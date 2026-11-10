@@ -1,3 +1,7 @@
+// The page shell every app screen is built from: ColumnLayout lays its Columns side by side, and on a phone shows
+// only the one named mobileColumn. Each Column has a toolbar bar whose bottom border fades in once its content
+// scrolls, and on a phone a back arrow that runs onBack or opens the sidebar.
+
 import { cn } from '@workspace/ui/lib/utils';
 import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -15,12 +19,9 @@ type ColumnProps = {
     id: string;
     width: string;
     toolbar?: ReactNode;
-    // 'auto' (default) fades the toolbar border in on scroll; 'always' keeps it
-    // visible — for columns with a canvas below (docs, slides, stickies).
+    // 'always' keeps the toolbar border for a column with a canvas below, such as a doc's.
     toolbarBorder?: 'auto' | 'always';
-    // A function runs on back; the 'sidebar' sentinel opens the mobile sidebar column
-    // (self-gated on sidebarMode so hidden-sidebar surfaces never show a dead arrow).
-    // A toolbar-less column still renders the bar on mobile when the arrow needs a home.
+    // 'sidebar' opens the phone's sidebar, and shows no arrow where the app has no collapsible sidebar.
     onBack?: (() => void) | 'sidebar';
     children: ReactNode;
     className?: string;
@@ -32,14 +33,15 @@ function Column({ id, width, toolbar, toolbarBorder = 'auto', onBack, children, 
     const [scrolled, setScrolled] = useState(false);
     const cleanupRef = useRef<(() => void) | null>(null);
 
-    // Scroll happens inside `children`, so a capture-phase listener catches whichever
-    // descendant actually scrolls; a callback ref rebinds across mobile column show/hide.
+    // A scroll inside `children` doesn't bubble, so a capture listener catches whichever descendant scrolls. A
+    // callback ref rebinds it as a phone column shows and hides.
     const contentRef = useCallback((el: HTMLDivElement | null) => {
         cleanupRef.current?.();
         cleanupRef.current = null;
         if (!el) return;
         const onScroll = (e: Event) => {
-            const target = e.target as HTMLElement;
+            const target = e.target;
+            if (!(target instanceof HTMLElement)) return;
             if (target.scrollHeight > target.clientHeight) setScrolled(target.scrollTop > 0);
         };
         el.addEventListener('scroll', onScroll, true);
@@ -63,11 +65,13 @@ function Column({ id, width, toolbar, toolbarBorder = 'auto', onBack, children, 
         ) : null;
 
     return (
-        <div className={cn('h-full flex flex-col overflow-hidden', className)} style={style}>
+        <div className={cn('group/column h-full flex flex-col overflow-hidden', className)} style={style}>
             {(toolbar || backButton) && (
                 <div
                     className={cn(
-                        'h-12 flex items-center app-gutter-x shrink-0 border-r border-b transition-colors duration-200',
+                        // The right border divides it from the next column, so the last one, also the only one on a
+                        // phone, has none.
+                        'h-12 flex items-center app-gutter-x shrink-0 border-r border-b transition-colors duration-200 group-last/column:border-r-0',
                         toolbarBorder === 'always' || scrolled ? 'border-b-border' : 'border-b-transparent',
                     )}
                 >

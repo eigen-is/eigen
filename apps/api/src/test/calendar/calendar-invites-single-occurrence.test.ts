@@ -8,7 +8,8 @@ import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@work
 import { getHome } from '../../lib/home';
 import { parseIcs } from '../../lib/ical';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
-import { CALENDAR_TEST_ROOT, makeCalendar } from '../calendar-test-helpers';
+import { makeSyntheticUser } from '../../lib/user';
+import { CALENDAR_TEST_ROOT, makeCalendar, receiveMailed, storedEvents } from '../calendar-test-helpers';
 import { davRequest } from '../dav-test-helpers';
 import { vcal } from '../ics-test-helpers';
 import { assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
@@ -166,6 +167,127 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         expect(stored).toHaveLength(1);
         expect(stored[0].title).toBe('After The Move');
         expect(stored[0].startTime.toISOString()).toBe(movedStart.toISOString());
+    });
+
+    test("a copy of a moved occurrence names the organizer's original slot", async () => {
+        const series = await createSeries('Single Occurrence Moved Away');
+
+        await editOccurrence(series.id, TARGET, {
+            title: 'Moved A Day Later',
+            startTime: '2028-03-14T14:00:00Z',
+            endTime: '2028-03-14T15:00:00Z',
+        });
+
+        await untilBob(series.uid, (occ) => occ.length === 1);
+        const home = await getHome(ctx.bob.user.id);
+        const resource = findOrFail(await home.calendar.listResources(bobCalendarId), (r) => r.uid === series.uid);
+        const res = await davRequest('GET', `/dav/calendars/${ctx.bob.user.id}/${bobCalendarId}/${resource.uri}`, {
+            email: ctx.bob.user.email,
+        });
+        expect(await res.text()).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20280313T100000\r\n');
+    });
+
+    test('a copy of a date moved into another zone keeps the series zone, its answer and its updates', async () => {
+        // 00:30 on Mondays in Amsterdam, which is Sunday evening in New York.
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Near Midnight',
+                    startTime: '2028-03-05T23:30:00Z',
+                    endTime: '2028-03-06T00:30:00Z',
+                    allDay: false,
+                    rrule: 'FREQ=WEEKLY;COUNT=4',
+                    timezone: TZ,
+                }),
+            },
+        );
+        const series = await assertJson<CalendarEvent>(res);
+        const inNewYork = { startTime: '2028-03-14T14:00:00Z', endTime: '2028-03-14T15:00:00Z' };
+        await editOccurrence(series.id, TARGET, {
+            title: 'Moved To New York',
+            timezone: 'America/New_York',
+            ...inNewYork,
+        });
+        const copy = await untilBob(series.uid, (occ) => occ.length === 1);
+
+        const home = await getHome(ctx.bob.user.id);
+        const resource = findOrFail(await home.calendar.listResources(bobCalendarId), (r) => r.uid === series.uid);
+        const stored = await davRequest('GET', `/dav/calendars/${ctx.bob.user.id}/${bobCalendarId}/${resource.uri}`, {
+            email: ctx.bob.user.email,
+        });
+        expect(await stored.text()).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20280313T003000\r\n');
+
+        await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events/${copy[0].id}/rsvp`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'accepted' }),
+            },
+        );
+        await untilAlice(series.uid, (e) => e.data?.attendees?.[0]?.status === 'accepted');
+
+        await editOccurrence(series.id, TARGET, { title: 'Renamed', timezone: 'America/New_York', ...inNewYork });
+        const renamed = await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Renamed'));
+        expect(renamed.map((e) => e.title)).toEqual(['Renamed']);
+    });
+
+    test('a copy of a date of a series kept in UTC keys on its UTC date, its answer and its updates', async () => {
+        // 23:30 UTC on Mondays, a series stored with no zone, as a CalDAV client can write it.
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'UTC Late',
+                    startTime: '2028-03-06T23:30:00Z',
+                    endTime: '2028-03-07T00:30:00Z',
+                    allDay: false,
+                    rrule: 'FREQ=WEEKLY;COUNT=4',
+                    timezone: null,
+                }),
+            },
+        );
+        const series = await assertJson<CalendarEvent>(res);
+        expect(series.timezone).toBeNull();
+        const inAuckland = { startTime: '2028-03-14T01:00:00Z', endTime: '2028-03-14T02:00:00Z' };
+        await editOccurrence(series.id, TARGET, {
+            title: 'Moved To Auckland',
+            timezone: 'Pacific/Auckland',
+            ...inAuckland,
+        });
+        await untilBob(series.uid, (occ) => occ.length === 1);
+
+        const home = await getHome(ctx.bob.user.id);
+        const [copy] = await home.calendar.getEventsByUid(series.uid);
+        expect(copy.recurrenceDate).toBe(TARGET);
+        const resource = findOrFail(await home.calendar.listResources(bobCalendarId), (r) => r.uid === series.uid);
+        const stored = await davRequest('GET', `/dav/calendars/${ctx.bob.user.id}/${bobCalendarId}/${resource.uri}`, {
+            email: ctx.bob.user.email,
+        });
+        expect(await stored.text()).toContain('RECURRENCE-ID:20280313T233000Z\r\n');
+
+        await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events/${copy.id}/rsvp`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'accepted' }),
+            },
+        );
+        await untilAlice(series.uid, (e) => e.data?.attendees?.[0]?.status === 'accepted');
+
+        await editOccurrence(series.id, TARGET, { title: 'Renamed', timezone: 'Pacific/Auckland', ...inAuckland });
+        const renamed = await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Renamed'));
+        expect(renamed.map((e) => e.title)).toEqual(['Renamed']);
     });
 
     test("the organizer's cancellation of that occurrence takes the guest's copy away", async () => {
@@ -334,7 +456,7 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
     const IMIP_UID = 'single-occurrence@external.com';
     const IMIP_ORG = 'organizer@external.com';
 
-    const imipOccurrence = (summary: string, sequence: number, dtstamp: string): ParsedEvent =>
+    const imipOccurrence = (summary: string, sequence: number, dtstamp: string, extra: string[] = []): ParsedEvent =>
         parseIcs(
             vcal([
                 'BEGIN:VEVENT',
@@ -347,6 +469,7 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
                 `ORGANIZER;CN=Ext Org:mailto:${IMIP_ORG}`,
                 'ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:guest@test.local',
                 `DTSTAMP:${dtstamp}`,
+                ...extra,
                 'END:VEVENT',
             ]),
         ).events[0];
@@ -372,7 +495,7 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         const harness = await makeCalendar();
         const calendar = harness.instance;
 
-        await calendar.receiveImipRequest(imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
+        await receiveMailed(calendar, imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
 
         const stored = await calendar.getEventsByUid(IMIP_UID);
         expect(stored).toHaveLength(1);
@@ -381,12 +504,40 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         expect(stored[0].data?.organizerEventId).toBe(IMIP_UID);
     });
 
+    test('an iMIP REQUEST cancelling the single occurrence cancels the copy', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        await receiveMailed(calendar, imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
+
+        const cancelled = imipOccurrence('One Instance Only', 1, '20280302T100000Z', ['STATUS:CANCELLED']);
+        await receiveMailed(calendar, cancelled, IMIP_ORG);
+
+        const stored = await calendar.getEventsByUid(IMIP_UID);
+        expect(stored).toHaveLength(1);
+        expect(stored[0].status).toBe('cancelled');
+    });
+
+    test('an iMIP REQUEST cancelling another occurrence leaves the single occurrence alone', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        await receiveMailed(calendar, imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
+
+        const cancelled = imipOccurrence('Another Date', 1, '20280302T100000Z', ['STATUS:CANCELLED']);
+        const elsewhere = { ...cancelled, recurrenceDate: '2028-03-20', recurrenceId: null };
+        await receiveMailed(calendar, elsewhere, IMIP_ORG);
+
+        const stored = await calendar.getEventsByUid(IMIP_UID);
+        expect(stored).toHaveLength(1);
+        expect(stored[0].title).toBe('One Instance Only');
+        expect(stored[0].status).toBe('confirmed');
+    });
+
     test('an iMIP series REQUEST with no ORGANIZER leaves the single occurrence alone', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
-        await calendar.receiveImipRequest(imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
+        await receiveMailed(calendar, imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
 
-        await calendar.receiveImipRequest(imipSeries('Whole Series', 1, '20280302T100000Z', []), IMIP_ORG);
+        await receiveMailed(calendar, imipSeries('Whole Series', 1, '20280302T100000Z', []), IMIP_ORG);
 
         const stored = await calendar.getEventsByUid(IMIP_UID);
         expect(stored).toHaveLength(1);
@@ -397,10 +548,10 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
     test('a stale iMIP series REQUEST leaves the newer single occurrence alone', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
-        await calendar.receiveImipRequest(imipOccurrence('One Instance Only', 3, '20280303T100000Z'), IMIP_ORG);
+        await receiveMailed(calendar, imipOccurrence('One Instance Only', 3, '20280303T100000Z'), IMIP_ORG);
 
         const organizer = [`ORGANIZER;CN=Ext Org:mailto:${IMIP_ORG}`];
-        await calendar.receiveImipRequest(imipSeries('Stale Series', 1, '20280301T100000Z', organizer), IMIP_ORG);
+        await receiveMailed(calendar, imipSeries('Stale Series', 1, '20280301T100000Z', organizer), IMIP_ORG);
 
         const stored = await calendar.getEventsByUid(IMIP_UID);
         expect(stored).toHaveLength(1);
@@ -411,14 +562,14 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
     test('the series invitation keeps the reminder the guest set on the occurrence', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
-        await calendar.receiveImipRequest(imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
+        await receiveMailed(calendar, imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
         const occurrenceCopy = (await calendar.getEventsByUid(IMIP_UID))[0];
         await calendar.updateEvent(occurrenceCopy.calendarId, occurrenceCopy.id, {
             data: { ...occurrenceCopy.data, reminders: [{ type: 'notification', minutes: 45 }] },
         });
 
         const organizer = [`ORGANIZER;CN=Ext Org:mailto:${IMIP_ORG}`];
-        await calendar.receiveImipRequest(imipSeries('Whole Series', 1, '20280302T100000Z', organizer), IMIP_ORG);
+        await receiveMailed(calendar, imipSeries('Whole Series', 1, '20280302T100000Z', organizer), IMIP_ORG);
 
         const stored = await calendar.getEventsByUid(IMIP_UID);
         expect(stored).toHaveLength(1);
@@ -426,13 +577,63 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         expect(stored[0].data?.reminders).toEqual([{ type: 'notification', minutes: 45 }]);
     });
 
+    test("the series invitation keeps the guest's answer and row for the occurrence they held", async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const vevent = (lines: string[]) => [
+            'BEGIN:VEVENT',
+            `UID:${IMIP_UID}`,
+            'SEQUENCE:1',
+            'DTSTAMP:20280301T100000Z',
+            `ORGANIZER;CN=Ext Org:mailto:${IMIP_ORG}`,
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${harness.user.email}`,
+            ...lines,
+            'END:VEVENT',
+        ];
+        const moved = vevent([
+            'SUMMARY:Moved',
+            'RECURRENCE-ID:20280313T090000Z',
+            'DTSTART:20280313T110000Z',
+            'DTEND:20280313T120000Z',
+        ]);
+        const series = vevent([
+            'SUMMARY:Whole Series',
+            'DTSTART:20280306T090000Z',
+            'DTEND:20280306T100000Z',
+            'RRULE:FREQ=WEEKLY;COUNT=4',
+        ]);
+        await receiveMailed(calendar, parseIcs(vcal(moved)).events[0], IMIP_ORG);
+        const [held] = await calendar.getEventsByUid(IMIP_UID);
+        await calendar.receiveAttendeeStatus(held.id, harness.user.email, 'accepted');
+
+        await calendar.receiveRequest(parseIcs(vcal(series, moved)).events, {
+            organizerEmail: IMIP_ORG,
+            organizerEventId: IMIP_UID,
+            organizerUserId: `external_${IMIP_ORG}`,
+            createByUserId: `external_${IMIP_ORG}`,
+        });
+
+        const rows = await calendar.getEventsByUid(IMIP_UID);
+        const occurrence = findOrFail(rows, (e) => !!e.parentEventId);
+        expect(rows).toHaveLength(2);
+        expect(occurrence.id).toBe(held.id);
+        expect(occurrence.data?.attendees?.[0]).toMatchObject({ email: harness.user.email, status: 'accepted' });
+    });
+
     // The relay carries the same REQUEST, so it is ordered by the same rule.
     test('a stale relayed series invitation leaves the newer single occurrence alone', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
-        const payload = (title: string, sequence: number, dtstamp: string, recurrenceDate: string | null) => ({
+        const link = {
+            organizerEmail: IMIP_ORG,
+            organizerEventId: 'organizer-event',
+            organizerUserId: 'organizer-home',
+            createByUserId: 'organizer-home',
+        };
+        const requested = (title: string, sequence: number, dtstamp: string, recurrenceDate: string | null) => ({
             uid: IMIP_UID,
             recurrenceDate,
+            recurrenceId: null,
             title,
             description: null,
             location: null,
@@ -446,20 +647,221 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
             dtstamp: new Date(dtstamp),
             data: {
                 organizer: { userId: 'organizer-home', email: IMIP_ORG, name: 'Ext Org' },
-                organizerEventId: 'organizer-event',
                 attendees: [{ email: 'guest@test.local', status: 'pending' as const, role: 'required' as const }],
             },
-            createByUserId: 'organizer-home',
-            organizerEventId: 'organizer-event',
-            organizerUserId: 'organizer-home',
         });
-        await calendar.receiveInvitation(payload('One Instance Only', 3, '2028-03-03T10:00:00Z', '2028-03-13'));
+        await calendar.receiveRequest([requested('One Instance Only', 3, '2028-03-03T10:00:00Z', '2028-03-13')], link);
 
-        await calendar.receiveInvitation(payload('Stale Series', 1, '2028-03-01T10:00:00Z', null));
+        await calendar.receiveRequest([requested('Stale Series', 1, '2028-03-01T10:00:00Z', null)], link);
 
         const stored = await calendar.getEventsByUid(IMIP_UID);
         expect(stored).toHaveLength(1);
         expect(stored[0].title).toBe('One Instance Only');
         expect(stored[0].rrule).toBeNull();
+    });
+});
+
+// An organizer who invites a guest to several dates of a series sends one message per date. The guest holds them all
+// in one copy with no master, as RFC 6638 shapes an attendee of some instances only.
+describe('An invitation to several single dates of one series', () => {
+    const UID = 'several-dates@external.com';
+    const ORG = 'organizer@external.com';
+    const LINK = {
+        organizerEmail: ORG,
+        organizerEventId: UID,
+        organizerUserId: `external_${ORG}`,
+        createByUserId: `external_${ORG}`,
+    };
+
+    const vevent = (guest: string, lines: string[], sequence = 0) => [
+        'BEGIN:VEVENT',
+        `UID:${UID}`,
+        `SEQUENCE:${sequence}`,
+        'DTSTAMP:20280301T100000Z',
+        `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+        `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${guest}`,
+        ...lines,
+        'END:VEVENT',
+    ];
+    // One date of the weekly series, moved two hours later.
+    const date = (guest: string, day: string, title: string, sequence = 0, extra: string[] = []) =>
+        vevent(
+            guest,
+            [
+                `SUMMARY:${title}`,
+                `RECURRENCE-ID:2028${day}T090000Z`,
+                `DTSTART:2028${day}T110000Z`,
+                `DTEND:2028${day}T120000Z`,
+                ...extra,
+            ],
+            sequence,
+        );
+    const series = (guest: string) =>
+        vevent(guest, [
+            'SUMMARY:Whole Series',
+            'DTSTART:20280306T090000Z',
+            'DTEND:20280306T100000Z',
+            'RRULE:FREQ=WEEKLY;COUNT=4',
+        ]);
+
+    async function invitedToTwoDates() {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const id = (await calendar.getCalendars())[0].id;
+        const guest = harness.user.email;
+        await calendar.receiveRequest(parseIcs(vcal(date(guest, '0313', 'First date'))).events, LINK);
+        await calendar.receiveRequest(parseIcs(vcal(date(guest, '0320', 'Second date'))).events, LINK);
+        const me = makeSyntheticUser(harness.user.id, harness.user.name, guest);
+        const rowOf = (day: string) => findOrFail(storedEvents(calendar, id), (e) => e.recurrenceDate === day);
+        return { calendar, id, guest, me, rowOf };
+    }
+
+    test('the second date joins the first in one copy, each at its own time', async () => {
+        const { calendar, id } = await invitedToTwoDates();
+
+        expect(await calendar.listResources(id)).toHaveLength(1);
+        const rows = storedEvents(calendar, id).sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+        expect(rows.map((e) => [e.recurrenceDate, e.title, e.parentEventId, e.startTime.toISOString()])).toEqual([
+            ['2028-03-13', 'First date', null, '2028-03-13T11:00:00.000Z'],
+            ['2028-03-20', 'Second date', null, '2028-03-20T11:00:00.000Z'],
+        ]);
+        const range = await calendar.getEventsInRange(new Date('2028-03-01'), new Date('2028-04-01'));
+        expect(range.map((occurrence) => occurrence.occurrenceDate).sort()).toEqual(['2028-03-13', '2028-03-20']);
+    });
+
+    test('each date is answered and cancelled on its own', async () => {
+        const { calendar, guest, me, rowOf } = await invitedToTwoDates();
+
+        await calendar.rsvp(rowOf('2028-03-13').id, me, { status: 'accepted' });
+        expect(rowOf('2028-03-13').data?.attendees?.[0]).toMatchObject({ email: guest, status: 'accepted' });
+        expect(rowOf('2028-03-20').data?.attendees?.[0]).toMatchObject({ email: guest, status: 'pending' });
+
+        const occurrence = {
+            recurrenceDate: '2028-03-13',
+            recurrenceId: null,
+            sequence: 1,
+            dtstamp: new Date('2028-03-02T10:00:00Z'),
+        };
+        await calendar.cancelInvitationOccurrence(UID, LINK.organizerUserId, occurrence);
+        expect((await calendar.getEventsByUid(UID)).map((e) => e.recurrenceDate)).toEqual(['2028-03-20']);
+
+        const cancelled = date(guest, '0320', 'Second date', 1, ['STATUS:CANCELLED']);
+        await calendar.receiveRequest(parseIcs(vcal(cancelled)).events, LINK);
+        expect((await calendar.getEventsByUid(UID)).map((e) => [e.recurrenceDate, e.status])).toEqual([
+            ['2028-03-20', 'cancelled'],
+        ]);
+    });
+
+    test("the guest's delete of one date leaves the other", async () => {
+        const { calendar, id, me, rowOf } = await invitedToTwoDates();
+
+        await calendar.deleteEvent(id, rowOf('2028-03-13').id, me);
+
+        expect((await calendar.getEventsByUid(UID)).map((e) => e.recurrenceDate)).toEqual(['2028-03-20']);
+    });
+
+    test("the guest's delete of the last date takes the copy with it", async () => {
+        const { calendar, id, me, rowOf } = await invitedToTwoDates();
+
+        await calendar.deleteEvent(id, rowOf('2028-03-13').id, me);
+        await calendar.deleteEvent(id, rowOf('2028-03-20').id, me);
+
+        expect(await calendar.listResources(id)).toHaveLength(0);
+    });
+
+    test('a date delivered again moves no ctag', async () => {
+        const { calendar, id, guest } = await invitedToTwoDates();
+        const ctag = (await calendar.getCollection(id))?.ctag;
+
+        await calendar.receiveRequest(parseIcs(vcal(date(guest, '0320', 'Second date'))).events, LINK);
+
+        expect((await calendar.getCollection(id))?.ctag).toBe(ctag);
+    });
+
+    // A CalDAV client reads the copy, sets a reminder on the second date and puts the file back.
+    test('a GET, a PUT back and a REPORT keep both dates and their rows', async () => {
+        const { calendar, id, rowOf } = await invitedToTwoDates();
+        const ids = [rowOf('2028-03-13').id, rowOf('2028-03-20').id];
+        const [{ uri }] = await calendar.listResources(id);
+        const served = await calendar.getResource(id, uri);
+        if (!served) throw new Error('the copy has no stored bytes');
+        const alarm = 'BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT30M\r\nDESCRIPTION:Reminder\r\nEND:VALARM\r\n';
+        const body = new TextDecoder()
+            .decode(served.bytes)
+            .replace(/(SUMMARY:Second date[\s\S]*?)END:VEVENT/, `$1${alarm}END:VEVENT`);
+
+        const put = await calendar.putResource(id, uri, body, { ifMatch: `"${served.etag}"`, ifNoneMatch: null });
+
+        expect(put.ok).toBe(true);
+        const reported = await calendar.getResourcesInRange(id, new Date('2028-03-01'), new Date('2028-04-01'));
+        expect(reported.map((resource) => resource.uri)).toEqual([uri]);
+        expect([rowOf('2028-03-13').id, rowOf('2028-03-20').id]).toEqual(ids);
+        expect(rowOf('2028-03-13').data?.reminders).toBeUndefined();
+        expect(rowOf('2028-03-20').data?.reminders).toEqual([{ type: 'notification', minutes: 30 }]);
+    });
+
+    test('a whole-series message replaces the copy, and each date keeps its row and answer', async () => {
+        const { calendar, id, guest, me, rowOf } = await invitedToTwoDates();
+        const [first, second] = [rowOf('2028-03-13'), rowOf('2028-03-20')];
+        await calendar.rsvp(second.id, me, { status: 'accepted' });
+
+        const whole = vcal(series(guest), date(guest, '0313', 'First date'), date(guest, '0320', 'Second date'));
+        await calendar.receiveRequest(parseIcs(whole).events, LINK);
+
+        expect(await calendar.listResources(id)).toHaveLength(1);
+        const rows = await calendar.getEventsByUid(UID);
+        expect(rows).toHaveLength(3);
+        expect(findOrFail(rows, (e) => !e.parentEventId).rrule).toContain('FREQ=WEEKLY');
+        expect(rowOf('2028-03-13').id).toBe(first.id);
+        expect(rowOf('2028-03-20')).toMatchObject({ id: second.id, parentEventId: expect.any(String) });
+        expect(rowOf('2028-03-20').data?.attendees?.[0]).toMatchObject({ email: guest, status: 'accepted' });
+        const range = await calendar.getEventsInRange(new Date('2028-03-01'), new Date('2028-04-01'));
+        expect(range).toHaveLength(4);
+    });
+
+    // The series is at 00:30 on Mondays in Amsterdam, so the date's UTC RECURRENCE-ID falls on the Sunday before.
+    test('a whole-series message in another zone than a date was named in keeps that date its row and answer', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const id = (await calendar.getCalendars())[0].id;
+        const guest = harness.user.email;
+        const moved = vevent(guest, [
+            'SUMMARY:Moved date',
+            'RECURRENCE-ID:20280312T233000Z',
+            'DTSTART;TZID=Europe/Amsterdam:20280313T020000',
+            'DTEND;TZID=Europe/Amsterdam:20280313T030000',
+        ]);
+        await calendar.receiveRequest(parseIcs(vcal(moved)).events, LINK);
+        const [held] = storedEvents(calendar, id);
+        expect(held.recurrenceDate).toBe('2028-03-12');
+        await calendar.rsvp(held.id, makeSyntheticUser(harness.user.id, harness.user.name, guest), {
+            status: 'accepted',
+        });
+
+        const master = vevent(guest, [
+            'SUMMARY:Whole Series',
+            'DTSTART;TZID=Europe/Amsterdam:20280306T003000',
+            'DTEND;TZID=Europe/Amsterdam:20280306T013000',
+            'RRULE:FREQ=WEEKLY;COUNT=4',
+        ]);
+        await calendar.receiveRequest(parseIcs(vcal(master, moved)).events, LINK);
+
+        const date = findOrFail(storedEvents(calendar, id), (e) => !!e.parentEventId);
+        expect(date).toMatchObject({ id: held.id, recurrenceDate: '2028-03-13' });
+        expect(date.data?.attendees?.[0]).toMatchObject({ email: guest, status: 'accepted' });
+    });
+
+    // A date the series doesn't list is an unmoved occurrence of it, so its answer stays with that date.
+    test("a whole-series message that lists no date takes neither date's row nor answer", async () => {
+        const { calendar, guest, me, rowOf } = await invitedToTwoDates();
+        const held = [rowOf('2028-03-13').id, rowOf('2028-03-20').id];
+        await calendar.rsvp(held[0], me, { status: 'accepted' });
+
+        await calendar.receiveRequest(parseIcs(vcal(series(guest))).events, LINK);
+
+        const [master] = await calendar.getEventsByUid(UID);
+        expect(master.rrule).toContain('FREQ=WEEKLY');
+        expect(held).not.toContain(master.id);
+        expect(master.data?.attendees?.[0]).toMatchObject({ email: guest, status: 'pending' });
     });
 });

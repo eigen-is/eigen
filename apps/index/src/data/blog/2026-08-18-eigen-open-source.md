@@ -2,6 +2,7 @@
 id: eigen-open-source
 title: "Eigen: Open Source"
 description: "Eigen is open source. You can install the workspace on your own server with one Docker Compose stack. Here is what's new, and how you can help."
+draft: true
 ---
 
 Eigen is a European Google Workspace alternative where you own your data. In [an earlier post](https://eigen.is/blog/eigen-six-months-later) I listed three possible directions for the project: open source the code, find an organization to adopt it, or build a team around it.

@@ -79,10 +79,9 @@ export async function copyPath(
     destParentId: string,
     name: string,
     discard: DiscardCopy,
-    actor?: { id: string; email: string },
+    actor: { id: string; email: string },
 ): Promise<DrivePath> {
     const recordCopied = (pathId: string, src: DrivePath): void => {
-        if (!actor) return;
         const details = {
             sourceOwnerId: mount.history.ownerId,
             sourceMountId: mount.history.mountId,

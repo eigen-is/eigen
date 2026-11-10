@@ -11,7 +11,7 @@ import {
     viewerTimeZone,
 } from '../../../core/calendar/calendar-utils';
 import { WINDOWS_ZONES } from '../../../core/calendar/windows-zones';
-import type { CalendarEventOccurrence, EventData } from '../../../types/calendar';
+import type { CalendarEventOccurrence, Organizer } from '../../../types/calendar';
 
 function occurrence(occurrenceDate: string, startTime: Date, endTime: Date): CalendarEventOccurrence {
     return {
@@ -102,7 +102,7 @@ describe('isSeriesOccurrence', () => {
 });
 
 describe('isInvitationFromOthers', () => {
-    const withOrganizer = (organizer: NonNullable<EventData['organizer']>) => ({ data: { organizer } });
+    const withOrganizer = (organizer: Organizer) => ({ data: { organizer } });
 
     test('an organizer with the owner address is the owner, whatever its case', () => {
         const event = withOrganizer({ userId: '', email: 'Alice@Example.com', name: 'Alice' });
@@ -297,6 +297,17 @@ describe('normalizeTimezone', () => {
         expect(normalizeTimezone('W. Europe Standard Time')).toBe('Europe/Berlin');
         expect(normalizeTimezone('Pacific Standard Time')).toBe('America/Los_Angeles');
         expect(normalizeTimezone('AUS Eastern Standard Time')).toBe('Australia/Sydney');
+    });
+
+    test("any spelling of a zone answers Intl's own", () => {
+        expect(normalizeTimezone('EUROPE/amsterdam')).toBe('Europe/Amsterdam');
+        expect(normalizeTimezone('america/new_york')).toBe('America/New_York');
+    });
+
+    test('a zone spelled as Intl spells it stays as it is', () => {
+        const zones = Intl.supportedValuesOf('timeZone').filter((zone) => !WINDOWS_ZONES.has(zone));
+
+        expect(zones.filter((zone) => normalizeTimezone(zone) !== zone)).toEqual([]);
     });
 
     test('every zone the Windows table names is one Intl knows', () => {

@@ -364,8 +364,7 @@ export async function closeInSlot(
     await db.close(opts);
 }
 
-// Syncs and closes every open document database at or below rootId. A trash or a delete changes rows without the cache
-// knowing, and a dirty database left open would sync to the old key, so callers run this first.
+// Syncs and closes every open document database at or below rootId, before a delete takes their rows away.
 export async function closeCachedDbsUnder(mount: Mount, rootId: string): Promise<void> {
     for (const id of [rootId, ...mount.collectDescendantIds(rootId)]) {
         if (mount.documentDbs.has(id)) {

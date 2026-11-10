@@ -22,7 +22,7 @@ Paths are under `apps/api/src/` unless they say otherwise.
 | **Public routes** | `routes/public.ts` | `/p/*`, the deliberate unauthenticated surface; never add auth to one |
 | **XML reads** | `lib/core/xml.ts` | `parseXml`, the one XML reader: refuses a DOCTYPE, matches by namespace, never prefix ([WEBDAV.md](WEBDAV.md)) |
 | **OOXML** | `lib/ooxml/` | What the docx, xlsx and pptx readers and writers share, apart so `export/` and `import/` never import each other (`lib/ooxml/README.md`, [EXPORT.md](EXPORT.md)) |
-| **Window limiter** | `lib/core/window-limiter.ts` | An in-memory sliding window per key (protocol auth failures, demo entry, access-request mail) |
+| **Window limiter** | `lib/core/window-limiter.ts` | An in-memory sliding window per key (protocol auth failures, demo entry, access-request and assignment mail) |
 | **SSE emission** | `lib/[domain]/sse-events.ts` | `home.broadcast(buildEvent(...))` ([SSE.md](SSE.md)) |
 | **Notifications** | `lib/notification-center/` | `home.notify({...})` stores and broadcasts a notification, shown as a toast ([NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md), [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md)) |
 | **Auth** | `lib/auth/auth.ts` | better-auth over `users3.db`, which has no migrations: a new column goes into `auth-schema.ts`, the `setup.ts` DDL and `ensureAuthSchemaColumns` together, or better-auth refuses to start ([DATABASE.md](DATABASE.md)) |
@@ -49,7 +49,7 @@ Paths are under `apps/api/src/` unless they say otherwise.
 | **Mailer** | `lib/mailer/` | `sendMail()` with one From rule; imports only config and `core`, so any domain can send ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#one-rule-decides-who-a-mail-is-from)) |
 | **Environment** | `lib/config/env.ts` | `isProduction()`, `isDemo()` ([DEMO_MODE.md](DEMO_MODE.md)), `isMailEnabled()` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#hosted-mail-and-the-relay-are-environment-not-settings)) |
 | **Async singleton** | `utils/singleton.ts` | `createAsyncSingleton()`: one async build shared by every caller while it runs |
-| **Home relay** | `lib/home/home-relay.ts` | Every call from one Home into another ([SCALABILITY.md](SCALABILITY.md)) |
+| **Home relay** | `lib/home/home-relay.ts` | Every call from one Home into another, and `pullFromEach` for a read across many ([SCALABILITY.md](SCALABILITY.md)) |
 | **Data epoch** | `lib/home/data-epoch.ts` | Changes on a restore or update, so a stale tab reloads ([SSE.md](SSE.md#a-restore-reloads-every-tab-of-the-home)) |
 | **Scheduler** | `lib/scheduler/` | In-process periodic jobs, registered in `jobs.ts` |
 | **Document transforms** | `lib/document/transform/` | Every CPU-heavy transform in a bounded child process ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)) |
@@ -58,6 +58,7 @@ Paths are under `apps/api/src/` unless they say otherwise.
 | **Versioning** | `lib/versioning/` | Opt-in snapshots inside the container ([STORAGE.md](STORAGE.md#version-snapshots-live-inside-the-container)) |
 | **Copy and move** | `lib/mount/copy.ts`, `lib/drive/copy-across.ts` | A move stays in its mount; a copy goes anywhere ([STORAGE.md](STORAGE.md#copy-goes-anywhere-a-move-stays-in-its-mount)) |
 | **Import from Drive** | `lib/drive/import-source.ts` | `readImportSourceBytes`, the one import-from-drive reader, with the user's access and a byte cap |
+| **Recent files** | `lib/drive/recent.ts`, `lib/drive/aggregate.ts`, `apps/drive/src/routes/_auth.recent.tsx` | Which paths a user opened or was notified about, in their own `shared.db`, checked against each owner on every load ([STORAGE.md](STORAGE.md#recent-files-stores-only-which-path-and-when)) |
 | **File history** | `lib/drive/history.ts` | Typed file events and watcher notifications ([FILE-HISTORY.md](FILE-HISTORY.md)) |
 | **Trash** | `lib/mount/trash.ts`, `lib/drive/trash.ts` | A delete moves to trash and revokes shares ([SOFT-DELETE.md](SOFT-DELETE.md)) |
 | **Comments** | `lib/chat/` | A card in the Y.Doc and a chat thread in its container ([COMMENTS.md](COMMENTS.md)) |
@@ -178,7 +179,7 @@ Two names mislead: `download` is a leaf subpath but needs `document`, so it is f
 
 ### Third copy → shared wrapper
 
-**About to paste a scaffold into a third app? Extract one wrapper into `packages/ui` instead**, for route guards, `_auth.tsx` files, editor shells and loading, empty and error treatments as well as components. So `createEigenAppRouter` bootstraps every app but the marketing site, `createAuthRouteOptions` guards every app but admin (which also checks the org role), and `SidebarSection` is every sidebar's loading, error and empty treatment.
+**About to paste a scaffold into a third app? Extract one wrapper into `packages/ui` instead**, for route guards, `_auth.tsx` files, editor shells and loading, empty and error treatments as well as components. So `createEigenAppRouter` bootstraps every app but the marketing site, `createAuthRouteOptions` guards every app with a signed-in area, admin included, which adds the org-role check in its page, and `SidebarSection` is every sidebar's loading, error and empty treatment.
 
 ## Pitfalls
 

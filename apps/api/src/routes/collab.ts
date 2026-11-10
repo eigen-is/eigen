@@ -1,6 +1,7 @@
-// The collab routes: a document's access info and comment index over HTTP, and the WebSocket each
-// editor opens to sync a document. The socket checks read when it opens and write on every message,
-// and it hands the frames to the CollabDocument the Drive keeps open for that document.
+// The collab routes: a document's access info and comment index over HTTP, and the WebSocket each editor opens to sync
+// a document. The socket checks read and its session when it opens and on its keepalive, and write on every message,
+// and it hands the frames to the CollabDocument the Drive keeps open for that document. An open that succeeds counts on
+// the user's Recent page.
 
 import {
     COLLAB_ACCESS_LOST_CLOSE,
@@ -22,8 +23,9 @@ import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
+import { recordOpened } from '../lib/drive/recent';
 import { getDataEpoch } from '../lib/home/data-epoch';
-import { keepWebSocketAlive } from '../utils/websockets';
+import { getSessionUser } from '../lib/user';
 import { betterAuth } from './auth';
 
 type CollabSession = {
@@ -169,11 +171,36 @@ export const collabRouter = new Elysia({
 
                 session.drive = drive;
                 session.collabDocument = document;
-                session.pingInterval = keepWebSocketAlive(user, rawWs, () => cleanupSession(session, rawWs));
+                const authSessionId = ws.data.session.id;
+                // Answers whether the socket keeps its access, and closes it when it doesn't.
+                const checkAccess = async (): Promise<boolean> => {
+                    // The row, not the user the socket opened with: an ACL entry outlives its user, and matches on
+                    // the email.
+                    const current = await getSessionUser(authSessionId);
+                    if (current && (await drive.canRead(mountId, pathId, current))) return true;
+                    rawWs.close(COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON);
+                    cleanupSession(session, rawWs);
+                    return false;
+                };
+                // The ping keeps a proxy from dropping the connection. A check that throws says nothing about the
+                // access, so the socket stays and the next tick asks again.
+                session.pingInterval = setInterval(async () => {
+                    if (rawWs.readyState !== WebSocket.OPEN) {
+                        cleanupSession(session, rawWs);
+                        return;
+                    }
+                    try {
+                        rawWs.ping();
+                        await checkAccess();
+                    } catch (err) {
+                        console.error('Error in collab keepalive:', err);
+                    }
+                }, 15_000);
 
-                // A removal or an ACL change during the load found no connection to close, and one after the subscribe
-                // finds this one. A frame that waits for `opened` finds no document once the session is cleaned up.
-                if (!(await document.keepsReadAccess(rawWs))) cleanupSession(session, rawWs);
+                // A change during the load is found now, not at the first tick. A frame that waits for `opened` finds
+                // no document once the session is cleaned up. Only an open that keeps its access counts on Recent.
+                if (!(await checkAccess())) return;
+                recordOpened(user, document.path);
             } catch (err) {
                 const status = err instanceof ApiError ? err.status : 500;
                 // A refusal, such as a document in the trash, is expected on every reconnect, so it gets one line.
@@ -239,8 +266,7 @@ export const collabRouter = new Elysia({
     });
 
 function cleanupSession(session: CollabSession, ws: ServerWebSocket<unknown>): void {
-    if (session.pingInterval) clearInterval(session.pingInterval);
-    session.pingInterval = undefined;
+    clearInterval(session.pingInterval);
     session.collabDocument?.unsubscribe(ws);
     session.collabDocument = undefined;
     session.releaseHome?.();

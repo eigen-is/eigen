@@ -11,7 +11,7 @@ import type { ChartData, InlineChartData, StoredChartSpec } from '../types/chart
 export const MAX_CHART_SPEC_BYTES = 64 * 1024;
 // Levels of [ and {, far past what Eigen writes. V8's JSON.stringify recurses, so every writer that serializes what is
 // stored throws at about 8,000 levels.
-export const MAX_CHART_SPEC_DEPTH = 32;
+const MAX_CHART_SPEC_DEPTH = 32;
 // The entries one Sheets chart holds, its records' keys summed. The shortest entry a build writes is three bytes, a
 // one-character id at '{}', so a chart holding more is past the byte limit and reads as nothing anyway.
 export const MAX_CHART_SPEC_ENTRIES = Math.floor(MAX_CHART_SPEC_BYTES / 3);

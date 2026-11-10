@@ -51,6 +51,7 @@ The shape is `ServerSettings` in `packages/lib/src/types/settings.ts`, and the d
 | `onboarding` | The waitlist, seeding the owner as a contact, the welcome mail, the waitlist invite mail | `requireWaitlistEnabled` gates every waitlist route; `welcome.ts` skips the welcome mail without hosted mail |
 | `guests` | Whether any address may ask for a sign-in code, and how long an idle guest lives | [GUEST-ACCESS.md](GUEST-ACCESS.md) |
 | `landing.links` | Extra buttons on the public landing page | `GET /p/config`, which is unauthenticated |
+| `landing.showInstall` | Whether the landing page shows the one-line install command. Off by default | `GET /p/config` as `showInstall`, read by `HomeComponent` in `apps/index`, which passes it to `LandingBlocks` |
 | `notifications.email` | Which events also send an email | [The notification flags gate the email only](#the-notification-flags-gate-the-email-only) |
 | `mail` | The system sender, and whether the relay may send as users | [One rule decides who a mail is from](#one-rule-decides-who-a-mail-is-from) |
 | `backups` | The nightly whole-server backup (on, hour in UTC, Full + S3, how many to keep) and the bucket archives go to, with its own count. Its secret reaches no browser | [BACKUP.md § The schedule makes one attempt per UTC day](BACKUP.md#the-schedule-makes-one-attempt-per-utc-day), [§ Upload goes to a bucket of its own](BACKUP.md#upload-goes-to-a-bucket-of-its-own) |
@@ -63,12 +64,14 @@ Each `notifications.email` flag turns one email on or off. The in-app notificati
 
 | Flag | Default | The email goes out when | Why the default |
 |---|---|---|---|
-| `guestOnAclAdd` | on | An address without an account, or a guest, is added to an ACL | The email is the guest's only way in ([GUEST-ACCESS.md](GUEST-ACCESS.md)) |
+| `guestOnAclAdd` | on | An address without an account, or a guest, is added to an ACL | A guest rarely has Eigen open, and one who never signed in has no bell, so the email is how they find out ([GUEST-ACCESS.md](GUEST-ACCESS.md)) |
 | `userOnAclAdd` | off | A registered user is added to an ACL | The bell already tells them |
+| `guestOnAssign` | on | An address without an account, or a guest, is assigned a comment or card, at most once an hour per person and document ([COMMENTS.md](COMMENTS.md#assignment-is-a-members-email-set-by-the-server)) | A guest rarely has Eigen open, and one who never signed in has no bell |
+| `userOnAssign` | off | A registered user is assigned a comment or card, under the same limit | The bell already tells them |
 | `userOnCalendarInvite` | on | An Eigen user is invited to an event | An invitation is time-sensitive, and Google and Outlook mail it too |
 | `ownerOnAccessRequest` | on | Someone asks for access to a path: the user who owns it, or each member of the team that owns it while the team's `notifyMembers` is on | A mail reaches an owner who doesn't have Eigen open |
 
-The ACL flags are read inline in `propagateSharedPathChange` (`apps/api/src/lib/drive/acl-propagation.ts`), the access-request flag in `access-request-propagation.ts` and the invite flag in `invite-propagation.ts`. See [ACL.md](ACL.md).
+The ACL flags are read inline in `propagateSharedPathChange` (`apps/api/src/lib/drive/acl-propagation.ts`), the access-request flag in `access-request-propagation.ts`, the invite flag in `invite-propagation.ts` and the assignment flags in `propagateAssignment` (`assignment-propagation.ts`). See [ACL.md](ACL.md).
 
 ## Settings are the owner's, the pages admins need are theirs too
 
@@ -78,11 +81,11 @@ Admins keep what the Users, Guests and team pages need. They read `GET /settings
 
 ## An admin password reset revokes every way in
 
-`PUT /settings/user/:userId/password` calls `resetUserPassword()` (`apps/api/src/lib/user/reset-password.ts`), the same path as `./eigen reset-password`. It signs the user out everywhere, closes their collab sockets and revokes their app passwords, since those open IMAP, CalDAV and WebDAV without the password. An open IMAP session stays up until it drops, because Dovecot checks the password only at login, and so does the user's event stream. It refuses a guest, who signs in with a code, and it refuses the owner unless the owner resets their own. better-auth's own `/admin/set-user-password` revokes nothing, so it is in `disabledPaths` (`apps/api/src/lib/auth/auth.ts`).
+`PUT /settings/user/:userId/password` calls `resetUserPassword()` (`apps/api/src/lib/user/reset-password.ts`), the same path as `./eigen reset-password`. It signs the user out everywhere, which closes their collab sockets and event streams within 15 s, and revokes their app passwords, since those open IMAP, CalDAV and WebDAV without the password. An open IMAP session stays up until it drops, because Dovecot checks the password only at login. It refuses a guest, who signs in with a code, and it refuses the owner unless the owner resets their own. better-auth's own `/admin/set-user-password` revokes nothing, so it is in `disabledPaths` (`apps/api/src/lib/auth/auth.ts`).
 
 ## The Users page sizes homes without booting them
 
-`GET /settings/users/usage` sizes every user through `pullHomeSize` (`apps/api/src/lib/home/home-relay.ts`), which reads the home's own databases and folders instead of booting the Home. A boot apiece costs seconds. `getAllUsersUsage` (`apps/api/src/lib/user/admin-usage.ts`) still caps the disk work at four homes at once, caches the result for five minutes per exact set of users, and skips a home that fails rather than failing the page. What each number counts is in [QUOTA.md](QUOTA.md#a-cold-read-reports-what-a-live-home-reports).
+`GET /settings/users/usage` sizes every user through `pullHomeSize` (`apps/api/src/lib/home/home-relay.ts`), which reads the home's own databases and folders instead of booting the Home. A boot apiece costs seconds. `getAllUsersUsage` (`apps/api/src/lib/user/admin-users.ts`, beside the queries behind the Users and Guests lists) still caps the disk work at four homes at once, caches the result for five minutes per exact set of users, and skips a home that fails rather than failing the page. What each number counts is in [QUOTA.md](QUOTA.md#a-cold-read-reports-what-a-live-home-reports).
 
 ## The status section is what ./eigen status reports
 

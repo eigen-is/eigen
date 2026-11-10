@@ -14,7 +14,7 @@ A row stores both `actorUserId` and `actorEmail`, so it renders without an auth-
 
 ## No actor means no row
 
-Drive mutations take an optional `user`. Without one, nothing is recorded, so internal scaffolding (a chat's seed files, `media/` folders) stays out of the timeline users see.
+Every change to the tree, its files and their versions names its `user`, so it records a row. Internal scaffolding, such as a new document's `media/` and chat folders, is made on the mount directly and stays out of the timeline users see. Only an ACL change can come with no actor, and then it records nothing.
 
 `FileHistory` also drops every event below an eigendoc or chat container: per-card comment threads, attachment media, `data.db`. The container speaks through its own events. `list` reads a subtree: a file's own events, or a folder's or container's whole subtree through a recursive CTE, newest first.
 
@@ -40,7 +40,7 @@ A plain file has no Yjs document, so its rows come from `Drive.writeFileContent`
 
 ## Clients post only the stickies card events
 
-`POST /drive/:ownerId/:mountId/path/:pathId/history` takes `sticky-added`, `sticky-moved` and `sticky-removed` and needs write access. The route's body schema is the allowlist, and `isClientFileEventType` checks it again. Identical events from one actor within 30 s collapse into one row. Each detail string is capped at `CARD_TITLE_MAX_LENGTH` (200), and `useRecordHistory` clips to it before posting.
+`POST /drive/:ownerId/:mountId/path/:pathId/history` takes `sticky-added`, `sticky-moved` and `sticky-removed` and needs write access. The route's body schema is the allowlist. Identical events from one actor within 30 s collapse into one row. Each detail string is capped at `CARD_TITLE_MAX_LENGTH` (200), and `useRecordHistory` clips to it before posting.
 
 Slide, sheet and doc structural changes stay `'edited'`. A stickies action is a discrete, nameable client action. Docs and sheets have no such clean boundary on the client, and the Yjs update log is a short-lived sync buffer, so naming their changes would take interpreting ops on the server.
 
@@ -48,7 +48,7 @@ Slide, sheet and doc structural changes stay `'edited'`. A stickies action is a 
 
 Watching needs read access to an untrashed path and a non-guest user. It grants nothing. `getWatchStatus` answers `{ direct, viaAncestor? }`, the ancestor being the nearest watched folder. `GET /drive/:ownerId/watches?all=1` gathers the caller's watches across their own home, their teams and every owner who shared into it (`apps/api/src/lib/drive/aggregate.ts`). It reads other homes, so it answers for the caller only.
 
-Fan-out (`FileHistory.fanOut`) collects watchers with one upward CTE from the affected path and the chain roots. So a folder watch covers every descendant, including ones added later. The actor never hears about their own action. Each watcher's read access is checked again against the chain the caller captured, so a watcher whose share was revoked is skipped, and no cleanup job is needed. The lookups run after the mutation committed, per watcher and best effort, so one failing lookup neither fails the mutation nor drops the other watchers. The deliveries then go out through the relay's `sendToUserHomes` without the mutation waiting for them. Each one opens the watcher's home, and the relay opens at most eight homes at once for all its fan-outs together, so a widely watched folder never opens every home in one burst and a write never waits behind another fan-out ([ACL.md § Share Propagation](ACL.md#share-propagation)). An event on an item already in trash never fans out.
+Fan-out (`FileHistory.fanOut`) collects watchers with one upward CTE from the affected path and the chain roots. So a folder watch covers every descendant, including ones added later. The actor never hears about their own action. Each watcher's read access is checked again against the chain the caller captured, so a watcher whose share was revoked is skipped, and no cleanup job is needed. The lookups run after the mutation committed, per watcher and best effort, so one failing lookup neither fails the mutation nor drops the other watchers. The deliveries then go out through the relay's `sendToUserHomes` without the mutation waiting for them. Each one opens the watcher's home, one at a time, so a widely watched folder never freezes the server in one burst ([ACL.md § Share Propagation](ACL.md#share-propagation)). An event on an item already in trash never fans out.
 
 ## Notifications coalesce per file, and bursts per folder
 

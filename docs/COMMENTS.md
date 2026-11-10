@@ -78,7 +78,7 @@ A thread's last write is the newer of its own `createdAt` and the `updatedAt` of
 
 ## A thread's own media go when no message names them
 
-Inside each thread it keeps, the sweep runs again with the thread as the document: a file in the thread's `media/` goes when no message names it, a deleted message's included, and it is past the grace. `ChatRoom.deleteMessage` also trashes a deleted message's files itself ([CHAT.md](CHAT.md)), so a version of a thread can name an attachment that is gone. No screen restores a thread version.
+Inside each thread it keeps, the sweep runs again with the thread as the document: a file in the thread's `media/` goes when no message names it, a deleted message's included, and it is past the grace. `ChatRoom.deleteMessage` also deletes a deleted message's files itself ([CHAT.md](CHAT.md)), so a version of a thread can name an attachment that is gone. No screen restores a thread version.
 
 ## Card attachments are staged until Save
 
@@ -103,6 +103,10 @@ A status or assignee write answers 404 when the name has no row. Without that it
 ## Assignment is a member's email, set by the server
 
 The assignee is a lowercased email that must belong to an effective member of the document, or the route answers 400. A real change records an `assigned` activity row. The assignee is left out of the watcher fan-out and gets a direct notification instead, unless they assigned themselves or have no account ([NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md), [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md)). Picking the current assignee again, and unassigning, record no row and notify nobody.
+
+The same assignments send a mail, under two server-wide flags ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#the-notification-flags-gate-the-email-only)), because a guest rarely has Eigen open and one who never signed in has no bell. An address with no account counts as a guest: it gets the mail and no notification, as it has no home to hold one. The mail names the card title and links to the card with `?chat=`. A recipient off the mail domain goes through the guest login and returns to the card, because `buildAttachmentUrl` adds `?email=`, so a password user off the domain lands on the Guest tab, as with a share mail. The send is detached, so a slow mail relay does not hold the assign route.
+
+The limit is one mail per person and document an hour (`assignMailWindow` in `apps/api/src/lib/drive/assignment-propagation.ts`). A notification folds a repeat on its tag, but a mail cannot, so working through a board would otherwise send a mail per card. Later cards in that document inside the hour reach the assignee only in the app: the bell, the toolbar badge in docs, sheets, slides and vector, and on a board the ring on their avatar (`NoteCard`). An address with no account hears of them only when it signs in. The window lives in the API process, so a restart forgets it, and a `false` from `sendMail` frees it, so the next assignment retries.
 
 The client posts the card title with every status and assignee write, and the server caches it in `title` for activity labels. It trusts the client the way the stickies card events do ([FILE-HISTORY.md](FILE-HISTORY.md)), and it lags a rename until the next action, so the UI never reads it and reads the card instead.
 

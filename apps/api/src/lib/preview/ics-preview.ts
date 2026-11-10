@@ -1,3 +1,7 @@
+// The payload of a `.ics` quick look: the events one file holds, bounded for a card, and a count of what could not be
+// read. The preview job builds it from the file's bytes with the parser every calendar file goes through, and the
+// preview route serves the cached result.
+
 import type { IcsPreview, IcsPreviewEvent } from '@workspace/lib/types/preview';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
@@ -5,8 +9,7 @@ import { countVEvents, decodeUtf8Strict, ICS_IMPORT_MAX_EVENTS } from '../core/t
 import { parseIcs } from '../ical';
 import type { IcsParseResult, ParsedEvent } from '../ical/ical-parse';
 
-// What one `.ics` preview may carry. A calendar export is a year of a team's meetings and an event's
-// description is a whole agenda, so the builder is where the payload is bounded.
+// A calendar export is a year of a team's meetings and an event's description is a whole agenda.
 export const ICS_PREVIEW_MAX_EVENTS = 200;
 export const ICS_PREVIEW_MAX_DESCRIPTION_CHARS = 10_000;
 export const ICS_PREVIEW_MAX_ATTENDEES = 100;
@@ -17,15 +20,12 @@ export const parseIcsPreview = (body: string): IcsPreview => JSON.parse(body);
 const dateString = (date: Date, allDay: boolean): string =>
     allDay ? date.toISOString().slice(0, 10) : date.toISOString();
 
-// toISOString spells a year outside 1–9999 with a sign and six digits ("+010007-06-07T…"), and the
-// all-day slice of that is not a date at all — a DTSTART of 99999999 normalizes its month and day into
-// the year. The card would print "Invalid Date", so the event is counted rather than listed.
+// toISOString spells a year outside 1–9999 with a sign and six digits, and a DTSTART of 99999999 normalizes
+// into such a year. The card would print "Invalid Date", so the event is counted rather than listed.
 const isDatable = (date: Date): boolean => date.getUTCFullYear() >= 1 && date.getUTCFullYear() <= 9999;
 
-// A CAL-ADDRESS is a URI and only a mailto: one names an address, which parseIcs strips the scheme off.
-// Anything else the file spells reaches the card as an address it writes a `mailto:` link from, so it is
-// omitted — not one more guest the card promises to be hiding. A `?` passes the shared validator and
-// starts a mailto: URI's header fields, so an address carrying one is not a plain address either.
+// The card writes a `mailto:` link from this address, and a `?` passes the shared validator and starts a mailto: URI's
+// header fields.
 const isPlainAddress = (email: string): boolean => validateEmailAddress(email) && !email.includes('?');
 
 function previewEvent(event: ParsedEvent): IcsPreviewEvent {
@@ -51,12 +51,10 @@ function previewEvent(event: ParsedEvent): IcsPreviewEvent {
 
 // File bytes → the events an .ics preview serves.
 export function buildIcsPreviewPayload(data: ArrayBuffer): IcsPreview {
-    // The same fatal decode the vCard build takes: RFC 5545 requires UTF-8, and a file in another
-    // encoding is not a calendar stored with replacement characters.
+    // RFC 5545 requires UTF-8, and a file in another encoding is not a calendar stored with replacement characters.
     const text = decodeUtf8Strict(data);
     if (text === null) throw new ApiError(422, 'Could not read this file');
-    // The import's own ceiling, before the parser: ical.js caches a TZID it found but never one it missed, so a file of
-    // events naming an undefined zone rescans itself once per event.
+    // The import's own ceiling, before the parser builds anything.
     if (countVEvents(text) > ICS_IMPORT_MAX_EVENTS) throw new ApiError(413, 'Too many events to preview');
 
     let parsed: IcsParseResult;
@@ -66,20 +64,17 @@ export function buildIcsPreviewPayload(data: ArrayBuffer): IcsPreview {
         throw new ApiError(422, 'Could not read this file');
     }
 
-    // Masters only: an override VEVENT and the synthetic cancelled row an EXDATE becomes are parts of
-    // their series, which the master's own rrule already says.
+    // An override and the cancelled row an EXDATE becomes are parts of their series, which the master's rrule says.
     const masters = parsed.events.filter((event) => event.recurrenceDate === null);
     const datable = masters.filter((event) => isDatable(event.startTime) && isDatable(event.endTime));
     datable.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
 
-    // A VEVENT the parser could not read, and an override whose master the file does not hold — it
-    // attaches to no series the card can show — are members like any other: counted, not silently gone.
+    // An override whose master the file does not hold attaches to no series the card can show, so it counts as unread.
     const masterUids = new Set(masters.map((event) => event.uid));
     const orphans = parsed.events.filter((event) => event.recurrenceDate !== null && !masterUids.has(event.uid)).length;
     const unreadable = parsed.skipped + orphans;
 
-    // `dropped` is the members the builder could not read, as it is in every preview payload; the ones
-    // merely past the cap are the consumer's own `total - dropped - events.length`.
+    // What is merely past the cap is the consumer's own `total - dropped - events.length`.
     return {
         method: parsed.method,
         events: datable.slice(0, ICS_PREVIEW_MAX_EVENTS).map(previewEvent),

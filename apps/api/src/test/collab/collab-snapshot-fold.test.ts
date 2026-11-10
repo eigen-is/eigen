@@ -34,7 +34,7 @@ describe('a collab document folds its updates into one snapshot', () => {
             const map = collab.doc.getMap('fold');
             for (let i = 0; i < 250; i++) map.set('n', i);
 
-            await home.drive.withDatabase(mountId, COLLAB_DB_CONFIG, collab.dataDbPathId!, async (managedDb) => {
+            await home.drive.withDatabase(mountId, COLLAB_DB_CONFIG, collab.dataDbPathId, async (managedDb) => {
                 const snapshots = managedDb.db.select().from(docSnapshots).all();
                 const updates = managedDb.db.select().from(docUpdates).all();
                 expect(snapshots).toHaveLength(1);

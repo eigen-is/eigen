@@ -67,36 +67,46 @@ function createEvent(user: TestUser, calendarId: string, title: string, padding 
     return postEvent(user, calendarId, eventBody(title, padding));
 }
 
+const aliceLink = (organizerEventId: string) => ({
+    organizerEmail: ctx.alice.user.email,
+    organizerEventId,
+    organizerUserId: ctx.alice.user.id,
+    createByUserId: ctx.alice.user.id,
+});
+
 // A series somebody else organizes, landed the way the relay lands one: the RSVP routes take no other kind.
 async function inviteFromAlice(user: TestUser, uid: string): Promise<CalendarEvent> {
     await sendToHome(user.id, {
-        type: 'calendar:invitation',
-        payload: {
-            uid,
-            title: 'Invited weekly',
-            description: null,
-            location: null,
-            startTime: new Date('2026-05-04T16:00:00Z'),
-            endTime: new Date('2026-05-04T17:00:00Z'),
-            allDay: false,
-            rrule: 'FREQ=WEEKLY;COUNT=4',
-            timezone: null,
-            status: 'confirmed',
-            sequence: 0,
-            data: {
-                organizer: { userId: ctx.alice.user.id, email: ctx.alice.user.email, name: 'Alice' },
-                attendees: [{ email: user.email, status: 'pending', role: 'required' }],
+        type: 'calendar:request',
+        events: [
+            {
+                uid,
+                title: 'Invited weekly',
+                description: null,
+                location: null,
+                startTime: new Date('2026-05-04T16:00:00Z'),
+                endTime: new Date('2026-05-04T17:00:00Z'),
+                allDay: false,
+                rrule: 'FREQ=WEEKLY;COUNT=4',
+                timezone: null,
+                status: 'confirmed',
+                sequence: 0,
+                dtstamp: null,
+                recurrenceDate: null,
+                recurrenceId: null,
+                data: {
+                    organizer: { userId: ctx.alice.user.id, email: ctx.alice.user.email, name: 'Alice' },
+                    attendees: [{ email: user.email, status: 'pending', role: 'required' }],
+                },
             },
-            createByUserId: ctx.alice.user.id,
-            organizerEventId: `${uid}-org-event`,
-            organizerUserId: ctx.alice.user.id,
-        },
+        ],
+        link: aliceLink(`${uid}-org-event`),
     });
     const home = await getHome(user.id);
     return findOrFail(await home.calendar.getEventsByUid(uid), (e) => !e.parentEventId);
 }
 
-const setBudget = (mb: number) => updateServerSettings({ quotas: { mailAndContactsMaxMB: mb } });
+const setBudget = (mb: number) => updateServerSettings({ quotas: { homeDataMaxMB: mb } });
 
 // The budget the writes below are judged against: exactly what the Home already holds, so anything that adds
 // bytes overflows and only an edit inside the headroom or a shrinking rewrite fits.
@@ -114,7 +124,7 @@ async function overfillBudget(user: TestUser): Promise<void> {
 
 // The ceiling is one server-wide setting, so whatever a test does to it, the next test starts where it did.
 async function restoringBudget<T>(run: () => Promise<T>): Promise<T> {
-    const original = getServerSettings().quotas.mailAndContactsMaxMB;
+    const original = getServerSettings().quotas.homeDataMaxMB;
     try {
         return await run();
     } finally {
@@ -563,27 +573,30 @@ describe('Calendar storage quota', () => {
             await fillBudget(user);
 
             await sendToHome(user.id, {
-                type: 'calendar:invitation',
-                payload: {
-                    uid: 'relay-quota@test',
-                    title: 'Relayed and refused',
-                    description: null,
-                    location: null,
-                    startTime: new Date('2026-05-04T16:00:00Z'),
-                    endTime: new Date('2026-05-04T17:00:00Z'),
-                    allDay: false,
-                    rrule: null,
-                    timezone: null,
-                    status: 'confirmed',
-                    sequence: 0,
-                    data: {
-                        organizer: { userId: ctx.alice.user.id, email: ctx.alice.user.email, name: 'Alice' },
-                        attendees: [{ email: user.email, status: 'pending', role: 'required' }],
+                type: 'calendar:request',
+                events: [
+                    {
+                        uid: 'relay-quota@test',
+                        title: 'Relayed and refused',
+                        description: null,
+                        location: null,
+                        startTime: new Date('2026-05-04T16:00:00Z'),
+                        endTime: new Date('2026-05-04T17:00:00Z'),
+                        allDay: false,
+                        rrule: null,
+                        timezone: null,
+                        status: 'confirmed',
+                        sequence: 0,
+                        dtstamp: null,
+                        recurrenceDate: null,
+                        recurrenceId: null,
+                        data: {
+                            organizer: { userId: ctx.alice.user.id, email: ctx.alice.user.email, name: 'Alice' },
+                            attendees: [{ email: user.email, status: 'pending', role: 'required' }],
+                        },
                     },
-                    createByUserId: ctx.alice.user.id,
-                    organizerEventId: 'relay-quota-org-event',
-                    organizerUserId: ctx.alice.user.id,
-                },
+                ],
+                link: aliceLink('relay-quota-org-event'),
             });
         });
 

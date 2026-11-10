@@ -26,8 +26,10 @@ function inScope(path: string): boolean {
 // holds no `;` or `=`.
 const MODULE_STATEMENT =
     /(?:^|\n)[ \t]*(?:import|export)\b[^;=]*?from[ \t]*(?:'[^'\n]*'|"[^"\n]*")|(?:^|\n)[ \t]*import[ \t]*(?:'[^'\n]*'|"[^"\n]*")|(?:^|\n)[ \t]*export[ \t]*\{[^}=;]*\}/g;
+// A mapped type's `as` renames its keys, `{ [P in Parts as Key<P>]: … }`, so drop that clause too.
+const KEY_REMAP = /(?<=\{\s*(?:[+-]?readonly\s+)?)\[\s*[\w$]+\s+in\s+(?:[^[\]\n]|\[[^[\]\n]*\])*?\bas\b/g;
 const DEEP_IMPORT = /@workspace\/(?:lib\/core\/|lib\/src\/|ui\/src\/)|['"]@workspace\/[\w@./-]+\.tsx?['"]/g;
-// Tailwind's default palette. A theme token replaces every one of these (CODE-STANDARDS § Code Style).
+// Tailwind's default palette. A theme token replaces every one of these.
 const PALETTE =
     'slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose';
 const RAW_COLOR = new RegExp(
@@ -53,15 +55,14 @@ if (CANONICAL_MIMES.size === 0) {
 // Every source file, tests and scripts included, since any of them may use a primitive. The metrics count in the
 // non-test sources of apps and packages.
 const sources: SourceFile[] = [];
-for (const path of (await Bun.$`git ls-files apps packages scripts docker`.text()).split('\n')) {
+for (const path of (await Bun.$`git ls-files --deduplicate apps packages scripts docker`.text()).split('\n')) {
     if (!/\.(?:ts|tsx|js|jsx|mjs)$/.test(path) || GENERATED.some((tail) => path.endsWith(tail))) continue;
     const text = await Bun.file(path).text();
     sources.push({ path, text, code: stripNoise(text, path.endsWith('x')) });
 }
 
-// CODE-STANDARDS § Standards Gates: a primitive the shared-primitives index lists needs a user outside its file. The
-// unused ones are found once, from every source file, before the per-file counts, and each counts against the file
-// that defines it.
+// A primitive the shared-primitives index lists needs a user outside its file. Each unused one counts against the
+// file that defines it.
 const PRIMITIVES_INDEX = 'docs/SHARED-PRIMITIVES.md';
 const unusedByFile = new Map<string, Primitive[]>();
 
@@ -69,14 +70,12 @@ function unusedIn(path: string, isType: boolean): number {
     return (unusedByFile.get(path) ?? []).filter((primitive) => primitive.isType === isType).length;
 }
 
-// CODE-STANDARDS § Standards Gates: a dialog footer outside FormDialog is an allow-listed exception. The files are found
-// once, from every source file, and a stale list entry counts against its own path.
+// A dialog footer outside FormDialog is an allow-listed exception, and a stale list entry counts against its own path.
 const footers = dialogFooterHits(sources);
 
 const ROUTE_FILE = /^apps\/api\/src\/routes\/[^/]+\.ts$/;
-// The home-independent surfaces that deliberately carry no `:ownerId` (docs/ARCHITECTURE.md § Pitfalls):
-// first-run setup, server-wide admin config, the unauthenticated public surface, and the backup routes,
-// server-wide too: `backup.ts` gated by `requireAdmin` in every handler, `server-backup.ts` by `requireOwner`.
+// Server-wide routes that belong to no Home, so they carry no `:ownerId`, such as first-run setup, admin config,
+// the unauthenticated public surface and the backup routes, which an admin or owner check gates instead.
 const OWNER_ID_EXEMPT = new Set([
     'setup.ts',
     'settings.ts',
@@ -90,22 +89,15 @@ const ROUTE_START = /\.(?:get|post|put|patch|delete|ws|head|options|all)\(\s*['"
 // `/ws` is a transport prefix, not a path segment: the collab socket's `:ownerId` comes after it.
 const TRANSPORT_PREFIX = /^\/ws(?=\/)/;
 
-// docs/LAYOUT.md § Hover-revealed affordances rest visible on touch: an affordance hidden until hover must rest visible
-// on touch, which has no hover. Only a hidden element is at risk, since a decorative `group-hover:scale-105` reveals
-// nothing, so a hit is a hiding utility plus a revealing `group-hover:` in the same class string. A named group's
-// `group-hover/item:` counts too. `pointer-fine:group-hover:` makes the hover desktop-only on purpose and is not a gap.
+// Touch has no hover, so a hit is a hiding utility plus a revealing `group-hover:` in one class string.
+// `pointer-fine:group-hover:` makes the hover desktop-only on purpose and passes.
 const STRING_LITERAL = /'[^'\n]*'|"[^"\n]*"|`[^`]*`/g;
 const HIDDEN_BASE = /(?<![\w-])(?:invisible|hidden|opacity-0)(?![\w-])/;
 const HOVER_REVEAL =
     /(?<!pointer-fine:)\bgroup-hover(?:\/[\w-]+)?:(visible|flex|grid|block|inline-flex|inline-block|opacity-\d+)(?![\w-])/g;
 
-// The same section keeps these controls in reach of the keyboard. Tab skips a control under `invisible` or `hidden`,
-// so a hover reveal hides with `opacity-0`. A reveal on `focus:` or `focus-within:` keeps a control shown after a mouse
-// click, once the pointer has left. So a class string is a hit when a `group-hover:` makes a bare `invisible` visible or
-// displays a bare `hidden`, or when it reveals on `focus:`, `focus-within:` or their `group-` forms. `focus-visible:`
-// and `group-has-focus-visible:` show only for the keyboard and pass. A `hidden md:flex` beside an unrelated
-// `group-hover:` reveals nothing. A hint the pointer always passes through, `pointer-events-none` with no
-// `pointer-events-auto`, holds no control.
+// Tab skips a control under `invisible` or `hidden`, so a hover reveal must hide with `opacity-0`; a `focus:` reveal
+// keeps a control shown after a mouse click, while `focus-visible:` shows only for the keyboard and passes.
 const TAB_SKIPPED_REVEALS = [
     [/(?<![\w:[-])invisible(?![\w-])/, /\bgroup-hover(?:\/[\w-]+)?:visible(?![\w-])/],
     [/(?<![\w:[-])hidden(?![\w-])/, /\bgroup-hover(?:\/[\w-]+)?:(?:flex|grid|block|inline-flex|inline-block)(?![\w-])/],
@@ -120,11 +112,8 @@ function keyboardHostileReveal(literal: string): boolean {
     return TAB_SKIPPED_REVEALS.some(([hide, reveal]) => hide.test(literal) && reveal.test(literal));
 }
 
-// docs/LAYOUT.md § A row that deletes is red and last: a row that deletes, trashes or removes is the destructive
-// variant, red with its icon, never a plain row or one tinted by a class. A row is destructive when it draws a trash
-// icon or its label (JSX text or a string literal, read where stripNoise blanked it) says Delete, Remove or to trash. A
-// toggle's label, a ternary with one branch saying Remove and the other not ('Remove' : 'Add', say), names an
-// undo, not a deletion.
+// A row that draws a trash icon or says Delete, Remove or to trash must be the destructive variant. A ternary
+// label with one branch saying Remove and the other not, such as 'Remove' : 'Add', is a toggle and passes.
 const MENU_ROW = /<(DropdownMenuItem|SelectItem)\b/g;
 const TRASH_ICON = /<Trash2?\b/;
 const DESTRUCTIVE_LABEL = /\b(?:Delete|Remove)\b|\bto trash\b/;
@@ -172,9 +161,8 @@ function plainDestructiveRows({ text, code }: SourceFile): number {
     return hits;
 }
 
-// docs/LAYOUT.md § A choice is a submenu with a check: a menu row shows a current option or an on state with the check
-// ChoiceMenuItems and DropdownMenuCheckboxItem draw, never a Check it draws itself when a condition holds. The color
-// picker's swatch grid marks its color inside the swatch, as Google's palette does.
+// A menu row shows a current option with the check ChoiceMenuItems draws, never its own conditional Check. The
+// color picker's swatch grid marks its color inside the swatch, as Google's palette does.
 const DRAWN_CHECK = /(?:&&|\?)\s*\(?\s*<Check(?:Icon)?\b/;
 const SWATCH_GRID = 'packages/ui/src/components/media/color-picker-menu-item.tsx';
 
@@ -217,7 +205,10 @@ const METRICS: Metric[] = [
         // `as unknown as T` is one escape hatch, not two.
         count: ({ code }) =>
             countMatches(
-                code.replaceAll(MODULE_STATEMENT, '').replaceAll(/\bas\s+unknown\s+as\b/g, 'as'),
+                code
+                    .replaceAll(MODULE_STATEMENT, '')
+                    .replaceAll(KEY_REMAP, '')
+                    .replaceAll(/\bas\s+unknown\s+as\b/g, 'as'),
                 /\bas\s+(?!const\b)/g,
             ),
     },
@@ -340,7 +331,6 @@ const METRICS: Metric[] = [
         id: 'sentence-case',
         label: 'Capitalized words in UI labels',
         hardZero: true,
-        // CODE-STANDARDS § UI labels are sentence case; the proper-noun list lives in sentence-case.ts.
         count: ({ path, text }) => sentenceCaseHits(path, text).length,
     },
     {
@@ -418,9 +408,8 @@ function allowedIn(metric: Metric, allowance: Allowance | undefined, path: strin
     return allowance ?? 0;
 }
 
-// A ratcheted count that fell becomes the new baseline; one that rose keeps the old one and fails below. A metric with
-// no entry yet starts at today's count. A file over its allowance keeps it, so the failure below still names it, and
-// the entry of a file that holds none, or that is gone, drops.
+// A count that fell becomes the new baseline, and one that rose keeps the old one and fails below. A file over its
+// allowance keeps it so the failure still names it, and a file that holds none, or is gone, drops its entry.
 const next: Record<string, Allowance> = {};
 for (const metric of METRICS) {
     if (metric.hardZero) continue;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
-import { NORMALIZE_ORIGIN, normalizeParentChildRefs } from '../../../core/collab/normalize-refs';
+import { normalizeParentChildRefs } from '../../../core/collab/normalize-refs';
 
 // Build a doc shaped like slides/stickies: a `parents` map of Y.Maps each holding a `refs` Y.Array of
 // child ids, plus a `children` map of the children themselves, plus an `order` Y.Array naming the
@@ -102,7 +102,7 @@ describe('normalizeParentChildRefs', () => {
         expect(Y.encodeStateAsUpdate(doc).length).toBeGreaterThanOrEqual(before.length);
     });
 
-    test('repairs run under NORMALIZE_ORIGIN — an UndoManager (default trackedOrigins) ignores them', () => {
+    test('an UndoManager with default trackedOrigins ignores the repair', () => {
         const doc = makeDoc({ p1: ['c1'], p2: ['c1'] }, ['c1']);
         const um = new Y.UndoManager([doc.getMap('parents')]);
         normalizeParentChildRefs(doc, 'parents', 'children', 'refs', 'order');
@@ -110,16 +110,6 @@ describe('normalizeParentChildRefs', () => {
         expect(um.canUndo()).toBe(false); // but not on the undo stack
         um.undo();
         expect(refsOf(doc, 'p1')).toEqual([]); // undo is a no-op — the corruption stays fixed
-    });
-
-    test('stamps the repair transaction with NORMALIZE_ORIGIN', () => {
-        const doc = makeDoc({ p1: ['c1'], p2: ['c1'] }, ['c1']);
-        let seenOrigin: unknown;
-        doc.on('afterTransaction', (tr) => {
-            if (tr.changed.size > 0) seenOrigin = tr.origin;
-        });
-        normalizeParentChildRefs(doc, 'parents', 'children', 'refs', 'order');
-        expect(seenOrigin).toBe(NORMALIZE_ORIGIN);
     });
 
     test('re-homes an orphan onto the first parent in document order, not the first map key', () => {

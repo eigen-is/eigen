@@ -18,7 +18,7 @@ import { serializeFill } from '../../../vector/fill';
 import { renderChartSpecSvg, renderChartSvg } from '../../../vector/kinds/chart-render';
 import { svgId } from '../../../vector/kinds/render-utils';
 import { outlinePath, rectOutline } from '../../../vector/outline';
-import { elementToSvg } from '../../../vector/scene-to-svg';
+import { elementSvg } from '../element-factories';
 
 const RANGE_SPEC: ChartSpec = {
     ...sampleChartSpec('column'),
@@ -102,7 +102,7 @@ describe('renderChartSpecSvg', () => {
             height: 371,
             paint: chartPaintOf(FLAT_CHART_LOOK),
         });
-        for (const shape of shapes) expect([shape.id, svg.includes(elementToSvg(shape))]).toEqual([shape.id, true]);
+        for (const shape of shapes) expect([shape.id, svg.includes(elementSvg(shape))]).toEqual([shape.id, true]);
     });
 
     test('an unparseable spec draws the placeholder', () => {

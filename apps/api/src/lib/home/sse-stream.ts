@@ -2,11 +2,13 @@
 // the Home broadcasts, and it holds the Home, so the Home stays open while the tab is. When the Home closes anyway,
 // such as for a restore or the shutdown, the stream ends and the browser reconnects to the next Home. When it opens,
 // it sends the server's restart notice, or word that there is none, and the data epochs. A keepalive every 15
-// seconds keeps a proxy from closing the connection, and the data epochs go out again with it.
+// seconds keeps a proxy from closing the connection. The data epochs go out again with it, and it ends the stream
+// once its session is gone.
 
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { sse } from 'elysia';
 import { buildRestartNoticeEvent } from '../config/restart-notice';
+import { getSessionUser } from '../user';
 import type { Home } from './home';
 import { buildDataEpochsEvent } from './sse-events';
 
@@ -17,14 +19,14 @@ const KEEPALIVE_INTERVAL_MS = 15_000;
 type StreamItem = SSEvent | ReturnType<typeof keepaliveItem>;
 
 // Throws the Home's 503 when it is closing, so the route answers with it and the browser retries.
-export function createSSEStream(home: Home): ReadableStream<StreamItem> {
+export function createSSEStream(home: Home, sessionId: string): ReadableStream<StreamItem> {
     const userId = home.user.id;
     let streamController: ReadableStreamDefaultController<StreamItem> | null = null;
     let keepalive: Timer | undefined;
     let releaseHome: (() => void) | undefined;
     let isClosed = false;
 
-    // Runs once, whichever way the stream ends: the client leaves, the Home closes, or a send fails.
+    // Runs once, whichever way the stream ends: the client leaves, the Home closes, the session ends, or a send fails.
     const teardown = () => {
         if (isClosed) return;
         isClosed = true;
@@ -53,10 +55,12 @@ export function createSSEStream(home: Home): ReadableStream<StreamItem> {
             streamController = controller;
             // Elysia calls cancel only when the client leaves, never when the stream closes itself, so the
             // teardown runs here first.
-            releaseHome = home.hold(() => {
+            const end = () => {
+                if (isClosed) return;
                 teardown();
                 controller.close();
-            });
+            };
+            releaseHome = home.hold(end);
             home.subscribeSSE(send);
             send(keepaliveItem());
             // With none too, so a tab that reconnects to a restarted server drops the notice it held.
@@ -66,6 +70,11 @@ export function createSSEStream(home: Home): ReadableStream<StreamItem> {
             keepalive = setInterval(() => {
                 send(keepaliveItem());
                 announceDataEpochs();
+                getSessionUser(sessionId)
+                    .then((user) => {
+                        if (!user) end();
+                    })
+                    .catch((e) => console.error(`[SSE] Failed to read the session of ${userId}:`, e));
             }, KEEPALIVE_INTERVAL_MS);
         },
         cancel: teardown,

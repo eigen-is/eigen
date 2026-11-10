@@ -6,10 +6,11 @@ import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import type { MountConfig, MountSettings } from '@workspace/lib/types';
 import { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
+import { mapStorageType } from '@workspace/lib/types/settings';
 import type { SQL } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { PATHS } from '../config/paths';
-import { getS3Config, getServerSettings, mapStorageType } from '../config/server-settings';
+import { getS3Config, getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import type { StorageBackend } from '../storage';
 import { LocalStorage, S3Storage } from '../storage';
@@ -43,6 +44,19 @@ export function ancestorIds(...pathIds: string[]): SQL {
             SELECT p.id, p.parentId FROM paths p JOIN ancestors a ON p.id = a.parentId
         )
         SELECT id FROM ancestors
+    `;
+}
+
+// Every path below parentId, trashed or not. A query adds it as `id IN (…)`, so
+// one statement reaches a whole subtree, and SQLite's cap on a statement's variables never applies.
+export function descendantIds(parentId: string): SQL {
+    return sql`
+        WITH RECURSIVE descendants AS (
+            SELECT id FROM paths WHERE parentId = ${parentId}
+            UNION ALL
+            SELECT p.id FROM paths p JOIN descendants d ON p.parentId = d.id
+        )
+        SELECT id FROM descendants
     `;
 }
 

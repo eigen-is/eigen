@@ -4,18 +4,18 @@
 // pushes nothing, so a listing drops the rows of an owner who no longer exists. This file is the only
 // one that reads or writes that table. Drive calls it with its shared database.
 
+import { shareTag } from '@workspace/lib/notification/tags';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByType, isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, inArray } from 'drizzle-orm';
-import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type { Home } from '../home';
 import { actorDisplayName, getMemberships, getOwnerExists } from '../user';
 import { matchesACL } from './acl';
+import type { SharedDb } from './shared';
 import * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
 
-type SharedDb = BunSQLiteDatabase<typeof sharedSchema>;
 type SharedPathRow = typeof sharedSchema.sharedPaths.$inferSelect;
 
 export async function receiveSharedPathChange(
@@ -30,7 +30,12 @@ export async function receiveSharedPathChange(
     const actorDisplay = actorDisplayName(actorName, actorEmail);
     const memberships = await getMemberships(home.user.id);
     if (newACL === null || !matchesACL(newACL, home.user, memberships, 'read')) {
-        sharedDb.delete(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
+        const removed = sharedDb
+            .delete(sharedSchema.sharedPaths)
+            .where(eq(sharedSchema.sharedPaths.id, path.id))
+            .returning({ id: sharedSchema.sharedPaths.id })
+            .get();
+        if (!removed) return;
         home.broadcast(buildDriveEvent(SSEventType.DRIVE_ACL_UNSHARED, path));
         // A user who leaves a share did it themselves, so they get no notice.
         if (actorEmail?.toLowerCase() !== home.user.email.toLowerCase()) {
@@ -86,7 +91,7 @@ export async function receiveSharedPathChange(
             actorEmail,
             title: actorDisplay ? `${actorDisplay} shared a ${noun}` : 'Shared with you',
             body: displayName,
-            tag: `share:${path.ownerId}:${path.mountId}:${path.id}`,
+            tag: shareTag({ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }),
             details: { pathType: path.type },
         });
     }

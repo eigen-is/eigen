@@ -3,6 +3,7 @@
 // discovers, such as new mail arriving, into live updates and notifications for the user.
 
 import { canonicalMailbox, MAILBOX_DRAFTS, MAILBOX_INBOX, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
+import { NEW_MAIL_TAG } from '@workspace/lib/notification/tags';
 import type {
     Attachment,
     DraftAttachmentUpload,
@@ -45,8 +46,6 @@ import { draftToOutboundMail } from './sender';
 import { buildMailEvent } from './sse-events';
 import { welcomeMail } from './welcome';
 
-const MAIL_NOTIFICATION_TAG = 'mail:new';
-
 // A blank id normalizes to undefined, so `?? createUniqueMessageId()` bakes a `Message-ID: <@domain>` into the EML.
 // Folded to NFC first, the rule `isSafePathSegment` is written for: one spelling reaches the filesystem.
 function draftIdOf(email: NewDraft): string | undefined {
@@ -77,7 +76,7 @@ export class Mail {
     }
 
     private readNotificationOnceInboxRead(): void {
-        if (this.store.unreadCount(MAILBOX_INBOX) === 0) this.home.notifications.markReadByTag(MAIL_NOTIFICATION_TAG);
+        if (this.store.unreadCount(MAILBOX_INBOX) === 0) this.home.notifications.markReadByTag(NEW_MAIL_TAG);
     }
 
     public async init(): Promise<void> {
@@ -90,7 +89,7 @@ export class Mail {
                         actorEmail: email.from?.value?.[0]?.address ?? null,
                         title: `New mail from ${email.fromShort}`,
                         body: email.subject || '(no subject)',
-                        tag: MAIL_NOTIFICATION_TAG,
+                        tag: NEW_MAIL_TAG,
                         coalesce: true,
                         details: {
                             mailId: email.id,

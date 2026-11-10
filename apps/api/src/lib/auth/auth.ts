@@ -124,7 +124,6 @@ export const auth = betterAuth({
                 after: async (user) => {
                     const { clearHomeDeleting } = await import('../home/get-home');
                     clearHomeDeleting(user.id);
-                    await enforceReadAccessAfterMembershipChange();
                 },
             },
         },
@@ -207,9 +206,6 @@ export const auth = betterAuth({
                     const user = await getUserById(teamMember.userId);
                     if (user) await reconcileShares(user, teamMember.teamId);
                 },
-                afterRemoveTeamMember: enforceReadAccessAfterMembershipChange,
-                // A member's team rows go with the member row, and better-auth calls no team hook for them.
-                afterRemoveMember: enforceReadAccessAfterMembershipChange,
                 // The team row still exists here, and a throw keeps it, as user.delete.before does for a user.
                 // The default team holds the org-wide drive every member joins, and its teardown can't be undone.
                 beforeDeleteTeam: async ({ team }) => {
@@ -225,7 +221,6 @@ export const auth = betterAuth({
                     // Lazy imports to avoid the static cycle (home-relay → get-home → team → auth).
                     const { clearHomeDeleting } = await import('../home/get-home');
                     clearHomeDeleting(teamOwnerId(team.id));
-                    await enforceReadAccessAfterMembershipChange();
                     const { pushTeamAvatar } = await import('../home/home-relay');
                     await pushTeamAvatar(team.id, null);
                 },
@@ -299,13 +294,6 @@ async function busyHomeAsConflict(run: () => unknown): Promise<void> {
         }
         throw error;
     }
-}
-
-// A socket checks read only when it opens, and the membership row that gave the read is gone by now. The import is
-// lazy for the same cycle as the team hooks. Nothing below it throws, so a removal never fails over it.
-async function enforceReadAccessAfterMembershipChange(): Promise<void> {
-    const { enforceReadAccessOnLoadedHomes } = await import('../home/home-relay');
-    await enforceReadAccessOnLoadedHomes();
 }
 
 // Joins the default org that setup pinned in the config, and its default team. The sign-up hook and every sign-in

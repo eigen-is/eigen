@@ -26,7 +26,9 @@ export function getSyntheticTeamUser(ownerId: string, teamName?: string): User {
 
 export class TeamHome extends Home {
     public readonly teamId: string;
-    declare public settings: JsonStore<TeamSettings>;
+    public override readonly settings = new JsonStore<TeamSettings>(this.fs, PATHS.SETTINGS, {
+        calendar: { enabled: false },
+    });
 
     // No event stream keeps a team home open, only an open document of the team does, so it gets a longer idle.
     protected override idleMs = Number(process.env['TEAM_HOME_IDLE_MS']) || 1000 * 60 * 30;
@@ -35,7 +37,6 @@ export class TeamHome extends Home {
         const teamId = parseOwnerId(syntheticUser.id).id;
         super(syntheticUser, getTeamHomePath(teamId), onClosed);
         this.teamId = teamId;
-        this.settings = new JsonStore<TeamSettings>(this.fs, PATHS.SETTINGS, { calendar: { enabled: false } });
         this._drive = new Drive(this);
         this._calendar = new Calendar(this);
     }

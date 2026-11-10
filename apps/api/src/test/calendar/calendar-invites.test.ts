@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getHome } from '../../lib/home';
+import type { ParsedEvent } from '../../lib/ical/ical-parse';
 import { assertJson, authedRequest, collectSSE, eventually, findOrFail, getTestContext } from '../setup';
 
 describe('Calendar Invites', () => {
@@ -81,6 +82,8 @@ describe('Calendar Invites', () => {
             expect(linked.data!.organizer!.userId).toBe(ctx.alice.user.id);
             expect(linked.data!.organizer!.email).toBe(ctx.alice.user.email);
             expect(linked.data!.organizerEventId).toBe(inviteEvent.id);
+            // Unlike a mailed file, the relayed REQUEST lists the guests alone, never the organizer.
+            expect(linked.data?.attendees?.map((a) => a.email)).toEqual([ctx.bob.user.email]);
         });
 
         test('exactly one linked copy reaches the attendee', async () => {
@@ -234,13 +237,12 @@ describe('Calendar Invites', () => {
 
         const sse = await collectSSE(ctx.charlie.user.id);
         try {
-            await home.calendar.cancelInvitationOccurrence(
-                orgEventId,
-                orgUserId,
-                '2026-07-13',
-                new Date('2026-07-13T09:00:00Z'),
-                { sequence: 1, dtstamp: new Date() },
-            );
+            await home.calendar.cancelInvitationOccurrence(orgEventId, orgUserId, {
+                recurrenceDate: '2026-07-13',
+                recurrenceId: { instant: new Date('2026-07-13T09:00:00Z'), timezone: null },
+                sequence: 1,
+                dtstamp: new Date(),
+            });
 
             await eventually(
                 async () => (sse.events.some((e) => e.type === SSEventType.CALENDAR_EVENT_UPDATED) ? true : undefined),
@@ -252,90 +254,82 @@ describe('Calendar Invites', () => {
     });
 
     // A re-received invite lands under a fresh name, so one sync delta carries the deleted resource as a
-    // 404 and the new one as a 200 — never one href as both. Driven at the domain level, like the linked-
-    // event seeding in calendar.test.ts: the REST layer has no re-invite-after-delete flow to exercise it.
+    // 404 and the new one as a 200, never one href as both.
     describe('Re-received invitation after local delete', () => {
-        test('syncs once as a 200 with a non-null eventCtag and no 404 tombstone', async () => {
-            const bobHome = await getHome(ctx.bob.user.id);
-            const cal = bobHome.calendar;
+        const relayed = (uid: string, title: string, organizerEmail: string, sequence = 0): ParsedEvent => ({
+            uid,
+            title,
+            description: null,
+            location: null,
+            startTime: new Date('2026-11-12T09:00:00Z'),
+            endTime: new Date('2026-11-12T10:00:00Z'),
+            allDay: false,
+            rrule: null,
+            timezone: null,
+            status: 'confirmed',
+            sequence,
+            dtstamp: null,
+            recurrenceDate: null,
+            recurrenceId: null,
+            data: { organizer: { userId: ctx.alice.user.id, email: organizerEmail, name: 'Alice' } },
+        });
+        const linkOf = (organizerEventId: string, organizerUserId = ctx.alice.user.id) => ({
+            organizerEmail: ctx.alice.user.email,
+            organizerEventId,
+            organizerUserId,
+            createByUserId: organizerUserId,
+        });
+
+        // A deleted copy is no record of an answer, so the organizer's next save files it again, as a mailed one does.
+        test("the organizer's next save files a deleted copy again, under a fresh name", async () => {
+            const created = await createEventWithAttendees('Re-received Invite', [{ email: ctx.bob.user.email }]);
+            await bobEvent((e) => e.title === 'Re-received Invite');
+            const cal = (await getHome(ctx.bob.user.id)).calendar;
             const defaultCal = findOrFail(await cal.getCalendars(), (c) => c.isDefault);
-            const uid = `reinvite-${crypto.randomUUID()}`;
-            const payload = {
-                uid,
-                title: 'Re-received Invite',
-                description: null,
-                location: null,
-                startTime: new Date('2026-11-10T09:00:00Z'),
-                endTime: new Date('2026-11-10T10:00:00Z'),
-                allDay: false,
-                rrule: null,
-                timezone: null,
-                status: 'confirmed' as const,
-                sequence: 0,
-                data: {
-                    organizer: { userId: ctx.alice.user.id, email: ctx.alice.user.email, name: 'Alice' },
-                    organizerEventId: `org-${uid}`,
+            const first = findOrFail(await cal.listResources(defaultCal.id), (r) => r.uid === created.uid);
+            const firstId = (await cal.getEventsByUid(created.uid))[0].id;
+            // The client's sync token, captured after the first receive and before the delete and the re-receive.
+            const preCtag = (await cal.getCalendarById(defaultCal.id))?.ctag ?? 0;
+
+            await cal.deleteEvent(defaultCal.id, firstId);
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${created.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'Re-received Invite, renamed' }),
                 },
-                createByUserId: ctx.alice.user.id,
-                organizerEventId: `org-${uid}`,
-                organizerUserId: ctx.alice.user.id,
-            };
+            );
+            const changed = await eventually(async () => {
+                const rows = (await cal.getChangedResourcesSince(defaultCal.id, preCtag)).filter(
+                    (r) => r.uid === created.uid,
+                );
+                return rows.length ? rows : undefined;
+            }, 'the copy filed again');
 
-            const firstId = await cal.receiveInvitation(payload);
-            const firstUri = findOrFail(await cal.listResources(defaultCal.id), (r) => r.uid === uid).uri;
-            // The client's sync token, captured after the first receive and before the delete + re-receive.
-            const preCtag = (await cal.getCalendarById(defaultCal.id))!.ctag;
-
-            await cal.deleteEvent(defaultCal.id, firstId!); // Bob deletes his linked copy → tombstones the uri
-            const secondId = await cal.receiveInvitation(payload); // Alice re-sends the same invite
-            expect(secondId).not.toBe(firstId);
-
-            const changed = (await cal.getChangedResourcesSince(defaultCal.id, preCtag)).filter((r) => r.uid === uid);
             const deleted = await cal.getDeletedResourcesSince(defaultCal.id, preCtag);
             expect(changed).toHaveLength(1);
-            expect(changed[0].uri).not.toBe(firstUri);
-            expect(deleted.map((d) => d.uri)).toContain(firstUri);
+            expect(changed[0].uri).not.toBe(first.uri);
+            expect(deleted.map((d) => d.uri)).toContain(first.uri);
             expect(deleted.some((d) => d.uri === changed[0].uri)).toBe(false);
         });
 
         test('a second link on one UID is dropped, and never a second master', async () => {
-            const bobHome = await getHome(ctx.bob.user.id);
-            const cal = bobHome.calendar;
+            const cal = (await getHome(ctx.bob.user.id)).calendar;
             const defaultCal = findOrFail(await cal.getCalendars(), (c) => c.isDefault);
             const uid = `collide-${crypto.randomUUID()}`;
-            const payload = {
-                uid,
-                title: 'Colliding Invite',
-                description: null,
-                location: null,
-                startTime: new Date('2026-11-12T09:00:00Z'),
-                endTime: new Date('2026-11-12T10:00:00Z'),
-                allDay: false,
-                rrule: null,
-                timezone: null,
-                status: 'confirmed' as const,
-                sequence: 0,
-                data: {
-                    organizer: { userId: ctx.alice.user.id, email: ctx.alice.user.email, name: 'Alice' },
-                    organizerEventId: `org-a-${uid}`,
-                },
-                createByUserId: ctx.alice.user.id,
-                organizerEventId: `org-a-${uid}`,
-                organizerUserId: ctx.alice.user.id,
-            };
-            await cal.receiveInvitation(payload);
-            const preCtag = (await cal.getCalendarById(defaultCal.id))!.ctag;
+            await cal.receiveRequest([relayed(uid, 'Colliding Invite', ctx.alice.user.email)], linkOf(`org-a-${uid}`));
+            const preCtag = (await cal.getCalendarById(defaultCal.id))?.ctag;
 
-            // The same uid under another organizer key slips past the linked-event dedupe; the calendar
-            // already holds that UID, so the invitation is dropped instead of throwing on the unique
-            // index, and it leaves no phantom ctag bump for every client to poll an empty delta for.
-            const second = await cal.receiveInvitation({
-                ...payload,
-                organizerEventId: `org-b-${uid}`,
-                organizerUserId: ctx.charlie.user.id,
-            });
-            expect(second).toBeNull();
-            expect((await cal.getCalendarById(defaultCal.id))!.ctag).toBe(preCtag);
+            // The same uid under another organizer key; the calendar already holds that UID, so the invitation is
+            // dropped instead of throwing on the unique index, and it leaves no phantom ctag bump for every client
+            // to poll an empty delta for.
+            await cal.receiveRequest(
+                [relayed(uid, 'Colliding Invite', ctx.alice.user.email, 1)],
+                linkOf(`org-b-${uid}`, ctx.charlie.user.id),
+            );
+            expect((await cal.getCalendarById(defaultCal.id))?.ctag).toBe(preCtag);
             expect(await cal.getEventsByUid(uid)).toHaveLength(1);
         });
 
@@ -344,31 +338,15 @@ describe('Calendar Invites', () => {
             const cal = bobHome.calendar;
             const uid = `nameless-${crypto.randomUUID()}`;
             const orgEventId = `org-${uid}`;
-            const payload = {
-                uid,
-                title: 'Nameless Invite',
-                description: null,
-                location: null,
-                startTime: new Date('2026-11-14T09:00:00Z'),
-                endTime: new Date('2026-11-14T10:00:00Z'),
-                allDay: false,
-                rrule: null,
-                timezone: null,
-                status: 'confirmed' as const,
-                sequence: 0,
-                data: { organizer: { userId: ctx.alice.user.id, email: '' }, organizerEventId: orgEventId },
-                createByUserId: ctx.alice.user.id,
-                organizerEventId: orgEventId,
-                organizerUserId: ctx.alice.user.id,
+            const nameless = (title: string, sequence: number): ParsedEvent => {
+                const event = relayed(uid, title, '', sequence);
+                return { ...event, data: { organizer: { userId: ctx.alice.user.id, email: '' } } };
             };
+            const link = { ...linkOf(orgEventId), organizerEmail: '' };
             const persist = spyOn(bobHome.notifications, 'persist');
             try {
-                await cal.receiveInvitation(payload);
-                await cal.receiveInvitationUpdate(orgEventId, ctx.alice.user.id, {
-                    ...payload,
-                    title: 'Nameless Invite Moved',
-                    sequence: 1,
-                });
+                await cal.receiveRequest([nameless('Nameless Invite', 0)], link);
+                await cal.receiveRequest([nameless('Nameless Invite Moved', 1)], link);
                 await cal.removeInvitation(orgEventId, ctx.alice.user.id);
                 const notices = persist.mock.calls.map((call) => call[0]).filter((n) => n.tag?.includes(orgEventId));
                 expect(notices.map((n) => n.title)).toEqual([
@@ -464,6 +442,56 @@ describe('Calendar Invites', () => {
             expect(stored[0].calendarId).toBe(shared.id);
             const owner = findOrFail(stored[0].data?.attendees ?? [], (a) => a.email === ctx.alice.user.email);
             expect(owner.status).toBe('pending');
+        });
+
+        // A guest answers the ORGANIZER, and only the owner's Home holds the event, so the owner is named whoever saved.
+        test("an event a collaborator saves names the calendar's owner as its organizer", async () => {
+            const home = await getHome(ctx.alice.user.id);
+            const shared = await home.calendar.createCalendar({ name: 'Organized by Alice', color: '#aabbcc' });
+            await home.calendar.updateCalendar(shared.id, {
+                shares: [{ targetId: ctx.bob.user.email, permission: 'write' }],
+            });
+            const mailer = await import('../../lib/mailer/mailer');
+            const sent = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            sent.mockClear();
+
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${shared.id}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Saved By Bob',
+                        startTime: new Date(Date.now() + 3600_000),
+                        endTime: new Date(Date.now() + 7200_000),
+                        allDay: false,
+                        data: {
+                            attendees: [ctx.charlie.user.email, 'outside.guest@external.com'].map((email) => ({
+                                email,
+                                status: 'pending',
+                                role: 'required',
+                            })),
+                        },
+                    }),
+                },
+            );
+            const created = await assertJson<CalendarEvent>(res);
+            const charlie = await getHome(ctx.charlie.user.id);
+            const copy = await eventually(
+                async () => (await charlie.calendar.getEventsByUid(created.uid))[0],
+                "Charlie's copy",
+            );
+            const invite = await eventually(
+                async () => sent.mock.calls.map((call) => call[0]).find((mail) => mail.icalEvent),
+                'the mailed invitation',
+            );
+            sent.mockRestore();
+
+            expect(copy.data?.organizer?.email).toBe(ctx.alice.user.email);
+            expect(invite.from?.address).toBe(ctx.alice.user.email);
+            const organizerLine = invite.icalEvent?.content.replace(/\r\n /g, '').match(/^ORGANIZER.*$/m)?.[0];
+            expect(organizerLine).toEndWith(`:mailto:${ctx.alice.user.email}`);
         });
     });
 
@@ -940,7 +968,7 @@ describe('Calendar Invites', () => {
         await bobEvent((e) => e.title === 'Projected Payload');
 
         const messages = spy.mock.calls.map((call) => JSON.stringify(call[1]));
-        expect(messages.some((message) => message.includes('calendar:invitation'))).toBe(true);
+        expect(messages.some((message) => message.includes('calendar:request'))).toBe(true);
         expect(messages.some((message) => message.toUpperCase().includes('X-EIGEN'))).toBe(false);
         spy.mockRestore();
     });
@@ -1012,5 +1040,237 @@ describe('Delete-as-decline is for attendees only', () => {
     test('deleting one the user is an attendee of still declines, whatever case the file spells', async () => {
         const event = await seed('My meeting', ctx.bob.user.email.toUpperCase());
         expect(await declinesTo(event.id)).toBe(1);
+    });
+});
+
+describe('The invitation mail of one save', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let calendarId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`);
+        calendarId = findOrFail(await assertJson<CalendarItem[]>(res), (c) => c.isDefault).id;
+    });
+
+    const GUESTS = ['one@external.com', 'two@external.com', 'three@external.com'];
+
+    test('is built once, and each guest gets it under their own address', async () => {
+        const mailer = await import('../../lib/mailer/mailer');
+        const ical = await import('../../lib/ical/ical-component');
+        const mail = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        mail.mockClear();
+        const build = spyOn(ical, 'serializeEventForImip');
+        build.mockClear();
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${calendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'One body',
+                    startTime: new Date(Date.now() + 3600_000),
+                    endTime: new Date(Date.now() + 7200_000),
+                    allDay: false,
+                    data: { attendees: GUESTS.map((email) => ({ email, status: 'pending', role: 'required' })) },
+                }),
+            },
+        );
+        expect(res.status).toBe(200);
+        const sent = await eventually(async () => {
+            const calls = mail.mock.calls.map((call) => call[0]).filter((m) => m.subject === 'Invitation: One body');
+            return calls.length === GUESTS.length ? calls : undefined;
+        }, 'the invitation to reach every guest');
+
+        expect(build).toHaveBeenCalledTimes(1);
+        expect(sent.map((m) => m.to.map((t) => t.address))).toEqual(GUESTS.map((email) => [email]));
+        const [first] = sent;
+        for (const guest of GUESTS) expect(first.icalEvent?.content).toContain(`mailto:${guest}`);
+        for (const m of sent) expect(m.icalEvent).toEqual(first.icalEvent);
+        build.mockRestore();
+        mail.mockRestore();
+    });
+
+    test('a guest on this server gets a notice with no calendar file, and none is built for them', async () => {
+        const mailer = await import('../../lib/mailer/mailer');
+        const ical = await import('../../lib/ical/ical-component');
+        const mail = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        mail.mockClear();
+        const build = spyOn(ical, 'serializeEventForImip');
+        build.mockClear();
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${calendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Local notice',
+                    startTime: new Date(Date.now() + 3600_000),
+                    endTime: new Date(Date.now() + 7200_000),
+                    allDay: false,
+                    data: { attendees: [{ email: ctx.bob.user.email, status: 'pending', role: 'required' }] },
+                }),
+            },
+        );
+        expect(res.status).toBe(200);
+        const notice = await eventually(
+            async () => mail.mock.calls.map((call) => call[0]).find((m) => m.subject === 'Invitation: Local notice'),
+            'the notice to Bob',
+        );
+
+        expect(notice.icalEvent).toBeUndefined();
+        expect(build).not.toHaveBeenCalled();
+        build.mockRestore();
+        mail.mockRestore();
+    });
+});
+
+describe('A save that changes nothing', () => {
+    test('moves no ctag, announces nothing and mails no guest', async () => {
+        const ctx = await getTestContext();
+        const owner = ctx.alice.user;
+        const calendar = (await getHome(owner.id)).calendar;
+        const calendarId = findOrFail(await calendar.getCalendars(), (c) => c.isDefault).id;
+        const eventUrl = (id: string) => `/calendar/${owner.id}/calendars/${calendarId}/events/${id}`;
+        const save = (id: string, body: object) =>
+            authedRequest(owner.sessionToken, eventUrl(id), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        const mailer = await import('../../lib/mailer/mailer');
+        const mail = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        const mailed = (subject: string) => mail.mock.calls.filter((call) => call[0].subject === subject).length;
+
+        const event = await assertJson<CalendarEvent>(
+            await authedRequest(owner.sessionToken, `/calendar/${owner.id}/calendars/${calendarId}/events`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Restated',
+                    description: 'Agenda',
+                    location: 'Room 1',
+                    startTime: new Date(Date.now() + 3600_000),
+                    endTime: new Date(Date.now() + 7200_000),
+                    allDay: false,
+                    timezone: 'Europe/Amsterdam',
+                    rrule: 'FREQ=WEEKLY',
+                    data: {
+                        url: 'https://example.com/agenda',
+                        color: '#2563eb',
+                        reminders: [{ type: 'notification', minutes: 10 }],
+                        attendees: [
+                            { email: 'restated@external.com', name: 'Guest', status: 'pending', role: 'required' },
+                        ],
+                    },
+                }),
+            }),
+        );
+        await eventually(async () => mailed('Invitation: Restated') || undefined, 'the invitation to reach the guest');
+        const ctag = (await calendar.getCollection(calendarId))?.ctag;
+        const sse = await collectSSE(owner.id);
+
+        // The form restates every field on every save.
+        const answer = await save(event.id, {
+            title: event.title,
+            description: event.description,
+            location: event.location,
+            startTime: event.startTime,
+            endTime: event.endTime,
+            allDay: event.allDay,
+            timezone: event.timezone,
+            rrule: event.rrule,
+            data: event.data,
+            etag: event.etag,
+        });
+        const unchanged = await assertJson<CalendarEvent>(answer);
+        expect(unchanged.etag).toBe(event.etag);
+        expect((await calendar.getCollection(calendarId))?.ctag).toBe(ctag);
+
+        // Absence only counts behind what IS expected: a real edit, made second, takes the very path the save must not.
+        expect((await save(event.id, { title: 'Really changed' })).status).toBe(200);
+        await eventually(async () => mailed('Updated invitation: Really changed') || undefined, 'the real update');
+
+        expect(mailed('Updated invitation: Restated')).toBe(0);
+        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_UPDATED)).toHaveLength(1);
+        sse.stop();
+        mail.mockRestore();
+    });
+});
+
+describe('A save only its owner sees', () => {
+    const setup = async (title: string, input: { rrule?: string }) => {
+        const ctx = await getTestContext();
+        const owner = ctx.alice.user;
+        const calendar = (await getHome(owner.id)).calendar;
+        const calendarId = findOrFail(await calendar.getCalendars(), (c) => c.isDefault).id;
+        const save = async (id: string, body: object) =>
+            assertJson<CalendarEvent>(
+                await authedRequest(owner.sessionToken, `/calendar/${owner.id}/calendars/${calendarId}/events/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                }),
+            );
+        const mailer = await import('../../lib/mailer/mailer');
+        const mail = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        const mailed = (subject: string) => mail.mock.calls.filter((call) => call[0].subject === subject).length;
+        const event = await assertJson<CalendarEvent>(
+            await authedRequest(owner.sessionToken, `/calendar/${owner.id}/calendars/${calendarId}/events`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title,
+                    startTime: new Date(Date.now() + 3600_000),
+                    endTime: new Date(Date.now() + 7200_000),
+                    allDay: false,
+                    timezone: 'Europe/Amsterdam',
+                    ...input,
+                    data: { attendees: [{ email: 'personal@external.com', status: 'pending', role: 'required' }] },
+                }),
+            }),
+        );
+        await eventually(async () => mailed(`Invitation: ${title}`) || undefined, 'the invitation to reach the guest');
+        return { owner, save, mail, mailed, event };
+    };
+
+    test('a color, a reminder or another spelling of the same instants mails nobody and moves no SEQUENCE', async () => {
+        const { owner, save, mail, mailed, event } = await setup('Mine alone', {});
+        const sse = await collectSSE(owner.id);
+        const data = event.data ?? {};
+
+        const colored = await save(event.id, { data: { ...data, color: '#2563eb' } });
+        const reminded = await save(event.id, {
+            data: { ...data, color: '#2563eb', reminders: [{ type: 'notification', minutes: 10 }] },
+        });
+        const respelled = await save(event.id, { timezone: 'Europe/London' });
+
+        const etags = [event.etag, colored.etag, reminded.etag, respelled.etag];
+        expect(new Set(etags).size).toBe(etags.length);
+        expect(respelled.timezone).toBe('Europe/London');
+        expect(respelled.startTime).toEqual(event.startTime);
+        expect(respelled.sequence).toBe(event.sequence);
+
+        // Absence only counts behind what IS expected: a real edit, made second, takes the very path the saves must not.
+        await save(event.id, { title: 'Really mine' });
+        await eventually(async () => mailed('Updated invitation: Really mine') || undefined, 'the real update');
+
+        expect(mailed('Updated invitation: Mine alone')).toBe(0);
+        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_UPDATED)).toHaveLength(4);
+        sse.stop();
+        mail.mockRestore();
+    });
+
+    test('a repeating event in another zone moves its later occurrences, so the guests hear it', async () => {
+        const { save, mail, mailed, event } = await setup('Weekly zone', { rrule: 'FREQ=WEEKLY' });
+
+        await save(event.id, { timezone: 'America/New_York' });
+
+        await eventually(async () => mailed('Updated invitation: Weekly zone') || undefined, 'the zone update');
+        mail.mockRestore();
     });
 });

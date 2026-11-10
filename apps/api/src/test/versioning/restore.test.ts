@@ -14,19 +14,23 @@ import * as Y from 'yjs';
 import type { Drive } from '../../lib/drive/drive';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
+import type { User } from '../../lib/user';
 import type { TestUser } from '../setup';
 import { authedRequest, chatGet, chatPost, createTestUserOnStorage, driveGet, drivePost, findOrFail } from '../setup';
 
 const M = 'default';
 
 let user: TestUser;
+let owner: User;
 let drive: Drive;
 let rootId: string;
 
 // A `local` mount, which keeps an open document's working copy in tmp/, as `s3` does.
 beforeAll(async () => {
     user = await createTestUserOnStorage('local-fullnames', 'Restore');
-    drive = (await getHome(user.id)).drive;
+    const home = await getHome(user.id);
+    owner = home.user;
+    drive = home.drive;
     rootId = (await drive.getRootFolder(M))!.id;
 });
 
@@ -59,16 +63,16 @@ describe('a container restored after an unclean shutdown', () => {
         const savedFile = (await mount.getChildByName(versionsId, saved.name))!;
         await leaveCrashTemp(mount, dataDb.id, await mount.readBytes(savedFile.id));
 
-        await drive.restoreContainer(M, chat.id, saved.name);
+        await drive.restoreContainer(M, chat.id, saved.name, owner);
         const messages = () => chatGet<{ content: string }[]>(t, user.id, M, `${chat.id}/messages`);
         expect((await messages()).map((message) => message.content)).toEqual(['v1']);
 
-        await drive.restoreContainer(M, chat.id, await preRestoreVersion(chat.id, saved.name));
+        await drive.restoreContainer(M, chat.id, await preRestoreVersion(chat.id, saved.name), owner);
         expect((await messages()).map((message) => message.content)).toEqual(['v1', 'v2']);
     });
 
     test('a document whose stored object is gone is restored over its crash temp, which the pre-restore version keeps', async () => {
-        const doc = await drive.create(M, rootId, 'Plan', 'sheets');
+        const doc = await drive.create(M, rootId, 'Plan', 'sheets', owner);
         const collab = await drive.getCollabDocument(M, doc.id);
         collab.doc.getMap('state').set('marker', 'v1');
         const saved = await drive.saveVersion(M, doc.id);
@@ -78,7 +82,7 @@ describe('a container restored after an unclean shutdown', () => {
         const dataDb = (await mount.getChildByName(doc.id, 'data.db'))!;
         await leaveCrashTemp(mount, dataDb.id, null);
 
-        await drive.restoreContainer(M, doc.id, saved.name);
+        await drive.restoreContainer(M, doc.id, saved.name, owner);
         const marker = async () => {
             const reopened = await drive.getCollabDocument(M, doc.id);
             const value = reopened.doc.getMap('state').get('marker');
@@ -87,7 +91,7 @@ describe('a container restored after an unclean shutdown', () => {
         };
         expect(await marker()).toBe('v1');
 
-        await drive.restoreContainer(M, doc.id, await preRestoreVersion(doc.id, saved.name));
+        await drive.restoreContainer(M, doc.id, await preRestoreVersion(doc.id, saved.name), owner);
         expect(await marker()).toBe('v2');
     });
 });
@@ -149,7 +153,7 @@ describe('a local-key chat restored after an unclean shutdown', () => {
 
 describe('a sheet version in an encoding the editor cannot read', () => {
     test('is refused with 409, and the open sheet keeps its content', async () => {
-        const sheets = await drive.create(M, rootId, 'Budget', 'sheets');
+        const sheets = await drive.create(M, rootId, 'Budget', 'sheets', owner);
         const collab = await drive.getCollabDocument(M, sheets.id);
         const state = collab.doc.getMap<string>('state');
         // The first encoding: the bare Sheet[] array, which decodeSheetsSnapshot refuses.
@@ -158,7 +162,7 @@ describe('a sheet version in an encoding the editor cannot read', () => {
         const current = encodeSheetsSnapshot([{ id: 'fixture-1', name: 'Sheet1', celldata: [] }], { computed: true });
         state.set('snapshot', current);
 
-        await expect(drive.restoreContainer(M, sheets.id, old.name)).rejects.toMatchObject({ status: 409 });
+        await expect(drive.restoreContainer(M, sheets.id, old.name, owner)).rejects.toMatchObject({ status: 409 });
         expect(state.get('snapshot')).toBe(current);
         await drive.closeCollabDocument(M, sheets.id);
     });
@@ -182,7 +186,7 @@ describe('a canvas comment deleted after a version', () => {
     }
 
     test('comes back with its element when the version is restored', async () => {
-        const board = await drive.create(M, rootId, 'Board', 'vector');
+        const board = await drive.create(M, rootId, 'Board', 'vector', owner);
         const { doc } = await drive.getCollabDocument(M, board.id);
         const card = new Y.Map<unknown>();
         doc.transact(() => {
@@ -202,7 +206,7 @@ describe('a canvas comment deleted after a version', () => {
         const active = () => activeCommentCardIds(readVectorFromDoc(doc).elements, cardsOf(doc));
         expect(active().has('c1')).toBe(false);
 
-        await drive.restoreContainer(M, board.id, saved.name);
+        await drive.restoreContainer(M, board.id, saved.name, owner);
         expect(readVectorFromDoc(doc).elements.map((el) => el.commentCardIds)).toEqual(['["c1"]']);
         expect(active().has('c1')).toBe(true);
         await drive.closeCollabDocument(M, board.id, { skipFinalSnapshot: true });

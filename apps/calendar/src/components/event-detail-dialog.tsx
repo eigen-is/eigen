@@ -7,7 +7,6 @@ import {
     heldAttendees,
     isSeriesOccurrence,
     isTransferableCalendarHome,
-    parseOccurrenceDate,
     truncateRRule,
     useCreateEvent,
     useDeleteEvent,
@@ -131,7 +130,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
             }
         } else if (action === 'this-and-following') {
             if (event.rrule) {
-                const truncated = truncateRRule(event.rrule, parseOccurrenceDate(event.occurrenceDate));
+                const truncated = truncateRRule(event.rrule, event.occurrenceDate, event);
                 await updateEvent.mutateAsync({
                     id: event.parentEventId || event.id,
                     calendarId: event.calendarId,

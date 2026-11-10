@@ -22,7 +22,7 @@ The home is on disk rather than in memory so it reuses Drive and NotificationCen
 | No mail, contacts or calendar | The services are absent, and `requireNonGuest()` guards every mail, contacts and calendar route |
 | No org or team membership | Guest creation skips the auth hooks, and `ensureDefaultOrgMembership` skips guests on sign-in |
 | No admin          | Admin checks read the org role, and a guest has none       |
-| No sharing, access requests or mail to collaborators | `requireNonGuest()` on the ACL route, the chat `/invite` route, the drive `access-check`, `request-access` and `email-collaborators`. The File menu and Drive's item menu hide **Email collaborators** from a guest |
+| No sharing, access requests or mail to collaborators | `requireNonGuest()` on the ACL route, the chat `/invite` route, the drive `access-check`, `request-access` and `email-collaborators`. The File menu and Drive's item menu hide **Email collaborators** from a guest. One exception: a guest who assigns a comment or card mails the assignee, as anyone does ([COMMENTS.md](COMMENTS.md#assignment-is-a-members-email-set-by-the-server)). A guest can add no one to an ACL, so a non-guest let both people in and the guest can only pick a member. It goes out as `{name} via {org}` with Reply-To the guest ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#one-rule-decides-who-a-mail-is-from)) |
 | Read/write per ACL| SharedDrive enforces the entries the owner set             |
 
 A calendar invitation treats a guest like an external address: an iMIP mail and a registry entry, no in-app copy (`invite-propagation.ts`, [CALENDAR.md § The organizer's writes fan out](CALENDAR.md#the-organizers-writes-fan-out-and-only-the-organizers)). A guest answers from their own mail, which reaches the organizer through [inbound iMIP](CALENDAR.md#inbound-imip-acts-only-on-a-sender-our-own-mta-verified). The home relay skips calendar messages for a home without a calendar (`hasCalendar`), so no calendar push crashes on a `GuestHome`. Reconciliation skips its calendar pulls for a guest, so a sign-in never scans an owner's calendar.
@@ -104,7 +104,7 @@ Clicking the notification opens Drive with the share dialog pre-filled: `resolve
 
 ## The guest frontend is a narrower shell
 
-The login page (`packages/ui/src/components/layout/pages/login-page.tsx`) has a "Guest" tab next to "Sign in": email, send code, 6-digit code, verify, reload. A login URL with `?email=` opens on the Guest tab with the address filled in, which is where a share mail's link lands.
+The login page (`packages/ui/src/components/layout/pages/login-page.tsx`) has a "Guest" tab next to "Sign in": email, send code, 6-digit code, verify, reload. A login URL with `?email=` opens on the Guest tab with the address filled in, which is where the link in a share mail or an assignment mail lands.
 
 The topbar limits a guest's app switcher to Drive, Docs, Stickies, Slides, Vector, Sheets and Chat (`GUEST_APPS` in `topbar.tsx`), and gives them a reduced user menu with no settings, profile or theme.
 

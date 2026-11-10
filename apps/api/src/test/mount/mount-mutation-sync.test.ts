@@ -122,23 +122,23 @@ describe('local: open document DB must not sync to a stale path after a mutation
         expect(await countStoredRows(mount, dataDbId)).toBe(2);
     });
 
-    test('TRASH of a chat container flushes its open dirty data.db INTO .trash/, losing nothing', async () => {
+    test('TRASH of a chat container: its open dirty data.db syncs INTO .trash/, losing nothing', async () => {
         const mount = await createMount('local-chat-trash', 'local');
         const rootId = (await mount.getRootFolder())!.id;
         const chatId = await mount.createFolder(rootId, 'room', 'chat');
         const dataDbId = await mount.touchFile(chatId, 'data.db', 'application/x-sqlite3');
 
-        // Chat data.db is NOT a Yjs collab doc, so Drive.closeCollabDocumentsRecursively never closes
-        // it; it stays cached + dirty across the trash directory rename.
+        // Chat data.db is NOT a Yjs collab doc; it stays cached + dirty across the trash directory rename.
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'synced' }).run();
         await managed.flush(); // synced to room/data.db
         managed.db.insert(docSchema.items).values({ id: 2, data: 'dirty' }).run(); // NOT flushed
 
         await mount.trashPath(chatId); // room -> .trash/<chatId>
+        await managed.flush();
 
-        // The dirty edit must have been flushed into the trashed location, not stranded in the temp
-        // (and never written to a resurrected room/data.db zombie outside .trash/).
+        // The sync after the rename resolves the trashed key, so the dirty edit lands in .trash/, never in
+        // a resurrected room/data.db outside it.
         expect(await countStoredRows(mount, dataDbId)).toBe(2);
     });
 });

@@ -1,8 +1,7 @@
-// Every time one owner's Home reaches into another, it goes through this file. sendToHome pushes a
-// message into another home, and each pull reads one answer from one, such as the paths shared
-// with a user. A few calls write server-wide data instead, such as a user's avatar, and a walk checks
-// the open documents of every loaded home. Today every call runs in this process. When homes live in
-// several processes, only this file has to change.
+// Every time one owner's Home reaches into another, it goes through this file. sendToHome pushes a message into
+// another home, each pull reads one answer from one, such as the paths shared with a user, and pullFromEach runs a
+// pull against many homes at once. A few calls write server-wide data instead, such as a user's avatar. Today every
+// call runs in this process. When homes live in several processes, only this file has to change.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -14,16 +13,16 @@ import type {
     CalendarItem,
     CalendarShare,
 } from '@workspace/lib/types/calendar';
-import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
+import type { DriveACL, DrivePath, EffectiveMember, RecentPath } from '@workspace/lib/types/drive';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
-import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
+import type { HomeSizeResponse, MyTeam, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
-import { Semaphore } from '../../utils/semaphore';
+import { settlesWithin } from '../../utils/timing';
 import { captureBytes, snapshotHome } from '../backup/snapshot-home';
 import type { Calendar } from '../calendar/calendar';
 import { readCalendarTotalSize } from '../calendar/resource-store';
-import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/types';
+import type { CreateEventArgs, InvitationRequest } from '../calendar/types';
 import {
     getAvatarsDir,
     getDataRoot,
@@ -35,11 +34,12 @@ import {
 } from '../config/paths';
 import { readContactsTotalSize } from '../contacts/card-store';
 import { LocalFilesystem } from '../core';
+import type { RecentRow } from '../drive/recent';
 import type { EventPatch } from '../ical/ical-component';
 import { readMailTotalSize } from '../mail/maildir-store';
-import type { User } from '../user';
-import { getMemberships, getUserById, getUsersByEmails, isGuest, updateUser } from '../user';
-import { forEachOpenDocument, getHome, getTeamHome, loadedHome, openHome } from './get-home';
+import type { Memberships, User } from '../user';
+import { getMemberships, getOwnerExists, getUserById, getUsersByEmails, isGuest, updateUser } from '../user';
+import { getHome, getTeamHome, loadedHome, openHome } from './get-home';
 import { homeSize, userHomeSize } from './home';
 import { TeamHome } from './team-home';
 
@@ -49,6 +49,7 @@ import { TeamHome } from './team-home';
 // home does the whole job itself, its events and notifications included.
 export type HomeMessage =
     | { type: 'drive:acl-change'; path: DrivePath; acl: DriveACL[] | null; actorEmail?: string; actorName?: string }
+    | { type: 'drive:recent-open'; ownerId: string; mountId: string; pathId: string }
     | {
           type: 'calendar:share';
           ownerId: string;
@@ -58,8 +59,7 @@ export type HomeMessage =
           actorEmail?: string;
           actorName?: string;
       }
-    | { type: 'calendar:invitation'; payload: ReceiveInvitationPayload }
-    | { type: 'calendar:invitation-update'; orgEventId: string; orgUserId: string; payload: InvitationUpdatePayload }
+    | ({ type: 'calendar:request' } & InvitationRequest)
     | {
           type: 'calendar:invitation-removal';
           orgEventId: string;
@@ -78,20 +78,37 @@ export type HomeMessage =
     | { type: 'broadcast'; event: SSEvent }
     | { type: 'notification'; notification: NotificationPersistInput };
 
-export async function sendToHome(targetUserId: string, message: HomeMessage): Promise<void> {
+// A broadcast opens no home, so it never becomes a delivery.
+type DeliveredMessage = Exclude<HomeMessage, { type: 'broadcast' }>;
+
+// Every push still delivering. Most of them run after their request answered, so nobody waits for them. A delivery
+// opens its recipient's home, so a shutdown drains them first.
+const deliveries = new Set<Promise<void>>();
+
+// The last fan-out queued for each order key. The next one waits for it: an add and a revoke delivered out of order
+// would bring a removed share back.
+const lastInOrder = new Map<string, Promise<void>>();
+
+export async function sendToHome(targetId: string, message: HomeMessage): Promise<void> {
     // A broadcast only reaches tabs that have the home open. It never opens a home or keeps one open.
     if (message.type === 'broadcast') {
-        loadedHome(targetUserId)?.broadcast(message.event);
+        loadedHome(targetId)?.broadcast(message.event);
         return;
     }
+    await tracked(deliver(targetId, message));
+}
 
-    const home = await getHome(targetUserId);
+async function deliver(targetId: string, message: DeliveredMessage): Promise<void> {
+    const home = await getHome(targetId);
     // A home without a calendar, such as a guest's, ignores every calendar message.
     if (message.type.startsWith('calendar:') && !home.hasCalendar) return;
 
     switch (message.type) {
         case 'drive:acl-change':
             await home.drive.receiveSharedPathChange(message.path, message.acl, message.actorEmail, message.actorName);
+            break;
+        case 'drive:recent-open':
+            home.drive.touchRecent(message.ownerId, message.mountId, message.pathId);
             break;
         case 'calendar:share':
             if (message.permission) {
@@ -112,44 +129,25 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
                 );
             }
             break;
-        case 'calendar:invitation': {
-            const received = await home.calendar.receiveInvitation(message.payload);
-            // The organizer's home believes this home holds a copy, so a refused invitation is logged.
-            if (!received) {
-                console.info(
-                    `home-relay: ${targetUserId} dropped the invitation ${message.payload.uid} from ${message.payload.organizerUserId}`,
-                );
-            }
-            break;
-        }
-        case 'calendar:invitation-update':
-            await home.calendar.receiveInvitationUpdate(message.orgEventId, message.orgUserId, message.payload);
+        case 'calendar:request':
+            await home.calendar.receiveRequest(message.events, message.link);
             break;
         case 'calendar:invitation-removal':
             if (message.occurrence) {
-                await home.calendar.cancelInvitationOccurrence(
-                    message.orgEventId,
-                    message.orgUserId,
-                    message.occurrence.recurrenceDate,
-                    null,
-                    message.occurrence,
-                );
+                await home.calendar.cancelInvitationOccurrence(message.orgEventId, message.orgUserId, {
+                    ...message.occurrence,
+                    recurrenceId: null,
+                });
             } else {
                 await home.calendar.removeInvitation(message.orgEventId, message.orgUserId);
             }
             break;
         case 'calendar:rsvp':
             if (message.recurrenceDate) {
-                // An answer from an attendee only sets their status. It never brings back an occurrence
-                // that the organizer deleted.
-                await home.calendar.receiveRsvpForOccurrence(
-                    message.eventId,
-                    message.attendeeEmail,
-                    message.status,
-                    message.recurrenceDate,
-                    null,
-                    false,
-                );
+                await home.calendar.receiveRsvpForOccurrence(message.eventId, message.attendeeEmail, message.status, {
+                    recurrenceDate: message.recurrenceDate,
+                    recurrenceId: null,
+                });
             } else {
                 await home.calendar.receiveAttendeeStatus(message.eventId, message.attendeeEmail, message.status);
             }
@@ -168,43 +166,48 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
     }
 }
 
-// Opening a home costs about 25 to 30 file descriptors and a burst of database opens. Only deliveries to user homes
-// take a permit, and a user home relays no further, so a delivery never waits for a permit its own fan-out holds.
-const deliveryBudget = new Semaphore(8);
+// One home at a time, since opening a home blocks the event loop: opened together, they would freeze the server for the
+// whole fan-out. A failed delivery is logged, and the other homes still get the message, so this never rejects.
+export async function sendToUserHomes(userIds: Iterable<string>, message: DeliveredMessage): Promise<void> {
+    const orderKey = message.type === 'drive:acl-change' ? message.path.id : undefined;
+    const previous = orderKey ? lastInOrder.get(orderKey) : undefined;
+    const fanOut = tracked(deliverToEach(userIds, message, previous));
+    if (orderKey) lastInOrder.set(orderKey, fanOut);
+    await fanOut;
+    if (orderKey && lastInOrder.get(orderKey) === fanOut) lastInOrder.delete(orderKey);
+}
 
-// The fan-outs that are still delivering. Most of them run after their request answered, so nobody
-// waits for them. A delivery opens its recipient's home, so a shutdown drains them first.
-const deliveries = new Set<Promise<unknown>>();
-
-// A failed delivery is logged, and the other homes still get the message.
-export async function sendToUserHomes(userIds: Iterable<string>, message: HomeMessage): Promise<void> {
-    const delivery = Promise.all(
-        [...userIds].map((id) =>
-            deliveryBudget.run(() =>
-                sendToHome(id, message).catch((err) =>
-                    console.error(`home-relay: delivering ${message.type} to ${id} failed:`, err),
-                ),
-            ),
-        ),
-    );
-    deliveries.add(delivery);
-    try {
-        await delivery;
-    } finally {
-        deliveries.delete(delivery);
+async function deliverToEach(
+    userIds: Iterable<string>,
+    message: DeliveredMessage,
+    previous: Promise<void> | undefined,
+): Promise<void> {
+    await previous;
+    for (const id of userIds) {
+        await deliver(id, message).catch((err) =>
+            console.error(`home-relay: delivering ${message.type} to ${id} failed:`, err),
+        );
     }
 }
 
-// Waits for every fan-out still delivering and for those that start meanwhile, such as a team notification a delivery
-// passes on. Graceful shutdown calls it before it closes the homes.
+function tracked(delivery: Promise<void>): Promise<void> {
+    deliveries.add(delivery);
+    return delivery.finally(() => deliveries.delete(delivery));
+}
+
+// Waits for every delivery still running and for those that start meanwhile. The sends of a caller's own loop that
+// hasn't reached them yet are not among them.
 export async function drainHomeDeliveries(): Promise<void> {
     while (deliveries.size > 0) {
         await Promise.allSettled([...deliveries]);
     }
 }
 
-export function countHomeDeliveries(): number {
-    return deliveries.size;
+// A delivery can hang on a home that is slow to close, such as during a bucket outage. It must not hang a shutdown, or
+// use up the time the mounts need to upload. What is left when the bound is over is lost, as in a crash.
+export async function drainDeliveriesWithin(boundMs: number): Promise<void> {
+    if (await settlesWithin(drainHomeDeliveries(), boundMs)) return;
+    console.warn(`[shutdown] gave up after ${boundMs} ms with ${deliveries.size} home deliveries left`);
 }
 
 // Tells the open tabs of the owner and of each member who can read the path: a member without read cannot list it, so
@@ -227,28 +230,46 @@ export async function broadcastToOwnerAndMembers(
     );
 }
 
+// --- Reads across homes ---
+
+// A gone owner is skipped, and a failed read is logged and leaves that owner out, so the others still answer.
+export async function pullFromEach<T>(
+    ownerIds: readonly string[],
+    pull: (ownerId: string) => Promise<T>,
+): Promise<T[]> {
+    const results = await Promise.all(
+        ownerIds.map((ownerId) =>
+            getOwnerExists(ownerId)
+                .then((exists) => (exists ? pull(ownerId) : null))
+                .catch((err) => {
+                    console.error(`home-relay: reading ${ownerId} failed:`, err);
+                    return null;
+                }),
+        ),
+    );
+    return results.filter((result) => result !== null);
+}
+
 // --- Drive ---
 
-export async function pullSharedPaths(ownerUserId: string, user: User): Promise<DrivePath[]> {
-    const home = await getHome(ownerUserId);
+export async function pullSharedPaths(ownerId: string, user: User): Promise<DrivePath[]> {
+    const home = await getHome(ownerId);
     return home.drive.getSharedWith(user);
 }
 
-export async function pullDrivePath(ownerUserId: string, mountId: string, pathId: string): Promise<DrivePath | null> {
-    const home = await getHome(ownerUserId);
+export async function pullDrivePath(ownerId: string, mountId: string, pathId: string): Promise<DrivePath | null> {
+    const home = await getHome(ownerId);
     return home.drive.getPath(mountId, pathId);
 }
 
-// --- Open documents ---
-
-// Closes the collab sockets of whoever lost read, after a change to a membership that any home's documents may rest on.
-export async function enforceReadAccessOnLoadedHomes(): Promise<void> {
-    await forEachOpenDocument((document) => document.enforceReadAccess());
-}
-
-// Closes the collab sockets of a user locked out whatever they may read, such as by a password reset.
-export async function closeUserSocketsOnLoadedHomes(userId: string): Promise<void> {
-    await forEachOpenDocument(async (document) => document.closeUserConnections(userId));
+export async function pullRecentPaths(
+    ownerId: string,
+    user: User,
+    memberships: Memberships,
+    rows: readonly RecentRow[],
+): Promise<RecentPath[]> {
+    const home = await getHome(ownerId);
+    return home.drive.getRecentPathsFor(user, memberships, rows);
 }
 
 // --- Calendar ---
@@ -261,99 +282,99 @@ async function calendarOf(ownerId: string): Promise<Calendar | null> {
     return home.hasCalendar ? home.calendar : null;
 }
 
-export async function pullCalendars(ownerUserId: string): Promise<CalendarItem[]> {
-    return (await calendarOf(ownerUserId))?.getCalendars() ?? [];
+export async function pullCalendars(ownerId: string): Promise<CalendarItem[]> {
+    return (await calendarOf(ownerId))?.getCalendars() ?? [];
 }
 
-export async function pullCalendarById(ownerUserId: string, calendarId: string): Promise<CalendarItem | null> {
-    const home = await getHome(ownerUserId);
+export async function pullCalendarById(ownerId: string, calendarId: string): Promise<CalendarItem | null> {
+    const home = await getHome(ownerId);
     return home.calendar.getCalendarById(calendarId);
 }
 
 export async function pullCalendarPermission(
-    ownerUserId: string,
+    ownerId: string,
     calendarId: string,
     email: string,
     teamIds: string[],
 ): Promise<CalendarShare['permission'] | null> {
-    return (await calendarOf(ownerUserId))?.checkPermission(calendarId, email, teamIds) ?? null;
+    return (await calendarOf(ownerId))?.checkPermission(calendarId, email, teamIds) ?? null;
 }
 
 export async function pullCalendarShares(
-    ownerUserId: string,
+    ownerId: string,
     email: string,
     teamIds: string[],
 ): Promise<{ calendarId: string; name: string; color: string; permission: CalendarShare['permission'] }[]> {
-    return (await calendarOf(ownerUserId))?.getSharedWith(email, teamIds) ?? [];
+    return (await calendarOf(ownerId))?.getSharedWith(email, teamIds) ?? [];
 }
 
 export async function pullEventsInRange(
-    ownerUserId: string,
+    ownerId: string,
     calendarId: string,
     from: Date,
     to: Date,
 ): Promise<CalendarEventOccurrence[]> {
-    const home = await getHome(ownerUserId);
+    const home = await getHome(ownerId);
     return home.calendar.getEventsInRange(from, to, calendarId);
 }
 
 export async function pullEventById(
-    ownerUserId: string,
+    ownerId: string,
     calendarId: string,
     eventId: string,
 ): Promise<CalendarEvent | null> {
-    const home = await getHome(ownerUserId);
+    const home = await getHome(ownerId);
     return home.calendar.getEventById(calendarId, eventId);
 }
 
-export async function pullPendingInvitations(ownerUserId: string, attendeeEmail: string): Promise<CalendarEvent[]> {
-    return (await calendarOf(ownerUserId))?.getEventsWithAttendee(attendeeEmail) ?? [];
+export async function pullPendingInvitations(ownerId: string, attendeeEmail: string): Promise<InvitationRequest[]> {
+    return (await calendarOf(ownerId))?.pendingInvitations(attendeeEmail) ?? [];
 }
 
 // In the event writes, `user` is the person who makes the change, not the owner of the calendar.
 // The owner's home uses it for the live updates it sends and for the history it keeps.
 
 export async function createEventAt(
-    ownerUserId: string,
+    ownerId: string,
     calendarId: string,
     input: CreateEventArgs,
     user: User,
 ): Promise<CalendarEvent> {
-    const home = await getHome(ownerUserId);
+    const home = await getHome(ownerId);
     return home.calendar.createEvent(calendarId, input, user);
 }
 
 export async function updateEventAt(
-    ownerUserId: string,
+    ownerId: string,
     calendarId: string,
     eventId: string,
     input: EventPatch,
     user: User,
     expectedEtag?: string,
 ): Promise<CalendarEvent> {
-    const home = await getHome(ownerUserId);
+    const home = await getHome(ownerId);
     return home.calendar.updateEvent(calendarId, eventId, input, user, expectedEtag);
 }
 
 export async function deleteEventAt(
-    ownerUserId: string,
+    ownerId: string,
     calendarId: string,
     eventId: string,
     user: User,
     expectedEtag?: string,
 ): Promise<void> {
-    const home = await getHome(ownerUserId);
+    const home = await getHome(ownerId);
     await home.calendar.deleteEvent(calendarId, eventId, user, expectedEtag);
 }
 
 export async function moveEventAt(
-    ownerUserId: string,
+    ownerId: string,
     calendarId: string,
     eventId: string,
     targetCalendarId: string,
     expectedEtag?: string,
 ): Promise<CalendarEvent> {
-    const home = await getHome(ownerUserId);
+    const home = await getHome(ownerId);
     return home.calendar.moveEvent(calendarId, eventId, targetCalendarId, expectedEtag);
 }
 
@@ -366,9 +387,7 @@ export async function pullTeamQuotaOverrides(ownerId: string): Promise<TeamQuota
     return home.settings.get().memberOverrides ?? {};
 }
 
-export async function pullTeamMounts(
-    ownerId: string,
-): Promise<{ id: string; name: string; rootPathId: string | null }[]> {
+export async function pullTeamMounts(ownerId: string): Promise<MyTeam['mounts']> {
     const home = await getTeamHome(ownerId);
     const mounts = Object.entries(home.settings.get().mounts ?? {}).filter(([, mount]) => mount.enabled);
     return Promise.all(

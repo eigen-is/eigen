@@ -27,7 +27,7 @@ import { textOutsideStories } from './story';
 type CommentMarkOptions = {
     onCommentClick?: (cardId: string) => void;
     onCommentContextMenu?: (cardId: string, event: MouseEvent) => void;
-    // True when it opened a menu; false leaves the browser's own.
+    // A right-click off a card's anchor. True when it opened a menu; false leaves the browser's own.
     onSelectionContextMenu?: (event: MouseEvent) => boolean;
     onAddComment?: () => void;
     onToggleCommentPanel?: () => void;
@@ -221,14 +221,14 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions, CommentP
                           }
                         : undefined,
                     handleDOMEvents: {
-                        contextmenu: (view, event) => {
+                        contextmenu: (_view, event) => {
                             const cardId = commentCardIdAt(event.target);
                             if (cardId && onCommentContextMenu) {
                                 event.preventDefault();
                                 onCommentContextMenu(cardId, event);
                                 return true;
                             }
-                            if (canAnchorComment(view.state) && onSelectionContextMenu?.(event)) {
+                            if (onSelectionContextMenu?.(event)) {
                                 event.preventDefault();
                                 return true;
                             }

@@ -32,14 +32,15 @@ const PAPERCLIP_SVG =
     '<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/>' +
     '</svg>';
 
+// One "Open {name} →" pill.
+type EmailLink = { name: string; href: string };
+
 type EmailShellInput = {
     title: string;
     bodyHtml: string;
     banner?: string;
-    attachmentLinks?: AttachmentReference[];
+    links?: readonly EmailLink[];
     footerLine?: string;
-    // The address the `?email=` suffix on a pill's URL carries.
-    recipientEmail?: string;
 };
 
 // A frontend app's URL is relative in production, such as "/docs", and a recipient clicks the link from their inbox. So
@@ -86,19 +87,24 @@ export function buildAttachmentUrl(ref: AttachmentReference, recipientEmail?: st
     return `${url}${url.includes('?') ? '&' : '?'}email=${encodeURIComponent(recipientEmail)}`;
 }
 
-export function renderAttachmentPills(references: AttachmentReference[], recipientEmail?: string): string {
-    const cards: string[] = [];
-    for (const ref of references) {
-        const href = buildAttachmentUrl(ref, recipientEmail);
-        const name = escapeHtml(stripEigenExtension(ref.name));
-        cards.push(
+function renderPills(links: readonly EmailLink[]): string {
+    if (links.length === 0) return '';
+    const cards = links.map(
+        (link) =>
             `<div style="display:inline-block;border:1px solid ${EMAIL_BORDER};border-radius:6px;padding:6px 10px;margin:4px 4px 4px 0;font-size:13px;font-family:${EMAIL_FONT};color:${EMAIL_PILL_TEXT};text-decoration:none;">` +
-                `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="color:${EMAIL_PILL_TEXT};text-decoration:none;">${PAPERCLIP_SVG}Open ${name} →</a>` +
-                '</div>',
-        );
-    }
-    if (cards.length === 0) return '';
+            `<a href="${escapeHtml(link.href)}" target="_blank" rel="noopener noreferrer" style="color:${EMAIL_PILL_TEXT};text-decoration:none;">${PAPERCLIP_SVG}Open ${escapeHtml(link.name)} →</a>` +
+            '</div>',
+    );
     return `<div style="margin-top:16px;padding-top:12px;border-top:1px solid ${EMAIL_BORDER};">${cards.join('')}</div>`;
+}
+
+export function renderAttachmentPills(references: readonly AttachmentReference[], recipientEmail?: string): string {
+    return renderPills(
+        references.map((ref) => ({
+            name: stripEigenExtension(ref.name),
+            href: buildAttachmentUrl(ref, recipientEmail),
+        })),
+    );
 }
 
 // Plain-text sibling of renderAttachmentPills for the text/plain alternative: one
@@ -124,9 +130,7 @@ export function renderEigenEmail(input: EmailShellInput): string {
     const banner = input.banner
         ? `<div style="background:${EMAIL_BANNER_BG};color:${EMAIL_BANNER_FG};font-weight:600;font-size:13px;padding:8px 12px;border-radius:4px;margin-bottom:16px">${escapeHtml(input.banner)}</div>`
         : '';
-    const pills = input.attachmentLinks?.length
-        ? renderAttachmentPills(input.attachmentLinks, input.recipientEmail)
-        : '';
+    const pills = input.links ? renderPills(input.links) : '';
     let footer = '';
     if (input.footerLine) {
         const origin = getPublicOrigin();

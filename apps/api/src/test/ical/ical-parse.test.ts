@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { parseIcs } from '../../lib/ical';
+import ICAL from 'ical.js';
+import { parseIcs, parseResource } from '../../lib/ical';
+import { cpuClock } from '../cpu-time';
 import { vcal } from '../ics-test-helpers';
 
 // A CalDAV resource holds one UID, but a preview and an import feed the parser whole files: a calendar
@@ -43,13 +45,13 @@ describe('parseIcs over a multi-series file', () => {
         }
     });
 
-    test('a series whose only VEVENT is an override still keys through its own DTSTART zone', () => {
+    test('a series whose only VEVENT is an override keys on the date its RECURRENCE-ID is written in', () => {
         const { events } = parseIcs(
             vcal([
                 ...AUCKLAND,
                 'BEGIN:VEVENT',
                 'UID:orphan@eigen',
-                'RECURRENCE-ID:20260309T160000Z',
+                'RECURRENCE-ID:20260310T020000Z',
                 'DTSTART;TZID=America/Los_Angeles:20260309T140000',
                 'DTEND;TZID=America/Los_Angeles:20260309T150000',
                 'SUMMARY:Orphaned override',
@@ -57,42 +59,7 @@ describe('parseIcs over a multi-series file', () => {
             ]),
         );
 
-        expect(events.find((event) => event.uid === 'orphan@eigen')?.recurrenceDate).toBe('2026-03-09');
-    });
-});
-
-// A UID is required, and an override carries its master's — but exporters skip it, and then the pair no
-// longer groups. A weekly series at 09:00 Auckland whose second occurrence is moved: the UTC-Z
-// RECURRENCE-ID is 2 January in UTC and 3 January in Auckland, so a file the two VEVENTs of which no
-// longer find each other keys the override a day early.
-describe('parseIcs over a file whose UIDs do not line up', () => {
-    const shape = (masterUid: string[], overrideUid: string[]) =>
-        vcal([
-            'BEGIN:VEVENT',
-            ...masterUid,
-            'DTSTART;TZID=Pacific/Auckland:20250101T090000',
-            'DTEND;TZID=Pacific/Auckland:20250101T100000',
-            'RRULE:FREQ=WEEKLY',
-            'SUMMARY:Standup',
-            'END:VEVENT',
-            'BEGIN:VEVENT',
-            ...overrideUid,
-            'RECURRENCE-ID:20250102T200000Z',
-            'DTSTART:20250102T220000Z',
-            'DTEND:20250102T230000Z',
-            'SUMMARY:Standup moved',
-            'END:VEVENT',
-        ]);
-
-    const overrideKey = (text: string) =>
-        parseIcs(text).events.find((event) => event.recurrenceDate !== null)?.recurrenceDate;
-
-    test('an override keys through the file master zone when its master carries no UID', () => {
-        expect(overrideKey(shape([], ['UID:series@eigen']))).toBe('2025-01-03');
-    });
-
-    test('an override with no UID of its own keys through the file master zone', () => {
-        expect(overrideKey(shape(['UID:series@eigen'], []))).toBe('2025-01-03');
+        expect(events.find((event) => event.uid === 'orphan@eigen')?.recurrenceDate).toBe('2026-03-10');
     });
 });
 
@@ -228,6 +195,28 @@ describe('parseIcs over a year that is not four digits', () => {
     });
 });
 
+describe('parseIcs over an all-day series with a timed EXDATE', () => {
+    test('the cancelled row is all day, on the date the EXDATE is written on', () => {
+        const { events } = parseIcs(
+            vcal([
+                'BEGIN:VEVENT',
+                'UID:all-day',
+                'DTSTART;VALUE=DATE:20260504',
+                'DTEND;VALUE=DATE:20260505',
+                'RRULE:FREQ=DAILY;COUNT=4',
+                'EXDATE;TZID=Pacific/Auckland:20260505T000000',
+                'SUMMARY:Holiday',
+                'END:VEVENT',
+            ]),
+        );
+        const cancelled = events.find((e) => e.status === 'cancelled');
+
+        expect(
+            cancelled && [cancelled.recurrenceDate, cancelled.allDay, cancelled.startTime, cancelled.endTime],
+        ).toEqual(['2026-05-05', true, new Date('2026-05-05T00:00:00Z'), new Date('2026-05-06T00:00:00Z')]);
+    });
+});
+
 // RFC 5545 §3.6.1 lets an event state its length as a DURATION instead of a DTEND, which Apple and
 // Outlook both emit — an end derived from DTSTART alone turns a three-hour meeting into an hour and a
 // three-day trip into one day.
@@ -265,6 +254,41 @@ describe('parseIcs over an event whose length is a DURATION', () => {
     test('an event with neither keeps the hour and the day a bare DTSTART means', () => {
         expect(only(['DTSTART:20260601T100000Z']).endTime.toISOString()).toBe('2026-06-01T11:00:00.000Z');
         expect(only(['DTSTART;VALUE=DATE:20260601']).endTime.toISOString()).toBe('2026-06-02T00:00:00.000Z');
+    });
+
+    test('a zoned DURATION across a clock change is that much real time', () => {
+        // 25 October 2026, 01:30 Amsterdam is 23:30Z the day before, and the clocks go back at 01:00Z.
+        expect(only(['DTSTART;TZID=Europe/Amsterdam:20261025T013000', 'DURATION:PT3H']).endTime.toISOString()).toBe(
+            '2026-10-25T02:30:00.000Z',
+        );
+    });
+
+    test('an all-day event counts whole days of its DURATION', () => {
+        expect(only(['DTSTART;VALUE=DATE:20260601', 'DURATION:P2W']).endTime.toISOString()).toBe(
+            '2026-06-15T00:00:00.000Z',
+        );
+        expect(only(['DTSTART;VALUE=DATE:20260601', 'DURATION:PT5H']).endTime.toISOString()).toBe(
+            '2026-06-01T00:00:00.000Z',
+        );
+    });
+
+    test('a DURATION of a thousand years is an ordinary end', () => {
+        expect(only(['DTSTART:20260101T000000Z', 'DURATION:P52000W']).endTime.getUTCFullYear()).toBe(3022);
+    });
+
+    test.each([
+        ['no DTEND could spell', 'P1000000W'],
+        ['no Date can hold', 'P1000000000W'],
+        ['no number can hold', `P${'9'.repeat(400)}W`],
+    ])('an end %s is an unreadable event, at no cost', (_name, duration) => {
+        const cpuMs = cpuClock();
+        const { events, skipped } = parseIcs(
+            vcal(['BEGIN:VEVENT', 'UID:far@eigen', 'DTSTART:20260101T000000Z', `DURATION:${duration}`, 'END:VEVENT']),
+        );
+
+        expect(cpuMs()).toBeLessThan(100);
+        expect(events).toEqual([]);
+        expect(skipped).toBe(1);
     });
 });
 
@@ -340,5 +364,83 @@ describe('parseIcs over a TZID only its VTIMEZONE names', () => {
 
         expect(event.timezone).toBeNull();
         expect(event.startTime.toISOString()).toBe('2026-06-01T08:00:00.000Z');
+    });
+});
+
+describe('parseResource refuses what no calendar file is', () => {
+    // A VEVENT in a VCALENDAR is two levels already.
+    const nested = (extraLevels: number) =>
+        vcal([
+            'BEGIN:VEVENT',
+            'UID:nested@eigen',
+            'DTSTART:20260601T080000Z',
+            ...Array<string>(extraLevels).fill('BEGIN:X-LEVEL'),
+            ...Array<string>(extraLevels).fill('END:X-LEVEL'),
+            'END:VEVENT',
+        ]);
+
+    test('a calendar eight levels deep parses', () => {
+        expect(parseResource(nested(6)).getAllSubcomponents('vevent')).toHaveLength(1);
+    });
+
+    test('a calendar nine levels deep is refused', () => {
+        expect(() => parseResource(nested(7))).toThrow(ICAL.parse.ParserError);
+        expect(() => parseIcs(nested(7))).toThrow(ICAL.parse.ParserError);
+    });
+
+    test('a calendar two hundred thousand levels deep is refused like any other', () => {
+        expect(() => parseResource(nested(200_000))).toThrow(ICAL.parse.ParserError);
+    });
+
+    test('two VCALENDAR objects are no one resource', () => {
+        const text = `${nested(0)}\r\n${nested(0)}`;
+        expect(() => parseResource(text)).toThrow(ICAL.parse.ParserError);
+    });
+
+    test('a text holding no calendar is refused', () => {
+        expect(() => parseResource('')).toThrow(ICAL.parse.ParserError);
+    });
+});
+
+describe('parseIcs over zone spellings', () => {
+    const named = (uid: string, tzid: string) => [
+        'BEGIN:VEVENT',
+        `UID:${uid}`,
+        `DTSTART;TZID=${tzid}:20260601T100000`,
+        'END:VEVENT',
+    ];
+    const zone = 'America/Argentina/ComodRivadavia';
+    const letters = [...zone].flatMap((char, index) => (/[a-z]/i.test(char) ? [index] : []));
+    const spelled = (n: number) => {
+        const chars = [...zone.toLowerCase()];
+        letters.slice(0, 20).forEach((index, bit) => {
+            if ((n >> bit) & 1) chars[index] = chars[index].toUpperCase();
+        });
+        return chars.join('');
+    };
+
+    test("a zone in another case is stored in Intl's spelling at the same instant", () => {
+        const [first, second] = parseIcs(vcal(named('a', 'EUROPE/amsterdam'), named('b', 'Europe/Amsterdam'))).events;
+
+        expect(first.timezone).toBe('Europe/Amsterdam');
+        expect(first.startTime).toEqual(second.startTime);
+    });
+
+    test('a Windows zone takes its table row', () => {
+        expect(parseIcs(vcal(named('a', 'W. Europe Standard Time'))).events[0].timezone).toBe('Europe/Berlin');
+    });
+
+    test('a zone nobody knows stores none', () => {
+        expect(parseIcs(vcal(named('a', 'Not/A_Zone'))).events[0].timezone).toBeNull();
+    });
+
+    test('many spellings of one zone cost one formatter', () => {
+        const body = vcal(Array.from({ length: 13_000 }, (_, i) => named('a', spelled(i))).flat());
+
+        const cpuMs = cpuClock();
+        const { events } = parseIcs(body);
+
+        expect(cpuMs()).toBeLessThan(2000);
+        expect(new Set(events.map((event) => event.timezone))).toEqual(new Set([zone]));
     });
 });

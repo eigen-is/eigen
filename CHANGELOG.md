@@ -6,15 +6,27 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Added
 
+- **Login in the top bar** — a signed-out visitor sees a login icon at the top right of every page, the sign-in pages included. On a demo server it enters the demo
+- **Install line on the landing page** — the owner can show the one-line install command, with a copy button, from **Show install section** under **Landing page** in Admin's server settings. It is off until turned on
+- **Covers on the blog** — a blog post can have a cover image, shown big under its title
 - **Delete history** — in Docs, Sheets, Slides, Vector and Stickies, File › Version history › **Delete history…** deletes every earlier version of a document, and the images and comments deleted from it, to free space. It keeps what was added or replied to in the last three days. Only an owner of the drive sees it
 - **Comments on hover** — in Docs, Sheets, Slides and Vector, rest the mouse on a comment to read its card, then click to open it. The pane lists comments by title, and in Sheets a click there jumps to the cell
+- **Assignment emails** — assigning a comment or card in Docs, Sheets, Slides, Vector or Stickies emails a guest a link to it, at most once an hour per document. Admin's server settings have a toggle for guests (on) and one for users (off)
+- **Recent files in Drive** — **Recent files** lists the files you lately opened or were notified about, from any drive, newest first. The sidebars of Drive, the document apps, Chat, Calendar, Mail and Contacts link to it
 
 ### Changed
 
+- **Trashing an open document** — it no longer adds a version to its history first. The document keeps every edit, and a restore brings them back
+- **Deleting a chat message** — the files attached to a deleted message are deleted for good with it, instead of landing in Drive's Trash
+- **Storage limit for mail, contacts and calendar (breaking)** — the limit per user, and a team's override of it, goes back to its default of 100 MB. Set it again under **Storage quotas** in Admin's server settings and **Quota overrides** on the team's page
+- **A new look for the public site** — the landing page, Support, the blog and the changelog share one layout, with a footer that shows the version.
+- **Tile titles** — on the Space home page and the help center's front page, an app's title is in the normal text color. The icon and the stripe keep the app's color
+- **Table of contents in the changelog** — a Versions list beside the changelog jumps to a release, and each entry starts with its bold title
 - **Moving a formula in Sheets** — a formula cut to another tab keeps reading the cells it read, as in Excel: `=A1*2` cut from One to Two becomes `=One!A1*2`, and a cell that moved along with it is still followed
 - **Uploading a backup** — only the owner can upload an archive in the **Backup** section of a user or team in Admin. Other admins still back up, download and restore
 - **Cards assigned to you** — on a Stickies board and in the comments pane of Docs, Sheets, Slides and Vector, the assignee's avatar stands out with a ring in the app's color when an open card is yours
 - **Deleting a comment** — in Docs, Sheets, Slides, Vector and Stickies, the edit form of a comment or sticky has a Delete button, and deleting from it or from the comment's right-click menu asks you to confirm
+- **Links in Docs** — the link dialog matches the one in Sheets: it shows the selected text, waits for a valid address and edits a link the cursor is on. Right-clicking a link offers Open, Copy, Edit and Remove link
 - **Unread dots** — on a sticky or a comment in the pane, the red dot moves to the start of the card's footer, beside its replies
 - **Flat icon buttons** — icon-only buttons have no border in the edit form of a sticky or comment, Drive's file details, the add button of share dialogs and guest lists, and the remove-image button in properties panels, so they match the toolbars
 - **GIFs stand still in lists** — in Drive's grid, on Stickies card covers and in the slide list of Slides, an animated GIF or WebP shows its first frame. It still plays in a file's details in Drive, in Quick preview, on the slide itself and in present mode. A deck full of GIFs opens faster, because the slide list loads small stills instead of every animation. Pictures uploaded before this keep playing in lists until the file changes
@@ -41,6 +53,9 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Empty results in Sheets** — a formula that gives empty text, such as `=IF(A1=1,"",5)`, plus 1 is `#VALUE!` as in Excel, whether you typed it or imported it
 - **Excel files in Sheets** — an import keeps what Excel saved, and calculates only a formula saved with no result or with an error, where Sheets can calculate it
 - **Large PDFs from Sheets** — a tall or chart-heavy spreadsheet prints up to the export's limit of 250,000 cells, or fails if it takes too long. The page count no longer cuts it. PDFs and web pages draw at most 1,000 images and charts, and about 200 MB of images
+- **Deleted invitations in Calendar** — an invitation from someone on your server that you deleted comes back, faded as declined and with its moved and cancelled dates, when its organizer changes the event. So does a date you removed
+- **Large invites in Mail** — a calendar invite over 1 MiB shows "This calendar invitation could not be read" instead of a preview, and no longer changes your calendar by itself
+- **Unusual repeat rules in Calendar** — an event whose repeat rule would take the server too long to work out shows on its first date only, and calendar apps still get the whole rule. An invite whose rule names no frequency arrives as one event instead of getting lost
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
 
 ### Fixed
@@ -100,19 +115,43 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Typing with an input method in Sheets** — the Enter that confirms what you compose, such as Japanese or Chinese, leaves the cell open. The next Enter confirms the cell
 - **A tab opened for the first time in Sheets** — arrow keys and typing work at once, on A1, without a click first
 - **Downloading an empty spreadsheet** — a spreadsheet nobody edited downloads with its blank sheet
-- **Downloads that fail** — downloading or printing a document from Docs, Sheets, Slides or Vector that is too big to export says "Export failed: the document is too big, or it used too much memory" instead of "Internal server error"
+- **Downloads that fail** — downloading or printing a document from Docs, Sheets, Slides or Vector that is too big, or whose PDF takes too long to make, says "Export failed: the document is too big, or it used too much memory" instead of a server error or a timeout
 - **Mail apps during a restore** — a mail app that signs in while an account is being restored or deleted is told to try again later, so it can no longer make the restore fail and keep the account offline
 - **Sending in Chat and comments** — a send that fails keeps its text and files, and a slash command such as /help leaves your attachments waiting. Send stays off until the room has loaded, so a message can't go out without its files
 - **Changing room in Chat** — what you were about to send is cleared when you change room, so it can't go to the wrong one
 - **Two people editing in Calendar** — editing, moving or deleting an event someone else just changed is refused instead of overwriting their change
 - **Removing a location in Calendar** — an update that only removes an event's location or description reaches its guests
-- **Very large calendar events** — saving a huge event through a calendar client takes seconds at most instead of freezing the server for minutes
+- **Calendar files from others** — a calendar file someone else made, in a mail invite, from a calendar app or in an import, no longer freezes the server
+- **Guest emails in Calendar** — changing only an event's color or reminder, or moving a one-off event to another time zone without changing when it happens, no longer emails its guests. Neither does a save that changes nothing
+- **Events from other calendar apps** — the first save in Calendar of an event made in another calendar app no longer rewrites what you didn't change, or emails its guests
+- **Repeating events that end in Calendar** — a repeating event from Apple Calendar or another app ends on the date it names, and one you end with **This and following events** ends on the same day in other calendar apps, all-day ones included
+- **Guest replies in Calendar** — a guest's answer for a date a repeating event doesn't have no longer adds that date to it
+- **Long date ranges in Calendar** — a repeating event lasting several days shows when it began before the days in view, in Calendar and in calendar apps. A calendar app asking for more than five years at once gets the events past the first five
+- **Time zones in calendar files** — an export keeps each event's time when two custom time zones share a name, and so does an import of a file holding several calendars. An event a calendar app saved in UTC shows as UTC, not GMT, and stays UTC when moved
+- **Importing a file that isn't a calendar** — Calendar says it is not a calendar file instead of showing an internal error
+- **Share notices in Calendar** — changing who a calendar is shared with, in Calendar or in a team's settings in Admin, no longer notifies people whose access stayed the same, so a notice they read stays read
+- **Mailed replies in Calendar** — a guest's answer that arrives by mail shows in your open Calendar tabs without a reload
+- **Guest replies on shared calendars** — an outside guest's reply to an event someone saved on another person's calendar reaches that calendar. The invitation names the calendar's owner as organizer
+- **Cancelling team events** — deleting a team event with outside guests sends them a cancellation from you
+- **Declining one date in Calendar** — declining or answering one date of an invitation that doesn't repeat no longer fails or goes unrecorded
+- **Your answer in Calendar** — your answer to an invitation no longer resets when the organizer makes a small edit, such as a new title
+- **Several dates of one event in Calendar** — when you're invited to several dates of a repeating event, cancelling or deleting one of them no longer removes the others
+- **Answering one moved date in Calendar** — when someone outside your server invites you to one moved date of a repeating event, your answer or decline reaches that date in their calendar
+- **Shortened and lengthened series in Calendar** — an organizer who lengthens a repeating event reaches its guests. A guest who ended it with **This and following events** keeps that end, unless the organizer sets an earlier end date
+- **Invitations to repeating events in Calendar** — an invitation to a repeating event with moved or cancelled dates notifies you once, and one that arrives twice notifies you no more. A date the organizer took you off shows as cancelled
+- **Invitations from before you joined** — an invitation to a repeating event sent before you had an account arrives with its moved and cancelled dates, and one to a single date of it arrives as that date
+- **Mailed invitations in Calendar** — an invitation by mail that lists a moved date before its repeating event keeps the moved date
 - **A refused Save** — in Calendar, Contacts and Personal info in Space, a Save refused because the item changed elsewhere keeps what you typed and takes the other fields from the server
-- **Removing someone with a document open** — removing someone from a team or an organization, or deleting their account, cuts them off at once from the documents they can no longer read. A password reset does too
-- **Losing access to an open document** — in Docs, Sheets, Slides, Vector and Stickies, the page switches to "You need access" at once, or to sign-in if your account was deleted, instead of leaving an editor where typing goes nowhere
+- **Removing someone with a document open** — removing someone from a team or an organization, or deleting their account, cuts them off within 15 seconds from the documents they can no longer read. A password reset does too
+- **Losing access to an open document** — in Docs, Sheets, Slides, Vector and Stickies, the page switches to "You need access" within 15 seconds, or to sign-in if your account was deleted, instead of leaving an editor where typing goes nowhere
+- **Signing out with a document open** — signing out or changing your password with **Log out of all other devices** ticked also ends open documents and live updates, within 15 seconds
+- **Logging out from a file list** — **Log out** on Trash, Shared or a file-type page in Drive, or on the file list of Docs, Sheets, Slides, Stickies or Vector, goes straight to the login page without an error flashing first
 - **Shared with me** — items of a deleted person or team no longer show
+- **Removing a share in Drive** — no longer notifies someone who never had the file
+- **Copy link** — the link copied from a share dialog, a file's menu or a comment starts with your server's address, so it opens when you paste it in a mail or chat
 - **Restoring a deleted account or team** — a restore of a deleted team, or of a deleted user whose address another account now holds, is refused before it changes anything. A restore that fails no longer reloads open tabs, so they keep their unsaved edits
 - **Deleting during an upload** — on local storage, deleting a file while an upload of the same name runs no longer loses the new file
+- **Limits in Admin** — a storage, mount or upload limit outside its range keeps Save disabled, with a plain hint under the field, instead of failing with a confusing error
 
 ## [0.4.2] - 2026-11-03
 

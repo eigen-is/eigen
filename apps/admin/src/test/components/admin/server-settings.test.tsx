@@ -8,7 +8,7 @@ import { renderInDocument } from '@workspace/ui/test/render-in-document';
 installHappyDom();
 
 const SETTINGS: ServerSettings = {
-    quotas: { mailAndContactsMaxMB: 100, defaultMountMaxSizeMB: 500, maxUploadSizeMB: 35, trashRetentionDays: 30 },
+    quotas: { homeDataMaxMB: 100, defaultMountMaxSizeMB: 500, maxUploadSizeMB: 35, trashRetentionDays: 30 },
     defaults: { mount: { storageType: 'local-fullnames' } },
     onboarding: {
         waitlist: { enabled: false },
@@ -22,9 +22,17 @@ const SETTINGS: ServerSettings = {
             { title: 'Docs', url: 'https://docs.example.com' },
             { title: ' ', url: 'https://blog.example.com' },
         ],
+        showInstall: false,
     },
     notifications: {
-        email: { guestOnAclAdd: true, userOnAclAdd: false, userOnCalendarInvite: true, ownerOnAccessRequest: true },
+        email: {
+            guestOnAclAdd: true,
+            userOnAclAdd: false,
+            userOnCalendarInvite: true,
+            ownerOnAccessRequest: true,
+            guestOnAssign: true,
+            userOnAssign: false,
+        },
     },
     mail: { senderName: '', senderAddress: '', relaySendsAsUsers: false },
     backups: {

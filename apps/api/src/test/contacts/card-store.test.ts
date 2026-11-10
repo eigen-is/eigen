@@ -4,7 +4,7 @@ import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
-import { CARD_MAX_BYTES, labelColorFor, normalizeLabelName } from '../../lib/contacts/card-store';
+import { CARD_MAX_BYTES, normalizeLabelName } from '../../lib/contacts/card-store';
 import * as contactsSchema from '../../lib/contacts/schema';
 import { computeResourceEtag } from '../../lib/core';
 import { createVCard, parseVCard } from '../../lib/vcard';
@@ -23,10 +23,17 @@ describe('normalizeLabelName', () => {
     });
 });
 
-describe('labelColorFor', () => {
-    test('is deterministic and lands in the accent palette', () => {
-        const color = labelColorFor(normalizeLabelName('Work'));
-        expect(color).toBe(labelColorFor(normalizeLabelName('Work')));
+describe('a label a card mints', () => {
+    test('takes the same accent color in every book', async () => {
+        const mintedColor = async () => {
+            const { instance: contacts } = await makeContacts();
+            const id = crypto.randomUUID();
+            const card = `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${id}\r\nFN:Jane Doe\r\nCATEGORIES:Suppliers\r\nEND:VCARD\r\n`;
+            await contacts.putCard(`${id}.vcf`, card, { ifMatch: null, ifNoneMatch: null });
+            return (await contacts.getLabels()).find((label) => label.name === 'Suppliers')?.color;
+        };
+        const color = await mintedColor();
+        expect(await mintedColor()).toBe(color);
         expect(EIGEN_ACCENT_COLORS.some((c) => c.value === color)).toBe(true);
     });
 });

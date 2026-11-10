@@ -288,7 +288,7 @@ describe('getHome teardown race', () => {
     test('no Home opens while shutdownAllHomes runs, and an open stream ends with its Home', async () => {
         const userId = await createHomeUser('shutdown-gate@test.eigen.is');
         const home = await getHome(userId);
-        const reader = createSSEStream(home).getReader();
+        const reader = createSSEStream(home, 'a session no keepalive reads').getReader();
         // Holds the shutdown open until the check below is done.
         const { promise: held, resolve: release } = Promise.withResolvers<void>();
         const close = home.close.bind(home);

@@ -10,6 +10,7 @@ import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home';
 import * as relay from '../../lib/home/home-relay';
 import * as mailer from '../../lib/mailer/mailer';
+import { makeSyntheticUser } from '../../lib/user';
 import { addMember, assertJson, authedRequest, createTeam, eventually, findOrFail, getTestContext } from '../setup';
 
 describe('Team Calendar Share (push to existing members)', () => {
@@ -475,8 +476,8 @@ describe('Team calendar administration', () => {
         expect(updated.title).toBe('Member Renamed');
     });
 
-    // A team Home has no address, and a CANCEL from it would name an empty organizer.
-    test('deleting a team event with an external guest mails no CANCEL from an empty address', async () => {
+    // A team Home has no address, so its events name the member who saved, or here deleted, them.
+    test('a member deleting a team event mails its outside guest a CANCEL from the member', async () => {
         const teamHome = await getHome(teamOwnerId(adminTeamId));
         const event = await teamHome.calendar.createEvent(adminTeamCalId, {
             title: 'Team Offsite With A Guest',
@@ -485,21 +486,16 @@ describe('Team calendar administration', () => {
             allDay: false,
             data: { attendees: [{ email: 'dana.team@example.org', status: 'pending', role: 'required' }] },
         });
+        const bob = makeSyntheticUser(ctx.bob.user.id, 'Bob', ctx.bob.user.email);
 
         const sent = spyOn(mailer, 'sendMail').mockResolvedValue(true);
-        const warned = spyOn(console, 'warn').mockImplementation(() => {});
         sent.mockClear();
-        warned.mockClear();
-        await teamHome.calendar.deleteEvent(adminTeamCalId, event.id);
-        await eventually(
-            async () => (sent.mock.calls.length || warned.mock.calls.length ? true : undefined),
-            'the cancellation to be handled',
-        );
-        const mails = sent.mock.calls.length;
+        await teamHome.calendar.deleteEvent(adminTeamCalId, event.id, bob);
+        const cancel = await eventually(async () => sent.mock.calls[0]?.[0], 'the cancellation');
         sent.mockRestore();
-        warned.mockRestore();
 
-        expect(mails).toBe(0);
+        expect(cancel.subject).toBe('Canceled: Team Offsite With A Guest');
+        expect(cancel.from?.address).toBe(ctx.bob.user.email);
     });
 
     // The Admin app's team detail: the list is what it reads the default calendar and its shares off.

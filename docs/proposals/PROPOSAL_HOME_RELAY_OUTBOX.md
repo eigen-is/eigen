@@ -29,14 +29,13 @@ So the rule is "everything that is pushed", not "everything that crosses".
 
 | Problem | Where |
 |---|---|
-| A crash loses every queued and running delivery | All pushes. `acl-propagation.ts` and `sendToUserHomes` hold them in memory |
+| A crash loses every queued and running delivery | All pushes. `home-relay.ts` holds them in memory |
 | A failed delivery is logged and dropped, with no retry | `sendToUserHomes`, `share-propagation.ts`, `reconciliation.ts` |
-| Pushes follow three policies: a chain plus the budget of eight, only the budget, or neither | ACL; chat and watchers; calendar, reconciliation, access requests, comment assignment and alerts |
+| Pushes follow three policies: a per-path chain, one home at a time, or a direct send | ACL; chat and watchers; calendar, reconciliation, access requests, comment assignment and alerts |
 | A share PUT waits for one Home open per target | `Calendar` awaits `propagateCalendarShare` |
-| An invitation update delivered before its create is dropped for good, because the receiver has no linked event yet | `receiveInvitationUpdate`, fed by `invite-propagation.ts` |
-| A shutdown waits for two of the three policies. A direct `sendToHome` that opens a Home during the teardown gets a 503 and is lost | `drainDeliveriesWithin` |
+| A shutdown waits for each running delivery, not for a caller's loop. A later direct `sendToHome` of an invitation to several guests or of a reconciliation gets a 503 and is lost | `invite-propagation.ts`, `reconciliation.ts` |
 
-`sendToUserHomes` already solves a graceful shutdown and the fd burst of chat and watcher fan-outs. So the outbox's value is durability, retry, ordering, and one path instead of three.
+The relay already waits for each running push at a graceful shutdown, and today's code holds no limit on opens, because a fan-out opens one home at a time. So the outbox's value is durability, retry, ordering, and one path instead of three.
 
 ## One function decides where a push goes
 
@@ -82,11 +81,10 @@ In a cluster "server-level" means per process. Each process's outbox holds what 
 
 | Leaves | Lines |
 |---|---|
-| `pendingFanOuts`, `queueACLFanOut`, `drainACLFanOuts` and `drainDeliveriesWithin` in `acl-propagation.ts` | about 47 of 177 |
-| `deliveryBudget`, `deliveries`, `drainHomeDeliveries`, `countHomeDeliveries` and the permit reasoning in `home-relay.ts` | about 40 |
-| The `.catch` handlers in `chat.ts` and `history.ts`, whose `sendToUserHomes` never rejects, and the `try/catch` in `notifySharedCalendarUsers`, the only one that guards a delivery alone | about 20 |
+| `deliveries`, `lastInOrder`, `tracked`, `deliverToEach`, `drainHomeDeliveries` and `drainDeliveriesWithin` in `home-relay.ts` | about 50 |
+| The `try/catch` in `notifySharedCalendarUsers`, the only one that guards a delivery alone | about 5 |
 
-In comes `outbox.ts`, its db-config and schema, the codec, the receiver fixes and the status row. The estimate is about 250 to 320 net lines of production code, plus the test migration, which is larger than the production diff. `content-reindex-queue.ts` is 130 lines and `upload-queue.ts` is 518, and `outbox.ts` sits between them.
+In comes `outbox.ts`, its db-config and schema, the codec, the receiver fixes and the status row. The estimate is about 300 to 370 net lines of production code, plus the test migration, which is larger than the production diff. `content-reindex-queue.ts` is 130 lines and `upload-queue.ts` is 518, and `outbox.ts` sits between them.
 
 What gets simpler is what a reader has to know: one ordering rule, one budget, one retry curve and one shutdown step. The price is that a push is not done when `sendToHome` returns ([What changes for callers](#what-changes-for-callers)).
 
@@ -109,7 +107,7 @@ CREATE INDEX outbox_lane ON outbox(targetOwnerId, fifoKey);
 
 A target is a resolved owner id. A team share is one row per member, resolved at enqueue, as the callers resolve it today. The message type is inside `payload`, so there is no `verb` column.
 
-Lanes order by `id`, not by a timestamp, because `sendSeriesExceptions` enqueues in a tight loop and milliseconds tie. Every SQLite index ends in the rowid, so `outbox_due` serves `ORDER BY nextAttemptAt, id` with no sort and `outbox_lane` serves a lane's `MIN(id)`, which `EXPLAIN QUERY PLAN` confirms. `oldestPendingAt` comes from `min(updatedAt)`, an unindexed status read on a small table.
+Lanes order by `id`, not by a timestamp, because a fan-out such as `propagateInvitation` enqueues in a tight loop and milliseconds tie. Every SQLite index ends in the rowid, so `outbox_due` serves `ORDER BY nextAttemptAt, id` with no sort and `outbox_lane` serves a lane's `MIN(id)`, which `EXPLAIN QUERY PLAN` confirms. `oldestPendingAt` comes from `min(updatedAt)`, an unindexed status read on a small table.
 
 **`enqueue` is async, and its insert is synchronous.** `outbox.db` opens as `lib/share/db.ts` opens `eigen.db`: a `createAsyncSingleton` around `openLocalDatabase`. The file must open lazily, because a CLI command or a test that imports `home-relay.ts` must not create it. So `enqueue` awaits the singleton, then commits in one synchronous `bun:sqlite` transaction, then kicks. `sendToHome` stays async with its signature unchanged, so no caller changes. When its promise resolves, the row is committed. Once the file is open, the await costs microtasks and no I/O, and a caller that doesn't await gets its row just as soon.
 
@@ -121,7 +119,7 @@ An enqueue with a `coalesceKey` upserts: it replaces the payload, resets `attemp
 |---|---|---|---|
 | `drive:acl-change` | `''` | `{target}:acl:{path.id}` | It carries the full ACL, so only the latest matters. `Drive.runInOrder` keeps two changes to one path in order up to the enqueue, and an add and a revoke can't arrive reversed |
 | `calendar:share` | `''` | `{target}:calshare:{ownerId}:{calendarId}` | It carries the full permission |
-| `calendar:invitation`, `-update`, `-removal` | organizer event id | None | True FIFO, so a cancel can't overtake the create it cancels, and an update can't arrive before it |
+| `calendar:request`, `calendar:invitation-removal` | organizer event id | None | True FIFO, so a cancel can't overtake the invitation it cancels, and an older update can't follow a newer one |
 | `calendar:rsvp` | `eventId` | None | Two quick answers apply in order |
 | `notification` | `''` | `{target}:notif:{tag}` | The receiver upserts on the tag, so a pending older one adds nothing |
 
@@ -169,11 +167,9 @@ A crash between delivery and ack delivers again, so delivery is at least once. *
 |---|---|---|---|---|
 | `drive:acl-change`, add | Nothing | Nothing | `receiveSharedPathChange` | |
 | `drive:acl-change`, revoke | Second bell and toast | Same | Its unshare branch | Fix 1 |
-| `calendar:share`, grant | Second toast, read row turns unread | Dismissed row returns; a removed calendar returns with a fresh color | `receiveShare`, `ensureSharedEntry` | Fix 2; a returning calendar is what any owner share PUT does today |
+| `calendar:share`, grant | Nothing | A removed calendar returns with a fresh color | `receiveShare`, `ensureSharedEntry` | Accepted: a returning calendar is what any owner share PUT does today |
 | `calendar:share`, revoke | Nothing | Nothing | `removeShare` | |
-| `calendar:invitation` | Nothing | Deleted invitation comes back with a bell; own answer resets to pending | `decideInboundRequest`, `fileNewInvitation` | Fix 3; the return is accepted |
-| `calendar:invitation-update`, series | Nothing | Own answer resets, "updated" bell; nothing if the copy is deleted | `applyInvitationUpdate` | Fix 3 |
-| `calendar:invitation-update`, occurrence | Second toast, unread row, ctag bump, new exception id | Own answer resets; removed occurrence returns | `applyInvitationException` | Fixes 3 and 4; the return is accepted |
+| `calendar:request` | Nothing | A deleted copy or a removed date comes back faded as declined, with a bell | `receiveRequest` | Accepted: the organizer's next update brings them back the same way |
 | `calendar:invitation-removal`, series | Nothing | Nothing | `removeInvitation` | |
 | `calendar:invitation-removal`, occurrence | Second toast, unread row | Dismissed row returns | `cancelInvitationOccurrence` | Fix 5 |
 | `calendar:rsvp`, series | Nothing | Nothing | `updateAttendeeStatus` | |
@@ -183,16 +179,16 @@ A crash between delivery and ack delivers again, so delivery is at least once. *
 **The first build step makes these fixes, because they also fix today's behaviour:**
 
 1. `receiveSharedPathChange`'s revoke notifies only if the delete removed a row, as `removeShare` does. This also stops the bell to a member who never had a mirror row.
-2. `ensureSharedEntry` reports whether it inserted or changed, and `receiveShare` notifies only then. This also stops today's re-raise on every share PUT.
-3. A guest's PARTSTAT stays unless the message's SEQUENCE is strictly higher than the stored one, in `applyInvitationUpdate` and `applyInvitationException`. With that a repeat changes nothing, so it sends no notice. It also protects an answer given just after an update was enqueued.
-4. `applyInvitationException` patches an existing override at an equal revision and returns false if unchanged, as `applyInvitationUpdate` does with `patchEvent`.
+2. Done: `ensureSharedEntry` answers the permission the entry held, and `receiveShare` notifies only for a new or raised grant, so a share PUT no longer raises the row again for every reader.
+3. Done: a guest's PARTSTAT stays unless the message's SEQUENCE is strictly higher than the stored one (`keepOwnAnswer`), for every event of a REQUEST. It also protects an answer given just after an update was enqueued.
+4. Done: a REQUEST takes one decision and writes at most once, patching what the copy holds, so a repeat that changes nothing writes nothing and sends no notice.
 5. `cancelInvitationOccurrence` returns early when the occurrence is already excluded at an equal revision. A guest's own removal stamps `sequence: 0` and no dtstamp, so an organizer's message still gets through.
-6. Three stuck lanes end. `rsvpForOccurrence` returns on a missing parent, where it throws 404 and `unlessRefused` rethrows it today. `removeOccurrence` returns on a resource with no master, where `addExclusion` throws today. A disabled team calendar's 404 becomes a drop in the relay's "home without a calendar" check, which also asks the `TeamHome` for its `calendar.enabled` setting. It doesn't override `hasCalendar`, because `calendarOf` uses that, and `get-calendar.ts` and `routes/home.ts` rely on the 404 from `pullCalendars`.
+6. Three stuck lanes end. `rsvpForOccurrence` returns on a missing parent, where it throws 404 and `unlessRefused` rethrows it today. `removeOccurrence` returns on a missing parent too, where it throws 404 today. A disabled team calendar's 404 becomes a drop in the relay's "home without a calendar" check, which also asks the `TeamHome` for its `calendar.enabled` setting. It doesn't override `hasCalendar`, because `calendarOf` uses that, and `get-calendar.ts` and `routes/home.ts` rely on the 404 from `pullCalendars`.
 
 **These stay, each at its cost:**
 
 - A repeat of a `notification` shows a second toast and turns a read row unread, and a dismissed row returns.
-- A deleted invitation or a removed occurrence can come back after a repeat, because a Home has no memory of a delete. The clean fix is a tombstone or soft delete, a migration with its own yes.
+- A deleted invitation or a removed occurrence comes back after a repeat, faded as declined, as it does on the organizer's next update, because a Home has no memory of a delete.
 - A late occurrence RSVP after a truncation can leave a ghost occurrence.
 - A row that always fails is a bug. It retries to the maximum age, about 20,000 attempts, with one log line, and each attempt holds its target's Home open.
 - A storage outage across eight or more targets slows other pushes.
@@ -205,7 +201,7 @@ A crash between delivery and ack delivers again, so delivery is at least once. *
 
 **The target's data lands a moment after the request answers.** The receive methods broadcast their own SSE event, so an open tab updates when the row is delivered. This applies to `calendar:share`, which is awaited today, and to reconciliation, where a guest's sign-in reconciles and then opens the app. Reads never depended on delivery for access, because access is always checked on the owner's side.
 
-**The RSVP broadcast moves into the receive methods.** `propagateRsvp` sends `calendar:rsvp` and then a `broadcast`, and it is the one place that sends both in a row. With a queue, the organizer's tab would refetch before the answer lands. So `receiveAttendeeStatus` and `receiveRsvpForOccurrence` broadcast `CALENDAR_INVITE_RSVP` after their write, where [a receive method finishes the job](../SCALABILITY.md#a-receive-method-finishes-the-job-on-the-target). It can't go into `updateAttendeeStatus` or `rsvpForOccurrence`, because the guest's own `rsvp` calls those on the guest's Home. It isn't a duplicate. An iMIP REPLY goes through the same two methods and gains the live update it lacks today. An occurrence's answer also announces `CALENDAR_EVENT_UPDATED`, as the relay path does today, and both events end in the debounced `invalidateEventsSoon`.
+**An answer already announces itself on the organizer's Home.** `propagateRsvp` sends `calendar:rsvp` alone, and the write the answer makes announces `CALENDAR_EVENT_UPDATED` when it changed something, where [a receive method finishes the job](../SCALABILITY.md#a-receive-method-finishes-the-job-on-the-target). So with a queue the organizer's tab still refetches after the answer lands, for the relay and an iMIP REPLY alike.
 
 **A caller doesn't see a delivery fail.** `sendToHome` can only fail on the open or the insert. By then the domain write has committed, so it logs the failure and resolves, and the request still answers. That is [the remaining window](#the-remaining-window), not a new one.
 
@@ -258,7 +254,7 @@ One unit branch lands together, in six commits. Moving verb by verb would keep t
 1. **Lift the backoff.** `uploadBackoffMs` moves to `utils/timing.ts`. The `upload-limits.ts` header and SYNC.md change with it.
 2. **Fix the receivers.** The six fixes in [A repeat delivery is tolerated and rare](#a-repeat-delivery-is-tolerated-and-rare), and the required tag on the relay's message type.
 3. **Add the outbox, unused.** `outbox.ts`, the schema, the db-config, the `SERVER_RUNTIME_FILES` entry and its unit tests. `test/server/server-files.test.ts` learns that `outbox.db` is a runtime database.
-4. **Switch, atomically.** `deliver`, `enqueue`, the RSVP move, the deletions, `server.ts`, the boot kick, and the test and seed migration. The deletions are `drainDeliveriesWithin`, `drainACLFanOuts`, `drainHomeDeliveries`, `countHomeDeliveries` and `queueACLFanOut`, with the state behind them.
+4. **Switch, atomically.** `deliver`, `enqueue`, the RSVP move, the deletions, `server.ts`, the boot kick, and the test and seed migration. The deletions are `drainDeliveriesWithin`, `drainHomeDeliveries`, `tracked`, `deliverToEach` and `lastInOrder`, with the state behind them.
 5. **Report it.** The status field and the `printReport` row, with the `ControlStatus` fixtures in `test/cli/status.test.ts` and `test/server/setup-token.test.ts`.
 6. **Document it.** SCALABILITY.md, ACL.md, SYNC.md, DATABASE.md, BACKUP.md (it lists the runtime files), CHAT.md, FILE-HISTORY.md, NOTIFICATION-CENTER.md, CALENDAR.md, an ARCHITECTURE.md row, the ROADMAP row, CHANGELOG, and the help center's `commands-and-files.md`, whose list of what `./eigen status` shows gets the new row.
 
@@ -266,7 +262,7 @@ Closing a removed member's open collab sockets doesn't use the outbox. Those soc
 
 ## Alternatives we rejected
 
-- **Hint rows that re-derive from live state.** Every delivery opens the source Home too, a removal has nothing to read once the source is deleted, across processes each delivery becomes a remote read, and notifications would stay on a second path. Finding C1 in [API-SIMPLIFICATION-AUDIT.md](../API-SIMPLIFICATION-AUDIT.md) may still merge the invitation messages into one, and the lanes stay as they are.
+- **Hint rows that re-derive from live state.** Every delivery opens the source Home too, a removal has nothing to read once the source is deleted, across processes each delivery becomes a remote read, and notifications would stay on a second path. The invitation messages are already one, `calendar:request`, and the lanes stay as they are.
 - **Notifications staying out.** It keeps a second policy and `drainDeliveriesWithin`.
 - **Verb-by-verb landing.** It keeps two paths alive until the last verb moves.
 - **A delivery timeout.** It is a second mechanism beside the bound on `close`, for an outage that is accepted.
@@ -276,7 +272,7 @@ Closing a removed member's open collab sockets doesn't use the outbox. Those soc
 ## Open questions
 
 - **Is 7 days the right maximum age?** Long enough for any outage we would survive, short enough that a row holding someone's text doesn't linger. A wrong value costs little and changes one constant.
-- **Is eight still the right budget?** It is the current value. Revisit it with the cap on open Homes.
+- **Is eight the right budget?** Today's code has none: a fan-out opens one home at a time. Revisit it with the cap on open Homes.
 
 ## Testing
 

@@ -29,12 +29,11 @@ export const TRANSFORM_LIMITS: Record<
     Pick<RunOptions, 'deadlineMs' | 'admissionCostMs'>
 > = {
     preview: { deadlineMs: 30_000, admissionCostMs: 15_000 },
-    // Heavy but user-requested work (exports, imports and conversions); the PDF
-    // subprocess keeps its own deadline.
+    // Heavy but user-requested work (exports, imports and conversions); the PDF subprocess keeps its own deadline.
     export: { deadlineMs: 120_000, admissionCostMs: 30_000 },
     import: { deadlineMs: 120_000, admissionCostMs: 30_000 },
-    // Search reindexing: nobody waits on it, but a stuck job must not hold the single
-    // active child away from user-facing work. It reuses the preview cost.
+    // Search reindexing: nobody waits on it, but a stuck job must not hold the single active child away from
+    // user-facing work. It reuses the preview cost.
     'extract-text': { deadlineMs: 30_000, admissionCostMs: 15_000 },
     // A workbook's log folded at its close, in the background. A long log folds until just before the deadline, so
     // the one child it holds is priced at all of it.
@@ -52,8 +51,9 @@ const MAX_PREDICTED_WAIT_MS = 120_000;
 const CLOSE_GRACE_MS = 5_000;
 // A killed child stuck in the kernel can't exit, and must not hold the shutdown.
 const KILL_WAIT_MS = 1_000;
-// The client shows it word for word, so it stays readable for a person.
+// The client shows these word for word, so they stay readable for a person.
 export const BUSY_MESSAGE = 'The server is busy, please try again in a moment';
+export const TOO_LARGE_TO_EXPORT = 'Export failed: the document is too big, or it used too much memory';
 
 // Linux alone takes these limits, as macOS refuses setrlimit for the data segment. $1 is the data segment in KiB, $2
 // the CPU seconds, and the rest is the command.
@@ -161,11 +161,7 @@ function formatWarning(warning: TransformWarning): string {
 
 export class DocumentTransformRunner {
     private readonly entry: string;
-    // Production always runs the constants above; only the runner suite dials these down.
-    private readonly maxQueued = MAX_QUEUED_JOBS;
-    private readonly maxQueuedBackground = MAX_QUEUED_BACKGROUND;
-    private readonly maxPredictedWaitMs = MAX_PREDICTED_WAIT_MS;
-    private readonly closeGraceMs = CLOSE_GRACE_MS;
+    // The machine's memory. Only the memory-limit suite lowers it, so a child fails past 1 GiB and not past all of RAM.
     private readonly memoryLimitKiB = MACHINE_MEMORY_KIB;
     private foreground: Job[] = [];
     private background: Job[] = [];
@@ -180,14 +176,14 @@ export class DocumentTransformRunner {
     // Callable ahead of run(), so a caller can refuse before it pays for an expensive input.
     public assertAdmissible(priority: TransformPriority): void {
         if (this.closing) this.refuse(priority, 'closing');
-        if (this.foreground.length + this.background.length >= this.maxQueued) this.refuse(priority, 'queue-full');
-        if (priority === 'background' && this.background.length >= this.maxQueuedBackground) {
+        if (this.foreground.length + this.background.length >= MAX_QUEUED_JOBS) this.refuse(priority, 'queue-full');
+        if (priority === 'background' && this.background.length >= MAX_QUEUED_BACKGROUND) {
             this.refuse(priority, 'background-share');
         }
         if (priority === 'foreground') {
             let predictedWaitMs = this.foreground.reduce((sum, job) => sum + job.admissionCostMs, 0);
             for (const active of this.active.values()) predictedWaitMs += active.admissionCostMs;
-            if (predictedWaitMs > this.maxPredictedWaitMs) this.refuse(priority, 'predicted-wait', predictedWaitMs);
+            if (predictedWaitMs > MAX_PREDICTED_WAIT_MS) this.refuse(priority, 'predicted-wait', predictedWaitMs);
         }
     }
 
@@ -201,8 +197,7 @@ export class DocumentTransformRunner {
         throw new ApiError(503, BUSY_MESSAGE);
     }
 
-    // Throws ApiError(503) synchronously when the job cannot be admitted; the
-    // returned promise always resolves with a DocumentTransformResponse.
+    // Throws ApiError(503) synchronously when the job cannot be admitted; the returned promise always resolves.
     public run(request: DocumentTransformRequest, opts: RunOptions): Promise<DocumentTransformResponse> {
         this.assertAdmissible(opts.priority);
 
@@ -241,7 +236,7 @@ export class DocumentTransformRunner {
         this.foreground = [];
         this.background = [];
         for (const job of queued) job.resolve(failed('shutdown'));
-        const deadline = Date.now() + this.closeGraceMs;
+        const deadline = Date.now() + CLOSE_GRACE_MS;
         while (this.active.size > 0 && Date.now() < deadline) await Bun.sleep(10);
         for (const active of this.active.values()) active.kill('shutdown');
         const killed = Date.now() + KILL_WAIT_MS;

@@ -12,6 +12,7 @@ import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { useFollowedFields } from '@workspace/ui/hooks/use-followed-fields';
@@ -413,7 +414,7 @@ function RepeatableField({ label, onAdd, className, children }: RepeatableFieldP
     return (
         <div>
             <div className="flex items-center justify-between">
-                <FormLabel className="text-base">{label}</FormLabel>
+                <Label className="text-base">{label}</Label>
                 <Button type="button" variant="outline" size="sm" className="h-7 gap-1" onClick={onAdd}>
                     <Plus className="h-3.5 w-3.5" />
                     <span className="text-xs">Add</span>

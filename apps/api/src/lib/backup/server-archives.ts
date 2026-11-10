@@ -4,6 +4,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { serverBackupFailedTag, serverBackupNotUploadedTag } from '@workspace/lib/notification/tags';
 import type { ServerArchive, ServerArchiveSidecar, ServerArchiveUpload } from '@workspace/lib/types/backup';
 import {
     canUploadServerArchive,
@@ -209,10 +210,10 @@ export async function recoverInterruptedServerBackups(): Promise<void> {
     }
     if (interrupted.length > 0) {
         const body = `${interrupted.join(', ')}: ${INTERRUPTED}`;
-        alertOwner('Server backup failed', body, 'server-backup-interrupted').catch(() => {});
+        alertOwner('Server backup failed', body, serverBackupFailedTag('interrupted')).catch(() => {});
     }
     if (notUploaded.length > 0) {
         const body = `${notUploaded.join(', ')}: ${INTERRUPTED}`;
-        alertOwner('Server backup not uploaded', body, 'server-backup-upload-interrupted').catch(() => {});
+        alertOwner('Server backup not uploaded', body, serverBackupNotUploadedTag('interrupted')).catch(() => {});
     }
 }

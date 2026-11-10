@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { EXPORT_CSP } from '../../lib/export/sanitize';
-import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from '../fixtures/heavy-sheets';
+import { weasyPrintPython } from '../pdf-test-helpers';
 import { authedRequest, driveGet, drivePost, getTestContext } from '../setup';
 
 // Response contract of GET /drive/:ownerId/:mountId/file/:pathId/export/:format for
@@ -84,7 +84,7 @@ describe('Sheets export route — response contract', () => {
     }, 60_000);
 });
 
-const suite = (await isWeasyPrintAvailable()) ? describe : describe.skip;
+const suite = weasyPrintPython ? describe : describe.skip;
 
 suite('Sheets export route — PDF (WeasyPrint end-to-end)', () => {
     test('pdf export serves a rendered PDF as an attachment', async () => {

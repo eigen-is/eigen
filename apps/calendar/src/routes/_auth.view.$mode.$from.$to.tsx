@@ -1,5 +1,8 @@
+// The calendar's main page: a month or week of the signed-in user's own and shared events, chosen by the URL's mode and
+// its from and to timestamps. The toolbar's arrows and Today move the range by navigating to a new URL, and a click on a
+// day opens the new-event dialog for that day.
+
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
 import type { ViewMode } from '@workspace/lib/calendar';
 import {
     getMonthRange,
@@ -27,10 +30,10 @@ function CalendarView() {
     const { mode, from: fromStr, to: toStr } = Route.useParams();
     const { eventId } = Route.useSearch();
     const navigate = useNavigate();
-    const { user } = useAuth();
-    const ownerId = user?.id || '';
+    const { user } = Route.useRouteContext();
+    const ownerId = user.id;
 
-    const viewMode = (mode === 'week' ? 'week' : 'month') as ViewMode;
+    const viewMode: ViewMode = mode === 'week' ? 'week' : 'month';
     const from = Number(fromStr);
     const to = Number(toStr);
 

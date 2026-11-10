@@ -2,10 +2,10 @@ import { afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:t
 import type { SSEvent, SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { announceRestart, clearRestartNotice } from '../../lib/config/restart-notice';
-import { drainACLFanOuts } from '../../lib/drive/acl-propagation';
 import { createSSEStream, getHome } from '../../lib/home';
 import { evictHome } from '../../lib/home/get-home';
-import { authedRequest, collectSSE, createTestUser, getTestContext } from '../setup';
+import { drainHomeDeliveries } from '../../lib/home/home-relay';
+import { authedRequest, collectSSE, createTestUser, getTestContext, sessionIdOf } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -162,7 +162,7 @@ describe('SSE', () => {
                 });
 
             // Bob's copy arrives through the async ACL fan-out, not inside the PUT.
-            await drainACLFanOuts();
+            await drainHomeDeliveries();
             bobSSE.stop();
 
             // Bob should receive DRIVE_ACL_UPDATED (not just SHARED/UNSHARED) since the path was already shared
@@ -214,7 +214,7 @@ describe('SSE', () => {
 
         // One open tab's stream, read on to the next restart notice it sends.
         async function openStream(userId: string) {
-            const reader = createSSEStream(await getHome(userId)).getReader();
+            const reader = createSSEStream(await getHome(userId), 'a session no keepalive reads').getReader();
             return {
                 notice: async () => {
                     for (;;) {
@@ -280,14 +280,18 @@ describe('SSE', () => {
 
         afterEach(() => jest.useRealTimers());
 
+        async function newUser(name: string) {
+            return createTestUser(`sse-${name}-${crypto.randomUUID()}@test.eigen.is`, 'pw-12345678', 'S');
+        }
+
         async function newHome(name: string) {
-            const user = await createTestUser(`sse-${name}-${crypto.randomUUID()}@test.eigen.is`, 'pw-12345678', 'S');
-            return getHome(user.id);
+            return getHome((await newUser(name)).id);
         }
 
         test('an open stream keeps its Home past the idle, and a cancelled one closes it at once', async () => {
-            const home = await newHome('held');
-            const reader = createSSEStream(home).getReader();
+            const user = await newUser('held');
+            const home = await getHome(user.id);
+            const reader = createSSEStream(home, await sessionIdOf(user.sessionToken)).getReader();
             jest.useFakeTimers();
             // A request re-arms the idle on the fake clock, so only the stream can keep the Home past it.
             home.touch();
@@ -314,7 +318,7 @@ describe('SSE', () => {
                 };
             });
             const intervals = spyOn(globalThis, 'setInterval');
-            const reader = createSSEStream(home).getReader();
+            const reader = createSSEStream(home, 'a session no keepalive reads').getReader();
             const keepalive = intervals.mock.results[intervals.mock.calls.findIndex(([, ms]) => ms === 15_000)]?.value;
             intervals.mockRestore();
             const cleared = spyOn(globalThis, 'clearInterval');
@@ -343,7 +347,7 @@ describe('SSE', () => {
             const subscribe = spyOn(home, 'subscribeSSE');
             let refusal: unknown;
             try {
-                createSSEStream(home);
+                createSSEStream(home, 'a session no keepalive reads');
             } catch (err) {
                 refusal = err;
             }
@@ -354,5 +358,119 @@ describe('SSE', () => {
             expect(subscribe).not.toHaveBeenCalled();
             await closing;
         });
+    });
+
+    // The keepalive reads the session, the same read a collab socket's tick makes. The tests run it by hand: the callback
+    // the stream gave setInterval, the real one, with no wait.
+    describe('A stream ends with its session', () => {
+        // Two sessions of one user, each with an open stream through the route.
+        async function twoStreams() {
+            const email = `sse-sessions-${crypto.randomUUID()}@test.eigen.is`;
+            const first = await createTestUser(email, 'pw-12345678', 'S');
+            const second = await createTestUser(email, 'pw-12345678', 'S');
+            const intervals = spyOn(globalThis, 'setInterval');
+            const open = async (token: string) => {
+                const body = (await authedRequest(token, `/sse/${first.id}/events`)).body;
+                if (!body) throw new Error('the stream has no body');
+                return body.getReader();
+            };
+            const firstStream = await open(first.sessionToken);
+            const secondStream = await open(second.sessionToken);
+            const keepalives = intervals.mock.calls.filter(([, ms]) => ms === 15_000).map(([keepalive]) => keepalive);
+            intervals.mockRestore();
+            return {
+                first,
+                firstStream,
+                secondStream,
+                tick: async () => {
+                    for (const keepalive of keepalives) keepalive();
+                    await Bun.sleep(50);
+                },
+            };
+        }
+
+        // Bounded, so a stream that never ends fails the test instead of hanging it.
+        async function ends(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<boolean> {
+            const read = (async () => {
+                while (!(await reader.read()).done) {}
+                return true;
+            })();
+            return Promise.race([read, Bun.sleep(2000).then(() => false)]);
+        }
+
+        // Reads on to the next keepalive, which only a stream that still runs sends. The frames arrive as strings.
+        async function keepsRunning(reader: ReadableStreamDefaultReader<Uint8Array>, tick: () => Promise<void>) {
+            const keepalive = (async () => {
+                for (;;) {
+                    const { value, done } = await reader.read();
+                    if (done) return false;
+                    if (String(value).includes('event: keepalive')) return true;
+                }
+            })();
+            await tick();
+            expect(await keepalive).toBe(true);
+            await reader.cancel();
+        }
+
+        test('a sign-out ends that stream at its next keepalive and keeps the other session', async () => {
+            const { first, firstStream, secondStream, tick } = await twoStreams();
+            await readOpeningFrames(firstStream);
+            await readOpeningFrames(secondStream);
+
+            expect((await authedRequest(first.sessionToken, '/auth/sign-out', authPost())).status).toBe(200);
+            await tick();
+
+            expect(await ends(firstStream)).toBe(true);
+            await keepsRunning(secondStream, tick);
+        });
+
+        test('/auth/revoke-sessions ends the streams of every session', async () => {
+            const { first, firstStream, secondStream, tick } = await twoStreams();
+
+            expect((await authedRequest(first.sessionToken, '/auth/revoke-sessions', authPost())).status).toBe(200);
+            await tick();
+
+            expect(await ends(firstStream)).toBe(true);
+            expect(await ends(secondStream)).toBe(true);
+        });
+
+        test("an admin's password reset ends the streams of every session", async () => {
+            const { first, firstStream, secondStream, tick } = await twoStreams();
+
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${first.id}/password`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: 'a-new-password-1' }),
+            });
+            expect(res.status).toBe(200);
+            await tick();
+
+            expect(await ends(firstStream)).toBe(true);
+            expect(await ends(secondStream)).toBe(true);
+        });
+
+        test('a password change that keeps the sessions ends nothing', async () => {
+            const { first, firstStream, secondStream, tick } = await twoStreams();
+            await readOpeningFrames(firstStream);
+            await readOpeningFrames(secondStream);
+
+            const res = await authedRequest(first.sessionToken, '/auth/change-password', {
+                ...authPost(),
+                body: JSON.stringify({ currentPassword: 'pw-12345678', newPassword: 'a-new-password-1' }),
+            });
+            expect(res.status).toBe(200);
+
+            await keepsRunning(firstStream, tick);
+            await keepsRunning(secondStream, tick);
+        });
+
+        function authPost(): RequestInit {
+            return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' };
+        }
+
+        // The keepalive the stream opens with would answer keepsRunning before any tick.
+        async function readOpeningFrames(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
+            while (!String((await reader.read()).value).includes('home:data-epochs')) {}
+        }
     });
 });

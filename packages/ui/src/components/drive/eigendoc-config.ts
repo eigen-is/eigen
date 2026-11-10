@@ -1,3 +1,7 @@
+// The config of each document app, such as Docs or Sheets: its name, icon, labels and the app that owns
+// its list, built from the shared type registry. The document apps' shells and the shared sidebar's filter
+// rows read it, and the editor routes take their search validator from here.
+
 import {
     getDocsAppUrl,
     getSheetsAppUrl,
@@ -6,8 +10,8 @@ import {
     getVectorAppUrl,
 } from '@workspace/lib/api';
 import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
-import type { DriveSearchParams, EigenDocType } from '@workspace/lib/types/drive';
-import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
+import type { EigenDocType } from '@workspace/lib/types/drive';
+import { EIGEN_DOC_TYPE_INFO, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
 
 export type EigenDocAppConfig = {
@@ -22,9 +26,17 @@ export type EigenDocAppConfig = {
     appUrl: (() => string) | null;
 };
 
-// Sidebar/nav order — deliberately not registry order — mapped to the app that owns each
-// type's list view. `chat` has none: the chat app opens one conversation, so Drive hosts
-// "All chats". A new eigendoc type is a compile error until it's placed here.
+// Each type's place in the sidebar, which is not the registry's order. A record, so a new type can't go missing.
+const EIGEN_DOC_NAV_ORDER: Record<EigenDocType, number> = {
+    doc: 0,
+    stickies: 1,
+    chat: 2,
+    slides: 3,
+    sheets: 4,
+    vector: 5,
+};
+
+// Chat has no list of its own, since the chat app opens one conversation, so Drive hosts All chats.
 const EIGEN_DOC_APP_URLS: Record<EigenDocType, (() => string) | null> = {
     doc: getDocsAppUrl,
     stickies: getStickiesAppUrl,
@@ -34,13 +46,7 @@ const EIGEN_DOC_APP_URLS: Record<EigenDocType, (() => string) | null> = {
     vector: getVectorAppUrl,
 };
 
-// Per-app config consumed by the EigenDoc app shell (EigenDocRoot, EigenDocListView,
-// EigenDocSharedView, EigenDocNewButton) and by the shared sidebar's filter rows. Both
-// metadata and icons derive from shared registries so adding a new app type is a
-// single-source edit.
-//
-// `mimeType` is the route-safe url-slug (`application-eigendoc`) —
-// the `/drive/.../mime/:slug` route reverses dash→slash server-side.
+// mimeType is the URL slug, such as application-eigendoc, which the server turns back into the MIME type.
 function buildConfig(type: EigenDocType): EigenDocAppConfig {
     const info = EIGEN_DOC_TYPE_INFO[type];
     return {
@@ -55,10 +61,10 @@ function buildConfig(type: EigenDocType): EigenDocAppConfig {
     };
 }
 
-// Every type in nav order, for surfaces that list them all (the shared sidebar's filters).
-export const EIGEN_DOC_APP_CONFIGS: ReadonlyArray<EigenDocAppConfig> = Object.keys(EIGEN_DOC_APP_URLS).map((type) =>
-    buildConfig(type as EigenDocType),
-);
+// Every type in nav order, for surfaces that list them all, such as the shared sidebar's filters.
+export const EIGEN_DOC_APP_CONFIGS: readonly EigenDocAppConfig[] = EIGEN_DOC_TYPES.toSorted(
+    (a, b) => EIGEN_DOC_NAV_ORDER[a] - EIGEN_DOC_NAV_ORDER[b],
+).map(buildConfig);
 
 export const DOCS_CONFIG: EigenDocAppConfig = buildConfig('doc');
 export const STICKIES_CONFIG: EigenDocAppConfig = buildConfig('stickies');
@@ -66,22 +72,13 @@ export const SLIDES_CONFIG: EigenDocAppConfig = buildConfig('slides');
 export const SHEETS_CONFIG: EigenDocAppConfig = buildConfig('sheets');
 export const VECTOR_CONFIG: EigenDocAppConfig = buildConfig('vector');
 
-// "Docs shared by me" — the sidebar row and the shared page's title must read alike, so
-// both build the phrase here. Without a plural (Drive's own rows) → "Shared by me".
+// "Docs shared by me": the sidebar row and the shared page's title must read alike. Drive's own rows pass no
+// plural and read "Shared by me".
 export function eigenDocSharedTitle(direction: 'by' | 'with', labelPlural?: string): string {
     return labelPlural ? `${labelPlural} shared ${direction} me` : `Shared ${direction} me`;
 }
 
-export function eigenDocValidateSearch(search: Record<string, unknown>): DriveSearchParams {
-    const pid = typeof search.pid === 'string' ? search.pid : undefined;
-    const uid = typeof search.uid === 'string' ? search.uid : undefined;
-    const mid = typeof search.mid === 'string' ? search.mid : undefined;
-    return { pid, uid, mid };
-}
-
-// The EigenDoc editor routes (doc/slide/board/sheet/vector) share one validator for the optional
-// `?chat=` / `?card=` deep-link params and the `?q=` in-document search term, so they can't
-// drift (only stickies reads `card` for now).
+// Every editor route reads ?chat=, ?card= and ?q= here, so they can't drift.
 export function eigenDocEditorValidateSearch(search: Record<string, unknown>): {
     chat?: string;
     card?: string;

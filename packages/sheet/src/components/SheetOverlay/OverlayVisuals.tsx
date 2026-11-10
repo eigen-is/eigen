@@ -219,16 +219,13 @@ export function OverlayVisuals({ containerRef }: Props) {
                     <div
                         key={presence.clientId}
                         className="sheet-presence-selection eigen-selection-ring eigen-selection-ring-peer"
-                        // React's CSSProperties has no custom properties, so the --peer-color entry needs the cast.
-                        style={
-                            {
-                                left: col_pre,
-                                top: row_pre,
-                                width,
-                                height,
-                                '--peer-color': color,
-                            } as React.CSSProperties
-                        }
+                        style={{
+                            left: col_pre,
+                            top: row_pre,
+                            width,
+                            height,
+                            '--peer-color': color,
+                        }}
                     >
                         <PresenceLabel color={color} name={presence.username} />
                     </div>

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import type { ArrangeItem } from '../../vector/arrange';
-import { arrangeBoundingBox, computeArrange } from '../../vector/arrange';
+import { computeArrange } from '../../vector/arrange';
+
+type ArrangeItem = Parameters<typeof computeArrange>[0][number];
 
 function obj(id: string, x: number, y: number, width: number, height: number): ArrangeItem {
     return { id, x, y, width, height };
@@ -11,12 +12,6 @@ function obj(id: string, x: number, y: number, width: number, height: number): A
 const A = obj('a', 10, 10, 100, 40);
 const B = obj('b', 200, 80, 60, 100);
 const C = obj('c', 50, 300, 200, 20);
-
-describe('arrangeBoundingBox', () => {
-    test('min/max corners over the selection', () => {
-        expect(arrangeBoundingBox([A, B, C])).toEqual({ minX: 10, minY: 10, maxX: 260, maxY: 320 });
-    });
-});
 
 describe('computeArrange - align', () => {
     test('align-left → every x = minX', () => {

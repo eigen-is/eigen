@@ -12,9 +12,10 @@ import type { HomeSettings } from './home';
 import { Home, homeSize } from './home';
 
 export class GuestHome extends Home {
+    public override readonly settings = new JsonStore<HomeSettings>(this.fs, PATHS.SETTINGS, {});
+
     public constructor(user: User, onClosed?: () => void) {
         super(user, getGuestHomePath(user.id), onClosed);
-        this.settings = new JsonStore<HomeSettings>(this.fs, PATHS.SETTINGS, {});
         this._drive = new Drive(this);
         this._notifications = new NotificationCenter(this);
     }

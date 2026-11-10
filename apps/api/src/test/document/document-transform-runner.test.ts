@@ -71,20 +71,28 @@ const EXPORT_OPTIONS = { ...TRANSFORM_LIMITS.export, priority: 'foreground' } as
 const BACKGROUND_OPTIONS = { ...PREVIEW_OPTIONS, priority: 'background' } as const;
 const COMPACT_OPTIONS = { ...TRANSFORM_LIMITS.compact, priority: 'background' } as const;
 
-// The admission bounds and the memory limit are private production constants — no caller
-// configures them, so a test dials them in place instead.
-type RunnerBounds = {
-    maxQueued: number;
-    maxQueuedBackground: number;
-    maxPredictedWaitMs: number;
-    closeGraceMs: number;
-    memoryLimitKiB: number;
-};
+// The production queue holds 16 jobs, 8 of them background, and a foreground job is refused past 120 s of predicted
+// wait. A test fills it with jobs that cost 1 ms each, so only the bound it means is reached, and aborts them after.
+const QUEUE = 16;
+const BACKGROUND_SHARE = 8;
 
-function makeRunner(bounds: Partial<RunnerBounds> = {}) {
+function makeRunner(bounds: { memoryLimitKiB?: number } = {}) {
     const runner = new DocumentTransformRunner({ entry: TEST_CHILD });
-    Object.assign(runner as unknown as RunnerBounds, bounds);
+    Object.assign(runner as unknown as { memoryLimitKiB: number }, bounds);
     return runner;
+}
+
+// An active job and `foreground` plus `background` queued ones, all aborted by the returned `release`.
+function fillQueue(runner: DocumentTransformRunner, foreground: number, background: number) {
+    const controller = new AbortController();
+    const cheap = { deadlineMs: 30_000, admissionCostMs: 1, signal: controller.signal };
+    const jobs = [runner.run(makeRequest({ behavior: 'sleep', ms: 5_000 }), { ...cheap, priority: 'foreground' })];
+    for (let i = 0; i < foreground; i++) jobs.push(runner.run(makeRequest(), { ...cheap, priority: 'foreground' }));
+    for (let i = 0; i < background; i++) jobs.push(runner.run(makeRequest(), { ...cheap, priority: 'background' }));
+    return async () => {
+        controller.abort();
+        await Promise.all(jobs);
+    };
 }
 
 function timings(response: DocumentTransformResponse): { startedAt: number; endedAt: number; deadlineAt: number } {
@@ -139,9 +147,8 @@ describe('DocumentTransformRunner', () => {
     });
 
     test('rejects foreground work with 503 when the queue is full', async () => {
-        const runner = makeRunner({ maxQueued: 1 });
-        const active = runner.run(makeRequest({ behavior: 'sleep', ms: 150 }), PREVIEW_OPTIONS);
-        const queued = runner.run(makeRequest(), PREVIEW_OPTIONS);
+        const runner = makeRunner();
+        const release = fillQueue(runner, QUEUE, 0);
 
         expect(() => runner.run(makeRequest(), PREVIEW_OPTIONS)).toThrow(ApiError);
         try {
@@ -150,7 +157,7 @@ describe('DocumentTransformRunner', () => {
             expect((err as ApiError).status).toBe(503);
             expect((err as ApiError).message).toContain('busy');
         }
-        await Promise.all([active, queued]);
+        await release();
         await runner.close();
     });
 
@@ -158,9 +165,8 @@ describe('DocumentTransformRunner', () => {
     // has to leave a trace, and a job's record needs its format and startup time (total minus the child's
     // own transform time) to tell a slow document from a slow spawn.
     test('logs every refused admission with the queue state', async () => {
-        const runner = makeRunner({ maxQueued: 1 });
-        const active = runner.run(makeRequest({ behavior: 'sleep', ms: 100 }), PREVIEW_OPTIONS);
-        const queued = runner.run(makeRequest(), PREVIEW_OPTIONS);
+        const runner = makeRunner();
+        const release = fillQueue(runner, QUEUE, 0);
 
         const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
         expect(() => runner.run(makeRequest(), PREVIEW_OPTIONS)).toThrow(ApiError);
@@ -169,9 +175,9 @@ describe('DocumentTransformRunner', () => {
 
         expect(warned).toHaveLength(1);
         expect(warned[0]).toContain('priority=foreground');
-        expect(warned[0]).toContain('queueDepth=1');
+        expect(warned[0]).toContain(`queueDepth=${QUEUE}`);
 
-        await Promise.all([active, queued]);
+        await release();
         await runner.close();
     });
 
@@ -193,14 +199,14 @@ describe('DocumentTransformRunner', () => {
     });
 
     test('rejects foreground work when predicted wait exceeds the bound', async () => {
-        const runner = makeRunner({ maxPredictedWaitMs: 250 });
-        // Long kill deadlines, small admission costs: the bound is spent on cost alone.
-        const options = { priority: 'foreground' as const, deadlineMs: 5000, admissionCostMs: 100 };
+        const runner = makeRunner();
+        // Short kill deadlines, large admission costs: the bound is spent on cost alone.
+        const options = { priority: 'foreground' as const, deadlineMs: 5000, admissionCostMs: 50_000 };
         const jobs = [runner.run(makeRequest({ behavior: 'sleep', ms: 30 }), options)];
-        // active (100ms) + one queued (100ms) = 200 ≤ 250 → admitted…
+        // active + one queued = 100_000 ≤ 120_000 → admitted…
         jobs.push(runner.run(makeRequest(), options));
         jobs.push(runner.run(makeRequest(), options));
-        // …but active + two queued = 300 > 250 → rejected.
+        // …but active + two queued = 150_000 > 120_000 → rejected.
         expect(() => runner.run(makeRequest(), options)).toThrow(ApiError);
         await Promise.all(jobs);
         await runner.close();
@@ -246,26 +252,23 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    test('drops queued background work on overflow without running it', async () => {
-        const runner = makeRunner({ maxQueued: 1 });
-        const active = runner.run(makeRequest({ behavior: 'sleep', ms: 150 }), PREVIEW_OPTIONS);
-        const queued = runner.run(makeRequest(), BACKGROUND_OPTIONS);
+    test('refuses background work when the whole queue is full, inside its share', async () => {
+        const runner = makeRunner();
+        const release = fillQueue(runner, QUEUE - BACKGROUND_SHARE + 1, BACKGROUND_SHARE - 1);
         expect(() => runner.run(makeRequest(), BACKGROUND_OPTIONS)).toThrow(ApiError);
-        await Promise.all([active, queued]);
+        await release();
         await runner.close();
     });
 
     test('background work stops at its queue share while foreground still admits', async () => {
-        const runner = makeRunner({ maxQueuedBackground: 1 });
-        const active = runner.run(makeRequest({ behavior: 'sleep', ms: 150 }), PREVIEW_OPTIONS);
-        const queued = runner.run(makeRequest(), BACKGROUND_OPTIONS);
+        const runner = makeRunner();
+        const release = fillQueue(runner, 0, BACKGROUND_SHARE);
 
         expect(() => runner.run(makeRequest(), BACKGROUND_OPTIONS)).toThrow(ApiError);
-        // The background share is exhausted but the queue is not — a preview still runs.
-        const foreground = await runner.run(makeRequest(), PREVIEW_OPTIONS);
-        expect(foreground.ok).toBe(true);
-
-        await Promise.all([active, queued]);
+        // The background share is exhausted but the queue is not, so a preview is still admitted.
+        const foreground = runner.run(makeRequest(), PREVIEW_OPTIONS);
+        await release();
+        expect((await foreground).ok).toBe(true);
         await runner.close();
     });
 
@@ -574,9 +577,10 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
+    // The production grace is 5 s, so this test waits it out.
     test('close() rejects queued work, stops admission, and kills active children after grace', async () => {
-        const runner = makeRunner({ closeGraceMs: 50 });
-        const active = runner.run(makeRequest({ behavior: 'sleep', ms: 2000 }), PREVIEW_OPTIONS);
+        const runner = makeRunner();
+        const active = runner.run(makeRequest({ behavior: 'sleep', ms: 10_000 }), PREVIEW_OPTIONS);
         const queued = runner.run(makeRequest(), PREVIEW_OPTIONS);
 
         await runner.close();
@@ -587,7 +591,7 @@ describe('DocumentTransformRunner', () => {
         if (!queuedResult.ok) expect(queuedResult.error.code).toBe('shutdown');
 
         expect(() => runner.run(makeRequest(), PREVIEW_OPTIONS)).toThrow(ApiError);
-    });
+    }, 15_000);
 });
 
 // The limit is Linux's alone: macOS refuses setrlimit for the data segment. Each heap fails its own way, by arch too

@@ -136,7 +136,7 @@ Refresh is **on-access only**. Three triggers, all funneling into one
 **Deliberately rejected: timers.** The codebase *does* have scheduler infrastructure —
 `scheduleInterval(name, ms, fn)` in `../../apps/api/src/lib/scheduler/scheduler.ts`, registered in
 `jobs.ts` — but a server-wide sweep would have to enumerate and open every Home that might hold a
-subscription (~30 fds per open Home, see `PROPOSAL_FD_BUDGET.md`) to refresh feeds nobody is
+subscription (~18 fds per open Home, see `PROPOSAL_FD_BUDGET.md`) to refresh feeds nobody is
 looking at. A per-Home `setInterval` has the same "refresh what nobody reads" property plus a
 lifecycle entanglement with Home GC-close. Since nothing server-side consumes calendar data when no
 client is reading (reminders are client-side), on-access covers every case that matters. If a
@@ -201,7 +201,7 @@ them. Per key:
   `data.color` and `data.reminders`, which keep their stored values (local overrides; feed VALARMs
   only seed `data.reminders` on first insert). SEQUENCE is stored but not used for conflict logic —
   a feed is a full snapshot, so snapshot-wins is correct; SEQUENCE ordering matters only for
-  incremental iMIP messaging (`receiveInvitationUpdate`), which this path never touches.
+  incremental iMIP messaging (`receiveRequest`), which this path never touches.
 - **In local, not remote** → delete the row + write the tombstone. Deleting a master cascades its
   exceptions (`events.parentEventId` FK is `ON DELETE CASCADE`).
 - Events with `STATUS:CANCELLED` in the feed are stored as-is (`parseIcs` maps status); canceled

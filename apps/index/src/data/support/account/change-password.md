@@ -5,7 +5,7 @@ type: how-to
 tags: [account, password, security]
 related: [account/update-profile, account/two-factor]
 order: 20
-updated: 2026-10-28
+updated: 2026-11-09
 ---
 
 You can change your Eigen password at any time from [**Change password**](/space/security/password) in Space. You will need to know your current password to complete the change.
@@ -19,7 +19,7 @@ You can change your Eigen password at any time from [**Change password**](/space
 5. The **Log out of all other devices** box is ticked by default. Leave it ticked to end any active sessions on other browsers or devices. Untick it if you want those sessions to stay open.
 6. Click **Change password**.
 
-Eigen returns you to the home page once the change is saved.
+Eigen returns you to the home page once the change is saved. With **Log out of all other devices** ticked, documents you have open reload once, within 15 seconds.
 
 ## If you use two-factor authentication
 

@@ -42,4 +42,4 @@ You can only delete messages you sent yourself.
 2. Click the bin icon (**Delete**).
 3. A confirmation dialog appears. Click **Delete** to confirm.
 
-Deleted messages are removed permanently and cannot be recovered.
+Deleted messages, and the files attached to them, are removed permanently and cannot be recovered.

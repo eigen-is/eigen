@@ -1,4 +1,8 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+// The chat app's queries and mutations: the sidebar's chat sections, a room's paged messages, posting, editing and
+// deleting them, and creating, finding and inviting to rooms. Contacts' "start a chat" and the wizards call these
+// too. Every write invalidates the caches it changes.
+
+import { skipToken, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { chatApi, openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
@@ -17,18 +21,27 @@ import { fetchPublicUser } from '../../public/user-batcher';
 import { chatKeys, invalidateChatMatches, invalidateMessages } from './keys';
 
 const MESSAGE_PAGE_SIZE = 50;
-const CHAT_MIME_SLUG = EIGEN_DOC_TYPE_INFO.chat.urlSlug; // 'application-eigenchat'
+const CHAT_MIME_SLUG = EIGEN_DOC_TYPE_INFO.chat.urlSlug;
 
 type ChatSections = {
     personal: DrivePath[];
     teams: { id: string; name: string; chats: DrivePath[] }[];
 };
 
-// Splits the aggregate chat list into one section per team (useMyTeams order, empty teams omitted)
-// and a personal catch-all: everything not owned by one of the caller's teams — own chats AND chats
-// other users shared with the caller (shared_paths mirrors carry the sharer's ownerId, e.g. 1:1 chat
-// invites), which have always rendered in the personal section. Pure — unit-tested.
-export function groupChatsBySection(chats: DrivePath[], teams: readonly { id: string; name: string }[]): ChatSections {
+// One aggregate request for the personal and team chats, split into sidebar sections that keep its newest-first
+// order. A closed wizard passes `enabled` false to skip the fetch.
+export function useChatSections(enabled: boolean = true): ChatSections & { isLoading: boolean } {
+    const { data: chats, isLoading } = useAggregateMimeContent(CHAT_MIME_SLUG, STALE_TIME.ONE_MINUTE, enabled);
+    const { data: myTeams, isLoading: teamsLoading } = useMyTeams();
+    return useMemo(() => {
+        const sections = groupChatsBySection(chats ?? [], myTeams ?? []);
+        return { ...sections, isLoading: isLoading || teamsLoading };
+    }, [chats, isLoading, myTeams, teamsLoading]);
+}
+
+// One section per team in useMyTeams order, empty teams left out, and a personal section for the rest: the user's
+// own chats and those other users shared, which carry the sharer's ownerId.
+function groupChatsBySection(chats: DrivePath[], teams: readonly { id: string; name: string }[]): ChatSections {
     const personal: DrivePath[] = [];
     const byTeamOwner = new Map<string, DrivePath[]>();
     for (const team of teams) byTeamOwner.set(teamOwnerId(team.id), []);
@@ -45,21 +58,8 @@ export function groupChatsBySection(chats: DrivePath[], teams: readonly { id: st
     return { personal, teams: teamSections };
 }
 
-// One aggregate request (personal + all team chats), split into sidebar sections. Both the personal
-// and per-team lists keep the aggregate's updatedAt-desc order.
-export function useChatSections(enabled: boolean = true): ChatSections & { isLoading: boolean } {
-    // 1-min staleTime (sidebar wants fresher data); `enabled` lets closed wizards skip the fetch.
-    const { data: chats, isLoading } = useAggregateMimeContent(CHAT_MIME_SLUG, STALE_TIME.ONE_MINUTE, enabled);
-    const { data: myTeams, isLoading: teamsLoading } = useMyTeams();
-    return useMemo(() => {
-        const sections = groupChatsBySection(chats ?? [], myTeams ?? []);
-        return { ...sections, isLoading: isLoading || teamsLoading };
-    }, [chats, isLoading, myTeams, teamsLoading]);
-}
-
-// Flat chat list in sidebar order (personal first, then teams), for the chat index's auto-open. Empty
-// while loading: until useMyTeams settles, team chats sit in the personal catch-all, so the interim
-// list would auto-open the wrong "first" chat.
+// Every chat in sidebar order, for the chat index's auto-open. Empty while loading, as until the teams load a
+// team's chats sit among the personal ones and the wrong chat would open first.
 export function useAllChats(): { chats: DrivePath[]; isLoading: boolean } {
     const { personal, teams, isLoading } = useChatSections();
     return useMemo(
@@ -71,20 +71,21 @@ export function useAllChats(): { chats: DrivePath[]; isLoading: boolean } {
 export function useMessages(ownerId: string, mountId: string, chatId: string | undefined) {
     return useInfiniteQuery({
         queryKey: chatKeys.messages(ownerId, mountId, chatId || ''),
-        queryFn: async ({ pageParam }: { pageParam: string | undefined }) => {
-            if (!chatId) return [] as ChatMessage[];
-            const query: { before?: string; limit?: number } = { limit: MESSAGE_PAGE_SIZE };
-            if (pageParam) query.before = pageParam;
-            const response = await chatApi({ ownerId })({ mountId })({ chatId }).messages.get({ query });
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
+        queryFn:
+            chatId && ownerId && mountId
+                ? async ({ pageParam }: { pageParam: string | undefined }): Promise<ChatMessage[]> => {
+                      const query: { before?: string; limit?: number } = { limit: MESSAGE_PAGE_SIZE };
+                      if (pageParam) query.before = pageParam;
+                      const response = await chatApi({ ownerId })({ mountId })({ chatId }).messages.get({ query });
+                      if (response.error) throw new AppError(response);
+                      return response.data;
+                  }
+                : skipToken,
         initialPageParam: undefined as string | undefined,
         getNextPageParam: (lastPage: ChatMessage[]) => {
             if (lastPage.length < MESSAGE_PAGE_SIZE) return undefined;
             return lastPage[0]?.id;
         },
-        enabled: !!chatId && !!ownerId && !!mountId,
         staleTime: STALE_TIME.ONE_MINUTE,
     });
 }
@@ -156,9 +157,8 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
                     if (response.error) throw new AppError(response);
                     return response.data;
                 },
-                // The wizard can omit parentId (the route resolves the lazily-created `chats`
-                // folder, an id no client endpoint hands out), so reconcile over the mount-scoped
-                // chat listing, narrowed to the folder whenever the caller did name one.
+                // Without a parentId the route picks a `chats` folder whose id no client knows, so this
+                // reconciles over the mount's chat listing, narrowed to the folder when one was named.
                 listFolder: async () => {
                     const chats = await fetchListingOnce(
                         queryClient,
@@ -169,7 +169,6 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
                 // dedupeName lets the server suffix a colliding name (`Name (2)`), so no reconcile.
                 expectedName: dedupeName ? undefined : withEigenExtension(fileName, 'chat'),
             }),
-        // Refresh the parent folder, the sidebar aggregate, and the by-members family.
         onSuccess: (data) => {
             invalidateItemCreated(queryClient, ownerId, mountId, data.parentId, data.mimeType);
             invalidateChatMatches(queryClient, ownerId);
@@ -182,10 +181,8 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
     });
 }
 
-// Contacts' "start a chat": takes the person's addresses and prefers the one that belongs to a
-// registered account — email[0] can be a later-added alias, and the by-members match is keyed by
-// the account address. Exactly one writable match opens directly ('opened'); otherwise the chosen
-// address comes back so the caller opens the wizard pre-filled with it.
+// Contacts' "start a chat". It prefers the address of a registered account, as the first one may be an alias and
+// rooms match on the account's. One writable match opens; otherwise the caller opens the wizard with that address.
 export function useStartChatWith() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
@@ -213,7 +210,7 @@ export function useStartChatWith() {
         // A failed lookup degrades to "no matches" so the caller falls through to opening the wizard.
         const matches = await queryClient
             .fetchQuery(byMembersQueryConfig(ownerId, [email]))
-            .catch(() => [] as ChatMatch[]);
+            .catch((): ChatMatch[] => []);
         const writable = matches.filter((m) => m.canWrite);
         if (writable.length === 1) {
             openDocument(writable[0].path);
@@ -232,7 +229,6 @@ export function useInviteToChat(ownerId: string, mountId: string, chatId: string
             return response.data;
         },
         onSuccess: () => {
-            // Refresh chat path so roomMembers list updates
             queryClient.invalidateQueries({ queryKey: driveKeys.path(ownerId, mountId, chatId) });
         },
         onError: onMutationError,

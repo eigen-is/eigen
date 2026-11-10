@@ -278,9 +278,11 @@ export function getDriveItemUrl(path: DriveItemRef, opts?: { card?: string; chat
     return url;
 }
 
-// Every item has a URL: an openable one, or Drive with the item's detail selected (plain files quick-look there).
-export function getDriveShareUrl(path: DriveItemRef): string {
-    return (
-        getDriveItemUrl(path) ?? getDriveAppUrl(`shared/with-me?pid=${path.id}&uid=${path.ownerId}&mid=${path.mountId}`)
-    );
+// Every item has a URL: an openable one, or Drive with the item's detail selected (plain files quick-look there). It is
+// absolute because it leaves the page, on the clipboard or in a new tab, and production's app URLs are same-origin paths.
+export function getDriveShareUrl(path: DriveItemRef, opts?: { chat?: string }): string {
+    const url =
+        getDriveItemUrl(path, opts) ??
+        getDriveAppUrl(`shared/with-me?pid=${path.id}&uid=${path.ownerId}&mid=${path.mountId}`);
+    return new URL(url, window.location.origin).href;
 }

@@ -1,16 +1,20 @@
+// Catches a render error anywhere in an app's pages and shows ErrorState's standard sentence with a
+// reload button, instead of a blank screen. EigenApp wraps every app's routes in it, and the error goes
+// to the console.
+
 import type { ReactNode } from 'react';
 import React from 'react';
+import { ErrorState } from './error-state';
 
 type ErrorBoundaryProps = {
     children: ReactNode;
-    fallback?: ReactNode;
 };
 
 type ErrorBoundaryState = {
     hasError: boolean;
 };
 
-// React requires class components for error boundaries — no hooks equivalent exists.
+// A class, because React catches render errors only in a class component's lifecycle methods.
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
     public state: ErrorBoundaryState = { hasError: false };
 
@@ -23,23 +27,18 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     }
 
     public render() {
-        if (this.state.hasError) {
-            return this.props.fallback ?? <ErrorFallback />;
-        }
-        return this.props.children;
+        if (!this.state.hasError) return this.props.children;
+        return (
+            <ErrorState
+                action={
+                    <button
+                        className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground cursor-pointer"
+                        onClick={() => window.location.reload()}
+                    >
+                        Reload page
+                    </button>
+                }
+            />
+        );
     }
-}
-
-function ErrorFallback() {
-    return (
-        <div className="flex flex-col items-center justify-center h-full w-full gap-4 p-8 text-center">
-            <p className="text-muted-foreground">Encountering the null vector: a rendezvous with nothing at all.</p>
-            <button
-                className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground cursor-pointer"
-                onClick={() => window.location.reload()}
-            >
-                Reload page
-            </button>
-        </div>
-    );
 }

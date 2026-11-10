@@ -1,6 +1,6 @@
 // The collab documents that are open in one Drive, such as docs that someone edits right now. It opens
-// each document once, however many people connect, and closes it again. When sharing or a membership
-// changes, it walks the open documents, which close the connections of people who may no longer read.
+// each document once, however many people connect, and closes it again. Drive holds one and passes every
+// open and close through it, and it refuses an open once the drive or the document's mount is closing.
 
 import { isCollabType } from '@workspace/lib/types/drive';
 import type { AsyncSingleton } from '../../utils/singleton';
@@ -18,9 +18,6 @@ export class CollabRegistry {
     // The mounts destructMount swept, for the same reason. A mount that comes back is a new Mount, so
     // its documents open again.
     private readonly closedMounts = new WeakSet<Mount>();
-    // The keys of a path moving to the trash, and of everything under it: a document opened after the trash closed its
-    // database would lose its edits. A key counts the trashes that guard it, because nested trashes can overlap.
-    private readonly trashing = new Map<string, number>();
 
     public constructor(private readonly ownerId: string) {}
 
@@ -32,7 +29,6 @@ export class CollabRegistry {
         if (this.destructed) throw new ApiError(503, 'Drive is shutting down');
         if (this.closedMounts.has(mount)) throw new ApiError(503, 'Mount is closing');
         const key = this.key(mount.id, pathId);
-        if (this.trashing.has(key)) throw new ApiError(503, 'Document is moving to the trash');
         let getter = this.documents.get(key);
         if (!getter) {
             getter = createAsyncSingleton(async () => {
@@ -41,8 +37,7 @@ export class CollabRegistry {
                     if (!isCollabType(path.type)) {
                         throw new ApiError(404, 'Document not found');
                     }
-                    const document = new CollabDocument(drive, path);
-                    return await document.init();
+                    return await CollabDocument.open(drive, path);
                 } catch (err) {
                     // A load that failed opened nothing. Only this entry goes, never one a newer get made.
                     if (this.documents.get(key) === getter) this.documents.delete(key);
@@ -61,50 +56,14 @@ export class CollabRegistry {
         // The entry goes before the close starts, so a get() meanwhile builds a new document. The
         // closing one would never answer the client's sync, and the client would hang.
         this.documents.delete(key);
-        const doc = await documentFn();
+        // A load that failed, such as one that met the trash it raced, opened nothing. Its caller has the error.
+        const doc = await documentFn().catch(() => null);
+        if (!doc) return;
         doc.destruct();
         console.log(`[collab] teardown path=${pathId}`);
         // When the document was opened again meanwhile, the new one owns data.db, so it stays open.
-        if (doc.dataDbPathId && !this.documents.has(key)) {
+        if (!this.documents.has(key)) {
             await mount.closeDatabase(doc.dataDbPathId, opts);
-        }
-    }
-
-    // The folders above count too, because a subfolder created after the trash began has no mark of its own. A move
-    // asks inside the transaction of its row write, so the folders it reads are those the move sees.
-    public isTrashing(mount: Mount, pathId: string): boolean {
-        // Most moves run while nothing is trashed, and then the walk up the folders is not needed.
-        if (this.trashing.size === 0) return false;
-        return [pathId, ...mount.collectAncestorIds(pathId)].some((id) => this.trashing.has(this.key(mount.id, id)));
-    }
-
-    // Refuses every open at or below the path until the trash is done. The refused socket tries again and gets a 404. A
-    // document that a restore or a create puts in after the keys are read isn't refused, so the trash closes it itself.
-    public async whileTrashing(mount: Mount, pathId: string, trash: () => Promise<void>): Promise<void> {
-        const keys = [pathId, ...mount.collectDescendantIds(pathId)].map((id) => this.key(mount.id, id));
-        for (const key of keys) this.trashing.set(key, (this.trashing.get(key) ?? 0) + 1);
-        try {
-            await trash();
-        } finally {
-            for (const key of keys) {
-                const count = this.trashing.get(key) ?? 0;
-                if (count > 1) this.trashing.set(key, count - 1);
-                else this.trashing.delete(key);
-            }
-        }
-    }
-
-    // A document that is still loading has no connections yet, and its load can take as long as a download, so
-    // nothing waits for it. One document that fails must not stop the walk over the others.
-    public async forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
-        for (const [key, getter] of this.documents) {
-            const document = getter.peek();
-            if (!document) continue;
-            try {
-                await visit(document);
-            } catch (error) {
-                console.error(`Failed to check the connections of ${key}:`, error);
-            }
         }
     }
 

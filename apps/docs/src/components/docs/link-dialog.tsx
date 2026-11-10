@@ -1,65 +1,109 @@
-// Google Docs' Insert › Link: a URL that links the selected text, or goes in at the caret as a link of its own. The
-// toolbar opens it, from Insert or the icon row's Add link for example, when the caret is not on a link already.
+// The Docs editor's Insert link and Edit link dialog, with the fields and words of the sheet's link dialog. It links the
+// selected text to a web page, or at a bare caret inserts what Display text holds as a new link. Selected text keeps
+// its formatting, so its box only shows it. The editor opens it from the toolbar, Insert and a link's right-click menu
+// on a range: linkDialogTarget widens the selection to a link it lies in, so the dialog edits that link whole.
 
+import { getMarkRange } from '@tiptap/core';
 import type { Editor } from '@tiptap/react';
+import { webLinkHref } from '@workspace/lib/sheets/web-link';
 import { FormDialog, FormDialogForm } from '@workspace/ui';
-import { Field, FieldLabel } from '@workspace/ui/components/field';
+import { FieldError } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
-import { useState } from 'react';
+import { Label } from '@workspace/ui/components/label';
+import { cn } from '@workspace/ui/lib/utils';
+import { useId, useState } from 'react';
 
-type LinkDialogProps = {
-    editor: Editor;
+// href is the link being edited, or empty for a new one. The selection stays as it is until OK.
+export type LinkDialogTarget = { editor: Editor; from: number; to: number; href: string };
+
+export function linkDialogTarget(editor: Editor): LinkDialogTarget {
+    const { $from, from, to } = editor.state.selection;
+    const type = editor.schema.marks['link'];
+    const link = type && getMarkRange($from, type);
+    const range = link && link.from <= from && link.to >= to ? link : { from, to };
+    const { href = '' } = editor.getAttributes('link');
+    return { editor, ...range, href };
+}
+
+type LinkDialogProps = LinkDialogTarget & {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onCloseAutoFocus: (event: Event) => void;
 };
 
-export function LinkDialog({ editor, open, onOpenChange, onCloseAutoFocus }: LinkDialogProps) {
+export function LinkDialog({ open, onOpenChange, onCloseAutoFocus, ...target }: LinkDialogProps) {
     return (
         <FormDialog
             open={open}
             onOpenChange={onOpenChange}
-            title="Add link"
-            size="sm"
+            title={target.href ? 'Edit link' : 'Insert link'}
+            size="md"
             onCloseAutoFocus={onCloseAutoFocus}
         >
-            <LinkForm editor={editor} />
+            <LinkForm {...target} />
         </FormDialog>
     );
 }
 
-// Mounted with the dialog, so each opening starts with an empty URL.
-function LinkForm({ editor }: { editor: Editor }) {
-    const [url, setUrl] = useState('');
-    const href = url.trim();
+// Mounted with the dialog, so each opening starts from its target.
+function LinkForm({ editor, from, to, href }: LinkDialogTarget) {
+    const atCaret = from === to;
+    const [text, setText] = useState(() => editor.state.doc.textBetween(from, to, ' '));
+    const [address, setAddress] = useState(href);
+    const linkHref = webLinkHref(address);
+    const refused = address.trim() !== '' && linkHref == null;
+    const refusalId = useId();
 
     return (
         <FormDialogForm
-            canSubmit={href !== ''}
-            submitLabel="Add link"
+            canSubmit={linkHref != null}
+            submitLabel="OK"
             onSubmit={() => {
-                const { from, to } = editor.state.selection;
-                if (from === to) {
+                if (linkHref == null) return false;
+                // The caret ends after the link, as a selection left on it would be replaced by the next key.
+                if (atCaret) {
+                    const link = { type: 'link', attrs: { href: linkHref } };
                     editor
                         .chain()
                         .focus()
-                        .insertContent({ type: 'text', text: href, marks: [{ type: 'link', attrs: { href } }] })
+                        .insertContentAt(from, { type: 'text', text: text || linkHref, marks: [link] })
                         .run();
                 } else {
-                    editor.chain().focus().setLink({ href }).run();
+                    editor
+                        .chain()
+                        .focus()
+                        .setTextSelection({ from, to })
+                        .setLink({ href: linkHref })
+                        .setTextSelection(to)
+                        .run();
                 }
             }}
         >
-            <Field>
-                <FieldLabel htmlFor="link-url">URL</FieldLabel>
-                <Input
-                    id="link-url"
-                    autoFocus
-                    placeholder="https://example.com"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                />
-            </Field>
+            <div className="space-y-3">
+                <div className="space-y-1.5">
+                    <Label htmlFor="link-text">Display text</Label>
+                    <Input
+                        id="link-text"
+                        spellCheck="false"
+                        disabled={!atCaret}
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                    />
+                </div>
+                <div className="space-y-1.5">
+                    <Label htmlFor="link-address">Link address</Label>
+                    <Input
+                        id="link-address"
+                        autoFocus
+                        aria-describedby={refused ? refusalId : undefined}
+                        className={cn(refused && 'border-destructive')}
+                        spellCheck="false"
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                    />
+                    {refused && <FieldError id={refusalId}>Please enter a valid link</FieldError>}
+                </div>
+            </div>
         </FormDialogForm>
     );
 }

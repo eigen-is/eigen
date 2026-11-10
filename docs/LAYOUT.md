@@ -8,7 +8,7 @@ The things that surprise people: on a phone only one column renders and the side
 
 ## Every app is `EigenApp` around `AppShell`
 
-`EigenApp` (`layout/app/eigen-app.tsx`) holds the providers every app shares: hotkeys, query client, auth, theme, SSE, uploads, the quick-look overlay and the command palette. `AppShell` (`layout/app/app-shell.tsx`) draws the topbar, the sidebar and `<main>`. A new app wraps its `__root.tsx` in `AppShell` and makes `_auth.tsx` a `createAuthRouteOptions` route.
+`EigenApp` (`layout/app/eigen-app.tsx`) holds the providers every app shares: hotkeys, query client, auth, theme, SSE, uploads, the quick-look overlay and the command palette. `AppShell` (`layout/app/app-shell.tsx`) draws the topbar, the sidebar and `<main>`. A new app wraps its `__root.tsx` in `AppShell` and makes `_auth.tsx` a `createAuthRouteOptions` route. That guard hands the signed-in user to every child route's context, so an `_auth` page reads `Route.useRouteContext().user`, never `useAuth().user!`, and a shared view it renders takes the user's id as a prop.
 
 The marketing routes in `apps/index` use `AppShell` without `EigenApp`, so `PaletteRunner` renders nothing when the palette provider is missing, and nothing for a signed-out visitor. The palette itself is [COMMAND-PALETTE.md](COMMAND-PALETTE.md).
 
@@ -150,6 +150,10 @@ A fixed color mapped onto the palette (`eigenColor(name, step)`) takes the neare
 ## The document apps reach Drive through one config
 
 Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Sheets go through `EigenDocListView` and `EigenDocSharedView`, configured by `buildConfig` in `eigendoc-config.ts` from the EigenDocType registry, so an app gets its sidebar, list and shared views without Drive code of its own.
+
+## Every Drive list has one empty text and one error text
+
+`DriveList` draws both, so no page passes copy of its own. An empty list shows `EmptyState`'s default sentence, with a hint only where you can drop or create (the button's own label when the list creates one kind). A failed load shows `ErrorState`'s default sentence alone, with no error detail; the error boundary shows the same one. A page that needs other words is a different screen, such as `RequestAccessView` for a folder you can't read.
 
 ## A file's icon comes from its name as well as its MIME type
 

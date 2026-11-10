@@ -1,11 +1,14 @@
-// The blog's overview page on the public site: the newest post large at the top, and the other posts below it.
-// The list comes from the blog's content files, and each of the other posts links to its own page.
+// The blog's overview page on the public site: a list row for each post, newest first, with its date in the left
+// gutter. The list comes from the blog's content files, so the prerender has all of it, and every row links to its
+// post.
 
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { formatDateOnly } from '@workspace/lib/date';
-import { Column, ColumnLayout } from '@workspace/ui';
-import { BlogPost } from '../components/blog-post';
-import { useArticleBody } from '../content/use-article-body';
+import { cn } from '@workspace/ui/lib/utils';
+import type { ReactNode } from 'react';
+import { ReadingLayout } from '../components/reading-layout';
+import { SitePage } from '../components/site-page';
+import type { BlogPost } from '../data/blog-posts';
 import { getAllBlogPosts } from '../data/blog-posts';
 
 export const Route = createFileRoute('/blog/')({
@@ -30,45 +33,58 @@ export const Route = createFileRoute('/blog/')({
 });
 
 function BlogOverviewComponent() {
-    const [latestPost, ...otherPosts] = getAllBlogPosts();
-    const body = useArticleBody('blog', latestPost?.slug ?? '');
+    const posts = getAllBlogPosts();
 
     return (
-        <ColumnLayout>
-            <Column id="blog" width="flex">
-                <div className="h-full overflow-y-auto">
-                    <div className="mx-auto w-full max-w-[70ch] px-6 py-10">
-                        {latestPost && body && <BlogPost post={latestPost} body={body} />}
-
-                        {otherPosts.length > 0 && (
-                            <div className="mt-16 pt-8 border-t border-border">
-                                <h2 className="text-2xl font-medium mb-6">Other posts</h2>
-                                <div className="space-y-8">
-                                    {otherPosts.map((post) => (
-                                        <article key={post.slug}>
-                                            <h3 className="text-xl font-medium mb-1">
-                                                <Link
-                                                    to="/blog/$id"
-                                                    params={{ id: post.slug }}
-                                                    className="hover:text-link"
-                                                >
-                                                    {post.title}
-                                                </Link>
-                                            </h3>
-                                            {post.date && (
-                                                <p className="text-sm text-muted-foreground mb-2">
-                                                    {formatDateOnly(post.date)}
-                                                </p>
-                                            )}
-                                            <p className="text-foreground leading-7">{post.description}</p>
-                                        </article>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
+        <SitePage>
+            <ReadingLayout>
+                <h1 className="site-title">Blog</h1>
+                <p className="mt-2 text-sm text-muted-foreground">Notes from building Eigen.</p>
+                <div className="mt-6">
+                    {posts.map((post, index) => (
+                        <PostRow key={post.slug} post={post}>
+                            <Link
+                                to="/blog/$id"
+                                params={{ id: post.slug }}
+                                className={cn(
+                                    'eigen-list-item -mx-(--app-gutter-x) block px-(--app-gutter-x) py-3.5',
+                                    index > 0 && 'border-t',
+                                )}
+                            >
+                                <PostText post={post} />
+                            </Link>
+                        </PostRow>
+                    ))}
                 </div>
-            </Column>
-        </ColumnLayout>
+            </ReadingLayout>
+        </SitePage>
+    );
+}
+
+// The date hangs in the left gutter; below 76rem there is none, and PostText shows it above the title instead.
+function PostRow({ post, children }: { post: BlogPost; children: ReactNode }) {
+    return (
+        <div className="relative">
+            {post.date && (
+                <time className="absolute top-3.5 right-full mr-(--site-gap) hidden w-(--site-gutter) text-sm leading-7 text-muted-foreground tabular-nums min-[76rem]:block">
+                    {formatDateOnly(post.date)}
+                </time>
+            )}
+            {children}
+        </div>
+    );
+}
+
+function PostText({ post }: { post: BlogPost }) {
+    return (
+        <>
+            {post.date && (
+                <time className="block text-sm leading-7 text-muted-foreground tabular-nums min-[76rem]:hidden">
+                    {formatDateOnly(post.date)}
+                </time>
+            )}
+            <h2 className="text-xl leading-tight font-medium tracking-tight">{post.title}</h2>
+            <p className="mt-1.5 text-muted-foreground">{post.description}</p>
+        </>
     );
 }

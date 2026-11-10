@@ -6,6 +6,7 @@ import { readVectorFromDoc, SLIDES_STYLE_DEFAULTS, writeElementInDoc, writeFrame
 import { ApiError } from '../../lib/core';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { documentTransformRunner } from '../../lib/document/transform/runner';
+import type { Drive } from '../../lib/drive/drive';
 import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getHome } from '../../lib/home/get-home';
 import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
@@ -471,13 +472,15 @@ describe('Import… into a deck', () => {
         const { path } = await bobDrive.resolveFile(mountId, deck.id);
 
         const realCreate = bobDrive.createFileFromData.bind(bobDrive);
-        const createSpy = spyOn(bobDrive, 'createFileFromData').mockImplementation(async (...args) => {
-            const created = await realCreate(...args);
-            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${deck.id}/acl`, {
-                add: [{ id: ctx.bob.user.email, read: true, write: false }],
-            });
-            return created;
-        });
+        const createSpy = spyOn(bobDrive, 'createFileFromData').mockImplementation(
+            async (...args: Parameters<Drive['createFileFromData']>) => {
+                const created = await realCreate(...args);
+                await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${deck.id}/acl`, {
+                    add: [{ id: ctx.bob.user.email, read: true, write: false }],
+                });
+                return created;
+            },
+        );
 
         const before = await readDeck(deck.id);
         try {

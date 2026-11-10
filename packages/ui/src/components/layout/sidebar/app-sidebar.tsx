@@ -1,7 +1,8 @@
-// The sidebar of Drive and the document apps: the New button, a filter row per kind of file, such as All images,
-// the user's own drives and the team drives. A guest sees only what was shared with them.
+// The sidebar of Drive and the document apps: the New button, the Drive and Recent files rows, a filter row per kind
+// of file, such as All images, the sharing pages and the team drives. A guest sees only what was shared with them.
 
 import { getDriveAppUrl } from '@workspace/lib/api';
+import type { AuthUser } from '@workspace/lib/auth';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useListTrash, useRootFolder } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
@@ -16,6 +17,7 @@ import { EIGEN_DOC_APP_CONFIGS, eigenDocSharedTitle } from '../../drive/eigendoc
 import { StorageUsage } from '../../home/usage';
 import { UserAvatar } from '../../user/user-avatar';
 import { useLayout } from '../app/layout-context';
+import { RecentFilesSidebarItem } from './recent-files-sidebar-item';
 import { SidebarBody } from './sidebar-body';
 import { SidebarItem } from './sidebar-item';
 import { SidebarSection } from './sidebar-section';
@@ -62,27 +64,13 @@ export const FILTER_LABELS: Record<string, string> = Object.fromEntries(
     FILTER_ENTRIES.map((entry) => [entry.driveMime, entry.label]),
 );
 
-// The eigendoc app we're rendering inside, or null in Drive — and in any app without a
-// filter view of its own, which then gets Drive's own rows and links.
-function currentHostConfig(appName: string): EigenDocAppConfig | null {
-    return EIGEN_DOC_APP_CONFIGS.find((config) => config.appUrl && config.appName === appName) ?? null;
-}
-
-function FilterRow({
-    entry,
-    hostApp,
-    condensed,
-}: {
-    entry: FilterEntry;
-    hostApp: EigenDocType | null;
-    condensed: boolean;
-}) {
-    const icon = <entry.icon className="h-4 w-4" />;
-    if (entry.hostApp === hostApp) {
-        const to = hostApp === null ? `/mime/${entry.driveMime}` : '/';
-        return <SidebarItem icon={icon} to={to} label={entry.label} condensed={condensed} exact={to === '/'} />;
+export function AppSidebar({ condensed = false, newButton }: AppSidebarProps) {
+    const { user } = useAuth();
+    const isGuest = useIsGuest();
+    if (!user || isGuest) {
+        return <GuestAppSidebar condensed={condensed} />;
     }
-    return <SidebarItem icon={icon} href={entry.appHref()} label={entry.label} condensed={condensed} />;
+    return <UserAppSidebar user={user} condensed={condensed} newButton={newButton} />;
 }
 
 function GuestAppSidebar({ condensed }: { condensed: boolean }) {
@@ -100,27 +88,16 @@ function GuestAppSidebar({ condensed }: { condensed: boolean }) {
     );
 }
 
-export function AppSidebar({ condensed = false, newButton }: AppSidebarProps) {
-    const isGuest = useIsGuest();
-    if (isGuest) {
-        return <GuestAppSidebar condensed={condensed} />;
-    }
-    return <UserAppSidebar condensed={condensed} newButton={newButton} />;
-}
-
 // Split from AppSidebar so its hooks sit under the guest fork without breaking hook order.
-function UserAppSidebar({ condensed = false, newButton }: AppSidebarProps) {
+function UserAppSidebar({ user, condensed, newButton }: { user: AuthUser; condensed: boolean; newButton?: ReactNode }) {
     const { appName } = useLayout();
-    const { user } = useAuth();
 
     const host = currentHostConfig(appName);
     const inDrive = host === null;
-    const userId = user!.id;
-    const { data: ownRoot } = useRootFolder(userId, DEFAULT_MOUNT_ID);
-    const personalRoot = ownRoot ?? null;
+    const { data: personalRoot } = useRootFolder(user.id, DEFAULT_MOUNT_ID);
 
     // Empty ownerId short-circuits the hook's enabled guard; only fetch trash count in Drive.
-    const { data: trashedItems } = useListTrash(inDrive ? userId : '', DEFAULT_MOUNT_ID);
+    const { data: trashedItems } = useListTrash(inDrive ? user.id : '', DEFAULT_MOUNT_ID);
     const trashCount = trashedItems?.length ?? 0;
 
     const { data: myTeams } = useMyTeams();
@@ -143,6 +120,7 @@ function UserAppSidebar({ condensed = false, newButton }: AppSidebarProps) {
                     label="Drive"
                     condensed={condensed}
                 />
+                <RecentFilesSidebarItem inDrive={inDrive} condensed={condensed} />
             </SidebarSection>
 
             <SidebarSection condensed={condensed} title={condensed ? undefined : 'Filters'}>
@@ -189,9 +167,8 @@ function UserAppSidebar({ condensed = false, newButton }: AppSidebarProps) {
                             .filter((mount) => mount.rootPathId)
                             .map((mount) => {
                                 const owner = teamOwnerId(team.id);
-                                // A team drive always opens its folder view — in Drive directly, from
-                                // an eigendoc app over in the Drive app (like the Drive home link). The
-                                // type-filtered slice already lives in this app's "All …" view.
+                                // A team drive opens its folder view in Drive, even from a document app,
+                                // whose own All view already lists that drive's files of its kind.
                                 const fsPath = `fs/${owner}/${mount.id}/${mount.rootPathId}`;
                                 const mountProps = inDrive ? { to: `/${fsPath}` } : { href: getDriveAppUrl(fsPath) };
                                 return (
@@ -211,4 +188,27 @@ function UserAppSidebar({ condensed = false, newButton }: AppSidebarProps) {
             <StorageUsage className="mt-auto" condensed={condensed} />
         </SidebarBody>
     );
+}
+
+// The eigendoc app we're rendering inside, or null in Drive — and in any app without a
+// filter view of its own, which then gets Drive's own rows and links.
+function currentHostConfig(appName: string): EigenDocAppConfig | null {
+    return EIGEN_DOC_APP_CONFIGS.find((config) => config.appUrl && config.appName === appName) ?? null;
+}
+
+function FilterRow({
+    entry,
+    hostApp,
+    condensed,
+}: {
+    entry: FilterEntry;
+    hostApp: EigenDocType | null;
+    condensed: boolean;
+}) {
+    const icon = <entry.icon className="h-4 w-4" />;
+    if (entry.hostApp === hostApp) {
+        const to = hostApp === null ? `/mime/${entry.driveMime}` : '/';
+        return <SidebarItem icon={icon} to={to} label={entry.label} condensed={condensed} exact={to === '/'} />;
+    }
+    return <SidebarItem icon={icon} href={entry.appHref()} label={entry.label} condensed={condensed} />;
 }

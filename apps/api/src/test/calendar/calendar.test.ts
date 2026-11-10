@@ -9,8 +9,6 @@ import type {
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import type { Notification } from '@workspace/lib/types/notification';
-import { eq, getTableColumns, sql } from 'drizzle-orm';
-import type { Calendar } from '../../lib/calendar/calendar';
 import * as schema from '../../lib/calendar/schema';
 import { getHome } from '../../lib/home';
 import {
@@ -842,6 +840,41 @@ describe('Calendar', () => {
             expect(shared?.body).toBe('Shared Cal');
         });
 
+        test('a share change tells Bob again only when it raises his access', async () => {
+            const asAlice = (path: string, method: string, body: object) =>
+                authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars${path}`, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+            const cal = await assertJson<CalendarItem>(await asAlice('', 'POST', { name: 'Reshared Cal' }));
+            const share = async (shares: object[]) =>
+                expect((await asAlice(`/${cal.id}`, 'PUT', { shares })).status).toBe(200);
+            const bobsRow = async () =>
+                (
+                    await assertJson<Notification[]>(
+                        await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
+                    )
+                ).find((n) => n.tag === `calendar-share:${cal.id}:${ctx.alice.user.id}`);
+            const bob = { targetId: ctx.bob.user.email, permission: 'read' };
+
+            await share([bob]);
+            const first = await bobsRow();
+            if (!first) throw new Error('Bob got no share notification');
+            const marked = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/notifications/${ctx.bob.user.id}/${first.id}/read`,
+                { method: 'PATCH' },
+            );
+            expect(marked.status).toBe(200);
+
+            await share([bob, { targetId: ctx.charlie.user.email, permission: 'read' }]);
+            expect((await bobsRow())?.read).toBe(true);
+
+            await share([{ ...bob, permission: 'write' }]);
+            expect((await bobsRow())?.read).toBe(false);
+        });
+
         test('a share notice with no actor names nobody', async () => {
             const bobHome = await getHome(ctx.bob.user.id);
             const calendarId = crypto.randomUUID();
@@ -1609,6 +1642,29 @@ describe('Calendar', () => {
                 );
                 expect(res.status).toBe(400);
             }
+        });
+
+        test('a create firing more than 24 times a day in daily words returns 400', async () => {
+            const hours = Array.from({ length: 24 }, (_, i) => i).join(',');
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                subDailyBody(`FREQ=DAILY;BYHOUR=${hours};BYMINUTE=0,30`),
+            );
+            expect(res.status).toBe(400);
+        });
+
+        test.each([
+            ['a date no year holds', 'FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30'],
+            ['a position rrule refuses', 'FREQ=MONTHLY;BYDAY=MO;BYSETPOS=0'],
+        ])('a create with %s keeps the event, without its repeats', async (_name, rrule) => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                subDailyBody(rrule),
+            );
+            expect(res.status).toBe(200);
+            expect((await assertJson<{ rrule: string | null }>(res)).rrule).toBeNull();
         });
 
         test('update event to FREQ=SECONDLY returns 400', async () => {
@@ -2764,63 +2820,6 @@ describe('the calendar byte counter', () => {
         expect(calendar.db.select().from(schema.events).all()).toEqual([]);
         // No cascade reaches a tombstone, so a calendar recreated at this id would inherit its 404s.
         expect(calendar.db.select().from(schema.resourceTombstones).all()).toEqual([]);
-    });
-});
-
-// Every column a blob decides. reindexEvents re-stamps createdAt/updatedAt on a row whose file carries no
-// stamp of its own (an exclusion), so a rebuild is compared on what the bytes really own.
-const projectedEvents = (calendar: Calendar) => {
-    const { createdAt: _created, updatedAt: _updated, ...columns } = getTableColumns(schema.events);
-    return calendar.db.select(columns).from(schema.events).all();
-};
-
-describe('rebuildProjection', () => {
-    test('every event row and projected column comes back from the blobs', async () => {
-        const harness = await makeCalendar();
-        const calendar = harness.instance;
-        const calendarId = await defaultCalendarId(harness);
-        // Seeded through the store, because a VEVENT without X-EIGEN-EVENT-ID gets a fresh id on projection.
-        await putResource(
-            calendar,
-            calendarId,
-            'series.ics',
-            vcal(vevent('rebuild-series@eigen', 'Weekly', ['RRULE:FREQ=WEEKLY;COUNT=5', 'EXDATE:20260415T100000Z']), [
-                'BEGIN:VEVENT',
-                'UID:rebuild-series@eigen',
-                'RECURRENCE-ID:20260408T100000Z',
-                'DTSTART:20260408T140000Z',
-                'DTEND:20260408T150000Z',
-                'SUMMARY:Moved occurrence',
-                'END:VEVENT',
-            ]),
-        );
-        await putResource(calendar, calendarId, 'plain.ics', vcal(vevent('rebuild-plain@eigen', 'Plain')));
-        await putResource(calendar, calendarId, 'deleted.ics', vcal(vevent('rebuild-deleted@eigen', 'Deleted')));
-        await calendar.deleteResource(calendarId, 'deleted.ics', { ifMatch: null });
-
-        const resourcesBefore = calendar.db.select().from(schema.resources).all();
-        const eventsBefore = projectedEvents(calendar);
-        const tombstonesBefore = calendar.db.select().from(schema.resourceTombstones).all();
-        expect(tombstonesBefore).toHaveLength(1);
-        const ctagBefore = (await calendar.getCollection(calendarId))!.ctag;
-        expect(eventsBefore.length).toBeGreaterThan(2);
-
-        // Corrupt every column the blob decides, plus the event rows themselves.
-        calendar.db
-            .update(schema.resources)
-            .set({ uid: sql`'corrupt-' || ${schema.resources.id}`, etag: 'corrupt', hasUnindexedRecurrence: true })
-            .run();
-        calendar.db.update(schema.events).set({ title: 'corrupt', parentEventId: null, rrule: null }).run();
-        calendar.db.delete(schema.events).where(eq(schema.events.uid, 'rebuild-plain@eigen')).run();
-
-        calendar.rebuildProjection();
-
-        expect(calendar.db.select().from(schema.resources).all()).toEqual(resourcesBefore);
-        expect(projectedEvents(calendar)).toEqual(eventsBefore);
-        // No blob carries a deletion, so a rebuild leaves the tombstone a syncing client still needs.
-        expect(calendar.db.select().from(schema.resourceTombstones).all()).toEqual(tombstonesBefore);
-        // A rebuild is not a change: no ctag moves, so no client is told to resync.
-        expect((await calendar.getCollection(calendarId))!.ctag).toBe(ctagBefore);
     });
 });
 

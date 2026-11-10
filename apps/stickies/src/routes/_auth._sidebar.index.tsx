@@ -1,17 +1,23 @@
+// The Stickies app's home: every board the viewer can open, in Drive's list and detail layout,
+// with the selected one's ?pid=&uid=&mid= detail beside the list. EigenDocListView draws it.
+
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { EigenDocListView, eigenDocValidateSearch, STICKIES_CONFIG } from '@workspace/ui/components/drive';
+import { validateDriveSearch } from '@workspace/lib/drive';
+import { EigenDocListView, STICKIES_CONFIG } from '@workspace/ui/components/drive';
 
 export const Route = createFileRoute('/_auth/_sidebar/')({
     component: DriveRoute,
-    validateSearch: eigenDocValidateSearch,
+    validateSearch: validateDriveSearch,
 });
 
 function DriveRoute() {
     const { pid, uid, mid } = Route.useSearch();
     const navigate = useNavigate();
+    const { user } = Route.useRouteContext();
     return (
         <EigenDocListView
             config={STICKIES_CONFIG}
+            viewerId={user.id}
             pid={pid}
             uid={uid}
             mid={mid}

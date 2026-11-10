@@ -1,6 +1,7 @@
 // The chat HTTP routes, for example the wizard that creates a chat with its members, and the messages
 // of one chat room. The room is a .eigenchat file in Drive, so a chat in another owner's drive goes
-// through SharedDrive, which checks the access before ChatRoom does the work.
+// through SharedDrive, which checks the access before ChatRoom does the work. A chat's first page of
+// messages counts as an open on the user's Recent page.
 
 import type { ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
 import type { DrivePath, InviteResult } from '@workspace/lib/types/drive';
@@ -14,6 +15,7 @@ import { ApiError } from '../lib/core/errors';
 import type { Drive } from '../lib/drive';
 import { getDrive, getSharedDrive } from '../lib/drive';
 import { folderIn, withFreeName } from '../lib/drive/naming';
+import { recordOpened } from '../lib/drive/recent';
 import { getTeamHome } from '../lib/home';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
@@ -32,9 +34,6 @@ function normalizeMemberEmails(raw: string[]): string[] {
     return emails;
 }
 
-// A chat route may serve another owner's chat, because chats live in shared and team drives. The
-// routes of one chat go through getSharedDrive, which checks the access. The two wizard routes below
-// use the Drive itself, behind requireSelf or requireTeamAccess.
 export const chatRouter = new Elysia({ name: 'chat' })
     .use(betterAuth)
 
@@ -83,11 +82,10 @@ export const chatRouter = new Elysia({ name: 'chat' })
             const fileName = body.fileName.trim().normalize('NFC');
             if (!fileName) throw new ApiError(422, 'A chat name is required');
 
-            const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId));
+            const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId, user));
 
-            // A chat the wizard named gets a free name beside its siblings, and a name the user typed is a
-            // 409 on a clash. The free name is picked with the extension on, because Drive.create adds it
-            // again.
+            // A chat the wizard named gets a free name beside its siblings, and a typed name is a 409 on a clash.
+            // The free name is picked with the extension on, as the siblings are stored, and create adds it again.
             const create = (name: string) => drive.create(params.mountId, parentId, name, DRIVE_TYPE_CHAT, user);
             let chat: DrivePath;
             if (body.dedupeName) {
@@ -100,9 +98,8 @@ export const chatRouter = new Elysia({ name: 'chat' })
                 chat = await create(fileName);
             }
 
-            // A wizard chat is shared from the start. When the share fails, the new chat goes again
-            // instead of staying unshared. No share email goes out, but the notification and the event
-            // still do.
+            // A wizard chat is shared from the start, so a failed share deletes the new chat. No share email goes
+            // out, but the notification and the event still do.
             if (!isTeam) {
                 try {
                     await drive.updateACLDelta(
@@ -115,10 +112,10 @@ export const chatRouter = new Elysia({ name: 'chat' })
                         { suppressShareEmail: 'registered' },
                     );
                 } catch (err) {
-                    await drive.deletePath(params.mountId, chat.id).catch((e) => {
+                    await drive.deletePath(params.mountId, chat.id, user).catch((e) => {
                         console.warn(`Failed to trash orphaned chat ${chat.id} after share failure:`, e);
                     });
-                    await drive.permanentlyDelete(params.mountId, chat.id).catch((e) => {
+                    await drive.permanentlyDelete(params.mountId, chat.id, user).catch((e) => {
                         console.warn(`Failed to purge orphaned chat ${chat.id} after share failure:`, e);
                     });
                     throw err;
@@ -145,7 +142,10 @@ export const chatRouter = new Elysia({ name: 'chat' })
         async ({ params, query, user }): Promise<ChatMessage[]> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const chat = await drive.getChat(params.mountId, params.chatId);
-            return await chat.getMessagesForUser(user.email, query.limit ?? 50, query.before || undefined);
+            const messages = await chat.getMessagesForUser(user.email, query.limit ?? 50, query.before || undefined);
+            // An older page is of a chat already open, and a comment thread opens with its document.
+            if (!query.before && !chat.containerPath) recordOpened(user, chat.path);
+            return messages;
         },
         {
             query: t.Object({

@@ -46,7 +46,7 @@ describe('Drive content-index', () => {
     }
 
     test('a sheet body becomes searchable after a reindex sweep, and honours the 2-min cap', async () => {
-        const sheetsPath = await home.drive.create(mountId, rootId, 'reindex-sheet', 'sheets');
+        const sheetsPath = await home.drive.create(mountId, rootId, 'reindex-sheet', 'sheets', home.user);
         const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
         const sheets = [
             {
@@ -74,7 +74,7 @@ describe('Drive content-index', () => {
     });
 
     test('DOC body is searchable', async () => {
-        const docPath = await home.drive.create(mountId, rootId, 'rt-doc', 'doc');
+        const docPath = await home.drive.create(mountId, rootId, 'rt-doc', 'doc', home.user);
         const collab = await home.drive.getCollabDocument(mountId, docPath.id);
         const p = new Y.XmlElement('paragraph');
         p.insert(0, [new Y.XmlText('flibberdoc content here')]);
@@ -87,7 +87,7 @@ describe('Drive content-index', () => {
     // copyPath byte-copies the container's data.db (no onSync fires for the new container),
     // so the copy must be marked contentDirty by copyPath itself or its body never indexes.
     test('a COPIED doc body is searchable (copy marks the new container dirty)', async () => {
-        const src = await home.drive.create(mountId, rootId, 'rt-copysrc', 'doc');
+        const src = await home.drive.create(mountId, rootId, 'rt-copysrc', 'doc', home.user);
         const collab = await home.drive.getCollabDocument(mountId, src.id);
         const p = new Y.XmlElement('paragraph');
         p.insert(0, [new Y.XmlText('flibbercopy content here')]);
@@ -97,13 +97,13 @@ describe('Drive content-index', () => {
 
         // The search term lives only in the body (neither name contains it), so a hit on the
         // copy proves the copied container's body was indexed.
-        const copied = await home.drive.copyPath(mountId, src.id, rootId, 'rt-copydst');
+        const copied = await home.drive.copyPath(mountId, src.id, rootId, 'rt-copydst', home.user);
         await flushContentReindex(home.drive);
         expect((await searchFile('flibbercopy')).file.some((h) => h.id === copied.id)).toBe(true);
     });
 
     test('SLIDES body is searchable', async () => {
-        const slidesPath = await home.drive.create(mountId, rootId, 'rt-slides', 'slides');
+        const slidesPath = await home.drive.create(mountId, rootId, 'rt-slides', 'slides', home.user);
         const collab = await home.drive.getCollabDocument(mountId, slidesPath.id);
         // A deck is a canvas: one frame, one rich-text element homed to it.
         collab.doc.transact(() => {
@@ -128,7 +128,7 @@ describe('Drive content-index', () => {
     });
 
     test('STICKIES card title + description are searchable', async () => {
-        const stk = await home.drive.create(mountId, rootId, 'rt-stickies', 'stickies');
+        const stk = await home.drive.create(mountId, rootId, 'rt-stickies', 'stickies', home.user);
         const collab = await home.drive.getCollabDocument(mountId, stk.id);
         collab.doc.transact(() => {
             const tasks = collab.doc.getMap('tasks');
@@ -150,7 +150,7 @@ describe('Drive content-index', () => {
     });
 
     test("a peer's scalar entry does not keep a STICKIES board out of search", async () => {
-        const stk = await home.drive.create(mountId, rootId, 'rt-stickies-scalar', 'stickies');
+        const stk = await home.drive.create(mountId, rootId, 'rt-stickies-scalar', 'stickies', home.user);
         const collab = await home.drive.getCollabDocument(mountId, stk.id);
         collab.doc.transact(() => {
             const tasks = collab.doc.getMap('tasks');
@@ -278,7 +278,7 @@ describe('Drive content-index', () => {
 
     test('container internals never surface as body hits', async () => {
         // A doc whose body contains a term must surface the CONTAINER, never its data.db child.
-        const docPath = await home.drive.create(mountId, rootId, 'rt-internal', 'doc');
+        const docPath = await home.drive.create(mountId, rootId, 'rt-internal', 'doc', home.user);
         const collab = await home.drive.getCollabDocument(mountId, docPath.id);
         const p = new Y.XmlElement('paragraph');
         p.insert(0, [new Y.XmlText('internalcheck token')]);
@@ -296,7 +296,7 @@ describe('Drive content-index', () => {
     // that drain row: the dirty bit stays set and the previously indexed body survives
     // untouched. There is no main-thread fallback to quietly re-extract it.
     test('a refused Worker extract keeps the sheet dirty and its indexed body unchanged', async () => {
-        const sheetsPath = await home.drive.create(mountId, rootId, 'reindex-refused', 'sheets');
+        const sheetsPath = await home.drive.create(mountId, rootId, 'reindex-refused', 'sheets', home.user);
         const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
         const writeCell = (text: string) => {
             const sheets = [
@@ -351,7 +351,7 @@ describe('Drive content-index', () => {
     ] as const)(
         'an extract that failed with %s indexes the sheet as empty and clears its dirty bit',
         async (code, message) => {
-            const sheetsPath = await home.drive.create(mountId, rootId, `reindex-${code}`, 'sheets');
+            const sheetsPath = await home.drive.create(mountId, rootId, `reindex-${code}`, 'sheets', home.user);
             const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
             const sheets = [
                 {
@@ -394,7 +394,7 @@ describe('Drive content-index', () => {
     // success — clearing the bit there leaves the newer content unindexed until some
     // unrelated future write re-dirties the row.
     test('an edit during an extract keeps the container dirty until it is re-extracted', async () => {
-        const sheetsPath = await home.drive.create(mountId, rootId, 'reindex-race', 'sheets');
+        const sheetsPath = await home.drive.create(mountId, rootId, 'reindex-race', 'sheets', home.user);
         const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
         const writeCell = (text: string) => {
             const sheets = [

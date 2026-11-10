@@ -3,7 +3,6 @@
 // no other actions, so the page hands the list its own rows instead of the Drive item menu's.
 
 import { createFileRoute } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
 import {
     DEFAULT_MOUNT_ID,
     getDriveComparator,
@@ -15,9 +14,10 @@ import {
 } from '@workspace/lib/drive';
 import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Column, ColumnLayout, DeleteDialog, EmptyState, LoadingState, ToolbarTitle } from '@workspace/ui';
+import { Column, ColumnLayout, DeleteDialog, LoadingState, ToolbarTitle } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { DriveList, DriveViewControls } from '@workspace/ui/components/drive/drive-list';
+import type { DriveListDate } from '@workspace/ui/components/drive/drive-table';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -25,12 +25,14 @@ export const Route = createFileRoute('/_auth/trash')({
     component: TrashRoute,
 });
 
+const TRASHED: DriveListDate = { label: 'Trashed', of: (item) => item.trashedAt };
+
 function TrashToolbar({ itemCount, onEmptyTrash }: { itemCount: number; onEmptyTrash: () => void }) {
     return (
         <div className="flex items-center justify-between w-full">
             <ToolbarTitle>Trash</ToolbarTitle>
             <div className="flex items-center gap-1">
-                <DriveViewControls />
+                <DriveViewControls dateLabel={TRASHED.label} />
                 {itemCount > 0 && (
                     <Button variant="outline" size="sm" onClick={onEmptyTrash}>
                         <Trash2 className="h-4 w-4 mr-2" />
@@ -43,11 +45,11 @@ function TrashToolbar({ itemCount, onEmptyTrash }: { itemCount: number; onEmptyT
 }
 
 function TrashRoute() {
-    const auth = useAuth();
-    const ownerId = auth.user!.id;
+    const { user } = Route.useRouteContext();
+    const ownerId = user.id;
     const mountId = DEFAULT_MOUNT_ID;
 
-    const { data: trashedItems = [], isLoading } = useListTrash(ownerId, mountId);
+    const { data: trashedItems = [], isLoading, error } = useListTrash(ownerId, mountId);
     const restorePath = useRestorePath(ownerId, mountId);
     const permanentlyDelete = usePermanentlyDelete(ownerId, mountId);
     const emptyTrash = useEmptyTrash(ownerId, mountId);
@@ -55,10 +57,10 @@ function TrashRoute() {
     const [emptyTrashOpen, setEmptyTrashOpen] = useState(false);
     const [deleteItems, setDeleteItems] = useState<readonly DrivePath[]>([]);
 
-    // Modified sorts by the time an item was trashed here, which is also the date this page shows.
+    // The date sort orders by the time an item was trashed, the date this page shows.
     const { sortKey, sortDir } = useDriveViewPreferences();
     const sortedItems = useMemo(() => {
-        const comparator = getDriveComparator(sortKey, sortDir, (p) => p.trashedAt ?? p.updatedAt);
+        const comparator = getDriveComparator(sortKey, sortDir, (p) => TRASHED.of(p) ?? p.updatedAt);
         return [...trashedItems].sort(comparator);
     }, [trashedItems, sortKey, sortDir]);
 
@@ -103,14 +105,13 @@ function TrashRoute() {
                 >
                     <DriveList
                         items={sortedItems}
+                        error={error}
                         ownerId={ownerId}
                         mountId={mountId}
                         hideOwner
                         hideShared
-                        dateLabel="Trashed"
-                        getItemDate={(item) => item.trashedAt}
+                        date={TRASHED}
                         ownActions={trashActions}
-                        emptyState={<EmptyState message="Trash is empty" icon={<Trash2 className="h-10 w-10" />} />}
                     />
                 </Column>
             </ColumnLayout>

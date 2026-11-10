@@ -79,8 +79,7 @@ describe('CollabDocument close linger', () => {
     async function openLingeringDoc(fileName: string) {
         const counted = await createCountedDoc(fileName);
         jest.useFakeTimers();
-        const doc = new CollabDocument(home.drive, counted.path);
-        await doc.init();
+        const doc = await CollabDocument.open(home.drive, counted.path);
         return { doc, ...counted };
     }
 

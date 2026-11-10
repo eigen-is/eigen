@@ -13,11 +13,10 @@ import {
     textBoxDefaults,
 } from '@workspace/lib/vector';
 import { exportDocument } from '../../lib/export/export-document';
-import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import { seedVectorDoc } from '../fixtures/golden-documents';
 import type { Raster, Rgb } from '../pdf-test-helpers';
-import { pixelAt, rasterize, rasterizer } from '../pdf-test-helpers';
+import { pixelAt, rasterize, rasterizer, weasyPrintPython } from '../pdf-test-helpers';
 import { driveGet, drivePost, getTestContext } from '../setup';
 
 // What a canvas PDF looks like, read off its pixels. WeasyPrint 68 loses two things a scaled or shifted
@@ -117,7 +116,7 @@ function area(frameId: string, x: number, y: number, height: number) {
 
 // CI installs WeasyPrint and poppler, so this suite runs wherever both a WeasyPrint and a
 // rasterizer are on the machine, and skips everywhere else.
-const suite = (await isWeasyPrintAvailable()) && rasterizer ? describe : describe.skip;
+const suite = weasyPrintPython && rasterizer ? describe : describe.skip;
 
 suite('canvas PDF — text, opaque and translucent elements print wherever they sit', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;

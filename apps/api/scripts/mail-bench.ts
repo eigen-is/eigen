@@ -1,13 +1,8 @@
-// Standalone mail-backend performance benchmark for MaildirStore.
-//
-// Measures cold sync / warm sync / incremental sync / list query / single mutations
-// against a large maildir, WITHOUT touching the repo's data/ dir or the dev server.
-//
-// Run from the repo root (so @workspace/* resolves):
-//   INBOX=50000 ARCHIVE=50000 INCREMENTAL=1000 bun apps/api/scripts/mail-bench.ts
-//
-// Scratch data goes to $TMPDIR/eigen-mail-bench (override with BENCH_ROOT). The dir is
-// wiped at the start of each run and left behind afterwards for inspection.
+// A benchmark for MaildirStore: cold, warm and incremental sync, the list query and single mutations, timed against a
+// large generated maildir. A developer runs it by hand from the repo root, so @workspace/* resolves, such as
+// `INBOX=50000 ARCHIVE=50000 INCREMENTAL=1000 bun apps/api/scripts/mail-bench.ts`. It never touches the repo's data
+// or the dev server: it works in $TMPDIR/eigen-mail-bench (or BENCH_ROOT), wiped at the start and kept for inspection.
+
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -49,7 +44,7 @@ const noopEvents = {
     deleted: () => {},
 };
 
-// ---- RFC822 generation (mirrors seed-test-mail.ts) ----
+// ---- RFC822 generation ----
 let seed = 987654321;
 const rand = () => {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
@@ -72,7 +67,7 @@ const subjects = [
 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const dows = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const baseMs = 1_752_000_000_000;
-const pick = <T>(a: readonly T[]) => a[Math.floor(rand() * a.length)] as T;
+const pick = <T>(a: readonly T[]) => a[Math.floor(rand() * a.length)];
 
 function rfc822(i: number, mailbox: string, extAddr: string, to: string): string {
     const d = new Date(baseMs - Math.floor(rand() * 365 * 24 * 60 * 60 * 1000));
@@ -125,7 +120,7 @@ const ms = (f: () => Promise<void> | void) => {
 const median = (xs: number[]) => {
     const s = [...xs].sort((a, b) => a - b);
     const m = Math.floor(s.length / 2);
-    return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
 const fmt = (n: number) => n.toLocaleString('en-US');
 
@@ -212,12 +207,12 @@ const moveTimes: number[] = [];
 const flagTimes: number[] = [];
 for (let i = 0; i < 3; i++) {
     const victims = wholeInbox();
-    const id = victims[victims.length - 1 - i]!.id;
+    const id = victims[victims.length - 1 - i].id;
     moveTimes.push(await ms(() => store.move(id, 'Archive')));
 }
 for (let i = 0; i < 3; i++) {
     const rows = wholeInbox();
-    const row = rows[i]!;
+    const row = rows[i];
     flagTimes.push(await ms(() => store.setFlags(row.id, { seen: !row.isRead })));
 }
 results['single move (archive) @full'] =

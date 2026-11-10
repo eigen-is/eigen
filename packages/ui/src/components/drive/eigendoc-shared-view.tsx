@@ -4,14 +4,11 @@
 
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths } from '@workspace/lib/drive';
 import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
 import { isDocumentType } from '@workspace/lib/types/drive';
 import { useContext } from 'react';
-import { EmptyState } from '../layout/app/empty-state';
 import { useLayout } from '../layout/app/layout-context';
-import { LoadingState } from '../layout/app/loading-state';
 import { DRIVE_CAPABILITIES } from './drive-capabilities';
 import { DriveLayout } from './drive-layout';
 import type { EigenDocAppConfig } from './eigendoc-config';
@@ -21,6 +18,7 @@ import { useDriveQuickLook } from './use-drive-quick-look';
 
 type EigenDocSharedViewProps = {
     config: EigenDocAppConfig;
+    viewerId: string;
     to: string;
     pid?: string;
     uid?: string;
@@ -29,12 +27,19 @@ type EigenDocSharedViewProps = {
     onNavigateBack: () => void;
 };
 
-export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNavigateBack }: EigenDocSharedViewProps) {
+export function EigenDocSharedView({
+    config,
+    viewerId,
+    to,
+    pid,
+    uid,
+    mid,
+    onNavigate,
+    onNavigateBack,
+}: EigenDocSharedViewProps) {
     const { rootPath } = useContext(EigenDocDriveContext);
     const navigate = useNavigate();
-    const { user } = useAuth();
-    const ownerId = user!.id;
-    const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid || '');
+    const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid);
     const { isMobile } = useLayout();
     // As in Drive's shared view, a row shared with the viewer belongs to someone else, and this listing
     // doesn't say what access the viewer has. So only the by-me side offers rows that write.
@@ -45,7 +50,7 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
         data: unfilteredFolderContents = [],
         isLoading,
         error,
-    } = useSharedPaths(ownerId, to === 'by-me' ? 'by-me' : 'with-me');
+    } = useSharedPaths(viewerId, to === 'by-me' ? 'by-me' : 'with-me');
 
     const folderContents = unfilteredFolderContents.filter((path) => path.type === config.type);
 
@@ -57,19 +62,11 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
         }
     };
 
-    if (error) {
-        return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
-    }
-
-    if (isLoading) {
-        return <LoadingState />;
-    }
-
     return (
         <DriveLayout
             pid={pid}
             selectedPath={selectedPath}
-            ownerId={uid || ownerId}
+            ownerId={uid || viewerId}
             mountId={mid || DEFAULT_MOUNT_ID}
             folderContents={folderContents}
             isLoading={isLoading}
@@ -87,15 +84,6 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
             }}
             title={eigenDocSharedTitle(to === 'by-me' ? 'by' : 'with', config.labelPlural)}
             currentPath={rootPath}
-            emptyState={
-                <EmptyState
-                    message={
-                        to === 'by-me'
-                            ? `${config.labelPlural} you’ve shared will appear here.`
-                            : `${config.labelPlural} shared with you will appear here.`
-                    }
-                />
-            }
         />
     );
 }

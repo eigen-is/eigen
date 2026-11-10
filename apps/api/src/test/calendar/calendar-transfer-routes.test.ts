@@ -15,6 +15,7 @@ import { getHome } from '../../lib/home';
 import { parseResource } from '../../lib/ical';
 import type { OutboundMail } from '../../lib/mailer/mailer';
 import { storedEvents } from '../calendar-test-helpers';
+import { cpuClock } from '../cpu-time';
 import { basicAuth, DAV_PASSWORD } from '../dav-test-helpers';
 import { vcal } from '../ics-test-helpers';
 import type { TestUser } from '../setup';
@@ -1209,13 +1210,114 @@ describe('Calendar transfer routes', () => {
         expect(res.status).toBe(404);
     });
 
-    test('a file that is not a calendar is 400 and nothing is written', async () => {
+    test('a file nested past the limit is 400 and nothing is written', async () => {
         const before = (await april()).length;
+        const levels = 20;
+        const file = vcal(
+            vevent(`nested-${crypto.randomUUID()}@other`, 'Nested', '20260416T090000Z', '20260416T100000Z', [
+                ...Array<string>(levels).fill('BEGIN:X-LEVEL'),
+                ...Array<string>(levels).fill('END:X-LEVEL'),
+            ]),
+        );
 
-        const res = await importRequest(alice, calendarId, 'not a calendar, just some bytes\r\n');
+        const res = await importRequest(alice, calendarId, file);
         expect(res.status).toBe(400);
         expect((await april()).length).toBe(before);
     });
+
+    test('a series with a long guest list behind a long padding imports in one pass', async () => {
+        const uid = `long-guests-${crypto.randomUUID()}@other`;
+        const file = vcal(
+            vevent(uid, 'Long guests', '20260416T090000Z', '20260416T100000Z', [
+                ...Array<string>(100_000).fill('X:p'),
+                ...Array<string>(30_000).fill('ATTENDEE:mailto:a@b.c'),
+            ]),
+        );
+
+        const cpuMs = cpuClock();
+        const res = await importRequest(alice, calendarId, file);
+        expect(cpuMs()).toBeLessThan(3_000);
+
+        expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: 1, skipped: 0, failed: 0 });
+        const stored = findOrFail(await april(), (e) => e.uid === uid);
+        expect(stored.data?.attendees).toBeUndefined();
+    });
+
+    test('many series behind a long run of other components import in one pass', async () => {
+        const count = 3_000;
+        const stamp = crypto.randomUUID();
+        const file = vcal(
+            Array<string>(100_000).fill('BEGIN:X-FIRST\r\nEND:X-FIRST'),
+            Array.from({ length: count }, (_, i) =>
+                [`BEGIN:VEVENT`, `UID:many-${stamp}-${i}@other`, 'DTSTART:20260601T090000Z', 'END:VEVENT'].join('\r\n'),
+            ),
+        );
+
+        const cpuMs = cpuClock();
+        const res = await importRequest(alice, calendarId, file);
+        expect(cpuMs()).toBeLessThan(7_000);
+
+        expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: count, skipped: 0, failed: 0 });
+    }, 120_000);
+
+    test.each([
+        ['bytes', 'not a calendar, just some bytes\r\n'],
+        ['a stray property', 'FOO:bar\r\n'],
+        ['a mail', 'Subject: x\r\n\r\nbody\r\n'],
+        [
+            'a second root ical.js has no design for',
+            'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\nBEGIN:CONSTRUCTOR\r\nX:y\r\nEND:CONSTRUCTOR\r\n',
+        ],
+    ])('%s is no calendar: 400 and nothing is written', async (_name, file) => {
+        const before = (await april()).length;
+
+        const res = await importRequest(alice, calendarId, file);
+        expect(res.status).toBe(400);
+        expect((await april()).length).toBe(before);
+    });
+
+    test('series the store refuses count toward the written-bytes cap', async () => {
+        const uid = crypto.randomUUID();
+        const standard =
+            'BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100\r\nEND:STANDARD';
+        const zone = ['BEGIN:VTIMEZONE', 'TZID:Own', ...Array(40_000).fill(standard), 'END:VTIMEZONE'];
+        const refused = Array.from({ length: 20 }, (_, i) => [
+            'BEGIN:VEVENT',
+            `UID:${uid}-${i}@other`,
+            'DTSTART;TZID=Own:20260421T100000',
+            'DTEND;TZID=Own:20260421T090000',
+            'END:VEVENT',
+        ]);
+
+        const res = await importRequest(alice, calendarId, vcal(zone, ...refused));
+
+        expect(res.status).toBe(413);
+        expect((await april()).some((event) => event.uid.startsWith(uid))).toBe(false);
+    }, 60_000);
+
+    test('series the Home already holds are skipped before they cost a parse', async () => {
+        const uid = crypto.randomUUID();
+        const uids = Array.from({ length: 20 }, (_, i) => `${uid}-${i}@other`);
+        const small = uids.map((held) => vevent(held, 'Held', '20260421T090000Z', '20260421T100000Z'));
+        expect((await importRequest(alice, calendarId, vcal(...small))).status).toBe(200);
+        const standard =
+            'BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100\r\nEND:STANDARD';
+        const zone = ['BEGIN:VTIMEZONE', 'TZID:Own', ...Array(40_000).fill(standard), 'END:VTIMEZONE'];
+        const fat = uids.map((held) => [
+            'BEGIN:VEVENT',
+            `UID:${held}`,
+            'DTSTART;TZID=Own:20260421T090000',
+            'DTEND;TZID=Own:20260421T100000',
+            'END:VEVENT',
+        ]);
+
+        const body = vcal(zone, ...fat);
+        const cpuMs = cpuClock();
+        const res = await importRequest(alice, calendarId, body);
+
+        expect(cpuMs()).toBeLessThan(2000);
+        expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: 0, skipped: 20, failed: 0 });
+    }, 60_000);
 
     // iCalendar is UTF-8 (RFC 5545 §3.1), the same fact a vCard import answers on: the file is refused for
     // its encoding, not lumped in with bytes that are no calendar at all.

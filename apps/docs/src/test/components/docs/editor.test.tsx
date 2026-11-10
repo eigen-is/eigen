@@ -1319,6 +1319,71 @@ test('a right-click on an equation in the band being edited opens its menu, whic
     expect(doc.getXmlFragment('default').toString()).not.toContain('equation');
 });
 
+// "see " then "the docs" linked to eigen.is, with `selection` set in the body.
+async function linkedBody(selection: number | { from: number; to: number }) {
+    await act(async () => {
+        bodyEditor().commands.setContent({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'see ' },
+                        {
+                            type: 'text',
+                            text: 'the docs',
+                            marks: [{ type: 'link', attrs: { href: 'https://eigen.is' } }],
+                        },
+                    ],
+                },
+            ],
+        });
+        bodyEditor().commands.setTextSelection(selection);
+    });
+}
+
+const LINK_ROWS = ['Open link', '—', 'Copy link', '—', 'Edit link', 'Remove link'];
+
+// The menu follows the pointer, not the selection: a caret elsewhere would otherwise leave the browser's own menu.
+test('a writer right-clicking a link with only a caret gets its rows, and Remove link unlinks all of it', async () => {
+    await render({ ...WRITER, chatFolderId: 'chats' });
+    await linkedBody(1);
+    const event = await rightClick(bodyView()?.querySelector('a'));
+    expect(event.defaultPrevented).toBe(true);
+    expect(menuRows()).toEqual(LINK_ROWS);
+    await pick('Remove link');
+    expect(bodyView()?.querySelector('a')).toBeNull();
+    expect(bodyEditor().getText()).toBe('see the docs');
+});
+
+test('a link right-clicked with its text selected offers Add comment after its rows', async () => {
+    await render({ ...WRITER, chatFolderId: 'chats' });
+    await linkedBody({ from: 5, to: 13 });
+    await rightClick(bodyView()?.querySelector('a'));
+    expect(menuRows()).toEqual([...LINK_ROWS, '—', 'Add comment']);
+});
+
+test('Edit link opens the Edit link dialog on the whole link', async () => {
+    await render(WRITER);
+    await linkedBody(1);
+    await rightClick(bodyView()?.querySelector('a'));
+    await pick('Edit link');
+    expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Edit link');
+    expect(document.querySelector<HTMLInputElement>('#link-text')?.value).toBe('the docs');
+    expect(document.querySelector<HTMLInputElement>('#link-address')?.value).toBe('https://eigen.is');
+});
+
+test.each([
+    ["a viewer's right-click on a link", { canWrite: false, isMobile: false }, 'a'],
+    ["a writer's right-click on plain text with only a caret", WRITER, 'p'],
+])('%s leaves the browser its own menu', async (_, who, selector) => {
+    await render({ ...who, chatFolderId: 'chats' });
+    await linkedBody(1);
+    const event = await rightClick(bodyView()?.querySelector(selector), selector === 'p' ? 2 : undefined);
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(event.defaultPrevented).toBe(false);
+});
+
 // A chart's look is attributes of its node beside the spec's parts; its labels draw in the look's color. No size draws
 // it at CHART_DEFAULT_SIZE, 600 × 371.
 function writeChart() {

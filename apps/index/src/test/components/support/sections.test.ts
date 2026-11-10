@@ -14,7 +14,7 @@ describe('help center section colors', () => {
 
     test('a section tied to no app keeps the help center teal', () => {
         for (const id of ['getting-started', 'connect', 'account', 'self-hosting']) {
-            expect(getSection(id)?.color).toBe('var(--app-current-color)');
+            expect(getSection(id)?.color).toBe('var(--app-space-color)');
         }
     });
 });

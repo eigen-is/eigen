@@ -64,6 +64,7 @@ describe('a change that has landed', () => {
             'landed-overwrite.txt',
             'text/plain',
             Buffer.from('one'),
+            home.user,
         );
         const before = await settledTempFiles();
         const writeFileFromTemp = mount.writeFileFromTemp.bind(mount);
@@ -88,7 +89,14 @@ describe('a change that has landed', () => {
     // A shared path keeps a copy in the homes of the people it is shared with. Updating those copies
     // is the last step, so a failure there leaves the owner's tabs and the history up to date.
     async function sharedFile(name: string) {
-        const file = await home.drive.createFileFromData(mount.id, rootId, name, 'text/plain', Buffer.from('x'));
+        const file = await home.drive.createFileFromData(
+            mount.id,
+            rootId,
+            name,
+            'text/plain',
+            Buffer.from('x'),
+            home.user,
+        );
         await home.drive.updateACLDelta(mount.id, file.id, {
             add: [{ id: 'bob@test.eigen.is', read: true, write: false }],
         });

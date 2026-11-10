@@ -17,16 +17,6 @@ export function downloadBlob(blob: Blob, filename: string): void {
     URL.revokeObjectURL(objectUrl);
 }
 
-// RFC 6266: `filename*` carries the real, percent-encoded name and wins over the ASCII-only `filename`
-// our server sends beside it (contentDisposition writes both when the name has non-ASCII characters).
-export function filenameFromDisposition(header: string | null, fallback: string): string {
-    if (!header) return fallback;
-    const extended = header.match(/filename\*=[^']*'[^']*'([^;]+)/i);
-    if (extended) return decodeURIComponent(extended[1].trim());
-    const plain = header.match(/filename="([^"]*)"|filename=([^;]+)/i);
-    return plain?.[1] || plain?.[2]?.trim() || fallback;
-}
-
 // A download the browser cannot do from an `<a href>` alone — the response's own Content-Disposition
 // names the file, and a POST carries the selection. There is no mutation to carry a failure, so this
 // reports its own; the flag drives the caller's spinner. A saved download resolves to the response's
@@ -57,6 +47,16 @@ export function useFileDownload(): {
     }, []);
 
     return { download, isDownloading };
+}
+
+// RFC 6266: `filename*` carries the real, percent-encoded name and wins over the ASCII-only `filename`
+// our server sends beside it (contentDisposition writes both when the name has non-ASCII characters).
+function filenameFromDisposition(header: string | null, fallback: string): string {
+    if (!header) return fallback;
+    const extended = header.match(/filename\*=[^']*'[^']*'([^;]+)/i);
+    if (extended) return decodeURIComponent(extended[1].trim());
+    const plain = header.match(/filename="([^"]*)"|filename=([^;]+)/i);
+    return plain?.[1] || plain?.[2]?.trim() || fallback;
 }
 
 // `download = ''` leaves the name to Content-Disposition (production is same-origin, where the

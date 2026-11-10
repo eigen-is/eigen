@@ -14,16 +14,15 @@ import type {
 } from '@workspace/lib/types/calendar';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
-import { and, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
+import { and, eq, getTableColumns, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
 import { enforceHomeDataQuota } from '../config/enforcement';
 import { PATHS } from '../config/paths';
 import type { DeleteResourceResult, ManagedDatabase, PutResourceResult, ResourcePreconditions } from '../core';
-import { ApiError, computeResourceEtag, newSyncGen } from '../core';
+import { ApiError, newSyncGen } from '../core';
 import type { Home } from '../home';
 import { atHome } from '../home';
-import { parseResource } from '../ical';
 import type { EventPatch, Revision } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
 import type { User } from '../user';
@@ -32,24 +31,17 @@ import * as davStore from './dav-store';
 import { CALENDAR_DB_CONFIG } from './db-config';
 import * as events from './events';
 import * as invitations from './invitations';
+import { pendingInvitations } from './invite-propagation';
 import { dbCalendarToCalendarItem, toEvent } from './mappers';
 import * as occurrences from './occurrences';
-import type { CalendarCollection, PreparedResource, PurgedResource, ResourceCommit, Tx } from './resource-store';
-import {
-    EVENT_MAX_BYTES,
-    indexResource,
-    projectRows,
-    reindexEvents,
-    resourceBytes,
-    sanitizeCalendarId,
-    uidOfResource,
-} from './resource-store';
+import type { CalendarCollection, PreparedResource, PurgedResource, Tx } from './resource-store';
+import { EVENT_MAX_BYTES, resourceBytes, sanitizeCalendarId } from './resource-store';
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
 import * as shares from './shares';
 import { buildCalendarEvent } from './sse-events';
 import { exportEvents, importEvents } from './transfer';
-import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from './types';
+import type { CreateEventArgs, InvitationLink, InvitationRequest, OccurrenceRef } from './types';
 
 export class Calendar {
     private managedDb!: ManagedDatabase<typeof schema>;
@@ -136,34 +128,41 @@ export class Calendar {
         prepared: PreparedResource;
         creditBytes: number;
     }): Promise<void> {
-        const { bytes } = opts.prepared;
+        const { calendarId, uri, prepared } = opts;
+        const { id, bytes } = prepared;
         if (bytes.byteLength > EVENT_MAX_BYTES) throw new ApiError(413, 'Event is too large');
         if (this.meteredIngest) {
             await enforceHomeDataQuota(this.home.user.id, bytes.byteLength, opts.creditBytes);
         }
-        this.commitResource({
-            id: opts.prepared.id,
-            calendarId: opts.calendarId,
-            uri: opts.uri,
-            uid: opts.prepared.uid,
-            ics: bytes,
-            etag: opts.prepared.etag,
-            rows: opts.prepared.rows,
-            hasUnindexedRecurrence: opts.prepared.hasUnindexedRecurrence,
-        });
-    }
-
-    // One transaction, so the ctag bump, the blob, the event rows and the tombstone clear settle together.
-    private commitResource(commit: ResourceCommit): void {
-        const { rows, ...resource } = commit;
+        // One transaction, so the ctag bump, the blob, the event rows and the tombstone clear settle together.
         const delta = this.db.transaction((tx) => {
             const previous = tx
                 .select({ size: resourceBytes })
                 .from(schema.resources)
-                .where(eq(schema.resources.id, commit.id))
+                .where(eq(schema.resources.id, id))
                 .get();
-            indexResource(tx, { ...resource, resourceCtag: this.bumpCtag(tx, commit.calendarId) }, rows);
-            return commit.ics.byteLength - (previous?.size ?? 0);
+            const row = {
+                uri,
+                uid: prepared.uid,
+                ics: bytes,
+                etag: prepared.etag,
+                resourceCtag: this.bumpCtag(tx, calendarId),
+                hasUnindexedRecurrence: prepared.hasUnindexedRecurrence,
+            };
+            tx.insert(schema.resources)
+                .values({ id, calendarId, ...row })
+                .onConflictDoUpdate({ target: schema.resources.id, set: row })
+                .run();
+            // The projected rows are replaced wholesale, so an event a rewrite no longer carries leaves no row behind.
+            tx.delete(schema.events).where(eq(schema.events.resourceId, id)).run();
+            for (const event of prepared.rows) tx.insert(schema.events).values(event).run();
+            // A resource at this uri is alive, so one written over a deleted name drops its stale removal.
+            tx.delete(schema.resourceTombstones)
+                .where(
+                    and(eq(schema.resourceTombstones.calendarId, calendarId), eq(schema.resourceTombstones.uri, uri)),
+                )
+                .run();
+            return bytes.byteLength - (previous?.size ?? 0);
         });
         this.eventsBytes += delta;
     }
@@ -407,42 +406,6 @@ export class Calendar {
         return occurrences.getEventsInRange(this, from, to, calendarId);
     }
 
-    public async getEventsWithAttendee(email: string): Promise<CalendarEvent[]> {
-        return this.joinedEvents()
-            .where(isNull(schema.events.organizerEventId))
-            .all()
-            .map(toEvent)
-            .filter((e) => e.data?.attendees?.some((a) => a.email.toLowerCase() === email.toLowerCase()));
-    }
-
-    // The blob is the truth, so every projected column and every event row come back from it. Untouched, because
-    // no blob carries them: the resource and calendar ctags, the generation, the tombstones and the share grants.
-    public rebuildProjection(): void {
-        const rows = this.db
-            .select({
-                id: schema.resources.id,
-                calendarId: schema.resources.calendarId,
-                ics: schema.resources.ics,
-            })
-            .from(schema.resources)
-            .all();
-        this.db.transaction((tx) => {
-            for (const row of rows) {
-                const resource = parseResource(new TextDecoder().decode(row.ics));
-                const projection = projectRows(row.calendarId, row.id, resource);
-                tx.update(schema.resources)
-                    .set({
-                        uid: uidOfResource(resource),
-                        etag: computeResourceEtag(row.ics),
-                        hasUnindexedRecurrence: projection.hasUnindexedRecurrence,
-                    })
-                    .where(eq(schema.resources.id, row.id))
-                    .run();
-                reindexEvents(tx, row.id, projection.rows);
-            }
-        });
-    }
-
     // --- Announcements ---
 
     // An announcement reaches the owner's own tabs and every Home the calendar is shared with.
@@ -559,37 +522,16 @@ export class Calendar {
 
     // --- Invitations ---
 
-    public async receiveInvitation(payload: ReceiveInvitationPayload): Promise<string | null> {
-        return invitations.receiveInvitation(this, payload);
-    }
-
-    public async receiveInvitationUpdate(
-        orgEventId: string,
-        orgUserId: string,
-        payload: InvitationUpdatePayload,
-    ): Promise<void> {
-        return invitations.receiveInvitationUpdate(this, orgEventId, orgUserId, payload);
-    }
-
-    public async receiveImipRequest(parsed: ParsedEvent, sender: string): Promise<void> {
-        return invitations.receiveImipRequest(this, parsed, sender);
+    public async receiveRequest(requested: readonly ParsedEvent[], link: InvitationLink): Promise<void> {
+        return invitations.receiveRequest(this, requested, link);
     }
 
     public async cancelInvitationOccurrence(
         orgEventId: string,
         orgUserId: string,
-        recurrenceDate: string,
-        recurrenceInstant: Date | null | undefined,
-        revision: Revision,
+        occurrence: OccurrenceRef & Revision,
     ): Promise<void> {
-        return invitations.cancelInvitationOccurrence(
-            this,
-            orgEventId,
-            orgUserId,
-            recurrenceDate,
-            recurrenceInstant,
-            revision,
-        );
+        return invitations.cancelInvitationOccurrence(this, orgEventId, orgUserId, occurrence);
     }
 
     public async removeInvitation(orgEventId: string, orgUserId: string): Promise<void> {
@@ -604,19 +546,13 @@ export class Calendar {
         eventId: string,
         email: string,
         status: Attendee['status'],
-        recurrenceDate: string,
-        recurrenceInstant?: Date | null,
-        restoreCancelled = true,
+        occurrence: OccurrenceRef,
     ): Promise<void> {
-        return invitations.receiveRsvpForOccurrence(
-            this,
-            eventId,
-            email,
-            status,
-            recurrenceDate,
-            recurrenceInstant,
-            restoreCancelled,
-        );
+        return invitations.receiveRsvpForOccurrence(this, eventId, email, status, occurrence);
+    }
+
+    public async pendingInvitations(email: string): Promise<InvitationRequest[]> {
+        return pendingInvitations(this, email);
     }
 
     public async rsvp(

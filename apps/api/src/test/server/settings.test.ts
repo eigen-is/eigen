@@ -18,9 +18,9 @@ import { eq, inArray } from 'drizzle-orm';
 import { user } from '../../../auth-schema';
 import { getAuthDrizzleDb } from '../../lib/auth/auth';
 import { ensureAuthSchemaColumns } from '../../lib/auth/auth-schema-columns';
-import { getUserHomePath } from '../../lib/config/paths';
+import { getServerDataPath, getUserHomePath, SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
-import { getMaxUploadSize, getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
+import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { atHome } from '../../lib/home/get-home';
 import { homeSize } from '../../lib/home/home';
 import { pullHomeSize } from '../../lib/home/home-relay';
@@ -51,7 +51,7 @@ describe('Server Settings', () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/server');
         const data = await assertJson<ServerSettings>(res);
         expect(data.quotas).toBeDefined();
-        expect(data.quotas.mailAndContactsMaxMB).toBeGreaterThan(0);
+        expect(data.quotas.homeDataMaxMB).toBeGreaterThan(0);
         expect(data.quotas.defaultMountMaxSizeMB).toBeGreaterThan(0);
         expect(data.quotas.maxUploadSizeMB).toBeGreaterThan(0);
         expect(data.defaults).toBeDefined();
@@ -71,7 +71,7 @@ describe('Server Settings', () => {
         });
         const data = await assertJson<ServerSettings>(res);
         expect(data.quotas.maxUploadSizeMB).toBe(50);
-        expect(data.quotas.mailAndContactsMaxMB).toBeGreaterThan(0);
+        expect(data.quotas.homeDataMaxMB).toBeGreaterThan(0);
     });
 
     test('admin can update default storage type', async () => {
@@ -96,17 +96,6 @@ describe('Server Settings', () => {
         expect((await putQuotas({ maxUploadSizeMB: 1024 })).status).toBe(422);
         const data = await assertJson<ServerSettings>(await putQuotas({ maxUploadSizeMB: UPLOAD_CAP_MAX_MB }));
         expect(data.quotas.maxUploadSizeMB).toBe(UPLOAD_CAP_MAX_MB);
-    });
-
-    // A cap saved before the route bounded it still sits in settings.json above the request bound.
-    test('a stored upload cap above the bound reads as the bound', async () => {
-        const previous = getServerSettings().quotas.maxUploadSizeMB;
-        await updateServerSettings({ quotas: { maxUploadSizeMB: 4096 } });
-        try {
-            expect(getMaxUploadSize()).toBe(UPLOAD_CAP_MAX_MB * 1024 * 1024);
-        } finally {
-            await updateServerSettings({ quotas: { maxUploadSizeMB: previous } });
-        }
     });
 
     // 0 is the mount's "never purge"; the route must let the owner choose it.
@@ -313,26 +302,26 @@ describe('Team Mount Management', () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/settings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ memberOverrides: { mailAndContactsMaxMB: 200 } }),
+            body: JSON.stringify({ memberOverrides: { homeDataMaxMB: 200 } }),
         });
         expect(res.status).toBe(200);
 
         const getRes = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/settings`);
         const settings = await assertJson<TeamSettings>(getRes);
-        expect(settings.memberOverrides!.mailAndContactsMaxMB).toBe(200);
+        expect(settings.memberOverrides!.homeDataMaxMB).toBe(200);
     });
 
     test('clearing memberOverride sets to null', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/settings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ memberOverrides: { mailAndContactsMaxMB: null } }),
+            body: JSON.stringify({ memberOverrides: { homeDataMaxMB: null } }),
         });
         expect(res.status).toBe(200);
 
         const getRes = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/settings`);
         const settings = await assertJson<TeamSettings>(getRes);
-        expect(settings.memberOverrides?.mailAndContactsMaxMB).toBeUndefined();
+        expect(settings.memberOverrides?.homeDataMaxMB).toBeUndefined();
     });
 
     test('admin can add a second mount', async () => {
@@ -654,7 +643,7 @@ describe('Setup Flow', () => {
         const ctx = await getTestContext();
         const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/server');
         const data = await assertJson<ServerSettings>(res);
-        expect(data.quotas.mailAndContactsMaxMB).toBe(100);
+        expect(data.quotas.homeDataMaxMB).toBe(100);
         expect(data.quotas.defaultMountMaxSizeMB).toBe(500);
         expect(data.quotas.maxUploadSizeMB).toBe(35);
     });
@@ -674,6 +663,8 @@ describe('Email notification toggles', () => {
         expect(data.notifications.email.userOnAclAdd).toBe(false);
         expect(data.notifications.email.userOnCalendarInvite).toBe(true);
         expect(data.notifications.email.ownerOnAccessRequest).toBe(true);
+        expect(data.notifications.email.guestOnAssign).toBe(true);
+        expect(data.notifications.email.userOnAssign).toBe(false);
     });
 
     test('PUT round-trips notifications.email', async () => {
@@ -854,6 +845,32 @@ describe('lastLoginAt', () => {
         ensureAuthSchemaColumns(db); // idempotent
         const cols = db.query<{ name: string }, []>(`PRAGMA table_info(user)`).all();
         expect(cols.some((c) => c.name === 'last_login_at')).toBe(true);
+    });
+
+    test('a fresh setup and ensureAuthSchemaColumns on an older db both index the membership rows by user', () => {
+        const older = new Database(':memory:');
+        older.run(`CREATE TABLE "member" ("id" text PRIMARY KEY NOT NULL, "user_id" text NOT NULL)`);
+        older.run(`CREATE TABLE "team_member" ("id" text PRIMARY KEY NOT NULL, "user_id" text NOT NULL)`);
+        ensureAuthSchemaColumns(older);
+        ensureAuthSchemaColumns(older); // idempotent
+
+        // A connection of its own, because a statement left on the server's handle would lock out its writers.
+        const fresh = new Database(getServerDataPath(SERVER_DATABASES.users), { readonly: true });
+        for (const db of [older, fresh]) {
+            for (const table of ['member', 'team_member']) {
+                const plan = db
+                    .query<{ detail: string }, []>(`EXPLAIN QUERY PLAN SELECT * FROM "${table}" WHERE "user_id" = 'u1'`)
+                    .all();
+                expect(plan.map((step) => step.detail).join()).toContain(`USING INDEX ${table}_user_id_idx`);
+            }
+        }
+        fresh.close();
+    });
+
+    test('ensureAuthSchemaColumns skips the indexes of tables setup has not made yet', () => {
+        const empty = new Database(':memory:');
+        ensureAuthSchemaColumns(empty);
+        expect(empty.query(`SELECT name FROM sqlite_master`).all()).toEqual([]);
     });
 
     test('ensureAuthSchemaColumns adds the better-auth 1.7 columns and seeds member_count', () => {

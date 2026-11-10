@@ -532,7 +532,14 @@ describe('a file whose stream overwrite is in flight when the capture reaches it
                 }
                 return write(key, data);
             });
-            const overwrite = home.drive.writeFileContent(M, big.id, new Blob([new Uint8Array(size).fill(1)]).stream());
+            const overwrite = home.drive.writeFileContent(
+                M,
+                big.id,
+                new Blob([new Uint8Array(size).fill(1)]).stream(),
+                {
+                    user: home.user,
+                },
+            );
             await frozen.promise;
             // The capture's own request for the file's lock lets the overwrite finish.
             const withPathLock = Mount.prototype.withPathLock;

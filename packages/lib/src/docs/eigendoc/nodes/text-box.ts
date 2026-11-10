@@ -9,6 +9,7 @@ import { DOMSerializer, Fragment, DOMParser as PMDOMParser } from '@tiptap/pm/mo
 import type { Transaction } from '@tiptap/pm/state';
 import { readHexColor } from '../../../constants/colors';
 import { readNumberIn } from '../../../core/guards';
+import { isElement } from '../../../core/html';
 import { MAX_PAPER_PX, mmToPx } from '../page';
 import type { Border } from './border';
 import { borderValue, readBorder } from './border';
@@ -18,7 +19,7 @@ import { flattenNestedStories, insertStory, newStoryId, readStoryId, STORY_ID_AT
 
 const NAME = 'textBox';
 
-// data-type, as a web page's own span.text-box is its text.
+// By data-type, not class, as a web page's own span.text-box is plain text to us.
 export const TEXT_BOX_SELECTOR = 'span[data-type="text-box"]';
 
 // A box's paragraph in HTML: a span, as a <p> inside the body's <p> closes it in every HTML parser.
@@ -40,9 +41,8 @@ export const MAX_TEXT_BOX_PADDING = 96;
 // Word's rounded rectangle, drawn at one fixed radius.
 export const TEXT_BOX_RADIUS = 8;
 
-// The box as it draws: every attribute read through its reader, so a value a peer or a paste wrote that isn't the
-// stored form reads as unset or clamped. A null height is auto: the box is as tall as its text. A number is a minimum,
-// and the box grows past it.
+// Every attribute goes through its reader, so a peer's or a paste's malformed value reads as unset or clamped. A null
+// height is auto, as tall as the text; a number is a minimum the box grows past.
 export type TextBoxAttrs = FigureFrameAttrs & {
     id: string | null;
     width: number;
@@ -128,8 +128,6 @@ export function textBoxHTMLAttributes(attrs: TextBoxAttrs): Record<string, strin
         style: style.filter(Boolean).join('; '),
     };
 }
-
-const isElement = (node: globalThis.Node): node is Element => node.nodeType === 1;
 
 // The box span a parse rule matched: the frame's span holds it, or a paste kept the box span alone.
 function boxOf(element: Element): Element | undefined {

@@ -1,9 +1,11 @@
+// The dialog behind "About Eigen" in the account menu: the logo, a line on what Eigen is, the build's version
+// and links to the source, the licenses and the changelog. The top bar opens it for a signed-in user or a guest.
+
 import { getChangelogUrl, getLicensesUrl } from '@workspace/lib/api';
-import { formatInputDate } from '@workspace/lib/date';
-import { usePublicConfig } from '@workspace/lib/public';
 import { Github, Scale, ScrollText } from 'lucide-react';
 import { Button } from '../../button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../dialog';
+import { VersionLabel } from './version-label';
 
 type AboutDialogProps = {
     open: boolean;
@@ -11,8 +13,6 @@ type AboutDialogProps = {
 };
 
 export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
-    const { data: config } = usePublicConfig();
-
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent size="sm">
@@ -31,14 +31,7 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
                 <div className="space-y-4 text-sm">
                     <div className="text-center text-xs text-muted-foreground">
                         <a href={getChangelogUrl()} target="_blank" rel="noreferrer" className="hover:text-foreground">
-                            Version {config?.version ?? '—'}
-                            {config?.commit && (
-                                <>
-                                    {' · '}
-                                    {config.commit}
-                                    {config.builtAt && ` · ${formatInputDate(config.builtAt)}`}
-                                </>
-                            )}
+                            <VersionLabel />
                         </a>
                     </div>
 

@@ -11,6 +11,7 @@ import type {
     DriveImportSource,
     DrivePath,
     ImportResult,
+    RecentPath,
 } from '@workspace/lib/types/drive';
 import { EXPORT_SUMMARY_HEADER, isContainerType, isConvertTarget } from '@workspace/lib/types/drive';
 import type { ClientFileEventInput, FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
@@ -31,7 +32,7 @@ import {
 } from '../lib/core/http';
 import { getDrive, getSharedDrive, readImportSourceBytes } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
-import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
+import { aggregateMimeContents, aggregateRecents, aggregateWatches } from '../lib/drive/aggregate';
 import { folderIn, withFreeName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
@@ -611,7 +612,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 body.subject ?? null,
                 body.message,
                 body.sendCopyToSelf,
-                { name: user.name, email: user.email },
+                user,
             );
         },
         {
@@ -631,13 +632,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             requireNonGuest(user);
             // This skips SharedDrive on purpose, since the caller has no access yet. propagateAccessRequest only
             // notifies the owner through the home relay and never reads the path for the requester.
-            await propagateAccessRequest(
-                params.ownerId,
-                params.mountId,
-                params.pathId,
-                { name: user.name, email: user.email },
-                body.message ?? null,
-            );
+            await propagateAccessRequest(params.ownerId, params.mountId, params.pathId, user, body.message ?? null);
             return { success: true };
         },
         {
@@ -797,4 +792,13 @@ export const driveRouter = new Elysia({ name: 'drive' })
             return aggregateWatches(user);
         },
         { auth: true, query: t.Object({ all: t.Optional(t.String()) }) },
+    )
+    .get(
+        '/drive/:ownerId/recent',
+        async ({ params, user }): Promise<RecentPath[]> => {
+            requireSelf(params.ownerId, user.id);
+            requireNonGuest(user);
+            return aggregateRecents(user);
+        },
+        { auth: true },
     );

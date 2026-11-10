@@ -1,3 +1,7 @@
+// The shapes of the site's generated content: the frontmatter a help article or a blog post must have, and the
+// manifests, bodies, changelog and license lists the build writes. The build scripts and the pages share them,
+// so a field added here reaches both.
+
 import { z } from 'zod';
 import type { MediaGridData } from '../../src/components/parse-media-grids';
 
@@ -28,6 +32,9 @@ export const blogFrontmatterSchema = z.object({
     id: z.string().min(1),
     title: z.string().min(1),
     description: z.string().min(1),
+    // A path under public/ such as /data/blog/media/<folder>/<image>.webp, shown big on the post and the overview.
+    cover: z.string().startsWith('/').optional(),
+    draft: z.boolean().default(false),
 });
 export type BlogFrontmatter = z.infer<typeof blogFrontmatterSchema>;
 
@@ -43,6 +50,7 @@ export type ArticleMeta = {
     order: number;
     updated?: string;
     date?: string; // blog only — YYYY-MM-DD from the filename
+    cover?: string; // blog only — the post's cover image
     toc: TocEntry[];
     related: string[]; // resolved slugs
     crossSections: string[]; // support: extra sections this article is also listed in
@@ -52,6 +60,11 @@ export type ContentManifest = { articles: ArticleMeta[] };
 
 // The per-article generated body file.
 export type ArticleBody = { html: string; mediaGrids: MediaGridData[] };
+
+// The changelog body, plus one entry per release for the page's table of contents. The date is a short
+// day and month such as "3 Nov", and Unreleased has none.
+export type ChangelogVersion = { id: string; version: string; date?: string };
+export type ChangelogBody = ArticleBody & { versions: ChangelogVersion[] };
 
 // The generated open-source license list (one entry per package), written by build-licenses.ts.
 export type LicensePackage = { name: string; version: string; license: string; url: string };

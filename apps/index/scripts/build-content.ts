@@ -1,3 +1,7 @@
+// Turns the site's Markdown into what its pages read: for every help article and blog post a JSON body with the
+// rendered HTML, and for each of the two a manifest of metadata with the headings and the related articles. A bad
+// frontmatter field throws, so a broken article never ships. It runs before the Vite build and the type check.
+
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { parseMediaGrids } from '../src/components/parse-media-grids';
@@ -64,6 +68,7 @@ function buildBlog(): ArticleMeta[] {
     for (const rel of listMarkdown(dir)) {
         const dateMatch = rel.match(/^(\d{4}-\d{2}-\d{2})-/);
         const { data, body } = parseContentFile(readFileSync(join(dir, rel), 'utf-8'), blogFrontmatterSchema);
+        if (data.draft) continue;
         const { content, mediaGrids } = parseMediaGrids(body);
         const { html, toc } = renderMarkdown(content);
         writeArticle('blog', data.id, { html, mediaGrids });
@@ -75,6 +80,7 @@ function buildBlog(): ArticleMeta[] {
             tags: [],
             order: 100,
             date: dateMatch ? dateMatch[1] : '',
+            cover: data.cover,
             toc,
             related: [],
             crossSections: [],

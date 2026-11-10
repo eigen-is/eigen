@@ -16,7 +16,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
-import { apikey as apikeyScheme, user as userScheme } from '../../../auth-schema';
+import { apikey as apikeyScheme, session as sessionScheme, user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import * as archiveModule from '../../lib/backup/archive';
 import { extractArtifact, packFolder, readArtifactManifest } from '../../lib/backup/archive';
@@ -156,7 +156,9 @@ async function stampSchemaVersion(manifest: BackupManifest, folder: string, relP
 // One open tab's event stream. `announced` reads on to the next data epochs it announces: the one it opens with, then
 // one per keepalive, which the fake timers of the tests below bring forward.
 async function openEventStream(userId: string) {
-    const reader = createSSEStream(await getHome(userId)).getReader();
+    const session = getAuthDrizzleDb().select().from(sessionScheme).where(eq(sessionScheme.userId, userId)).get();
+    if (!session) throw new Error(`${userId} has no session`);
+    const reader = createSSEStream(await getHome(userId), session.id).getReader();
     return {
         announced: async (): Promise<Record<string, string>> => {
             for (;;) {

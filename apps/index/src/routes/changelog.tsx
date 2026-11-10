@@ -1,16 +1,24 @@
+// The changelog page: every release of Eigen, newest first, with a list of the versions in the left gutter. The
+// build turns CHANGELOG.md into the HTML and the version list, and the prerender has both, so a visitor without
+// scripts reads the whole page.
+
 import { createFileRoute } from '@tanstack/react-router';
-import { AppShell, Column, ColumnLayout } from '@workspace/ui';
+import { AppShell } from '@workspace/ui';
 import { ArticleContent } from '../components/article-content';
-import type { ArticleBody } from '../content/manifest';
+import { ArticleToc } from '../components/article-toc';
+import { ReadingLayout } from '../components/reading-layout';
+import { SitePage } from '../components/site-page';
+import type { ChangelogBody } from '../content/manifest';
 
 // Eager glob (not a static import) so a not-yet-generated file degrades to an empty body
 // in dev instead of breaking the module load. Regenerated on every prod build by
 // scripts/build-changelog.ts (prebuild).
-const generated = import.meta.glob<ArticleBody>('../content/.generated/changelog.json', {
+const generated = import.meta.glob<ChangelogBody>('../content/.generated/changelog.json', {
     eager: true,
     import: 'default',
 });
-const body: ArticleBody = Object.values(generated)[0] ?? { html: '', mediaGrids: [] };
+const body: ChangelogBody = Object.values(generated)[0] ?? { html: '', mediaGrids: [], versions: [] };
+const versions = body.versions.map(({ id, version, date }) => ({ id, text: version, detail: date }));
 
 export const Route = createFileRoute('/changelog')({
     component: ChangelogPage,
@@ -31,19 +39,13 @@ export const Route = createFileRoute('/changelog')({
 function ChangelogPage() {
     return (
         <AppShell appName="changelog" rootRoute={Route}>
-            <ColumnLayout>
-                <Column id="changelog" width="flex">
-                    <div className="h-full overflow-y-auto">
-                        <div className="mx-auto w-full max-w-[70ch] px-6 py-10">
-                            <h1 className="text-4xl font-medium mb-2">Changelog</h1>
-                            <p className="text-sm text-muted-foreground mb-6">
-                                User-visible changes to eigen, newest first.
-                            </p>
-                            <ArticleContent body={body} className="eigen-prose" />
-                        </div>
-                    </div>
-                </Column>
-            </ColumnLayout>
+            <SitePage>
+                <ReadingLayout aside={<ArticleToc toc={versions} label="Versions" />}>
+                    <h1 className="site-title">Changelog</h1>
+                    <p className="mt-2 text-muted-foreground">What changed in Eigen, newest first.</p>
+                    <ArticleContent body={body} className="changelog mt-10" />
+                </ReadingLayout>
+            </SitePage>
         </AppShell>
     );
 }

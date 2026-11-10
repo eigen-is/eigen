@@ -3,7 +3,7 @@
 // cell's card ids in sheets. A delete from the dialog's edit form or that menu asks first, through DeleteCommentDialog,
 // so every editor asks the same way. Everything else, the deleted state included, comes from the bundle.
 
-import { getDriveItemUrl } from '@workspace/lib/api';
+import { getDriveShareUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -75,7 +75,7 @@ export function CommentLifecycleDialogs({
                 deleted={openCardDeleted}
                 isEditing={openCardEditing}
                 onEditingChange={setOpenCardEditing}
-                copyLinkUrl={openCard?.chatName ? getDriveItemUrl(path, { chat: openCard.chatName }) : undefined}
+                copyLinkUrl={openCard?.chatName ? getDriveShareUrl(path, { chat: openCard.chatName }) : undefined}
                 members={members}
                 currentUserEmail={user?.email}
                 onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}

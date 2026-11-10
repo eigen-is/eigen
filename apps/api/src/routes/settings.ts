@@ -4,6 +4,12 @@
 
 import { BACKUP_KEEP_MAX } from '@workspace/lib/constants/backup';
 import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
+import {
+    LANDING_LINK_TITLE_MAX,
+    LANDING_LINK_URL_MAX,
+    LANDING_LINKS_MAX,
+    QUOTA_MIN_MB,
+} from '@workspace/lib/constants/settings';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type {
@@ -14,23 +20,24 @@ import type {
     ServerSettingsSaved,
 } from '@workspace/lib/types/settings';
 import { SERVER_STORAGE_TYPES } from '@workspace/lib/types/settings';
-import type { SQL } from 'drizzle-orm';
-import { eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
-import { member, session, team, teamMember, user } from '../../auth-schema';
 import { requireAdmin, requireOwner } from '../lib/auth/access';
-import { getAuthDrizzleDb } from '../lib/auth/auth';
 import { resolveBackupUpload, withoutBackupSecret } from '../lib/backup/upload';
-import { getOrgName, getServerConfig } from '../lib/config/server-config';
-import { DEFAULT_BACKUPS, getS3Config, getServerSettings, updateServerSettings } from '../lib/config/server-settings';
+import { getOrgName } from '../lib/config/server-config';
+import {
+    getS3Config,
+    getServerSettings,
+    getServerSettingsForAdmin,
+    updateServerSettings,
+} from '../lib/config/server-settings';
 import type { ControlStatus } from '../lib/config/server-status';
 import { getServerStatus } from '../lib/config/server-status';
 import { ApiError } from '../lib/core';
 import { sendMailOrThrow, storedSender } from '../lib/mailer/mailer';
 import { renameOrganization } from '../lib/org';
 import { checkS3Connection, hardenS3Bucket } from '../lib/storage/s3-storage';
-import { GUEST_ROLE, getOrgRole, getUserById } from '../lib/user';
-import { getAllUsersUsage } from '../lib/user/admin-usage';
+import { getOrgRole, getUserById } from '../lib/user';
+import { getAdminGuestRows, getAdminUserRows, getAllUsersUsage } from '../lib/user/admin-users';
 import { deleteUserCompletely } from '../lib/user/delete-user';
 import { resetUserPassword } from '../lib/user/reset-password';
 import { betterAuth } from './auth';
@@ -51,7 +58,6 @@ const backupKeepSchema = t.Integer({
     error: `Backups to keep must be a whole number from 1 to ${BACKUP_KEEP_MAX}`,
 });
 
-// The owner's backup settings in a save of the server settings: the schedule and the bucket.
 const backupSettingsBody = t.Object({
     schedule: t.Optional(
         t.Object({
@@ -76,76 +82,6 @@ const backupSettingsBody = t.Object({
     ),
 });
 
-// Who appears on the admin Users page: everyone except guests, orphans included.
-// `ne(user.role, GUEST_ROLE)` alone excludes NULL-role orphans in SQLite, so OR in isNull.
-const nonGuestUsers = () => or(isNull(user.role), ne(user.role, GUEST_ROLE));
-
-// One row shape for the Users and Guests pages. A guest has no member row and no team, so it comes back with
-// no role and no teams.
-function adminUserRows(where: SQL | undefined): AdminUserRow[] {
-    const db = getAuthDrizzleDb();
-    const orgId = getServerConfig()?.orgId;
-    // Project explicitly so the wire payload matches AdminUserRow exactly — `select()`
-    // would ship banReason / twoFactorEnabled / banned etc. to the admin UI.
-    const users = db
-        .select({
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            createdAt: user.createdAt,
-            lastLoginAt: user.lastLoginAt,
-        })
-        .from(user)
-        .where(where)
-        .all();
-    const members = orgId
-        ? db
-              .select({ id: member.id, userId: member.userId, role: member.role })
-              .from(member)
-              .where(eq(member.organizationId, orgId))
-              .all()
-        : [];
-    // Scope to the configured org like the member query above — teams belong to an org, so
-    // an unscoped join would leak other orgs' team memberships into this org's admin view.
-    const teamRows = orgId
-        ? db
-              .select({ userId: teamMember.userId, id: team.id, name: team.name })
-              .from(teamMember)
-              .innerJoin(team, eq(teamMember.teamId, team.id))
-              .where(eq(team.organizationId, orgId))
-              .all()
-        : [];
-    // MAX() over a timestamp-mode column comes back as raw epoch seconds
-    const lastSessions = db
-        .select({ userId: session.userId, last: sql<number>`max(${session.updatedAt})` })
-        .from(session)
-        .groupBy(session.userId)
-        .all();
-    const memberByUser = new Map(members.map((m) => [m.userId, m]));
-    const sessionByUser = new Map(lastSessions.map((s) => [s.userId, new Date(s.last * 1000)]));
-    const teamsByUser = new Map<string, AdminUserRow['teams']>();
-    for (const { userId, id, name } of teamRows) {
-        const teams = teamsByUser.get(userId);
-        if (teams) teams.push({ id, name });
-        else teamsByUser.set(userId, [{ id, name }]);
-    }
-    return users.map((u) => {
-        const m = memberByUser.get(u.id);
-        const seen = [u.lastLoginAt, sessionByUser.get(u.id)].filter((d): d is Date => d != null);
-        const lastActiveAt = seen.length ? new Date(Math.max(...seen.map(Number))) : null;
-        return {
-            id: u.id,
-            name: u.name,
-            email: u.email,
-            memberId: m?.id ?? null,
-            role: m?.role ?? null,
-            createdAt: u.createdAt,
-            lastActiveAt,
-            teams: teamsByUser.get(u.id) ?? [],
-        };
-    });
-}
-
 export const settingsRouter = new Elysia({ name: 'settings' })
     .use(betterAuth)
 
@@ -153,15 +89,8 @@ export const settingsRouter = new Elysia({ name: 'settings' })
         '/settings/server',
         async ({ user }): Promise<ServerSettings> => {
             await requireAdmin(user.id);
-            const settings = withoutBackupSecret(getServerSettings());
-            // The mount secret is the owner's, as on /settings/s3config; an admin's team mount form takes the rest.
-            // Backups are the owner's alone, like the archives they make.
-            if ((await getOrgRole(user.id)) === 'owner') return settings;
-            const { s3Config } = settings.defaults.mount;
-            const mount = s3Config
-                ? { ...settings.defaults.mount, s3Config: { ...s3Config, secretAccessKey: '' } }
-                : settings.defaults.mount;
-            return { ...settings, defaults: { mount }, backups: DEFAULT_BACKUPS };
+            if ((await getOrgRole(user.id)) === 'owner') return withoutBackupSecret(getServerSettings());
+            return getServerSettingsForAdmin();
         },
         { auth: true },
     )
@@ -190,8 +119,8 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             body: t.Object({
                 quotas: t.Optional(
                     t.Object({
-                        mailAndContactsMaxMB: t.Optional(t.Number({ minimum: 10 })),
-                        defaultMountMaxSizeMB: t.Optional(t.Number({ minimum: 10 })),
+                        homeDataMaxMB: t.Optional(t.Number({ minimum: QUOTA_MIN_MB })),
+                        defaultMountMaxSizeMB: t.Optional(t.Number({ minimum: QUOTA_MIN_MB })),
                         maxUploadSizeMB: t.Optional(t.Number({ minimum: 1, maximum: UPLOAD_CAP_MAX_MB })),
                         trashRetentionDays: t.Optional(t.Number({ minimum: 0 })),
                     }),
@@ -239,12 +168,17 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                         links: t.Optional(
                             t.Array(
                                 t.Object({
-                                    title: t.String({ minLength: 1, maxLength: 80 }),
-                                    url: t.String({ minLength: 1, maxLength: 2048, pattern: '^https?://' }),
+                                    title: t.String({ minLength: 1, maxLength: LANDING_LINK_TITLE_MAX }),
+                                    url: t.String({
+                                        minLength: 1,
+                                        maxLength: LANDING_LINK_URL_MAX,
+                                        pattern: '^https?://',
+                                    }),
                                 }),
-                                { maxItems: 20 },
+                                { maxItems: LANDING_LINKS_MAX },
                             ),
                         ),
+                        showInstall: t.Optional(t.Boolean()),
                     }),
                 ),
                 notifications: t.Optional(
@@ -255,6 +189,8 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                                 userOnAclAdd: t.Optional(t.Boolean()),
                                 userOnCalendarInvite: t.Optional(t.Boolean()),
                                 ownerOnAccessRequest: t.Optional(t.Boolean()),
+                                guestOnAssign: t.Optional(t.Boolean()),
+                                userOnAssign: t.Optional(t.Boolean()),
                             }),
                         ),
                     }),
@@ -339,36 +275,34 @@ export const settingsRouter = new Elysia({ name: 'settings' })
 
     .get(
         '/settings/users',
-        async ({ user: authUser }): Promise<AdminUserRow[]> => {
-            await requireAdmin(authUser.id);
-            return adminUserRows(nonGuestUsers());
+        async ({ user }): Promise<AdminUserRow[]> => {
+            await requireAdmin(user.id);
+            return getAdminUserRows();
         },
         { auth: true },
     )
 
     .get(
         '/settings/users/guests',
-        async ({ user: authUser }): Promise<AdminUserRow[]> => {
-            await requireAdmin(authUser.id);
-            return adminUserRows(eq(user.role, GUEST_ROLE));
+        async ({ user }): Promise<AdminUserRow[]> => {
+            await requireAdmin(user.id);
+            return getAdminGuestRows();
         },
         { auth: true },
     )
 
     .get(
         '/settings/users/usage',
-        async ({ user: authUser }): Promise<Record<string, HomeSizeResponse>> => {
-            await requireAdmin(authUser.id);
-            const db = getAuthDrizzleDb();
-            const ids = db.select({ id: user.id }).from(user).where(nonGuestUsers()).all();
-            return getAllUsersUsage(ids.map((r) => r.id));
+        async ({ user }): Promise<Record<string, HomeSizeResponse>> => {
+            await requireAdmin(user.id);
+            return getAllUsersUsage();
         },
         { auth: true },
     )
 
     .delete(
         '/settings/user/:userId',
-        async ({ params, user, request }) => {
+        async ({ params, user, request }): Promise<{ success: boolean }> => {
             await requireAdmin(user.id);
             if (params.userId === user.id) {
                 throw new ApiError(400, 'Cannot delete your own account');

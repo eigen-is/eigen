@@ -1,16 +1,24 @@
 import { beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, ImipMethod } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment } from '@workspace/lib/types/mail';
-import { composeCancelEmail, composeInviteEmail, composeRsvpReply, processInboundImip } from '../../lib/calendar/imip';
+import { SSEventType } from '@workspace/lib/types/sse';
+import {
+    composeCancelEmail,
+    composeInviteEmail,
+    composeInviteRequest,
+    composeRsvpReply,
+    processInboundImip,
+} from '../../lib/calendar/imip';
 import { getMailDomain } from '../../lib/config/server-config';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
 import { buildResource, parseIcs, serializeEventForImip, serializeResource } from '../../lib/ical';
 import { verifyImipSender } from '../../lib/mail/imip-auth';
-import { storedEvents } from '../calendar-test-helpers';
+import { receiveMailed, storedEvents } from '../calendar-test-helpers';
 import { basicAuth } from '../dav-test-helpers';
 import { restoreEnvAfterEach } from '../env-test-helpers';
-import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+import { vcal } from '../ics-test-helpers';
+import { app, assertJson, authedRequest, collectSSE, findOrFail, getTestContext } from '../setup';
 
 // Inbound iMIP acts only on a message our verifying MTA authenticated. These helpers stand in for
 // the Authentication-Results header OpenDKIM would prepend: a DKIM pass aligned with the sender's
@@ -201,6 +209,20 @@ describe('iMIP Parsing', () => {
     });
 });
 
+const invite = (
+    event: CalendarEvent,
+    organizer: Parameters<typeof composeInviteEmail>[1],
+    series?: CalendarEvent,
+    updated = false,
+) =>
+    composeInviteEmail(
+        event,
+        organizer,
+        [{ email: 'bob@external.com', name: 'Bob', status: 'pending', role: 'required' }],
+        composeInviteRequest(event, organizer, series),
+        updated,
+    );
+
 describe('iMIP Outbound Email Composition', () => {
     const organizer = { userId: 'alice-id', email: 'alice@eigen.example', name: 'Alice' };
     const attendee = { email: 'bob@external.com', name: 'Bob', status: 'pending' as const, role: 'required' as const };
@@ -212,7 +234,7 @@ describe('iMIP Outbound Email Composition', () => {
     });
 
     test('composeInviteEmail creates proper OutboundMail with icalEvent', () => {
-        const mail = composeInviteEmail(MOCK_EVENT, organizer, [attendee]);
+        const mail = invite(MOCK_EVENT, organizer);
         expect(mail.from?.address).toBe('alice@eigen.example');
         expect(mail.from?.name).toBe('Alice');
         expect(mail.to[0].address).toBe('bob@external.com');
@@ -226,20 +248,20 @@ describe('iMIP Outbound Email Composition', () => {
     });
 
     test('invitation mail labels a zone-less event UTC instead of guessing the server zone', () => {
-        const mail = composeInviteEmail(MOCK_EVENT, organizer, [attendee]);
+        const mail = invite(MOCK_EVENT, organizer);
         expect(mail.text).toContain('10:00 AM – 11:00 AM (UTC)');
         expect(mail.html).toContain('(UTC)');
     });
 
     test('invitation mail renders a stored zone as its own wall clock, unlabelled', () => {
-        const mail = composeInviteEmail({ ...MOCK_EVENT, timezone: 'Europe/Amsterdam' }, organizer, [attendee]);
+        const mail = invite({ ...MOCK_EVENT, timezone: 'Europe/Amsterdam' }, organizer);
         expect(mail.text).toContain('12:00 PM – 1:00 PM');
         expect(mail.text).not.toContain('(UTC)');
     });
 
     test('an updated invitation uses the updated subject and method', () => {
         const updatedEvent = { ...MOCK_EVENT, sequence: 1 };
-        const mail = composeInviteEmail(updatedEvent, organizer, [attendee], undefined, [], true);
+        const mail = invite(updatedEvent, organizer, undefined, true);
         expect(mail.subject).toBe('Updated invitation: Team Standup');
         expect(mail.html).toContain('This event has been updated');
         expect(mail.icalEvent?.method).toBe('REQUEST');
@@ -307,25 +329,27 @@ describe('iMIP Outbound Email Composition', () => {
     const unfold = (mail: { icalEvent?: { content: string } }) => mail.icalEvent!.content.replace(/\r\n[ \t]/g, '');
 
     test('an occurrence invite names the original instant, not the moved start', () => {
-        const ics = unfold(composeInviteEmail(MOVED_OCCURRENCE, organizer, [attendee], RECURRING_EVENT));
+        const ics = unfold(invite(MOVED_OCCURRENCE, organizer, RECURRING_EVENT));
         expect(ics).toContain(ORIGINAL_SLOT);
         expect(ics).toContain('DTSTART;TZID=America/New_York:20260408T110000');
         expect(ics).not.toContain('RRULE:FREQ=WEEKLY');
     });
 
-    // A guest invited to ONE occurrence holds a standalone copy that keeps its RECURRENCE-ID, so the reply
-    // it sends names that occurrence and the organizer answers it on their override, not on the series.
+    // A guest invited to ONE occurrence holds a standalone copy that keeps the organizer's RECURRENCE-ID, so the
+    // reply names that original slot and the organizer answers it on their override, not on the series.
     test('a reply from a standalone single-occurrence copy names that occurrence', () => {
-        const standalone: CalendarEvent = { ...MOVED_OCCURRENCE, parentEventId: null };
+        const standalone = {
+            ...MOVED_OCCURRENCE,
+            parentEventId: null,
+            recurrenceId: { instant: new Date('2026-04-08T14:00:00Z'), timezone: 'America/New_York' },
+        };
         const ics = unfold(composeRsvpReply(standalone, 'bob@external.com', 'Bob', 'accepted'));
-        expect(ics).toContain('RECURRENCE-ID;TZID=America/New_York:20260408T');
+        expect(ics).toContain(ORIGINAL_SLOT);
         expect(ics).toContain('ACCEPTED');
     });
 
     test('an occurrence update and an occurrence cancel carry the same RECURRENCE-ID', () => {
-        expect(
-            unfold(composeInviteEmail(MOVED_OCCURRENCE, organizer, [attendee], RECURRING_EVENT, [], true)),
-        ).toContain(ORIGINAL_SLOT);
+        expect(unfold(invite(MOVED_OCCURRENCE, organizer, RECURRING_EVENT, true))).toContain(ORIGINAL_SLOT);
         expect(unfold(composeCancelEmail(MOVED_OCCURRENCE, organizer, [attendee], RECURRING_EVENT))).toContain(
             ORIGINAL_SLOT,
         );
@@ -354,8 +378,8 @@ describe("iMIP mail on a user's behalf", () => {
     const unfold = (mail: { icalEvent?: { content: string } }) => mail.icalEvent!.content.replace(/\r\n[ \t]/g, '');
     type Organizer = typeof external;
     const composers: [string, (organizer: Organizer) => ReturnType<typeof composeInviteEmail>][] = [
-        ['invite', (organizer) => composeInviteEmail(MOCK_EVENT, organizer, [attendee])],
-        ['update', (organizer) => composeInviteEmail(MOCK_EVENT, organizer, [attendee], undefined, [], true)],
+        ['invite', (organizer) => invite(MOCK_EVENT, organizer)],
+        ['update', (organizer) => invite(MOCK_EVENT, organizer, undefined, true)],
         ['cancel', (organizer) => composeCancelEmail(MOCK_EVENT, organizer, [attendee])],
         [
             'RSVP reply',
@@ -369,7 +393,7 @@ describe("iMIP mail on a user's behalf", () => {
     });
 
     test('an invite from an external organizer keeps her own address as ORGANIZER', () => {
-        const ics = unfold(composeInviteEmail(MOCK_EVENT, external, [attendee]));
+        const ics = unfold(invite(MOCK_EVENT, external));
         expect(ics).toMatch(/^ORGANIZER[^\r\n]*:mailto:alice@gmail\.com\r?$/m);
     });
 
@@ -441,6 +465,48 @@ describe('iMIP Inbound Processing (integration)', () => {
         const externalEvent = findOrFail(events, (e) => e.title === 'External Lunch');
         expect(externalEvent.uid).toBe('external-invite-uid-1@external.com');
         expect(externalEvent.data?.organizer?.email).toBe('organizer@external.com');
+    });
+
+    test('a REQUEST whose rule names no frequency lands as one event', async () => {
+        const ics = vcal([
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:no-frequency@external.com',
+            'SUMMARY:Rule without a frequency',
+            'DTSTART:20260422T120000Z',
+            'DTEND:20260422T130000Z',
+            'RRULE:COUNT=3;BYDAY=WE',
+            'ORGANIZER:mailto:organizer@external.com',
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.alice.user.email}`,
+            'END:VEVENT',
+        ]);
+        const email = [
+            'From: organizer@external.com',
+            arHeaderLine('organizer@external.com'),
+            `To: ${ctx.alice.user.email}`,
+            'Subject: Invitation',
+            'MIME-Version: 1.0',
+            'Content-Type: text/calendar; method=REQUEST; charset=utf-8',
+            '',
+            ics,
+        ].join('\r\n');
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/deliver/${ctx.alice.user.email}`, {
+            method: 'POST',
+            body: new TextEncoder().encode(email).buffer,
+        });
+        expect(res.status).toBe(200);
+
+        const from = Math.floor(new Date('2026-04-01').getTime() / 1000);
+        const to = Math.floor(new Date('2026-05-31').getTime() / 1000);
+        const eventsRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
+        );
+        const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
+        expect(events.filter((e) => e.uid === 'no-frequency@external.com').map((e) => e.occurrenceDate)).toEqual([
+            '2026-04-22',
+        ]);
     });
 
     test('delivering email with METHOD:CANCEL removes calendar event', async () => {
@@ -633,11 +699,15 @@ describe('iMIP METHOD:REPLY inbound (integration)', () => {
             '--reply-boundary--',
         ].join('\r\n');
 
+        const sse = await collectSSE(ctx.alice.user.id);
         const deliverRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/deliver/${ctx.alice.user.email}`, {
             method: 'POST',
             body: new TextEncoder().encode(replyEmail).buffer,
         });
         expect(deliverRes.status).toBe(200);
+        sse.stop();
+        // Alice's open tabs hear the answer, as they do one relayed from a guest on this server.
+        expect(sse.events.some((e) => e.type === SSEventType.CALENDAR_EVENT_UPDATED)).toBe(true);
 
         // Step 3: Check Alice's event now shows attendee as accepted
         const from = Math.floor(Date.now() / 1000);
@@ -913,35 +983,35 @@ describe('Calendar timezone crash (audit P1-7b, integration)', () => {
 });
 
 // A row poisoned BEFORE the ingestion fix (bad TZID stored verbatim) must not 500 reads forever.
-// receiveInvitation persists the timezone as-is, standing in for such a row; isolated on `charlie`.
+// A REQUEST whose parsed zone is that TZID stands in for such a row; isolated on `charlie`.
 describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let calendarId: string;
 
-    const organizerId = 'external_outlook@external.com';
-
-    async function receivePoisonedInvite(uid: string): Promise<string | null> {
+    async function receivePoisonedInvite(uid: string): Promise<string> {
         const home = await getHome(ctx.charlie.user.id);
-        return home.calendar.receiveInvitation({
-            uid,
-            title: `Poisoned ${uid}`,
-            description: null,
-            location: null,
-            startTime: new Date('2026-09-10T09:00:00Z'),
-            endTime: new Date('2026-09-10T10:00:00Z'),
-            allDay: false,
-            rrule: 'FREQ=WEEKLY;COUNT=3',
-            timezone: 'Customer Standard Time',
-            status: 'confirmed',
-            sequence: 0,
-            data: {
-                organizer: { userId: organizerId, email: 'outlook@external.com', name: 'Outlook' },
-                organizerEventId: uid,
+        await receiveMailed(
+            home.calendar,
+            {
+                uid,
+                title: `Poisoned ${uid}`,
+                description: null,
+                location: null,
+                startTime: new Date('2026-09-10T09:00:00Z'),
+                endTime: new Date('2026-09-10T10:00:00Z'),
+                allDay: false,
+                rrule: 'FREQ=WEEKLY;COUNT=3',
+                timezone: 'Customer Standard Time',
+                status: 'confirmed',
+                sequence: 0,
+                dtstamp: null,
+                recurrenceDate: null,
+                recurrenceId: null,
+                data: { organizer: { userId: '', email: 'outlook@external.com', name: 'Outlook' } },
             },
-            createByUserId: organizerId,
-            organizerEventId: uid,
-            organizerUserId: organizerId,
-        });
+            'outlook@external.com',
+        );
+        return findOrFail(await home.calendar.getEventsByUid(uid), (e) => !e.parentEventId).id;
     }
 
     beforeAll(async () => {
@@ -1023,6 +1093,160 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
         ctx = await getTestContext();
         const res = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/calendars`);
         bobCalendarId = findOrFail(await assertJson<CalendarItem[]>(res), (c) => c.isDefault).id;
+    });
+
+    const calendarMail = (ics: string, sender: string) => ({
+        attachments: [
+            {
+                contentType: 'text/calendar; method=REQUEST',
+                content: new TextEncoder().encode(ics),
+                index: 0,
+                size: ics.length,
+            },
+        ],
+        from: { text: sender, value: [{ name: '', address: sender }] },
+    });
+
+    test('an unverified sender returns before the calendar part is parsed', async () => {
+        const home = await getHome(ctx.bob.user.id);
+        const verdict = { verified: false, reason: 'no DKIM pass' };
+
+        await processInboundImip(home, calendarMail('NOT AN ICS FILE', 'stranger@evil.com'), verdict);
+    });
+
+    test('a REPLY listing its sender more than once answers once, with the first listing', async () => {
+        const home = await getHome(ctx.bob.user.id);
+        const event = await home.calendar.createEvent(bobCalendarId, {
+            title: 'Listed Twice',
+            startTime: new Date('2026-05-04T10:00:00Z'),
+            endTime: new Date('2026-05-04T11:00:00Z'),
+            allDay: false,
+            data: { attendees: [{ email: 'twice@external.com', status: 'pending', role: 'required' }] },
+        });
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REPLY',
+            'BEGIN:VEVENT',
+            `UID:${event.uid}`,
+            'DTSTART:20260504T100000Z',
+            'ATTENDEE;PARTSTAT=ACCEPTED:mailto:twice@external.com',
+            'ATTENDEE;PARTSTAT=DECLINED:mailto:twice@external.com',
+            'ATTENDEE;PARTSTAT=TENTATIVE:mailto:TWICE@external.com',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+        const ctag = home.calendar.calendarRow(bobCalendarId)?.ctag ?? 0;
+
+        await processInboundImip(home, calendarMail(ics, 'twice@external.com'), {
+            verified: true,
+            reason: 'dkim pass',
+        });
+
+        const [stored] = await home.calendar.getEventsByUid(event.uid);
+        expect(stored.data?.attendees?.map((attendee) => attendee.status)).toEqual(['accepted']);
+        expect(home.calendar.calendarRow(bobCalendarId)?.ctag).toBe(ctag + 1);
+    });
+
+    test('a REPLY answers its first five dates of a series', async () => {
+        const home = await getHome(ctx.bob.user.id);
+        const event = await home.calendar.createEvent(bobCalendarId, {
+            title: 'Daily Answers',
+            startTime: new Date('2026-05-04T10:00:00Z'),
+            endTime: new Date('2026-05-04T11:00:00Z'),
+            allDay: false,
+            rrule: 'FREQ=DAILY',
+            data: { attendees: [{ email: 'dates@external.com', status: 'pending', role: 'required' }] },
+        });
+        const days = Array.from({ length: 7 }, (_, i) => `2026051${i}`);
+        const answers = days.flatMap((day) => [
+            'BEGIN:VEVENT',
+            `UID:${event.uid}`,
+            `RECURRENCE-ID:${day}T100000Z`,
+            `DTSTART:${day}T100000Z`,
+            'ATTENDEE;PARTSTAT=ACCEPTED:mailto:dates@external.com',
+            'END:VEVENT',
+        ]);
+        const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'METHOD:REPLY', ...answers, 'END:VCALENDAR'].join('\r\n');
+
+        await processInboundImip(home, calendarMail(ics, 'dates@external.com'), {
+            verified: true,
+            reason: 'dkim pass',
+        });
+
+        const answered = (await home.calendar.getEventsByUid(event.uid)).flatMap((row) => row.recurrenceDate ?? []);
+        expect(answered.sort()).toEqual(['2026-05-10', '2026-05-11', '2026-05-12', '2026-05-13', '2026-05-14']);
+    });
+
+    test('a verified sender with a part past the mail size limit writes nothing', async () => {
+        const home = await getHome(ctx.bob.user.id);
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:imip-large-part@external.com',
+            'SUMMARY:Large Part',
+            'DTSTART:20260420T120000Z',
+            'ORGANIZER:mailto:organizer@external.com',
+            `X-PAD:${'p'.repeat(1_048_576)}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        await processInboundImip(home, calendarMail(ics, 'organizer@external.com'), {
+            verified: true,
+            reason: 'dkim pass',
+        });
+
+        expect(await home.calendar.getEventsByUid('imip-large-part@external.com')).toEqual([]);
+    });
+
+    // A mail is decided per UID, not per VEVENT, so neither the order of its events nor a second UID beside them matters.
+    test('a mail listing an override before its master keeps the override, and a second UID files too', async () => {
+        const home = await getHome(ctx.bob.user.id);
+        const vevent = (uid: string, lines: string[]) => [
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            'SEQUENCE:0',
+            'DTSTAMP:20260401T100000Z',
+            'ORGANIZER:mailto:organizer@external.com',
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.bob.user.email}`,
+            ...lines,
+            'END:VEVENT',
+        ];
+        const ics = vcal([
+            'METHOD:REQUEST',
+            ...vevent('override-first@external.com', [
+                'SUMMARY:Moved',
+                'RECURRENCE-ID:20260502T090000Z',
+                'DTSTART:20260502T110000Z',
+                'DTEND:20260502T120000Z',
+            ]),
+            ...vevent('override-first@external.com', [
+                'SUMMARY:Series',
+                'DTSTART:20260501T090000Z',
+                'DTEND:20260501T100000Z',
+                'RRULE:FREQ=DAILY;COUNT=5',
+            ]),
+            ...vevent('beside-it@external.com', [
+                'SUMMARY:Lunch',
+                'DTSTART:20260503T120000Z',
+                'DTEND:20260503T130000Z',
+            ]),
+        ]);
+
+        await processInboundImip(home, calendarMail(ics, 'organizer@external.com'), {
+            verified: true,
+            reason: 'dkim pass',
+        });
+
+        const rows = await home.calendar.getEventsByUid('override-first@external.com');
+        const master = findOrFail(rows, (e) => !e.parentEventId);
+        expect(master.title).toBe('Series');
+        expect(rows.find((e) => e.parentEventId === master.id)?.title).toBe('Moved');
+        expect(rows).toHaveLength(2);
+        expect((await home.calendar.getEventsByUid('beside-it@external.com')).map((e) => e.title)).toEqual(['Lunch']);
     });
 
     test('forged REPLY (envelope From != attendee) does not change the attendee status', async () => {
@@ -1296,11 +1520,8 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
     });
 });
 
-// Audit #A / #B: an external organizer editing or canceling ONE occurrence of a recurring meeting
-// sends a lone VEVENT with a RECURRENCE-ID. Pre-fix, REQUEST fed it to receiveInvitationUpdate (which
-// nulled the master's rrule and moved its start) and CANCEL fed it to removeInvitation (which dropped
-// the whole event) — either way the attendee lost the entire series the first time the organizer
-// touched a single instance.
+// An external organizer editing or canceling ONE occurrence of a recurring meeting sends a lone VEVENT with a
+// RECURRENCE-ID. It reaches that occurrence of the attendee's series alone, never the whole series.
 describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     const ORG = 'external.series.organizer@example.com';
@@ -2112,26 +2333,27 @@ describe('iMIP inbound self-addressed messages', () => {
             data: { organizer: { userId: ctx.charlie.user.id, email: ctx.charlie.user.email, name: 'Charlie' } },
         });
         // The link a CANCEL binds to, as an earlier self-addressed REQUEST would have left it.
-        await home.calendar.receiveInvitation({
-            uid: `${uid}-linked`,
-            title: 'Still mine',
-            description: null,
-            location: null,
-            startTime: new Date('2026-09-02T09:00:00Z'),
-            endTime: new Date('2026-09-02T10:00:00Z'),
-            allDay: false,
-            rrule: null,
-            timezone: null,
-            status: 'confirmed',
-            sequence: 0,
-            data: {
-                organizer: { userId: '', email: ctx.charlie.user.email, name: 'Charlie' },
-                organizerEventId: `${uid}-linked`,
+        await receiveMailed(
+            home.calendar,
+            {
+                uid: `${uid}-linked`,
+                title: 'Still mine',
+                description: null,
+                location: null,
+                startTime: new Date('2026-09-02T09:00:00Z'),
+                endTime: new Date('2026-09-02T10:00:00Z'),
+                allDay: false,
+                rrule: null,
+                timezone: null,
+                status: 'confirmed',
+                sequence: 0,
+                dtstamp: null,
+                recurrenceDate: null,
+                recurrenceId: null,
+                data: { organizer: { userId: '', email: ctx.charlie.user.email, name: 'Charlie' } },
             },
-            createByUserId: ctx.charlie.user.id,
-            organizerEventId: `${uid}-linked`,
-            organizerUserId: `external_${ctx.charlie.user.email}`,
-        });
+            ctx.charlie.user.email,
+        );
 
         const ics = [
             'BEGIN:VCALENDAR',

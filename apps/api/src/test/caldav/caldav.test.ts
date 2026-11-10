@@ -5,7 +5,7 @@ import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import { ApiError } from '../../lib/core';
 import { REPORT_DATA_BUDGET_BYTES } from '../../lib/dav/report-row';
 import { getHome } from '../../lib/home/get-home';
-import { storedEvents } from '../calendar-test-helpers';
+import { receiveMailed, storedEvents } from '../calendar-test-helpers';
 import { davRequest } from '../dav-test-helpers';
 import { app, createTestUser, findOrFail, getTestContext } from '../setup';
 
@@ -1765,26 +1765,27 @@ describe('CalDAV', () => {
         test("a copy of somebody else's event keeps its fields and takes only the body's alarms", async () => {
             const uid = 'caldav-linked-copy@external.com';
             const home = await getHome(userId);
-            await home.calendar.receiveInvitation({
-                uid,
-                title: 'Quarterly review',
-                description: null,
-                location: null,
-                startTime: new Date('2026-11-12T09:00:00Z'),
-                endTime: new Date('2026-11-12T10:00:00Z'),
-                allDay: false,
-                rrule: null,
-                timezone: null,
-                status: 'confirmed',
-                sequence: 0,
-                data: {
-                    organizer: { userId: 'external_boss@example.com', email: 'boss@example.com', name: 'Boss' },
-                    organizerEventId: uid,
+            await receiveMailed(
+                home.calendar,
+                {
+                    uid,
+                    title: 'Quarterly review',
+                    description: null,
+                    location: null,
+                    startTime: new Date('2026-11-12T09:00:00Z'),
+                    endTime: new Date('2026-11-12T10:00:00Z'),
+                    allDay: false,
+                    rrule: null,
+                    timezone: null,
+                    status: 'confirmed',
+                    sequence: 0,
+                    dtstamp: null,
+                    recurrenceDate: null,
+                    recurrenceId: null,
+                    data: { organizer: { userId: '', email: 'boss@example.com', name: 'Boss' } },
                 },
-                createByUserId: 'external_boss@example.com',
-                organizerEventId: uid,
-                organizerUserId: 'external_boss@example.com',
-            });
+                'boss@example.com',
+            );
             const stored = (await home.calendar.listResources(defaultCalendarId)).find((r) => r.uid === uid)!;
             expect(stored).toBeDefined();
 

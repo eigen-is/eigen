@@ -58,31 +58,8 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
             }
 
             if (teamId) continue;
-            for (const event of await pullPendingInvitations(fromUserId, user.email)) {
-                await sendToHome(user.id, {
-                    type: 'calendar:invitation',
-                    payload: {
-                        uid: event.uid,
-                        title: event.title,
-                        description: event.description,
-                        location: event.location,
-                        startTime: event.startTime,
-                        endTime: event.endTime,
-                        allDay: event.allDay,
-                        rrule: event.rrule,
-                        timezone: event.timezone,
-                        status: event.status,
-                        sequence: event.sequence,
-                        data: {
-                            organizer: { userId: fromUserId, email: owner.email, name: owner.name },
-                            organizerEventId: event.id,
-                            attendees: event.data?.attendees,
-                        },
-                        createByUserId: fromUserId,
-                        organizerEventId: event.id,
-                        organizerUserId: fromUserId,
-                    },
-                });
+            for (const request of await pullPendingInvitations(fromUserId, user.email)) {
+                await sendToHome(user.id, { type: 'calendar:request', ...request });
             }
         } catch (error) {
             console.error(`Failed to reconcile shares from ${fromUserId} to ${target} for user ${user.id}:`, error);

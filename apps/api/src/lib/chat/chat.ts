@@ -17,6 +17,7 @@ import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
 import type { Home } from '../home';
 import { broadcastToOwnerAndMembers, sendToUserHomes } from '../home/home-relay';
+import type { Mount } from '../mount';
 import { CONTAINER_DATA_DB, CONTAINER_MEDIA_FOLDER } from '../mount/container-dbs';
 import type { User } from '../user';
 import { getUserByEmail } from '../user';
@@ -32,17 +33,17 @@ export class ChatRoom {
     private constructor(
         private readonly drive: Drive,
         private readonly home: Home,
-        private readonly path: DrivePath,
+        public readonly path: DrivePath,
         private readonly dataDbId: string,
         // The document a comment thread belongs to. A chat on its own has none.
-        private readonly containerPath: DrivePath | null,
+        public readonly containerPath: DrivePath | null,
     ) {}
 
-    public static async create(drive: Drive, mountId: string, roomId: string): Promise<void> {
+    public static async create(drive: Drive, mount: Mount, roomId: string): Promise<void> {
         // The databases are set up in one step that cleans up after itself. A storage failure then leaves
         // no data.db row without a database, which would make every later init answer 503.
-        await drive.provisionManagedDbs(mountId, roomId, [{ name: CONTAINER_DATA_DB, config: CHAT_ROOM_DB_CONFIG }]);
-        await drive.createFolder(mountId, roomId, CONTAINER_MEDIA_FOLDER);
+        await drive.provisionManagedDbs(mount.id, roomId, [{ name: CONTAINER_DATA_DB, config: CHAT_ROOM_DB_CONFIG }]);
+        await mount.createFolder(roomId, CONTAINER_MEDIA_FOLDER);
     }
 
     // Finds the room's data.db. It opens nothing: each method below opens data.db for its own queries.
@@ -65,23 +66,23 @@ export class ChatRoom {
     ): Promise<ChatMessage> {
         const { email: authorEmail } = author;
         if (content.startsWith('/') && type === 'message') {
-            const cmd = parseCommand(content);
-            switch (cmd.kind) {
+            const command = parseCommand(content);
+            switch (command.kind) {
                 case 'builtin-emote':
                     type = 'emote';
-                    content = cmd.target ? `$${cmd.emoteKey}:${cmd.target}` : `$${cmd.emoteKey}`;
+                    content = command.target ? `$${command.emoteKey}:${command.target}` : `$${command.emoteKey}`;
                     break;
                 case 'emote':
                     type = 'emote';
-                    content = cmd.content;
+                    content = command.content;
                     break;
                 case 'whisper':
                     type = 'whisper';
-                    whisperTo = cmd.target;
-                    content = cmd.content;
+                    whisperTo = command.target;
+                    content = command.content;
                     break;
                 case 'error':
-                    throw new ApiError(400, cmd.error);
+                    throw new ApiError(400, command.error);
             }
         }
 
@@ -162,14 +163,11 @@ export class ChatRoom {
                 chatName: this.containerPath ? this.path.name : undefined,
             };
             const body = content.length > 100 ? `${content.slice(0, 100)}...` : content;
-            const memberEmails = new Set(members.map((m) => m.email.toLowerCase()));
+            const memberEmails = new Set(members.map((member) => member.email.toLowerCase()));
 
-            // The deliveries open each recipient's home and share the relay's budget with other
-            // fan-outs. So they run after the post answers, and a busy budget never holds up a message.
+            // The deliveries open each recipient's home, so they run after the post answers.
             const notify = (userIds: string[], notification: NotificationPersistInput) => {
-                sendToUserHomes(userIds, { type: 'notification', notification }).catch((error: unknown) => {
-                    console.error('Failed to send the chat notifications:', error);
-                });
+                sendToUserHomes(userIds, { type: 'notification', notification });
             };
             // The message is stored already, so a failed lookup costs only that person's notification.
             // It is logged, and the post still answers.
@@ -309,31 +307,31 @@ export class ChatRoom {
         });
 
         const viewerEmail = userEmail.toLowerCase();
-        return rows.reverse().map((msg) => {
-            if (msg.type === 'whisper') {
-                const isAuthor = msg.authorEmail.toLowerCase() === viewerEmail;
-                const isRecipient = msg.whisperTo?.toLowerCase() === viewerEmail;
-                const targetName = msg.whisperTo || 'someone';
+        return rows.reverse().map((row) => {
+            if (row.type === 'whisper') {
+                const isAuthor = row.authorEmail.toLowerCase() === viewerEmail;
+                const isRecipient = row.whisperTo?.toLowerCase() === viewerEmail;
+                const targetName = row.whisperTo || 'someone';
                 if (isAuthor) {
-                    return { ...msg, content: `whispers to ${targetName}: ${msg.content}` };
+                    return { ...row, content: `whispers to ${targetName}: ${row.content}` };
                 }
                 if (isRecipient) {
-                    return { ...msg, content: `whispers to you: ${msg.content}` };
+                    return { ...row, content: `whispers to you: ${row.content}` };
                 }
                 return {
-                    ...msg,
+                    ...row,
                     content: `whispers to ${targetName}: [a few hushed words]`,
                     whisperTo: null,
                     attachments: null,
                 };
             }
-            if (msg.type === 'emote' && !msg.deletedAt) {
+            if (row.type === 'emote' && !row.deletedAt) {
                 return {
-                    ...msg,
-                    content: formatEmoteForViewer(msg.content, msg.authorEmail, userEmail),
+                    ...row,
+                    content: formatEmoteForViewer(row.content, row.authorEmail, userEmail),
                 };
             }
-            return msg;
+            return row;
         });
     }
 
@@ -380,17 +378,14 @@ export class ChatRoom {
 
         if (existing.attachments) {
             // An attachment is a file name in this chat's own media folder. It is looked up only there, so a
-            // crafted name can't trash another path of the owner's.
-            const mediaFolder = await this.drive.getChildByName(
-                this.path.mountId,
-                this.path.id,
-                CONTAINER_MEDIA_FOLDER,
-            );
+            // crafted name can't delete another path of the owner's. It goes for good, like the message.
+            const { mount } = await this.drive.resolveFile(this.path.mountId, this.path.id);
+            const mediaFolder = await mount.getChildByName(this.path.id, CONTAINER_MEDIA_FOLDER);
             if (mediaFolder) {
                 for (const attachment of existing.attachments) {
                     if (typeof attachment !== 'string') continue;
-                    const media = await this.drive.getChildByName(this.path.mountId, mediaFolder.id, attachment);
-                    if (media) await this.drive.deletePath(this.path.mountId, media.id);
+                    const media = await mount.getChildByName(mediaFolder.id, attachment);
+                    if (media) await mount.deletePath(media.id);
                 }
             }
         }

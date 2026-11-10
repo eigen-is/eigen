@@ -42,7 +42,7 @@ describe('opening a document copy before its data.db lands', () => {
         });
         let copy: DrivePath;
         try {
-            copy = await home.drive.copyPath(mountId, source.id, rootId, 'copy-source copy');
+            copy = await home.drive.copyPath(mountId, source.id, rootId, 'copy-source copy', home.user);
         } finally {
             spy.mockRestore();
         }

@@ -125,9 +125,7 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
                             />
                             <Switch
                                 checked={mount.enabled}
-                                onCheckedChange={async (enabled) => {
-                                    await updateMount.mutateAsync({ mountId: id, enabled });
-                                }}
+                                onCheckedChange={(enabled) => updateMount.mutate({ mountId: id, enabled })}
                             />
                         </div>
                     ))}

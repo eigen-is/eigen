@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import type { Notification } from '@workspace/lib/types/notification';
-import { drainACLFanOuts } from '../../lib/drive/acl-propagation';
 import { getHome } from '../../lib/home';
+import { drainHomeDeliveries, sendToHome } from '../../lib/home/home-relay';
 import { assertJson, authedRequest, driveDelete, driveGet, drivePost, drivePut, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -140,6 +140,27 @@ describe('ACL share email', () => {
         expect(unshared?.details).toEqual({ pathType: 'doc' });
     });
 
+    test('a revoke reaching a home without the row neither notifies nor broadcasts', async () => {
+        const doc = await createDoc('revoke-no-row');
+        const path = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${doc.id}`);
+        const bobHome = await getHome(ctx.bob.user.id);
+        const broadcast = spyOn(bobHome, 'broadcast');
+
+        await sendToHome(ctx.bob.user.id, {
+            type: 'drive:acl-change',
+            path,
+            acl: null,
+            actorEmail: ctx.alice.user.email,
+            actorName: ctx.alice.user.name,
+        });
+        const list = await assertJson<Notification[]>(
+            await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
+        );
+        expect(list.filter((n) => n.body === 'revoke-no-row')).toEqual([]);
+        expect(broadcast).not.toHaveBeenCalled();
+        broadcast.mockRestore();
+    });
+
     test('trash + restore of a shared item name the actor, never "undefined"', async () => {
         const doc = await createDoc('trash-notify');
         await setAcl(doc.id, { add: [{ id: ctx.bob.user.email, read: true, write: false }] });
@@ -212,7 +233,7 @@ describe('ACL share email', () => {
 
         const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.bob.user.email));
         expect(calls.length).toBe(0);
-        await drainACLFanOuts();
+        await drainHomeDeliveries();
         spy.mockRestore();
     });
 

@@ -1,17 +1,23 @@
+// The Vector app's home: every drawing the viewer can open, in Drive's list and detail layout,
+// with the selected one's ?pid=&uid=&mid= detail beside the list. EigenDocListView draws it.
+
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { EigenDocListView, eigenDocValidateSearch, VECTOR_CONFIG } from '@workspace/ui/components/drive';
+import { validateDriveSearch } from '@workspace/lib/drive';
+import { EigenDocListView, VECTOR_CONFIG } from '@workspace/ui/components/drive';
 
 export const Route = createFileRoute('/_auth/_sidebar/')({
     component: DriveRoute,
-    validateSearch: eigenDocValidateSearch,
+    validateSearch: validateDriveSearch,
 });
 
 function DriveRoute() {
     const { pid, uid, mid } = Route.useSearch();
     const navigate = useNavigate();
+    const { user } = Route.useRouteContext();
     return (
         <EigenDocListView
             config={VECTOR_CONFIG}
+            viewerId={user.id}
             pid={pid}
             uid={uid}
             mid={mid}

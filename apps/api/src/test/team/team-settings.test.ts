@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { TeamSettings } from '@workspace/lib/types/settings';
 import { getServerConfig } from '../../lib/config/server-config';
@@ -21,6 +21,11 @@ describe('Team settings', () => {
         await addMember(ctx, teamId, ctx.bob.user.id);
     });
 
+    // The overrides reach every member's quota, so they go before another file meters Bob's home.
+    afterAll(async () => {
+        expect((await putSettings(ctx.alice.user.sessionToken, { memberOverrides: {} })).status).toBe(200);
+    });
+
     function putSettings(token: string, body: TeamSettings): Promise<Response> {
         return authedRequest(token, `/team/${ownerId}/settings`, {
             method: 'PUT',
@@ -38,7 +43,7 @@ describe('Team settings', () => {
     });
 
     test('a PUT without memberOverrides keeps the saved ones', async () => {
-        const overrides = { mailAndContactsMaxMB: 50, defaultMountMaxSizeMB: 20 };
+        const overrides = { homeDataMaxMB: 50, defaultMountMaxSizeMB: 20 };
         expect((await putSettings(ctx.alice.user.sessionToken, { memberOverrides: overrides })).status).toBe(200);
         expect((await putSettings(ctx.alice.user.sessionToken, { notifyMembers: true })).status).toBe(200);
         const settings = await assertJson<TeamSettings>(

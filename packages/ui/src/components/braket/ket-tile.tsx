@@ -1,3 +1,6 @@
+// The tile for one app or section in a launcher grid, such as Space's home and the help center's front page.
+// It wraps the link it is given, a router link or a plain anchor, and the tile's color tints its stripe and icon.
+
 import type { LucideIcon } from 'lucide-react';
 import { Slot } from 'radix-ui';
 import type { CSSProperties, ReactNode } from 'react';
@@ -7,7 +10,7 @@ type KetTileProps = {
     icon: LucideIcon;
     title: string;
     description: string;
-    // A CSS color, usually `var(--app-<name>-color)`: drives the stripe, icon, title and hover wash.
+    // A CSS color, usually `var(--app-<name>-color)`: drives the stripe, icon and hover wash.
     color: string;
     className?: string;
     // The link element (`<a>` or a router `<Link>`); the tile's content renders inside it.
@@ -18,18 +21,15 @@ type KetTileProps = {
 // is the bar, the logo's ket (4:15, same angle as <Ket />) is the right edge. Hover mirrors
 // .eigen-list-item. Shape and sizing live in globals.css under .eigen-ket-tile.
 export function KetTile({ icon: Icon, title, description, color, className, children }: KetTileProps) {
+    const style: CSSProperties & Record<'--ket-tile-color', string> = { '--ket-tile-color': color };
+
     return (
-        <Slot.Root
-            className={cn('eigen-ket-tile relative block drop-shadow-xs', className)}
-            style={{ '--ket-tile-color': color } as CSSProperties}
-        >
+        <Slot.Root className={cn('eigen-ket-tile relative block drop-shadow-xs', className)} style={style}>
             <Slot.Slottable>{children}</Slot.Slottable>
             <div className="eigen-ket-tile-body flex h-full items-center gap-3 border-y border-l px-3 md:px-4">
                 <Icon className="size-5 shrink-0 md:size-6" style={{ color }} />
                 <div className="min-w-0">
-                    <h3 className="line-clamp-2 font-medium text-sm leading-tight md:text-base" style={{ color }}>
-                        {title}
-                    </h3>
+                    <span className="line-clamp-2 font-medium text-sm leading-tight md:text-base">{title}</span>
                     <p className="hidden text-muted-foreground text-xs md:line-clamp-2">{description}</p>
                 </div>
             </div>

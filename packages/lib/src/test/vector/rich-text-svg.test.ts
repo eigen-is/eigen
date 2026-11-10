@@ -2,8 +2,11 @@
 // side on one baseline becomes one positioned <tspan>. These boxes are what the DOM adapter (packages/ui's canvas
 // image writer) reads back with Range.getClientRects.
 import { describe, expect, test } from 'bun:test';
-import type { MeasuredChar, MeasuredText, MeasuredTextStyle } from '../../vector/rich-text-svg';
+import type { MeasuredText } from '../../vector/rich-text-svg';
 import { richTextSvg } from '../../vector/rich-text-svg';
+
+type MeasuredChar = MeasuredText['chars'][number];
+type MeasuredTextStyle = MeasuredText['style'];
 
 const STYLE: MeasuredTextStyle = {
     fontFamily: 'Excalifont, cursive',

@@ -131,7 +131,7 @@ function settleFanOut(contacts: Contacts, fanout: FanOut): void {
 }
 
 export async function addLabel(contacts: Contacts, label: Omit<Label, 'id'>): Promise<string> {
-    // syncCardLabels skips an empty key, so such a label would drop every membership while the save reported success.
+    // indexCard skips an empty key, so such a label would drop every membership while the save reported success.
     const nameKey = normalizeLabelName(label.name);
     if (!nameKey) throw new ApiError(400, 'Label name is required');
     const name = label.name.trim();

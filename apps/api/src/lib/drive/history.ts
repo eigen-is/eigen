@@ -2,6 +2,7 @@
 // share, and the users who watch a path. After a change, the watchers of the path and of the folders
 // above it get a notification. Each Mount builds one, and Drive records changes through it.
 
+import { fileEventTag } from '@workspace/lib/notification/tags';
 import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
 import { isDocumentType } from '@workspace/lib/types/drive';
 import type { FileEvent, FileEventInput, FileEventType, PathWatchStatus } from '@workspace/lib/types/file-history';
@@ -16,32 +17,17 @@ import type { User } from '../user';
 import { getMemberships, getUserById } from '../user';
 import { canReadFromAncestors } from './acl';
 
-// Per-path caps, no age cap: a quiet file keeps its whole story. 'edited' rows are the noise
-// and get trimmed first, so creation/share/assign rows survive a busy document.
+// Caps per path and none on age, so a quiet file keeps its whole story. Edits are trimmed first, so a busy
+// document keeps its other rows.
 const HISTORY_MAX_EDITED_PER_PATH = 100;
 const HISTORY_MAX_PER_PATH = 500;
 
 export class FileHistory {
     public constructor(
-        private db: BunSQLiteDatabase<typeof schema>,
+        private readonly db: BunSQLiteDatabase<typeof schema>,
         public readonly ownerId: string,
         public readonly mountId: string,
     ) {}
-
-    // Entities inside an eigendoc/chat container (per-card comment threads, attachment media)
-    // are scaffolding, never timeline rows — the container speaks through its own events.
-    private isContainerInternal(pathId: string): boolean {
-        const ancestors = this.db.all<{ type: DrivePathType }>(sql`
-            WITH RECURSIVE chain(id) AS (
-                SELECT ${sql.raw('parentId')} FROM ${paths} WHERE id = ${pathId} AND ${sql.raw('parentId')} IS NOT NULL
-                UNION
-                SELECT p.${sql.raw('parentId')} FROM ${paths} p JOIN chain c ON p.id = c.id
-                WHERE p.${sql.raw('parentId')} IS NOT NULL
-            )
-            SELECT p.type AS type FROM ${paths} p JOIN chain c ON p.id = c.id
-        `);
-        return ancestors.some((a) => isDocumentType(a.type));
-    }
 
     public record(input: FileEventInput, opts?: { dedupeWindowMs?: number }): void {
         if (this.isContainerInternal(input.pathId)) return;
@@ -76,8 +62,7 @@ export class FileHistory {
             .run();
     }
 
-    // File: direct events. Folder/container: events on the path and every descendant
-    // (recursive CTE downward), newest first.
+    // A file's own events; a folder's or a document's also those of everything below it. Newest first.
     public list(pathId: string, opts?: { limit?: number }): FileEvent[] {
         const limit = opts?.limit ?? 50;
 
@@ -102,7 +87,7 @@ export class FileHistory {
             FROM ${fileEvents} e
             JOIN subtree st ON e.pathId = st.id
             JOIN ${paths} p ON p.id = e.pathId
-            ORDER BY e.createdAt DESC
+            ORDER BY e.createdAt DESC, e.rowid DESC
             LIMIT ${limit}
         `);
 
@@ -137,7 +122,6 @@ export class FileHistory {
             .where(and(eq(pathWatchers.pathId, pathId), eq(pathWatchers.userId, userId)))
             .get();
 
-        // Nearest watched ancestor: walk the parentId chain upward, excluding the path itself
         const [ancestor] = this.db.all<{ pathId: string; name: string }>(sql`
             WITH RECURSIVE chain(id, depth) AS (
                 SELECT ${sql.raw('parentId')}, 1 FROM ${paths} WHERE id = ${pathId} AND ${sql.raw('parentId')} IS NOT NULL
@@ -155,7 +139,7 @@ export class FileHistory {
 
         return {
             direct: !!direct,
-            ...(ancestor ? { viaAncestor: { pathId: ancestor.pathId, name: ancestor.name } } : {}),
+            ...(ancestor ? { viaAncestor: ancestor } : {}),
         };
     }
 
@@ -165,12 +149,11 @@ export class FileHistory {
             .from(pathWatchers)
             .where(eq(pathWatchers.userId, userId))
             .all()
-            .map((r) => r.pathId);
+            .map((row) => row.pathId);
     }
 
-    // Watchers on the root paths and on every ancestor of each root (one inclusive
-    // upward CTE seeded with all roots), deduped, with the acting user removed.
-    public collectWatcherIds(rootPathIds: string[], excludeUserId: string): string[] {
+    // The watchers of the roots and of every folder above them, without the actor.
+    public collectWatcherIds(rootPathIds: readonly string[], excludeUserId: string): string[] {
         const rootList = sql.join(
             rootPathIds.map((id) => sql`${id}`),
             sql`, `,
@@ -188,31 +171,25 @@ export class FileHistory {
         return rows.map((row) => row.userId);
     }
 
-    // Per-watcher delivery with ACL re-verification: a watcher whose share was
-    // revoked since watching is silently skipped. verifyAncestors is the chain
-    // that justifies the notification — callers capture it BEFORE mutations that
-    // rewrite the parent chain (trash re-parents to the mount root).
+    // A watcher whose share was revoked since watching is skipped. verifyAncestors is the chain that justifies the
+    // notification, captured before a change that rewrites it, as a trash moves the item to the mount root.
     public async notifyWatchers(
-        watcherIds: string[],
+        watcherIds: readonly string[],
         opts: {
             eventType: FileEventType;
             actor: User;
             itemName: string;
             pathType: DrivePathType;
             details?: FileEvent['details'];
-            tagPathId: string; // the path the tag points at (parent for burst events)
-            verifyAncestors: DrivePath[];
-            excludeEmails?: Set<string>;
+            tagPathId: string;
+            verifyAncestors: readonly DrivePath[];
+            excludeEmails?: ReadonlySet<string>;
         },
     ): Promise<void> {
-        // Compose the row once through the shared phrasing layer (the same the activity panel
-        // renders with): title = actor + action, body = primary content, details = link/secondary.
-        // The body is persisted, so the team names an acl-changed row shows are resolved here
-        // rather than at render time; describeFileEvent prints every other principal id verbatim.
-        const d = opts.details;
-        // The change has landed by now. A notification that can't be written is logged, and never
-        // fails the change.
-        const names = await getBatchPublicInfo(aclPrincipalsToResolve(d)).catch((error: unknown) => {
+        const { details } = opts;
+        // The stored body names teams, so their names are resolved now and not when it renders. The change has landed
+        // by now, so a notification that can't be written is logged and never fails the change.
+        const names = await getBatchPublicInfo(aclPrincipalsToResolve(details)).catch((error: unknown) => {
             console.error(`[FileHistory] Failed to notify the watchers of ${opts.tagPathId}:`, error);
             return null;
         });
@@ -220,15 +197,15 @@ export class FileHistory {
         const lines = describeFileEvent(
             {
                 eventType: opts.eventType,
-                details: opts.details ?? null,
+                details: details ?? null,
                 pathName: opts.itemName,
                 pathType: opts.pathType,
             },
             'container',
             { resolveName: (id) => names[id]?.name },
         );
-        const cardId = d && 'cardId' in d ? d.cardId : undefined;
-        const chatName = d && 'chatName' in d ? d.chatName : undefined;
+        const cardId = details && 'cardId' in details ? details.cardId : undefined;
+        const chatName = details && 'chatName' in details ? details.chatName : undefined;
         // One failed lookup skips only that watcher, because the change has landed already.
         const recipients = await Promise.all(
             watcherIds.map(async (watcherId) => {
@@ -243,8 +220,7 @@ export class FileHistory {
                 }
             }),
         );
-        // The deliveries open each watcher's home and share the relay's budget with other fan-outs.
-        // So they run after the change answers, and a busy budget never holds up the change.
+        // The deliveries open each watcher's home, so they run after the change answers.
         sendToUserHomes(
             recipients.filter((id) => id !== null),
             {
@@ -254,34 +230,32 @@ export class FileHistory {
                     actorEmail: opts.actor.email,
                     title: `${opts.actor.name} ${lines.action}`,
                     body: lines.primary,
-                    tag: `file-event:${this.ownerId}:${this.mountId}:${opts.tagPathId}`,
+                    tag: fileEventTag({ ownerId: this.ownerId, mountId: this.mountId, pathId: opts.tagPathId }),
                     coalesce: true,
                     details: { secondary: lines.secondary, cardId, chatName, pathType: opts.pathType },
                 },
             },
-        ).catch((error: unknown) => {
-            console.error(`[FileHistory] Failed to notify the watchers of ${opts.tagPathId}:`, error);
-        });
+        );
     }
 
     public async fanOut(opts: {
         eventType: FileEventType;
         actor: User;
-        path: DrivePath; // affected item (pre-mutation shape where relevant)
-        chainRootIds: (string | null)[]; // parent chains to walk (e.g. [parentId]; moved: both)
-        burst?: boolean; // created/uploaded/copied: tag on the parent folder
-        excludeEmails?: Set<string>;
-        details?: FileEvent['details']; // event details → notification body/secondary/links
-        // Thunks resolve only when there are watchers — zero watchers (the common
-        // case) costs zero breadcrumb walks. Mutations that rewrite the parent
-        // chain (trash/move) pass pre-captured arrays instead.
-        verifyAncestors: DrivePath[] | (() => Promise<DrivePath[]>);
+        path: DrivePath;
+        // The folders whose chains are walked, such as both of a move's parents.
+        chainRootIds: readonly (string | null)[];
+        // A burst, such as an upload, is tagged with its folder, so many uploads fold into one row.
+        burst?: boolean;
+        excludeEmails?: ReadonlySet<string>;
+        details?: FileEvent['details'];
+        // A function runs only when there are watchers, which is rare, so most changes walk no breadcrumbs. A change
+        // that rewrites the parent chain, such as a trash or a move, passes the chain it captured before.
+        verifyAncestors: readonly DrivePath[] | (() => Promise<readonly DrivePath[]>);
     }): Promise<void> {
-        // Events on items already in trash never fan out ('trashed' itself passes
-        // the pre-trash snapshot, whose trashedAt is still null).
+        // An item already in trash never fans out. The 'trashed' event passes the item as it was before.
         if (opts.path.trashedAt && opts.eventType !== 'trashed') return;
         if (this.isContainerInternal(opts.path.id)) return;
-        const chainRoots = opts.chainRootIds.filter((id): id is string => id !== null);
+        const chainRoots = opts.chainRootIds.filter((id) => id !== null);
         const watcherIds = this.collectWatcherIds([opts.path.id, ...chainRoots], opts.actor.id);
         if (watcherIds.length === 0) return;
         await this.notifyWatchers(watcherIds, {
@@ -314,5 +288,20 @@ export class FileHistory {
                 ) WHERE rn > ${HISTORY_MAX_PER_PATH}
             )
         `);
+    }
+
+    // What sits inside a document, such as a card's comment thread or its media, gets no timeline rows.
+    // The document speaks through its own events.
+    private isContainerInternal(pathId: string): boolean {
+        const ancestors = this.db.all<{ type: DrivePathType }>(sql`
+            WITH RECURSIVE chain(id) AS (
+                SELECT ${sql.raw('parentId')} FROM ${paths} WHERE id = ${pathId} AND ${sql.raw('parentId')} IS NOT NULL
+                UNION
+                SELECT p.${sql.raw('parentId')} FROM ${paths} p JOIN chain c ON p.id = c.id
+                WHERE p.${sql.raw('parentId')} IS NOT NULL
+            )
+            SELECT p.type AS type FROM ${paths} p JOIN chain c ON p.id = c.id
+        `);
+        return ancestors.some((ancestor) => isDocumentType(ancestor.type));
     }
 }

@@ -22,7 +22,7 @@ export async function finalizeUpload(
         size: number;
         hash: string;
         tempId: string;
-        user?: User;
+        user: User;
     },
 ): Promise<DrivePath> {
     // The store keeps names in NFC, so the name is compared with its siblings in that form too.
@@ -34,15 +34,7 @@ export async function finalizeUpload(
         ? await mount.updatePath(pathId, { details: { originalName } })
         : await mount.getActivePath(pathId);
     drive.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
-    // Only the history row. The caller tells the watchers.
-    if (args.user) {
-        mount.history.record({
-            pathId,
-            eventType: 'uploaded',
-            actor: args.user,
-            details: { size: uploadedFile.size },
-        });
-    }
+    mount.history.record({ pathId, eventType: 'uploaded', actor: args.user, details: { size: uploadedFile.size } });
 
     if (uploadedFile.size === 0) {
         // An empty file has no thumbnail. Finder copies in two steps: an empty file first, and the
@@ -81,7 +73,7 @@ export function regenerateThumbnailAsync(
             const updated = await mount.updatePath(pathId, {
                 thumbnail: thumbnail.fileName,
                 details: {
-                    ...(current.details ?? {}),
+                    ...current.details,
                     width: thumbnail.width,
                     height: thumbnail.height,
                     ...(thumbnail.duration !== undefined && { duration: thumbnail.duration }),

@@ -21,3 +21,4 @@ export { SettingsPage } from './settings-page';
 export { SettingsSection } from './settings-section';
 export { Topbar } from './topbar';
 export { UnsyncedEditsGuard } from './unsynced-edits-guard';
+export { VersionLabel } from './version-label';
