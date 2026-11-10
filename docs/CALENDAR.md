@@ -125,9 +125,9 @@ The edit dialog opens on an occurrence but "All events in series" saves on the m
 
 An override's `RECURRENCE-ID` and an `EXDATE` both name the occurrence the series would have had, computed from the master VEVENT in its own DTSTART form, value type included. It is never the override's moved start, and never `VALUE=DATE` because the override was toggled to all day. Either would match no occurrence and orphan the override (RFC 5545 §3.8.4.4). The master is read from the file after its own patch, so an override that arrives in the message that moves the series names the new time.
 
-A copy of one date holds no master to compute that instant from, so it keeps the organizer's own `RECURRENCE-ID`, and only its file does: no column holds it. It writes the line back in the zone the organizer wrote it in, never in the moved start's zone or all-day form, so the date it is keyed under stays the one it was filed under. A floating `RECURRENCE-ID` names no instant, so a copy keeps only the date it is written on. Every iMIP REPLY names its occurrence by what the stored file holds (`recurrenceIdOf`), read before a delete erases it, and Google and Outlook match the answer to their occurrence by that instant. The relay gives a guest invited to one date the series' original slot in the series' zone, as a mailed REQUEST does, so the guest's answer and the organizer's next update find that date.
+A copy of one date holds no master to compute that instant from, so it keeps the organizer's own `RECURRENCE-ID`, and only its file does: no column holds it. It writes the line back in the zone the organizer wrote it in, never in the moved start's zone or all-day form, so the copy reads it back under the key it was filed under. A floating `RECURRENCE-ID` names no instant, so a copy keeps only the date it is written on. Every iMIP REPLY names its occurrence by what the stored file holds (`storedRecurrenceIds`), read before a delete erases it, and Google and Outlook match the answer to their occurrence by that instant. The relay gives a guest invited to one date the series' original slot in the series' zone, as a mailed REQUEST does, so the guest's answer and the organizer's next update find that date.
 
-A lone `RECURRENCE-ID` that names an instant and reaches a copy holding a timed master is keyed again in that master's zone, because its own file may not state the series' zone (`occurrenceKey` in `invitations.ts`). So is each date of a copy of single dates when the whole series replaces it, so a date named in UTC keeps its row and answer.
+That key is provisional until the series arrives, because the copy's own file may not state the series' zone. A lone `RECURRENCE-ID` that names an instant and reaches a copy holding a timed master is keyed again in that master's zone (`occurrenceKey` in `invitations.ts`). So is each date of a copy of single dates when a timed series replaces it, by the instant its stored line names, so a date named in UTC keeps its row and answer.
 
 ## An occurrence is keyed by its wall-clock date in the series' zone
 
@@ -135,7 +135,13 @@ An occurrence key is a `YYYY-MM-DD` date. A range read also carries timestamps, 
 
 The series zone is the TZID of each UID's master DTSTART, and a timed master with none keeps its series in UTC. A `DATE` value keeps its date, and a floating one reads in the series' zone. An all-day series has no clock, so a timed value on it keys on the date it is written on, whatever its TZID. An occurrence a file holds without its master knows no zone but the one its `RECURRENCE-ID` is written in, UTC included, and keys in it whatever zone its DTSTART is restated in. A zone only the file defines keys in UTC, the form the copy writes the line back in.
 
-Two edges are accepted. A series whose zone changes keys its overrides in the new zone, so one near midnight can land on the next or previous date. A previewed file whose override lost its UID shows that override on the date its `RECURRENCE-ID` is written in, and an import files it as an event of its own under a fresh UID.
+Five edges are accepted:
+
+- A series whose zone changes keys its overrides in the new zone, so one near midnight can land on the next or previous date.
+- A previewed file whose override lost its UID shows that override on the date its `RECURRENCE-ID` is written in, and an import counts it as failed and drops it, since under the fresh UID it gets it has no master.
+- A lone `RECURRENCE-ID` the organizer writes malformed (floating, a plain date on a timed event, or a TZID neither the file nor the zone database defines) is written back with a time Eigen picks, so when its series arrives the date may re-file a day off and the guest answers it again, and a REPLY names a line the organizer can't match.
+- One organizer who writes two lone dates that fall on one key, one in UTC and one in a TZID, leaves the guest only one of them.
+- A lone copy whose organizer restates one date between UTC and a TZID near midnight files that date twice.
 
 Each `EXDATE` becomes a synthetic cancelled row. Its id and SEQUENCE come from the `X-EIGEN-EXDATE` stamp beside it, or the master's SEQUENCE when a client wrote the `EXDATE` itself. One occurrence is one row, however many forms name it.
 
