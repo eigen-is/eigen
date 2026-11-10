@@ -1,318 +1,218 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import type { DrivePath } from '@workspace/lib/types/drive';
-import { CollabDocument } from '../../lib/collab/collab-document';
+import type { ChatMessage, DrivePath } from '@workspace/lib/types';
 import { ApiError } from '../../lib/core/errors';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
-import { HOLDER_WAIT_MS } from '../../lib/mount/document-db';
 import type { TestUser } from '../setup';
-import { authedRequest, createTestUserOnStorage, driveGet, drivePost, getTestContext } from '../setup';
+import {
+    assertJson,
+    authedRequest,
+    chatPost,
+    createTestUserOnStorage,
+    driveGet,
+    drivePost,
+    getTestContext,
+} from '../setup';
 
-// Trashing an open eigendoc tears the collab document down, so no live session keeps editing a
-// trashed document and no open database syncs its data.db to the pre-trash key.
-describe('trash closes open collab documents', () => {
-    let ctx: Awaited<ReturnType<typeof getTestContext>>;
-    let home: Home;
-    let rootId: string;
-    const mountId = 'default';
+const mountId = 'default';
 
-    beforeAll(async () => {
-        ctx = await getTestContext();
-        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
-        rootId = root.id;
-        home = await getHome(ctx.alice.user.id);
-    });
+// A trash marks the item first and then closes what is open under it. Every sync resolves its key from
+// the row, so whatever an open document or database writes until the close lands with the trashed item.
+for (const storage of ['local-id', 'local-fullnames'] as const) {
+    describe(`a trash closes what is open under the item (${storage})`, () => {
+        let user: TestUser;
+        let home: Home;
+        let rootId: string;
 
-    const createDoc = (fileName: string) =>
-        drivePost<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `folder/${rootId}/create/doc`, {
-            fileName,
+        beforeAll(async () => {
+            const ctx = await getTestContext();
+            user = storage === 'local-id' ? ctx.alice.user : await createTestUserOnStorage(storage, 'Trash Close');
+            home = await getHome(user.id);
+            rootId = (await driveGet<DrivePath>(user.sessionToken, user.id, mountId, 'root')).id;
         });
 
-    test('DELETE on an open .eigendoc closes it', async () => {
-        const doc = await createDoc('trash-close');
-        await home.drive.getCollabDocument(mountId, doc.id);
-        expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(true);
+        const createIn = (folderId: string, kind: 'doc' | 'chat', fileName: string) =>
+            drivePost<DrivePath>(user.sessionToken, user.id, mountId, `folder/${folderId}/create/${kind}`, {
+                fileName,
+            });
 
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/path/${doc.id}`,
-            { method: 'DELETE' },
-        );
-        expect(res.status).toBe(200);
-        expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
-    });
+        // Runs the DELETE and returns what it logged as an error.
+        const trashLogging = async (pathId: string): Promise<unknown[][]> => {
+            const errors = spyOn(console, 'error');
+            try {
+                await home.drive.deletePath(mountId, pathId, home.user);
+                return errors.mock.calls;
+            } finally {
+                errors.mockRestore();
+            }
+        };
 
-    // trashPath closes the document's database, which a collab doc still open would then persist into.
-    test('an open .eigendoc is closed before its database, so its last state persists cleanly', async () => {
-        const doc = await createDoc('trash-clean');
-        const collab = await home.drive.getCollabDocument(mountId, doc.id);
-        collab.doc.getMap('state').set('marker', 'edited');
-        const errors = spyOn(console, 'error');
-        let logged: unknown[][];
-        try {
-            await home.drive.deletePath(mountId, doc.id, home.user);
-        } finally {
-            logged = errors.mock.calls;
-            errors.mockRestore();
-        }
-        expect(logged).toEqual([]);
-    });
+        test('DELETE on an open document closes it, and logs nothing', async () => {
+            const doc = await createIn(rootId, 'doc', 'trash-close');
+            const collab = await home.drive.getCollabDocument(mountId, doc.id);
+            collab.doc.getMap('state').set('marker', 'edited');
 
-    // The path stays active until trashPath writes trashedAt, and trashPath closes the databases first.
-    // A document opened in between would save its edits into a closed data.db, so the open is refused.
-    test('an open while the trash runs is refused, and every edit made before it is there after a restore', async () => {
-        const doc = await createDoc('trash-window');
-        const collab = await home.drive.getCollabDocument(mountId, doc.id);
-        collab.doc.getMap('state').set('before', 'kept');
-        const { mount } = await home.drive.resolveFile(mountId, doc.id);
-        const trashPath = mount.trashPath.bind(mount);
-        const withTreeExclusive = mount.withTreeExclusive.bind(mount);
-        let lateOpen: unknown = null;
-        const trashSpy = spyOn(mount, 'trashPath').mockImplementationOnce(async (pathId) => {
-            lateOpen = await home.drive.getCollabDocument(mountId, doc.id).catch((e: unknown) => e);
-            return trashPath(pathId);
+            const res = await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/path/${doc.id}`, {
+                method: 'DELETE',
+            });
+            expect(res.status).toBe(200);
+            expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
         });
-        // trashPath takes the tree lock right after it closed the databases under the item.
-        const lockSpy = spyOn(mount, 'withTreeExclusive').mockImplementationOnce(async (work) => {
-            if (lateOpen instanceof CollabDocument) lateOpen.doc.getMap('state').set('during', 'edited');
-            return withTreeExclusive(work);
-        });
-        const errors = spyOn(console, 'error');
-        let logged: unknown[][];
-        try {
-            await home.drive.deletePath(mountId, doc.id, home.user);
-        } finally {
-            logged = errors.mock.calls;
-            errors.mockRestore();
-            trashSpy.mockRestore();
-            lockSpy.mockRestore();
-        }
 
-        expect(lateOpen).toBeInstanceOf(ApiError);
-        expect(lateOpen instanceof ApiError && lateOpen.status).toBe(503);
-        expect(logged.some((call) => call.some((part) => String(part).includes('closed database')))).toBe(false);
-        expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
-
-        await home.drive.restorePath(mountId, doc.id, home.user);
-        const restored = await home.drive.getCollabDocument(mountId, doc.id);
-        expect(restored.doc.getMap('state').get('before')).toBe('kept');
-    });
-
-    // A move checks its target folder, then waits to write, here until the trash of that folder has
-    // closed the collab documents in it. The move is refused, so the trash never meets an open
-    // document that moved in after its collab close, and it doesn't wait HOLDER_WAIT_MS for one.
-    test('a move into a folder while the folder is trashed is refused, and the document stays open', async () => {
-        const folder = await home.drive.createFolder(mountId, rootId, 'trash-move-in', home.user);
-        const doc = await createDoc('trash-move-in-doc');
-        const collab = await home.drive.getCollabDocument(mountId, doc.id);
-        collab.doc.getMap('state').set('before', 'kept');
-        const { mount } = await home.drive.resolveFile(mountId, doc.id);
-        const updatePath = mount.updatePath.bind(mount);
-        const trashPath = mount.trashPath.bind(mount);
-        const moveWaits = Promise.withResolvers<void>();
-        const collabClosed = Promise.withResolvers<void>();
-        let move: Promise<unknown> = Promise.resolve();
-        const moveSpy = spyOn(mount, 'updatePath').mockImplementationOnce(async (...args) => {
-            moveWaits.resolve();
-            await collabClosed.promise;
-            return updatePath(...args);
-        });
-        // trashPath runs after the collab close and closes the databases under the folder first.
-        const trashSpy = spyOn(mount, 'trashPath').mockImplementationOnce(async (pathId) => {
-            collabClosed.resolve();
-            await move;
-            return trashPath(pathId);
-        });
-        const started = Date.now();
-        try {
-            move = home.drive.movePath(mountId, doc.id, folder.id, home.user).catch((e: unknown) => e);
-            await moveWaits.promise;
-            await home.drive.deletePath(mountId, folder.id, home.user);
-        } finally {
-            moveSpy.mockRestore();
-            trashSpy.mockRestore();
-        }
-        const moved = await move;
-
-        expect(moved instanceof ApiError && moved.status).toBe(404);
-        expect(Date.now() - started).toBeLessThan(HOLDER_WAIT_MS);
-        expect((await mount.getPath(doc.id))?.parentId).toBe(rootId);
-        expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(true);
-        collab.doc.getMap('state').set('after', 'typed');
-        await home.drive.closeCollabDocument(mountId, doc.id);
-        const fresh = await home.drive.getCollabDocument(mountId, doc.id);
-        expect(fresh.doc.getMap('state').toJSON()).toEqual({ before: 'kept', after: 'typed' });
-    });
-
-    // A create that checked the folder before its trash began can insert a subfolder after the trash
-    // marked what was there. The subfolder has no mark of its own, and a move into it is refused all the same.
-    const moveIntoLateSubfolder = async (user: TestUser, name: string) => {
-        const userHome = await getHome(user.id);
-        const root = await driveGet<DrivePath>(user.sessionToken, user.id, mountId, 'root');
-        const folder = await userHome.drive.createFolder(mountId, root.id, name, userHome.user);
-        const doc = await drivePost<DrivePath>(user.sessionToken, user.id, mountId, `folder/${root.id}/create/doc`, {
-            fileName: `${name}-doc`,
-        });
-        const collab = await userHome.drive.getCollabDocument(mountId, doc.id);
-        collab.doc.getMap('state').set('before', 'kept');
-        const { mount } = await userHome.drive.resolveFile(mountId, doc.id);
-        const trashPath = mount.trashPath.bind(mount);
-        let moved: unknown = null;
-        const trashSpy = spyOn(mount, 'trashPath').mockImplementationOnce(async (pathId) => {
-            const subfolderId = await mount.createFolder(folder.id, 'late');
-            moved = await userHome.drive.movePath(mountId, doc.id, subfolderId, userHome.user).catch((e: unknown) => e);
-            return trashPath(pathId);
-        });
-        try {
-            await userHome.drive.deletePath(mountId, folder.id, userHome.user);
-        } finally {
-            trashSpy.mockRestore();
-        }
-
-        expect(moved instanceof ApiError && moved.status).toBe(404);
-        expect((await mount.getPath(doc.id))?.parentId).toBe(root.id);
-        expect(userHome.drive.hasCollabDocument(mountId, doc.id)).toBe(true);
-        collab.doc.getMap('state').set('after', 'typed');
-        await userHome.drive.closeCollabDocument(mountId, doc.id);
-        const fresh = await userHome.drive.getCollabDocument(mountId, doc.id);
-        expect(fresh.doc.getMap('state').toJSON()).toEqual({ before: 'kept', after: 'typed' });
-        await userHome.drive.closeCollabDocument(mountId, doc.id);
-        return mount;
-    };
-
-    test('a move into a subfolder created while its folder is trashed is refused', async () => {
-        await moveIntoLateSubfolder(ctx.alice.user, 'trash-late-sub');
-    });
-
-    // A trash marks only the folder and what is under it, so a move next to it goes on while it runs.
-    test('a move into a sibling of a folder while the folder is trashed succeeds', async () => {
-        const folder = await home.drive.createFolder(mountId, rootId, 'trash-sibling', home.user);
-        const sibling = await home.drive.createFolder(mountId, rootId, 'trash-sibling-target', home.user);
-        const doc = await createDoc('trash-sibling-doc');
-        const { mount } = await home.drive.resolveFile(mountId, doc.id);
-        const trashPath = mount.trashPath.bind(mount);
-        let moved: unknown = null;
-        const trashSpy = spyOn(mount, 'trashPath').mockImplementationOnce(async (pathId) => {
-            moved = await home.drive.movePath(mountId, doc.id, sibling.id, home.user).catch((e: unknown) => e);
-            return trashPath(pathId);
-        });
-        try {
-            await home.drive.deletePath(mountId, folder.id, home.user);
-        } finally {
-            trashSpy.mockRestore();
-        }
-
-        expect(moved).not.toBeInstanceOf(Error);
-        expect((await mount.getPath(doc.id))?.parentId).toBe(sibling.id);
-    });
-
-    // On `local` a move renames the bytes before it writes the row, and a refusal must leave them with the row.
-    test('on local the same move is refused, and the document keeps its bytes', async () => {
-        const user = await createTestUserOnStorage('local-fullnames', 'Trash Local');
-        const mount = await moveIntoLateSubfolder(user, 'trash-late-sub-local');
-        expect(mount.isPathBased).toBe(true);
-    });
-
-    // A restore can still put a document in the folder after the trash began, and the document can then
-    // be opened. trashPath takes the tree lock right after it closed the databases under the folder, so
-    // the document opens there, and the trash closes it after trashPath returns.
-    const restoreIntoTrashedFolder = async (name: string) => {
-        const folder = await home.drive.createFolder(mountId, rootId, name, home.user);
-        const doc = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${folder.id}/create/doc`,
-            { fileName: `${name}-doc` },
-        );
-        await home.drive.deletePath(mountId, doc.id, home.user);
-        const { mount } = await home.drive.resolveFile(mountId, folder.id);
-        const withTreeExclusive = mount.withTreeExclusive.bind(mount);
-        const lockSpy = spyOn(mount, 'withTreeExclusive').mockImplementationOnce(async (work) => {
-            await home.drive.restorePath(mountId, doc.id, home.user);
+        // A socket that connects to the open document after the mark joins it and is closed with it. One that
+        // opens a closed document after the mark gets a 404.
+        test('an edit made while the trash runs survives a restore, and an open after the mark is a 404', async () => {
+            const folder = await home.drive.createFolder(mountId, rootId, 'trash-window', home.user);
+            const doc = await createIn(folder.id, 'doc', 'trash-window-doc');
+            const closedDoc = await createIn(folder.id, 'doc', 'trash-window-closed');
             const collab = await home.drive.getCollabDocument(mountId, doc.id);
             collab.doc.getMap('state').set('before', 'kept');
-            return withTreeExclusive(work);
+            const { mount } = await home.drive.resolveFile(mountId, doc.id);
+            const trashPath = mount.trashPath.bind(mount);
+            const getActivePath = mount.getActivePath.bind(mount);
+            let joined: unknown = null;
+            let lateOpen: Promise<unknown> = Promise.resolve();
+            const spy = spyOn(mount, 'trashPath').mockImplementationOnce(async (pathId) => {
+                const trashed = await trashPath(pathId);
+                joined = await home.drive.getCollabDocument(mountId, doc.id);
+                collab.doc.getMap('state').set('during', 'typed');
+                // The open reads its row only once the trash's close waits for it.
+                activeSpy.mockImplementationOnce(async (id) => {
+                    await Bun.sleep(50);
+                    return getActivePath(id);
+                });
+                lateOpen = home.drive.getCollabDocument(mountId, closedDoc.id).catch((e: unknown) => e);
+                return trashed;
+            });
+            const activeSpy = spyOn(mount, 'getActivePath');
+            let logged: unknown[][];
+            try {
+                logged = await trashLogging(folder.id);
+            } finally {
+                spy.mockRestore();
+                activeSpy.mockRestore();
+            }
+
+            expect(joined).toBe(collab);
+            const opened = await lateOpen;
+            expect(opened instanceof ApiError && opened.status).toBe(404);
+            expect(logged).toEqual([]);
+            expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
+            expect(home.drive.hasCollabDocument(mountId, closedDoc.id)).toBe(false);
+
+            await home.drive.restorePath(mountId, folder.id, home.user);
+            const restored = await home.drive.getCollabDocument(mountId, doc.id);
+            expect(restored.doc.getMap('state').toJSON()).toEqual({ before: 'kept', during: 'typed' });
+            await home.drive.closeCollabDocument(mountId, doc.id);
         });
-        return { folder, doc, mount, lockSpy };
-    };
 
-    test('a document restored into the folder while it is trashed is closed, and edits after the restore persist', async () => {
-        const { folder, doc, mount, lockSpy } = await restoreIntoTrashedFolder('trash-restore-in');
-        try {
-            await home.drive.deletePath(mountId, folder.id, home.user);
-        } finally {
-            lockSpy.mockRestore();
-        }
-        expect((await mount.getPath(doc.id))?.trashedAt).not.toBeNull();
-        expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
+        // A chat's data.db is no collab document, and stays open after a post.
+        test("a chat's open data.db under a trashed folder is closed by the trash, and its post survives a restore", async () => {
+            const folder = await home.drive.createFolder(mountId, rootId, 'trash-chat', home.user);
+            const chat = await createIn(folder.id, 'chat', 'trash-chat-room');
+            await chatPost(user.sessionToken, user.id, mountId, `${chat.id}/messages`, { content: 'keep me' });
+            const { mount } = await home.drive.resolveFile(mountId, chat.id);
+            const dataDb = await mount.getChildByName(chat.id, 'data.db');
+            expect(dataDb && mount.documentDbs.has(dataDb.id)).toBe(true);
 
-        await home.drive.restorePath(mountId, folder.id, home.user);
-        const reopened = await home.drive.getCollabDocument(mountId, doc.id);
-        reopened.doc.getMap('state').set('afterRestore', 'typed');
-        await home.drive.closeCollabDocument(mountId, doc.id);
-        const fresh = await home.drive.getCollabDocument(mountId, doc.id);
-        expect(fresh.doc.getMap('state').toJSON()).toEqual({ before: 'kept', afterRestore: 'typed' });
-    });
+            expect(await trashLogging(folder.id)).toEqual([]);
+            expect(dataDb && mount.documentDbs.has(dataDb.id)).toBe(false);
 
-    // The trash is in once trashPath returns. A document that arrived and then fails to close only
-    // logs, and the DELETE still answers that the folder is in the trash.
-    test('a close that fails after the trash still answers the DELETE with success', async () => {
-        const { folder, doc, mount, lockSpy } = await restoreIntoTrashedFolder('trash-close-fails');
-        const closeSpy = spyOn(mount, 'closeDatabase').mockImplementation(async () => {
-            throw new ApiError(503, 'storage unavailable');
+            await home.drive.restorePath(mountId, folder.id, home.user);
+            const res = await authedRequest(user.sessionToken, `/chat/${user.id}/${mountId}/${chat.id}/messages`);
+            const messages = await assertJson<ChatMessage[]>(res);
+            expect(messages.map((m) => m.content)).toContain('keep me');
         });
-        const errors = spyOn(console, 'error').mockImplementation(() => {});
-        let res: Response;
-        let logged: unknown[][];
-        try {
-            res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${mountId}/path/${folder.id}`,
-                { method: 'DELETE' },
-            );
-        } finally {
-            logged = errors.mock.calls;
-            errors.mockRestore();
-            closeSpy.mockRestore();
-            lockSpy.mockRestore();
-        }
-        expect(res.status).toBe(200);
-        expect((await mount.getPath(folder.id))?.trashedAt).not.toBeNull();
-        expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
-        expect(logged.some((call) => String(call[0]).includes(doc.id))).toBe(true);
-    });
 
-    // Each trash refuses the opens below its own path. When a trash of a document inside the folder
-    // fails, the folder's trash still refuses an open of that document.
-    test('a failed trash inside a folder that is being trashed keeps the folder refusing opens', async () => {
-        const folder = await home.drive.createFolder(mountId, rootId, 'trash-nested', home.user);
-        const doc = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${folder.id}/create/doc`,
-            { fileName: 'trash-nested-doc' },
-        );
-        const { mount } = await home.drive.resolveFile(mountId, doc.id);
-        const trashPath = mount.trashPath.bind(mount);
-        let innerTrash: unknown = null;
-        let lateOpen: unknown = null;
-        const spy = spyOn(mount, 'trashPath')
-            .mockImplementationOnce(async (pathId) => {
-                innerTrash = await home.drive.deletePath(mountId, doc.id, home.user).catch((e: unknown) => e);
-                lateOpen = await home.drive.getCollabDocument(mountId, doc.id).catch((e: unknown) => e);
+        // A restore that runs before the trash marks the folder lands in it, and its document goes to
+        // the trash with the folder.
+        test('a document restored into the folder while it is trashed is closed, and its edits persist', async () => {
+            const folder = await home.drive.createFolder(mountId, rootId, 'trash-restore-in', home.user);
+            const doc = await createIn(folder.id, 'doc', 'trash-restore-in-doc');
+            await home.drive.deletePath(mountId, doc.id, home.user);
+            const { mount } = await home.drive.resolveFile(mountId, folder.id);
+            const trashPath = mount.trashPath.bind(mount);
+            const spy = spyOn(mount, 'trashPath').mockImplementationOnce(async (pathId) => {
+                await home.drive.restorePath(mountId, doc.id, home.user);
+                const collab = await home.drive.getCollabDocument(mountId, doc.id);
+                collab.doc.getMap('state').set('before', 'kept');
                 return trashPath(pathId);
-            })
-            .mockImplementationOnce(async () => {
+            });
+            try {
+                expect(await trashLogging(folder.id)).toEqual([]);
+            } finally {
+                spy.mockRestore();
+            }
+            expect((await mount.getPath(doc.id))?.trashedAt).not.toBeNull();
+            expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
+
+            await home.drive.restorePath(mountId, folder.id, home.user);
+            const reopened = await home.drive.getCollabDocument(mountId, doc.id);
+            expect(reopened.doc.getMap('state').toJSON()).toEqual({ before: 'kept' });
+            await home.drive.closeCollabDocument(mountId, doc.id);
+        });
+
+        // The inner trash fails before it closes anything, and the folder's trash closes the document.
+        test('a failed trash of a document inside a folder that is being trashed leaves its close to the folder', async () => {
+            const folder = await home.drive.createFolder(mountId, rootId, 'trash-nested', home.user);
+            const doc = await createIn(folder.id, 'doc', 'trash-nested-doc');
+            const collab = await home.drive.getCollabDocument(mountId, doc.id);
+            const { mount } = await home.drive.resolveFile(mountId, doc.id);
+            const trashPath = mount.trashPath.bind(mount);
+            let innerTrash: unknown = null;
+            const spy = spyOn(mount, 'trashPath')
+                .mockImplementationOnce(async (pathId) => {
+                    innerTrash = await home.drive.deletePath(mountId, doc.id, home.user).catch((e: unknown) => e);
+                    collab.doc.getMap('state').set('during', 'typed');
+                    return trashPath(pathId);
+                })
+                .mockImplementationOnce(async () => {
+                    throw new ApiError(503, 'storage unavailable');
+                });
+            try {
+                await home.drive.deletePath(mountId, folder.id, home.user);
+            } finally {
+                spy.mockRestore();
+            }
+
+            expect(innerTrash instanceof ApiError && innerTrash.status).toBe(503);
+            expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
+            const lateOpen = await home.drive.getCollabDocument(mountId, doc.id).catch((e: unknown) => e);
+            expect(lateOpen instanceof ApiError && lateOpen.status).toBe(404);
+
+            await home.drive.restorePath(mountId, folder.id, home.user);
+            const restored = await home.drive.getCollabDocument(mountId, doc.id);
+            expect(restored.doc.getMap('state').toJSON()).toEqual({ during: 'typed' });
+            await home.drive.closeCollabDocument(mountId, doc.id);
+        });
+
+        // The trash is in once trashPath returns. A close that fails only logs, the walk goes on to the
+        // document's data.db, and the DELETE still succeeds.
+        test('a close that fails after the trash still answers the DELETE with success', async () => {
+            const doc = await createIn(rootId, 'doc', 'trash-close-fails');
+            await home.drive.getCollabDocument(mountId, doc.id);
+            const { mount } = await home.drive.resolveFile(mountId, doc.id);
+            const dataDb = await mount.getChildByName(doc.id, 'data.db');
+            const closeSpy = spyOn(mount, 'closeDatabase').mockImplementationOnce(async () => {
                 throw new ApiError(503, 'storage unavailable');
             });
-        try {
-            await home.drive.deletePath(mountId, folder.id, home.user);
-        } finally {
-            spy.mockRestore();
-        }
-        expect(innerTrash instanceof ApiError && innerTrash.status).toBe(503);
-        expect(lateOpen instanceof ApiError && lateOpen.status).toBe(503);
+            const errors = spyOn(console, 'error').mockImplementation(() => {});
+            let res: Response;
+            let logged: unknown[][];
+            try {
+                res = await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/path/${doc.id}`, {
+                    method: 'DELETE',
+                });
+            } finally {
+                logged = errors.mock.calls;
+                errors.mockRestore();
+                closeSpy.mockRestore();
+            }
+            expect(res.status).toBe(200);
+            expect((await mount.getPath(doc.id))?.trashedAt).not.toBeNull();
+            expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
+            expect(logged.some((call) => String(call[0]).includes(doc.id))).toBe(true);
+            expect(dataDb && mount.documentDbs.has(dataDb.id)).toBe(false);
+        });
     });
-});
+}

@@ -9,7 +9,6 @@ import type { SQL } from 'drizzle-orm';
 import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { folderIn, withFreeName } from '../drive/naming';
-import { closeCachedDbsUnder } from './document-db';
 import { renameThenWriteRow, rethrowPathWriteError } from './helpers';
 import type { Mount } from './mount';
 import { trashStorageKey } from './names';
@@ -19,10 +18,6 @@ export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath
     const root = await mount.getRootFolder();
     if (!root) throw new ApiError(500, 'Root folder not found');
     if (pathId === root.id) throw new ApiError(400, 'Cannot trash root folder');
-
-    // The open databases under the item close before the rename, so their last bytes move into .trash/ with the rest
-    // and no later sync writes outside it. The collab close skips a chat's data.db, so this one covers it.
-    await closeCachedDbsUnder(mount, pathId);
 
     return mount.withPathLock(pathId, () =>
         mount.withTreeExclusive(async () => {

@@ -2588,11 +2588,12 @@ describe('trash/restore content reindex', () => {
         await mount.reindexQueue?.drain();
         expect(mount.searchPaths({ q: 'grendelone', limit: 20 }).some((h) => h.id === containerId)).toBe(true);
 
-        // Dirty it again (the trash-time close syncs it, re-marking the container; the 2-min cap
-        // defers that drain), then trash. Age the index stamp so a restore-time drain is due now.
+        // Dirty it again, then trash and close it as Drive's trash does (the close syncs it, re-marking the
+        // container; the 2-min cap defers that drain). Age the index stamp so a restore-time drain is due now.
         body = 'grendeltwo';
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
         await mount.trashPath(containerId);
+        await mount.closeDatabase(dataDbId, { skipFinalSnapshot: true });
         mount.db.run(sql`UPDATE paths SET contentIndexedAt = 0 WHERE id = ${containerId}`);
 
         const extracted = new Promise<void>((resolve) => {

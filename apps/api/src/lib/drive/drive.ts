@@ -593,10 +593,7 @@ export class Drive {
         return { path: committed, etag: computeEtag(committed) };
     }
 
-    // The folder a create, copy or move puts something in. A folder on its way to the trash is a 404 already: its trash
-    // closes the databases under it, and a document put there meanwhile could take edits it can't save.
     private async getTargetFolder(mount: Mount, folderId: string): Promise<DrivePath> {
-        if (this.documents.isTrashing(mount, folderId)) throw new ApiError(404, 'Folder not found');
         const folder = await mount.getActivePath(folderId);
         await this.refuseDocumentPart(mount, folder);
         return folder;
@@ -645,12 +642,7 @@ export class Drive {
         // Read before the move for the same reason: whoever saw the path in its old folder hears it left.
         const oldMembers = await this.getEffectiveMembers(mountId, pathId);
 
-        // The check above can come before a trash of the folder begins, so the move asks again as it writes.
-        const movedPath = await mount.updatePath(
-            pathId,
-            { parentId: targetParentId },
-            { isTargetTrashing: () => this.documents.isTrashing(mount, targetParentId) },
-        );
+        const movedPath = await mount.updatePath(pathId, { parentId: targetParentId });
         this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, {
             oldParentId,
             members: this.getEffectiveMembers(mountId, pathId).then((members) => [...oldMembers, ...members]),
@@ -804,8 +796,7 @@ export class Drive {
         return this.removePath(mountId, pathId, (mount, item) => deleteFailedCopy(this, mount, item, createdIds, user));
     }
 
-    // A trash and the removal of a failed copy hold the item's ACL chain. New opens below it are refused
-    // until it is gone, and its WebDAV locks go with it.
+    // A trash and the removal of a failed copy hold the item's ACL chain, and its WebDAV locks go with it.
     private async removePath(
         mountId: string,
         pathId: string,
@@ -815,7 +806,7 @@ export class Drive {
         return this.runInOrder(`acl:${mountId}:${pathId}`, async () => {
             const item = await mount.getActivePath(pathId);
             if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
-            await this.documents.whileTrashing(mount, item.id, () => remove(mount, item));
+            await remove(mount, item);
             await this.releaseLocksUnder(mountId, item.id);
         });
     }
