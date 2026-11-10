@@ -1,6 +1,5 @@
 export { spliceBlocks } from './blocks';
 export {
-    addExclusion,
     applyEdits,
     buildResource,
     dropExceptionsFrom,

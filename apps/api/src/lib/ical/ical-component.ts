@@ -211,15 +211,6 @@ export function patchEvent(
     return applyEdits(resource, new Map([[recurrenceKey, { kind: 'patch', patch, ctx }]]));
 }
 
-export function addExclusion(
-    resource: ICAL.Component,
-    master: CalendarEvent,
-    exclusion: CalendarEvent,
-    ctx: WriteContext,
-): void {
-    applyEdits(resource, new Map([[exclusion.recurrenceDate, { kind: 'exclusion', event: exclusion, ctx }]]), master);
-}
-
 // A rule cut before `fromKey` keeps no override or exclusion from that date on, or a moved occurrence would outlive
 // the series.
 export function dropExceptionsFrom(resource: ICAL.Component, fromKey: string): void {

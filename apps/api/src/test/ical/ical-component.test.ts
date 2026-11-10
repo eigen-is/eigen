@@ -7,7 +7,6 @@ import { describe, expect, test } from 'bun:test';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import type ICAL from 'ical.js';
 import {
-    addExclusion,
     applyEdits,
     buildResource,
     parseIcs,
@@ -28,6 +27,14 @@ const CTX = { now: new Date('2026-06-01T10:00:00Z'), actorIsOrganizer: true };
 // One override edit, the way the store adds an occurrence it did not hold.
 const putOverride = (resource: ICAL.Component, master: CalendarEvent, override: CalendarEvent): boolean =>
     applyEdits(resource, new Map([[override.recurrenceDate, { kind: 'override', event: override }]]), master);
+
+// One exclusion edit, the way the store cancels an occurrence.
+const exclude = (resource: ICAL.Component, master: CalendarEvent, exclusion: CalendarEvent): boolean =>
+    applyEdits(
+        resource,
+        new Map([[exclusion.recurrenceDate, { kind: 'exclusion', event: exclusion, ctx: CTX }]]),
+        master,
+    );
 
 const masterOf = (resource: ICAL.Component): ICAL.Component =>
     resource.getAllSubcomponents('vevent').find((v) => !v.getFirstProperty('recurrence-id'))!;
@@ -1140,7 +1147,7 @@ describe('timezone fidelity', () => {
         const resource = parseResource(vcal(VTZ_AMS, clientSeries()));
         const master = { ...MASTER, timezone: 'America/New_York' };
 
-        addExclusion(resource, master, { ...EXCLUSION, recurrenceDate: '2026-04-22' }, CTX);
+        exclude(resource, master, { ...EXCLUSION, recurrenceDate: '2026-04-22' });
 
         expect(tzidsOf(resource).sort()).toEqual(['America/New_York', 'Europe/Amsterdam']);
     });
@@ -1196,11 +1203,11 @@ describe('the outbound iMIP body', () => {
 });
 
 describe('structural edits', () => {
-    test('addExclusion writes an EXDATE with its stamp and drops the override of that key', () => {
+    test('an exclusion writes an EXDATE with its stamp and drops the override of that key', () => {
         const resource = buildResource([MASTER, OVERRIDE]);
         expect(overridesOf(resource)).toHaveLength(1);
 
-        addExclusion(resource, MASTER, { ...EXCLUSION, id: 'evt-cancel', recurrenceDate: '2026-04-22' }, CTX);
+        exclude(resource, MASTER, { ...EXCLUSION, id: 'evt-cancel', recurrenceDate: '2026-04-22' });
 
         expect(overridesOf(resource)).toHaveLength(0);
         const stamp = masterOf(resource).getAllProperties('x-eigen-exdate')[0];
@@ -1211,8 +1218,8 @@ describe('structural edits', () => {
 
     test('cancelling one occurrence twice leaves one EXDATE and one stamp', () => {
         const resource = buildResource([MASTER]);
-        addExclusion(resource, MASTER, { ...EXCLUSION, id: 'evt-cancel-1', recurrenceDate: '2026-04-22' }, CTX);
-        addExclusion(resource, MASTER, { ...EXCLUSION, id: 'evt-cancel-2', recurrenceDate: '2026-04-22' }, CTX);
+        exclude(resource, MASTER, { ...EXCLUSION, id: 'evt-cancel-1', recurrenceDate: '2026-04-22' });
+        exclude(resource, MASTER, { ...EXCLUSION, id: 'evt-cancel-2', recurrenceDate: '2026-04-22' });
 
         const master = masterOf(resource);
         expect(master.getAllProperties('exdate').flatMap((p) => p.getValues())).toHaveLength(1);
@@ -1246,7 +1253,7 @@ describe('structural edits', () => {
     // A copy of single dates has no master to carry an EXDATE: the excluded date's VEVENT goes and nothing else.
     test('an exclusion on a resource with no master VEVENT drops that date alone', () => {
         const resource = parseResource(serializeResource(buildResource([OVERRIDE])));
-        addExclusion(resource, MASTER, OVERRIDE, CTX);
+        exclude(resource, MASTER, OVERRIDE);
         expect(resource.getAllSubcomponents('vevent')).toHaveLength(0);
     });
 
@@ -1278,8 +1285,8 @@ describe('refusals', () => {
         expect(() => putOverride(buildResource([MASTER]), MASTER, unkeyed)).toThrow('names no occurrence');
     });
 
-    test('addExclusion refuses an exclusion that names no occurrence', () => {
-        expect(() => addExclusion(buildResource([MASTER]), MASTER, unkeyed, CTX)).toThrow('names no occurrence');
+    test('an exclusion refuses an exclusion that names no occurrence', () => {
+        expect(() => exclude(buildResource([MASTER]), MASTER, unkeyed)).toThrow('names no occurrence');
     });
 
     test('removeExclusion refuses a resource with no master VEVENT', () => {
