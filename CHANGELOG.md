@@ -15,6 +15,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Changed
 
+- **Trashing an open document** — it no longer adds a version to its history first. The document keeps every edit, and a restore brings them back
 - **Deleting a chat message** — the files attached to a deleted message are deleted for good with it, instead of landing in Drive's Trash
 - **Storage limit for mail, contacts and calendar (breaking)** — the limit per user, and a team's override of it, goes back to its default of 100 MB. Set it again under **Storage quotas** in Admin's server settings and **Quota overrides** on the team's page
 - **A new look for the public site** — the landing page, Support, the blog and the changelog share one layout, with a footer that shows the version.

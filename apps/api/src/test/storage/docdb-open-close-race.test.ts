@@ -53,13 +53,12 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 
 type Gate = { parked: Promise<void>; release: () => void };
 
-// LocalStorage whose next write()/rename() after arm parks on a test-controlled gate (a write can
-// also be failed) — freezes a close mid-final-sync (or a trash mid-rename) so a concurrent open
+// LocalStorage whose next write() or read after arm parks on a test-controlled gate (a write can
+// also be failed) — freezes a close mid-final-sync so a concurrent open
 // lands deterministically in the close window. One-shot: the arm is consumed synchronously at park time, so every other
 // call passes straight through. No sleeps anywhere — pure deferreds.
 class GatedLocalStorage extends LocalStorage {
     private writeGate: { parked: () => void; released: Promise<void> } | null = null;
-    private renameGate: { parked: () => void; released: Promise<void> } | null = null;
     private readGate: { parked: () => void; released: Promise<void> } | null = null;
 
     public armWrite(): Gate & { fail: (err: Error) => void } {
@@ -67,13 +66,6 @@ class GatedLocalStorage extends LocalStorage {
         const released = Promise.withResolvers<void>();
         this.writeGate = { parked: parked.resolve, released: released.promise };
         return { parked: parked.promise, release: released.resolve, fail: released.reject };
-    }
-
-    public armRename(): Gate {
-        const parked = deferred();
-        const released = deferred();
-        this.renameGate = { parked: parked.resolve, released: released.promise };
-        return { parked: parked.promise, release: released.resolve };
     }
 
     // Parks the next download before its first byte, holding the open mid-load like a stalled GET.
@@ -92,16 +84,6 @@ class GatedLocalStorage extends LocalStorage {
             await gate.released;
         }
         return super.write(key, data);
-    }
-
-    public override async rename(oldKey: string, newKey: string): Promise<void> {
-        const gate = this.renameGate;
-        if (gate) {
-            this.renameGate = null;
-            gate.parked();
-            await gate.released;
-        }
-        return super.rename(oldKey, newKey);
     }
 
     // Gated at stream() rather than read(): exists() and size() read the same handle.
@@ -186,7 +168,7 @@ afterAll(() => {
 });
 
 describe('open during close waits for the close to settle', () => {
-    test("local: a reopen landing in trashPath's close window rebuilds from storage; its sync succeeds", async () => {
+    test("local: a reopen landing in the trash's close window rebuilds from storage; its sync succeeds", async () => {
         const { mount, storage } = await createGatedLocalMount('interleave-trash');
         const { containerId, dataDbId, managed } = await provisionDoc(mount, docConfig, 'chat');
 
@@ -194,22 +176,18 @@ describe('open during close waits for the close to settle', () => {
         await managed.flush();
         managed.db.insert(docSchema.items).values({ id: 2, data: 'dirty' }).run(); // close's final sync writes this
 
-        // Park the close's final sync (trashPath → closeCachedDbsUnder → close → onSync →
-        // uploadFromTemp → storage.write) and land an open in the window. Keys resolve under the tree
-        // lock, so the assertion holds whether the open takes it before the trash's rename (its sync
-        // resolves the trashed key) or after.
+        // A trash marks and renames first, then closes. Park that close's final sync (close → onSync →
+        // uploadFromTemp → storage.write) and land an open in the window.
+        await mount.trashPath(containerId);
         const writeGate = storage.armWrite();
-        const trashPromise = mount.trashPath(containerId);
+        const closePromise = mount.closeDatabase(dataDbId, { skipFinalSnapshot: true });
         await writeGate.parked;
 
         const openPromise = mount.holdDatabase(docConfig, dataDbId);
-        const renameGate = storage.armRename();
         writeGate.release();
-        await renameGate.parked;
-        renameGate.release();
 
         const reopened = await openPromise; // pre-fix: adopts the closing instance's live temp
-        await trashPromise;
+        await closePromise;
 
         // Pre-fix the old close's cleanupTemp unlinked the adopted temp: this flush throws
         // 'uploadFromTemp … tempfile missing' (steady-state sync loss until reopen). Post-fix

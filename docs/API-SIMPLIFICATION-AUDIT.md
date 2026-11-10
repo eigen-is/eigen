@@ -27,7 +27,6 @@ The best payoff per unit of risk. **Product** marks a finding that drops or chan
 
 | # | Finding | Removes | Risk | Product? | What is lost |
 |---|---------|---------|------|----------|--------------|
-| [M1](#m1) | Trash marks the rows first, then closes documents | ~70 + ~250 test | med | no | nothing |
 | [M9](#m9) | A copy leaves unnamed parts out, instead of sweeping them after | ~80 | med | no | nothing |
 | [X1](#x1) | Delete the audit scripts' `run`/`compare`/`split` modes | ~2,200 + ~1,000 test | low | no (dev) | an independent Word reader to measure ours against |
 | [C1](#c1) | Eigen-to-Eigen invites carry the iMIP body over the relay | ~200 | med-high | no | nothing |
@@ -37,13 +36,6 @@ The best payoff per unit of risk. **Product** marks a finding that drops or chan
 | [ML2](#ml2) | One message per send, no per-recipient copies | ~60 + most of 565 test | low | yes | a guest types their address on the login page |
 
 ## Mount, drive and versioning
-
-<a id="m1"></a>**M1. The trash closes documents before it marks the row, then guards the gap in five layers.**
-`drive/collab-registry.ts` (`trashing`, `isTrashing`, `whileTrashing`), `drive/drive.ts:609,660,842`, the `isTargetTrashing` option in `mount/mount.ts` (`updatePath`, `assertMovableInTx`), `drive/trash.ts`.
-History: `2ad5bc796` (refuse an open), `8b836cd59` (second close, counted keys), `04fa2707d` (refuse a create), `ab46de8ea` (and a subfolder), `9d64bb547` (thread `isTargetTrashing` into Mount), `7e8157f13`, `d0eeb4089`. About 320 test lines exist only for this (`trash-collab-close`, `trash-create-race`).
-Root cause: `deletePath` closes the documents while the row is still live, and `trashedAt` is written afterwards, so an in-memory map stands in for a DB fact that isn't there yet.
-Simpler: in one transaction, write `trashedAt`/`trashedFrom` on the item and its descendants, keeping `parentId` and the storage key. Then close the documents, whose final sync lands at the unchanged key. Then, under the lock, rename in storage and reparent. `getActivePath` and `targetFolderErrorInTx` already refuse a trashed row and a trashed ancestor, so the map, its plumbing and the second close all go. A crash between the steps leaves a trashed row at its old key, which restore and purge already resolve from the row.
-~70 LOC + ~250 test, medium risk (the order of the `local` rename), high confidence.
 
 <a id="m2"></a>**M2. UploadQueue repairs late orphan PUTs after the fact.**
 `mount/upload-queue.ts` (`OrphanState{count, canceled, isDatabase, lastAcked}`, `orphansAtStart`, the cancel flag set in the timeout, re-staging acked bytes).

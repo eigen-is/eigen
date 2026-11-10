@@ -22,15 +22,10 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
     // shared with, and they must still hear that it left their view.
     const members = await drive.getEffectiveMembers(mount.id, item.id);
 
-    // Open documents close before trashPath closes their databases, so each one saves its last state.
-    // Drive.deletePath refuses new opens until the trash is done.
-    await closeOpenDocumentsUnder(drive, mount, item.id);
-
+    // The mark comes first: after it an open is a 404 and a sync writes to the trashed row's key, so what was
+    // open under the item closes after it and saves its last edits into the trash.
     const trashedItem = await mount.trashPath(item.id);
-    // A restore or a create can put a document in the folder after Drive.deletePath read the paths it
-    // guards, and the document can then be opened. trashPath closed its database with the rest, so the
-    // document closes now, before the slow steps below, and stops taking edits it can't save.
-    await closeOpenDocumentsUnder(drive, mount, item.id, { skipFinalSnapshot: true });
+    await closeOpenDocumentsUnder(drive, mount, item.id);
     drive.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, { oldParentId: item.parentId, members });
     mount.history.record({ pathId: item.id, eventType: 'trashed', actor: user });
     // The item as it was before the trash. fanOut skips paths in the trash, and this one isn't yet.
@@ -118,7 +113,9 @@ export async function deleteFailedCopy(
 ): Promise<void> {
     if (!(await holdsOnlyCopy(mount, item, createdIds))) return deletePath(drive, mount, item, user);
     const members = await drive.getEffectiveMembers(mount.id, item.id);
-    await closeOpenDocumentsUnder(drive, mount, item.id, { skipFinalSnapshot: true });
+    // A document opened in the half-built copy between this close and the delete loses its database under the
+    // editor, which logs until its socket's read check closes it. The copy goes for good either way.
+    await closeOpenDocumentsUnder(drive, mount, item.id);
     await mount.deletePath(item.id);
     drive.emit(isContainerType(item.type) ? SSEventType.DRIVE_FOLDER_DELETED : SSEventType.DRIVE_FILE_DELETED, item, {
         members,
@@ -134,20 +131,15 @@ async function holdsOnlyCopy(mount: Mount, item: DrivePath, createdIds: Readonly
     return true;
 }
 
-// Closes every collab document open at or below the path. The trash goes on either way, so a close
-// that fails is only logged.
-async function closeOpenDocumentsUnder(
-    drive: Drive,
-    mount: Mount,
-    pathId: string,
-    opts?: { skipFinalSnapshot?: boolean },
-): Promise<void> {
-    for (const id of [pathId, ...mount.collectDescendantIds(pathId)]) {
-        if (!drive.hasCollabDocument(mount.id, id)) continue;
-        await drive
-            .closeCollabDocument(mount.id, id, opts)
-            .catch((error: unknown) => console.error(`Failed to close collab document ${id}:`, error));
+// Closes every collab document open at or below the path, then every database still open there, such as a
+// chat's data.db. The trash or the delete goes on either way, so a close that fails is only logged.
+async function closeOpenDocumentsUnder(drive: Drive, mount: Mount, pathId: string): Promise<void> {
+    const ids = [pathId, ...mount.collectDescendantIds(pathId)];
+    const logFailure = (id: string) => (error: unknown) => console.error(`Failed to close ${id}:`, error);
+    for (const id of ids) {
+        await drive.closeCollabDocument(mount.id, id, { skipFinalSnapshot: true }).catch(logFailure(id));
     }
+    for (const id of ids) await mount.closeDatabase(id, { skipFinalSnapshot: true }).catch(logFailure(id));
 }
 
 // Read access comes from the whole chain of folders, so every path below the folder with an ACL of its
