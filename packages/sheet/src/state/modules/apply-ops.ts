@@ -58,7 +58,8 @@ export function applyBatch(ctx: Context, ops: Op[], moveView = true): AppliedRow
     // Each op moves the view on the grid it left, which the next op starts from.
     for (const [i, { move }] of moved.entries()) {
         const after = moved[i + 1]?.sheets ?? applied.sheets;
-        followView(ctx, move, after.find(({ id }) => id === move.id)?.data);
+        const data = after.find(({ id }) => id === move.id)?.data;
+        if (data) followView(ctx, move, data);
     }
     settleCurrentSheet(ctx);
     return moved;
