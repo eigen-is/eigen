@@ -326,6 +326,8 @@ describe('iMIP Outbound Email Composition', () => {
         expect(mail.html).toContain('8 Apr 2026');
         expect(mail.html).not.toContain('1 Apr 2026');
         expect(mail.html).not.toContain('Repeats');
+        expect(mail.text).toContain('8 Apr 2026');
+        expect(mail.text).not.toContain('Repeats');
     });
 
     test('composeRsvpReply for the whole series sends no RECURRENCE-ID (RFC 5546)', () => {

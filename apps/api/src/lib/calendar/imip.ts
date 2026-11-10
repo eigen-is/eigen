@@ -122,7 +122,7 @@ export function composeRsvpReply(
         from: { name: attendeeName, address: attendeeEmail },
         to: [{ name: organizer.name ?? '', address: organizer.email }],
         subject: `${STATUS_LABELS[status]}: ${event.title}`,
-        text: `${attendeeName} has ${statusLabel} the invitation: ${event.title}`,
+        text: `${attendeeName} has ${statusLabel} the invitation:\n\n${buildEventSummary(replyEvent)}`,
         html: buildEventHtml(
             replyEvent,
             `Reply from ${attendeeName}`,
