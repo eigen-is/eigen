@@ -5,7 +5,7 @@
 import { escapeHtml, stripTagsServer } from '@workspace/lib/html';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
-import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
+import { toAttachmentReference } from '@workspace/lib/types/drive-reference';
 import {
     buildAttachmentUrl,
     EMAIL_BORDER,
@@ -15,18 +15,6 @@ import {
     renderEigenEmail,
 } from './mail-template';
 import type { OutboundMail } from './mailer';
-
-function pathAsAttachmentLink(path: DrivePath): AttachmentReference {
-    return {
-        type: 'reference',
-        id: path.id,
-        ownerId: path.ownerId,
-        mountId: path.mountId,
-        name: path.name,
-        driveType: path.type,
-        mimeType: path.mimeType,
-    };
-}
 
 // Takes HTML, so the caller escapes what a person wrote.
 function quoteBlock(html: string): string {
@@ -41,19 +29,18 @@ export function composeShareEmail(
     const displayName = stripEigenExtension(path.name);
     const actorDisplay = actor.name || actor.email;
     const subject = `${actorDisplay} shared "${displayName}" with you`;
-    const reference = pathAsAttachmentLink(path);
+    const url = buildAttachmentUrl(toAttachmentReference(path), recipientEmail);
     const html = renderEigenEmail({
         title: subject,
         bodyHtml: `<p style="font-size:14px;line-height:1.5">${escapeHtml(actorDisplay)} shared a document with you. Open it from the link below.</p>`,
-        attachmentLinks: [reference],
+        links: [{ name: displayName, href: url }],
         footerLine: `Shared by ${actorDisplay}`,
-        recipientEmail,
     });
     return {
         from: { name: actor.name, address: actor.email },
         to: [{ name: '', address: recipientEmail }],
         subject,
-        text: `${actorDisplay} shared "${displayName}" with you.\n\n${buildAttachmentUrl(reference, recipientEmail)}`,
+        text: `${actorDisplay} shared "${displayName}" with you.\n\n${url}`,
         html,
     };
 }
@@ -67,16 +54,16 @@ export function composeAssignedEmail(
 ): OutboundMail {
     const displayName = stripEigenExtension(path.name);
     const actorDisplay = actor.name || actor.email;
-    const subject = `${actorDisplay} assigned you a comment on "${displayName}"`;
-    const url = new URL(buildAttachmentUrl(pathAsAttachmentLink(path), recipientEmail));
+    const subject = `${actorDisplay} assigned you a task on "${displayName}"`;
+    const url = new URL(buildAttachmentUrl(toAttachmentReference(path), recipientEmail));
     url.searchParams.set('chat', chatName);
-    const cardBlock = card ? quoteBlock(escapeHtml(card)) : '';
     const html = renderEigenEmail({
         title: subject,
-        bodyHtml: `<p style="font-size:14px;line-height:1.5">${escapeHtml(actorDisplay)} assigned you a comment.</p>${cardBlock}<p style="font-size:14px;line-height:1.5;margin-top:12px"><a href="${escapeHtml(url.toString())}" style="color:${EMAIL_LINK}">Open the comment</a></p>`,
+        bodyHtml: `<p style="font-size:14px;line-height:1.5">${escapeHtml(actorDisplay)} assigned you a task. Open it from the link below.</p>${card ? quoteBlock(escapeHtml(card)) : ''}`,
+        links: [{ name: displayName, href: url.toString() }],
         footerLine: `Assigned by ${actorDisplay}`,
     });
-    const textParts = [`${actorDisplay} assigned you a comment on "${displayName}".`];
+    const textParts = [`${actorDisplay} assigned you a task on "${displayName}".`];
     if (card) textParts.push(card);
     textParts.push(url.toString());
     return {
@@ -98,16 +85,16 @@ export function composeAccessRequestEmail(
     const requesterDisplay = requester.name || requester.email;
     const subject = `${requesterDisplay} requested access to "${displayName}"`;
     const messageBlock = message ? quoteBlock(escapeHtml(message).replace(/\n/g, '<br>')) : '';
-    const reference = pathAsAttachmentLink(path);
+    const url = buildAttachmentUrl(toAttachmentReference(path));
     const html = renderEigenEmail({
         title: subject,
         bodyHtml: `<p style="font-size:14px;line-height:1.5">${escapeHtml(requesterDisplay)} (<a href="mailto:${escapeHtml(requester.email)}" style="color:${EMAIL_LINK}">${escapeHtml(requester.email)}</a>) is requesting access. Open the document and grant them access from the share dialog.</p>${messageBlock}`,
-        attachmentLinks: [reference],
+        links: [{ name: displayName, href: url }],
         footerLine: `Access request from ${requesterDisplay}`,
     });
     const textParts = [`${requesterDisplay} requested access to "${displayName}".`];
     if (message) textParts.push(`Message: ${message}`);
-    textParts.push(buildAttachmentUrl(reference));
+    textParts.push(url);
     return {
         from: { name: requesterDisplay, address: requester.email },
         to: [{ name: owner.name, address: owner.email }],
@@ -127,20 +114,19 @@ export function composeCollaboratorsEmail(
     const displayName = stripEigenExtension(path.name);
     const resolvedSubject = subject?.trim() || displayName;
     const senderDisplay = sender.name || sender.email;
-    const reference = pathAsAttachmentLink(path);
+    const url = buildAttachmentUrl(toAttachmentReference(path), recipientEmail);
     const html = renderEigenEmail({
         title: resolvedSubject,
         bodyHtml: htmlMessage,
-        attachmentLinks: [reference],
+        links: [{ name: displayName, href: url }],
         footerLine: `Sent from ${senderDisplay}`,
-        recipientEmail,
     });
     const textBody = stripTagsServer(htmlMessage);
     return {
         from: { name: sender.name, address: sender.email },
         to: [{ name: '', address: recipientEmail }],
         subject: resolvedSubject,
-        text: `${textBody}\n\n${buildAttachmentUrl(reference, recipientEmail)}`,
+        text: `${textBody}\n\n${url}`,
         html,
     };
 }
@@ -194,7 +180,6 @@ export function composeInviteEmail(
         title: subject,
         bodyHtml,
         footerLine: orgName,
-        recipientEmail,
     });
     return {
         to: [{ name: '', address: recipientEmail }],

@@ -31,19 +31,9 @@ describe('renderEigenEmail', () => {
         const html = renderEigenEmail({
             title: 'T',
             bodyHtml: '',
-            attachmentLinks: [
-                {
-                    type: 'reference',
-                    id: 'p1',
-                    ownerId: 'u1',
-                    mountId: 'm1',
-                    name: 'doc.eigendoc',
-                    driveType: 'doc',
-                    mimeType: 'application/eigendoc',
-                },
-            ],
+            links: [{ name: 'doc', href: 'http://localhost:3006/docs/doc/u1/m1/p1' }],
         });
-        expect(html).toContain('doc'); // .eigendoc stripped
+        expect(html).toContain('Open doc →');
         expect(html).toMatch(/svg/i); // paperclip
         expect(html).toContain('target="_blank"'); // open eigen doc in a new tab
         expect(html).toContain('rel="noopener noreferrer"');

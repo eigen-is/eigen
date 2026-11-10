@@ -363,7 +363,7 @@ describe('Assignment email', () => {
             .map(([message]) => message)
             .filter(
                 (message) =>
-                    message.subject.includes('assigned you a comment') &&
+                    message.subject.includes('assigned you a task') &&
                     message.to.some((recipient) => recipient.address === address),
             );
     }
@@ -476,7 +476,7 @@ describe('Assignment email', () => {
         const mails = assignMailsTo(guest.email);
         expect(mails).toHaveLength(1);
         const message = mails[0];
-        expect(message.subject).toBe(`${ctx.alice.user.name} assigned you a comment on "mail-guest"`);
+        expect(message.subject).toBe(`${ctx.alice.user.name} assigned you a task on "mail-guest"`);
         expect(message.from).toEqual({ name: ctx.alice.user.name, address: ctx.alice.user.email });
         expect(message.html).toContain('Fix header');
         expect(message.text).toContain('Fix header');
@@ -487,8 +487,8 @@ describe('Assignment email', () => {
         expect(link.pathname).toContain(`/${ctx.alice.user.id}/${mountId}/${docId}`);
         // The HTML holds the same link, with its & escaped for the attribute.
         expect(message.html).toContain(`href="${link.toString().replaceAll('&', '&amp;')}"`);
-        // A pill cannot carry the param, so there is none.
-        expect(message.html).not.toContain('<svg');
+        // The link is the shared pill, as in a share mail.
+        expect(message.html).toContain('Open mail-guest →');
 
         const tag = bellTag(docId, chatName);
         expect((await notificationsFor(guest.id)).some((n) => n.tag === tag)).toBe(true);
@@ -655,7 +655,7 @@ describe('Assignment email', () => {
         const mails = assignMailsTo(otherGuest.email);
         expect(mails).toHaveLength(1);
         const message = mails[0];
-        expect(message.subject).toBe(`${guest.name} assigned you a comment on "mail-guest-actor"`);
+        expect(message.subject).toBe(`${guest.name} assigned you a task on "mail-guest-actor"`);
         expect(message.from).toEqual({ name: guest.name, address: guest.email });
     });
 
@@ -681,7 +681,7 @@ describe('Assignment email', () => {
         const mails = assignMailsTo(guest.email);
         expect(mails).toHaveLength(1);
         const message = mails[0];
-        const title = `${ctx.alice.user.email} assigned you a comment on "mail-no-name"`;
+        const title = `${ctx.alice.user.email} assigned you a task on "mail-no-name"`;
         expect(message.subject).toBe(title);
         const tag = bellTag(docId, chatName);
         expect(findOrFail(await notificationsFor(guest.id), (n: Notification) => n.tag === tag).title).toBe(title);

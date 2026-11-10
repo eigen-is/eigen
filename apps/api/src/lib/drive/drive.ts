@@ -1215,7 +1215,7 @@ export class Drive {
             // The assignment stands whatever happens to the notice, such as a home a restore holds.
             await this.resolveFile(mountId, pathId)
                 .then(({ path }) => propagateAssignment(path, chatName, assignee, user, card))
-                .catch(() => {});
+                .catch((err) => console.error('Failed to propagate assignment:', err));
         }
     }
 
