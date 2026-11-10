@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types';
 import { teamOwnerId } from '@workspace/lib/types';
-import type { CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
+import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { requestOtp, verifyOtpAndSignIn } from '../../lib/auth/guest-auth';
 import { getServerConfig } from '../../lib/config/server-config';
 import { evictHome, getHome } from '../../lib/home/get-home';
@@ -97,6 +97,68 @@ describe('share reconciliation', () => {
             await authedRequest(created.sessionToken, `/calendar/${created.id}/event-range/${from}/${to}`),
         );
         expect(events.some((event) => event.title === title)).toBe(true);
+    });
+
+    // The newcomer's copy is what an Eigen guest invited today holds: the series with its moved and cancelled dates, and
+    // an occurrence they alone were invited to as that one occurrence of its series.
+    test('a newcomer gets each series with its exceptions, and an occurrence invitation as that occurrence', async () => {
+        const email = `recon-series-${crypto.randomUUID()}@test.eigen.is`;
+        const guest = { email, status: 'pending', role: 'required' };
+        const calendars = await assertJson<CalendarItem[]>(
+            await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`),
+        );
+        const calendarId = findOrFail(calendars, (c) => c.isDefault).id;
+        const post = async (body: Record<string, unknown>) =>
+            assertJson<CalendarEvent>(
+                await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/calendar/${ctx.alice.user.id}/calendars/${calendarId}/events`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ allDay: false, rrule: null, timezone: 'Europe/Amsterdam', ...body }),
+                    },
+                ),
+            );
+        const weekly = (title: string, attendees: object[]) =>
+            post({
+                title,
+                startTime: '2027-03-02T09:00:00Z',
+                endTime: '2027-03-02T10:00:00Z',
+                rrule: 'FREQ=WEEKLY;COUNT=4',
+                data: { attendees },
+            });
+        const occurrence = (series: CalendarEvent, date: string, body: Record<string, unknown>) =>
+            post({
+                title: series.title,
+                startTime: `${date}T09:00:00Z`,
+                endTime: `${date}T10:00:00Z`,
+                parentEventId: series.id,
+                recurrenceDate: date,
+                ...body,
+            });
+        const series = await weekly('Recon series', [guest]);
+        await occurrence(series, '2027-03-09', {
+            title: 'Recon moved',
+            startTime: '2027-03-09T11:00:00Z',
+            endTime: '2027-03-09T12:00:00Z',
+        });
+        await occurrence(series, '2027-03-16', { status: 'cancelled' });
+        const other = await weekly('Recon other', []);
+        await occurrence(other, '2027-03-23', { title: 'Recon only this one', data: { attendees: [guest] } });
+
+        const created = await createTestUser(email, 'testpassword123', 'Newcomer');
+
+        const home = await getHome(created.id);
+        const copy = await home.calendar.getEventsByUid(series.uid);
+        expect(findOrFail(copy, (e) => !e.parentEventId).title).toBe('Recon series');
+        expect(findOrFail(copy, (e) => e.recurrenceDate === '2027-03-09').title).toBe('Recon moved');
+        expect(findOrFail(copy, (e) => e.recurrenceDate === '2027-03-16').status).toBe('cancelled');
+        expect(copy).toHaveLength(3);
+        const [lone, ...rest] = await home.calendar.getEventsByUid(other.uid);
+        expect(rest).toHaveLength(0);
+        expect(lone).toMatchObject({ title: 'Recon only this one', recurrenceDate: '2027-03-23', parentEventId: null });
+        expect(lone.data?.organizerEventId).toBe(other.id);
     });
 
     // An invitation names an address, so a team join has none to pull, and a pull would re-add one the member removed.

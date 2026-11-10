@@ -4,7 +4,6 @@
 // decide what arrives, so an entry left by a revoked share delivers nothing.
 
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
-import { requestedEvent } from '../calendar/invite-propagation';
 import { pullCalendarShares, pullPendingInvitations, pullSharedPaths, sendToHome } from '../home/home-relay';
 import { getTeam } from '../team';
 import type { User } from '../user';
@@ -59,18 +58,8 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
             }
 
             if (teamId) continue;
-            const organizer = { userId: fromUserId, email: owner.email, name: owner.name };
-            for (const event of await pullPendingInvitations(fromUserId, user.email)) {
-                await sendToHome(user.id, {
-                    type: 'calendar:request',
-                    events: [requestedEvent(event, null, organizer, event.data?.attendees ?? [])],
-                    link: {
-                        organizerEmail: owner.email.toLowerCase(),
-                        organizerEventId: event.id,
-                        organizerUserId: fromUserId,
-                        createByUserId: fromUserId,
-                    },
-                });
+            for (const request of await pullPendingInvitations(fromUserId, user.email)) {
+                await sendToHome(user.id, { type: 'calendar:request', ...request });
             }
         } catch (error) {
             console.error(`Failed to reconcile shares from ${fromUserId} to ${target} for user ${user.id}:`, error);

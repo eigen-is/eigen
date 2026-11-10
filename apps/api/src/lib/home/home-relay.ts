@@ -22,7 +22,7 @@ import { settlesWithin } from '../../utils/timing';
 import { captureBytes, snapshotHome } from '../backup/snapshot-home';
 import type { Calendar } from '../calendar/calendar';
 import { readCalendarTotalSize } from '../calendar/resource-store';
-import type { CreateEventArgs, InvitationLink } from '../calendar/types';
+import type { CreateEventArgs, InvitationRequest } from '../calendar/types';
 import {
     getAvatarsDir,
     getDataRoot,
@@ -36,7 +36,6 @@ import { readContactsTotalSize } from '../contacts/card-store';
 import { LocalFilesystem } from '../core';
 import type { RecentRow } from '../drive/recent';
 import type { EventPatch } from '../ical/ical-component';
-import type { ParsedEvent } from '../ical/ical-parse';
 import { readMailTotalSize } from '../mail/maildir-store';
 import type { Memberships, User } from '../user';
 import { getMemberships, getOwnerExists, getUserById, getUsersByEmails, isGuest, updateUser } from '../user';
@@ -60,7 +59,7 @@ export type HomeMessage =
           actorEmail?: string;
           actorName?: string;
       }
-    | { type: 'calendar:request'; events: readonly ParsedEvent[]; link: InvitationLink }
+    | ({ type: 'calendar:request' } & InvitationRequest)
     | {
           type: 'calendar:invitation-removal';
           orgEventId: string;
@@ -337,8 +336,8 @@ export async function pullEventById(
     return home.calendar.getEventById(calendarId, eventId);
 }
 
-export async function pullPendingInvitations(ownerId: string, attendeeEmail: string): Promise<CalendarEvent[]> {
-    return (await calendarOf(ownerId))?.getEventsWithAttendee(attendeeEmail) ?? [];
+export async function pullPendingInvitations(ownerId: string, attendeeEmail: string): Promise<InvitationRequest[]> {
+    return (await calendarOf(ownerId))?.pendingInvitations(attendeeEmail) ?? [];
 }
 
 // In the event writes, `user` is the person who makes the change, not the owner of the calendar.

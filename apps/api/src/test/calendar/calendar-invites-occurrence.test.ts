@@ -37,7 +37,7 @@ describe('Occurrence edits of an invited series', () => {
 
     const guests = () => [{ email: ctx.bob.user.email, name: 'Bob', status: 'pending' as const, role: 'required' }];
 
-    async function createSeries(title: string): Promise<CalendarEvent> {
+    async function createSeries(title: string, attendees: object[] = guests()): Promise<CalendarEvent> {
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
             `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
@@ -51,7 +51,7 @@ describe('Occurrence edits of an invited series', () => {
                     allDay: false,
                     rrule: 'FREQ=WEEKLY;COUNT=4',
                     timezone: TZ,
-                    data: { attendees: guests() },
+                    data: { attendees },
                 }),
             },
         );
@@ -527,6 +527,19 @@ describe('Occurrence edits of an invited series', () => {
             expect(ics).not.toContain('X-EIGEN');
             expect(ics).not.toContain('BEGIN:VALARM');
         }
+    });
+
+    test('a guest added to a series gets an occurrence they are not on as cancelled', async () => {
+        const charlie = { email: ctx.charlie.user.email, name: 'Charlie', status: 'pending', role: 'required' };
+        const series = await createSeries('Weekly Not On One', [charlie]);
+        const target = '2027-02-16';
+        await editOccurrence(series.id, target, { title: 'Charlie Only', data: { attendees: [charlie] } });
+
+        expect((await putEvent(series.id, { data: { attendees: [charlie, ...guests()] } })).status).toBe(200);
+
+        const reached = await untilBob(series.uid, (occ) => occ.length >= 3);
+        expect(reached.map((e) => e.occurrenceDate)).not.toContain(target);
+        expect(reached).toHaveLength(3);
     });
 
     test('the guest is told an invitation changed, not that they were invited to a new series', async () => {
