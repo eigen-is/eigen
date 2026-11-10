@@ -585,14 +585,13 @@ describe('engine/recalc — recalcSheets', () => {
             ]),
         ];
         expect(() => recalcSheets(sheets, { maxCellsRead: 4 })).toThrow(RangeError);
-        // Past the budget a recompute leaves every value as it was.
         const cached = [
             sheet('s1', 'Sheet1', [
                 [num(1), formula('=SUM(A1:A2)', num(9))],
                 [num(2), null],
             ]),
         ];
-        expect(recompute(cached, everyFormula, { maxCellsRead: 1 })[0].data![0][1]?.v).toBe(9);
+        expect(() => recompute(cached, everyFormula, { maxCellsRead: 1 })).toThrow(RangeError);
         const out = recalcSheets(sheets, { maxCellsRead: 5 });
         expect([out[0].data![0][1]?.v, out[0].data![1][1]?.v]).toEqual([6, 3]);
     });

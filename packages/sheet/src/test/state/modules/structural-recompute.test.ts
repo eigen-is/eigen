@@ -6,7 +6,7 @@ import { FormulaEngine } from '../../../engine/formula-engine';
 import { FormulaGraph } from '../../../engine/formula-graph';
 import { walkFormulaRefs } from '../../../engine/formula-shift';
 import { recomputeAfter } from '../../../engine/recalc';
-import { replaySheetsOps } from '../../../engine/replay-ops';
+import { replaySheetsOps, SkippedRecompute } from '../../../engine/replay-ops';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../../engine/rowcol';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
@@ -512,7 +512,7 @@ describe('what a recompute keeps', () => {
         }
     });
 
-    test('past a budget the values stay, the op stands and no batch drops', () => {
+    test('past a budget the values stay, the op stands and the recompute is reported', () => {
         const base = book({
             cells: [
                 [n(10), f('=SUM(A1:A3)', 60)],
@@ -520,16 +520,15 @@ describe('what a recompute keeps', () => {
                 [n(30), null],
             ],
         });
-        let dropped = 0;
+        const dropped: unknown[] = [];
         const [sheet] = replaySheetsOps(
             base.sheets,
             [[{ op: 'deleteRowCol', id: 's1', path: [], value: deleteRow(1) }]],
-            () => {
-                dropped += 1;
-            },
+            (e) => dropped.push(e),
             { maxCellsRead: 1 },
         );
-        expect(dropped).toBe(0);
+        expect(dropped).toHaveLength(1);
+        expect(dropped[0]).toBeInstanceOf(SkippedRecompute);
         expect(sheet.data?.length).toBe(2);
         expect(sheet.data?.[0][1]?.f).toBe('=SUM(A1:A2)');
         expect(sheet.data?.[0][1]?.v).toBe(60);

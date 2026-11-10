@@ -35,13 +35,17 @@ const immer = new Immer({ autoFreeze: false });
 type InsertValue = Omit<InsertRowColOp, 'id'>;
 type DeleteValue = Omit<DeleteRowColOp, 'id'>;
 
-// A batch the replay can't apply is reported to `onDropped`, which a caller that wants a count of its own passes. By
-// default each one is logged as a warning. `budgets` bound what a batch's recompute may cost the server.
+// A batch whose recompute passed a budget. Its ops stand and its formulas keep the values they had, which a reader
+// without the budget computes, so such sheets are no state to store.
+export class SkippedRecompute extends Error {}
+
+// A batch the replay can't apply is reported to `onDropped`, and so is a recompute past `budgets` as a SkippedRecompute,
+// whose batch stands with the values it had. A caller that wants a count of its own passes it. By default each one is
+// logged as a warning.
 export function replaySheetsOps(
     sheets: Sheet[],
     opBatches: Op[][],
-    onDropped: (dropped: unknown) => void = (e) =>
-        console.warn('[sheets] op batch failed to apply, skipping batch:', e),
+    onDropped: (dropped: unknown) => void = (e) => console.warn('[sheets] replay skipped a batch or its recompute:', e),
     budgets: RecalcBudgets = {},
 ): Sheet[] {
     // Every base sheet carries its config collections before the first op, so the config patches the editor writes
@@ -49,6 +53,17 @@ export function replaySheetsOps(
     let result = sheets.map(withNormalizedSheet);
     // Built at the first batch that recomputes, and kept until a batch renames, adds or deletes a sheet.
     let graph: FormulaGraph | null = null;
+    // A step past a budget may leave the graph short, so the graph goes, and the next recompute builds it whole.
+    const withinBudget = (step: () => void): RangeError | null => {
+        try {
+            step();
+            return null;
+        } catch (e) {
+            if (!(e instanceof RangeError)) throw e;
+            graph = null;
+            return e;
+        }
+    };
     for (const batch of opBatches) {
         // One bad batch must never make the whole workbook unreadable. It rolls back and the replay goes on with the
         // next batch. The same batch is skipped on every replay.
@@ -75,7 +90,7 @@ export function replaySheetsOps(
                 } else if (isRowColOp(op)) {
                     const move = rowColOf(op);
                     result = applyRowColOp(result, op);
-                    graph = withinBudget(() => graph?.shift(result, move) ?? null);
+                    withinBudget(() => graph?.shift(result, move));
                 } else if (op.op === 'renameSheet') {
                     result = applySheetRename(result, renameSheetOf(op));
                     graph = null;
@@ -84,13 +99,17 @@ export function replaySheetsOps(
             const normalOps = batch.filter((op) => op.op === 'add' || op.op === 'remove' || op.op === 'replace');
             const [patches] = opToPatchOnSheets(result, normalOps);
             result = immer.applyPatches(result, patches);
-            if (patches.length > 0) graph = withinBudget(() => graph?.followPatches(result, patches) ?? null);
+            if (patches.length > 0) withinBudget(() => graph?.followPatches(result, patches));
             const seeds = seedsOf(batch);
             if (seeds) {
                 const materialized = result.map(withMaterializedData);
-                graph ??= withinBudget(() => new FormulaGraph(materialized, budgets));
+                result = materialized;
                 const engine = new FormulaEngine({ maxCellsRead: budgets.maxCellsRead });
-                result = graph ? recomputeAfter(materialized, seeds, graph, engine) : materialized;
+                const passed = withinBudget(() => {
+                    graph ??= new FormulaGraph(materialized, budgets);
+                    result = recomputeAfter(materialized, seeds, graph, engine);
+                });
+                if (passed) onDropped(new SkippedRecompute(passed.message, { cause: passed }));
             }
         } catch (e) {
             onDropped(e);
@@ -152,17 +171,6 @@ export function applyRowColOp<S extends ShiftedSheet>(sheets: S[], op: Op): S[] 
 
 function rowColOf(op: Op): InsertRowColOp | DeleteRowColOp {
     return op.op === 'insertRowCol' ? insertRowColOf(op) : deleteRowColOf(op);
-}
-
-// The graph, or null once it passed a budget. The replay goes on without it: the batch's values stay as they were, and
-// its ops stand.
-function withinBudget(step: () => FormulaGraph | null): FormulaGraph | null {
-    try {
-        return step();
-    } catch (e) {
-        if (e instanceof RangeError) return null;
-        throw e;
-    }
 }
 
 // A stored sheet keeps its cells as the `celldata` list, but a cell op writes `data[r][c]`. So a sheet gets the dense

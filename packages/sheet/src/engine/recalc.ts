@@ -57,21 +57,16 @@ export function recalcSheets(sheets: readonly Sheet[], budgets: RecalcBudgets = 
 
 // The sheets with what the seeds affect computed again, over the formula graph the caller holds for them. Every reader
 // runs it, so the values stay off the wire: a clock or a random number keeps its stored value, as every tab must agree.
-// Past a budget the values stay as they were, and the op they follow stands.
+// Past a budget it throws a RangeError, and the graph may be left short, so the caller drops it.
 export function recomputeAfter<S extends WorkingSheet>(
     sheets: S[],
     seeds: RecomputeSeeds,
     graph: FormulaGraph,
     engine: FormulaEngine,
 ): S[] {
-    try {
-        const chosen = Object.values(graph.formulas).filter(({ formula }) => seeds.reads(formula));
-        const order = graph.affected(sheets, [...seeds.cells, ...cellsOnLines(sheets, seeds.lines)], chosen);
-        return withResults(sheets, evaluateFormulas(order, sheets, engine, true));
-    } catch (e) {
-        if (e instanceof RangeError) return sheets;
-        throw e;
-    }
+    const chosen = Object.values(graph.formulas).filter(({ formula }) => seeds.reads(formula));
+    const order = graph.affected(sheets, [...seeds.cells, ...cellsOnLines(sheets, seeds.lines)], chosen);
+    return withResults(sheets, evaluateFormulas(order, sheets, engine, true));
 }
 
 // Evaluates formulas in order, each value reaching the next through `computed`, which the resolver reads before the
