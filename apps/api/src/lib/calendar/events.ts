@@ -93,10 +93,10 @@ export async function deleteEvent(
     const existing = await calendar.writeLock.run(() => eraseStoredEvent(calendar, calendarId, id, expectedEtag));
     if (!existing) return;
 
-    const invitation = isInvitationFromOthers(existing, calendar.home.user.email) ? existing.data : null;
     // An override without its own list has its series' guests. A cancelled master answers and cancels nothing: its PUT
     // already fanned out STATUS:CANCELLED.
     const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
+    const invitation = isInvitationFromOthers(series ?? existing, calendar.home.user.email) ? existing.data : null;
     const held = existing.status === 'cancelled' ? [] : heldAttendees(existing, series);
     const declining = user && held.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
     if (declining && invitation?.organizer) {
@@ -238,12 +238,11 @@ export async function eraseStoredEvent(
         await calendar.purgeResource(resource);
         return existing;
     }
-    // A synthetic exclusion row carries no data of its own, so the link is the master's to state. A copy of single
-    // dates has no master: it loses one date at a time, and goes whole with its last.
-    const parent = existing.parentEventId ? requireEvent(calendar, existing.parentEventId) : undefined;
+    // A copy of single dates has no master: it loses one date at a time, and goes whole with its last.
+    const series = existing.parentEventId ? requireEvent(calendar, existing.parentEventId) : existing;
     const component = storedComponent(calendar, resource);
     const recurrenceId = storedRecurrenceIds(component).get(existing.recurrenceDate);
-    const ctx = writeContext(actorIsOrganizer(parent ?? existing));
+    const ctx = writeContext(!isInvitationFromOthers(series, calendar.home.user.email));
     const exclusion: VEventEdit = { kind: 'exclusion', event: existing, ctx };
     applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]));
     if (component.getFirstSubcomponent('vevent')) await writeComponent(calendar, resource, component);
@@ -303,17 +302,17 @@ export async function editResource(
 
 // An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp. An organizer's
 // new date starts at its series' SEQUENCE, the revision its guests held it at; a receiver states the organizer's own.
-export function exceptionEdit(parent: CalendarEvent, input: CreateEventArgs): VEventEdit {
-    const organizer = actorIsOrganizer(parent);
+export function exceptionEdit(parent: CalendarEvent, input: CreateEventArgs, ctx: WriteContext): VEventEdit {
+    const sequence = input.sequence ?? (ctx.actorIsOrganizer ? parent.sequence : undefined);
     const event = eventForResource({
         id: crypto.randomUUID(),
         calendarId: parent.calendarId,
         uid: parent.uid,
-        input: { ...input, rrule: null, sequence: input.sequence ?? (organizer ? parent.sequence : undefined) },
-        now: new Date(),
+        input: { ...input, rrule: null, sequence },
+        now: ctx.now,
     });
     if (event.status !== 'cancelled') return { kind: 'override', event };
-    return { kind: 'exclusion', event, ctx: writeContext(organizer, input.dtstamp) };
+    return { kind: 'exclusion', event, ctx };
 }
 
 export function writeContext(actorIsOrganizer: boolean, dtstamp?: Date | null): WriteContext {
@@ -384,8 +383,9 @@ async function patchStoredEvent(
     // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
     if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
 
-    const linked = isInvitationFromOthers(existing, calendar.home.user.email);
-    if (linked) {
+    const series = existing.parentEventId ? requireEvent(calendar, existing.parentEventId) : existing;
+    const organizer = !isInvitationFromOthers(series, calendar.home.user.email);
+    if (!organizer) {
         const localData: EventData = { ...existing.data };
         if (input.data) {
             localData.reminders = input.data.reminders ?? localData.reminders;
@@ -422,9 +422,7 @@ async function patchStoredEvent(
     assertEtag(resource, expectedEtag);
 
     if (existing.parentEventId && input.status === 'cancelled') {
-        const parent = requireEvent(calendar, existing.parentEventId);
-        const ctx = writeContext(actorIsOrganizer(parent));
-        const exclusion: VEventEdit = { kind: 'exclusion', event: existing, ctx };
+        const exclusion: VEventEdit = { kind: 'exclusion', event: existing, ctx: writeContext(organizer) };
         await editResource(calendar, resource, (component) => {
             applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]));
         });
@@ -453,7 +451,7 @@ async function patchStoredEvent(
             status: input.status,
             data: input.data ?? undefined,
         },
-        writeContext(!!user && !linked),
+        writeContext(!!user && organizer),
     );
 
     return { updated: requireEvent(calendar, id), existing };
@@ -476,7 +474,8 @@ async function writeOverride(
     const key = input.recurrenceDate;
     if (!key) throw new ApiError(400, 'Invalid occurrence date');
 
-    const edit = exceptionEdit(parent, input);
+    const organizer = !isInvitationFromOthers(parent, calendar.home.user.email);
+    const edit = exceptionEdit(parent, input, writeContext(organizer, input.dtstamp));
     await editResource(calendar, resource, (component) => applyEdits(component, new Map([[key, edit]])));
     const stored = exceptionOf(calendar, parent.id, key);
     return stored ?? requireEvent(calendar, parent.id);
@@ -495,12 +494,6 @@ function assertEtag(resource: StoredResource, expectedEtag: string | undefined):
     if (expectedEtag !== undefined && expectedEtag !== resource.etag) {
         throw new ApiError(412, 'Event was changed elsewhere');
     }
-}
-
-// A resource carrying the organizer link is somebody else's: a SEQUENCE bump here would outrank the organizer's next
-// message.
-function actorIsOrganizer(event: CalendarEvent): boolean {
-    return !event.data?.organizerEventId;
 }
 
 function uidHolder(calendar: Calendar, calendarId: string, uid: string): { uri: string } | undefined {

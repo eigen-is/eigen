@@ -360,14 +360,15 @@ function requestedEdit(
     }
     // A copy of single dates has no series to exclude another date from.
     if (cancelled && series.recurrenceDate) return null;
-    return events.exceptionEdit(series, {
+    const exception = {
         ...parsed,
         timezone,
         parentEventId: series.id,
         recurrenceDate: key,
         data: { ...series.data, attendees: attendees ?? held },
         createByUserId: series.createByUserId,
-    });
+    };
+    return events.exceptionEdit(series, exception, events.writeContext(false, parsed.dtstamp));
 }
 
 // The caller holds the write lock. A new copy is built from the message in the default calendar. A copy of single dates

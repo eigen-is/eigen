@@ -125,6 +125,38 @@ describe('inbound iMIP REQUEST', () => {
         }
     });
 
+    // The stored event names somebody else as its organizer, so this Home only mirrors the numbers the message states:
+    // a number of its own would outrank the organizer's next update.
+    test('an adoption that cancels a date keeps the SEQUENCE the message states', async () => {
+        const weekly = ['RRULE:FREQ=WEEKLY;COUNT=4'];
+        const { calendar, id } = await harnessWith(
+            stored(ORG).replace('DTSTAMP', `${weekly[0]}\r\nSEQUENCE:2\r\nDTSTAMP`),
+        );
+        const update = (title: string, stamp: string) =>
+            request([...weekly, 'EXDATE:20260508T090000Z'])
+                .replace('SEQUENCE:2', 'SEQUENCE:3')
+                .replace('SUMMARY:Quarterly review', `SUMMARY:${title}`)
+                .replace('DTSTAMP:20260101T000000Z', `DTSTAMP:${stamp}`);
+
+        await calendar.receiveRequest(parseIcs(update('Adopted', '20260102T000000Z')).events, {
+            organizerEmail: ORG,
+            organizerEventId: UID,
+            organizerUserId: `external_${ORG}`,
+            createByUserId: `external_${ORG}`,
+        });
+        const text = (await resourceTextOf(calendar, id, 'mine.ics')).replace(/\r\n[ \t]/g, '');
+        expect(text).toContain('\r\nSEQUENCE:3\r\n');
+        expect(text).toContain('X-EIGEN-SEQ=3');
+
+        await calendar.receiveRequest(parseIcs(update('Renamed at 3', '20260103T000000Z')).events, {
+            organizerEmail: ORG,
+            organizerEventId: UID,
+            organizerUserId: `external_${ORG}`,
+            createByUserId: `external_${ORG}`,
+        });
+        expect(findOrFail(await calendar.getEventsByUid(UID), (e) => !e.parentEventId).title).toBe('Renamed at 3');
+    });
+
     test('the address an imported event was filed under adopts it too', async () => {
         const harness = await makeCalendar();
         const id = (await harness.instance.getCalendars())[0].id;

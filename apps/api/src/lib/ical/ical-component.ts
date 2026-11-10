@@ -763,7 +763,7 @@ function touch(vevent: ICAL.Component, ctx: WriteContext, scheduling: boolean, s
     setProperty(vevent, utcStamp('last-modified', ctx.now));
     // DTSTAMP on a copy of somebody else's event orders the next message, so only a message moves it, never a local
     // edit.
-    if (ctx.dtstamp || readStamp(vevent, EIGEN.organizerEvent) === null) {
+    if (ctx.dtstamp || ctx.actorIsOrganizer) {
         setProperty(vevent, utcStamp('dtstamp', clampStamp(ctx.dtstamp, ctx.now) ?? ctx.now));
     }
     if (sequence !== undefined) {
