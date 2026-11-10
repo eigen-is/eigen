@@ -1,6 +1,6 @@
-// The line above a page's title on the public site, such as "Support › Sheets" over an article or "Blog · 14 Sep 2026"
-// over a post. A crumb with a `to` links; a crumb with an icon is a Support section, drawn in medium weight in the
-// page's current color. The page's own title is never a crumb. Support articles, sections and blog posts use it.
+// The trail in a public page's toolbar, such as "Support › Sheets" on an article or "Blog" on a post. A crumb with a
+// `to` links; a crumb with an icon is a Support section, drawn in medium weight in the page's current color. The
+// page's own title is never a crumb. Support articles, sections and blog posts use it.
 
 import { Link } from '@tanstack/react-router';
 import {
@@ -18,20 +18,15 @@ export type Crumb = { label: string; to?: string; icon?: LucideIcon };
 
 type ArticleBreadcrumbProps = {
     trail: Crumb[];
-    separator?: 'chevron' | 'dot';
 };
 
-export function ArticleBreadcrumb({ trail, separator = 'chevron' }: ArticleBreadcrumbProps) {
+export function ArticleBreadcrumb({ trail }: ArticleBreadcrumbProps) {
     return (
-        <Breadcrumb className="mb-3">
+        <Breadcrumb>
             <BreadcrumbList className="h-5 flex-nowrap gap-1.5 text-sm sm:gap-1.5">
                 {trail.map(({ label, to, icon: Icon }, i) => (
                     <Fragment key={label}>
-                        {i > 0 && (
-                            <BreadcrumbSeparator className="[&>svg]:size-3 [&>svg]:opacity-60">
-                                {separator === 'dot' ? '·' : undefined}
-                            </BreadcrumbSeparator>
-                        )}
+                        {i > 0 && <BreadcrumbSeparator className="[&>svg]:size-3 [&>svg]:opacity-60" />}
                         <BreadcrumbItem>
                             {to ? (
                                 <BreadcrumbLink

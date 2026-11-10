@@ -23,17 +23,11 @@ type BlogPostProps = {
 
 export function BlogPost({ post, body, older, newer }: BlogPostProps) {
     return (
-        <SitePage>
+        <SitePage toolbar={<ArticleBreadcrumb trail={[{ label: 'Blog', to: '/blog' }]} />}>
             <ReadingLayout aside={<ArticleToc toc={post.toc} />}>
                 <article>
-                    <ArticleBreadcrumb
-                        trail={[
-                            { label: 'Blog', to: '/blog' },
-                            ...(post.date ? [{ label: formatDateOnly(post.date) }] : []),
-                        ]}
-                        separator="dot"
-                    />
                     <h1 className="site-title">{post.title}</h1>
+                    {post.date && <p className="mt-2 text-sm text-muted-foreground">{formatDateOnly(post.date)}</p>}
                     {post.cover && <BlogCover src={post.cover} className="mt-7" />}
                     <ArticleContent body={body} className="site-lead mt-8" />
                 </article>

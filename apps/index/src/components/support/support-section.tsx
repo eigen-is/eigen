@@ -14,9 +14,8 @@ export function SupportSection({ section, articles }: { section: string; article
     const sorted = [...articles].sort((a, b) => a.order - b.order);
 
     return (
-        <SitePage color={config?.color}>
+        <SitePage color={config?.color} toolbar={<ArticleBreadcrumb trail={[{ label: 'Support', to: '/support' }]} />}>
             <ReadingLayout>
-                <ArticleBreadcrumb trail={[{ label: 'Support', to: '/support' }]} />
                 <h1 className="site-title">{config?.title ?? section}</h1>
                 {config && <p className="mt-2 text-sm text-muted-foreground">{config.description}</p>}
                 <div className="mt-6">

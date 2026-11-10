@@ -21,8 +21,9 @@ export function SupportArticle({ article, body, related }: SupportArticleProps) 
     const config = getSection(article.section);
 
     return (
-        <SitePage color={config?.color}>
-            <ReadingLayout aside={<ArticleToc toc={article.toc} />}>
+        <SitePage
+            color={config?.color}
+            toolbar={
                 <ArticleBreadcrumb
                     trail={[
                         { label: 'Support', to: '/support' },
@@ -33,6 +34,9 @@ export function SupportArticle({ article, body, related }: SupportArticleProps) 
                         },
                     ]}
                 />
+            }
+        >
+            <ReadingLayout aside={<ArticleToc toc={article.toc} />}>
                 <h1 className="site-title">{article.title}</h1>
                 {article.updated && (
                     <p className="mt-2 text-sm text-muted-foreground">Updated {formatDateOnly(article.updated)}</p>
