@@ -56,7 +56,7 @@ function BlogOverviewComponent() {
                             params={{ id: post.slug }}
                             className="eigen-list-item -mx-(--app-gutter-x) block px-(--app-gutter-x) py-3.5"
                         >
-                            <PostText post={post} className="text-[1.375rem]" />
+                            <PostText post={post} className="text-xl" />
                         </Link>
                     </PostRow>
                 ))}
@@ -79,7 +79,7 @@ function PostRow({ post, className, dateClassName, children }: PostRowProps) {
             {post.date && (
                 <time
                     className={cn(
-                        'absolute right-full mr-(--site-gap) hidden w-(--site-gutter) text-[0.8125rem] leading-7 text-muted-foreground tabular-nums min-[76rem]:block',
+                        'absolute right-full mr-(--site-gap) hidden w-(--site-gutter) text-sm leading-7 text-muted-foreground tabular-nums min-[76rem]:block',
                         dateClassName,
                     )}
                 >
@@ -95,7 +95,7 @@ function PostText({ post, className }: { post: BlogPost; className: string }) {
     return (
         <>
             {post.date && (
-                <time className="block text-[0.8125rem] leading-7 text-muted-foreground tabular-nums min-[76rem]:hidden">
+                <time className="block text-sm leading-7 text-muted-foreground tabular-nums min-[76rem]:hidden">
                     {formatDateOnly(post.date)}
                 </time>
             )}

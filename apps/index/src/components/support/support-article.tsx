@@ -41,9 +41,7 @@ export function SupportArticle({ article, body, related }: SupportArticleProps) 
 
                 {related.length > 0 && (
                     <section className="mt-12">
-                        <p className="mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
-                            Related
-                        </p>
+                        <p className="eigen-section-label mb-2">Related</p>
                         <ArticleRows articles={related} />
                     </section>
                 )}

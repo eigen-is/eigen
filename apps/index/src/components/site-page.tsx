@@ -3,7 +3,7 @@
 // section's color, which washes the rows and marks the table of contents inside it; the top bar sits outside.
 
 import { Column, ColumnLayout } from '@workspace/ui';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { SiteFooter } from './site-footer';
 
 type SitePageProps = {
@@ -13,13 +13,12 @@ type SitePageProps = {
 };
 
 export function SitePage({ color, children }: SitePageProps) {
-    const style: (CSSProperties & Record<'--app-current-color' | '--app-current-color-soft', string>) | undefined =
-        color
-            ? {
-                  '--app-current-color': color,
-                  '--app-current-color-soft': `color-mix(in oklab, ${color} 14%, var(--background))`,
-              }
-            : undefined;
+    const style = color
+        ? {
+              '--app-current-color': color,
+              '--app-current-color-soft': `color-mix(in oklab, ${color} 14%, var(--background))`,
+          }
+        : undefined;
 
     return (
         <ColumnLayout>

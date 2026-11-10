@@ -1,6 +1,11 @@
+// A grid of images and videos inside a blog post or Support article, which the article's markdown declares as a
+// media block. Each item shows a thumbnail, a play mark on a video, and its caption; clicking it opens the full image
+// or plays the video in a dialog.
+
+import { Dialog, DialogContent, DialogTitle } from '@workspace/ui/components/dialog';
 import { cn } from '@workspace/ui/lib/utils';
+import { Play } from 'lucide-react';
 import { useState } from 'react';
-import { MediaPreview } from './media-preview';
 
 type MediaItemProps = {
     src: string;
@@ -18,7 +23,7 @@ function MediaItem({ src, type, caption, thumbnail, poster }: MediaItemProps) {
 
     return (
         <>
-            <div className="group cursor-pointer" onClick={() => setIsPreviewOpen(true)}>
+            <button type="button" className="group block w-full text-left" onClick={() => setIsPreviewOpen(true)}>
                 <div className="relative overflow-hidden rounded-lg bg-muted">
                     {type === 'image' && (
                         <img
@@ -35,23 +40,26 @@ function MediaItem({ src, type, caption, thumbnail, poster }: MediaItemProps) {
                                 <video src={src} className="w-full h-full object-cover" muted preload="metadata" />
                             )}
                             <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
-                                <svg
-                                    className="w-16 h-16 text-white opacity-80 group-hover:opacity-100 transition-opacity"
-                                    fill="currentColor"
-                                    viewBox="0 0 20 20"
-                                >
-                                    <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
-                                </svg>
+                                <Play className="size-16 fill-current text-white opacity-80 group-hover:opacity-100 transition-opacity" />
                             </div>
                         </div>
                     )}
                 </div>
                 {caption && <p className="mt-2 text-sm text-muted-foreground text-center">{caption}</p>}
-            </div>
+            </button>
 
-            {isPreviewOpen && (
-                <MediaPreview src={src} type={type} caption={caption} onClose={() => setIsPreviewOpen(false)} />
-            )}
+            <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+                <DialogContent className="w-auto sm:max-w-[90vw] justify-items-center">
+                    <DialogTitle className="sr-only">{caption || 'Media preview'}</DialogTitle>
+                    {type === 'image' && (
+                        <img src={src} alt={caption || 'Preview'} className="max-w-full max-h-[80vh] rounded" />
+                    )}
+                    {type === 'video' && (
+                        <video src={src} controls autoPlay className="max-w-full max-h-[80vh] rounded" />
+                    )}
+                    {caption && <p className="text-sm text-muted-foreground text-center max-w-2xl">{caption}</p>}
+                </DialogContent>
+            </Dialog>
         </>
     );
 }
