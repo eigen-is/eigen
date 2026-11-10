@@ -13,6 +13,7 @@ export {
     patchEvent,
     raisedSequence,
     restampResource,
+    revisionAfter,
     serializeEventForImip,
     serializeResource,
     stampInvitationLink,

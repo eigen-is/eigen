@@ -15,6 +15,7 @@ import {
     parseResource,
     patchEvent,
     raisedSequence,
+    revisionAfter,
     serializeEventForImip,
     storedRecurrenceIds,
     storedRevisions,
@@ -233,8 +234,8 @@ export async function eraseStoredEvent(
     const ctx = writeContext(!isInvitationFromOthers(series, calendar.home.user.email));
     const component = storedComponent(calendar, resource);
     if (!existing.recurrenceDate) {
-        // The purge leaves no file to raise the SEQUENCE in, so the series' CANCEL takes its number here.
-        const sequence = raisedSequence(storedRevisions(component));
+        // The purge leaves no file to hold the revision, so the series' CANCEL or the guest's REPLY takes it here.
+        const { sequence } = revisionAfter(ctx, raisedSequence(storedRevisions(component)), existing);
         await calendar.purgeResource(resource);
         return { ...existing, sequence, updatedAt: ctx.now };
     }

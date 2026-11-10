@@ -112,7 +112,7 @@ describe('Cancellations reaching the guest', () => {
     });
 
     // RFC 5546 § 2.1.4: a CANCEL raises the SEQUENCE, and a deleted series has no file left to raise it in.
-    test("deleting a series mails a CANCEL above the series' last SEQUENCE", async () => {
+    test('deleting a series mails a CANCEL above every SEQUENCE its file holds', async () => {
         const CAROL = 'carol.series-cancel@example.org';
         const carol = { email: CAROL, name: 'Carol', status: 'pending', role: 'required' };
         const series = await post({
@@ -123,13 +123,17 @@ describe('Cancellations reaching the guest', () => {
             rrule: 'FREQ=WEEKLY;COUNT=4',
             data: { attendees: [carol] },
         });
-        await put(series.id, { startTime: `${TARGET}T09:00:00Z`, endTime: `${TARGET}T10:00:00Z` });
-        const stored = await assertJson<CalendarEvent>(
-            await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${series.id}`,
-            ),
-        );
+        // The moved date outranks the series, so the CANCEL has to outrank the date.
+        const moved = await post({
+            title: 'Series Cancel Sequence',
+            startTime: `${TARGET}T11:00:00Z`,
+            endTime: `${TARGET}T12:00:00Z`,
+            allDay: false,
+            rrule: null,
+            parentEventId: series.id,
+            recurrenceDate: TARGET,
+        });
+        expect(moved.sequence).toBeGreaterThan(series.sequence);
 
         const mailer = await import('../../lib/mailer/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
@@ -145,7 +149,7 @@ describe('Cancellations reaching the guest', () => {
                 async () => spy.mock.calls.map((call) => call[0]).find((m) => m.subject.startsWith('Canceled')),
                 'the CANCEL to reach Carol',
             );
-            expect(cancel.icalEvent?.content).toContain(`\r\nSEQUENCE:${stored.sequence + 1}\r\n`);
+            expect(cancel.icalEvent?.content).toContain(`\r\nSEQUENCE:${moved.sequence + 1}\r\n`);
         } finally {
             spy.mockRestore();
         }

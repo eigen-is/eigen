@@ -798,7 +798,7 @@ function touch(vevent: ICAL.Component, ctx: WriteContext, raised: number | null,
 // The one rule for a revision (RFC 5546 § 2.1.4). A receiver mirrors what a message states, since a number of its own
 // would outrank the organizer's next update, and on its copy only a message moves DTSTAMP. The organizer's scheduling
 // change takes `raised`. Any other write keeps what is `held`.
-function revisionAfter(ctx: WriteContext, raised: number | null, held: Revision, stated?: number): Revision {
+export function revisionAfter(ctx: WriteContext, raised: number | null, held: Revision, stated?: number): Revision {
     const stamped = !!ctx.dtstamp || ctx.actorIsOrganizer;
     return {
         sequence: stated ?? (ctx.actorIsOrganizer && raised !== null ? raised : held.sequence),

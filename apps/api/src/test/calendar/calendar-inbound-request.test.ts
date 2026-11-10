@@ -233,6 +233,24 @@ describe('inbound iMIP REQUEST', () => {
         expect(rows[0].status).toBe('confirmed');
     });
 
+    // RFC 5546 § 3.2.3: a REPLY echoes the SEQUENCE of the request it answers.
+    test("a guest's delete declines at the SEQUENCE the REQUEST stated", async () => {
+        const { harness, calendar } = await harnessWith();
+        await receiveMailed(calendar, parsedOf(request().replace('owner@test.local', harness.user.email)), ORG);
+        const [copy] = await calendar.getEventsByUid(UID);
+        const me = makeSyntheticUser(harness.user.id, harness.user.name, harness.user.email);
+        const mailer = await import('../../lib/mailer/mailer');
+        const sent = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        sent.mockClear();
+        try {
+            await calendar.deleteEvent(copy.calendarId, copy.id, me);
+            const [reply] = findOrFail(sent.mock.calls, ([mail]) => mail.icalEvent?.method === 'REPLY');
+            expect(reply.icalEvent?.content).toContain('\r\nSEQUENCE:2\r\n');
+        } finally {
+            sent.mockRestore();
+        }
+    });
+
     test('a REQUEST the store refuses for its size is dropped, not half-written', async () => {
         const { calendar, id } = await harnessWith();
         const huge = 'x'.repeat(6_000_000);
