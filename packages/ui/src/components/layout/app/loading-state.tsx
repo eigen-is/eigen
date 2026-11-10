@@ -10,7 +10,7 @@ export function LoadingState({ message }: LoadingStateProps) {
     return (
         <div
             className={cn(
-                'flex items-center justify-center h-full w-full',
+                'flex flex-1 items-center justify-center h-full w-full',
                 message && 'flex-col gap-4 p-8 text-center',
             )}
         >
