@@ -177,8 +177,9 @@ export function recurrenceKeyOf(vevent: ICAL.Component, zones: ReadonlyMap<strin
     const value = vevent.getFirstProperty('recurrence-id')?.getFirstValue();
     if (!(value instanceof ICAL.Time)) return null;
     const uid = uidOf(vevent);
-    const ownTz = propTzid(vevent.getFirstProperty('dtstart'));
-    const seriesTz = zones.has(uid) ? (zones.get(uid) ?? null) : (ownTz ?? zones.values().next().value ?? null);
+    const seriesTz = zones.has(uid)
+        ? (zones.get(uid) ?? null)
+        : (propTzid(vevent.getFirstProperty('dtstart')) ?? zones.values().next().value ?? null);
     return icalTimeToRecurrenceKey(value, seriesTz);
 }
 
