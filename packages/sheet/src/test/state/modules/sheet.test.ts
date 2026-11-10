@@ -161,6 +161,24 @@ describe('leaving a sheet that goes away', () => {
         expect(ctx.currentSheetId).toBe('a');
     });
 
+    test('hiding or deleting the last shown sheet, such as after a peer hid the others, refuses with the reason', () => {
+        const ctx = tabOrderContext();
+        hideSheet(ctx, 'b');
+        hideSheet(ctx, 'd');
+        expect(ctx.warnDialog).toBeUndefined();
+        hideSheet(ctx, 'a');
+        expect(ctx.warnDialog).toContain('To hide this sheet');
+        deleteSheet(ctx, 'a');
+        expect(ctx.warnDialog).toContain('To delete this sheet');
+        expect(ctx.sheets.map((sheet) => [sheet.id, sheet.hide])).toEqual([
+            ['a', undefined],
+            ['b', 1],
+            ['c', 1],
+            ['d', 1],
+        ]);
+        expect(ctx.currentSheetId).toBe('a');
+    });
+
     test('a peer deleting a sheet applies for a viewer', () => {
         const ctx = tabOrderContext();
         ctx.allowEdit = false;

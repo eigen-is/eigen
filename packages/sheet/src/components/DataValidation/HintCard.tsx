@@ -3,11 +3,12 @@
 // anchored on the cell holds it under the cell, and flips or shifts it to stay inside the grid. The selection overlay
 // mounts it, and getValidationHint says what it shows and where.
 
-import { Popover, PopoverAnchor, PopoverContent } from '@workspace/ui/components/popover';
+import { Popover, PopoverContent } from '@workspace/ui/components/popover';
 import { cn } from '@workspace/ui/lib/utils';
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
 import { getValidationHint } from '../../state';
+import { CellAnchor } from '../SheetOverlay/cell-anchor';
 
 export function ValidationHintCard() {
     const { context, refs } = useContext(WorkbookContext);
@@ -26,10 +27,8 @@ export function ValidationHintCard() {
 
     return (
         // Radix places the card again only for a new anchor element, so each cell gets its own.
-        <Popover key={`${hint.left}_${hint.top}`} open>
-            <PopoverAnchor asChild>
-                <div className="absolute" style={{ left: hint.left, top: hint.top, height: hint.bottom - hint.top }} />
-            </PopoverAnchor>
+        <Popover key={`${hint.position.left}_${hint.position.top}`} open>
+            <CellAnchor {...hint.position} />
             <PopoverContent
                 // A press on the card bubbles through React into the grid, and the class keeps it from reselecting.
                 className={cn(

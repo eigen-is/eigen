@@ -12,7 +12,7 @@ import type { Cell } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
-import type { CellMatrix, DataValidationDraft, DataValidationRule, Rect, SingleRange } from '../types';
+import type { CellMatrix, CellRect, DataValidationDraft, DataValidationRule, Rect, SingleRange } from '../types';
 import { clipToUsedExtent, getSheetIndex, replaceHtml } from '../utils';
 import {
     getCellValue,
@@ -358,10 +358,7 @@ export function insertCheckbox(ctx: Context) {
 export type ValidationHint = {
     kind: 'invalid' | 'prompt';
     text: string;
-    // The cell's edges in content pixels, a merged cell's whole, for the card's anchor.
-    left: number;
-    top: number;
-    bottom: number;
+    position: CellRect;
 };
 
 // "between 1 and 10", "greater than 5", "earlier than 2024-01-01".
@@ -444,8 +441,7 @@ export function getValidationHint(ctx: Context, r: number, c: number): Validatio
     }
     if (!kind || !text) return undefined;
 
-    const { left, top, bottom } = cellRectAt(ctx, d, r, c);
-    return { kind, text, left, top, bottom };
+    return { kind, text, position: cellRectAt(ctx, d, r, c) };
 }
 
 // Moves the hidden list anchor onto the focus cell when its rule is a list, and hides it otherwise.

@@ -43,7 +43,7 @@ const openCard = async ({ isEditing = true, originType = 'webpage', originAddres
                 originText: '',
                 originType,
                 originAddress,
-                position: { cellLeft: 0, cellTop: 0, cellBottom: 20 },
+                position: { left: 0, top: 0, right: 74, bottom: 20 },
                 isEditing,
             },
         },
@@ -96,12 +96,18 @@ const link = (context: Context) => context.sheets[0].data?.[0][0]?.link;
 const hoverCard = (scrolling = false) => openCard({ isEditing: false, originAddress: 'https://eigen.is', scrolling });
 const shownCard = () => document.querySelector('button[aria-label="Edit link"]')?.parentElement;
 
-// The anchor spans the cell's height, so a card with no room below goes above the cell rather than over it.
-test('the card hangs from a line 20 px into its cell, top to bottom', async () => {
+// The anchor spans the cell, so a card with no room below goes above the cell rather than over it, and one in column A
+// isn't taken for clipped by the cell area's left edge.
+test('the card hangs from its whole cell', async () => {
     await hoverCard();
     const anchor = document.querySelector('.absolute');
     if (!(anchor instanceof HTMLElement)) throw new Error('no anchor');
-    expect([anchor.style.left, anchor.style.top, anchor.style.height]).toEqual(['20px', '0px', '20px']);
+    expect([anchor.style.left, anchor.style.top, anchor.style.width, anchor.style.height]).toEqual([
+        '0px',
+        '0px',
+        '74px',
+        '20px',
+    ]);
 });
 
 test('the pointer moving on to the next link gets the card a new anchor, which Radix places afresh', async () => {
@@ -299,7 +305,7 @@ describe('the range picker', () => {
         originText: '',
         originType: 'webpage',
         originAddress: 'https://eigen.is',
-        position: { cellLeft: 0, cellTop: 0, cellBottom: 20 },
+        position: { left: 0, top: 0, right: 74, bottom: 20 },
     };
 
     test('the link card stays away until a notice takes its place', async () => {

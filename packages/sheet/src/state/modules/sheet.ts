@@ -46,18 +46,18 @@ export function changeSheet(ctx: Context, id: string) {
     applySheetView(ctx);
 }
 
-// False when no other visible sheet is left to land on.
-export function leaveCurrentSheet(ctx: Context, excludeId?: string) {
-    const next = firstVisibleSheetId(ctx, excludeId);
-    if (next == null) return false;
-    changeSheet(ctx, next);
-    return true;
-}
-
-// A batch, an undo or a redo can remove or hide the sheet on screen.
+// A hide, a delete, a peer's batch, an undo or a redo can take away the sheet on screen.
 export function settleCurrentSheet(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
-    if (index == null || ctx.sheets[index].hide === 1) leaveCurrentSheet(ctx);
+    if (index != null && ctx.sheets[index].hide !== 1) return;
+    const next = firstVisibleSheetId(ctx);
+    if (next != null) changeSheet(ctx, next);
+}
+
+// The workbook always shows one sheet, so hiding or deleting its last shown one is refused with this reason.
+export function lastShownSheetRefusal(ctx: Context, id: string, action: 'hide' | 'delete') {
+    if (firstVisibleSheetId(ctx, id) != null) return undefined;
+    return `A workbook always shows at least one sheet. To ${action} this sheet, add a sheet or show a hidden one first.`;
 }
 
 // The per-sheet paint data is derived in the recipe that makes the sheet current, so no frame mixes sheets and a jump
@@ -131,6 +131,11 @@ export function deleteSheet(ctx: Context, id: string) {
     if (ctx.allowEdit === false) return;
     const index = getSheetIndex(ctx, id);
     if (index == null) return;
+    const refusal = lastShownSheetRefusal(ctx, id, 'delete');
+    if (refusal) {
+        ctx.warnDialog = refusal;
+        return;
+    }
     const order = sheetOrder(ctx.sheets[index]);
     applyBatch(ctx, [{ op: 'deleteSheet', id, path: [], value: { id } }]);
     shiftSheetOrders(ctx.sheets, order, -1);

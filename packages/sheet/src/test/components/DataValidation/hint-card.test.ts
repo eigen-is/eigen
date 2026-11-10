@@ -13,7 +13,9 @@ const { validationsByCell } = await import('../../state/factories/validations');
 
 const rule = { type: 'number', type2: 'between', value1: '1', value2: '10' };
 
-test('the card is a popover outside the grid, anchored on its cell from top to bottom', async () => {
+// Radix hides a card whose anchor the cell area clips, and an anchor with no width at the area's left edge counts as
+// clipped, so the card of a cell in column A never showed.
+test('the card is a popover outside the grid, anchored on its whole cell', async () => {
     await renderSheetDialog(
         () => {},
         {
@@ -39,5 +41,10 @@ test('the card is a popover outside the grid, anchored on its cell from top to b
     expect(card?.closest('#grid')).toBeNull();
     const anchor = document.querySelector('#grid .absolute');
     if (!(anchor instanceof HTMLElement)) throw new Error('no anchor');
-    expect([anchor.style.left, anchor.style.top, anchor.style.height]).toEqual(['74px', '20px', '20px']);
+    expect([anchor.style.left, anchor.style.top, anchor.style.width, anchor.style.height]).toEqual([
+        '74px',
+        '20px',
+        '74px',
+        '20px',
+    ]);
 });

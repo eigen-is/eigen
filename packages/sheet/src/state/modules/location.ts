@@ -6,6 +6,7 @@
 import { sortedIndex } from 'es-toolkit/compat';
 import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
+import type { CellRect } from '../types';
 import { mergeBorder } from './cell';
 import type { OverlayRegionSpec } from './freeze';
 import { freezeOf } from './freeze';
@@ -66,8 +67,7 @@ export function colLocation(x: number, visibleCol: number[]) {
     return colLocationByIndex(index >= visibleCol.length && x > 0 ? visibleCol.length - 1 : index, visibleCol);
 }
 
-// In content pixels, for what hangs off a cell, such as a card.
-export function cellRectAt(ctx: Context, d: CellMatrix, r: number, c: number) {
+export function cellRectAt(ctx: Context, d: CellMatrix, r: number, c: number): CellRect {
     const rect = {
         top: r === 0 ? 0 : ctx.visibledatarow[r - 1],
         bottom: ctx.visibledatarow[r],

@@ -96,7 +96,6 @@ export function showLinkCard(ctx: Context, r: number, c: number, isEditing = fal
         (link != null && (!ctx.linkCard?.isEditing || isMouseDown)) ||
         ctx.linkCard?.sheetId !== ctx.currentSheetId
     ) {
-        const { left, top, bottom } = cellRectAt(ctx, d, r, c);
         ctx.linkCard = {
             sheetId: ctx.currentSheetId,
             r,
@@ -105,7 +104,7 @@ export function showLinkCard(ctx: Context, r: number, c: number, isEditing = fal
             originText: `${cellValue(cell) ?? ''}`,
             originType: link?.type ?? 'webpage',
             originAddress: link?.address ?? '',
-            position: { cellLeft: left, cellTop: top, cellBottom: bottom },
+            position: cellRectAt(ctx, d, r, c),
             isEditing,
         };
     }
