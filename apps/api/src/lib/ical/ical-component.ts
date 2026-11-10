@@ -182,8 +182,9 @@ export function applyEdits(
 
     const vevent = vevents.get(null);
     if (vevent && unexcluded.size) dropExclusions(vevent, (key) => unexcluded.has(key));
-    if (exclusions.size) {
-        if (!vevent || !master) throw new Error('applyEdits: the resource holds no master VEVENT');
+    // A copy of single dates has no master to hold an EXDATE, so an excluded date just goes with its VEVENT.
+    if (vevent && exclusions.size) {
+        if (!master) throw new Error('applyEdits: an EXDATE names its instant through the master row');
         const excluded = exdateKeys(vevent, propTzid(vevent.getFirstProperty('dtstart')));
         keepProperties(vevent, (prop) => prop.name !== EIGEN.exdate || !exclusions.has(String(prop.getFirstValue())));
         let ctx: WriteContext | undefined;

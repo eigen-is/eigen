@@ -8,7 +8,8 @@ import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@work
 import { getHome } from '../../lib/home';
 import { parseIcs } from '../../lib/ical';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
-import { CALENDAR_TEST_ROOT, makeCalendar, receiveMailed } from '../calendar-test-helpers';
+import { makeSyntheticUser } from '../../lib/user';
+import { CALENDAR_TEST_ROOT, makeCalendar, receiveMailed, storedEvents } from '../calendar-test-helpers';
 import { davRequest } from '../dav-test-helpers';
 import { vcal } from '../ics-test-helpers';
 import { assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
@@ -536,5 +537,119 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         expect(stored).toHaveLength(1);
         expect(stored[0].title).toBe('One Instance Only');
         expect(stored[0].rrule).toBeNull();
+    });
+});
+
+// An organizer who invites a guest to several dates of a series sends one message per date. The guest holds them all
+// in one copy with no master, as RFC 6638 shapes an attendee of some instances only.
+describe('An invitation to several single dates of one series', () => {
+    const UID = 'several-dates@external.com';
+    const ORG = 'organizer@external.com';
+    const LINK = {
+        organizerEmail: ORG,
+        organizerEventId: UID,
+        organizerUserId: `external_${ORG}`,
+        createByUserId: `external_${ORG}`,
+    };
+
+    const vevent = (guest: string, lines: string[], sequence = 0) => [
+        'BEGIN:VEVENT',
+        `UID:${UID}`,
+        `SEQUENCE:${sequence}`,
+        'DTSTAMP:20280301T100000Z',
+        `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+        `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${guest}`,
+        ...lines,
+        'END:VEVENT',
+    ];
+    // One date of the weekly series, moved two hours later.
+    const date = (guest: string, day: string, title: string, sequence = 0, extra: string[] = []) =>
+        vevent(
+            guest,
+            [
+                `SUMMARY:${title}`,
+                `RECURRENCE-ID:2028${day}T090000Z`,
+                `DTSTART:2028${day}T110000Z`,
+                `DTEND:2028${day}T120000Z`,
+                ...extra,
+            ],
+            sequence,
+        );
+    const series = (guest: string) =>
+        vevent(guest, [
+            'SUMMARY:Whole Series',
+            'DTSTART:20280306T090000Z',
+            'DTEND:20280306T100000Z',
+            'RRULE:FREQ=WEEKLY;COUNT=4',
+        ]);
+
+    async function invitedToTwoDates() {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const id = (await calendar.getCalendars())[0].id;
+        const guest = harness.user.email;
+        await calendar.receiveRequest(parseIcs(vcal(date(guest, '0313', 'First date'))).events, LINK);
+        await calendar.receiveRequest(parseIcs(vcal(date(guest, '0320', 'Second date'))).events, LINK);
+        const me = makeSyntheticUser(harness.user.id, harness.user.name, guest);
+        const rowOf = (day: string) => findOrFail(storedEvents(calendar, id), (e) => e.recurrenceDate === day);
+        return { calendar, id, guest, me, rowOf };
+    }
+
+    test('the second date joins the first in one copy, each at its own time', async () => {
+        const { calendar, id } = await invitedToTwoDates();
+
+        expect(await calendar.listResources(id)).toHaveLength(1);
+        const rows = storedEvents(calendar, id).sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+        expect(rows.map((e) => [e.recurrenceDate, e.title, e.parentEventId, e.startTime.toISOString()])).toEqual([
+            ['2028-03-13', 'First date', null, '2028-03-13T11:00:00.000Z'],
+            ['2028-03-20', 'Second date', null, '2028-03-20T11:00:00.000Z'],
+        ]);
+        const range = await calendar.getEventsInRange(new Date('2028-03-01'), new Date('2028-04-01'));
+        expect(range.map((occurrence) => occurrence.occurrenceDate).sort()).toEqual(['2028-03-13', '2028-03-20']);
+    });
+
+    test('each date is answered and cancelled on its own', async () => {
+        const { calendar, guest, me, rowOf } = await invitedToTwoDates();
+
+        await calendar.rsvp(rowOf('2028-03-13').id, me, { status: 'accepted' });
+        expect(rowOf('2028-03-13').data?.attendees?.[0]).toMatchObject({ email: guest, status: 'accepted' });
+        expect(rowOf('2028-03-20').data?.attendees?.[0]).toMatchObject({ email: guest, status: 'pending' });
+
+        const revision = { sequence: 1, dtstamp: new Date('2028-03-02T10:00:00Z') };
+        await calendar.cancelInvitationOccurrence(UID, LINK.organizerUserId, '2028-03-13', null, revision);
+        expect((await calendar.getEventsByUid(UID)).map((e) => e.recurrenceDate)).toEqual(['2028-03-20']);
+
+        const cancelled = date(guest, '0320', 'Second date', 1, ['STATUS:CANCELLED']);
+        await calendar.receiveRequest(parseIcs(vcal(cancelled)).events, LINK);
+        expect((await calendar.getEventsByUid(UID)).map((e) => [e.recurrenceDate, e.status])).toEqual([
+            ['2028-03-20', 'cancelled'],
+        ]);
+    });
+
+    test("the guest's delete of one date leaves the other", async () => {
+        const { calendar, id, me, rowOf } = await invitedToTwoDates();
+
+        await calendar.deleteEvent(id, rowOf('2028-03-13').id, me);
+
+        expect((await calendar.getEventsByUid(UID)).map((e) => e.recurrenceDate)).toEqual(['2028-03-20']);
+    });
+
+    test('a whole-series message replaces the copy, and each date keeps its row and answer', async () => {
+        const { calendar, id, guest, me, rowOf } = await invitedToTwoDates();
+        const [first, second] = [rowOf('2028-03-13'), rowOf('2028-03-20')];
+        await calendar.rsvp(second.id, me, { status: 'accepted' });
+
+        const whole = vcal(series(guest), date(guest, '0313', 'First date'), date(guest, '0320', 'Second date'));
+        await calendar.receiveRequest(parseIcs(whole).events, LINK);
+
+        expect(await calendar.listResources(id)).toHaveLength(1);
+        const rows = await calendar.getEventsByUid(UID);
+        expect(rows).toHaveLength(3);
+        expect(findOrFail(rows, (e) => !e.parentEventId).rrule).toContain('FREQ=WEEKLY');
+        expect(rowOf('2028-03-13').id).toBe(first.id);
+        expect(rowOf('2028-03-20')).toMatchObject({ id: second.id, parentEventId: expect.any(String) });
+        expect(rowOf('2028-03-20').data?.attendees?.[0]).toMatchObject({ email: guest, status: 'accepted' });
+        const range = await calendar.getEventsInRange(new Date('2028-03-01'), new Date('2028-04-01'));
+        expect(range).toHaveLength(4);
     });
 });

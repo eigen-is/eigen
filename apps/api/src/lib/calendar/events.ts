@@ -405,7 +405,7 @@ async function patchStoredEvent(
 }
 
 // Caller holds the write lock; the row it answers with is what the decline or cancellation mail is composed from.
-async function eraseStoredEvent(
+export async function eraseStoredEvent(
     calendar: Calendar,
     calendarId: string,
     id: string,
@@ -430,6 +430,13 @@ async function eraseStoredEvent(
             if (existing.status === 'cancelled') removeExclusion(component, key, context);
             else addExclusion(component, parent, existing, context);
         });
+    } else if (existing.recurrenceDate) {
+        // A copy of single dates loses one date at a time, and goes whole with its last.
+        const component = storedComponent(calendar, resource);
+        const edit: VEventEdit = { kind: 'exclusion', event: existing, ctx: writeContext(false) };
+        applyEdits(component, new Map([[existing.recurrenceDate, edit]]));
+        if (component.getFirstSubcomponent('vevent')) await writeComponent(calendar, resource, component);
+        else await calendar.purgeResource(resource);
     } else {
         await calendar.purgeResource(resource);
     }

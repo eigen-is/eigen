@@ -1243,6 +1243,13 @@ describe('structural edits', () => {
         ).toHaveLength(1);
     });
 
+    // A copy of single dates has no master to carry an EXDATE: the excluded date's VEVENT goes and nothing else.
+    test('an exclusion on a resource with no master VEVENT drops that date alone', () => {
+        const resource = parseResource(serializeResource(buildResource([OVERRIDE])));
+        addExclusion(resource, MASTER, OVERRIDE, CTX);
+        expect(resource.getAllSubcomponents('vevent')).toHaveLength(0);
+    });
+
     test('putOverride replaces an existing override of the same key', () => {
         const resource = buildResource([MASTER, OVERRIDE]);
         putOverride(resource, MASTER, { ...OVERRIDE, id: 'evt-override-2', title: 'Second take' });
@@ -1273,10 +1280,6 @@ describe('refusals', () => {
 
     test('addExclusion refuses an exclusion that names no occurrence', () => {
         expect(() => addExclusion(buildResource([MASTER]), MASTER, unkeyed, CTX)).toThrow('names no occurrence');
-    });
-
-    test('addExclusion refuses a resource with no master VEVENT', () => {
-        expect(() => addExclusion(overrideOnly(), MASTER, EXCLUSION, CTX)).toThrow('holds no master VEVENT');
     });
 
     test('removeExclusion refuses a resource with no master VEVENT', () => {
