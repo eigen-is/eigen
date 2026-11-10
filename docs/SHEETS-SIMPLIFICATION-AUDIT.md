@@ -126,6 +126,7 @@ History: `3493e91b3`, `a5c17095d`, `a80dea4c5`, `78c3df73d` (every close paid th
 Root cause: pattern 4. With no older builds, the only uncomputed workbook is an import whose recalc failed. `SERVER_RECALC_BUDGET` counts work, not time, so the export's retry fails exactly as the import did.
 Simpler: the import recalcs once; a failure keeps Excel's cached values and its warning. Every reader serves the replayed values. The flag, `sheetsNeedRecalc`, the `recalc` option and the compaction's flag logic go.
 Lost: a failed import later cut below the budget isn't recomputed at export. ~90 LOC + ~150 test, low risk, high confidence.
+Open, not built on `sheets-audit`: the owner on 2026-11-10 kept the export recalc and the `computed` flag for now. It's harmless: the flag is false only after an import whose recalc ran past the budget, and the export retries under the same budget, so it costs one failed recalc per export of such a workbook and changes no value.
 
 <a id="e8"></a>**E8. Redesign: one tokenizer for formula text, the grammar's own lexer, behind every reader.**
 Five readers lex one formula's text: the jison lexer (`grammar-parser.ts`), `walkFormulaRefs`, `tokenize` in `recalc.ts`, the fork's highlighter `functionHTML` (`formula-editor.ts`) and `findRefSpans` (`formula-reference-cycle.ts`, F4). `9c6d0e040` left unquoted non-Latin sheet names failing in the grammar while the walkers kept their own `SIMPLE_SHEET_NAME`.
