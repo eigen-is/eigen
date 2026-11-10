@@ -618,10 +618,30 @@ describe("a delete of a sheet's last lines", () => {
         expect(replayed.data?.[0]?.[0]).toMatchObject({ f: '=SUM(One!A4:A8)', v: 0 });
     });
 
-    test('recomputes a whole-row reader when every column goes', () => {
+    test('recomputes a whole-row reader when the last column goes', () => {
         const one: Sheet = { id: 's1', name: 'One', order: 0, data: [[n(1), n(2)]], config: {} };
         const two: Sheet = { id: 's2', name: 'Two', order: 1, data: [[{ f: '=SUM(One!1:1)', v: 3 }]], config: {} };
-        const [, replayed] = replaySheetsOps([one, two], [remove('column', 0, 1)]);
-        expect(replayed.data?.[0]?.[0]).toMatchObject({ f: '=SUM(One!1:1)', v: 0 });
+        const [, replayed] = replaySheetsOps([one, two], [remove('column', 1, 1)]);
+        expect(replayed.data?.[0]?.[0]).toMatchObject({ f: '=SUM(One!1:1)', v: 1 });
+    });
+
+    // Two tabs deleting at once can ask for every line. A stored sheet reads no rows as the default size, so a fold
+    // would part from the replay.
+    test.each(['row', 'column'] as const)('a delete that would take every %s keeps the last', (type) => {
+        const values = [n(1), n(2), n(3)];
+        const data = type === 'row' ? values.map((v) => [v]) : [values];
+        const one: Sheet = { id: 's1', name: 'One', order: 0, data, config: {} };
+        const sum = type === 'row' ? '=SUM(One!A1:A3)' : '=SUM(One!A1:C1)';
+        const two: Sheet = { id: 's2', name: 'Two', order: 1, data: [[{ f: sum, v: 6 }]], config: {} };
+        const [left, reader] = replaySheetsOps([one, two], [remove(type, 2, 2), remove(type, 0, 1)]);
+        expect(left.data).toEqual([[n(2)]]);
+        expect([left.row, left.column]).toEqual(type === 'row' ? [1, undefined] : [undefined, 1]);
+        expect(reader.data?.[0]?.[0]?.v).toBe(2);
+    });
+
+    test('a delete of the one line left changes nothing', () => {
+        const one: Sheet = { id: 's1', name: 'One', order: 0, data: [[n(1)], [n(2)]], config: {} };
+        const [left] = replaySheetsOps([one], [remove('row', 1, 1), remove('row', 0, 0)]);
+        expect(left.data).toEqual([[n(1)]]);
     });
 });

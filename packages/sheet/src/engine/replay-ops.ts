@@ -113,7 +113,8 @@ export function applySheetsBatch(
             result = applySheetDelete(result, op.id);
             held = null;
         } else if (isRowColOp(op)) {
-            const move = rowColOf(op);
+            const move = rowColOf(op, result);
+            if (!move) continue;
             moved.push({ op: move, sheets: result });
             result = applyRowColOp(result, op);
             withinBudget(() => held?.shift(result, move));
@@ -181,12 +182,20 @@ export function seedsOf(ops: readonly Op[]): RecomputeSeeds | null {
 
 // A row or column op's result on plain sheets. An insert past the sheet's size limit throws RowColError.
 export function applyRowColOp<S extends ShiftedSheet>(sheets: S[], op: Op): S[] {
-    const move = rowColOf(op);
+    const move = rowColOf(op, sheets);
+    if (!move) return sheets;
     return 'index' in move ? applySheetsInsertRowCol(sheets, move) : applySheetsDeleteRowCol(sheets, move);
 }
 
-function rowColOf(op: Op): InsertRowColOp | DeleteRowColOp {
-    return op.op === 'insertRowCol' ? insertRowColOf(op) : deleteRowColOf(op);
+// The op as it applies, or null for a delete that leaves nothing to take. A delete keeps a sheet's last line: two tabs
+// deleting at once can ask for every one, and a stored sheet reads no rows as the default size.
+function rowColOf(op: Op, sheets: readonly Sheet[]): InsertRowColOp | DeleteRowColOp | null {
+    if (op.op === 'insertRowCol') return insertRowColOf(op);
+    const remove = deleteRowColOf(op);
+    const data = sheets.find(({ id }) => id === remove.id)?.data;
+    const lines = (remove.type === 'row' ? data?.length : data?.[0]?.length) ?? 0;
+    if (remove.start > 0 || remove.end < lines - 1) return remove;
+    return lines > 1 ? { ...remove, end: lines - 2 } : null;
 }
 
 // A stored sheet keeps its cells as the `celldata` list, but a cell op writes `data[r][c]`. So a sheet gets the dense

@@ -707,41 +707,19 @@ test("a peer's delete that lands the selection inside a merge types into the hea
     expectJoined(tab);
 });
 
-// Concurrent deletes can leave no rows. No cell is left to land on, so no key opens an editor or throws, and a peer's
-// insert brings the grid back for a click to select in.
-test("a peer's delete of every row drops the selection, the keys do nothing, and a peer's insert works", async () => {
-    const s = server({ '3_0': 'gone' });
+// Concurrent deletes can ask for every row. The last row stays, so the selection has a cell to land on.
+test("a peer's delete of every row keeps the last, and the selection lands on it", async () => {
+    const s = server({ '3_0': 'gone', '11_0': 'kept' });
     const tab = await openTab(s, 50);
     const peer = replica(s, 100);
     await tab.select(3, 0);
     push(peer, [{ op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row', start: 0, end: 11 } }]);
     await deliver(peer, tab.doc);
-    expect(tab.workbook().getFlowdata()).toEqual([]);
-    const thrown: unknown[] = [];
-    const onError = (event: ErrorEvent) => thrown.push(event.error);
-    window.addEventListener('error', onError);
-    const sent = opsIn(tab.doc);
-    for (const [key, keyCode] of [
-        ['ArrowDown', 40],
-        ['Enter', 13],
-        ['Enter', 13],
-        ['Tab', 9],
-        ['Escape', 27],
-        ['x', 88],
-    ] as const) {
-        await tab.press(key, keyCode);
-    }
-    window.removeEventListener('error', onError);
-    expect(thrown).toEqual([]);
-    expect(opsIn(tab.doc)).toBe(sent);
-    push(peer, rowInsert(0));
-    push(peer, [
-        { op: 'insertRowCol', id: 's1', path: [], value: { type: 'column', index: 0, count: 1, direction: 'lefttop' } },
-    ]);
-    await deliver(peer, tab.doc);
-    expect(tab.workbook().getFlowdata()).toEqual([[null]]);
-    await tab.type(0, 0, 'back');
-    expect(tab.cell(0, 0)?.v).toBe('back');
+    expect(tab.workbook().getFlowdata()?.length).toBe(1);
+    expect(tab.cell(0, 0)?.v).toBe('kept');
+    expect(tab.seen.selection?.row).toEqual([0, 0]);
+    await tab.typeOver('typed');
+    expect(tab.cell(0, 0)?.v).toBe('typed');
     expectJoined(tab);
 });
 

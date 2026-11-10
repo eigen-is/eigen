@@ -39,8 +39,7 @@ export function deleteRowCol(ctx: Context, op: DeleteRowColOp) {
 }
 
 // The open cell editor and the selections move with their cells, so a commit lands where the person chose, not in the
-// row that slid under it. A delete of the editor's cell closes the editor without writing, and with no line left the
-// selection goes too, as no cell is left to land on and the keys need one. `data` is the grid the op left.
+// row that slid under it, and a delete of the editor's cell closes it without writing. `data` is the grid the op left.
 export function followView(ctx: Context, move: RowColMove, data: CellMatrix | undefined) {
     const row = move.type === 'row';
     const last = ((row ? data?.length : data?.[0]?.length) ?? 0) - 1;
