@@ -7,6 +7,7 @@ import { eq, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../../lib/core';
 import { ApiError, eventLoopTurn, storageGone } from '../../lib/core';
+import { captureCollabSource } from '../../lib/document/transform/collab-source';
 import { getUniqueFileName } from '../../lib/drive/naming';
 import type { ContentExtractor } from '../../lib/mount/content-reindex-queue';
 import { CONTENT_REINDEX_CAP_SECONDS, ContentReindexQueue } from '../../lib/mount/content-reindex-queue';
@@ -2674,5 +2675,32 @@ describe('content reindex failure handling', () => {
         await queue.close();
         expect(mount.getContentDirtyPaths(-1, 100).map((p) => p.id)).not.toContain(txt);
         expect(mount.searchPaths({ q: 'quorblegone', limit: 20 }).some((h) => h.id === txt)).toBe(false);
+    });
+
+    // A document trashed after the batch read has no live data.db by its capture. That is no failure to
+    // log, and the row stays dirty for the drain its restore kicks.
+    test('a container trashed between the batch read and its capture logs nothing and stays dirty', async () => {
+        const containerId = await mount.createFolder(rootId, 'reindex-trashed', 'doc');
+        await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+        mount.markContentDirty(containerId);
+        const queue = new ContentReindexQueue({
+            mount,
+            label: 'trashed-test',
+            extract: async (m, path) => {
+                await m.trashPath(path.id);
+                await captureCollabSource(m, path);
+                return '';
+            },
+        });
+        const errors = spyOn(console, 'error');
+        try {
+            await queue.drain();
+            await queue.close();
+            expect(errors.mock.calls).toEqual([]);
+        } finally {
+            errors.mockRestore();
+        }
+        await mount.restorePath(containerId);
+        expect(mount.getContentDirtyPaths(-1, 100).map((p) => p.id)).toContain(containerId);
     });
 });
