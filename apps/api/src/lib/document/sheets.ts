@@ -21,6 +21,7 @@ import {
     recalcSheets,
     renameSheetTexts,
     replaySheetsOps,
+    SkippedRecompute,
     sheetFinder,
     sheetNameKey,
     withMaterializedData,
@@ -70,14 +71,25 @@ export function readSheetsFromDoc(
 }
 
 // A compaction in the transform process: it replays the log over the snapshot and encodes the result as an import does.
-// The batches come as JSON text, which crosses to the process much faster than objects.
+// The batches come as JSON text, which crosses to the process much faster than objects. A recompute past the budget
+// fails it, since a browser computes values the fold would store stale, so the log stays and every tab recomputes.
 export function compactSheetsSnapshot(
     snapshotJson: string | null,
     batchesJson: string,
 ): { snapshot: string; dropped: number } {
     const { sheets, computed } = decodeOrDefault(snapshotJson);
     let dropped = 0;
-    const replayed = replaySheetsOps(sheets, JSON.parse(batchesJson), () => dropped++, SERVER_RECALC_BUDGET);
+    const skipped: SkippedRecompute[] = [];
+    const replayed = replaySheetsOps(
+        sheets,
+        JSON.parse(batchesJson),
+        (e) => {
+            if (e instanceof SkippedRecompute) skipped.push(e);
+            else dropped += 1;
+        },
+        SERVER_RECALC_BUDGET,
+    );
+    if (skipped.length > 0) throw skipped[0];
     // The compaction never recalculates, so a workbook nobody computed stays uncomputed, and an export computes it.
     return { snapshot: encodeSheetsSnapshot(replayed, { computed }), dropped };
 }

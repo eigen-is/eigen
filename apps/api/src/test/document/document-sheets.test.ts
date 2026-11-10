@@ -999,6 +999,23 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         expect(values(compacted)).toEqual([[0, 0, 'a']]);
     });
 
+    // Each of the 6,400 formulas in column A holds #REF!, so a row op recomputes it, and each is read by the 6,400
+    // COUNT(A:A) in column B: 41 million links, past the server's 40 million.
+    test('a batch whose recompute passes the budget fails the fold, so the log stays', () => {
+        const rows = 6_400;
+        const celldata = Array.from({ length: rows }, (_, r) => [
+            { r, c: 0, v: { f: '=#REF!', v: '#REF!' } },
+            { r, c: 1, v: { f: '=COUNT(A:A)', v: 0 } },
+        ]).flat();
+        const wide: Sheet = { id: 'sheet-1', name: 'Sheet1', order: 0, row: rows + 1, column: 2, celldata, config: {} };
+        const deleteLast: Op[] = [
+            { op: 'deleteRowCol', id: 'sheet-1', path: [], value: { type: 'row', start: rows, end: rows } },
+        ];
+        expect(() =>
+            compactSheetsSnapshot(encodeSheetsSnapshot([wide], { computed: true }), JSON.stringify([deleteLast])),
+        ).toThrow(engine.SkippedRecompute);
+    });
+
     test('a batch the replay rejects is dropped and counted, and the others still apply', () => {
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         try {
