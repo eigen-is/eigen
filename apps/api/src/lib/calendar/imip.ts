@@ -266,7 +266,7 @@ function icalEvent(
 }
 
 function buildEventSummary(event: CalendarEvent): string {
-    const repeats = rruleToText(event.rrule);
+    const repeats = rruleToText(event.rrule, event.timezone);
     const lines: string[] = [];
     lines.push(`What: ${event.title}`);
     lines.push(`When: ${buildEventWhen(event)}`);
@@ -295,7 +295,7 @@ function buildEventHtml(event: CalendarEvent, footerLine: string, banner?: strin
 
 function buildEventBodyHtml(event: CalendarEvent): string {
     const sections: string[] = [];
-    const repeats = rruleToText(event.rrule);
+    const repeats = rruleToText(event.rrule, event.timezone);
     sections.push(buildSection('When', escapeHtml(buildEventWhen(event))));
     if (repeats) sections.push(buildSection('Repeats', escapeHtml(repeats)));
     if (event.location) sections.push(buildSection('Where', escapeHtml(event.location)));

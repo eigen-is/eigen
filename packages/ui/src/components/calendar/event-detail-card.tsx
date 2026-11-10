@@ -43,7 +43,7 @@ export function EventDetailCard({
     remainingAttendees = 0,
     className,
 }: EventDetailCardProps) {
-    const recurrenceText = rruleToText(rrule ?? null);
+    const recurrenceText = rruleToText(rrule, timezone);
     const cancelled = status === 'cancelled';
 
     return (

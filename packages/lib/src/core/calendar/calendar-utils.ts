@@ -272,11 +272,18 @@ function ordinalSuffix(n: number): string {
     return 'th';
 }
 
-// A file's RRULE is untrusted input, so a rule rrule cannot read is printed verbatim rather than swallowed.
-export function rruleToText(rrule: string | null): string | null {
+// A file's RRULE is untrusted input, so a rule rrule cannot read is printed verbatim rather than swallowed. rrule prints
+// UNTIL as its UTC date, but a timed one is an instant whose last day is the wall date in the event's zone.
+export function rruleToText(rrule: string | null | undefined, timezone: string | null | undefined): string | null {
     if (!rrule) return null;
     try {
-        const text = RRule.fromString(rrule)
+        const options = RRule.parseString(rrule);
+        const tz = normalizeTimezone(timezone);
+        if (options.until && tz && /UNTIL=\d{8}T\d{6}Z/i.test(rrule)) {
+            const { year, month, day } = utcToLocal(options.until, tz);
+            options.until = new Date(Date.UTC(year, month - 1, day));
+        }
+        const text = new RRule(options)
             .toText(undefined, undefined, (year, month, day) => `${day} ${month} ${year}`)
             .replace(ORDINAL_IN_TEXT, (_, digits: string) => `${digits}${ordinalSuffix(Number(digits))}`);
         return text[0].toUpperCase() + text.slice(1);

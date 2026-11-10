@@ -1,3 +1,6 @@
+// The Repeat select in the event form: presets built from the start date, such as weekly on its weekday, and any
+// other rule shown as a sentence. The form owns the rule and the zone its last date reads in.
+
 import { rruleToText } from '@workspace/lib/calendar';
 import { formatMonth } from '@workspace/lib/date';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
@@ -8,6 +11,7 @@ type RecurrencePickerProps = {
     value: string | null;
     onChange: (rrule: string | null) => void;
     startDate: Date;
+    timezone: string;
     disabled?: boolean;
 };
 
@@ -30,7 +34,7 @@ function getOrdinal(n: number): string {
     return 'last';
 }
 
-export function RecurrencePicker({ value, onChange, startDate, disabled }: RecurrencePickerProps) {
+export function RecurrencePicker({ value, onChange, startDate, timezone, disabled }: RecurrencePickerProps) {
     const weekdayIdx = getWeekdayIndex(startDate);
     const weekOfMonth = getWeekOfMonth(startDate);
     const dayName = DAY_NAMES[weekdayIdx];
@@ -76,26 +80,14 @@ export function RecurrencePicker({ value, onChange, startDate, disabled }: Recur
     }, [weekdayIdx, weekOfMonth, dayName, monthName, dayOfMonth, startDate]);
 
     const currentValue = value || 'none';
-
-    const rruleText = useMemo(() => rruleToText(value), [value]);
-
+    const rruleText = rruleToText(value, timezone);
     const matchedPreset = presets.find((p) => p.value === currentValue);
     const selectValue = matchedPreset ? currentValue : 'custom';
 
     return (
         // A custom rule reads as a sentence ("every year on the 1st, 2nd …"), so the trigger has to be shrinkable.
         <div className="flex items-center gap-3 min-w-0">
-            <Select
-                value={selectValue}
-                disabled={disabled}
-                onValueChange={(v) => {
-                    if (v === 'none') {
-                        onChange(null);
-                    } else {
-                        onChange(v);
-                    }
-                }}
-            >
+            <Select value={selectValue} disabled={disabled} onValueChange={(v) => onChange(v === 'none' ? null : v)}>
                 <SelectTrigger className="flex-1 min-w-0">
                     <SelectValue placeholder="Does not repeat">
                         {matchedPreset ? matchedPreset.label : rruleText ? `Custom: ${rruleText}` : 'Does not repeat'}
