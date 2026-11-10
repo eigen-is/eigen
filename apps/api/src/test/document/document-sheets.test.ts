@@ -1030,6 +1030,37 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         ).toThrow(engine.SkippedRecompute);
     }, 60_000);
 
+    test('a batch past the budget after the first ends the fold, which stores the batches before it', () => {
+        const rows = 6_400;
+        const celldata = Array.from({ length: rows }, (_, r) => [
+            { r, c: 0, v: { f: '=#REF!', v: '#REF!' } },
+            { r, c: 1, v: { f: '=COUNT(A:A)', v: 0 } },
+        ]).flat();
+        const wide: Sheet = { id: 'sheet-1', name: 'Sheet1', order: 0, row: rows + 1, column: 2, celldata, config: {} };
+        const typed: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['data', rows, 0], value: { v: 'a', m: 'a' } }];
+        const deleteLast: Op[] = [
+            { op: 'deleteRowCol', id: 'sheet-1', path: [], value: { type: 'row', start: rows, end: rows } },
+        ];
+        const { snapshot, folded } = compactSheetsSnapshot(
+            encodeSheetsSnapshot([wide], { computed: true }),
+            JSON.stringify([typed, deleteLast, edit(0, 'b')]),
+            jobDeadline(),
+        );
+        expect(folded).toBe(1);
+        expect(values(snapshot)).toContainEqual([rows, 0, 'a']);
+        expect(values(snapshot)).not.toContainEqual([0, 0, 'b']);
+    }, 60_000);
+
+    test('a batch that ends past the deadline is folded, and the next is not started', () => {
+        const { snapshot, folded } = compactSheetsSnapshot(
+            encodeSheetsSnapshot(sheets, { computed: true }),
+            JSON.stringify([edit(0, 'a'), edit(1, 'b')]),
+            Date.now(),
+        );
+        expect(folded).toBe(1);
+        expect(values(snapshot)).toEqual([[0, 0, 'a']]);
+    });
+
     test("a forged write of a sheet's id or name folds into a snapshot every reader opens", () => {
         const two: Sheet[] = [...sheets, { id: 'sheet-2', name: 'Sheet2', order: 1, celldata: [], config: {} }];
         const forged: Op[] = [

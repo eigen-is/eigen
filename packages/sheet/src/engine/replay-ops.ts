@@ -1,8 +1,8 @@
 // Applies op batches to a workbook's plain sheets. replaySheetsOps replays the stored log for a reader that was not
 // there live, such as a browser that opens the workbook or the server's export, replaySheetsSteps the same replay a
 // batch at a time for the server's fold, and the editor applies each batch it takes through the same applySheetsBatch,
-// so a peer, a joiner and the server skip the same ops and end with the same sheets. It also owns the shape check a sheet or row op passes before it applies, and says what a batch's ops can
-// affect, which every reader computes again after the batch.
+// so a peer, a joiner and the server skip the same ops and end with the same sheets. It also owns the shape check a
+// sheet or row op passes before it applies, and says what a batch's ops can affect, which every reader computes again.
 
 import { isRecord } from '@workspace/lib/guards';
 import type { Op, Sheet } from '@workspace/lib/sheets';
