@@ -10,6 +10,7 @@ import { getServerSettings } from '../config/server-settings';
 import type { Home } from '../home';
 import { sendToHome } from '../home/home-relay';
 import type { ParsedEvent } from '../ical/ical-parse';
+import { computeOccurrenceTimes } from '../ical/wall-clock';
 import type { OutboundICalEvent } from '../mailer/mailer';
 import { sendMail } from '../mailer/mailer';
 import { addRegistryEntry } from '../share';
@@ -169,7 +170,11 @@ function invitationRequest(
         createByUserId,
     };
     if (series) {
-        return { link, events: [requestedEvent(event, event.recurrenceDate, organizer, heldAttendees(event, series))] };
+        const key = event.recurrenceDate;
+        // A moved occurrence's RECURRENCE-ID names its original slot, which only the series knows.
+        const recurrenceInstant = key && !series.allDay ? computeOccurrenceTimes(series, key).startTime : null;
+        const requested = requestedEvent(event, key, organizer, heldAttendees(event, series));
+        return { link, events: [{ ...requested, recurrenceInstant }] };
     }
     const address = email.toLowerCase();
     const isOn = (e: CalendarEvent) => heldAttendees(e, event).some((a) => a.email.toLowerCase() === address);
@@ -203,7 +208,6 @@ function requestedEvent(
         // The organizer's own revision, so the guest can order this message against the next: the fan-out is unordered.
         dtstamp: event.updatedAt,
         recurrenceDate,
-        // A relayed key is already a date in the series' own zone, so there is no UTC instant to re-key from.
         recurrenceInstant: null,
         data: { organizer, attendees: [...attendees] },
     };

@@ -169,6 +169,24 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         expect(stored[0].startTime.toISOString()).toBe(movedStart.toISOString());
     });
 
+    test("a copy of a moved occurrence names the organizer's original slot", async () => {
+        const series = await createSeries('Single Occurrence Moved Away');
+
+        await editOccurrence(series.id, TARGET, {
+            title: 'Moved A Day Later',
+            startTime: '2028-03-14T14:00:00Z',
+            endTime: '2028-03-14T15:00:00Z',
+        });
+
+        await untilBob(series.uid, (occ) => occ.length === 1);
+        const home = await getHome(ctx.bob.user.id);
+        const resource = findOrFail(await home.calendar.listResources(bobCalendarId), (r) => r.uid === series.uid);
+        const res = await davRequest('GET', `/dav/calendars/${ctx.bob.user.id}/${bobCalendarId}/${resource.uri}`, {
+            email: ctx.bob.user.email,
+        });
+        expect(await res.text()).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20280313T100000\r\n');
+    });
+
     test("the organizer's cancellation of that occurrence takes the guest's copy away", async () => {
         const series = await createSeries('Single Occurrence Cancel');
         await editOccurrence(series.id, TARGET, { title: 'Doomed' });
