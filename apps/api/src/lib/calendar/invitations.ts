@@ -366,7 +366,6 @@ function requestedEdit(
     const exception = {
         ...parsed,
         timezone,
-        parentEventId: series.id,
         recurrenceDate: key,
         data: { ...series.data, attendees: attendees ?? held },
         createByUserId: series.createByUserId,
@@ -542,13 +541,9 @@ async function removeOccurrence(
 ): Promise<void> {
     const resource = events.resourceOf(calendar, eventId);
     if (!resource) throw new ApiError(404, 'Event not found');
-    const exclusion: VEventEdit = {
-        kind: 'exclusion',
-        id: crypto.randomUUID(),
-        ctx: events.writeContext(false, revision),
-    };
+    const ctx = events.writeContext(false, revision);
     await events.editResource(calendar, resource, (component) => {
-        applyEdits(component, new Map([[recurrenceDate, exclusion]]));
+        applyEdits(component, new Map([[recurrenceDate, { kind: 'exclusion', id: crypto.randomUUID(), ctx }]]));
     });
 }
 
@@ -656,7 +651,6 @@ async function rsvpForOccurrence(
                 endTime: slot.endTime,
                 allDay: parent.allDay,
                 timezone: parent.timezone,
-                parentEventId: eventId,
                 recurrenceDate: key,
                 status: 'confirmed',
                 data: { ...data, attendees },
