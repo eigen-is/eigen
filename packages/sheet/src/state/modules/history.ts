@@ -156,7 +156,7 @@ function atSheetIndex(ctx: Context, patches: Patch[]): Patch[] {
 // A batch that says all it does, such as a rename or a row op's redo, runs here as it does on a peer.
 function batchStep(ctx: Context, ops: Op[]): Step {
     const applied = applyOpBatch(ctx, ops);
-    return applied ? { ctx: produce(applied.ctx, settleCurrentSheet), ops } : { ctx, ops: [] };
+    return applied ? { ctx: applied.ctx, ops } : { ctx, ops: [] };
 }
 
 // A sheet comes back, or goes, through applyOpBatch, as a peer's would, with what its delete rewrote on the other
@@ -175,7 +175,6 @@ function sheetStep(ctx: Context, batch: (after: Sheet[]) => Op[], recorded: Patc
             const deleted = ctx.sheets.find((sheet) => sheet.id === sheetOp.id);
             if (deleted) shiftSheetOrders(draft.sheets, sheetOrder(deleted), -1);
         }
-        settleCurrentSheet(draft);
     });
     return { ctx: next, ops: [...batch(next.sheets), ...restored] };
 }
@@ -242,7 +241,7 @@ function undoRowCol(ctx: Context, marker: Op, recorded: Patch[]): Step {
     const restored = restoredOps(moved, recorded);
     const ops = [marker, ...restored];
     const applied = applyOpBatch(ctx, ops);
-    return applied ? { ctx: produce(applied.ctx, settleCurrentSheet), ops } : { ctx, ops: [] };
+    return applied ? { ctx: applied.ctx, ops } : { ctx, ops: [] };
 }
 
 // The recorded writes `sheets` don't hold yet, the cells one by one.

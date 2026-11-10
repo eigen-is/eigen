@@ -9,12 +9,11 @@ import { produce } from 'immer';
 import { applySheetsBatch } from '../../engine/replay-ops';
 import type { Context } from '../context';
 import type { Op, Sheet } from '../types';
-import { getSheetIndex } from '../utils';
 import { snapshotContext } from './formula-cache';
 import type { RowColMove } from './history-shift';
 import { deleteMove, insertMove } from './history-shift';
 import { followView } from './rowcol';
-import { initSheetData, leaveCurrentSheet } from './sheet';
+import { initSheetData, settleCurrentSheet } from './sheet';
 
 // A row or column op the batch applied, with the sheets it was applied to.
 type AppliedRowCol = { move: RowColMove; sheets: Sheet[] };
@@ -62,9 +61,7 @@ export function applyBatch(ctx: Context, ops: Op[], moveView = true): AppliedRow
         const after = moved[i + 1]?.sheets ?? applied.sheets;
         followView(ctx, move, after.find(({ id }) => id === move.id)?.data);
     }
-    const [first] = ops;
-    if (getSheetIndex(ctx, ctx.currentSheetId) == null) leaveCurrentSheet(ctx);
-    else if (first?.path[0] === 'hide' && first.id === ctx.currentSheetId) leaveCurrentSheet(ctx, first.id);
+    settleCurrentSheet(ctx);
     return moved;
 }
 
