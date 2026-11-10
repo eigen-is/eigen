@@ -40,6 +40,22 @@ export type DeleteRowColOp = {
 // and a peer's applyOp skip the op's whole batch.
 export class RowColError extends Error {}
 
+type InsertLines = Pick<InsertRowColOp, 'index' | 'count' | 'direction'>;
+type DeleteLines = Pick<DeleteRowColOp, 'start' | 'end'>;
+
+// What a row or column op does to the lines on its axis: `at` is the first line it adds or deletes, and `to` says
+// where a line goes, null for one it deletes.
+export type LineMove = { at: number; to: (line: number) => number | null };
+
+export function lineMove(op: InsertLines | DeleteLines): LineMove {
+    if ('index' in op) {
+        const at = op.direction === 'lefttop' ? op.index : op.index + 1;
+        return { at, to: (line) => (line < at ? line : line + op.count) };
+    }
+    const count = op.end - op.start + 1;
+    return { at: op.start, to: (line) => (line < op.start ? line : line > op.end ? line - count : null) };
+}
+
 type AxisRange = { row: readonly number[]; column: readonly number[] };
 
 // Excel's rule for a range across an insert: an insert at or before its first row (or column) moves it, one inside
@@ -49,7 +65,7 @@ export function shiftRangeForInsert<R extends AxisRange>(
     range: R,
     op: Pick<InsertRowColOp, 'type' | 'index' | 'count' | 'direction'>,
 ): R {
-    const insertAt = op.direction === 'lefttop' ? op.index : op.index + 1;
+    const { at: insertAt } = lineMove(op);
     const [start, end] = op.type === 'row' ? range.row : range.column;
     if (insertAt > end) return range;
     const last = (op.type === 'row' ? REFERENCE_ROW_COUNT : REFERENCE_COLUMN_COUNT) - 1;
@@ -80,7 +96,7 @@ export function shiftRangeForDelete<R extends AxisRange>(
 function pointsForInsert(ref: CellRangeRef, op: InsertRowColOp): ((index: number) => number) | null {
     if (!runsAlong(ref, op.type)) return null;
     const [start, end] = op.type === 'row' ? ref.row : ref.column;
-    const at = (op.direction === 'lefttop' ? op.index : op.index + 1) - start;
+    const at = lineMove(op).at - start;
     if (at <= 0 || at > end - start) return null;
     return (index) => (index >= at ? index + op.count : index);
 }
@@ -309,7 +325,7 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     const newCfg: ExtendedSheetConfig = { ...target.config };
     const newData = op.type === 'row' ? [...data] : data.map((row) => [...row]);
     newTarget.data = newData;
-    const insertAt = op.direction === 'lefttop' ? op.index : op.index + 1;
+    const { at: insertAt } = lineMove(op);
 
     newCfg.merge = shiftMergeForInsert(cfg, op.type, op.index, count, op.direction);
     newCfg.borderInfo = shiftCellKeyedForInsert(cfg.borderInfo, op.type, op.index, count, op.direction, cloneSides);
@@ -354,7 +370,7 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     if (target.dataValidations != null) {
         newTarget.dataValidations = shiftValidations(target.dataValidations, (range) => shiftRangeForInsert(range, op));
     }
-    const frozen = shiftFrozen(target.frozen, op.type, (focus) => (focus >= insertAt ? focus + count : focus));
+    const frozen = shiftFrozen(target.frozen, op.type, lineMove(op));
     if (frozen !== target.frozen) newTarget.frozen = frozen;
     shiftFilterForInsert(newTarget, newCfg, op);
 
@@ -430,9 +446,7 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
     if (target.dataValidations != null) {
         newTarget.dataValidations = shiftValidations(target.dataValidations, (range) => shiftRangeForDelete(range, op));
     }
-    const frozen = shiftFrozen(target.frozen, op.type, (focus) =>
-        focus >= op.start ? focus - (Math.min(op.end, focus) - op.start + 1) : focus,
-    );
+    const frozen = shiftFrozen(target.frozen, op.type, lineMove(op));
     if (frozen !== target.frozen) newTarget.frozen = frozen;
     shiftFilterForDelete(newTarget, newCfg, op);
 
@@ -473,14 +487,10 @@ export function shiftValidations(
 // The frozen pane, moved whole: a peer's unfreeze removes `frozen`, and a write into a field that is gone would not
 // apply. A bare type such as 'both' with a range freezes as its range form does, so it moves too. A focus below 0 means
 // the op deleted the whole band, so that axis stops freezing, and the pane goes with its last axis.
-function shiftFrozen(
-    frozen: Sheet['frozen'],
-    type: 'row' | 'column',
-    shift: (focus: number) => number,
-): Sheet['frozen'] {
+function shiftFrozen(frozen: Sheet['frozen'], type: 'row' | 'column', { at, to }: LineMove): Sheet['frozen'] {
     if (!frozen?.range || !(type === 'row' ? freezesRows(frozen) : freezesColumns(frozen))) return frozen;
     const axis = type === 'row' ? 'row_focus' : 'column_focus';
-    const focus = shift(frozen.range[axis]);
+    const focus = to(frozen.range[axis]) ?? at - 1;
     if (focus === frozen.range[axis]) return frozen;
     if (focus >= 0) return { ...frozen, range: { ...frozen.range, [axis]: focus } };
     if (!(type === 'row' ? freezesColumns(frozen) : freezesRows(frozen))) return undefined;
@@ -494,14 +504,14 @@ function shiftFilterForInsert(sheet: ShiftedSheet, cfg: ExtendedSheetConfig, op:
     if (!filterRange?.row) return;
     const { type, index, count, direction } = op;
     const range = shiftRangeForInsert(filterRange, op);
-    const insertAt = direction === 'lefttop' ? index : index + 1;
+    const { at } = lineMove(op);
     const shifted: Record<string, FilterEntry> = {};
     for (const [key, entry] of Object.entries(filter ?? {})) {
         if (type === 'row') {
             const rowhidden = shiftKeyedMapForInsert(entry.rowhidden ?? {}, index, count, direction);
             shifted[key] = { ...entry, rowhidden, str: range.row[0], edr: range.row[1] };
         } else {
-            const cindex = entry.cindex >= insertAt ? entry.cindex + count : entry.cindex;
+            const cindex = entry.cindex >= at ? entry.cindex + count : entry.cindex;
             shifted[cindex - range.column[0]] = { ...entry, cindex, stc: range.column[0], edc: range.column[1] };
         }
     }

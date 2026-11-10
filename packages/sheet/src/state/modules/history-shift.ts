@@ -10,8 +10,9 @@ import { sheetFinder } from '../../engine/a1-notation';
 import { mapChartRefs } from '../../engine/chart-data';
 import { functionStrChange, mayShiftOffSheet } from '../../engine/formula-shift';
 import { isFormula } from '../../engine/formula-utils';
-import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
+import type { DeleteRowColOp, InsertRowColOp, LineMove } from '../../engine/rowcol';
 import {
+    lineMove,
     shiftCellKeyedForDelete,
     shiftCellKeyedForInsert,
     shiftKeyedMapForDelete,
@@ -26,13 +27,9 @@ import type { Cell, SingleRange } from '../../engine/types';
 import type { History, Sheet } from '../types';
 
 // What one row or column op does to the indices on its axis, with the engine's shifter for each kind of map.
-export type RowColMove = {
+export type RowColMove = LineMove & {
     id: string;
     type: 'row' | 'column';
-    // The first line the op adds or deletes.
-    at: number;
-    // Where an index ends up, or null for a row or column the op deletes.
-    to: (index: number) => number | null;
     formula: (
         text: string,
         sheetName: string,
@@ -48,12 +45,10 @@ export type RowColMove = {
 
 export function insertMove(op: InsertRowColOp): RowColMove {
     const { id, type, index, count, direction } = op;
-    const at = direction === 'lefttop' ? index : index + 1;
     return {
         id,
         type,
-        at,
-        to: (i) => (i < at ? i : i + count),
+        ...lineMove(op),
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'add', axisName(type), direction, index, count, name, onTargetSheet, findSheet),
         merge: (merge) => shiftMergeForInsert({ merge }, type, index, count, direction),
@@ -69,8 +64,7 @@ export function deleteMove(op: DeleteRowColOp): RowColMove {
     return {
         id,
         type,
-        at: start,
-        to: (i) => (i < start ? i : i > end ? i - count : null),
+        ...lineMove(op),
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'del', axisName(type), null, start, count, name, onTargetSheet, findSheet),
         merge: (merge) => shiftMergeForDelete({ merge }, type, start, count),

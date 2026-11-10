@@ -6,6 +6,7 @@
 
 import { isRecord } from '@workspace/lib/guards';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
+import { lineMove } from '../../engine/rowcol';
 import type { CellMatrix } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
@@ -20,14 +21,13 @@ export const ONE_AREA_ONLY = 'Cannot perform this operation on multiple selectio
 
 export function insertRowCol(ctx: Context, op: InsertRowColOp, changeSelection = true) {
     if (ctx.allowEdit === false) return;
-    const { type, index, count, direction } = op;
     applyBatch(ctx, [insertMarker(op)]);
     const data = getFlowdata(ctx, op.id);
     if (changeSelection && data) {
-        const insertAt = direction === 'lefttop' ? index : index + 1;
-        const span = [insertAt, insertAt + count - 1];
+        const { at } = lineMove(op);
+        const span = [at, at + op.count - 1];
         ctx.selections =
-            type === 'row'
+            op.type === 'row'
                 ? [{ row: span, column: [0, data[0].length - 1] }]
                 : [{ row: [0, data.length - 1], column: span }];
     }

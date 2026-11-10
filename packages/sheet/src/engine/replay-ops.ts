@@ -18,7 +18,7 @@ import { namesSheet } from './formula-shift';
 import type { RecalcBudgets, RecomputeSeeds } from './recalc';
 import { recomputeAfter } from './recalc';
 import type { DeleteRowColOp, InsertRowColOp } from './rowcol';
-import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from './rowcol';
+import { applySheetsDeleteRowCol, applySheetsInsertRowCol, lineMove } from './rowcol';
 import { normalizeSheetConfig } from './sheet-config';
 import type { RenameSheetOp } from './sheet-name';
 import { applySheetDelete, applySheetRename, sheetNameRefusal } from './sheet-name';
@@ -127,7 +127,7 @@ export function applySheetsBatch(
     const [patches] = opToPatchOnSheets(result, normalOps);
     result = immer.applyPatches(result, patches);
     if (patches.length > 0) withinBudget(() => held?.followPatches(result, patches));
-    const seeds = seedsOf(batch);
+    const seeds = seedsOf(batch, moved);
     let skipped: RangeError | null = null;
     if (seeds) {
         const materialized = result.map(withMaterializedData);
@@ -144,31 +144,24 @@ export function applySheetsBatch(
 
 // What a batch's sheet, row and column ops can affect, or null when it holds none, since an edit carries its own
 // values. A cell its patches write counts too, because an undo's repairs change what the formulas reading them hold.
-export function seedsOf(ops: readonly Op[]): RecomputeSeeds | null {
+function seedsOf(ops: readonly Op[], moved: readonly AppliedRowColOp[]): RecomputeSeeds | null {
     if (!isStructuralBatch(ops)) return null;
-    const cells: RecomputeSeeds['cells'][number][] = [];
     const lines: RecomputeSeeds['lines'][number][] = [];
-    const names = new Set<string>();
-    // A later row or column op moves the lines an earlier one opened or closed, as it moves the cells on them.
-    const moveLines = (id: string, type: 'row' | 'column', at: number, by: number) => {
+    for (const { op } of moved) {
+        const { id, type } = op;
+        const { at, to } = lineMove(op);
+        // A later op moves the lines an earlier one opened or closed, as it moves the cells on them.
         for (const [i, seed] of lines.entries()) {
-            if (seed.id !== id || seed.type !== type || seed.line < at) continue;
-            const line = seed.line + by;
-            lines[i] = { ...seed, line: by < 0 ? Math.max(at - 1, line) : line };
+            if (seed.id === id && seed.type === type) lines[i] = { ...seed, line: to(seed.line) ?? at - 1 };
         }
-    };
+        if ('index' in op) lines.push({ id, type, line: at });
+        else lines.push({ id, type, line: at - 1 }, { id, type, line: at });
+    }
+    const cells: RecomputeSeeds['cells'][number][] = [];
+    const names = new Set<string>();
     for (const op of ops) {
         const [field, r, c] = op.path;
-        if (op.op === 'insertRowCol') {
-            const { id, type, index, count, direction } = insertRowColOf(op);
-            const line = direction === 'lefttop' ? index : index + 1;
-            moveLines(id, type, line, count);
-            lines.push({ id, type, line });
-        } else if (op.op === 'deleteRowCol') {
-            const { id, type, start, end } = deleteRowColOf(op);
-            moveLines(id, type, start, start - end - 1);
-            lines.push({ id, type, line: start - 1 }, { id, type, line: start });
-        } else if (op.op === 'addSheet' || op.op === 'renameSheet') {
+        if (op.op === 'addSheet' || op.op === 'renameSheet') {
             const name = isRecord(op.value) ? op.value['name'] : undefined;
             if (typeof name === 'string') names.add(sheetNameKey(name));
         } else if (isPatchOp(op) && field === 'data' && typeof r === 'number' && typeof c === 'number' && op.id) {

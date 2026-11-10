@@ -14,6 +14,7 @@ import { isFormula, matrixWidth, resolveCellRange } from './formula-utils';
 import { sheetFinder } from './parser/helper/cell';
 import type { RecalcBudgets } from './recalc';
 import type { DeleteRowColOp, InsertRowColOp } from './rowcol';
+import { lineMove } from './rowcol';
 import type { FormulaCellInfo, FormulaCellInfoMap, FormulaDependency } from './types';
 
 // A sheet's dense `data`, by id, which a pass reads and writes.
@@ -73,20 +74,17 @@ export class FormulaGraph {
     // Follows a row or column op, given the sheets it left: the formulas on its sheet move with their cells, one on a
     // deleted line goes, and one whose text the op rewrote lists its references again.
     public shift(sheets: readonly WorkingSheet[], op: InsertRowColOp | DeleteRowColOp): void {
-        const insert = 'index' in op;
-        const at = insert ? (op.direction === 'lefttop' ? op.index : op.index + 1) : op.start;
-        const span = insert ? op.count : op.end - op.start + 1;
+        const { to } = lineMove(op);
         const moved = new Map<number, FormulaCellInfo>();
         for (const node of this.cells.get(op.id)?.values() ?? []) {
-            const line = op.type === 'row' ? node.r : node.c;
-            if (!insert && line >= at && line < at + span) {
+            const line = to(op.type === 'row' ? node.r : node.c);
+            if (line == null) {
                 delete this.nodes[node.key];
                 this.index.delete(node.key);
                 continue;
             }
-            const by = line < at ? 0 : insert ? span : -span;
-            if (op.type === 'row') node.r += by;
-            else node.c += by;
+            if (op.type === 'row') node.r = line;
+            else node.c = line;
             moved.set(packCell(node.r, node.c), node);
         }
         this.cells.set(op.id, moved);
