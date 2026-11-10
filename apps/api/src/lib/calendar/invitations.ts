@@ -400,17 +400,16 @@ async function fileNewInvitation(
     // exception takes over the date's row and answer.
     const revisions = replaces && storedRevisions(replaces.component);
     const heldRevision = (copy: CalendarEvent) => revisions?.get(copy.recurrenceDate) ?? null;
-    const heldByDate = new Map(replaces?.dates);
-    const stale = [...heldByDate].some(([key, copy]) => {
+    const stale = [...(replaces?.dates ?? [])].some(([key, copy]) => {
         const parsed = requested.find((e) => e.recurrenceDate === key) ?? requested[0];
         return !isNewerRevision(parsed, heldRevision(copy));
     });
     if (stale) return { kind: 'dropped', reason: 'nothing newer to apply' };
-    const kept = heldByDate.values().next().value?.data;
+    const kept = replaces?.dates.values().next().value?.data;
 
     const now = new Date();
     const rows = requested.map((parsed) => {
-        const held = heldByDate.get(parsed.recurrenceDate);
+        const held = replaces?.dates.get(parsed.recurrenceDate);
         return eventForResource({
             id: held?.id ?? crypto.randomUUID(),
             calendarId,
