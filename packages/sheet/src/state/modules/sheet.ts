@@ -103,7 +103,7 @@ function deriveGeometry(ctx: Context, { data }: Sheet) {
 export function addSheet(
     ctx: Context,
     // A copy or a peer's add names the new sheet's id, and the add then stays on the current sheet.
-    newSheetID?: string,
+    newSheetId?: string,
     sheetName?: string,
     sheetData?: Sheet,
     // A batch through applyOpBatch, such as a peer's add, lands for a read-only viewer too, and leaves the other
@@ -112,7 +112,7 @@ export function addSheet(
 ) {
     if (!fromBatch && ctx.allowEdit === false) return;
     // The add switches to the sheet it adds, so a sheet that comes with an id keeps it.
-    const id = newSheetID ?? sheetData?.id ?? crypto.randomUUID();
+    const id = newSheetId ?? sheetData?.id ?? crypto.randomUUID();
     const sheet: Sheet = sheetData ?? {
         name: sheetName || nextSheetName(ctx.sheets),
         order: ctx.sheets.length,
@@ -127,7 +127,7 @@ export function addSheet(
     ctx.sheets.push(sheet);
     // A name that read no sheet may read this one now, and the graph holds none of its formulas.
     ctx.formulaCache.forgetGraph();
-    if (!newSheetID) changeSheet(ctx, id);
+    if (!newSheetId) changeSheet(ctx, id);
     if (!fromBatch) recomputeAfterOps(ctx, addSheetOps(sheet, ctx.sheets));
 }
 

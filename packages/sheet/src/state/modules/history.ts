@@ -1,9 +1,8 @@
-// What ⌘Z and ⌘⇧Z do in this tab. An edit is recorded as an entry of immer patches that names its sheet by id. Undo and
-// redo take the context and an entry and return the next context and the batch to send. A cell or field entry skips a
-// target a peer changed since and recalculates the formulas it writes back. A structural entry, such as a row op, a
-// rename or a paste that grew the grid, leaves the stacks at a peer's first batch, so it always finds the workbook as
-// it left it. A row or sheet step applies exactly the ops it sends, through applyOpBatch, as its peers will. The
-// Workbook keeps the stacks.
+// What ⌘Z and ⌘⇧Z do in this tab. An edit is recorded as an entry of immer patches that names its sheet by id, and
+// undo and redo turn an entry into the next context and the batch to send. A cell or field entry skips a target a peer
+// changed since and recalculates the formulas it writes back. A structural entry, such as a row op or a rename, leaves
+// the stacks at a peer's first batch, so it always finds the workbook as it left it, and its step applies exactly the
+// ops it sends, through applyOpBatch, as its peers will. The Workbook keeps the stacks.
 
 import type { MergeCell } from '@workspace/lib/sheets';
 import { get, isEqual } from 'es-toolkit/compat';
@@ -83,6 +82,14 @@ function rewrittenByDelete(before: Context, after: Context): Patch[] {
     return recorded;
 }
 
+// An entry's path names its sheet by id, ['sheets', id, …], where an edit's names it by index.
+function bySheetId(patches: Patch[], sheets: Sheet[]): Patch[] {
+    return patches.map((patch) => {
+        const [, index, ...rest] = patch.path;
+        return { ...patch, path: ['sheets', sheets[Number(index)].id, ...rest] };
+    });
+}
+
 // How far back undo reaches. A row, column or sheet entry may hold whole cell matrices, so fewer of those stay.
 const MAX_ENTRIES = 200;
 const MAX_STRUCTURAL_OP_ENTRIES = 10;
@@ -135,14 +142,6 @@ export function redoEntry(ctx: Context, { options, patches, inversePatches }: Hi
     const marker = rowColMarker(options);
     if (marker) return batchStep(ctx, [marker]);
     return patchStep(ctx, patches, inversePatches);
-}
-
-// An entry's path names its sheet by id, ['sheets', id, …], where an edit's names it by index.
-function bySheetId(patches: Patch[], sheets: Sheet[]): Patch[] {
-    return patches.map((patch) => {
-        const [, index, ...rest] = patch.path;
-        return { ...patch, path: ['sheets', sheets[Number(index)].id, ...rest] };
-    });
 }
 
 // The entry's paths on today's sheet indices; a patch on a sheet that is gone is dropped.
@@ -276,13 +275,6 @@ function repairOps(sheet: Sheet, recorded: CellMatrix): Op[] {
     return ops;
 }
 
-// What a person wrote into a cell: a formula's value, its display text and its value type are the engine's.
-function authored(cell: Cell | null | undefined) {
-    if (cell?.f == null) return cell ?? null;
-    const { v, m, ct, ...rest } = cell;
-    return ct ? { ...rest, fa: ct.fa } : rest;
-}
-
 // The patches whose targets still hold what the entry wrote there: a target a peer changed since keeps the peer's
 // value, as Google does. A merge and its cells pass or skip together.
 function stillWritten(ctx: Context, apply: Patch[], written: Patch[]): Patch[] {
@@ -333,4 +325,11 @@ function holds(ctx: Context, unit: (string | number)[], patches: Patch[]): boole
     } catch {
         return false;
     }
+}
+
+// What a person wrote into a cell: a formula's value, its display text and its value type are the engine's.
+function authored(cell: Cell | null | undefined) {
+    if (cell?.f == null) return cell ?? null;
+    const { v, m, ct, ...rest } = cell;
+    return ct ? { ...rest, fa: ct.fa } : rest;
 }

@@ -10,7 +10,6 @@ import { execFunctionGroup } from './formula-exec';
 
 export function recomputeCells(ctx: Context, cells: readonly FormulaCell[], formulasAt: readonly FormulaCell[] = []) {
     const matrix = getFlowdata(ctx);
-    // A sheet without data has nothing to refresh.
     if (!matrix) return;
     for (const cell of cells) setFormulaCellInfo(ctx, cell, matrix);
     execFunctionGroup(ctx, cells, formulasAt);

@@ -1,8 +1,7 @@
 // The formula engine the editor and the server's recalc share. It owns one Parser, answers its cell and range reads
-// from the CellResolver, and turns each result into a cell value, a display string and a type. An error a cell holds
-// reads back as an error, so ISERROR and IFERROR see it.
-// Every range read is clamped to the sheet's grid and counted against maxCellsRead. It also says when this build can't
-// evaluate a formula's own text, which a recompute takes as no answer.
+// from a CellResolver, and turns each result into the value a cell stores. An error a cell holds reads back as an
+// error, so ISERROR and IFERROR see it. Every range read is clamped to the sheet's grid and counted against
+// maxCellsRead. It also says when this build can't evaluate a formula's own text, which a recompute takes as no answer.
 
 import { cellValue } from './format';
 import { inlineNames } from './formula-shift';
@@ -31,19 +30,6 @@ import type {
     RangeCell,
 } from './types';
 
-// A cell holds an error as its text and a formula reads it back as formulajs's error object, which its functions
-// recognize by identity. A `#NAME?` reads as an unsupported function, which no function traps, so no fallback passes.
-function getCellValue(cell: Cell | null | undefined): FormulaValue {
-    if (cell?.ct?.t === 'n') {
-        const n = Number(cell.v);
-        return Number.isNaN(n) ? cell.v : n;
-    }
-    const value = cellValue(cell);
-    const text = cell?.ct?.t === 's' || cell?.ct?.t === 'inlineStr';
-    if (typeof value !== 'string' || text || !valueIsError(value)) return value;
-    return value === errorParser(ERROR_NAME) ? UNSUPPORTED_FUNCTION : toFormulaError(Error(value));
-}
-
 // A name as Excel spells one: a letter, `_` or `\` first, then letters, digits, `_`, `.`, `\` or `?`.
 const NAME_RE = /^[\p{L}_\\][\p{L}\p{N}_.\\?]*$/u;
 
@@ -51,10 +37,10 @@ const NAME_RE = /^[\p{L}_\\][\p{L}\p{N}_.\\?]*$/u;
 const FUNCTION_CALL_RE = /(?<![\p{L}\p{N}_.])([\p{L}_][\p{L}\p{N}_.]*)\s*\(/gu;
 
 export class FormulaEngine {
-    private parser: Parser;
+    private readonly parser: Parser;
     // Each sheet's width, by sheet id, for the resolver in `widthsOf`. A resolver hands out the same matrices for as
     // long as it is used, so their widths hold as long, and a range read needn't scan every row of its sheet.
-    private widths = new Map<string, number>();
+    private readonly widths = new Map<string, number>();
     private widthsOf: CellResolver | null = null;
     // The cells range reads have cost; a read that would pass `maxCellsRead` fails before it reads.
     private cellsRead = 0;
@@ -65,11 +51,8 @@ export class FormulaEngine {
         this.parser = new Parser();
     }
 
-    // True when the result says nothing because of the formula's own text: a parse failure, a function this build
-    // lacks that the branch taken holds, an operator applied to an array, or a name it can't resolve, whose #NAME? an
-    // IFERROR would trap into a fallback nobody computed. A #NAME? read from another cell is the other cell's. A name
-    // Excel reads past its last column (RhoCO2) is one the engine reads as a cell. A result of #REF! is an answer, the
-    // one a function this build lacks hands on included, whatever else the text holds.
+    // True when the result says nothing because of the formula's own text, such as a parse failure or a function this
+    // build lacks. A #REF! is always an answer.
     public cantEvaluate(formula: string, { value, arrayOperation }: EvaluationResult): boolean {
         if (arrayOperation) return true;
         if (value === errorParser(ERROR_REF)) return false;
@@ -121,17 +104,14 @@ export class FormulaEngine {
         let result = evaluated;
         while (Array.isArray(result)) result = result[0];
         const failure = result instanceof Error ? (errorParser(result.message) ?? errorParser(ERROR)) : error;
-        if (failure != null) {
-            return { value: failure, arrayOperation };
-        }
+        if (failure != null) return { value: failure, arrayOperation };
 
         // A Date result stores as its Excel serial, as the parser's operators read a Date operand. As a string, a DATE
         // or EOMONTH cell would turn into text on the xlsx round trip.
         const serial = result instanceof Date ? dateToSerial(result) : result;
         // NaN and Infinity survive no JSON, so a tab and a joiner would hold different cells. Excel's word is #NUM!.
         if (typeof serial === 'number' && !Number.isFinite(serial)) {
-            const overflow = errorParser(ERROR_NUM);
-            return { value: overflow };
+            return { value: errorParser(ERROR_NUM) };
         }
 
         // Any other non-primitive is stored as its string.
@@ -204,4 +184,17 @@ export class FormulaEngine {
         }
         return width;
     }
+}
+
+// A cell holds an error as its text and a formula reads it back as formulajs's error object, which its functions
+// recognize by identity. A `#NAME?` reads as an unsupported function, which no function traps, so no fallback passes.
+function getCellValue(cell: Cell | null | undefined): FormulaValue {
+    if (cell?.ct?.t === 'n') {
+        const n = Number(cell.v);
+        return Number.isNaN(n) ? cell.v : n;
+    }
+    const value = cellValue(cell);
+    const text = cell?.ct?.t === 's' || cell?.ct?.t === 'inlineStr';
+    if (typeof value !== 'string' || text || !valueIsError(value)) return value;
+    return value === errorParser(ERROR_NAME) ? UNSUPPORTED_FUNCTION : toFormulaError(Error(value));
 }
