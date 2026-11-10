@@ -105,6 +105,7 @@ export function showLinkCard(ctx: Context, r: number, c: number, isEditing = fal
             originAddress: link?.address || '',
             position: {
                 cellLeft: c === 0 ? 0 : ctx.visibledatacolumn[c - 1],
+                cellTop: r === 0 ? 0 : ctx.visibledatarow[r - 1],
                 cellBottom: ctx.visibledatarow[r],
             },
             isEditing,

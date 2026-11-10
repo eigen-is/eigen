@@ -120,7 +120,7 @@ export type LinkCardProps = {
     originText: string;
     originType: string;
     originAddress: string;
-    position: { cellLeft: number; cellBottom: number };
+    position: { cellLeft: number; cellTop: number; cellBottom: number };
     isEditing: boolean;
 };
 

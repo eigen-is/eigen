@@ -25,7 +25,7 @@ If you leave **Display text** empty, the cell shows the address instead. If the 
 
 ## Open a link
 
-Hover over a cell that has a link. A small card appears under it.
+Hover over a cell that has a link. A small card appears under it, or above it near the bottom of the sheet.
 
 - For a web page, click **Open link**. The page opens in a new browser tab.
 - For a cell range or another sheet, the card reads **Go to** followed by the address. Click it to jump there.

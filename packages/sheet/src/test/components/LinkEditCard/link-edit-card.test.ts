@@ -43,7 +43,7 @@ const openCard = async ({ isEditing = true, originType = 'webpage', originAddres
                 originText: '',
                 originType,
                 originAddress,
-                position: { cellLeft: 0, cellBottom: 20 },
+                position: { cellLeft: 0, cellTop: 0, cellBottom: 20 },
                 isEditing,
             },
         },
@@ -96,9 +96,23 @@ const link = (context: Context) => context.sheets[0].data?.[0][0]?.link;
 const hoverCard = (scrolling = false) => openCard({ isEditing: false, originAddress: 'https://eigen.is', scrolling });
 const shownCard = () => document.querySelector('button[aria-label="Edit link"]')?.parentElement;
 
-test('the card sits below the reach of the fill handle, 5 px past the cell', async () => {
+// The anchor spans the cell's height, so a card with no room below goes above the cell rather than over it.
+test('the card hangs from a line 20 px into its cell, top to bottom', async () => {
     await hoverCard();
-    expect(Number.parseFloat(shownCard()?.style.top ?? '')).toBeGreaterThanOrEqual(20 + 5);
+    const anchor = document.querySelector('.absolute');
+    if (!(anchor instanceof HTMLElement)) throw new Error('no anchor');
+    expect([anchor.style.left, anchor.style.top, anchor.style.height]).toEqual(['20px', '0px', '20px']);
+});
+
+test('the pointer moving on to the next link gets the card a new anchor, which Radix places afresh', async () => {
+    const dialog = await hoverCard();
+    const first = document.querySelector('.absolute');
+    await dialog.setContext((ctx) => {
+        const row = ctx.sheets[0].data?.[0];
+        if (row) row[1] = { v: 'next', link: { type: 'webpage', address: 'https://eigen.is/next' } };
+        if (ctx.linkCard) ctx.linkCard = { ...ctx.linkCard, c: 1, rc: '0_1' };
+    });
+    expect(document.querySelector('.absolute')).not.toBe(first);
 });
 
 test('the card stays away during a drag, or the pointer over it would never reach the document', async () => {
@@ -285,7 +299,7 @@ describe('the range picker', () => {
         originText: '',
         originType: 'webpage',
         originAddress: 'https://eigen.is',
-        position: { cellLeft: 0, cellBottom: 20 },
+        position: { cellLeft: 0, cellTop: 0, cellBottom: 20 },
     };
 
     test('the link card stays away until a notice takes its place', async () => {
