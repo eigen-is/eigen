@@ -39,7 +39,7 @@ function LicensesPage() {
         <AppShell appName="licenses" rootRoute={Route}>
             <SitePage>
                 <ReadingLayout>
-                    <h1 className="text-4xl font-medium tracking-tight">Open-source licenses</h1>
+                    <h1 className="site-title">Open-source licenses</h1>
                     <p className="mt-2 mb-8 leading-7">
                         eigen is built on the work of {packages.length} open-source packages. Thank you to everyone who
                         maintains them.

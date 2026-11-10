@@ -33,7 +33,7 @@ export function BlogPost({ post, body, older, newer }: BlogPostProps) {
                         ]}
                         separator="dot"
                     />
-                    <h1 className="text-4xl font-medium tracking-tight">{post.title}</h1>
+                    <h1 className="site-title">{post.title}</h1>
                     {post.cover && <BlogCover src={post.cover} className="mt-7" />}
                     <ArticleContent body={body} className="site-lead mt-8" />
                 </article>

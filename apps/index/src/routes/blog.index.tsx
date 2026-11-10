@@ -39,7 +39,7 @@ function BlogOverviewComponent() {
     return (
         <SitePage>
             <ReadingLayout>
-                <h1 className="text-4xl font-medium tracking-tight">Blog</h1>
+                <h1 className="site-title">Blog</h1>
                 <p className="mt-2 text-muted-foreground">Notes from building Eigen.</p>
                 {newest && (
                     <PostRow post={newest} className="mt-10" dateClassName="top-1">

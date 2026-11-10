@@ -17,7 +17,7 @@ export function SupportSection({ section, articles }: { section: string; article
         <SitePage color={config?.color}>
             <ReadingLayout>
                 <ArticleBreadcrumb trail={[{ label: 'Support', to: '/support' }]} />
-                <h1 className="text-4xl font-medium tracking-tight">{config?.title ?? section}</h1>
+                <h1 className="site-title">{config?.title ?? section}</h1>
                 {config && <p className="mt-2 text-sm text-muted-foreground">{config.description}</p>}
                 <div className="mt-6">
                     <ArticleRows articles={sorted} />

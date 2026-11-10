@@ -1,3 +1,5 @@
+@reference "@workspace/ui/globals.css";
+
 :root {
     --app-current-color: var(--app-space-color);
     --app-current-color-soft: var(--app-space-color-soft);
@@ -17,6 +19,12 @@
 
 .text-app {
     color: var(--app-space-color);
+}
+
+/* The title of every page on the site, one size everywhere. The landing page is the exception: its h1 is the pitch
+   under the wordmark. */
+.site-title {
+    @apply text-4xl font-medium tracking-tight;
 }
 
 .site-wide {

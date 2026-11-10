@@ -41,7 +41,7 @@ function ChangelogPage() {
         <AppShell appName="changelog" rootRoute={Route}>
             <SitePage>
                 <ReadingLayout aside={<ArticleToc toc={versions} label="Versions" />}>
-                    <h1 className="text-4xl font-medium tracking-tight">Changelog</h1>
+                    <h1 className="site-title">Changelog</h1>
                     <p className="mt-2 text-muted-foreground">What changed in Eigen, newest first.</p>
                     <ArticleContent body={body} className="changelog mt-10" />
                 </ReadingLayout>
