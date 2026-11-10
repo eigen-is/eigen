@@ -46,6 +46,8 @@ type DeleteLines = Pick<DeleteRowColOp, 'start' | 'end'>;
 // where a line goes, null for one it deletes.
 export type LineMove = { at: number; to: (line: number) => number | null };
 
+export function lineMove(op: InsertLines): { at: number; to: (line: number) => number };
+export function lineMove(op: InsertLines | DeleteLines): LineMove;
 export function lineMove(op: InsertLines | DeleteLines): LineMove {
     if ('index' in op) {
         const at = op.direction === 'lefttop' ? op.index : op.index + 1;
@@ -164,53 +166,17 @@ function placeMerge(
     merges[`${placed.r}_${placed.c}`] = placed;
 }
 
-// Re-keys an "r_c" map for an insert: the row/column at `index` is the template, copied by `clone`
-// onto every inserted one when given, and shifts along only for a lefttop insert.
-export function shiftCellKeyedForInsert<T>(
+// Re-keys an "r_c" map, an entry on a line the op deletes dropped.
+export function shiftCellKeyed<T>(
     map: Record<string, T> | undefined,
     axis: 'row' | 'column',
-    index: number,
-    count: number,
-    direction: 'lefttop' | 'rightbottom',
-    clone?: (item: T) => T,
+    { to }: LineMove,
 ): Record<string, T> {
     const shifted: Record<string, T> = {};
     for (const key in map) {
-        const item = map[key];
-        let [r, c] = parseCellKey(key);
-        const at = axis === 'row' ? r : c;
-        if (at === index && clone) {
-            for (let n = 0; n < count; n += 1) {
-                const to = direction === 'rightbottom' ? index + n + 1 : index + n;
-                shifted[axis === 'row' ? `${to}_${c}` : `${r}_${to}`] = clone(item);
-            }
-        }
-        if (direction === 'lefttop' ? at >= index : at > index) {
-            if (axis === 'row') r += count;
-            else c += count;
-        }
-        shifted[`${r}_${c}`] = item;
-    }
-    return shifted;
-}
-
-// Re-keys an "r_c" map for a delete: entries in [start, end] drop, the ones past it shift up.
-export function shiftCellKeyedForDelete<T>(
-    map: Record<string, T> | undefined,
-    axis: 'row' | 'column',
-    start: number,
-    end: number,
-): Record<string, T> {
-    const shifted: Record<string, T> = {};
-    for (const key in map) {
-        let [r, c] = parseCellKey(key);
-        const at = axis === 'row' ? r : c;
-        if (at >= start && at <= end) continue;
-        if (at > end) {
-            if (axis === 'row') r -= end - start + 1;
-            else c -= end - start + 1;
-        }
-        shifted[`${r}_${c}`] = map[key];
+        const [r, c] = parseCellKey(key);
+        const line = to(axis === 'row' ? r : c);
+        if (line != null) shifted[axis === 'row' ? `${line}_${c}` : `${r}_${line}`] = map[key];
     }
     return shifted;
 }
@@ -270,34 +236,18 @@ function shiftChartsAcrossSheets<S extends Sheet>(
     });
 }
 
-// A sheet's config keeps several maps keyed by a row or column index, such as rowlen, rowhidden and customHeight.
+// A sheet's config keeps several maps keyed by a row or column index, such as a row's height or whether it is hidden.
 // All of them shift the same way when rows or columns move.
-export function shiftKeyedMapForInsert(
-    map: Record<string, number>,
-    index: number,
-    count: number,
-    direction: 'lefttop' | 'rightbottom',
-): Record<string, number> {
-    const shifted: Record<string, number> = {};
-    for (const [key, v] of Object.entries(map)) {
-        const i = Number.parseInt(key, 10);
-        if (i < index || (i === index && direction === 'rightbottom')) shifted[i] = v;
-        else shifted[i + count] = v;
-    }
-    return shifted;
-}
+export const LINE_MAPS = {
+    row: ['rowhidden', 'rowlen', 'customHeight'],
+    column: ['colhidden', 'columnlen', 'customWidth'],
+} as const;
 
-export function shiftKeyedMapForDelete(
-    map: Record<string, number>,
-    start: number,
-    end: number,
-): Record<string, number> {
+export function shiftKeyedMap(map: Record<string, number>, { to }: LineMove): Record<string, number> {
     const shifted: Record<string, number> = {};
-    const removeCount = end - start + 1;
     for (const [key, v] of Object.entries(map)) {
-        const i = Number.parseInt(key, 10);
-        if (i < start) shifted[i] = v;
-        else if (i > end) shifted[i - removeCount] = v;
+        const line = to(Number.parseInt(key, 10));
+        if (line != null) shifted[line] = v;
     }
     return shifted;
 }
@@ -320,18 +270,23 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     const newCfg: ExtendedSheetConfig = { ...target.config };
     const newData = op.type === 'row' ? [...data] : data.map((row) => [...row]);
     newTarget.data = newData;
-    const { at: insertAt } = lineMove(op);
+    const move = lineMove(op);
+    const insertAt = move.at;
 
     newCfg.merge = shiftMergeForInsert(cfg, op.type, op.index, count, op.direction);
-    newCfg.borderInfo = shiftCellKeyedForInsert(cfg.borderInfo, op.type, op.index, count, op.direction, cloneSides);
+    const borderInfo = shiftCellKeyed(cfg.borderInfo, op.type, move);
+    // The new lines take the borders of the line they were inserted beside.
+    for (const [key, sides] of Object.entries(cfg.borderInfo ?? {})) {
+        const [r, c] = parseCellKey(key);
+        if ((op.type === 'row' ? r : c) !== op.index) continue;
+        for (let line = insertAt; line < insertAt + count; line += 1) {
+            borderInfo[op.type === 'row' ? `${line}_${c}` : `${r}_${line}`] = cloneSides(sides);
+        }
+    }
+    newCfg.borderInfo = borderInfo;
+    shiftLineMaps(cfg, newCfg, op.type, move);
 
     if (op.type === 'row') {
-        if (cfg.rowhidden != null)
-            newCfg.rowhidden = shiftKeyedMapForInsert(cfg.rowhidden, op.index, count, op.direction);
-        if (cfg.rowlen != null) newCfg.rowlen = shiftKeyedMapForInsert(cfg.rowlen, op.index, count, op.direction);
-        if (cfg.customHeight != null)
-            newCfg.customHeight = shiftKeyedMapForInsert(cfg.customHeight, op.index, count, op.direction);
-
         const cols = newData[0]?.length ?? 0;
         const blank = () => new Array<null>(cols).fill(null);
         // One splice for all the new rows, because inserting them one by one would move the rows below each time.
@@ -339,13 +294,6 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
         for (let i = 0; i < count; i += 1) blankRows.push(blank());
         newData.splice(insertAt, 0, ...blankRows);
     } else {
-        if (cfg.colhidden != null)
-            newCfg.colhidden = shiftKeyedMapForInsert(cfg.colhidden, op.index, count, op.direction);
-        if (cfg.columnlen != null)
-            newCfg.columnlen = shiftKeyedMapForInsert(cfg.columnlen, op.index, count, op.direction);
-        if (cfg.customWidth != null)
-            newCfg.customWidth = shiftKeyedMapForInsert(cfg.customWidth, op.index, count, op.direction);
-
         const blanks = new Array<null>(count).fill(null);
         for (const row of newData) {
             row.splice(insertAt, 0, ...blanks);
@@ -365,7 +313,7 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     if (target.dataValidations != null) {
         newTarget.dataValidations = shiftValidations(target.dataValidations, (range) => shiftRangeForInsert(range, op));
     }
-    const frozen = shiftFrozen(target.frozen, op.type, lineMove(op));
+    const frozen = shiftFrozen(target.frozen, op.type, move);
     if (frozen !== target.frozen) newTarget.frozen = frozen;
     shiftFilterForInsert(newTarget, newCfg, op);
 
@@ -400,23 +348,14 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
     const newData = op.type === 'row' ? [...data] : data.map((row) => [...row]);
     newTarget.data = newData;
     const removeCount = op.end - op.start + 1;
+    const move = lineMove(op);
 
     newCfg.merge = shiftMergeForDelete(cfg, op.type, op.start, removeCount);
-    newCfg.borderInfo = shiftCellKeyedForDelete(cfg.borderInfo, op.type, op.start, op.end);
+    newCfg.borderInfo = shiftCellKeyed(cfg.borderInfo, op.type, move);
+    shiftLineMaps(cfg, newCfg, op.type, move);
 
-    if (op.type === 'row') {
-        if (cfg.rowhidden != null) newCfg.rowhidden = shiftKeyedMapForDelete(cfg.rowhidden, op.start, op.end);
-        if (cfg.rowlen != null) newCfg.rowlen = shiftKeyedMapForDelete(cfg.rowlen, op.start, op.end);
-        if (cfg.customHeight != null) newCfg.customHeight = shiftKeyedMapForDelete(cfg.customHeight, op.start, op.end);
-
-        newData.splice(op.start, removeCount);
-    } else {
-        if (cfg.colhidden != null) newCfg.colhidden = shiftKeyedMapForDelete(cfg.colhidden, op.start, op.end);
-        if (cfg.columnlen != null) newCfg.columnlen = shiftKeyedMapForDelete(cfg.columnlen, op.start, op.end);
-        if (cfg.customWidth != null) newCfg.customWidth = shiftKeyedMapForDelete(cfg.customWidth, op.start, op.end);
-
-        for (const row of newData) row.splice(op.start, removeCount);
-    }
+    if (op.type === 'row') newData.splice(op.start, removeCount);
+    else for (const row of newData) row.splice(op.start, removeCount);
 
     stampMerges(newData, newCfg.merge, op.type, op.start);
     newTarget.config = newCfg;
@@ -441,7 +380,7 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
     if (target.dataValidations != null) {
         newTarget.dataValidations = shiftValidations(target.dataValidations, (range) => shiftRangeForDelete(range, op));
     }
-    const frozen = shiftFrozen(target.frozen, op.type, lineMove(op));
+    const frozen = shiftFrozen(target.frozen, op.type, move);
     if (frozen !== target.frozen) newTarget.frozen = frozen;
     shiftFilterForDelete(newTarget, newCfg, op);
 
@@ -460,6 +399,13 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
         (ref) => shiftRangeForDelete(ref, op),
         (ref) => pointsForDelete(ref, op),
     );
+}
+
+function shiftLineMaps(cfg: ExtendedSheetConfig, next: ExtendedSheetConfig, type: 'row' | 'column', move: LineMove) {
+    for (const key of LINE_MAPS[type]) {
+        const map = cfg[key];
+        if (map != null) next[key] = shiftKeyedMap(map, move);
+    }
 }
 
 // Moves every validation rule's ranges, and drops a rule left with none. A rule whose ranges stay where they were is
@@ -496,16 +442,15 @@ function shiftFrozen(frozen: Sheet['frozen'], type: 'row' | 'column', { at, to }
 function shiftFilterForInsert(sheet: ShiftedSheet, cfg: ExtendedSheetConfig, op: InsertRowColOp) {
     const { filterRange, filter } = sheet;
     if (!filterRange?.row) return;
-    const { type, index, count, direction } = op;
     const range = shiftRangeForInsert(filterRange, op);
-    const { at } = lineMove(op);
+    const move = lineMove(op);
     const shifted: Record<string, FilterEntry> = {};
     for (const [key, entry] of Object.entries(filter ?? {})) {
-        if (type === 'row') {
-            const rowhidden = shiftKeyedMapForInsert(entry.rowhidden ?? {}, index, count, direction);
+        if (op.type === 'row') {
+            const rowhidden = shiftKeyedMap(entry.rowhidden ?? {}, move);
             shifted[key] = { ...entry, rowhidden, str: range.row[0], edr: range.row[1] };
         } else {
-            const cindex = entry.cindex >= at ? entry.cindex + count : entry.cindex;
+            const cindex = move.to(entry.cindex);
             shifted[cindex - range.column[0]] = { ...entry, cindex, stc: range.column[0], edc: range.column[1] };
         }
     }
@@ -518,6 +463,7 @@ function shiftFilterForDelete(sheet: ShiftedSheet, cfg: ExtendedSheetConfig, op:
     const { filterRange, filter } = sheet;
     if (!filterRange?.row) return;
     const { type, start, end } = op;
+    const move = lineMove(op);
     const deletesHeader = type === 'row' && filterRange.row[0] >= start && filterRange.row[0] <= end;
     const range = deletesHeader ? null : shiftRangeForDelete(filterRange, op);
     if (!range) {
@@ -527,14 +473,13 @@ function shiftFilterForDelete(sheet: ShiftedSheet, cfg: ExtendedSheetConfig, op:
     const shifted: Record<string, FilterEntry> = {};
     for (const [key, entry] of Object.entries(filter ?? {})) {
         if (type === 'row') {
-            const rowhidden = shiftKeyedMapForDelete(entry.rowhidden ?? {}, start, end);
+            const rowhidden = shiftKeyedMap(entry.rowhidden ?? {}, move);
             if (Object.keys(rowhidden).length > 0) {
                 shifted[key] = { ...entry, rowhidden, str: range.row[0], edr: range.row[1] };
             }
-        } else if (entry.cindex < start) {
-            shifted[entry.cindex - range.column[0]] = { ...entry, edc: range.column[1] };
-        } else if (entry.cindex > end) {
-            const cindex = entry.cindex - (end - start + 1);
+        } else {
+            const cindex = move.to(entry.cindex);
+            if (cindex == null) continue;
             shifted[cindex - range.column[0]] = { ...entry, cindex, stc: range.column[0], edc: range.column[1] };
         }
     }

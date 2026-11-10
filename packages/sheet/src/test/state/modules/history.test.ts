@@ -12,8 +12,9 @@ import { dataToCelldata } from '../../../engine/celldata';
 import { MAX_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Cell, ShiftedSheet } from '../../../engine/types';
-import { copySheet } from '../../../state/api/sheet';
+import { copySheet, hideSheet, showSheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
+import { getFlowdata } from '../../../state/context';
 import { applyDataValidation } from '../../../state/modules/data-validation';
 import type { RowColMove } from '../../../state/modules/history-shift';
 import { deleteMove, insertMove, shiftEntries } from '../../../state/modules/history-shift';
@@ -21,6 +22,7 @@ import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { mergeCells } from '../../../state/modules/merge';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, changeSheet, deleteSheet, renameSheet } from '../../../state/modules/sheet';
+import { updateFormatCell } from '../../../state/modules/toolbar';
 import { clearValidations, validationAt } from '../../../state/modules/validation-rules';
 import type { ConditionalFormatRule, DataValidationRule, Op, Sheet } from '../../../state/types';
 import { commutes } from '../../../state/utils/commute';
@@ -684,6 +686,24 @@ describe('undo and redo recalculate the formulas they touch', () => {
         for (const t of [s.a, s.b]) expect(cellAt(t, 'B1')).toMatchObject({ f: '=A1*3', v: 21 });
         expectAgree(s);
     });
+
+    test.each([
+        ['a date', { fa: 'yyyy-MM-dd', t: 'd' }, '1900-01-10'],
+        ['a text', { fa: '@', t: 's' }, '10'],
+    ])('the undo and redo of %s format give a formula its type and display', (_, ct, m) => {
+        const general = { f: '=A1*2', v: 10, m: '10', ct: { fa: 'General', t: 'n' } };
+        const s = session(workbook({ A1: num(5), B1: general }));
+        s.edit(s.a, (ctx) => {
+            const data = getFlowdata(ctx);
+            if (data) updateFormatCell(ctx, data, 'ct', ct.fa, 0, 0, 1, 1);
+        });
+        s.undo(s.a);
+        for (const t of [s.a, s.b]) expect(cellAt(t, 'B1')).toEqual(general);
+        expectAgree(s);
+        s.redo(s.a);
+        for (const t of [s.a, s.b]) expect(cellAt(t, 'B1')).toEqual({ ...general, m, ct });
+        expectAgree(s);
+    });
 });
 
 test("a redone formula follows its inputs at its place after a peer's row insert", () => {
@@ -1025,19 +1045,110 @@ describe('sheet orders after two tabs change the sheet list at once', () => {
     });
 });
 
-// A name stored before imports repaired names can break the sheet-name rule, and its copy's name keeps the break.
-describe('a copy whose name the add refuses', () => {
-    test('says why and changes nothing, so its undo deletes no other tab', () => {
+// The Workbook's replay of the log from `base`, as a late batch that doesn't commute with the tab's own makes it.
+function replayLog(t: Tab, base: Context, log: Op[][], late: Op[]) {
+    generateAPIs(
+        () => t.ctx,
+        (recipe) => {
+            t.ctx = produce(t.ctx, recipe);
+        },
+        () => {},
+        () => {},
+        t.history,
+    ).replayOps(base.sheets, log, new Set([late]));
+}
+
+// One and Two are the last sheets shown, and each tab takes one away before the other's batch arrives. The log puts A's
+// batch first, and B takes it as the Workbook takes a late batch: on top when it commutes, else by a replay.
+describe('two tabs taking away the last two sheets shown at once', () => {
+    const shown = (sheets: readonly LibSheet[]) => sheets.filter((s) => s.hide !== 1).map((s) => s.id);
+
+    test.each<[string, Structural, Structural]>([
+        ['deletes', removeSheet(TWO), removeSheet(ONE)],
+        [
+            'hides',
+            [(ctx) => hideSheet(ctx, TWO), {}],
+            [
+                (ctx) => {
+                    changeSheet(ctx, TWO);
+                    hideSheet(ctx, ONE);
+                },
+                {},
+            ],
+        ],
+    ])('two %s: the later does nothing, on both tabs and for a joiner', (_, onA, onB) => {
         const base = produce(workbook(), (ctx: Context) => {
-            ctx.sheets[0].name = 'Q1: Sales';
-            ctx.sheets[2].order = 3;
+            ctx.sheets[2].hide = 1;
         });
         const a = tab(base);
-        const ops = tabEdit(a, (ctx) => copySheet(ctx, ONE), { addSheetOp: true });
-        expect(ops).toEqual([]);
-        expect(a.ctx.warnDialog).toBeTruthy();
-        expect(a.ctx.sheets.map((s) => [s.id, s.order])).toEqual(base.sheets.map((s) => [s.id, s.order]));
-        expect(tabUndo(a)).toEqual([]);
+        const b = tab(base);
+        const fromA = tabEdit(a, ...onA);
+        const fromB = tabEdit(b, ...onB);
+        const log = [fromA, fromB];
+        tabReceive(a, fromB);
+        if (commutes([fromA], [fromB])) tabReceive(b, fromA);
+        else replayLog(b, base, log, fromA);
+        expect(shown(a.ctx.sheets)).toEqual([ONE]);
+        expect(view(b.ctx.sheets)).toEqual(view(a.ctx.sheets));
+        expect(shown(b.ctx.sheets)).toEqual([ONE]);
+        expect(view(join(base, log))).toEqual(view(a.ctx.sheets));
+        expect(shown(join(base, log))).toEqual([ONE]);
+    });
+
+    test('an undo that would hide the last sheet shown does nothing', () => {
+        const base = produce(workbook(), (ctx: Context) => {
+            ctx.sheets[1].hide = 1;
+            ctx.sheets[2].hide = 1;
+        });
+        const s = session(base);
+        s.edit(s.a, (ctx) => showSheet(ctx, TWO));
+        s.edit(s.b, (ctx) => {
+            changeSheet(ctx, TWO);
+            hideSheet(ctx, ONE);
+        });
+        s.undo(s.a);
+        expect(shown(s.a.ctx.sheets)).toEqual([TWO]);
+        expect(shown(s.b.ctx.sheets)).toEqual([TWO]);
+        expect(shown(s.joiner())).toEqual([TWO]);
+    });
+});
+
+// Two tabs pressing + at once both name the new tab Sheet4. The log puts A's add first, so B applies the log again from
+// before its own.
+describe('two tabs adding a sheet of one name at once', () => {
+    test('the later add takes the next free name and keeps its cells, on both tabs and for a joiner', () => {
+        const base = workbook();
+        const a = tab(base);
+        const b = tab(base);
+        const fromA = tabEdit(a, (ctx) => addSheet(ctx, 'x'), { addSheetOp: true });
+        const fromB = tabEdit(b, (ctx) => addSheet(ctx, 'y'), { addSheetOp: true });
+        const typedInB = tabEdit(b, (ctx) => {
+            changeSheet(ctx, 'y');
+            typed(0, 0, 'kept')(ctx);
+        });
+        const log = [fromA, fromB, typedInB];
+        tabReceive(a, fromB);
+        tabReceive(a, typedInB);
+        replayLog(b, base, log, fromA);
+        const names = (sheets: readonly LibSheet[]) => sheets.map((s) => [s.id, s.name]);
+        expect(names(a.ctx.sheets).slice(3)).toEqual([
+            ['x', 'Sheet4'],
+            ['y', 'Sheet4 (2)'],
+        ]);
+        expect(a.ctx.sheets[4].data?.[0]?.[0]?.v).toBe('kept');
+        expect(view(b.ctx.sheets)).toEqual(view(a.ctx.sheets));
+        expect(view(join(base, log))).toEqual(view(a.ctx.sheets));
+    });
+
+    // A name stored before imports repaired names can break the sheet-name rule, and its copy's name keeps the break.
+    test('a copy of a tab whose stored name breaks the rule lands repaired, and its undo takes it away', () => {
+        const base = produce(workbook(), (ctx: Context) => {
+            ctx.sheets[0].name = 'Q1: Sales';
+        });
+        const a = tab(base);
+        tabEdit(a, (ctx) => copySheet(ctx, ONE), { addSheetOp: true });
+        expect(a.ctx.sheets.map((s) => s.name)).toEqual(['Q1: Sales', 'Two', 'Three', 'Q1_ Sales(Copy)']);
+        tabUndo(a);
         expect(a.ctx.sheets.map((s) => s.id)).toEqual([ONE, TWO, THREE]);
     });
 });

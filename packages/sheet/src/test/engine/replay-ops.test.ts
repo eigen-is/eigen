@@ -438,6 +438,41 @@ describe('replaySheetsOps', () => {
     });
 });
 
+// Two tabs pressing + at once both name the new tab Sheet2, and nothing either typed may be lost. Two sheets of one
+// name would let a delete or a rename of one break or repoint the formulas reading the other.
+describe('a sheet added under a name it cannot take', () => {
+    test.each([
+        ['past the length limit', 'x'.repeat(32), 'x'.repeat(31)],
+        ['with a colon', 'a:b', 'a_b'],
+        ['with a quote at its end', "x'", 'x'],
+        ['empty', '', 'Sheet1'],
+    ])('a name %s is repaired, as an import repairs it', (_, name, repaired) => {
+        const added: Op = { op: 'addSheet', id: 's2', path: [], value: baseSheet('s2', name) };
+        expect(replaySheetsOps([baseSheet('s1', 'One')], [[added]]).map((sheet) => sheet.name)).toEqual([
+            'One',
+            repaired,
+        ]);
+    });
+
+    test('a name a sheet already has, in any case, takes the next free one, and formulas read the first', () => {
+        const add = (id: string, name: string): Op[] => [{ op: 'addSheet', id, path: [], value: baseSheet(id, name) }];
+        const typedInB: Op[] = [{ op: 'replace', id: 'b', path: ['data', 0, 0], value: { v: 7, m: '7' } }];
+        const typed: Op[] = [{ op: 'replace', id: 's1', path: ['data', 0, 0], value: { f: '=Sheet2!A1', v: 0 } }];
+        const gone: Op[] = [{ op: 'deleteSheet', id: 'b', path: [] }];
+        const batches = [add('a', 'Sheet2'), add('b', 'Sheet2'), add('c', 'SHEET2'), typedInB, typed];
+        const replayed = replaySheetsOps([baseSheet('s1', 'One')], batches);
+        expect(replayed.map((sheet) => [sheet.id, sheet.name])).toEqual([
+            ['s1', 'One'],
+            ['a', 'Sheet2'],
+            ['b', 'Sheet2 (2)'],
+            ['c', 'SHEET2 (3)'],
+        ]);
+        expect(replayed[2].data?.[0]?.[0]?.v).toBe(7);
+        const afterDelete = replaySheetsOps([baseSheet('s1', 'One')], [...batches, gone]);
+        expect(afterDelete[0].data?.[0]?.[0]?.f).toBe('=Sheet2!A1');
+    });
+});
+
 // A granular patch into a collection (`['config','rowlen','2']`) only resolves if the collection
 // already exists. Every document written before the editor started materializing them — and every
 // fresh doc before its first compaction — stores `config: {}`, so the replay base must materialize
@@ -445,30 +480,6 @@ describe('replaySheetsOps', () => {
 // replaySheetsOps throws "path doesn't resolve" and rolls back the WHOLE batch: the edit is
 // lost, not degraded, on every reader (a second client opening the doc, the preview renderer,
 // and every xlsx/HTML/PDF export).
-describe('a sheet added under a name the rule refuses', () => {
-    test.each([
-        ['past the length limit', 'x'.repeat(32)],
-        ['with a colon', 'a:b'],
-        ['with a quote at its end', "x'"],
-        ['empty', ''],
-    ])('a name %s is left out, as a live tab leaves it out', (_, name) => {
-        const added: Op = { op: 'addSheet', id: 's2', path: [], value: baseSheet('s2', name) };
-        expect(replaySheetsOps([baseSheet('s1', 'One')], [[added]]).map((sheet) => sheet.id)).toEqual(['s1']);
-    });
-
-    // Two tabs pressing + at once both name the new tab Sheet2. Two of one name would let a delete or a rename of one
-    // break or repoint the formulas reading the other.
-    test('a name a sheet already has, in any case, is left out: the later of two adds vanishes', () => {
-        const add = (id: string): Op[] => [{ op: 'addSheet', id, path: [], value: baseSheet(id, 'Sheet2') }];
-        const shouted: Op[] = [{ op: 'addSheet', id: 'c', path: [], value: baseSheet('c', 'SHEET2') }];
-        const typed: Op[] = [{ op: 'replace', id: 's1', path: ['data', 0, 0], value: { f: '=Sheet2!A1', v: 0 } }];
-        const gone: Op[] = [{ op: 'deleteSheet', id: 'b', path: [] }];
-        const replayed = replaySheetsOps([baseSheet('s1', 'One')], [add('a'), add('b'), shouted, typed, gone]);
-        expect(replayed.map((sheet) => sheet.id)).toEqual(['s1', 'a']);
-        expect(replayed[0].data?.[0]?.[0]?.f).toBe('=Sheet2!A1');
-    });
-});
-
 describe('ops from a normalizing editor apply to an un-normalized stored sheet', () => {
     const storedBeforeThisBranch = (): Sheet[] => [{ name: 'Sheet1', id: 'id_1', order: 0, celldata: [], config: {} }];
 

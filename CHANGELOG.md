@@ -76,6 +76,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pictures cropped in Google Slides** — a picture that Google Slides cropped to fit its box, such as a logo, no longer comes in squashed when you convert or import the deck
 - **Validation rules and formats in Sheets** — a rule checks a cell's value, not its text: a date shown in another format, a number shown as 50% and an unchanged formula pass, and an imported "any date" rule no longer refuses every date
 - **Row and column changes while others edit in Sheets** — a rename, tab color or link someone sets while you insert or delete rows stays
+- **Tabs while others edit in Sheets** — a tab added at the same moment as another of its name is kept as "Name (2)" instead of vanishing. Two people deleting or hiding the last two visible tabs at once leave one showing, and Duplicate works on a tab whose old name breaks the naming rules
 - **Filters while others edit in Sheets** — a filter someone else changes no longer leaves rows hidden for good after your next filter edit
 - **Refused edits in Sheets** — Delete on part of a merged cell shows a notice, a paste past the sheet's size limit says so, and a paste over part of a merge says it can't and changes nothing
 - **Long text in Sheets** — wrapped text grows its row to fit every line, however you confirm it, from the formula bar or by clicking elsewhere too

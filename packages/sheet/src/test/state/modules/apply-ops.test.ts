@@ -24,7 +24,8 @@ import { typed } from '../factories/edit-cycle';
 import type { Random } from '../factories/workbook-fuzz';
 import { fresh, nextBatch, random, sizeOf, withAuthorValues, workbook } from '../factories/workbook-fuzz';
 
-const SEEDS = Array.from({ length: 24 }, (_, i) => i + 1);
+// Seed 51 once left a #REF! cell typed as a number after an undo and a redo.
+const SEEDS = [...Array.from({ length: 24 }, (_, i) => i + 1), 51];
 const STEPS = 60;
 
 afterEach(() => {
@@ -112,10 +113,7 @@ function extrasBatch(rnd: Random, sheets: Sheet[], step: number): Op[] {
         const ranges = [{ row: [rnd.int(4), 5], column: [1, 1] }];
         return [{ op: 'add', id, path: ['dataValidations', `w${step}`], value: { ranges, rule } }];
     }
-    // Every author keeps one sheet shown.
-    if (roll === 6 && sheets.some((s) => s.id !== id && s.hide !== 1)) {
-        return [{ op: 'replace', id, path: ['hide'], value: rnd.chance(0.5) ? 1 : undefined }];
-    }
+    if (roll === 6) return [{ op: 'replace', id, path: ['hide'], value: rnd.chance(0.5) ? 1 : undefined }];
     return [{ op: 'remove', id, path: ['config', 'rowlen', '2'] }];
 }
 

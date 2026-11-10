@@ -657,8 +657,8 @@ describe("the selection follows a peer's row and column ops", () => {
         expect(focus(applyPeerOps(selected(3, 1), batch))).toEqual([[1, 1], [1, 1], 1, 1]);
     });
 
-    // Two peers each deleting most of the rows can leave none, which every reader applies. No cell is left to land on,
-    // and the keys throw on a selection with no cell under it.
+    // Two peers each deleting most of the rows can ask for every one, and every reader keeps the last, so the
+    // selection always has a cell to land on.
     it('a delete of every row or column keeps the last, and the selection lands on it', () => {
         const rows = applyPeerOps(selected(2, 1), [remove('row', 0, 3)]);
         expect(rows.sheets[0].data).toHaveLength(1);

@@ -131,7 +131,8 @@ export function copySheetName(name: string, taken: readonly string[]): string {
 }
 
 // What a file's sheets are called, each unique in any case. The first holding a name keeps it, and any other is
-// repaired, then numbered as Excel numbers a copy. `reserved` lists names a writer may not use at all.
+// repaired, then numbered as Excel numbers a copy. `reserved` lists names it may not use at all, such as the
+// workbook's own for a sheet an add brings.
 export function legalSheetNames(names: readonly string[], reserved: readonly string[] = []): string[] {
     const taken = new Set(reserved.map(sheetNameKey));
     const kept = names.map((name) => {

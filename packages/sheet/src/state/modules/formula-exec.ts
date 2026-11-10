@@ -5,6 +5,7 @@
 
 import { findSheetByName } from '../../engine/a1-notation';
 import { createArrayResolver } from '../../engine/cell-resolver';
+import { holdsFormulaResult } from '../../engine/format';
 import { FormulaGraph } from '../../engine/formula-graph';
 import { checkBracketNum, LAST_COLUMN, LAST_ROW, matrixWidth, resolveCellRange } from '../../engine/formula-utils';
 import { evaluateFormulas } from '../../engine/recalc';
@@ -55,9 +56,9 @@ export function warmFormulaGraphOnIdle(getContext: () => Context): () => void {
 }
 
 // Recomputes the formulas at `formulasAt` and every formula that reads a cell in `changedCells` or one of those,
-// directly or through another formula, and writes the values that changed. The cells are already written, and the
-// formula graph already knows them. A clock or a random number recomputes here, as its author's value then goes out on
-// the wire.
+// directly or through another formula, and writes each result its cell doesn't hold yet. The cells are already
+// written, and the formula graph already knows them. A clock or a random number recomputes here, as its author's value
+// then goes out on the wire.
 export function execFunctionGroup(
     ctx: Context,
     changedCells: readonly FormulaCell[],
@@ -72,12 +73,12 @@ export function execFunctionGroup(
 
     const results = evaluateFormulas(runList, snapshot.sheets, ctx.formulaCache.engine, false);
 
-    // Most recomputed formulas land on their previous value, and a draft write is what immer's finalize pays for.
+    // Most recomputed formulas land on what they hold, and a draft write is what immer's finalize pays for.
     for (const { r, c, id, formula, result } of results) {
         const idx = getSheetIndex(snapshot, id);
         if (idx == null) continue;
         const before = snapshot.sheets[idx].data?.[r]?.[c];
-        if (before != null && before.v === result.value) continue;
+        if (before != null && holdsFormulaResult(before, result.value)) continue;
         const { data } = ctx.sheets[idx];
         if (data != null) setCellValue(ctx, r, c, data, { v: result.value, f: formula });
     }

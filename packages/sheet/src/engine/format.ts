@@ -69,6 +69,14 @@ export function writeFormulaResult(cell: Cell, value: Cell['v']) {
     else cell.m = String(value);
 }
 
+// The cell already holds what writeFormulaResult writes for the value: its value, type and display, so a recompute
+// that lands on it writes nothing.
+export function holdsFormulaResult(cell: Cell, value: Cell['v']): boolean {
+    const written: Cell = { ...cell, ct: cell.ct && { ...cell.ct } };
+    writeFormulaResult(written, value);
+    return written.v === cell.v && written.m === cell.m && written.ct?.t === cell.ct?.t;
+}
+
 // Wrap breaks text only; the value decides too, since a formula typed into a text cell keeps its ct.t.
 export function cellWrapsText(cell: Cell): boolean {
     return cell.tb === '2' && typeof cell.v !== 'number' && cell.ct?.t !== 'n' && cell.ct?.t !== 'd';
