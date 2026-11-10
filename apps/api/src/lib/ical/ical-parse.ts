@@ -165,18 +165,15 @@ export function uidOf(vevent: ICAL.Component): string {
 }
 
 // The occurrence key a VEVENT's RECURRENCE-ID names, null for a master, through `zones` from seriesTimezones. An
-// occurrence without its master takes the zone its RECURRENCE-ID is written in as the series'. A UTC value states none,
-// so it borrows its own DTSTART's zone, else the file's first master's, since exporters drop UIDs.
+// occurrence without its master knows no zone but the one its RECURRENCE-ID is written in, UTC included, so it keys
+// on the date as written.
 export function recurrenceKeyOf(vevent: ICAL.Component, zones: ReadonlyMap<string, string | null>): string | null {
     const prop = vevent.getFirstProperty('recurrence-id');
     const value = prop?.getFirstValue();
     if (!(value instanceof ICAL.Time)) return null;
     const uid = uidOf(vevent);
-    const tzid = propTzid(prop);
-    const seriesTz = zones.has(uid)
-        ? (zones.get(uid) ?? null)
-        : (tzid ?? propTzid(vevent.getFirstProperty('dtstart')) ?? zones.values().next().value ?? null);
-    return icalTimeToRecurrenceKey(value, tzid, seriesTz);
+    if (!zones.has(uid)) return recurrenceKey(value.year, value.month, value.day);
+    return icalTimeToRecurrenceKey(value, propTzid(prop), zones.get(uid) ?? null);
 }
 
 // A copy of one date holds no master to name its occurrence through, so it keeps the organizer's line to write back.

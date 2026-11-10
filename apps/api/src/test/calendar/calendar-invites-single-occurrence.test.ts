@@ -237,6 +237,59 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         expect(renamed.map((e) => e.title)).toEqual(['Renamed']);
     });
 
+    test('a copy of a date of a series kept in UTC keys on its UTC date, its answer and its updates', async () => {
+        // 23:30 UTC on Mondays, a series stored with no zone, as a CalDAV client can write it.
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'UTC Late',
+                    startTime: '2028-03-06T23:30:00Z',
+                    endTime: '2028-03-07T00:30:00Z',
+                    allDay: false,
+                    rrule: 'FREQ=WEEKLY;COUNT=4',
+                    timezone: null,
+                }),
+            },
+        );
+        const series = await assertJson<CalendarEvent>(res);
+        expect(series.timezone).toBeNull();
+        const inAuckland = { startTime: '2028-03-14T01:00:00Z', endTime: '2028-03-14T02:00:00Z' };
+        await editOccurrence(series.id, TARGET, {
+            title: 'Moved To Auckland',
+            timezone: 'Pacific/Auckland',
+            ...inAuckland,
+        });
+        await untilBob(series.uid, (occ) => occ.length === 1);
+
+        const home = await getHome(ctx.bob.user.id);
+        const [copy] = await home.calendar.getEventsByUid(series.uid);
+        expect(copy.recurrenceDate).toBe(TARGET);
+        const resource = findOrFail(await home.calendar.listResources(bobCalendarId), (r) => r.uid === series.uid);
+        const stored = await davRequest('GET', `/dav/calendars/${ctx.bob.user.id}/${bobCalendarId}/${resource.uri}`, {
+            email: ctx.bob.user.email,
+        });
+        expect(await stored.text()).toContain('RECURRENCE-ID:20280313T233000Z\r\n');
+
+        await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events/${copy.id}/rsvp`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'accepted' }),
+            },
+        );
+        await untilAlice(series.uid, (e) => e.data?.attendees?.[0]?.status === 'accepted');
+
+        await editOccurrence(series.id, TARGET, { title: 'Renamed', timezone: 'Pacific/Auckland', ...inAuckland });
+        const renamed = await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Renamed'));
+        expect(renamed.map((e) => e.title)).toEqual(['Renamed']);
+    });
+
     test("the organizer's cancellation of that occurrence takes the guest's copy away", async () => {
         const series = await createSeries('Single Occurrence Cancel');
         await editOccurrence(series.id, TARGET, { title: 'Doomed' });
@@ -683,7 +736,12 @@ describe('An invitation to several single dates of one series', () => {
         expect(rowOf('2028-03-13').data?.attendees?.[0]).toMatchObject({ email: guest, status: 'accepted' });
         expect(rowOf('2028-03-20').data?.attendees?.[0]).toMatchObject({ email: guest, status: 'pending' });
 
-        const occurrence = { recurrenceDate: '2028-03-13', sequence: 1, dtstamp: new Date('2028-03-02T10:00:00Z') };
+        const occurrence = {
+            recurrenceDate: '2028-03-13',
+            recurrenceId: null,
+            sequence: 1,
+            dtstamp: new Date('2028-03-02T10:00:00Z'),
+        };
         await calendar.cancelInvitationOccurrence(UID, LINK.organizerUserId, occurrence);
         expect((await calendar.getEventsByUid(UID)).map((e) => e.recurrenceDate)).toEqual(['2028-03-20']);
 
@@ -759,6 +817,38 @@ describe('An invitation to several single dates of one series', () => {
         expect(rowOf('2028-03-20').data?.attendees?.[0]).toMatchObject({ email: guest, status: 'accepted' });
         const range = await calendar.getEventsInRange(new Date('2028-03-01'), new Date('2028-04-01'));
         expect(range).toHaveLength(4);
+    });
+
+    // The series is at 00:30 on Mondays in Amsterdam, so the date's UTC RECURRENCE-ID falls on the Sunday before.
+    test('a whole-series message in another zone than a date was named in keeps that date its row and answer', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const id = (await calendar.getCalendars())[0].id;
+        const guest = harness.user.email;
+        const moved = vevent(guest, [
+            'SUMMARY:Moved date',
+            'RECURRENCE-ID:20280312T233000Z',
+            'DTSTART;TZID=Europe/Amsterdam:20280313T020000',
+            'DTEND;TZID=Europe/Amsterdam:20280313T030000',
+        ]);
+        await calendar.receiveRequest(parseIcs(vcal(moved)).events, LINK);
+        const [held] = storedEvents(calendar, id);
+        expect(held.recurrenceDate).toBe('2028-03-12');
+        await calendar.rsvp(held.id, makeSyntheticUser(harness.user.id, harness.user.name, guest), {
+            status: 'accepted',
+        });
+
+        const master = vevent(guest, [
+            'SUMMARY:Whole Series',
+            'DTSTART;TZID=Europe/Amsterdam:20280306T003000',
+            'DTEND;TZID=Europe/Amsterdam:20280306T013000',
+            'RRULE:FREQ=WEEKLY;COUNT=4',
+        ]);
+        await calendar.receiveRequest(parseIcs(vcal(master, moved)).events, LINK);
+
+        const date = findOrFail(storedEvents(calendar, id), (e) => !!e.parentEventId);
+        expect(date).toMatchObject({ id: held.id, recurrenceDate: '2028-03-13' });
+        expect(date.data?.attendees?.[0]).toMatchObject({ email: guest, status: 'accepted' });
     });
 
     // A date the series doesn't list is an unmoved occurrence of it, so its answer stays with that date.

@@ -202,8 +202,8 @@ describe("the first web save of a client's event", () => {
     });
 });
 
-// A client may store one occurrence of a series alone. Its UTC RECURRENCE-ID keys through its own DTSTART's zone, so
-// the row and every edit of the file name one date, here 13 January.
+// A client may store one occurrence of a series alone. Its UTC RECURRENCE-ID keys on its UTC date, so the row and every
+// edit of the file name one date, here 12 January.
 describe('a lone occurrence a client wrote', () => {
     const stored = async () => {
         const harness = await makeCalendar();
@@ -221,7 +221,7 @@ describe('a lone occurrence a client wrote', () => {
         ]);
         await putResource(calendar, calendarId, 'lone.ics', body);
         const event = storedEvents(calendar, calendarId)[0];
-        expect(event.recurrenceDate).toBe('2026-01-13');
+        expect(event.recurrenceDate).toBe('2026-01-12');
         return { calendar, calendarId, event };
     };
 

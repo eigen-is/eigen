@@ -18,7 +18,7 @@ export type InvitationRequest = { events: readonly ParsedEvent[]; link: Invitati
 
 // One occurrence a message names: its sender's key, and the RECURRENCE-ID a mailed message states, which the receiver
 // keys again in the series it holds.
-export type OccurrenceRef = { recurrenceDate: string; recurrenceId?: RecurrenceId | null };
+export type OccurrenceRef = { recurrenceDate: string; recurrenceId: RecurrenceId | null };
 
 // The wire shape minus the positional calendarId, plus the fields only the server sets, which the web app never sends.
 export type CreateEventArgs = Omit<CreateEventInput, 'calendarId'> & {

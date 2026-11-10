@@ -837,6 +837,93 @@ describe('a copy of one date named in another zone than its start', () => {
     });
 });
 
+// A UTC RECURRENCE-ID states UTC as its zone, so a copy of that one date keys on the UTC date whatever its start says.
+describe('a copy of one date named in UTC', () => {
+    const DATE = 'one-date-utc@external.com';
+    const link = {
+        organizerEmail: ORG,
+        organizerEventId: DATE,
+        organizerUserId: `external_${ORG}`,
+        createByUserId: `external_${ORG}`,
+    };
+    const occurrence = (guest: string, title: string, sequence: number, times: string[]): ParsedEvent[] =>
+        parseIcs(
+            vcal([
+                'BEGIN:VEVENT',
+                `UID:${DATE}`,
+                'RECURRENCE-ID:20260509T223000Z',
+                `SUMMARY:${title}`,
+                `SEQUENCE:${sequence}`,
+                `DTSTAMP:2026010${sequence + 1}T000000Z`,
+                `ORGANIZER:mailto:${ORG}`,
+                `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${guest}`,
+                ...times,
+                'END:VEVENT',
+            ]),
+        ).events;
+
+    // 00:30 on 10 May in Amsterdam is 22:30 on 9 May in UTC.
+    async function filed() {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const guest = harness.user.email;
+        const inAmsterdam = [
+            'DTSTART;TZID=Europe/Amsterdam:20260510T003000',
+            'DTEND;TZID=Europe/Amsterdam:20260510T013000',
+        ];
+        await calendar.receiveRequest(occurrence(guest, 'Late call', 0, inAmsterdam), link);
+        return { calendar, guest };
+    }
+
+    async function stored(calendar: Calendar) {
+        const events = await calendar.getEventsByUid(DATE);
+        const { calendarId } = events[0];
+        const resource = findOrFail(await calendar.listResources(calendarId), (r) => r.uid === DATE);
+        return { events, text: await resourceTextOf(calendar, calendarId, resource.uri) };
+    }
+
+    test('an update that restates its start in UTC updates it in place', async () => {
+        const { calendar, guest } = await filed();
+
+        const inUtc = ['DTSTART:20260509T223000Z', 'DTEND:20260509T233000Z'];
+        await calendar.receiveRequest(occurrence(guest, 'Renamed', 1, inUtc), link);
+
+        const { events, text } = await stored(calendar);
+        expect(events.map((e) => [e.title, e.recurrenceDate])).toEqual([['Renamed', '2026-05-09']]);
+        expect(text.match(/BEGIN:VEVENT/g)).toHaveLength(1);
+        expect(text).toContain('RECURRENCE-ID:20260509T223000Z\r\n');
+    });
+
+    test('a cancel that states its start in UTC removes it', async () => {
+        const { calendar, guest } = await filed();
+
+        const [cancel] = occurrence(guest, 'Late call', 1, [
+            'STATUS:CANCELLED',
+            'DTSTART:20260509T223000Z',
+            'DTEND:20260509T233000Z',
+        ]);
+        const { recurrenceDate } = cancel;
+        if (!recurrenceDate) throw new Error('a cancel of one date names that date');
+        await calendar.cancelInvitationOccurrence(DATE, link.organizerUserId, { ...cancel, recurrenceDate });
+
+        expect(await calendar.getEventsByUid(DATE)).toEqual([]);
+    });
+
+    test('an update that moves it to New York keeps one copy', async () => {
+        const { calendar, guest } = await filed();
+
+        const inNewYork = [
+            'DTSTART;TZID=America/New_York:20260509T183000',
+            'DTEND;TZID=America/New_York:20260509T193000',
+        ];
+        await calendar.receiveRequest(occurrence(guest, 'Moved', 1, inNewYork), link);
+
+        const { events, text } = await stored(calendar);
+        expect(events.map((e) => [e.title, e.recurrenceDate])).toEqual([['Moved', '2026-05-09']]);
+        expect(text.match(/BEGIN:VEVENT/g)).toHaveLength(1);
+    });
+});
+
 // A guest's copy names a new occurrence by the series the same message states, never by the one it held before.
 describe('a series moved in the same message as a new occurrence', () => {
     const SERIES = 'moved-with-override@external.com';

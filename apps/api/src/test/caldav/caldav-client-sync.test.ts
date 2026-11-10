@@ -341,11 +341,13 @@ describe('CalDAV client sync on web-created events', () => {
             // The first RSVP writes the exception; the second moves the PARTSTAT on the one that exists.
             await home.calendar.receiveRsvpForOccurrence(eventId, ctx.alice.user.email, 'accepted', {
                 recurrenceDate: '2026-05-11',
+                recurrenceId: null,
             });
             const before = await syncToken();
 
             await home.calendar.receiveRsvpForOccurrence(eventId, ctx.alice.user.email, 'tentative', {
                 recurrenceDate: '2026-05-11',
+                recurrenceId: null,
             });
 
             expect(await delta(before)).toContain(uri);
@@ -383,6 +385,7 @@ describe('CalDAV client sync on web-created events', () => {
             const home = await getHome(userId);
             await home.calendar.receiveRsvpForOccurrence(eventId, ctx.alice.user.email, 'accepted', {
                 recurrenceDate: '2026-05-11',
+                recurrenceId: null,
             });
             const before = await syncToken();
 

@@ -212,7 +212,8 @@ export async function rsvp(
             await calendar.writeLock.run(() => removeOccurrence(calendar, eventId, recurrenceDate));
             calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, event.calendarId);
         } else {
-            await rsvpForOccurrence(calendar, eventId, user.email, input.status, { recurrenceDate }, true);
+            const occurrence = { recurrenceDate, recurrenceId: null };
+            await rsvpForOccurrence(calendar, eventId, user.email, input.status, occurrence, true);
         }
         if (isExternalOrganizer) sendRsvpReply(status, recurrenceDate);
         else relayRsvp(status, recurrenceDate);
@@ -244,11 +245,12 @@ async function unlessRefused<T>(uid: string, apply: () => Promise<T>, dropped: T
 }
 
 // A RECURRENCE-ID names an instant, and its occurrence is the day the series' wall clock shows then. A lone
-// occurrence's file may not state the series' zone, so a copy holding the master keys the instant in that master's
-// zone. A copy of single dates knows none but the zone the RECURRENCE-ID is written in, which the parser keyed on.
+// occurrence's file may not state the series' zone, so against a master, held or arriving, the instant keys in that
+// master's zone. A copy of single dates knows none but the zone the RECURRENCE-ID is written in, which the parser
+// keyed on.
 function occurrenceKey<Key extends string | null>(
-    occurrence: { recurrenceDate: Key; recurrenceId?: RecurrenceId | null },
-    held: CalendarEvent,
+    occurrence: { recurrenceDate: Key; recurrenceId: RecurrenceId | null },
+    held: CalendarEvent | ParsedEvent,
 ): Key | string {
     const stated = occurrence.recurrenceId;
     return stated && !held.recurrenceDate ? recurrenceKeyIn(stated.instant, held.timezone) : occurrence.recurrenceDate;
@@ -288,9 +290,16 @@ async function decideInboundRequest(
 
     // One resource per calendar holds a UID, so these are the copy's rows: its master and exceptions, or its dates.
     const held = new Map(stored.filter((e) => e.calendarId === series.calendarId).map((e) => [e.recurrenceDate, e]));
-    // A copy of single dates gives way to the whole series once the organizer invites this Home to all of it.
+    // A copy of single dates gives way to the whole series once the organizer invites this Home to all of it, each
+    // date under the key that series gives it.
     if (series.recurrenceDate && master) {
-        return fileNewInvitation(calendar, requested, link, { copies: [...held.values()], resource, component });
+        const dates = new Map(
+            [...held.values()].map((copy) => {
+                const recurrenceId = recurrenceIdOf(component, copy.recurrenceDate);
+                return [occurrenceKey({ recurrenceDate: copy.recurrenceDate, recurrenceId }, master), copy];
+            }),
+        );
+        return fileNewInvitation(calendar, requested, link, { dates, resource, component });
     }
 
     // A RECURRENCE-ID the message repeats keeps its newest event. A message that carries its master was keyed in that
@@ -365,7 +374,11 @@ async function fileNewInvitation(
     calendar: Calendar,
     requested: readonly ParsedEvent[],
     link: InvitationLink,
-    replaces?: { copies: readonly CalendarEvent[]; resource: events.StoredResource; component: ICAL.Component },
+    replaces?: {
+        dates: ReadonlyMap<string | null, CalendarEvent>;
+        resource: events.StoredResource;
+        component: ICAL.Component;
+    },
 ): Promise<InboundRequestOutcome> {
     // A new invitation is attributed to its sender, so the body's ORGANIZER must be that address.
     const organizer = requested[0].data?.organizer;
@@ -385,13 +398,13 @@ async function fileNewInvitation(
     // exception takes over the date's row and answer.
     const revisions = replaces && storedRevisions(replaces.component);
     const heldRevision = (copy: CalendarEvent) => revisions?.get(copy.recurrenceDate) ?? null;
-    const heldByDate = new Map(replaces?.copies.map((copy) => [copy.recurrenceDate, copy]));
-    const stale = replaces?.copies.some((copy) => {
-        const parsed = requested.find((e) => e.recurrenceDate === copy.recurrenceDate) ?? requested[0];
+    const heldByDate = new Map(replaces?.dates);
+    const stale = [...heldByDate].some(([key, copy]) => {
+        const parsed = requested.find((e) => e.recurrenceDate === key) ?? requested[0];
         return !isNewerRevision(parsed, heldRevision(copy));
     });
     if (stale) return { kind: 'dropped', reason: 'nothing newer to apply' };
-    const kept = replaces?.copies.at(0)?.data;
+    const kept = heldByDate.values().next().value?.data;
 
     const now = new Date();
     const rows = requested.map((parsed) => {

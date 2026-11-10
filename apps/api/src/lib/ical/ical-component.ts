@@ -273,7 +273,7 @@ export function storedRevisions(resource: ICAL.Component): Map<string | null, Re
 }
 
 // The RECURRENCE-ID the stored VEVENT of one occurrence names, as the organizer wrote it.
-export function recurrenceIdOf(resource: ICAL.Component, recurrenceKey: string): RecurrenceId | null {
+export function recurrenceIdOf(resource: ICAL.Component, recurrenceKey: string | null): RecurrenceId | null {
     const vevent = keyVEvents(resource).get(recurrenceKey);
     return vevent ? readRecurrenceId(vevent) : null;
 }
