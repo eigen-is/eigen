@@ -419,6 +419,56 @@ describe('inbound message ordering', () => {
     });
 });
 
+// An organizer's list often still says NEEDS-ACTION for a guest whose reply it hasn't read. Only a rescheduling,
+// which raises the SEQUENCE, asks the guest to answer again.
+describe("the guest's own answer", () => {
+    const answered = async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const me = makeSyntheticUser(harness.user.id, harness.user.name, harness.user.email);
+        const mine = (event: CalendarEvent | undefined) =>
+            event?.data?.attendees?.find((a) => a.email === me.email)?.status;
+        return { calendar, me, mine };
+    };
+
+    test('stays through an update at the same SEQUENCE and resets at a higher one', async () => {
+        const { calendar, me, mine } = await answered();
+        await calendar.receiveImipRequest(parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
+        await calendar.rsvp((await masterOf(calendar)).id, me, { status: 'accepted' });
+
+        await calendar.receiveImipRequest(parsedOf(request('Title B', 2, '20260401T120000Z', [], me.email)), ORG);
+
+        expect((await masterOf(calendar)).title).toBe('Title B');
+        expect(mine(await masterOf(calendar))).toBe('accepted');
+
+        await calendar.receiveImipRequest(parsedOf(request('Title C', 3, '20260401T130000Z', [], me.email)), ORG);
+
+        expect(mine(await masterOf(calendar))).toBe('pending');
+    });
+
+    test('stays on one occurrence through an update to it at the same SEQUENCE', async () => {
+        const { calendar, me, mine } = await answered();
+        const moved = (summary: string, sequence: number, dtstamp: string) =>
+            parsedOf(occurrence(summary, sequence, dtstamp).replace(`mailto:${GUEST}`, `mailto:${me.email}`));
+        await calendar.receiveImipRequest(parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
+        await calendar.receiveImipRequest(moved('Moved once', 2, '20260401T110000Z'), ORG);
+        await calendar.rsvp((await masterOf(calendar)).id, me, {
+            status: 'accepted',
+            scope: 'this',
+            recurrenceDate: '2026-05-02',
+        });
+
+        await calendar.receiveImipRequest(moved('Moved twice', 2, '20260401T120000Z'), ORG);
+
+        expect((await exceptionOf(calendar))?.title).toBe('Moved twice');
+        expect(mine(await exceptionOf(calendar))).toBe('accepted');
+
+        await calendar.receiveImipRequest(moved('Moved again', 3, '20260401T130000Z'), ORG);
+
+        expect(mine(await exceptionOf(calendar))).toBe('pending');
+    });
+});
+
 describe('an answer that names a date', () => {
     const GUESTS = [{ email: GUEST, status: 'pending' as const, role: 'required' as const }];
     const stored = async (input: { rrule?: string; timezone?: string; startTime: string; endTime: string }) => {

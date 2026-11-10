@@ -228,6 +228,8 @@ A relayed message naming this Home as its own organizer is dropped, because adop
 
 `isNewerRevision` (RFC 5546 § 2.1.5) compares SEQUENCE first, then `DTSTAMP`. The stored side is what the resource holds for that occurrence (`storedRevision`); a cancelled one reads the stamp beside its `EXDATE`. A lower SEQUENCE always loses. At equal SEQUENCE an equal or newer stamp is applied, and so is a message when either side has no stamp. `DTSTAMP` has one-second resolution, so such a message is a redelivery, and a redelivery patches to nothing: no ctag moves and the user is told nothing twice. An occurrence the copy already holds is patched the same way, and only a new one is written whole, so a series redelivered with its moved and cancelled occurrences writes nothing either. A stamp more than 24 hours ahead of the receiver's clock is clamped to now, or it would outrank every genuine update at the same SEQUENCE.
 
+A guest's own answer outlives an update at the same SEQUENCE, because an organizer's list can still say needs-action for a reply it hasn't read yet. Only a higher SEQUENCE, which marks a rescheduling, puts the organizer's list in its place. `keepOwnAnswer` is that one rule for the series and for each occurrence.
+
 Receivers never raise. A message over `EVENT_MAX_BYTES` or the storage budget is logged and dropped, because the mail it rode in on has landed and nobody is waiting for a 413 or a 507.
 
 ## iMIP mail carries the projected event, never the stored bytes

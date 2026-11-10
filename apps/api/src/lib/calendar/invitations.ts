@@ -443,23 +443,23 @@ async function applyInvitationException(
     const resource = events.resourceOf(calendar, linked.id);
     if (!resource) return false;
     const component = events.storedComponent(calendar, resource);
-    if (!isNewerRevision(payload, storedRevision(component, recurrenceDate))) return false;
+    const stored = storedRevision(component, recurrenceDate);
+    if (!isNewerRevision(payload, stored)) return false;
 
     const existing = events.exceptionOf(calendar, linked.id, recurrenceDate);
+    const held = heldAttendees(existing, linked);
+    const attendees = keepOwnAnswer(calendar, payload, held, stored);
     const cancelled = payload.status === 'cancelled';
     const timezone = payload.timezone ?? linked.timezone;
     if (existing && (existing.status === 'cancelled') === cancelled) {
         // A cancelled occurrence is an EXDATE, which holds nothing more to patch.
         if (cancelled) return false;
-        const patch = invitationPatch(existing, { ...payload, timezone, rrule: null }, null);
+        const patch = invitationPatch(existing, { ...payload, timezone, rrule: null, attendees }, null);
         const changed = patchEvent(component, recurrenceDate, patch, events.writeContext(false, payload.dtstamp));
         if (changed) await events.writeComponent(calendar, resource, component);
         return changed;
     }
-    const data: EventData = {
-        ...linked.data,
-        attendees: payload.attendees ?? heldAttendees(existing, linked),
-    };
+    const data: EventData = { ...linked.data, attendees: attendees ?? held };
     await events.writeEvent(calendar, linked.calendarId, {
         title: payload.title,
         description: payload.description,
@@ -520,20 +520,36 @@ async function applyInvitationUpdate(
     if (!resource) return false;
     const component = events.storedComponent(calendar, resource);
     // A copy that is one occurrence of a series this Home does not hold is keyed by its RECURRENCE-ID.
-    if (!isNewerRevision(payload, storedRevision(component, linked.recurrenceDate))) return false;
+    const stored = storedRevision(component, linked.recurrenceDate);
+    if (!isNewerRevision(payload, stored)) return false;
 
     // Never extend the rrule past what the guest has: they may have shortened it on purpose.
     const rrule = constrainRRule(payload.rrule, linked.rrule);
+    const attendees = keepOwnAnswer(calendar, payload, linked.data?.attendees ?? [], stored);
     // A redelivery changes nothing, so it bumps no ctag and sends no second notice.
     const changed = patchEvent(
         component,
         linked.recurrenceDate,
-        invitationPatch(linked, payload, rrule),
+        invitationPatch(linked, { ...payload, attendees }, rrule),
         events.writeContext(false, payload.dtstamp),
     );
     if (!changed) return false;
     await events.writeComponent(calendar, resource, component);
     return true;
+}
+
+// The guest's own answer stands until the organizer reschedules, which raises the SEQUENCE. An organizer's list can
+// still say NEEDS-ACTION for a reply it hasn't read yet.
+function keepOwnAnswer(
+    calendar: Calendar,
+    payload: { sequence: number; attendees?: Attendee[] },
+    held: readonly Attendee[],
+    stored: Revision | null,
+): Attendee[] | undefined {
+    const email = calendar.home.user.email.toLowerCase();
+    const own = held.find((a) => a.email.toLowerCase() === email);
+    if (!payload.attendees || !own || !stored || payload.sequence > stored.sequence) return payload.attendees;
+    return withAttendeeStatus(payload.attendees, email, own.status);
 }
 
 // An organizer's client repeats the times in every message. Only a time that differs from the stored row is patched.
