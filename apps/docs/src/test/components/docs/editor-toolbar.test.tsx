@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { collapseSeparators } from '@workspace/ui/test/menu-rows';
-import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import { withBrowserFrames } from '../../fixtures/browser-frames';
 
@@ -50,6 +49,7 @@ const rootExtensions = (root: { band?: boolean; note?: boolean }) => [
 ];
 
 const onReplaceImage = mock(() => {});
+const onLink = mock(() => {});
 const onEnterBand = mock((_band: unknown) => {});
 const onPageNumbers = mock((_preset: unknown) => {});
 const onToggleOutline = mock(() => {});
@@ -104,6 +104,7 @@ async function render(
         closePanels,
         onImageUpload: () => {},
         onReplaceImage,
+        onLink,
         onEnterBand: bands ? onEnterBand : undefined,
         onPageNumbers: bands ? onPageNumbers : undefined,
         outlineShown,
@@ -1158,97 +1159,24 @@ test.each(['OK', 'Cancel'])('Page setup closed with %s gives focus back to the e
     expect(document.activeElement === editor.view.dom).toBe(true);
 });
 
-const linkField = () => document.querySelector<HTMLInputElement>('[role="dialog"] input');
 const dialogButton = (label: string) =>
     [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent === label);
 
-async function openLinkDialog() {
+// The editor owns the link dialog, as a link's right-click menu opens it too.
+test('Add link and Insert › Link hand the link dialog to the editor', async () => {
+    onLink.mockClear();
+    await render(1920, true);
     const icon = document.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Add link"]');
     await act(async () => icon?.click());
-    expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Add link');
-}
-
-async function typeLink(url: string) {
-    const input = linkField();
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(input, url);
-        input?.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-}
-
-test('Add link stays off until a URL is typed, and Enter links the selected text', async () => {
-    editor.commands.setContent({
-        type: 'doc',
-        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'ab' }] }],
-    });
-    editor.commands.setTextSelection({ from: 1, to: 3 });
-    await render(1920, true);
-    await openLinkDialog();
-    expect(dialogButton('Add link')?.disabled).toBe(true);
-    await typeLink('https://eigen.is');
-    expect(dialogButton('Add link')?.disabled).toBe(false);
-    await act(async () => {
-        const input = linkField();
-        if (!input) throw new Error('no URL field');
-        pressEnter(input);
-    });
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(editor.getJSON().content?.[0]?.content?.[0]?.marks).toEqual([
-        { type: 'link', attrs: expect.objectContaining({ href: 'https://eigen.is' }) },
-    ]);
-});
-
-test('a URL typed and then cancelled is gone the next time Add link opens', async () => {
-    editor.commands.setContent(ONE_PARAGRAPH);
-    editor.commands.setTextSelection(1);
-    await render(1920, true);
-    await openLinkDialog();
-    await typeLink('https://eigen.is');
-    await act(async () => dialogButton('Cancel')?.click());
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
-    await openLinkDialog();
-    expect(linkField()?.value).toBe('');
-});
-
-// The field is trimmed, so a URL pasted with the spaces around it links, and spaces alone are no URL.
-test('Add link trims the URL, at the caret and on a selection, and spaces alone keep it off', async () => {
-    editor.commands.setContent(ONE_PARAGRAPH);
-    editor.commands.setTextSelection(1);
-    await render(1920, true);
-    await openLinkDialog();
-    await typeLink('   ');
-    expect(dialogButton('Add link')?.disabled).toBe(true);
-    await typeLink('  https://eigen.is  ');
-    await act(async () => dialogButton('Add link')?.click());
-    expect(editor.getJSON().content?.[0]?.content?.[0]).toEqual({
-        type: 'text',
-        text: 'https://eigen.is',
-        marks: [{ type: 'link', attrs: expect.objectContaining({ href: 'https://eigen.is' }) }],
-    });
-
-    editor.commands.setContent({
-        type: 'doc',
-        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'ab' }] }],
-    });
-    editor.commands.setTextSelection({ from: 1, to: 3 });
-    await openLinkDialog();
-    await typeLink(' https://eigen.is/help\t');
-    await act(async () => dialogButton('Add link')?.click());
-    expect(editor.getJSON().content?.[0]?.content?.[0]?.marks).toEqual([
-        { type: 'link', attrs: expect.objectContaining({ href: 'https://eigen.is/help' }) },
-    ]);
+    expect(onLink).toHaveBeenCalledTimes(1);
+    await openMenu('Insert');
+    await withBrowserFrames(() => clickItem('Link'));
+    expect(onLink).toHaveBeenCalledTimes(2);
 });
 
 // Each dialog the toolbar opens hands the focus back to the editor as it closes, the way Page setup does above, so the
 // next keystroke types in the doc and not on a trigger.
 const openToolbarDialog = {
-    'Add link': async () => {
-        editor.commands.setContent(ONE_PARAGRAPH);
-        editor.commands.setTextSelection(1);
-        await render(1920, true);
-        await openLinkDialog();
-        await typeLink('https://eigen.is');
-    },
     'Restart numbering': async () => {
         editor.commands.setContent(orderedList({ start: 1, type: null }));
         editor.commands.setTextSelection(3);
@@ -1273,8 +1201,6 @@ const openToolbarDialog = {
 };
 
 test.each([
-    ['Add link', 'Add link'],
-    ['Add link', 'Cancel'],
     ['Restart numbering', 'OK'],
     ['Restart numbering', 'Cancel'],
     ['Custom spacing', 'Apply'],

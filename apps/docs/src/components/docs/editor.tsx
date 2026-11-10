@@ -67,7 +67,7 @@ import type * as Y from 'yjs';
 import { ChartDataEditor, ChartPropertiesPanel } from './chart-properties-panel';
 import { chartClipboardItem, pasteFromClipboard, runClipboardCommand } from './clipboard';
 import { useBandEditors, useDocEditor, useDocMedia } from './doc-editor';
-import { EditorToolbar } from './editor-toolbar';
+import { EditorToolbar, keepEditorFocus } from './editor-toolbar';
 import { equationMenuSections } from './equation-menu-sections';
 import { EquationPropertiesPanel } from './equation-properties-panel';
 import {
@@ -94,6 +94,10 @@ import type { SelectionPanel } from './hooks/use-selection-panel';
 import { useSelectionPanel } from './hooks/use-selection-panel';
 import { cellBackground, selectCellCommands } from './hooks/use-toolbar-state';
 import { useYMapRead } from './hooks/use-y-map-read';
+import type { LinkDialogTarget } from './link-dialog';
+import { LinkDialog, linkDialogTarget } from './link-dialog';
+import type { LinkAtPointer } from './link-menu-sections';
+import { linkAtPointer, linkMenuSections } from './link-menu-sections';
 import { updateNormalStyle } from './normal-style';
 import { OUTLINE_WIDTH_PX, OutlineColumn } from './outline-sidebar';
 import { BandControls, PageBands } from './page-band';
@@ -244,6 +248,7 @@ const TiptapEditor = ({
         () => {},
     );
     const tableOfContentsContextMenuRef = useRef<(editor: Editor, pos: number, event: MouseEvent) => void>(() => {});
+    const selectionContextMenuRef = useRef<(event: MouseEvent) => boolean>(() => false);
     const editEquationRef = useRef(() => {});
     const openNoteRef = useRef((_pos: number) => {});
     const openBoxRef = useRef((_pos: number, _at: { left: number; top: number } | null) => {});
@@ -339,11 +344,7 @@ const TiptapEditor = ({
                         const item = commentMenuItem(cardId);
                         if (item) commentContextMenu.openAt(item, event.clientX, event.clientY);
                     },
-                    onSelectionContextMenu: (event) => {
-                        if (!handleAddCommentRef.current) return false;
-                        selectionContextMenu.openAt(true, event.clientX, event.clientY);
-                        return true;
-                    },
+                    onSelectionContextMenu: (event) => selectionContextMenuRef.current(event),
                     onAddComment: () => handleAddCommentRef.current?.(),
                     onToggleCommentPanel: toggleComments,
                 }),
@@ -520,7 +521,18 @@ const TiptapEditor = ({
     cardsRef.current = cards;
 
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
-    const selectionContextMenu = useContextMenu<boolean>();
+    const selectionContextMenu = useContextMenu<{ link: LinkAtPointer | null; comment: boolean }>();
+    // A writer's right-click on a link, or on text a comment can anchor to; anywhere else the browser's own menu shows.
+    selectionContextMenuRef.current = (event) => {
+        const link = canWrite ? linkAtPointer(editor, event) : null;
+        const comment = handleAddCommentRef.current != null && canAnchorComment(editor.state);
+        if (!link && !comment) return false;
+        selectionContextMenu.openAt({ link, comment }, event.clientX, event.clientY);
+        return true;
+    };
+    const selectionItem = selectionContextMenu.item;
+    const menuLink = selectionItem?.link;
+    const [linkDialog, setLinkDialog] = useState<(LinkDialogTarget & { open: boolean }) | null>(null);
     const figureContextMenu = useContextMenu<{
         imagePath: DrivePath | undefined;
         chart: EigenClipboardChartItem | null;
@@ -830,6 +842,7 @@ const TiptapEditor = ({
                                             : undefined
                                     }
                                     onReplaceImage={() => setReplacePickerOpen(true)}
+                                    onLink={() => setLinkDialog({ ...linkDialogTarget(activeEditor), open: true })}
                                     // Comments anchor in the body only, and a band's or a note's equation comes from a
                                     // paste or a Word file, which its panel edits: Insert grays both out there.
                                     onAddComment={chatFolderId ? handleAddComment : undefined}
@@ -1179,14 +1192,34 @@ const TiptapEditor = ({
             </ContextMenuAnchor>
 
             <ContextMenuAnchor contextMenu={selectionContextMenu}>
-                <CommentMenuItems
-                    item={null}
-                    onAddComment={() => {
-                        handleAddCommentRef.current?.();
-                        selectionContextMenu.close();
-                    }}
-                />
+                {selectionItem && (
+                    <MenuSections
+                        {...(menuLink &&
+                            linkMenuSections(editor, menuLink, () =>
+                                setLinkDialog({ editor, ...menuLink, open: true }),
+                            ))}
+                        collaborate={
+                            selectionItem.comment && (
+                                <CommentMenuItems
+                                    item={null}
+                                    onAddComment={() => {
+                                        handleAddCommentRef.current?.();
+                                        selectionContextMenu.close();
+                                    }}
+                                />
+                            )
+                        }
+                    />
+                )}
             </ContextMenuAnchor>
+
+            {linkDialog && (
+                <LinkDialog
+                    {...linkDialog}
+                    onOpenChange={(open) => setLinkDialog({ ...linkDialog, open })}
+                    onCloseAutoFocus={keepEditorFocus(linkDialog.editor)}
+                />
+            )}
         </>
     );
 };
