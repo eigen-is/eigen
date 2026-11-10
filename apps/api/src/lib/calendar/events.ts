@@ -15,11 +15,11 @@ import {
     parseResource,
     patchEvent,
     raisedSequence,
+    serializeEventForImip,
     storedRecurrenceIds,
     storedRevisions,
 } from '../ical';
 import type { EventPatch, EventToBuild, Revision, VEventEdit, WriteContext } from '../ical/ical-component';
-import { serializeEventForImip } from '../ical/ical-component';
 import { parseRecurrenceKey } from '../ical/wall-clock';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
@@ -59,10 +59,24 @@ export async function createEvent(
     if (input.recurrenceDate && !recurrenceDate) throw new ApiError(400, 'Invalid occurrence date');
     const args = { ...input, recurrenceDate };
 
-    // Who holds the occurrence this write replaces: a cancelled override keeps no guest list of its own.
+    // The checks that decide which resource is written run inside the lock.
     const { created, replaced } = await calendar.writeLock.run(async () => {
-        const replaced = args.parentEventId ? exceptionOf(calendar, args.parentEventId, recurrenceDate) : null;
-        return { created: await writeEvent(calendar, calendarId, args), replaced };
+        // A resource under a calendar nobody owns any more would dangle on its foreign key.
+        if (!calendar.calendarRow(calendarId)) throw new ApiError(404, 'Calendar not found');
+        validateEventInput(args);
+        if (args.parentEventId) {
+            // Who held the occurrence this write replaces: a cancelled override keeps no guest list of its own.
+            const replaced = exceptionOf(calendar, args.parentEventId, recurrenceDate);
+            return { created: await writeOverride(calendar, calendarId, args.parentEventId, args), replaced };
+        }
+        // Eigen mints every name it writes: a UID is its author's string and may carry `/`, `..` or quotes.
+        const uri = `${crypto.randomUUID()}.ics`;
+        const uid = args.uid || crypto.randomUUID();
+        if (uidHolder(calendar, calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
+        const event = eventForResource({ id: crypto.randomUUID(), calendarId, uid, input: args, now: new Date() });
+        const prepared = prepareResource(calendarId, buildResource([event]), null);
+        await calendar.writeResource({ calendarId, uri, prepared, creditBytes: 0 });
+        return { created: requireEvent(calendar, event.id), replaced: null };
     });
 
     calendar.announce(SSEventType.CALENDAR_EVENT_CREATED, calendarId);
@@ -183,31 +197,6 @@ export async function moveEvent(
         calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, targetCalendarId);
     }
     return requireEvent(calendar, id);
-}
-
-// The locked core every writer of a NEW event shares: the checks that decide WHICH resource is written run in it.
-export async function writeEvent(
-    calendar: Calendar,
-    calendarId: string,
-    input: CreateEventArgs,
-): Promise<CalendarEvent> {
-    // A resource under a calendar nobody owns any more would dangle on its foreign key.
-    if (!calendar.calendarRow(calendarId)) throw new ApiError(404, 'Calendar not found');
-    validateEventInput(input);
-    if (input.parentEventId) return writeOverride(calendar, calendarId, input.parentEventId, input);
-
-    // Eigen mints every name it writes: a UID is its author's string and may carry `/`, `..` or quotes.
-    const uri = `${crypto.randomUUID()}.ics`;
-    const uid = input.uid || crypto.randomUUID();
-    if (uidHolder(calendar, calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
-    const event = eventForResource({ id: crypto.randomUUID(), calendarId, uid, input, now: new Date() });
-    await calendar.writeResource({
-        calendarId,
-        uri,
-        prepared: prepareResource(calendarId, buildResource([event]), null),
-        creditBytes: 0,
-    });
-    return requireEvent(calendar, event.id);
 }
 
 // Caller holds the write lock and has already resolved the resource this patch means. Answers whether it wrote.
