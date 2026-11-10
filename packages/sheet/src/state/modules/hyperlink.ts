@@ -137,9 +137,7 @@ export function goToLink(ctx: Context, r: number, c: number) {
 
 export function isLinkValid(linkType: CellLinkType, linkAddress: string) {
     if (!linkAddress) return { isValid: false, tooltip: '' };
-    if (linkType === 'webpage' && webLinkHref(linkAddress) == null) {
-        return { isValid: false, tooltip: 'Please enter a valid link' };
-    }
+    if (linkType === 'webpage' && webLinkHref(linkAddress) == null) return { isValid: false, tooltip: '' };
     if (linkType === 'cellrange' && !iscelldata(linkAddress)) {
         return { isValid: false, tooltip: 'Please enter a valid cell range, such as Sheet1!A1:C8' };
     }

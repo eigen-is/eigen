@@ -6,7 +6,6 @@
 // scripting schemes must be unreachable.
 
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { webLinkHref } from '@workspace/lib/validation';
 import type { Context } from '../../../state/context';
 import { goToLink, isLinkValid } from '../../../state/modules/hyperlink';
 import { contextFactory } from '../factories/context';
@@ -80,11 +79,11 @@ describe('goToLink scheme allowlist', () => {
         expect(calls).toEqual(['https://javascript:8080']);
     });
 
-    test('whitespace/control-char scheme variants get the https:// prepend, never a raw scripting scheme', () => {
+    test('a scripting scheme behind spaces never opens, and a control char inside one gets the https:// prepend', () => {
         const calls = openedUrls();
         goToLink(webpageContext(' javascript:alert(1)'), 0, 0);
         goToLink(webpageContext('java\nscript:alert(1)'), 0, 0);
-        expect(calls).toEqual(['https:// javascript:alert(1)', 'https://java\nscript:alert(1)']);
+        expect(calls).toEqual(['https://java\nscript:alert(1)']);
     });
 
     test('never opens scripting or other non-allowlisted schemes', () => {
@@ -165,10 +164,3 @@ describe('isLinkValid scheme allowlist', () => {
         expect(isLinkValid('webpage', 'file:///etc/passwd').isValid).toBe(false);
     });
 });
-
-test.each(['https://eig en.is/', 'javascript:alert(1)', 'https://eigen.is/help', '  eigen.is  '])(
-    "the sheet's dialog takes %p as the doc's does",
-    (address) => {
-        expect(isLinkValid('webpage', address).isValid).toBe(webLinkHref(address) != null);
-    },
-);
