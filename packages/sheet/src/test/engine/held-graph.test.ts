@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import { isRecord } from '@workspace/lib/guards';
 import type { Cell, Op, Sheet } from '@workspace/lib/sheets';
 import { produce } from 'immer';
 import { FormulaEngine } from '../../engine/formula-engine';
 import { FormulaGraph } from '../../engine/formula-graph';
 import { recomputeAfter } from '../../engine/recalc';
-import { replaySheetsOps, withMaterializedData } from '../../engine/replay-ops';
+import { replaySheetsOps, SkippedRecompute, withMaterializedData } from '../../engine/replay-ops';
 import type { Context } from '../../state/context';
 import { applyOpBatch } from '../../state/modules/apply-ops';
 import { warmFormulaGraph } from '../../state/modules/formula-exec';
@@ -134,7 +135,7 @@ function rowColOp(rnd: Random, sheet: Sheet): Op {
     const type = rnd.chance(0.7) ? 'row' : 'column';
     const { rows, columns } = sizeOf(sheet);
     const size = type === 'row' ? rows : columns;
-    if (size > 4 && (size > 14 || rnd.chance(0.5))) {
+    if (size > 4 && (size > 18 || rnd.chance(0.5))) {
         const start = rnd.int(size - 2);
         return { op: 'deleteRowCol', id: sheet.id, path: [], value: { type, start, end: start + rnd.int(2) } };
     }
@@ -213,6 +214,8 @@ function nextBatch(rnd: Random, sheets: Sheet[], step: number): Op[] {
     const ops = [rowColOp(rnd, rnd.pick(sheets))];
     // A structural undo or redo can send several row or column ops at once.
     if (rnd.chance(0.15)) ops.push(rowColOp(rnd, rnd.pick(sheets)));
+    // A hostile peer's batch can fail after its row op shifted the graph, and every reader skips it whole.
+    if (rnd.chance(0.1)) return [...ops, { op: 'insertRowCol', id: ops[0].id, path: [], value: { type: 'row' } }];
     // An undo's repairs write cells beside its row op, with their values.
     if (rnd.chance(0.2)) {
         return withAuthorValues(sheets, [...ops, ...cellOps(rnd, replaySheetsOps(sheets, [ops]))]);
@@ -231,6 +234,10 @@ function editor(sheets: readonly Sheet[]): Context {
     return frozen;
 }
 
+// A batch every reader skips, because one of its ops is malformed.
+const malformed = (batch: readonly Op[]) =>
+    batch.some(({ op, value }) => op === 'insertRowCol' && isRecord(value) && value['count'] == null);
+
 describe('a held formula graph', () => {
     for (const seed of Array.from({ length: 16 }, (_, i) => i + 1)) {
         test(`seed ${seed}: after every batch the graph reaches what a fresh one does, and the values are fresh`, () => {
@@ -244,20 +251,65 @@ describe('a held formula graph', () => {
                 batches.push(batch);
                 const where = `seed ${seed}, batch ${step}: ${JSON.stringify(batch).slice(0, 300)}`;
 
-                sheets = replaySheetsOps(start, batches, (e) => {
-                    throw new Error(`${where} failed: ${String(e)}`);
+                let dropped = 0;
+                sheets = replaySheetsOps(start, batches, () => {
+                    dropped += 1;
                 });
+                expect({ where, dropped }).toEqual({ where, dropped: batches.filter(malformed).length });
                 expect(differences(`${where}\n  replay`, sheets, fresh(sheets))).toEqual([]);
 
                 const applied = applyOpBatch(ctx, batch);
-                if (applied == null) throw new Error(`${where} failed in the editor`);
-                ctx = applied.ctx;
+                expect({ where, skipped: applied == null }).toEqual({ where, skipped: malformed(batch) });
+                ctx = applied?.ctx ?? ctx;
                 expect(differences(`${where}\n  editor`, ctx.sheets, sheets)).toEqual([]);
                 const held = warmFormulaGraph(ctx);
                 expect({ where, reach: reach(held, ctx.sheets) }).toEqual({
                     where,
                     reach: reach(new FormulaGraph(ctx.sheets), ctx.sheets),
                 });
+            }
+        });
+    }
+});
+
+// The slots a workbook here lists hover around this budget, so most seeds pass it at some batches and not at others.
+const BUDGETS = { maxDependencySlots: 34 };
+
+// A replay of one batch builds its graph for that batch, so the graph held across the batches must skip the same
+// recomputes and compute the same values.
+describe('a held formula graph under a budget', () => {
+    for (const seed of Array.from({ length: 16 }, (_, i) => i + 1)) {
+        test(`seed ${seed}: the replay skips the recomputes a graph built for each batch skips, and no other`, () => {
+            const rnd = random(seed);
+            const start = fresh(workbook(rnd));
+            const batches: Op[][] = [];
+            let sheets = start;
+            let alone = start;
+            let skippedAlone = 0;
+            for (let step = 0; step < 40; step += 1) {
+                const batch = nextBatch(rnd, sheets, step);
+                batches.push(batch);
+                const where = `seed ${seed}, batch ${step}: ${JSON.stringify(batch).slice(0, 300)}`;
+
+                let skipped = 0;
+                sheets = replaySheetsOps(
+                    start,
+                    batches,
+                    (e) => {
+                        if (e instanceof SkippedRecompute) skipped += 1;
+                    },
+                    BUDGETS,
+                );
+                alone = replaySheetsOps(
+                    alone,
+                    [batch],
+                    (e) => {
+                        if (e instanceof SkippedRecompute) skippedAlone += 1;
+                    },
+                    BUDGETS,
+                );
+                expect({ where, skipped }).toEqual({ where, skipped: skippedAlone });
+                expect(differences(`${where}\n  replay`, sheets, alone)).toEqual([]);
             }
         });
     }
