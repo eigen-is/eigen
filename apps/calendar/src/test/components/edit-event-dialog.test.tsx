@@ -2,8 +2,8 @@
 // Cancel and Escape wait, and a save the server refuses keeps the dialog open beside the hook's toast, with no
 // unhandled rejection. A series occurrence asks which events the change applies to, and a move to another owner asks
 // first, and each closes Edit event once its save is done. A move retried after a failed delete copies again.
-// "This event" stores a guest list on its date only when the user changed it. Copying an invitation's guests saves
-// nothing.
+// "This event" stores a guest list on its date only when the user changed it, and "All events" from such a date saves
+// the series' own list with only the guests added or removed there. Copying an invitation's guests saves nothing.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { CalendarEventOccurrence, CalendarItem, UpdateEventInput } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -272,6 +272,47 @@ test('This event keeps the list a date already holds, and stores the one the use
     await click('OK');
     await settle();
     expect(savedForOneDate()).toMatchObject({ data: { attendees: [bea] } });
+});
+
+// React reads a typed value through the input's own setter, so the field is set the way a keystroke sets it.
+const addGuest = async (email: string) => {
+    const field = document.querySelector<HTMLInputElement>('[role="dialog"] #attendee-input');
+    if (!field) throw new Error('the dialog has no guest field');
+    await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, email);
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => pressEnter(field));
+};
+// What the last "All events" save posted.
+const savedForSeries = () => updateEvent.mutateAsync.mock.calls.map(([input]) => input).at(-1);
+const saveForAll = async () => {
+    await save();
+    await act(async () => document.querySelector<HTMLButtonElement>('#recurring-all')?.click());
+    await click('OK');
+    await settle();
+};
+
+test("All events from a date with its own list leaves the series' guests and data alone", async () => {
+    master = { data: { ...standup, data: { attendees: [ada, bea], url: 'https://series.test' } } };
+    const moved = { ...standup, id: 'o1', rrule: null, parentEventId: 's1', recurrenceDate: '2026-10-09' };
+    await open({ ...moved, data: { attendees: [bea], url: 'https://date.test' } });
+    await saveForAll();
+    expect(savedForSeries()).toMatchObject({ id: 's1' });
+    expect(JSON.stringify(savedForSeries())).not.toContain('example.org');
+    expect(JSON.stringify(savedForSeries())).not.toContain('https://date.test');
+});
+
+test('All events from a date with its own list applies only the guests added or removed there', async () => {
+    master = { data: { ...standup, data: { attendees: [ada, bea], url: 'https://series.test' } } };
+    const moved = { ...standup, id: 'o1', rrule: null, parentEventId: 's1', recurrenceDate: '2026-10-09' };
+    const cy = { ...ada, email: 'cy@example.org' };
+    await open({ ...moved, data: { attendees: [bea, cy], url: 'https://date.test' } });
+    await click(`Remove ${bea.email}`);
+    await addGuest('dee@example.org');
+    await saveForAll();
+    expect(savedForSeries()?.data?.attendees?.map((guest) => guest.email)).toEqual([ada.email, 'dee@example.org']);
+    expect(JSON.stringify(savedForSeries())).not.toContain('https://');
 });
 
 test("a move to another owner's calendar asks first, and Move saves and closes it once", async () => {

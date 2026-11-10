@@ -135,6 +135,18 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
             const data = { ...event.data, attendees: guests.length > 0 ? guests : undefined };
             return Object.values(data).some((v) => v !== undefined) ? data : null;
         };
+        const seriesGuests = (own: readonly Attendee[]) => {
+            const shown = new Set(serverAttendees.map((guest) => guest.email.toLowerCase()));
+            const listed = new Map(attendees.map((guest) => [guest.email.toLowerCase(), guest]));
+            const series = new Map(own.map((guest) => [guest.email.toLowerCase(), guest]));
+            for (const email of shown) {
+                if (!listed.has(email)) series.delete(email);
+            }
+            for (const [email, guest] of listed) {
+                if (!shown.has(email) && !series.has(email)) series.set(email, guest);
+            }
+            return [...series.values()];
+        };
         // "This event" keeps the list a date already holds, and gives one to a date only when the user changed it.
         const dateGuests = typed.attendees ? attendees : isOverride ? (event.data?.attendees ?? []) : [];
         const timezone = allDay ? null : (event.timezone ?? viewerTimeZone());
@@ -153,12 +165,13 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
             data: dataWith(attendees),
         };
         // The master is saved with what the user changed, never with the clicked occurrence's own times: taking
-        // those would drag the series' start onto that date and drop every occurrence before it.
+        // those would drag the series' start onto that date and drop every occurrence before it. Its guests are its
+        // own list with the guests added or removed here, so a guest the date leaves out stays on the series.
         const seriesUpdates = master
             ? {
                   rrule: updates.rrule,
                   timezone,
-                  data: updates.data,
+                  data: typed.attendees && { attendees: seriesGuests(master.data?.attendees ?? []) },
                   ...seriesEditFromOccurrence(event, master, edited),
               }
             : updates;

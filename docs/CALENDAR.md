@@ -119,7 +119,7 @@ A `UNTIL` ending in `Z` beside a zoned start is an instant (RFC 5545 §3.3.10), 
 
 A range read (`occurrences.ts`) is bounded by its window, not by the size of the Home. It loads the single events overlapping the window, the masters starting before its end (a rule never steps back before DTSTART), and their overrides plus any override moved into the window.
 
-The edit dialog opens on an occurrence but "All events in series" saves on the master. So `seriesEditFromOccurrence` (`packages/lib/src/core/calendar/calendar-utils.ts`) sends a delta. The master's times shift by what the user moved, and a text field travels only when retyped. A series-wide text edit also reaches every override that still carried the master's old value; one that set its own keeps it.
+The edit dialog opens on an occurrence but "All events in series" saves on the master. So `seriesEditFromOccurrence` (`packages/lib/src/core/calendar/calendar-utils.ts`) sends a delta. The master's times shift by what the user moved, and a text field travels only when retyped. So does the guest list: the master's own list with the guests the user added or removed, so a guest a date with its own list leaves out stays on the series. A series-wide text edit also reaches every override that still carried the master's old value; one that set its own keeps it.
 
 ## A RECURRENCE-ID names the original occurrence
 
