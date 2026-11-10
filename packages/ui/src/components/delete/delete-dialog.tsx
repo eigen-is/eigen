@@ -9,6 +9,7 @@ export type DeleteDialogProps = {
     onDelete: () => void | Promise<void>;
     cancelText?: string;
     deleteText?: string;
+    onCloseAutoFocus?: (event: Event) => void;
 };
 
 // Destructive preset over ConfirmDialog: the shared pending/close lifecycle lives there; this adds
@@ -22,6 +23,7 @@ export function DeleteDialog({
     onDelete,
     cancelText = 'Cancel',
     deleteText = 'Delete',
+    onCloseAutoFocus,
 }: DeleteDialogProps) {
     // Confirmation prompts read as questions; append "?" unless the caller already terminated the sentence.
     const terminator = /[.?!]$/.test(description) ? '' : '?';
@@ -44,6 +46,7 @@ export function DeleteDialog({
             cancelText={cancelText}
             confirmText={deleteText}
             destructive
+            onCloseAutoFocus={onCloseAutoFocus}
         />
     );
 }

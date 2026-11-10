@@ -2,7 +2,7 @@
 // and deleting rows and columns, hiding, sorting and filters. useSheetContextMenu selects what was clicked and opens
 // the menu for one area, on a right click or a long press on touch.
 
-import { CommentLifecycleMenuItems } from '@workspace/ui/components/comments';
+import { CommentLifecycleMenuItems, DeleteCommentDialog } from '@workspace/ui/components/comments';
 import {
     ClipboardMenuItems,
     ContextMenuAnchor,
@@ -10,7 +10,6 @@ import {
     useContextMenu,
 } from '@workspace/ui/components/context-menu';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
-import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import {
     ArrowDownAZ,
     ArrowDownZA,
@@ -258,22 +257,9 @@ function TickBoxItem() {
     );
 }
 
-// The ask a card's own menu shows, in the same words. It is a dialog of the sheet's slot, which outlives the menu and
-// hands the focus back to the grid, where the shared DeleteDialog has no way to.
-function DeleteCommentDialog({ onDelete }: { onDelete: () => void }) {
-    const dialogProps = useDialogProps();
-    return (
-        <FormDialog
-            {...dialogProps}
-            title="Delete comment"
-            description="This deletes the comment and its replies."
-            size="md"
-        >
-            <FormDialogForm submitLabel="Delete" onSubmit={onDelete}>
-                {null}
-            </FormDialogForm>
-        </FormDialog>
-    );
+// A dialog of the sheet's slot, which outlives the menu and hands the focus back to the grid as it closes.
+function DeleteCommentAsk({ onDelete }: { onDelete: () => void }) {
+    return <DeleteCommentDialog {...useDialogProps()} onDelete={onDelete} />;
 }
 
 function CommentItems({ part }: { part: 'rows' | 'delete' }) {
@@ -297,7 +283,7 @@ function CommentItems({ part }: { part: 'rows' | 'delete' }) {
             onAddComment={onAddComment && (() => onAddComment(row, col))}
             onDelete={
                 onDeleteComment &&
-                ((cardId) => showDialog(<DeleteCommentDialog onDelete={() => onDeleteComment(cardId)} />))
+                ((cardId) => showDialog(<DeleteCommentAsk onDelete={() => onDeleteComment(cardId)} />))
             }
             part={part}
         />
