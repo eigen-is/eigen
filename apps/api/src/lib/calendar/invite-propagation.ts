@@ -4,9 +4,8 @@
 // occurrences, and an account that appears later is sent what it was invited to. The event writes call it once they
 // commit, such as a save or a delete, and a guest's answer to an organizer on this server goes back the same way.
 
-import { heldAttendees } from '@workspace/lib/calendar/calendar-utils';
+import { heldAttendees, isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
-import { isNull } from 'drizzle-orm';
 import { getServerSettings } from '../config/server-settings';
 import type { Home } from '../home';
 import { sendToHome } from '../home/home-relay';
@@ -19,11 +18,10 @@ import { getUserByEmail, isGuest } from '../user';
 import type { Calendar } from './calendar';
 import { composeCancelEmail, composeInviteEmail, composeInviteRequest } from './imip';
 import { toEvent } from './mappers';
-import * as schema from './schema';
 import type { InvitationRequest } from './types';
 
-// `series` set means `event` is one occurrence, and the messages name the series id plus the occurrence key. Every
-// message about a series carries its `exceptions`, so a guest's copy never shows a moved or deleted date at its old slot.
+// `series` set means `event` is one occurrence, and the messages name the series id plus its key. Every message about
+// a series carries its `exceptions`, so a guest's copy never shows a moved or deleted date at its old slot.
 export async function propagateInvitation(
     organizerHome: Home,
     event: CalendarEvent,
@@ -136,18 +134,19 @@ export async function propagateCancellation(
 }
 
 // What a newcomer to the server is owed when their account appears: each series that lists them, and each occurrence
-// that lists them while its series doesn't. A copy of somebody else's invitation is not this Home's to send.
+// that lists them while its series doesn't. An event somebody else organizes is not this Home's to send, linked or not.
 export function pendingInvitations(calendar: Calendar, email: string): InvitationRequest[] {
     const address = email.toLowerCase();
     const lists = (event: CalendarEvent | undefined) =>
         !!event?.data?.attendees?.some((a) => a.email.toLowerCase() === address);
-    const own = calendar.joinedEvents().where(isNull(schema.events.organizerEventId)).all().map(toEvent);
-    const byId = new Map(own.map((event) => [event.id, event]));
-    const exceptionsOf = Map.groupBy(own, (event) => event.parentEventId);
+    const all = calendar.joinedEvents().all().map(toEvent);
+    const byId = new Map(all.map((event) => [event.id, event]));
+    const exceptionsOf = Map.groupBy(all, (event) => event.parentEventId);
     const organizer = organizerOf(calendar.home, undefined);
-    return own.flatMap((event) => {
+    return all.flatMap((event) => {
         const series = event.parentEventId ? byId.get(event.parentEventId) : undefined;
         if (!lists(event) || lists(series)) return [];
+        if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return [];
         const exceptions = series ? [] : (exceptionsOf.get(event.id) ?? []);
         return [invitationRequest(organizer, calendar.home.user.id, email, event, series, exceptions)];
     });

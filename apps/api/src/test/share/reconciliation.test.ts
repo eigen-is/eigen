@@ -10,6 +10,7 @@ import * as mailer from '../../lib/mailer/mailer';
 import { reconcileShares } from '../../lib/share';
 import { addRegistryEntry } from '../../lib/share/registry';
 import { getUserByEmail, getUserById } from '../../lib/user';
+import { vcal } from '../ics-test-helpers';
 import { addMember, assertJson, authedRequest, createTeam, createTestUser, findOrFail, getTestContext } from '../setup';
 
 describe('share reconciliation', () => {
@@ -159,6 +160,29 @@ describe('share reconciliation', () => {
         expect(rest).toHaveLength(0);
         expect(lone).toMatchObject({ title: 'Recon only this one', recurrenceDate: '2027-03-23', parentEventId: null });
         expect(lone.data?.organizerEventId).toBe(other.id);
+    });
+
+    test("a newcomer gets nothing from an event somebody else organizes, synced in by the owner's client", async () => {
+        const email = `recon-foreign-${crypto.randomUUID()}@test.eigen.is`;
+        const uid = `foreign-${crypto.randomUUID()}@external.com`;
+        const calendar = (await getHome(ctx.alice.user.id)).calendar;
+        const calendarId = findOrFail(await calendar.getCalendars(), (c) => c.isDefault).id;
+        const ics = vcal([
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            'SUMMARY:Somebody else organizes',
+            'DTSTART:20270302T090000Z',
+            'DTEND:20270302T100000Z',
+            'ORGANIZER:mailto:outside@external.com',
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.alice.user.email}`,
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${email}`,
+            'DTSTAMP:20270101T000000Z',
+            'END:VEVENT',
+        ]);
+        const put = await calendar.putResource(calendarId, `${uid}.ics`, ics, { ifMatch: null, ifNoneMatch: null });
+        expect(put.ok).toBe(true);
+
+        expect((await calendar.pendingInvitations(email)).map((request) => request.events[0].uid)).not.toContain(uid);
     });
 
     // An invitation names an address, so a team join has none to pull, and a pull would re-add one the member removed.
