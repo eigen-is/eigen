@@ -7,7 +7,7 @@ import type { Patch } from 'immer';
 import { isRecord } from '../core/guards';
 import { floatingWriteFilter } from './floating';
 import type { Op, Sheet } from './types';
-import { isPatchOp } from './types';
+import { isCellLinkType, isPatchOp } from './types';
 import { isSheetValidation, isSheetValidations, MAX_VALIDATIONS } from './validations';
 
 // The patches, and the sheet and row ops left for the caller to apply.
@@ -26,7 +26,8 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
         if (!op.id) continue;
         // A log written before a cell's `f` became the one record of its formula holds writes to a list no sheet has.
         if (op.path[0] === 'calcChain') continue;
-        // No writer ships a sheet whole or its stored cell list, and a reader with no matrix would be the only one to apply it.
+        // No writer ships a sheet whole or its stored cell list, and a reader with no matrix would be the only one to
+        // apply it.
         if (op.path.length === 0 || op.path[0] === 'celldata') continue;
         // Every op finds its sheet by id and a formula by name, so they change only through the checked sheet ops.
         if (op.path[0] === 'id' || op.path[0] === 'name') continue;
@@ -51,8 +52,8 @@ function isValidationWrite(op: Op): boolean {
     return op.path.length === 2 && (op.op === 'remove' || isSheetValidation(op.value));
 }
 
-// A rename and the exports read every link's type and address, so a write that would leave a link without them is
-// dropped. The editor writes a link whole, and a cell, a row or a matrix whole with the links it holds.
+// A rename and the exports read every link's type and address, so a write that leaves a link without them, or of a
+// kind no reader follows, is dropped. The editor writes a link whole, and a cell, a row or a matrix with its links.
 function isCellWrite({ op, path, value }: Op): boolean {
     if (path[3] === 'link') return path.length === 4 && (op === 'remove' || isLink(value));
     if (op === 'remove' || path.length > 3) return true;
@@ -74,7 +75,7 @@ function holdsNoBadLink(cell: unknown): boolean {
 function isLink(value: unknown): boolean {
     if (!isRecord(value)) return false;
     const { type, address } = value;
-    return typeof type === 'string' && typeof address === 'string';
+    return isCellLinkType(type) && typeof address === 'string';
 }
 
 // Says whether a validation write applies. A `replace` means its writer saw the rule, because immer writes `add` for an

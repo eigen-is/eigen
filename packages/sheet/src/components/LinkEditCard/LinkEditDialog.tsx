@@ -2,6 +2,8 @@
 // to a web page, a range or a sheet in the workbook, and its OK waits for an address Sheets can open. Picking a range
 // hands its place to the range picker, which opens this dialog again with the draft, back on the link's cell.
 
+import type { CellLinkType } from '@workspace/lib/sheets';
+import { isCellLinkType } from '@workspace/lib/sheets';
 import { FieldError } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
@@ -30,14 +32,14 @@ import { CellRangeDialog } from '../CellRangeDialog';
 const RANGE_PICKER_WIDTH = 380;
 const RANGE_PICKER_GAP = 5;
 
-const LINK_TYPES = [
+const LINK_TYPES: { text: string; value: CellLinkType }[] = [
     { text: 'Webpages', value: 'webpage' },
     { text: 'Cell range', value: 'cellrange' },
     { text: 'Sheet', value: 'sheet' },
 ];
 
 // The fields as the user left them when the range picker took this dialog's place.
-type LinkDraft = { text: string; type: string; address: string };
+type LinkDraft = { text: string; type: CellLinkType; address: string };
 
 export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: LinkDraft }) {
     const { context, setContext, refs } = useContext(WorkbookContext);
@@ -102,6 +104,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                         <Select
                             value={linkType}
                             onValueChange={(value) => {
+                                if (!isCellLinkType(value)) return;
                                 if (value === 'cellrange') {
                                     pickRange({ text: linkText, type: value, address: '' });
                                     return;

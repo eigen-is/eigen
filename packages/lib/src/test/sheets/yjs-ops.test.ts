@@ -20,6 +20,17 @@ describe('opToPatchOnSheets', () => {
         expect(opToPatchOnSheets(SHEETS, ops)).toEqual([[], []]);
     });
 
+    test('drops a link of a kind no reader follows, and keeps the kinds they do', () => {
+        const write = (type: string): Op => ({
+            op: 'replace',
+            id: SHEETS[0].id,
+            path: ['data', 0, 0, 'link'],
+            value: { type, address: 'Sheet1!A1' },
+        });
+        const [patches] = opToPatchOnSheets(SHEETS, ['file', 'webpage', 'cellrange', 'sheet'].map(write));
+        expect(patches.map((patch) => patch.value.type)).toEqual(['webpage', 'cellrange', 'sheet']);
+    });
+
     test('replace op on existing sheet → patch with [i, ...path]', () => {
         const ops: Op[] = [{ op: 'replace', id: 'sheet-2', path: ['data', 0, 0, 'v'], value: 42 }];
         const [patches, special] = opToPatchOnSheets(SHEETS, ops);

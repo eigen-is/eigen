@@ -1011,9 +1011,9 @@ describe('a function with a one-letter name', () => {
 
 describe('a deleted sheet`s name', () => {
     test('a list source and a link naming it break as a formula does', () => {
-        const toRange = { ...f('=One!A1', 10), link: { type: 'cellrange', address: 'One!A1:B2' } };
-        const toSheet = { ...n(1), link: { type: 'sheet', address: 'One' } };
-        const toPage = { ...n(2), link: { type: 'webpage', address: 'One' } };
+        const toRange = { ...f('=One!A1', 10), link: { type: 'cellrange' as const, address: 'One!A1:B2' } };
+        const toSheet = { ...n(1), link: { type: 'sheet' as const, address: 'One' } };
+        const toPage = { ...n(2), link: { type: 'webpage' as const, address: 'One' } };
         const base = book({ cells: [[n(10)]] }, { name: 'Two', cells: [[toRange, toSheet, toPage]] });
         const withTexts = produce(base, (d: Context) => {
             d.sheets[1].dataValidations = {

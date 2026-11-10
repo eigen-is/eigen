@@ -3,7 +3,7 @@
 // restores what the marker alone can't.
 
 import { describe, expect, test } from 'bun:test';
-import type { Sheet as LibSheet, MergeCell } from '@workspace/lib/sheets';
+import type { CellLink, Sheet as LibSheet, MergeCell } from '@workspace/lib/sheets';
 import { REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import { replaySheetsOps, withMaterializedData } from '../../../engine';
@@ -27,8 +27,8 @@ enablePatches();
 const INSERT_OP = { type: 'row', index: 1, count: 1, direction: 'lefttop', id: 'id_1' } as const;
 const DELETE_OP = { type: 'row', start: 1, end: 2, id: 'id_1' } as const;
 const SIDE = { style: 1, color: '#000' };
-const LINK = { type: 'webpage', address: 'https://eigen.is' };
-const PEER_LINK = { type: 'webpage', address: 'https://peer.example' };
+const LINK: CellLink = { type: 'webpage', address: 'https://eigen.is' };
+const PEER_LINK: CellLink = { type: 'webpage', address: 'https://peer.example' };
 
 function richContext(): Context {
     const cell = (v: number) => ({ v, m: String(v) });

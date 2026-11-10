@@ -2,6 +2,7 @@
 // the format is the separate Clear formatting command.
 
 import { describe, expect, test } from 'bun:test';
+import type { CellLink } from '@workspace/lib/sheets';
 import type { Context } from '../../../state/context';
 import { deleteSelectedCellText } from '../../../state/modules/selection';
 import type { Cell } from '../../../state/types';
@@ -44,7 +45,7 @@ describe('deleteSelectedCellText keeps the format', () => {
     });
 
     test("a link goes with the link's look, and the cell's other format stays", () => {
-        const link = { type: 'webpage', address: 'https://example.com' };
+        const link: CellLink = { type: 'webpage', address: 'https://example.com' };
         const { ctx } = deleteA1({ v: 'site', m: 'site', fc: 'rgb(0, 0, 255)', un: 1, link, bl: 1 });
         expect(ctx.sheets[0].data?.[0][0]).toEqual({ bl: 1 });
     });

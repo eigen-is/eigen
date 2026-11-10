@@ -3,6 +3,7 @@
 // imports from one place.
 
 import type {
+    CellLinkType,
     ConditionalFormatRule,
     DataValidationRule,
     Sheet as LibSheet,
@@ -126,7 +127,7 @@ export type LinkCardProps = {
     c: number;
     rc: string;
     originText: string;
-    originType: string;
+    originType: CellLinkType;
     originAddress: string;
     position: CellRect;
     isEditing: boolean;

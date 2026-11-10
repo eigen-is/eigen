@@ -4,7 +4,7 @@
 // cell whose source has none and joins a source's rule to the one on the sheet.
 
 import { describe, expect, test } from 'bun:test';
-import type { ConditionalFormatRule, DataValidationRule } from '@workspace/lib/sheets';
+import type { CellLink, ConditionalFormatRule, DataValidationRule } from '@workspace/lib/sheets';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { Context } from '../../state/context';
 import { copy } from '../../state/modules/clipboard';
@@ -24,7 +24,7 @@ import { cellLinks } from './factories/links';
 const ONE = 's1';
 const TWO = 's2';
 const SIDE = { style: 1, color: '#000' };
-const LINK = { type: 'webpage', address: 'https://eigen.is/' };
+const LINK: CellLink = { type: 'webpage', address: 'https://eigen.is/' };
 
 const text = (v: string): Cell => ({ v, m: v, ct: { fa: 'General', t: 's' } });
 const number = (v: number): Cell => ({ v, m: `${v}`, ct: { fa: 'General', t: 'n' } });

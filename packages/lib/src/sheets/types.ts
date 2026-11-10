@@ -44,8 +44,14 @@ export type Cell = CellStyle & {
     commentCardIds?: string[];
 };
 
-// A link belongs to its cell, so whatever moves the cell moves it. `type` is webpage, sheet or cellrange.
-export type CellLink = { type: string; address: string };
+// A link belongs to its cell, so whatever moves the cell moves it.
+export type CellLink = { type: CellLinkType; address: string };
+
+export type CellLinkType = 'webpage' | 'cellrange' | 'sheet';
+
+export function isCellLinkType(value: unknown): value is CellLinkType {
+    return value === 'webpage' || value === 'cellrange' || value === 'sheet';
+}
 
 export type CellMatrix = (Cell | null)[][];
 

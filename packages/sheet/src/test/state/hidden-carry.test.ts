@@ -9,7 +9,7 @@
 // lands at G7, and row 9 of the destination was hidden beforehand.
 
 import { describe, expect, test } from 'bun:test';
-import type { DataValidationRule, SheetValidation } from '@workspace/lib/sheets';
+import type { CellLink, DataValidationRule, SheetValidation } from '@workspace/lib/sheets';
 import { MAX_VALIDATION_RANGES } from '@workspace/lib/sheets';
 import { Window } from 'happy-dom';
 import type { SingleRange } from '../../engine/types';
@@ -57,7 +57,7 @@ function rule(r: number, c: number): DataValidationRule {
     };
 }
 
-function link(r: number, c: number) {
+function link(r: number, c: number): CellLink {
     return { type: 'webpage', address: `https://eigen.is/${r}${c}` };
 }
 

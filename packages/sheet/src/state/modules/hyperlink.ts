@@ -3,6 +3,7 @@
 // sheet names that sheet, and following it finds the sheet by name. Saving new text writes over the cell, so the
 // formulas that read it recompute.
 
+import type { CellLinkType } from '@workspace/lib/sheets';
 import { resolveWebLink, webLinkHref } from '@workspace/lib/validation';
 import { cloneDeep } from 'es-toolkit/compat';
 import { findSheetByName } from '../../engine/a1-notation';
@@ -44,11 +45,11 @@ export function saveHyperlink(
     r: number,
     c: number,
     linkText: string,
-    linkType: string,
+    linkType: CellLinkType,
     linkAddress: string,
 ) {
     const flowdata = getFlowdata(ctx);
-    if (flowdata != null && linkType && linkAddress) {
+    if (flowdata != null && linkAddress) {
         const address = linkType === 'webpage' ? linkAddress.trim() : linkAddress;
         const cell = (flowdata[r][c] ??= {});
         cell.link = { type: linkType, address };
@@ -134,7 +135,7 @@ export function goToLink(ctx: Context, r: number, c: number) {
     ctx.linkCard = undefined;
 }
 
-export function isLinkValid(linkType: string, linkAddress: string) {
+export function isLinkValid(linkType: CellLinkType, linkAddress: string) {
     if (!linkAddress) return { isValid: false, tooltip: '' };
     if (linkType === 'webpage' && webLinkHref(linkAddress) == null) {
         return { isValid: false, tooltip: 'Please enter a valid link' };
