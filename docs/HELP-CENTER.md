@@ -69,7 +69,7 @@ The Self-hosting section is written for the person who runs the server, not for 
 
 - `crossSections: [other-section]` lists an article on a second section page without changing its canonical URL.
 - `related` is explicit when set. Otherwise the build resolves it from shared `tags` within the same section, at most four (`apps/index/scripts/lib/related.ts`).
-- `draft: true` drops a support article from the build entirely.
+- `draft: true` drops a support article or a blog post from the build entirely: no page, no list entry, no sitemap entry.
 - Section pages sort on `order` alone. `category` is validated and carried in the manifest, but nothing groups by it.
 - The blog rides the same pipeline with a smaller schema (`id`, `title`, `description`). Its date comes from the filename prefix.
 

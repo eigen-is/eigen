@@ -34,6 +34,7 @@ export const blogFrontmatterSchema = z.object({
     description: z.string().min(1),
     // A path under public/ such as /data/blog/media/<folder>/<image>.webp, shown big on the post and the overview.
     cover: z.string().startsWith('/').optional(),
+    draft: z.boolean().default(false),
 });
 export type BlogFrontmatter = z.infer<typeof blogFrontmatterSchema>;
 
