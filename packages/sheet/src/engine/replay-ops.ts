@@ -55,9 +55,8 @@ export function replaySheetsOps(
     return (result ?? sheets.map(withNormalizedSheet)).map(withSyncedCelldataIfData);
 }
 
-// The replay one batch at a time: the sheets after each batch, and what it dropped, as replaySheetsOps reports it. A
-// caller can stop between two batches and keep the sheets after any of them, since a batch never changes the sheets it
-// is given. The cells of a sheet holding the dense matrix are in `data`, not yet written back to `celldata`.
+// The replay one batch at a time, which a caller may stop between two, since a batch never changes the sheets it is
+// given. A sheet holding the dense matrix has its cells in `data`, not yet written back to `celldata`.
 export function* replaySheetsSteps(
     sheets: Sheet[],
     opBatches: readonly Op[][],

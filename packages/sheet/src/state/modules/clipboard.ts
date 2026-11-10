@@ -28,9 +28,8 @@ export function consumePendingCopy(): PendingCopy | null {
     return result;
 }
 
-// A copy from a menu runs outside a copy event, so the browser never writes the system clipboard by itself, and a
-// later Ctrl-V would paste what was there before. execCommand('copy') fires the event at once. The Workbook's listener
-// then writes every MIME type, the Eigen ones included, which navigator.clipboard.write cannot.
+// A copy from a menu runs outside a copy event, so the browser would not write the clipboard. execCommand('copy')
+// fires one, whose listener writes every MIME type, the Eigen ones included, which navigator.clipboard.write cannot.
 export function flushPendingCopy() {
     if (pending == null) return;
     document.execCommand('copy');
@@ -42,9 +41,8 @@ export function copyActiveObject(cut: boolean) {
     document.execCommand(cut ? 'cut' : 'copy');
 }
 
-// A copy or cut of the selection. The clipboard carries the cells a paste in this tab would land, hidden ones too: an
-// HTML table with the cells' styles and a fresh id, the display text as TSV, and the same text unquoted for the Eigen
-// text item, which a consumer reads as text rather than as TSV.
+// A copy or cut of the selection, hidden cells too, as a paste in this tab would land them. The Eigen text item holds
+// the text unquoted, since a consumer reads it as text rather than as TSV.
 export function copy(ctx: Context, { cut = false }: { cut?: boolean } = {}) {
     const ranges = ctx.selections ?? [];
     const sheetId = ctx.currentSheetId;
@@ -102,8 +100,7 @@ export function copy(ctx: Context, { cut = false }: { cut?: boolean } = {}) {
 
             const shown = copiedCellText(d, r, c);
             textRow.push(shown);
-            // The style comes from the cell and lands inside an attribute, which the HTML parser decodes before CSS
-            // sees it.
+            // The style lands inside an attribute, which the HTML parser decodes before CSS sees it.
             body += `<td ${span} style="${escapeHtml(style)}">${escapeHtml(shown)}</td>`;
         }
 
