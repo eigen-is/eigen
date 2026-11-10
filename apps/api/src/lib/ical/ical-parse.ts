@@ -5,7 +5,7 @@
 // Eigen's own lines.
 
 import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
-import type { Attendee, EventData, ImipMethod, Reminder } from '@workspace/lib/types/calendar';
+import type { Attendee, EventData, ImipMethod, Organizer, Reminder } from '@workspace/lib/types/calendar';
 import { IMIP_METHODS } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
 import { isExpandableRrule, isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
@@ -460,7 +460,7 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
             const reminders = projectReminders(vevent);
 
             const organizerProp = vevent.getFirstProperty('organizer');
-            let organizer: EventData['organizer'] | undefined;
+            let organizer: Organizer | undefined;
             if (organizerProp) {
                 const orgEmail = calAddress(organizerProp.getFirstValue());
                 const orgCn = organizerProp.getFirstParameter('cn') || orgEmail;
