@@ -465,6 +465,56 @@ describe('Calendar Invites', () => {
             const owner = findOrFail(stored[0].data?.attendees ?? [], (a) => a.email === ctx.alice.user.email);
             expect(owner.status).toBe('pending');
         });
+
+        // A guest answers the ORGANIZER, and only the owner's Home holds the event, so the owner is named whoever saved.
+        test("an event a collaborator saves names the calendar's owner as its organizer", async () => {
+            const home = await getHome(ctx.alice.user.id);
+            const shared = await home.calendar.createCalendar({ name: 'Organized by Alice', color: '#aabbcc' });
+            await home.calendar.updateCalendar(shared.id, {
+                shares: [{ targetId: ctx.bob.user.email, permission: 'write' }],
+            });
+            const mailer = await import('../../lib/mailer/mailer');
+            const sent = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            sent.mockClear();
+
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${shared.id}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Saved By Bob',
+                        startTime: new Date(Date.now() + 3600_000),
+                        endTime: new Date(Date.now() + 7200_000),
+                        allDay: false,
+                        data: {
+                            attendees: [ctx.charlie.user.email, 'outside.guest@external.com'].map((email) => ({
+                                email,
+                                status: 'pending',
+                                role: 'required',
+                            })),
+                        },
+                    }),
+                },
+            );
+            const created = await assertJson<CalendarEvent>(res);
+            const charlie = await getHome(ctx.charlie.user.id);
+            const copy = await eventually(
+                async () => (await charlie.calendar.getEventsByUid(created.uid))[0],
+                "Charlie's copy",
+            );
+            const invite = await eventually(
+                async () => sent.mock.calls.map((call) => call[0]).find((mail) => mail.icalEvent),
+                'the mailed invitation',
+            );
+            sent.mockRestore();
+
+            expect(copy.data?.organizer?.email).toBe(ctx.alice.user.email);
+            expect(invite.from?.address).toBe(ctx.alice.user.email);
+            const organizerLine = invite.icalEvent?.content.replace(/\r\n /g, '').match(/^ORGANIZER.*$/m)?.[0];
+            expect(organizerLine).toEndWith(`:mailto:${ctx.alice.user.email}`);
+        });
     });
 
     describe('Per-occurrence RSVP', () => {

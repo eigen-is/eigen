@@ -115,7 +115,7 @@ export async function deleteEvent(
         }
     } else if (!invitation && held.length) {
         // An event with no foreign organizer makes this user its organizer, and an organizer's delete cancels.
-        propagateCancellation(calendar.home, existing, held, series ?? undefined).catch(console.error);
+        propagateCancellation(calendar.home, user, existing, held, series ?? undefined).catch(console.error);
     }
 
     calendar.announce(SSEventType.CALENDAR_EVENT_DELETED, calendarId);
@@ -286,7 +286,7 @@ async function propagateWrite(
     if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
     if (previous && guestView(previous, series) === guestView(event, series)) return;
     if (series && event.status === 'cancelled') {
-        await propagateCancellation(calendar.home, event, held, series);
+        await propagateCancellation(calendar.home, user, event, held, series);
         return;
     }
     // An occurrence write is itself one exception and carries none.

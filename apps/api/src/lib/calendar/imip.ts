@@ -15,7 +15,7 @@ import { computeOccurrenceTimes } from '../ical/wall-clock';
 import { EMAIL_MUTED, EMAIL_TEXT, renderEigenEmail } from '../mailer/mail-template';
 import type { OutboundICalEvent, OutboundMail } from '../mailer/mailer';
 
-type Organizer = NonNullable<EventData['organizer']>;
+export type Organizer = NonNullable<EventData['organizer']>;
 
 // Above this a body is a mailed calendar export, not a scheduling message, and it does not get to write a Home once per VEVENT.
 const IMIP_MAX_EVENTS = 50;

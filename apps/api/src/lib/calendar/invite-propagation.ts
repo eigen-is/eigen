@@ -14,6 +14,7 @@ import { sendMail } from '../mailer/mailer';
 import { addRegistryEntry } from '../share';
 import type { User } from '../user';
 import { getUserByEmail, isGuest } from '../user';
+import type { Organizer } from './imip';
 import { composeCancelEmail, composeInviteEmail, composeInviteRequest } from './imip';
 import { buildCalendarEvent } from './sse-events';
 
@@ -39,7 +40,7 @@ export async function propagateInvitation(
     const removed = oldAttendees.filter((a) => notSelf(a) && !newEmails.has(a.email.toLowerCase()));
     const existing = newAttendees.filter((a) => notSelf(a) && oldEmails.has(a.email.toLowerCase()));
 
-    const organizer = { userId: user.id, email: user.email, name: user.name };
+    const organizer = organizerOf(organizerHome, user);
     const eventFields = {
         recurrenceDate,
         title: event.title,
@@ -73,7 +74,7 @@ export async function propagateInvitation(
                     ...eventFields,
                     uid: event.uid,
                     data: {
-                        organizer: { userId: organizerHome.user.id, email: user.email, name: user.name },
+                        organizer,
                         organizerEventId,
                         attendees: newAttendees,
                     },
@@ -156,24 +157,21 @@ export async function propagateRsvp(
 // `attendees` is who held the event, because a cancelled occurrence is an EXDATE with no guest list of its own.
 export async function propagateCancellation(
     organizerHome: Home,
+    user: User | undefined,
     event: CalendarEvent,
     attendees: readonly Attendee[],
     series?: CalendarEvent,
 ): Promise<void> {
     const occurrence = occurrenceRevision(event, series ? event.recurrenceDate : null);
+    const organizer = organizerOf(organizerHome, user);
     for (const attendee of attendees) {
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || isGuest(targetUser)) {
-                if (!organizerHome.user.email) {
+                if (!organizer.email) {
                     console.warn(`Skipped the iMIP cancel to ${attendee.email}: the organizer has no address`);
                     continue;
                 }
-                const organizer = {
-                    userId: organizerHome.user.id,
-                    email: organizerHome.user.email,
-                    name: organizerHome.user.name,
-                };
                 const mail = composeCancelEmail(event, organizer, [attendee], series);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
                 continue;
@@ -188,6 +186,13 @@ export async function propagateCancellation(
             console.error('Failed to propagate cancellation:', error);
         }
     }
+}
+
+// A guest answers the ORGANIZER, and only the calendar's own Home holds the event, so its user is named whoever saved.
+// A team has no address, so a team event names the member who saved it.
+function organizerOf(organizerHome: Home, user: User | undefined): Organizer {
+    const named = organizerHome.user.email ? organizerHome.user : user;
+    return { userId: organizerHome.user.id, email: named?.email ?? '', name: named?.name };
 }
 
 // Set only for a copy that is one occurrence of a series the guest does not hold. An exception answers through the
