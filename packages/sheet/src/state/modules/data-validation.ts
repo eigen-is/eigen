@@ -9,27 +9,23 @@ import { booleanDisplay, cellDisplay, cellValue } from '../../engine/format';
 import { iscelldata, matrixWidth } from '../../engine/formula-utils';
 import { dateToSerial } from '../../engine/parser/helper/number';
 import type { Cell } from '../../engine/types';
-import type { CellMatrix, Context, DataValidationRule, SingleRange } from '..';
+import { getSheet } from '../api/common';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
+import type { CellMatrix, DataValidationDraft, DataValidationRule, Rect, SingleRange } from '../types';
+import { clipToUsedExtent, getSheetIndex, replaceHtml } from '../utils';
 import {
-    diff,
     getCellValue,
-    getcellrange,
-    getFlowdata,
     getRangeByTxt,
     getRealCellValue,
-    getSheetIndex,
-    isdatetime,
-    isRealNull,
-    isRealNum,
-    jfrefreshgrid,
     normalizedAttr,
     normalizedCellAttr,
     setCellValue,
-} from '..';
-import { getSheet } from '../api/common';
-import type { DataValidationDraft, Rect } from '../types';
-import { clipToUsedExtent, replaceHtml } from '../utils';
+} from './cell';
+import { getcellrange } from './formula-exec';
 import { cellRectAt } from './location';
+import { jfrefreshgrid } from './refresh';
+import { diff, isdatetime, isRealNull, isRealNum } from './validation';
 import { addValidation, validationAt } from './validation-rules';
 
 // The words a hint sentence puts in for its rule type and its condition. The keys are loose strings because a rule's
@@ -362,9 +358,10 @@ export function insertCheckbox(ctx: Context) {
 export type ValidationHint = {
     kind: 'invalid' | 'prompt';
     text: string;
-    // The card hangs under the cell, a merged cell included. This is the cell's bottom-left corner in content pixels.
+    // The cell's edges in content pixels, a merged cell's whole, for the card's anchor.
     left: number;
     top: number;
+    bottom: number;
 };
 
 // "between 1 and 10", "greater than 5", "earlier than 2024-01-01".
@@ -447,8 +444,8 @@ export function getValidationHint(ctx: Context, r: number, c: number): Validatio
     }
     if (!kind || !text) return undefined;
 
-    const { bottom, left } = cellRectAt(ctx, d, r, c);
-    return { kind, text, left, top: bottom };
+    const { left, top, bottom } = cellRectAt(ctx, d, r, c);
+    return { kind, text, left, top, bottom };
 }
 
 // Moves the hidden list anchor onto the focus cell when its rule is a list, and hides it otherwise.

@@ -475,7 +475,7 @@ The hover path writes the same answer to `context.cellGlyphHover`, which shows a
 
 ## The validation card follows the focus cell
 
-One React card, `components/DataValidation/HintCard.tsx`, shows a validated cell's prompt or, when its value fails the rule, why. `getValidationHint` derives it from the focus cell on every render. So it follows keyboard navigation, never strands over the previous cell, and renders a collaborator's or an xlsx file's prompt as text, never as markup.
+One React card, `components/DataValidation/HintCard.tsx`, shows a validated cell's prompt or, when its value fails the rule, why. `getValidationHint` derives it from the focus cell on every render. So it follows keyboard navigation, never strands over the previous cell, and renders a collaborator's or an xlsx file's prompt as text, never as markup. It is a Radix popover on an anchor spanning the cell, as the link card is, so at the grid's edge it flips above the cell or shifts left instead of hanging past the cell area.
 
 A rejection outranks a prompt, since it is the more urgent message. The card stands down while the list is open, because both hang over the same corner. The copy is assembled by `describeValidationRule`, which also words the `prohibitInput` dialog, so both ways a rejected value is reported say the same thing.
 

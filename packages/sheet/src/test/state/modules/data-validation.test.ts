@@ -668,7 +668,8 @@ describe('getValidationHint', () => {
             kind: 'invalid',
             text: 'Input must be a number between 1 and 10.',
             left: 74,
-            top: 40,
+            top: 20,
+            bottom: 40,
         });
     });
 
@@ -681,7 +682,8 @@ describe('getValidationHint', () => {
             kind: 'prompt',
             text: 'Pick an item from the list.',
             left: 74,
-            top: 40,
+            top: 20,
+            bottom: 40,
         });
     });
 
@@ -759,7 +761,8 @@ describe('getValidationHint', () => {
             kind: 'prompt',
             text: '<img src=x onerror=alert(1)>',
             left: 74,
-            top: 40,
+            top: 20,
+            bottom: 40,
         });
     });
 
