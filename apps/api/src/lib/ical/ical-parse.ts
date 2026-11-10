@@ -269,7 +269,7 @@ export function readExclusionStamps(vevent: ICAL.Component): Map<string, Exclusi
     return stamps;
 }
 
-// A RECURRENCE-ID that names an instant, and the zone it is written in, null for UTC or a zone only the file defines.
+// A RECURRENCE-ID that names an instant, and the zone it is written in, null for UTC or a zone no IANA name resolves.
 export type RecurrenceId = { instant: Date; timezone: string | null };
 
 export type ParsedEvent = {
