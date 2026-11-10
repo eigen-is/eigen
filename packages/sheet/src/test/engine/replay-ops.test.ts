@@ -561,3 +561,24 @@ describe('a batch with two row ops', () => {
         expect(replayed.data?.[2]?.[1]).toMatchObject({ f: '=SUM(A6:A7)', v: 10 });
     });
 });
+
+describe('a batch that writes a sheet id', () => {
+    test("the held graph finds the sheet's formulas under the new id", () => {
+        const n = (v: number) => ({ v, m: `${v}`, ct: { fa: 'General', t: 'n' } });
+        const data = [
+            [n(1), null],
+            [n(2), { f: '=SUM(A1:A2)', v: 3 }],
+        ];
+        const sheet: Sheet = { id: 's1', name: 'One', order: 0, data, config: {} };
+        const insertLast: Op = {
+            op: 'insertRowCol',
+            id: 's1',
+            path: [],
+            value: { type: 'row', index: 1, count: 1, direction: 'rightbottom' },
+        };
+        const deleteFirst: Op = { op: 'deleteRowCol', id: 's9', path: [], value: { type: 'row', start: 0, end: 0 } };
+        const batches = [[insertLast], [{ op: 'replace', id: 's1', path: ['id'], value: 's9' }], [deleteFirst]];
+        const [replayed] = replaySheetsOps([sheet], batches);
+        expect(replayed.data?.[0]?.[1]).toMatchObject({ f: '=SUM(A1)', v: 2 });
+    });
+});

@@ -104,13 +104,13 @@ export class FormulaGraph {
 
     // Follows cell writes, given the sheets they left. A patch path starts at the sheet's index in `sheets`. A write of
     // a whole row or matrix, or one that adds or removes a cell and so moves the cells after it, reads its sheet again,
-    // and a write of a sheet's name or the sheet itself builds the graph again.
+    // and a write of a sheet's id, its name or the sheet itself, which the graph keys on, builds the graph again.
     public followPatches(sheets: readonly WorkingSheet[], patches: readonly Patch[]): this {
         const reread = new Set<WorkingSheet>();
         for (const { op, path } of patches) {
             const [i, field, r, c] = path;
             const sheet = typeof i === 'number' ? sheets[i] : undefined;
-            if (sheet == null || field == null || field === 'name') {
+            if (sheet == null || field == null || field === 'id' || field === 'name') {
                 this.build(sheets);
                 return this;
             }
