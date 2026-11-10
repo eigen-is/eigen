@@ -308,7 +308,8 @@ export type DocumentTransformResponse =
     | { ok: true; result: TransformResult; warnings: TransformWarning[] }
     | { ok: false; error: TransformError };
 
-export type ChildRequestEnvelope = { jobId: number; request: DocumentTransformRequest };
+// `deadlineAt` is the wall-clock time the runner kills the child at, which a compaction folds up to.
+export type ChildRequestEnvelope = { jobId: number; request: DocumentTransformRequest; deadlineAt: number };
 // The child's first message: the job arrived, so a death from here on is the job's.
 export type ChildAck = { jobId: number; ack: true };
 // An export's child asks for the media its document names; the runner answers with them prepared.

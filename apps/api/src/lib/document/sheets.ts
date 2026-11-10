@@ -21,6 +21,7 @@ import {
     recalcSheets,
     renameSheetTexts,
     replaySheetsOps,
+    replaySheetsSteps,
     SkippedRecompute,
     sheetFinder,
     sheetNameKey,
@@ -46,8 +47,9 @@ export const SERVER_RECALC_BUDGET = {
     maxCellsRead: 120_000_000,
 };
 
-// A fold starts no batch past this, so one more batch at the recalc budget still ends inside the transform's deadline.
-const FOLD_TIME_MS = 30_000;
+// What a compaction's run keeps after its fold's deadline: the encode and the reply, and the part of the last batch no
+// check reaches, such as a row op's shift and formula rewrite.
+const FOLD_MARGIN_MS = 5_000;
 
 // A stored workbook is read in the transform process, which loads the Yjs doc first. `recalcError` is set when the
 // recalc failed and the sheets keep their replayed values.
@@ -75,36 +77,34 @@ export function readSheetsFromDoc(
     }
 }
 
-// The batches come as JSON text, which crosses to the transform process much faster than objects. A recompute past
-// the budget fails the fold, which would store values a browser computes differently, so the log stays.
+// A compaction in the transform process folds the head of the log, the batches it replays before `deadlineAt`, the
+// wall-clock time its job is killed at, less the margin. A batch whose recompute runs past that, or past any budget,
+// would store values a browser computes differently, so the fold ends before it and the next close starts with it;
+// one that is the first fails the fold, and the log stays. The batches come as JSON text, which crosses to the process
+// much faster than objects.
 export function compactSheetsSnapshot(
     snapshotJson: string | null,
     batchesJson: string,
+    deadlineAt: number,
 ): { snapshot: string; dropped: number; folded: number } {
-    const stopAt = performance.now() + FOLD_TIME_MS;
+    // The child's own clock from here, since the wall clock is the one both processes share but can be set.
+    const deadline = performance.now() + deadlineAt - Date.now() - FOLD_MARGIN_MS;
     const { sheets, computed } = decodeOrDefault(snapshotJson);
-    const log: Op[][] = JSON.parse(batchesJson);
+    // Time bounds the fold, not the cells it reads, whose cost varies with the formulas.
+    const budgets = { ...SERVER_RECALC_BUDGET, maxCellsRead: Number.POSITIVE_INFINITY, deadline };
+    let replayed = sheets;
     let folded = 0;
-    // The first batch always folds, so every compaction shortens the log.
-    function* untilStop() {
-        for (const batch of log) {
-            if (folded > 0 && performance.now() > stopAt) return;
-            folded += 1;
-            yield batch;
-        }
-    }
     let dropped = 0;
-    let skipped: SkippedRecompute | null = null;
-    const replayed = replaySheetsOps(
-        sheets,
-        untilStop(),
-        (e) => {
-            if (e instanceof SkippedRecompute) skipped ??= e;
-            else dropped += 1;
-        },
-        SERVER_RECALC_BUDGET,
-    );
-    if (skipped) throw skipped;
+    for (const step of replaySheetsSteps(sheets, JSON.parse(batchesJson), budgets)) {
+        if (step.dropped instanceof SkippedRecompute) {
+            if (folded === 0) throw step.dropped;
+            break;
+        }
+        if (step.dropped !== null) dropped += 1;
+        replayed = step.sheets;
+        folded += 1;
+        if (performance.now() > deadline) break;
+    }
     // The compaction never recalculates, so a workbook nobody computed stays uncomputed, and an export computes it.
     return { snapshot: encodeSheetsSnapshot(replayed, { computed }), dropped, folded };
 }

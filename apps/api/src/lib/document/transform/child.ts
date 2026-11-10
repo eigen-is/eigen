@@ -17,7 +17,6 @@ import type {
     ChildResponseEnvelope,
     CollabPreviewJob,
     CollabTransformJob,
-    DocumentTransformRequest,
     DocumentTransformResponse,
     ExportMedia,
     ExportMediaLoader,
@@ -182,13 +181,13 @@ async function renderCollabRequest(
     }
 }
 
-async function handleRequest(jobId: number, request: DocumentTransformRequest): Promise<DocumentTransformResponse> {
+async function handleRequest({ jobId, request, deadlineAt }: ChildRequestEnvelope): Promise<DocumentTransformResponse> {
     // A bytes-sourced job carries its own input, so it has no document to materialize.
     if ('data' in request) return runBytesRequest(request);
     // So does a compaction, which the main thread read from the live document.
     if (request.kind === 'compact') {
         const { compactSheetsSnapshot } = await import('../sheets');
-        const { snapshot, dropped, folded } = compactSheetsSnapshot(request.snapshot, request.batches);
+        const { snapshot, dropped, folded } = compactSheetsSnapshot(request.snapshot, request.batches, deadlineAt);
         return { ok: true, result: { snapshot: toTransferableText(snapshot), dropped, folded }, warnings: [] };
     }
 
@@ -214,7 +213,7 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
         onMediaReply?.(message.media);
         return;
     }
-    const { jobId, request } = message;
+    const { jobId } = message;
     const ack: ChildAck = { jobId, ack: true };
     process.send?.(ack);
     const startedAt = performance.now();
@@ -230,7 +229,7 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
     };
     // The send serializes the result, which can fail too, out of memory included: it is answered like any throw.
     try {
-        reply(await handleRequest(jobId, request));
+        reply(await handleRequest(message));
     } catch (err) {
         reply({ ok: false, error: toTransformError(err) });
     }

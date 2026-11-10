@@ -16,6 +16,7 @@ import * as engine from '@workspace/sheet/engine';
 import { normalizeSheetConfig } from '@workspace/sheet/engine';
 import * as Y from 'yjs';
 import { addSheetsBatch, compactSheetsSnapshot, readSheetsFromDoc } from '../../lib/document/sheets';
+import { TRANSFORM_LIMITS } from '../../lib/document/transform/runner';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
@@ -906,6 +907,8 @@ describe('document/sheets — addSheetsBatch', () => {
 });
 
 describe('document/sheets — compactSheetsSnapshot', () => {
+    // The time a compaction's job is killed at, as the runner gives it to the child.
+    const jobDeadline = () => Date.now() + TRANSFORM_LIMITS.compact.deadlineMs;
     const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
     const edit = (c: number, v: string): Op[] => [
         { op: 'replace', id: 'sheet-1', path: ['data', 0, c], value: { v, m: v } },
@@ -924,6 +927,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         const { snapshot: compacted } = compactSheetsSnapshot(
             encodeSheetsSnapshot(sheets, { computed: true }),
             JSON.stringify([edit(0, 'a'), edit(1, 'b')]),
+            jobDeadline(),
         );
         expect(decodeSheetsWorkbook(compacted).computed).toBe(true);
         expect(values(compacted)).toEqual([
@@ -949,6 +953,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
             const { snapshot: compacted } = compactSheetsSnapshot(
                 encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: false }),
                 JSON.stringify([typed]),
+                jobDeadline(),
             );
             const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
             expect(computed).toBe(false);
@@ -963,6 +968,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         const { snapshot: compacted } = compactSheetsSnapshot(
             encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: true }),
             JSON.stringify([edit(1, 'a')]),
+            jobDeadline(),
         );
         const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
         expect(computed).toBe(true);
@@ -990,12 +996,13 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         const { snapshot } = compactSheetsSnapshot(
             encodeSheetsSnapshot(sheets, { computed: true }),
             JSON.stringify(batches),
+            jobDeadline(),
         );
         expect(decodeSheetsWorkbook(snapshot).computed).toBe(true);
     });
 
     test('a workbook with no snapshot compacts over the default sheets, computed', () => {
-        const { snapshot: compacted } = compactSheetsSnapshot(null, JSON.stringify([edit(0, 'a')]));
+        const { snapshot: compacted } = compactSheetsSnapshot(null, JSON.stringify([edit(0, 'a')]), jobDeadline());
         const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
         expect(computed).toBe(true);
         expect(result.map((sheet) => sheet.id)).toEqual(['sheet-1']);
@@ -1015,7 +1022,11 @@ describe('document/sheets — compactSheetsSnapshot', () => {
             { op: 'deleteRowCol', id: 'sheet-1', path: [], value: { type: 'row', start: rows, end: rows } },
         ];
         expect(() =>
-            compactSheetsSnapshot(encodeSheetsSnapshot([wide], { computed: true }), JSON.stringify([deleteLast])),
+            compactSheetsSnapshot(
+                encodeSheetsSnapshot([wide], { computed: true }),
+                JSON.stringify([deleteLast]),
+                jobDeadline(),
+            ),
         ).toThrow(engine.SkippedRecompute);
     }, 60_000);
 
@@ -1028,6 +1039,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         const { snapshot } = compactSheetsSnapshot(
             encodeSheetsSnapshot(two, { computed: true }),
             JSON.stringify([forged, edit(0, 'a')]),
+            jobDeadline(),
         );
         const folded = decodeSheetsWorkbook(snapshot).sheets;
         expect(folded.map(({ id, name }) => [id, name])).toEqual([
@@ -1044,6 +1056,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
             const { snapshot, dropped } = compactSheetsSnapshot(
                 encodeSheetsSnapshot(sheets, { computed: true }),
                 JSON.stringify([edit(0, 'a'), poison, edit(1, 'b'), poison]),
+                jobDeadline(),
             );
             expect(values(snapshot)).toEqual([
                 [0, 0, 'a'],

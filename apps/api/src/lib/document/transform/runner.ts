@@ -10,6 +10,7 @@ import { ApiError } from '../../core/errors';
 import type {
     ChildAck,
     ChildMediaRequest,
+    ChildRequestEnvelope,
     ChildResponseEnvelope,
     DocumentTransformRequest,
     DocumentTransformResponse,
@@ -387,7 +388,12 @@ export class DocumentTransformRunner {
                     ended();
                 },
             });
-            child.send({ jobId: job.id, request: job.request });
+            const envelope: ChildRequestEnvelope = {
+                jobId: job.id,
+                request: job.request,
+                deadlineAt: startedAt + job.deadlineMs,
+            };
+            child.send(envelope);
         } catch (err) {
             console.error(`[transform] job=${job.id} child start failed:`, err);
             settle(failed('crashed'));

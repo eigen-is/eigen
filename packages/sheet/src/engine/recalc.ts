@@ -19,12 +19,14 @@ import type { EvaluationResult, FormulaCellInfo } from './types';
 type FormulaResult = CellAt & { formula: string; result: EvaluationResult };
 
 // What bounds an untrusted workbook's formulas. Past any of them a pass throws a RangeError, before it evaluates or,
-// for the cells read, at the formula after the one that passed it. Without them there is no bound.
+// for the cells read and the deadline, at the formula after the one that passed it. The deadline is a time on
+// performance.now()'s clock. Without them there is no bound.
 export type RecalcBudgets = {
     maxDependencySlots?: number;
     maxDependencyVisits?: number;
     maxDependencyEdges?: number;
     maxCellsRead?: number;
+    deadline?: number;
 };
 
 // What a structural op can affect: the readers of `cells` and of each cell on `lines`, and every formula `reads` picks.
@@ -45,7 +47,7 @@ export function recalcSheets(sheets: readonly Sheet[], budgets: RecalcBudgets = 
     const order = graph
         .affected(working, [], Object.values(graph.formulas))
         .filter(({ id, r, c }) => lacksValue(working.find((w) => w.id === id)?.data[r]?.[c] ?? null));
-    const engine = new FormulaEngine({ maxCellsRead: budgets.maxCellsRead });
+    const engine = new FormulaEngine(budgets);
     for (const { id, r, c, result } of evaluateFormulas(order, working, engine, true)) {
         const row = working.find((w) => w.id === id)?.data[r];
         const existing = row?.[c];
@@ -81,14 +83,14 @@ export function evaluateFormulas(
     const results: FormulaResult[] = [];
     for (const { formula, r, c, id } of order) {
         // A read past the budget fails its formula, which the pass would carry on past: it stops at the next.
-        engine.assertWithinCellBudget();
+        engine.assertWithinBudget();
         if (keepVolatile && VOLATILE_RE.test(formula)) continue;
         const result = engine.evaluate(formula, id, resolver);
         if (stored.getCell(id, r, c)?.v != null && engine.cantEvaluate(formula, result)) continue;
         computed.set(computedKey(r, c, id), { v: result.value });
         results.push({ r, c, id, formula, result });
     }
-    engine.assertWithinCellBudget();
+    engine.assertWithinBudget();
     return results;
 }
 
