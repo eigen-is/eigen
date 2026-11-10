@@ -18,14 +18,15 @@ import type { OutboundICalEvent, OutboundMail } from '../mailer/mailer';
 // Above this a body is a mailed calendar export, not a scheduling message.
 const IMIP_MAX_EVENTS = 50;
 
-// An answer for one date of a series walks the series from its start to that date, so a REPLY answers this many.
+// A REPLY's date counts only when the rule yields it, and checking that expands the series from its start to that
+// date, so a REPLY answers this many.
 const IMIP_MAX_REPLY_DATES = 5;
 
 // A scheduling message is small, far below what a saved event may hold.
 const IMIP_MAX_BYTES = 1_048_576;
 
-// The calendar file of one save's invitation mails. Nothing in it differs per guest, and its size is guests × exceptions,
-// so a save builds it once.
+// The calendar file of one save's invitation mails. Nothing in it differs per guest, and its size is guests ×
+// exceptions, so a save builds it once.
 export function composeInviteRequest(
     event: CalendarEvent,
     organizer: Organizer,
@@ -71,7 +72,8 @@ export function composeCancelEmail(
         subject: `Canceled: ${event.title}`,
         text: `This event has been canceled:\n\n${buildEventSummary(event)}`,
         html: buildEventHtml(event, footer, 'This event has been canceled'),
-        // RFC 5546 § 3.2.5: a CANCEL lists the attendees it cancels, and neither a cancelled occurrence nor a removal holds them.
+        // RFC 5546 § 3.2.5: a CANCEL lists the attendees it cancels, and neither a cancelled occurrence nor a removal
+        // holds them.
         icalEvent: icalEvent(
             { ...event, status: 'cancelled', data: { ...event.data, organizer, attendees } },
             'CANCEL',
@@ -105,7 +107,8 @@ export function composeRsvpReply(
         },
     };
 
-    // A scope:'this' RSVP carries a RECURRENCE-ID (RFC 5546) so the organizer applies the PARTSTAT to that instance alone.
+    // A scope:'this' RSVP carries a RECURRENCE-ID (RFC 5546), so the organizer applies the PARTSTAT to that instance
+    // alone.
     if (recurrenceDate) {
         const { startTime, endTime } = computeOccurrenceTimes(event, recurrenceDate);
         replyEvent.rrule = null;
@@ -186,7 +189,8 @@ export async function processInboundImip(
     const method = parsedMethod ?? calAttachment.method;
     if (!method || events.length === 0) return;
 
-    // The user's own mail coming back: acting on it would seize their own event as somebody else's copy, reducing every CalDAV PUT to alarms.
+    // The user's own mail coming back. Acting on it would make their own event somebody else's copy, so every CalDAV
+    // PUT could change only its alarms.
     if (method !== 'REPLY' && sender === home.user.email.toLowerCase()) {
         console.info(`iMIP: not acting on a ${method} the recipient sent themselves (${sender})`);
         return;
@@ -265,7 +269,8 @@ function withOrganizer(event: CalendarEvent, organizer: Organizer): CalendarEven
     return { ...event, data: { ...event.data, organizer } };
 }
 
-// `series` lets the body name the occurrence it replaces (RECURRENCE-ID) instead of reading as a message about the whole series; a master's `exceptions` ride beside it.
+// `series` makes the body name its occurrence with a RECURRENCE-ID, or it would read as a message about the whole
+// series. A master's `exceptions` ride beside it.
 function icalEvent(
     event: CalendarEvent,
     method: 'REQUEST' | 'REPLY' | 'CANCEL',
@@ -285,7 +290,8 @@ function buildEventSummary(event: CalendarEvent): string {
     return lines.join('\n');
 }
 
-// Invitation mail has no viewer, so an event with no stored zone renders in UTC and says so instead of borrowing the server's.
+// Invitation mail has no viewer, so an event with no stored zone renders in UTC and says so, instead of borrowing the
+// server's.
 function buildEventWhen(event: CalendarEvent): string {
     const timezone = normalizeTimezone(event.timezone);
     const when = formatEventWhen(event.startTime, event.endTime, event.allDay, timezone, 'UTC');
