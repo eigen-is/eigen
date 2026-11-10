@@ -20,7 +20,7 @@ const BLOCKS = [
     },
 ];
 
-const TITLE = 'text-xl leading-[1.3] font-medium tracking-[-0.01em]';
+const TITLE = 'text-xl font-medium';
 
 type LandingBlocksProps = {
     showInstall: boolean;
@@ -29,21 +29,19 @@ type LandingBlocksProps = {
 export function LandingBlocks({ showInstall }: LandingBlocksProps) {
     return (
         <div className="site-wide pb-10">
-            <div className="grid grid-cols-1 gap-6 min-[56rem]:grid-cols-3 min-[56rem]:gap-10">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-3 md:gap-10">
                 {BLOCKS.map((block) => (
                     <div key={block.title}>
                         <h2 className={TITLE}>{block.title}</h2>
-                        <p className="mt-2 text-[0.9375rem] leading-[1.6] text-pretty text-muted-foreground">
-                            {block.text}
-                        </p>
+                        <p className="mt-2 text-sm text-pretty text-muted-foreground">{block.text}</p>
                     </div>
                 ))}
             </div>
             {showInstall && (
-                <div className="mt-10 grid items-center gap-4 min-[56rem]:grid-cols-2 min-[56rem]:gap-10">
+                <div className="mt-10 grid items-center gap-4 md:grid-cols-2 md:gap-10">
                     <div>
                         <h2 className={TITLE}>Install Eigen in one line</h2>
-                        <p className="mt-1 text-[0.9375rem] text-muted-foreground">
+                        <p className="mt-1 text-sm text-muted-foreground">
                             Eigen is pre-1.0. Expect rough edges, and breaking changes until 1.0.
                         </p>
                     </div>

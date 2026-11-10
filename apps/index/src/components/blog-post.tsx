@@ -49,9 +49,7 @@ export function BlogPost({ post, body, older, newer }: BlogPostProps) {
 function PagerLink({ label, post, className }: { label: string; post: BlogPostType; className?: string }) {
     return (
         <Link to="/blog/$id" params={{ id: post.slug }} className={cn('group block', className)}>
-            <span className="mb-1 block text-xs font-medium tracking-wider text-muted-foreground uppercase">
-                {label}
-            </span>
+            <span className="eigen-section-label mb-1 block">{label}</span>
             <span className="font-medium underline-offset-4 group-hover:underline">{post.title}</span>
         </Link>
     );

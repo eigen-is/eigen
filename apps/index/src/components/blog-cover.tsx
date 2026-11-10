@@ -5,7 +5,7 @@ import { cn } from '@workspace/ui/lib/utils';
 
 export function BlogCover({ src, className }: { src: string; className?: string }) {
     return (
-        <div className={cn('aspect-video overflow-hidden rounded-[0.625rem] border', className)}>
+        <div className={cn('aspect-video overflow-hidden rounded-xl border', className)}>
             <img src={src} alt="" className="h-full w-full object-cover object-top" />
         </div>
     );

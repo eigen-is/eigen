@@ -24,7 +24,7 @@ type ArticleBreadcrumbProps = {
 export function ArticleBreadcrumb({ trail, separator = 'chevron' }: ArticleBreadcrumbProps) {
     return (
         <Breadcrumb className="mb-3">
-            <BreadcrumbList className="h-5 flex-nowrap gap-1.5 text-[0.8125rem] sm:gap-1.5">
+            <BreadcrumbList className="h-5 flex-nowrap gap-1.5 text-sm sm:gap-1.5">
                 {trail.map(({ label, to, icon: Icon }, i) => (
                     <Fragment key={label}>
                         {i > 0 && (
