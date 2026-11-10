@@ -97,6 +97,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Logging out from a file list** — **Log out** on Trash, Shared or a file-type page in Drive, or on the file list of Docs, Sheets, Slides, Stickies or Vector, goes straight to the login page without an error flashing first
 - **Shared with me** — items of a deleted person or team no longer show
 - **Removing a share in Drive** — no longer notifies someone who never had the file
+- **Copy link** — the link copied from a share dialog, a file's menu or a comment starts with your server's address, so it opens when you paste it in a mail or chat
 - **Restoring a deleted account or team** — a restore of a deleted team, or of a deleted user whose address another account now holds, is refused before it changes anything. A restore that fails no longer reloads open tabs, so they keep their unsaved edits
 - **Deleting during an upload** — on local storage, deleting a file while an upload of the same name runs no longer loses the new file
 - **Limits in Admin** — a storage, mount or upload limit outside its range keeps Save disabled, with a plain hint under the field, instead of failing with a confusing error
