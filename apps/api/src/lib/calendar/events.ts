@@ -218,6 +218,40 @@ export async function patchResource(
     return changed;
 }
 
+// Caller holds the write lock; the row it answers with is what the decline or cancellation mail is composed from, its
+// occurrence named as the bytes it erases named it.
+export async function eraseStoredEvent(
+    calendar: Calendar,
+    calendarId: string,
+    id: string,
+    expectedEtag?: string,
+): Promise<EventToBuild | null> {
+    const existing = eventById(calendar, id);
+    if (!existing) return null;
+    if (existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
+    const resource = resourceOf(calendar, id);
+    if (!resource) throw new ApiError(404, 'Event not found');
+    assertEtag(resource, expectedEtag);
+
+    if (!existing.recurrenceDate) {
+        await calendar.purgeResource(resource);
+        return existing;
+    }
+    // A synthetic exclusion row carries no data of its own, so the link is the master's to state. A copy of single
+    // dates has no master: it loses one date at a time, and goes whole with its last.
+    const parent = existing.parentEventId ? requireEvent(calendar, existing.parentEventId) : undefined;
+    const component = storedComponent(calendar, resource);
+    const erased = { ...existing, recurrenceId: storedRecurrenceIds(component).get(existing.recurrenceDate) };
+    const ctx = writeContext(actorIsOrganizer(parent ?? existing));
+    const exclusion: VEventEdit = { kind: 'exclusion', event: existing, ctx };
+    // A cancelled row is the exclusion itself, so deleting it puts the occurrence back.
+    if (parent && existing.status === 'cancelled') removeExclusion(component, existing.recurrenceDate, ctx);
+    else applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]));
+    if (component.getFirstSubcomponent('vevent')) await writeComponent(calendar, resource, component);
+    else await calendar.purgeResource(resource);
+    return erased;
+}
+
 // The stored component of a resource: the bytes are the truth, so every path that parses them reads them itself.
 export function storedComponent(calendar: Calendar, resource: Pick<StoredResource, 'id'>): ICAL.Component {
     const row = calendar.db
@@ -255,6 +289,17 @@ export function writeComponent(calendar: Calendar, resource: StoredResource, com
     });
 }
 
+// Caller holds the write lock: the bytes it mutates are the bytes the commit overwrites.
+export async function editResource(
+    calendar: Calendar,
+    resource: StoredResource,
+    mutate: (component: ICAL.Component) => void,
+): Promise<void> {
+    const component = storedComponent(calendar, resource);
+    mutate(component);
+    await writeComponent(calendar, resource, component);
+}
+
 // An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp.
 export function exceptionEdit(parent: CalendarEvent, input: CreateEventArgs): VEventEdit {
     const event = eventForResource({
@@ -283,6 +328,11 @@ export function exceptionOf(
         .where(and(eq(schema.events.parentEventId, parentEventId), eq(schema.events.recurrenceDate, recurrenceDate)))
         .get();
     return row ? toEvent(row) : null;
+}
+
+// Every exception a master holds, overrides and cancellations alike, in the order the file lists them.
+export function exceptionsOf(calendar: Calendar, parentEventId: string): CalendarEvent[] {
+    return calendar.joinedEvents().where(eq(schema.events.parentEventId, parentEventId)).all().map(toEvent);
 }
 
 // An override is one occurrence of its series, so every message about it names the series' id.
@@ -406,40 +456,6 @@ async function patchStoredEvent(
     return { updated: requireEvent(calendar, id), existing };
 }
 
-// Caller holds the write lock; the row it answers with is what the decline or cancellation mail is composed from, its
-// occurrence named as the bytes it erases named it.
-export async function eraseStoredEvent(
-    calendar: Calendar,
-    calendarId: string,
-    id: string,
-    expectedEtag?: string,
-): Promise<EventToBuild | null> {
-    const existing = eventById(calendar, id);
-    if (!existing) return null;
-    if (existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
-    const resource = resourceOf(calendar, id);
-    if (!resource) throw new ApiError(404, 'Event not found');
-    assertEtag(resource, expectedEtag);
-
-    if (!existing.recurrenceDate) {
-        await calendar.purgeResource(resource);
-        return existing;
-    }
-    // A synthetic exclusion row carries no data of its own, so the link is the master's to state. A copy of single
-    // dates has no master: it loses one date at a time, and goes whole with its last.
-    const parent = existing.parentEventId ? requireEvent(calendar, existing.parentEventId) : undefined;
-    const component = storedComponent(calendar, resource);
-    const erased = { ...existing, recurrenceId: storedRecurrenceIds(component).get(existing.recurrenceDate) };
-    const ctx = writeContext(actorIsOrganizer(parent ?? existing));
-    const exclusion: VEventEdit = { kind: 'exclusion', event: existing, ctx };
-    // A cancelled row is the exclusion itself, so deleting it puts the occurrence back.
-    if (parent && existing.status === 'cancelled') removeExclusion(component, existing.recurrenceDate, ctx);
-    else applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]));
-    if (component.getFirstSubcomponent('vevent')) await writeComponent(calendar, resource, component);
-    else await calendar.purgeResource(resource);
-    return erased;
-}
-
 async function writeOverride(
     calendar: Calendar,
     calendarId: string,
@@ -478,26 +494,10 @@ function assertEtag(resource: StoredResource, expectedEtag: string | undefined):
     }
 }
 
-// Caller holds the write lock: the bytes it mutates are the bytes the commit overwrites.
-export async function editResource(
-    calendar: Calendar,
-    resource: StoredResource,
-    mutate: (component: ICAL.Component) => void,
-): Promise<void> {
-    const component = storedComponent(calendar, resource);
-    mutate(component);
-    await writeComponent(calendar, resource, component);
-}
-
 // A resource carrying the organizer link is somebody else's: a SEQUENCE bump here would outrank the organizer's next
 // message.
 function actorIsOrganizer(event: CalendarEvent): boolean {
     return !event.data?.organizerEventId;
-}
-
-// Every exception a master holds, overrides and cancellations alike, in the order the file lists them.
-export function exceptionsOf(calendar: Calendar, parentEventId: string): CalendarEvent[] {
-    return calendar.joinedEvents().where(eq(schema.events.parentEventId, parentEventId)).all().map(toEvent);
 }
 
 function uidHolder(calendar: Calendar, calendarId: string, uid: string): { uri: string } | undefined {
