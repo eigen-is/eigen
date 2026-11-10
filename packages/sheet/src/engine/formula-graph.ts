@@ -71,9 +71,8 @@ export class FormulaGraph {
     }
 
     // Follows a row or column op, given the sheets it left: the formulas on its sheet move with their cells, one on a
-    // deleted line goes, and one whose text the op rewrote lists its references again. Returns the graph, as
-    // followPatches does, so a holder can drop it where a budget throws.
-    public shift(sheets: readonly WorkingSheet[], op: InsertRowColOp | DeleteRowColOp): this {
+    // deleted line goes, and one whose text the op rewrote lists its references again.
+    public shift(sheets: readonly WorkingSheet[], op: InsertRowColOp | DeleteRowColOp): void {
         const insert = 'index' in op;
         const at = insert ? (op.direction === 'lefttop' ? op.index : op.index + 1) : op.start;
         const span = insert ? op.count : op.end - op.start + 1;
@@ -99,20 +98,19 @@ export class FormulaGraph {
             const formula = data.get(node.id)?.[node.r]?.[node.c]?.f;
             if (formula !== node.formula) this.set(node.id, node.r, node.c, formula);
         }
-        return this;
     }
 
     // Follows cell writes, given the sheets they left. A patch path starts at the sheet's index in `sheets`. A write of
     // a whole row or matrix, or one that adds or removes a cell and so moves the cells after it, reads its sheet again,
     // and a write of a sheet's id, its name or the sheet itself, which the graph keys on, builds the graph again.
-    public followPatches(sheets: readonly WorkingSheet[], patches: readonly Patch[]): this {
+    public followPatches(sheets: readonly WorkingSheet[], patches: readonly Patch[]): void {
         const reread = new Set<WorkingSheet>();
         for (const { op, path } of patches) {
             const [i, field, r, c] = path;
             const sheet = typeof i === 'number' ? sheets[i] : undefined;
             if (sheet == null || field == null || field === 'id' || field === 'name') {
                 this.build(sheets);
-                return this;
+                return;
             }
             if (field !== 'data') continue;
             const cellWrite = typeof r === 'number' && typeof c === 'number' && (op === 'replace' || path.length > 4);
@@ -123,7 +121,6 @@ export class FormulaGraph {
             for (const node of [...this.cellsOn(sheet.id).values()]) this.remove(node);
             this.read(sheet);
         }
-        return this;
     }
 
     // Every formula that reads one of `cells`, the `chosen` ones, and every formula reading those in turn, each after

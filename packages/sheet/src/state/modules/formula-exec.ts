@@ -1,7 +1,6 @@
-// Formula execution in the editor: evaluating a formula, building the formula graph from the cells, recomputing the cells
-// an edit affects (execFunctionGroup) and what a sheet, row or column op affects (recomputeAfterOps). These read and
-// write the workbook context, so they live in the state layer, while the parsing and evaluating they call into is the
-// engine's.
+// Formula execution in the editor: evaluating a formula, building the formula graph, recomputing what an edit affects
+// (execFunctionGroup) and what a sheet, row or column op affects (recomputeAfterOps). These read and write the
+// workbook context, so they live in the state layer, while the parsing and evaluating they call into is the engine's.
 
 import { findSheetByName } from '../../engine/a1-notation';
 import { createArrayResolver } from '../../engine/cell-resolver';

@@ -8,7 +8,7 @@ import { replaySheetsOps, withMaterializedData } from '../../engine/replay-ops';
 import type { Context } from '../../state/context';
 import { applyOpBatch } from '../../state/modules/apply-ops';
 import { warmFormulaGraph } from '../../state/modules/formula-exec';
-import { contextFactory, selectionFactory } from '../state/factories/context';
+import { selectionFactory, workbookContextFactory } from '../state/factories/context';
 
 // A seeded generator, so a failure names the seed and batch that reproduce it.
 function random(seed: number) {
@@ -221,11 +221,11 @@ function nextBatch(rnd: Random, sheets: Sheet[], step: number): Op[] {
 }
 
 function editor(sheets: readonly Sheet[]): Context {
-    const ctx = contextFactory({
+    const ctx = workbookContextFactory({
         currentSheetId: 's1',
         selections: selectionFactory([0, 0], [0, 0], 0, 0),
         sheets: sheets.map(withMaterializedData),
-    } as never) as Context;
+    });
     const frozen = produce(ctx, () => {});
     warmFormulaGraph(frozen);
     return frozen;
