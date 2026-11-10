@@ -36,6 +36,14 @@ describe('commutes', () => {
         expect(commutes([add(['conditionalFormatRules', 0])], [add(['conditionalFormatRules', 1])])).toBe(false);
     });
 
+    test('fails for hides on two sheets, and for a hide and a write of its whole sheet', () => {
+        const hide = (id: string) => replace(['hide'], id);
+        expect(commutes([hide('s1')], [hide('s2')])).toBe(false);
+        expect(commutes([hide('s1')], [replace([])])).toBe(false);
+        expect(commutes([replace([])], [hide('s1')])).toBe(false);
+        expect(commutes([hide('s1')], [replace(['data', 0, 0], 's2')])).toBe(true);
+    });
+
     test('fails when either side moves rows', () => {
         expect(commutes([rowInsert], [replace(['data', 5, 0])])).toBe(false);
         expect(commutes([replace(['data', 5, 0])], [rowInsert])).toBe(false);
