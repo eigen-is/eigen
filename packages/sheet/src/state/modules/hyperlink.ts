@@ -12,7 +12,7 @@ import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import { mergeBorder } from './cell';
 import { getcellrange } from './formula-exec';
-import { colLocation, rowLocation, sheetPoint } from './location';
+import { cellRectAt, colLocation, rowLocation, sheetPoint } from './location';
 import { recomputeCells } from './refresh';
 import { normalizeSelection } from './selection';
 import { changeSheet } from './sheet';
@@ -79,9 +79,10 @@ export function removeHyperlink(ctx: Context, r: number, c: number) {
 }
 
 export function showLinkCard(ctx: Context, r: number, c: number, isEditing = false, isMouseDown = false) {
-    if (`${r}_${c}` === ctx.linkCard?.rc) return;
-    const link = getCellHyperlink(ctx, r, c);
-    const cell = getFlowdata(ctx)?.[r]?.[c];
+    const d = getFlowdata(ctx);
+    if (d == null || `${r}_${c}` === ctx.linkCard?.rc) return;
+    const cell = d[r]?.[c];
+    const link = cell?.link;
     if (
         !isEditing &&
         link == null &&
@@ -95,19 +96,16 @@ export function showLinkCard(ctx: Context, r: number, c: number, isEditing = fal
         (link != null && (!ctx.linkCard?.isEditing || isMouseDown)) ||
         ctx.linkCard?.sheetId !== ctx.currentSheetId
     ) {
+        const { left, top, bottom } = cellRectAt(ctx, d, r, c);
         ctx.linkCard = {
             sheetId: ctx.currentSheetId,
             r,
             c,
             rc: `${r}_${c}`,
             originText: `${cellValue(cell) ?? ''}`,
-            originType: link?.type || 'webpage',
-            originAddress: link?.address || '',
-            position: {
-                cellLeft: c === 0 ? 0 : ctx.visibledatacolumn[c - 1],
-                cellTop: r === 0 ? 0 : ctx.visibledatarow[r - 1],
-                cellBottom: ctx.visibledatarow[r],
-            },
+            originType: link?.type ?? 'webpage',
+            originAddress: link?.address ?? '',
+            position: { cellLeft: left, cellTop: top, cellBottom: bottom },
             isEditing,
         };
     }

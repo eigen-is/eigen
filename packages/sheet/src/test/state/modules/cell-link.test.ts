@@ -66,6 +66,14 @@ describe('the writers of a cell', () => {
         expect(cellLinks(next.sheets[0])).toEqual({ '0_0': LINK });
     });
 
+    test('the card on a cell merged down hangs from the merge, not from its first row', () => {
+        const { next } = author(linkedGrid(), (ctx) => {
+            mergeCells(ctx, 'id_1', [{ row: [0, 1], column: [0, 0] }], 'merge-all');
+            showLinkCard(ctx, 0, 0);
+        });
+        expect(next.linkCard?.position.cellBottom).toBe(next.visibledatarow[1]);
+    });
+
     test('an unmerge leaves the link on the first cell alone', () => {
         const merged = author(linkedGrid(), (ctx) =>
             mergeCells(ctx, 'id_1', [{ row: [0, 0], column: [0, 1] }], 'merge-all'),

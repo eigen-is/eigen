@@ -19,8 +19,8 @@ import {
     loadCellFont,
     moveHighlightCell,
     openCellEditor,
-    rangeHightlightselected,
     typesIntoEditor,
+    updateFunctionHint,
     valueShowEs,
 } from '../../state';
 
@@ -124,7 +124,7 @@ export function FxEditor() {
                         }
                         case 'ArrowLeft':
                         case 'ArrowRight': {
-                            rangeHightlightselected(draftCtx, fxInput);
+                            updateFunctionHint(draftCtx, fxInput);
                             break;
                         }
                     }

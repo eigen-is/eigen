@@ -9,10 +9,11 @@ installHappyDom();
 
 const { defaultContext } = await import('../../../state/context');
 const { setCellValue } = await import('../../../state/modules/cell');
-const { execFunctionGroup, getcellrange, warmFormulaGraph } = await import('../../../state/modules/formula-exec');
+const { execFunctionGroup, getcellrange } = await import('../../../state/modules/formula-exec');
+const { heldGraph } = await import('../factories/context');
 const { insertRowCol } = await import('../../../state/modules/rowcol');
 const { editSheetName } = await import('../../../state/modules/sheet');
-const { updateDropCell } = await import('../../../state/modules/drop-cell');
+const { dragFill } = await import('../factories/grid-dom');
 const { saveHyperlink } = await import('../../../state/modules/hyperlink');
 const { dataToCelldata } = await import('../../../engine/celldata');
 const { join, tab, tabEdit, tabReceive, tabRedo, tabUndo } = await import('../factories/collab');
@@ -84,7 +85,7 @@ describe('a tab rename rewrites the text that names the tab', () => {
         renameFirst(t, 'Inputs');
         expect(t.ctx.sheets[0].name).toBe('Inputs');
         expect(formula(t)).toBe('=Inputs!A1+1');
-        const graph = warmFormulaGraph(t.ctx);
+        const graph = heldGraph(t.ctx);
         expect(graph.affected(t.ctx.sheets, [{ id: 'id_1', r: 0, c: 0 }])).toMatchObject([{ id: 'id_2', r: 0, c: 0 }]);
     });
 
@@ -402,7 +403,7 @@ describe('a tab rename rewrites the text that names the tab', () => {
             expect(formula(author)).toBe("='Q1!'!A1+1");
             expect(join(base, log)[1].celldata?.[0].v?.f).toBe("='Q1!'!A1+1");
 
-            warmFormulaGraph(author.ctx);
+            heldGraph(author.ctx);
             tabEdit(author, (ctx) => {
                 const { data } = ctx.sheets[0];
                 if (!data) return;
@@ -468,8 +469,7 @@ describe('a rename after a fill down from a linked cell', () => {
         const base = t.ctx;
         const link = tabEdit(t, (ctx) => saveHyperlink(ctx, 0, 0, 'go', 'webpage', 'https://example.com'));
         const fill = tabEdit(t, (ctx) => {
-            ctx.selections = [{ row: [0, 1], column: [0, 0], row_focus: 0, column_focus: 0 }];
-            updateDropCell(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 1], column: [0, 0] }, 'down');
+            dragFill(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 1], column: [0, 0] }, 'down');
         });
         return { t, base, log: [link, fill] };
     }

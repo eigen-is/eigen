@@ -9,10 +9,10 @@ import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import * as cellModule from '../../../state/modules/cell';
 import { setFormulaCellInfo } from '../../../state/modules/formula-cache';
-import { execFunctionGroup, getcellrange, warmFormulaGraph } from '../../../state/modules/formula-exec';
+import { execFunctionGroup, getcellrange } from '../../../state/modules/formula-exec';
 import { insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, deleteSheet, renameSheet } from '../../../state/modules/sheet';
-import { contextFactory } from '../factories/context';
+import { contextFactory, heldGraph } from '../factories/context';
 
 enablePatches();
 
@@ -46,7 +46,7 @@ function editCell(ctx: Context, r: number, c: number, value: number, id: string)
 describe('execFunctionGroup — index-driven recalc', () => {
     it('recomputes direct and cross-sheet transitive dependents in order', () => {
         const ctx = makeCtx();
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
 
         editCell(ctx, 0, 0, 7, 'id_1');
 
@@ -56,7 +56,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
 
     it('recomputes nothing when the edited cell has no dependents', () => {
         const ctx = makeCtx();
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
 
         const data = ctx.sheets[0].data;
         const before = data![0][1];
@@ -116,7 +116,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
         let draftReads = -1;
 
         produceWithPatches(base, (draft) => {
-            warmFormulaGraph(draft as Context);
+            heldGraph(draft as Context);
             draftReads = reads.mock.calls.filter(([, , , , data]) => data != null && isDraft(data)).length;
         });
         reads.mockRestore();
@@ -126,7 +126,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
 
     it('stops recomputing against a formula after it is rewritten to other deps', () => {
         const ctx = makeCtx();
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
 
         // One!B1 now depends on D1 instead of A1 (as updateCell would do:
         // rewrite the cell, then setFormulaCellInfo refreshes map + index).
@@ -142,7 +142,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
 
     it('drops a deleted formula from the index', () => {
         const ctx = makeCtx();
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
 
         ctx.sheets[0].data![0][1] = null;
         setFormulaCellInfo(ctx, { r: 0, c: 1, id: 'id_1' });
@@ -154,7 +154,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
 
     it('rebuilds map and index after a reset (row/col ops set the map to null)', () => {
         const ctx = makeCtx();
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
         editCell(ctx, 0, 0, 7, 'id_1');
 
         ctx.formulaCache.forgetGraph();
@@ -166,7 +166,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
 
     it('handles a multi-cell edit', () => {
         const ctx = makeCtx();
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
 
         // Simulate a paste/delete that changed One!A1 and a cell nothing reads.
         ctx.sheets[0].data![0][0] = { v: 20, m: '20' };
@@ -181,7 +181,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
 
     it('produces identical results when run inside an immer draft', () => {
         const base = makeCtx();
-        warmFormulaGraph(base);
+        heldGraph(base);
 
         const [next] = produceWithPatches(base, (draft) => {
             editCell(draft as Context, 0, 0, 7, 'id_1');
@@ -197,7 +197,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][2] = { f: '=SUM(A3:A1)', v: 5, m: '5' };
         ctx.sheets[0].data![1][3] = { f: '=SUM(B$3:A1)', v: 15, m: '15' };
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
 
         cellModule.updateCell(ctx, 1, 0, null, 7);
 
@@ -210,7 +210,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
     it('keeps the number of a real Excel function the engine lacks, even inside IFERROR, once an input changes', () => {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][2] = { f: '=IFERROR(FILTER(A1:A3,A1:A3>1),"none")', v: 5, m: '5' };
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
 
         editCell(ctx, 0, 0, 7, 'id_1');
 
@@ -221,7 +221,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][2] = { f: '=IFERROR(FILTRE(A1),"x")', v: 'x', m: 'x' };
         ctx.sheets[0].data![0][3] = { f: '=IFERROR(FILTRE(A1),A1)', v: 5, m: '5' };
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
 
         editCell(ctx, 0, 0, 7, 'id_1');
 
@@ -237,7 +237,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
         one[1][0] = { f: '=ISERROR(C1)', v: false, m: 'FALSE' };
         one[1][1] = { f: '=C1+1', v: 0.5, m: '0.5' };
         ctx.sheets[1].data![1][0] = { f: '=ERROR.TYPE(One!C1)', v: '#N/A', m: '#N/A' };
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
 
         editCell(ctx, 0, 0, 7, 'id_1');
 
@@ -250,7 +250,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][2] = { f: '=FILTER(A1:A3,A1:A3>1)' };
         ctx.sheets[0].data![0][3] = { f: '=IFERROR(C1,"none")', v: 5, m: '5' };
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
 
         editCell(ctx, 0, 0, 7, 'id_1');
 
@@ -300,7 +300,7 @@ describe('updateCell — the formulas that read an edited cell through a functio
                 { name: 'Data', id: 's2', order: 1, data },
             ],
         }) as Context;
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
         const shown = () => formulas.map(([r, c]) => ctx.sheets[0].data![r][c]?.m);
 
         cellModule.updateCell(ctx, 0, 0, null, 10);
@@ -337,7 +337,7 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
 
     it('a whole column on another sheet reads the rows an insert added', () => {
         const ctx = workbook('=SUM(One!A:A)');
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
         growOne(ctx);
         editCell(ctx, 6, 0, 5, 'id_1');
         expect(ctx.sheets[1].data?.[0][1]?.v).toBe(6);
@@ -345,7 +345,7 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
 
     it('a whole column on its own sheet reads the rows an insert added', () => {
         const ctx = workbook('=SUM(A:A)', 'id_1');
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
         growOne(ctx);
         editCell(ctx, 6, 0, 5, 'id_1');
         expect(ctx.sheets[0].data?.[0][1]?.v).toBe(6);
@@ -353,7 +353,7 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
 
     it('a sheet added under a deleted name does not heal what the delete broke', () => {
         const ctx = workbook('=One!A1');
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
         deleteSheet(ctx, 'id_1');
         addSheet(ctx, 'id_3', 'One');
         ctx.sheets[1].data = grid(4, 4);
@@ -364,7 +364,7 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
 
     it('a sheet name that read no sheet reads the sheet renamed to it', () => {
         const ctx = workbook('=Old!A1');
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
         renameSheet(ctx, { id: 'id_1', name: 'Old' });
         editCell(ctx, 0, 0, 7, 'id_1');
         expect(ctx.sheets[1].data?.[0][1]?.v).toBe(7);
@@ -373,11 +373,11 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
     // A rename points the formula at the new name, so the formula keeps reading the sheet.
     it('a formula that names a renamed sheet follows it, and the graph knows', () => {
         const ctx = workbook('=One!A1');
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
         getcellrange(ctx, 'One!A1');
         renameSheet(ctx, { id: 'id_1', name: 'Gone' });
         expect(ctx.sheets[1].data?.[0][1]?.f).toBe('=Gone!A1');
-        const graph = warmFormulaGraph(ctx);
+        const graph = heldGraph(ctx);
         expect(graph.formulaAt('id_2', 0, 1)?.formula).toBe('=Gone!A1');
         expect(graph.affected(ctx.sheets, [{ id: 'id_1', r: 0, c: 0 }])).toMatchObject([{ id: 'id_2', r: 0, c: 1 }]);
     });
@@ -392,7 +392,7 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
     // A replay of the op log hands the engine sheets whose names may differ from the ones it knew.
     it('a sheet name another caller resolved reads no sheet once a peer renames it, after a replay', () => {
         const ctx = workbook('=One!A1');
-        warmFormulaGraph(ctx);
+        heldGraph(ctx);
         ctx.formulaCache.resetEngine();
         ctx.sheets[0].name = 'Old';
         getcellrange(ctx, 'Old!A1');

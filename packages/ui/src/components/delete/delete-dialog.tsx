@@ -1,3 +1,6 @@
+// The yes or no before something is deleted, such as a file, a team or a comment: ConfirmDialog with a destructive
+// button, the item's name in bold and the prompt ending as a question.
+
 import { ConfirmDialog } from '../confirm-dialog';
 
 export type DeleteDialogProps = {
@@ -9,10 +12,9 @@ export type DeleteDialogProps = {
     onDelete: () => void | Promise<void>;
     cancelText?: string;
     deleteText?: string;
+    onCloseAutoFocus?: (event: Event) => void;
 };
 
-// Destructive preset over ConfirmDialog: the shared pending/close lifecycle lives there; this adds
-// the delete-specific copy — a bolded item name and a "?" terminator on the prompt.
 export function DeleteDialog({
     open,
     onOpenChange,
@@ -22,8 +24,8 @@ export function DeleteDialog({
     onDelete,
     cancelText = 'Cancel',
     deleteText = 'Delete',
+    onCloseAutoFocus,
 }: DeleteDialogProps) {
-    // Confirmation prompts read as questions; append "?" unless the caller already terminated the sentence.
     const terminator = /[.?!]$/.test(description) ? '' : '?';
     return (
         <ConfirmDialog
@@ -44,6 +46,7 @@ export function DeleteDialog({
             cancelText={cancelText}
             confirmText={deleteText}
             destructive
+            onCloseAutoFocus={onCloseAutoFocus}
         />
     );
 }

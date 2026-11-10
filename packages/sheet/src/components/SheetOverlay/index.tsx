@@ -1,9 +1,7 @@
-// The DOM layer over the grid canvas: the row and column headers, the scrolling cell area with the cell editor,
-// selections and floating images and charts, the validation and link cards, and the add-rows footer. It turns the
-// pointer's down, move, up and double click on the cell area into the state handlers, such as
-// handleCellAreaMouseDown, and coalesces mouse moves to one update per frame, each of which also tells the host which
-// comment the pointer is on, until a press or an open editor says none. A press that closes an open app-bar menu is
-// marked before the cells or a header read it, so it puts no reference into a formula.
+// The DOM layer over the grid canvas: the headers, the scrolling cell area with its overlays, such as the cell editor,
+// the selections and the cards, and the add-rows footer. It turns the pointer's presses and moves on the cell area into
+// the state handlers, such as handleCellAreaMouseDown, one move per frame, and tells the host which comment the pointer
+// is on. A press that closes an app-bar menu is marked first, so it puts no reference into a formula.
 
 import { SHEET_COLUMN_HEADER_HEIGHT, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import { Button } from '@workspace/ui/components/button';

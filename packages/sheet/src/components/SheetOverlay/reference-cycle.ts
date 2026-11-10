@@ -6,12 +6,12 @@ import { cycleReferenceAtCaret } from '../../engine/formula-reference-cycle';
 import type { Context } from '../../state';
 import {
     cancelFunctionrangeSelected,
-    createRangeHightlight,
+    createRangeHighlight,
     functionHTMLGenerate,
-    rangeHightlightselected,
     resetRangeIndexes,
     selectionTextOffsets,
     selectTextOffsets,
+    updateFunctionHint,
 } from '../../state';
 
 export function cycleReferenceInEditor(
@@ -33,10 +33,10 @@ export function cycleReferenceInEditor(
         selectTextOffsets(editor, result.selectionStart, result.selectionEnd);
 
         cancelFunctionrangeSelected(draftCtx);
-        createRangeHightlight(draftCtx, html);
+        createRangeHighlight(draftCtx, html);
         draftCtx.formulaCache.rangestart = false;
         draftCtx.formulaCache.rangedrag_column_start = false;
         draftCtx.formulaCache.rangedrag_row_start = false;
-        rangeHightlightselected(draftCtx, editor);
+        updateFunctionHint(draftCtx, editor);
     });
 }

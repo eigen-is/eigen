@@ -17,13 +17,13 @@ import type { Context } from '../../state/context';
 import { handleCopy, handleCut } from '../../state/events/copy';
 import { handlePaste } from '../../state/events/paste';
 import { carriedLines, carryCells } from '../../state/modules/carry';
-import { consumePendingCopy, rangeValueToClipboard } from '../../state/modules/clipboard';
+import { consumePendingCopy } from '../../state/modules/clipboard';
 import { onCellsMoveEnd } from '../../state/modules/move-cells';
 import { pasteHandlerOfPaintModel } from '../../state/modules/selection';
 import { handleFormatPainter } from '../../state/modules/toolbar';
 import { validationAt } from '../../state/modules/validation-rules';
 import type { Cell, GlobalCache, Op, Selection } from '../../state/types';
-import { clipboardWith, pasteCopy } from './factories/clipboard';
+import { clipboardWith, copied, pasteCopy } from './factories/clipboard';
 import { author, join, receive } from './factories/collab';
 import { contextFactory, editInPlace, workbookContextFactory } from './factories/context';
 import { gridElements, withGridGeometry } from './factories/grid-dom';
@@ -270,7 +270,7 @@ describe('a range with a hidden row and column inside it', () => {
 
     test('the clipboard carries the hidden row and column', () => {
         const ctx = makeCtx();
-        const text = rangeValueToClipboard(ctx, 'id_1', source())?.cellText;
+        const text = copied(ctx, source())?.cellText;
         expect(text?.split('\n')).toEqual([
             'r0c0\tr0c1\tr0c2\t',
             'r1c0\tr1c1\tr1c2\tr1c3',
@@ -324,7 +324,7 @@ describe('a range with a row an active filter hides', () => {
 
     test('the clipboard leaves the filtered row out', () => {
         const ctx = makeCtx({ filtered: true });
-        const text = rangeValueToClipboard(ctx, 'id_1', source())?.cellText;
+        const text = copied(ctx, source())?.cellText;
         expect(text?.split('\n')).toEqual(['r0c0\tr0c1\tr0c2\t', 'r2c0\tr2c1\tr2c2\tr2c3', '\tr3c1\tr3c2\tr3c3']);
     });
 
@@ -390,7 +390,7 @@ describe('a range with a row an active filter hides', () => {
         mergeColumnA(ctx, 1, 2);
         const s = sheet(ctx);
         for (const hidden of [s.config?.rowhidden, s.filter?.[0].rowhidden]) if (hidden) hidden[2] = 0;
-        expect(tableGrid(rangeValueToClipboard(ctx, 'id_1', source())?.html ?? '')).toEqual([
+        expect(tableGrid(copied(ctx, source())?.html ?? '')).toEqual([
             ['r0c0', 'r0c1', 'r0c2', ''],
             ['r3c0', 'r3c1', 'r3c2', 'r3c3'],
         ]);
@@ -455,7 +455,7 @@ describe('a range with a row an active filter hides', () => {
             const rowhidden = sheet(ctx).config?.rowhidden;
             if (rowhidden) rowhidden[2] = 0;
             ctx.selections = [{ row: [2, 3], column: [0, 3], row_focus: 2, column_focus: 0 }];
-            expect(rangeValueToClipboard(ctx, 'id_1', ctx.selections)?.cellText.split('\n')).toEqual([
+            expect(copied(ctx, ctx.selections)?.cellText.split('\n')).toEqual([
                 'r2c0\tr2c1\tr2c2\tr2c3',
                 '\tr3c1\tr3c2\tr3c3',
             ]);

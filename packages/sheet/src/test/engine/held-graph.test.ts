@@ -5,8 +5,7 @@ import { FormulaGraph } from '../../engine/formula-graph';
 import { replaySheetsOps, SkippedRecompute, withMaterializedData } from '../../engine/replay-ops';
 import type { Context } from '../../state/context';
 import { applyOpBatch } from '../../state/modules/apply-ops';
-import { warmFormulaGraph } from '../../state/modules/formula-exec';
-import { selectionFactory, workbookContextFactory } from '../state/factories/context';
+import { heldGraph, selectionFactory, workbookContextFactory } from '../state/factories/context';
 import { fresh, letter, malformed, nextBatch, random, workbook } from '../state/factories/workbook-fuzz';
 
 // For every cell of every sheet, the formulas a change there reaches, by where they sit, and each formula's text.
@@ -55,7 +54,7 @@ function editor(sheets: readonly Sheet[]): Context {
         sheets: sheets.map(withMaterializedData),
     });
     const frozen = produce(ctx, () => {});
-    warmFormulaGraph(frozen);
+    heldGraph(frozen);
     return frozen;
 }
 
@@ -83,7 +82,7 @@ describe('a held formula graph', () => {
                 expect({ where, skipped: applied == null }).toEqual({ where, skipped: malformed(batch) });
                 ctx = applied?.ctx ?? ctx;
                 expect(differences(`${where}\n  editor`, ctx.sheets, sheets)).toEqual([]);
-                const held = warmFormulaGraph(ctx);
+                const held = heldGraph(ctx);
                 expect({ where, reach: reach(held, ctx.sheets) }).toEqual({
                     where,
                     reach: reach(new FormulaGraph(ctx.sheets), ctx.sheets),

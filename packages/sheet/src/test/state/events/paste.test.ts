@@ -12,9 +12,8 @@ import { describe, expect, it } from 'bun:test';
 import type { Cell, DefaultConditionalFormatRule } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { copy } from '../../../state/modules/clipboard';
-import { warmFormulaGraph } from '../../../state/modules/formula-exec';
 import { pasteCopy, pasteText } from '../factories/clipboard';
-import { contextFactory, editInPlace } from '../factories/context';
+import { contextFactory, editInPlace, heldGraph } from '../factories/context';
 import { edit, typed } from '../factories/edit-cycle';
 import { cellLinks } from '../factories/links';
 
@@ -597,7 +596,7 @@ describe('pasted formulas and the dependency map', () => {
             let ctx = makeCtx(6, 6, (d) => {
                 d[0][0] = { v: 5, m: '5' };
             });
-            if (warm) warmFormulaGraph(ctx);
+            if (warm) heldGraph(ctx);
 
             [ctx] = edit(ctx, pasteTextAt('=A1*3', 0, 2));
             expect(ctx.sheets[0].data![0][2]?.v).toBe(15);
@@ -622,7 +621,7 @@ describe('pasted formulas and the dependency map', () => {
                 { name: 'Two', id: 'id_2', order: 1, data: two },
             ],
         }) as Context;
-        warmFormulaGraph(base);
+        heldGraph(base);
         const [ctx] = edit(base, (d) => {
             d.selections = single(0, 1);
             copy(d, { cut: true });
@@ -660,7 +659,7 @@ describe('pasted formulas and the dependency map', () => {
             d[0][1] = { f: '=A1*2', v: 10, m: '10' };
             d[0][2] = { f: '=B1+1', v: 11, m: '11' };
         });
-        warmFormulaGraph(base);
+        heldGraph(base);
         const [ctx] = edit(base, (d) => copyThenPaste(d, single(0, 1), single(3, 3), { cut: true }));
 
         const data = ctx.sheets[0].data!;

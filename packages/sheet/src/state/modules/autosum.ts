@@ -3,13 +3,13 @@
 // opens an empty call. It runs inside a setContext recipe.
 
 import { cellValue } from '../../engine/format';
-import type { Cell, CellMatrix } from '../../engine/types';
+import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import { getRangetxt, setCellValue } from './cell';
 import { openCellEditor } from './cell-editor';
 import { rangeColor } from './color';
-import { functionCallHtml, israngeseleciton } from './formula-editor';
+import { caretTakesRange, functionCallHtml } from './formula-editor';
 import { computeFormula } from './formula-exec';
 import { createFormulaRangeSelect, rangeSetValue } from './formula-range';
 import { colLocationByIndex, rowLocationByIndex } from './location';
@@ -20,6 +20,20 @@ import { isRealNull, isRealNum } from './validation';
 // cells sum those above.
 type Line = 'c' | 'r';
 
+// One autosum's workbook, editors and function name, which every step below reads.
+type Autosum = {
+    ctx: Context;
+    d: CellMatrix;
+    cellInput: HTMLDivElement;
+    fxInput: HTMLDivElement | null | undefined;
+    formula: string;
+};
+
+// The walk back over blanks for numbers to sum gives up past this many blank cells.
+const MAX_BLANKS = 40;
+
+const CLOSE_HTML = '<span dir="auto" class="sheet-formula-text-color">)</span>';
+
 export function autoSelectionFormula(
     ctx: Context,
     cellInput: HTMLDivElement,
@@ -27,19 +41,20 @@ export function autoSelectionFormula(
     formula: string,
 ) {
     if (ctx.allowEdit === false) return;
-    const flowdata = getFlowdata(ctx);
-    if (flowdata == null) return;
+    const d = getFlowdata(ctx);
+    if (d == null) return;
+    const sum: Autosum = { ctx, d, cellInput, fxInput, formula };
 
     const openSumOfRow = (top: number, bottom: number, left: number, right: number) => {
-        const start = numbersStart(flowdata, top, right, 'c');
-        if (start == null) openSum(cellInput, fxInput, ctx, top, left, null, null, formula, true);
-        else openSum(cellInput, fxInput, ctx, top, left, [top, bottom], [start, right - 1], formula);
+        const start = numbersStart(d, top, right, 'c');
+        if (start == null) openEmptySum(sum, top, left);
+        else openSum(sum, top, left, { row: [top, bottom], column: [start, right - 1] });
     };
 
     const openSumOfColumn = (top: number, bottom: number, left: number, right: number) => {
-        const start = numbersStart(flowdata, left, bottom, 'r');
+        const start = numbersStart(d, left, bottom, 'r');
         if (start == null) openSumOfRow(top, bottom, left, right);
-        else openSum(cellInput, fxInput, ctx, top, left, [start, bottom - 1], [left, right], formula);
+        else openSum(sum, top, left, { row: [start, bottom - 1], column: [left, right] });
     };
 
     for (const selection of ctx.selections ?? []) {
@@ -50,25 +65,21 @@ export function autoSelectionFormula(
 
         if (top === bottom && left === right) {
             if (bottom === 0 && right === 0) {
-                openSum(cellInput, fxInput, ctx, top, left, null, null, formula, true);
-            } else if (bottom > 0 && holdsNumber(flowdata[bottom - 1][left])) {
+                openEmptySum(sum, top, left);
+            } else if (bottom > 0 && holdsNumber(d[bottom - 1][left])) {
                 openSumOfColumn(top, bottom, left, right);
-            } else if (right > 0 && holdsNumber(flowdata[top][right - 1])) {
+            } else if (right > 0 && holdsNumber(d[top][right - 1])) {
                 openSumOfRow(top, bottom, left, right);
             } else {
                 openSumOfColumn(top, bottom, left, right);
             }
         } else if (top === bottom) {
-            sumLine(cellInput, fxInput, ctx, flowdata, focusColumn, top, left, right, formula, 'r');
+            sumLine(sum, 'r', top, selection.column, focusColumn);
         } else if (left === right) {
-            sumLine(cellInput, fxInput, ctx, flowdata, focusRow, left, top, bottom, formula, 'c');
+            sumLine(sum, 'c', left, selection.row, focusRow);
         } else {
-            for (let r = top; r <= bottom; r += 1) {
-                sumLine(cellInput, fxInput, ctx, flowdata, focusColumn, r, left, right, formula, 'r', false);
-            }
-            for (let c = left; c <= right; c += 1) {
-                sumLine(cellInput, fxInput, ctx, flowdata, focusRow, c, top, bottom, formula, 'c', false);
-            }
+            for (let r = top; r <= bottom; r += 1) sumLine(sum, 'r', r, selection.column, focusColumn, false);
+            for (let c = left; c <= right; c += 1) sumLine(sum, 'c', c, selection.row, focusRow, false);
         }
     }
 }
@@ -87,129 +98,76 @@ function holdsValue(cell: Cell | null) {
 function numbersStart(d: CellMatrix, line: number, end: number, type: Line) {
     let start = null;
     let blanks = 0;
-    let blankRuns = 0;
-
     for (let r = end - 1; r >= 0; r -= 1) {
         const cell = type === 'c' ? d[line][r] : d[r][line];
-
         if (holdsNumber(cell)) {
             start = r;
-        } else if (!holdsValue(cell)) {
-            blanks += 1;
-
-            if (blanks >= 40) {
-                if (blankRuns <= 0) {
-                    blankRuns = 1;
-                } else {
-                    break;
-                }
-            }
-        } else {
+        } else if (holdsValue(cell)) {
             break;
+        } else {
+            blanks += 1;
+            if (blanks > MAX_BLANKS) break;
         }
     }
-
     return start;
 }
 
-function openSum(
-    cellInput: HTMLDivElement,
-    fxInput: HTMLDivElement | null | undefined,
-    ctx: Context,
-    focusRow: number,
-    focusColumn: number,
-    rows: number[] | null,
-    columns: number[] | null,
-    formula: string,
-    noRange = false,
-) {
-    if (noRange) {
-        const html = `${functionCallHtml(formula.toUpperCase())}<span dir="auto" class="sheet-formula-text-color">)</span>`;
-        openCellEditor(ctx, focusRow, focusColumn, { html, caret: formula.length + 2 });
-        return;
-    }
+// The editor opens on an empty call, with the caret inside its brackets.
+function openEmptySum({ ctx, formula }: Autosum, r: number, c: number) {
+    const html = `${functionCallHtml(formula.toUpperCase())}${CLOSE_HTML}`;
+    openCellEditor(ctx, r, c, { html, caret: formula.length + 2 });
+}
 
-    if (rows == null || columns == null) return;
-    const rowStart = rowLocationByIndex(rows[0], ctx.visibledatarow)[0];
-    const rowEnd = rowLocationByIndex(rows[1], ctx.visibledatarow)[1];
-    const columnStart = colLocationByIndex(columns[0], ctx.visibledatacolumn)[0];
-    const columnEnd = colLocationByIndex(columns[1], ctx.visibledatacolumn)[1];
+// The editor opens on a sum of `range`, picked as a reference the pointer can still change.
+function openSum({ ctx, cellInput, fxInput, formula }: Autosum, r: number, c: number, range: SingleRange) {
+    const rowStart = rowLocationByIndex(range.row[0], ctx.visibledatarow)[0];
+    const rowEnd = rowLocationByIndex(range.row[1], ctx.visibledatarow)[1];
+    const columnStart = colLocationByIndex(range.column[0], ctx.visibledatacolumn)[0];
+    const columnEnd = colLocationByIndex(range.column[1], ctx.visibledatacolumn)[1];
+    const rect = {
+        left: columnStart,
+        width: columnEnd - columnStart - 1,
+        top: rowStart,
+        height: rowEnd - rowStart - 1,
+    };
 
-    const html = `${functionCallHtml(formula.toUpperCase())}<span class="sheet-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${rangeColor(
-        0,
-    )};">${getRangetxt(
-        ctx,
-        ctx.currentSheetId,
-        { row: rows, column: columns },
-        ctx.currentSheetId,
-    )}</span><span dir="auto" class="sheet-formula-text-color">)</span>`;
-    openCellEditor(ctx, focusRow, focusColumn, { html });
+    const reference = getRangetxt(ctx, ctx.currentSheetId, range, ctx.currentSheetId);
+    const referenceHtml = `<span class="sheet-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${rangeColor(0)};">${reference}</span>`;
+    const html = `${functionCallHtml(formula.toUpperCase())}${referenceHtml}${CLOSE_HTML}`;
+    openCellEditor(ctx, r, c, { html });
 
-    israngeseleciton(ctx);
+    caretTakesRange(ctx);
     ctx.formulaCache.rangestart = true;
     ctx.formulaCache.rangedrag_column_start = false;
     ctx.formulaCache.rangedrag_row_start = false;
     ctx.formulaCache.rangechangeindex = 0;
-    rangeSetValue(ctx, cellInput, { row: rows, column: columns }, fxInput);
+    rangeSetValue(ctx, cellInput, range, fxInput);
     ctx.formulaCache.func_selectedrange = {
-        left: columnStart,
-        width: columnEnd - columnStart - 1,
-        top: rowStart,
-        height: rowEnd - rowStart - 1,
-        left_move: columnStart,
-        width_move: columnEnd - columnStart - 1,
-        top_move: rowStart,
-        height_move: rowEnd - rowStart - 1,
-        row: [focusRow, focusRow],
-        column: [focusColumn, focusColumn],
+        ...rect,
+        left_move: rect.left,
+        width_move: rect.width,
+        top_move: rect.top,
+        height_move: rect.height,
+        row: [r, r],
+        column: [c, c],
     };
-
-    createFormulaRangeSelect(ctx, {
-        rangeIndex: ctx.formulaCache.rangeIndex || 0,
-        left: columnStart,
-        width: columnEnd - columnStart - 1,
-        top: rowStart,
-        height: rowEnd - rowStart - 1,
-    });
+    createFormulaRangeSelect(ctx, { rangeIndex: ctx.formulaCache.rangeIndex ?? 0, ...rect });
 }
 
-function writeSum(
-    d: CellMatrix,
-    r: number,
-    c: number,
-    rows: number[],
-    columns: number[],
-    formula: string,
-    ctx: Context,
-) {
-    const f = `=${formula.toUpperCase()}(${getRangetxt(
-        ctx,
-        ctx.currentSheetId,
-        { row: rows, column: columns },
-        ctx.currentSheetId,
-    )})`;
-    const [v, formulaText] = computeFormula(ctx, f);
-    setCellValue(ctx, r, c, d, { v, f: formulaText });
-    recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }]);
-}
-
-function sumLine(
-    cellInput: HTMLDivElement,
-    fxInput: HTMLDivElement | null | undefined,
-    ctx: Context,
-    d: CellMatrix,
-    index: number,
-    fix: number,
-    first: number,
-    last: number,
-    formula: string,
-    type: Line,
-    fillBlanks = true,
-) {
+// Sums one selected line `fix` of `type` over [first, last]. A blank line sums what lies before each of its cells,
+// and a line of numbers sums itself into the first free cell past it.
+function sumLine(sum: Autosum, type: Line, fix: number, [first, last]: number[], focus: number, fillBlanks = true) {
+    const { ctx, d, formula } = sum;
     const cellAt = (at: number) => (type === 'c' ? d[at][fix] : d[fix][at]);
     const write = (at: number, along: number[], across: number[]) => {
-        if (type === 'c') writeSum(d, at, fix, along, across, formula, ctx);
-        else writeSum(d, fix, at, across, along, formula, ctx);
+        const [r, c] = type === 'c' ? [at, fix] : [fix, at];
+        const range = type === 'c' ? { row: along, column: across } : { row: across, column: along };
+        const [v, f] = computeFormula(
+            ctx,
+            `=${formula.toUpperCase()}(${getRangetxt(ctx, ctx.currentSheetId, range, ctx.currentSheetId)})`,
+        );
+        setCellValue(ctx, r, c, d, { v, f });
+        recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }]);
     };
 
     let allBlank = true;
@@ -225,14 +183,14 @@ function sumLine(
     }
 
     if (allBlank && fillBlanks) {
-        if (numbersStart(d, index, fix, type) == null) {
-            if (type === 'c') openSum(cellInput, fxInput, ctx, index, fix, null, null, formula, true);
-            else openSum(cellInput, fxInput, ctx, fix, index, null, null, formula, true);
+        if (numbersStart(d, focus, fix, type) == null) {
+            if (type === 'c') openEmptySum(sum, focus, fix);
+            else openEmptySum(sum, fix, focus);
             return;
         }
         const count = last - first + 1;
         for (let step = 0; step < count; step += 1) {
-            const at = index === first ? first + step : last - step;
+            const at = focus === first ? first + step : last - step;
             const start = numbersStart(d, at, fix, type);
             if (start == null) break;
             write(at, [at, at], [start, fix - 1]);

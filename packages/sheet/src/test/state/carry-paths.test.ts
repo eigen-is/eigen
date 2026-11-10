@@ -8,7 +8,7 @@ import type { ConditionalFormatRule, DataValidationRule } from '@workspace/lib/s
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { Context } from '../../state/context';
 import { copy } from '../../state/modules/clipboard';
-import { updateDropCell } from '../../state/modules/drop-cell';
+import { mergeCells } from '../../state/modules/merge';
 import { pasteHandlerOfPaintModel } from '../../state/modules/selection';
 import { sortRange } from '../../state/modules/sort';
 import { handleFormatPainter } from '../../state/modules/toolbar';
@@ -18,6 +18,7 @@ import { pasteCopy } from './factories/clipboard';
 import type { Tab } from './factories/collab';
 import { join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from './factories/collab';
 import { workbookContextFactory } from './factories/context';
+import { dragFill } from './factories/grid-dom';
 import { cellLinks } from './factories/links';
 
 const ONE = 's1';
@@ -391,8 +392,7 @@ describe('a source cell without a rule takes the destination rule away, cell by 
             },
         );
         s.edit(s.a, (ctx) => {
-            ctx.selections = select(0, 2, 0, 0);
-            updateDropCell(ctx, range(0, 0, 0, 0), range(1, 2, 0, 0), 'down');
+            dragFill(ctx, range(0, 0, 0, 0), range(1, 2, 0, 0), 'down');
         });
         expectEveryoneAgrees(s, (sheet) => {
             expect(sheet.dataValidations?.v.ranges).toEqual([range(3, 3, 0, 0)]);
@@ -585,8 +585,7 @@ describe('a source with a rule extends it', () => {
             },
         );
         s.edit(s.a, (ctx) => {
-            ctx.selections = select(0, 3, 5, 5);
-            updateDropCell(ctx, range(0, 0, 5, 5), range(1, 3, 5, 5), 'down');
+            dragFill(ctx, range(0, 0, 5, 5), range(1, 3, 5, 5), 'down');
         });
         expectEveryoneAgrees(s, (sheet) => {
             expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([range(0, 3, 5, 5)]);
@@ -629,8 +628,7 @@ describe('a tab, a peer and a joiner agree through a whole session', () => {
         const edits: ((ctx: Context) => void)[] = [
             (ctx) => sortRange(ctx, range(0, 2, 0, 2), true),
             (ctx) => {
-                ctx.selections = select(0, 4, 0, 2);
-                updateDropCell(ctx, range(0, 2, 0, 2), range(3, 4, 0, 2), 'down');
+                dragFill(ctx, range(0, 2, 0, 2), range(3, 4, 0, 2), 'down');
             },
             (ctx) => {
                 ctx.selections = select(5, 5, 4, 4);
@@ -670,8 +668,7 @@ describe('a fill lands through the carry', () => {
     const fillDown =
         (from: number[], to: number[], c1 = 0, c2 = 0) =>
         (ctx: Context) => {
-            ctx.selections = select(from[0], to[1], c1, c2);
-            updateDropCell(ctx, range(from[0], from[1], c1, c2), range(to[0], to[1], c1, c2), 'down');
+            dragFill(ctx, range(from[0], from[1], c1, c2), range(to[0], to[1], c1, c2), 'down');
         };
 
     test('copies a link onto every filled cell, and an undo takes them away', () => {
@@ -807,8 +804,7 @@ describe('a fill lands through the carry', () => {
             },
         );
         s.edit(s.a, (ctx) => {
-            ctx.selections = select(0, 5, 0, 0);
-            updateDropCell(ctx, range(4, 5, 0, 0), range(0, 3, 0, 0), 'up');
+            dragFill(ctx, range(4, 5, 0, 0), range(0, 3, 0, 0), 'up');
         });
         expectEveryoneAgrees(s, (sheet) => {
             expect(Object.keys(cellLinks(sheet)).sort()).toEqual(['0_0', '2_0', '4_0']);
@@ -935,5 +931,26 @@ describe('the format painter lands rules as a copy does', () => {
             // The carried rows are 0 and 2, so only the second landed row is inside the rule.
             expect(sheet.conditionalFormatRules).toEqual([greater([range(1, 2, 0, 0), range(6, 6, 2, 2)])]);
         });
+    });
+});
+
+// A paste reads the live cells, so a merge made after the copy can start outside the copied block.
+test('a copied cell merged since into a merge above the block lands as a plain cell', () => {
+    const s = session((d) => {
+        d[0][0] = text('top');
+        d[1][0] = text('copied');
+    });
+    s.edit(s.a, (ctx) => {
+        ctx.selections = select(1, 1, 0, 0);
+        copy(ctx);
+    });
+    s.edit(s.a, (ctx) => mergeCells(ctx, ONE, [range(0, 1, 0, 0)], 'merge-all'));
+    s.edit(s.a, (ctx) => {
+        ctx.selections = select(5, 5, 3, 3);
+        pasteCopy(ctx);
+    });
+    expectEveryoneAgrees(s, (sheet) => {
+        expect(sheet.data?.[5][3]?.mc).toBeUndefined();
+        expect(sheet.config?.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 1 } });
     });
 });

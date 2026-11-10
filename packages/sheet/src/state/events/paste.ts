@@ -149,8 +149,8 @@ function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
             const { f: _, ...value } = source;
             return value;
         }
-        // A copy on its own cell is the same formula. Anywhere else it is a new one, so its source's value isn't its
-        // own: it lands with none and this build's answer stands, even #NAME?. On a copy, as the write changes its ct.
+        // On its own cell a copy is the same formula. Anywhere else it is a new one that lands with no value, so this
+        // build's answer stands, even #NAME?. Either lands as a copy of the source, since the write changes its ct.
         if (copySheetId === ctx.currentSheetId && r === sr && c === sc) return cloneDeep(source);
         const cell = { ...cloneDeep(source), f: `=${functionCopy(source.f, r - sr, c - sc)}` };
         writeFormulaResult(cell, undefined);

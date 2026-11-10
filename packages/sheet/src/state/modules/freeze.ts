@@ -3,8 +3,10 @@
 // overlay panes and the headers' freeze handles.
 
 import { freezesColumns, freezesRows } from '@workspace/lib/sheets';
-import type { Context, Freeze } from '..';
-import { colLocationByIndex, getSheetIndex, rowLocationByIndex } from '..';
+import type { Context } from '../context';
+import type { Freeze } from '../types';
+import { getSheetIndex } from '../utils';
+import { colLocationByIndex, rowLocationByIndex } from './location';
 
 export function freezeOf(ctx: Context): Freeze | undefined {
     const idx = getSheetIndex(ctx, ctx.currentSheetId);
@@ -160,8 +162,7 @@ export function overlayRegionForCell(
 }
 
 // A selection drag whose far end has gone behind a frozen band scrolls back to the start, so the cells it reaches show.
-// The main pane starts at the band's width plus the scroll, and a far end past that is in view. A drag inside the band
-// hides nothing, and a mouse's jitter on a press there is one.
+// The main pane starts at the band's width plus the scroll, and a far end past that is in view.
 export function scrollToFrozenRowCol(ctx: Context) {
     const selection = ctx.selections?.at(-1);
     if (!selection) return;
@@ -202,12 +203,12 @@ export function getFrozenHandleTop(ctx: Context) {
     const idx = getSheetIndex(ctx, ctx.currentSheetId);
     const frozen = idx == null ? undefined : ctx.sheets[idx].frozen;
     if (!freezesRows(frozen)) return ctx.scrollTop;
-    return rowLocationByIndex(frozen?.range?.row_focus || 0, ctx.visibledatarow)[1] + ctx.scrollTop;
+    return rowLocationByIndex(frozen?.range?.row_focus ?? 0, ctx.visibledatarow)[1] + ctx.scrollTop;
 }
 
 export function getFrozenHandleLeft(ctx: Context) {
     const idx = getSheetIndex(ctx, ctx.currentSheetId);
     const frozen = idx == null ? undefined : ctx.sheets[idx].frozen;
     if (!freezesColumns(frozen)) return ctx.scrollLeft;
-    return colLocationByIndex(frozen?.range?.column_focus || 0, ctx.visibledatacolumn)[1] - 2 + ctx.scrollLeft;
+    return colLocationByIndex(frozen?.range?.column_focus ?? 0, ctx.visibledatacolumn)[1] - 2 + ctx.scrollLeft;
 }

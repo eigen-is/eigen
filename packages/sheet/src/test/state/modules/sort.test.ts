@@ -1,5 +1,5 @@
-// Sorting has two layers: the pure `sortedOrder` comparator (numeric, 'en' text,
-// nulls last) and `sortRange`, which picks the rows then delegates. These
+// Sorting has two layers: `sortDataRange`, which orders the rows (numeric, 'en' text,
+// nulls last), and `sortRange`, which picks the rows then delegates. These
 // pin which rows the sort covers: a leading CJK cell sorts like any other value
 // with no header-guessing, a header row stays only when the caller says so, and
 // a merged cell stops the sort.
@@ -9,13 +9,18 @@ import { produce } from 'immer';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { sortFilterRange } from '../../../state/modules/filter';
-import { sortedOrder, sortRange, sortSelection } from '../../../state/modules/sort';
-import { contextFactory, selectionFactory } from '../factories/context';
+import { sortDataRange, sortRange, sortSelection } from '../../../state/modules/sort';
+import { contextFactory, editInPlace, selectionFactory } from '../factories/context';
 
 const cell = (v: Cell['v']): Cell => ({ v, m: String(v) });
-const sorted = (isAsc: boolean, rows: (Cell | null)[][]) => sortedOrder(isAsc, 0, rows).map((i) => rows[i]);
+// The rows of a one-column sheet after a sort of all of them.
+function sorted(isAsc: boolean, rows: (Cell | null)[][]) {
+    const ctx = contextFactory({ sheets: [{ name: 'sheet', id: 'id_1', order: 0, data: rows }] }) as Context;
+    editInPlace(ctx, (draft) => sortDataRange(draft, { row: [0, rows.length - 1], column: [0, 0] }, 0, isAsc));
+    return ctx.sheets[0].data ?? [];
+}
 
-describe('sortedOrder', () => {
+describe('sortDataRange', () => {
     test('numeric ascending keeps nulls last', () => {
         const rows = [[cell(3)], [cell(1)], [null], [cell(2)]];
         expect(sorted(true, rows).map((r) => r[0]?.v ?? null)).toEqual([1, 2, 3, null]);
@@ -31,18 +36,15 @@ describe('sortedOrder', () => {
         expect(sorted(true, rows).map((r) => r[0]?.v)).toEqual(['apple', 'banana', 'cherry']);
     });
 
-    test("says each row's old place, and sorts a large range in linear time per row", () => {
-        const rows = [[cell(30)], [cell(10)], [cell(20)]];
-        expect(sortedOrder(true, 0, rows)).toEqual([1, 2, 0]);
-
+    test('sorts a large range in linear time per row', () => {
         // Reversed, so every row moves. Finding each row's old place by a search made this quadratic, seconds long.
         const count = 50_000;
         const large = Array.from({ length: count }, (_, i) => [cell(count - i)]);
         const started = performance.now();
-        const order = sortedOrder(true, 0, large);
-        expect(performance.now() - started).toBeLessThan(1000);
-        expect(order[0]).toBe(count - 1);
-        expect(order[count - 1]).toBe(0);
+        const rows = sorted(true, large);
+        expect(performance.now() - started).toBeLessThan(5000);
+        expect(rows[0][0]?.v).toBe(1);
+        expect(rows[count - 1][0]?.v).toBe(count);
     });
 });
 

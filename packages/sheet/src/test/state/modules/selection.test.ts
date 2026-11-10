@@ -6,11 +6,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
 import { getRangetxt } from '../../../state/modules/cell';
-import { consumePendingCopy, copy, rangeValueToClipboard } from '../../../state/modules/clipboard';
+import { consumePendingCopy, copy } from '../../../state/modules/clipboard';
 import { moveHighlightRange, normalizeSelection } from '../../../state/modules/selection';
+import { copied } from '../factories/clipboard';
 import { contextFactory } from '../factories/context';
 
-describe('state/modules/selection — rangeValueToClipboard', () => {
+describe('state/modules/selection — what a copy puts on the clipboard', () => {
     function styledContext(fc: string) {
         const ctx = contextFactory() as Context;
         ctx.sheets[0].data = [[{ v: 'x', m: 'x', fc }, null, null, null]];
@@ -18,9 +19,7 @@ describe('state/modules/selection — rangeValueToClipboard', () => {
     }
 
     test('a style value cannot close its own attribute', () => {
-        const html = rangeValueToClipboard(styledContext('red" onload="alert(1)'), 'id_1', [
-            { row: [0, 0], column: [0, 0] },
-        ])?.html;
+        const html = copied(styledContext('red" onload="alert(1)'), [{ row: [0, 0], column: [0, 0] }])?.html;
         const styleValue = /<td[^>]*style="([^"]*)"/.exec(html ?? '')?.[1];
         expect(styleValue).toBeDefined();
         // What matters is that nothing escapes the quotes; the text left inside the
@@ -29,7 +28,7 @@ describe('state/modules/selection — rangeValueToClipboard', () => {
     });
 
     test('a plain colour still serialises as CSS', () => {
-        const html = rangeValueToClipboard(styledContext('#ff0000'), 'id_1', [{ row: [0, 0], column: [0, 0] }])?.html;
+        const html = copied(styledContext('#ff0000'), [{ row: [0, 0], column: [0, 0] }])?.html;
         expect(html).toContain('color:#ff0000;');
     });
 
@@ -49,7 +48,7 @@ describe('state/modules/selection — rangeValueToClipboard', () => {
                     columnlen: { 0: '50" onclick="alert(1)', 1: '60px;background:url(//tracker)' },
                 }),
             );
-            const html = rangeValueToClipboard(ctx, 'id_1', [{ row: [0, 0], column: [0, 1] }])?.html ?? '';
+            const html = copied(ctx, [{ row: [0, 0], column: [0, 1] }])?.html ?? '';
             expect(html).not.toMatch(/url|onmouseover|onclick/);
             expect(html).toContain('border-bottom:1px solid transparent;');
             expect(html).toContain('height:19px;');
@@ -65,7 +64,7 @@ describe('state/modules/selection — rangeValueToClipboard', () => {
             rowlen: { 0: 30 },
             columnlen: { 0: 50, 1: 60 },
         };
-        const html = rangeValueToClipboard(ctx, 'id_1', [{ row: [0, 0], column: [0, 1] }])?.html ?? '';
+        const html = copied(ctx, [{ row: [0, 0], column: [0, 1] }])?.html ?? '';
         expect(html).toContain('<colgroup width="50px"></colgroup><colgroup width="60px"></colgroup>');
         expect(html).toContain('rowspan="1" colspan="2"');
         expect(html).toContain('height:30px;');

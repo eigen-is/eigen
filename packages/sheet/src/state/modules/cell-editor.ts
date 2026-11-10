@@ -8,7 +8,7 @@ import { valueShowEs } from '../../engine/format';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import { getFormulaHtml, getInlineStringHTML } from './cell';
-import { createRangeHightlight } from './formula-range';
+import { createRangeHighlight } from './formula-range';
 import { isInlineStringCell, placeEditorCaret } from './inline-string';
 
 // `html` replaces the cell's text and must be markup we built or escaped. The bar gets it too; without it the bar already
@@ -37,7 +37,7 @@ function loadCellHtml(ctx: Context, r: number, c: number): string {
     if (isInlineStringCell(cell)) return getInlineStringHTML(r, c, flowdata);
     if (cell.f) {
         const formulaHtml = getFormulaHtml(r, c, flowdata) ?? '';
-        createRangeHightlight(ctx, formulaHtml);
+        createRangeHighlight(ctx, formulaHtml);
         return formulaHtml;
     }
     return escapeHtml(String(valueShowEs(r, c, flowdata) ?? ''));

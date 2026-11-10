@@ -5,11 +5,10 @@ import { produce } from 'immer';
 import type { Context } from '../../../state/context';
 import { autoSelectionFormula } from '../../../state/modules/autosum';
 import { updateCell } from '../../../state/modules/cell';
-import { warmFormulaGraph } from '../../../state/modules/formula-exec';
 import { replaceSearchMatch } from '../../../state/modules/search-replace';
 import { sortRange } from '../../../state/modules/sort';
 import { tab, tabEdit, tabUndo } from '../factories/collab';
-import { contextFactory, selectionFactory } from '../factories/context';
+import { contextFactory, heldGraph, selectionFactory } from '../factories/context';
 
 function withDependent(a1: number | string, selections = selectionFactory([0, 0], [0, 0], 0, 0)): Context {
     const ctx = contextFactory({
@@ -32,14 +31,14 @@ function withDependent(a1: number | string, selections = selectionFactory([0, 0]
             },
         ],
     }) as Context;
-    warmFormulaGraph(ctx);
+    heldGraph(ctx);
     return ctx;
 }
 
 describe('a recompute leaves nothing behind', () => {
     test('undoing a replace gives a dependent the old text back', () => {
         const t = tab(withDependent('foo'));
-        warmFormulaGraph(t.ctx);
+        heldGraph(t.ctx);
         tabEdit(t, (draft) => {
             replaceSearchMatch(
                 draft,

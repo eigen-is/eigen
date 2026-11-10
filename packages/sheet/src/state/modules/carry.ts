@@ -1,7 +1,7 @@
 // A carry lands a block of cells somewhere else with what belongs to them: borders, validation rules, merges and
-// conditional formats, each keyed by the source cell it came from. A cell whose source has none of these loses its own,
-// one cell at a time, as in Excel. A paste, a cut, a drag move, the format painter and a fill all land through
-// carryCells, and say what of a source cell, its link among it, lands through its land callback.
+// conditional formats, each keyed by the source cell it came from. A cell whose source has none of these loses its
+// own, one cell at a time, as in Excel. Paths such as a paste, a cut, a fill and the format painter land through
+// carryCells, and each one's callback says what of a source cell lands, its value and link included.
 
 import type { ConditionalFormatRule } from '@workspace/lib/sheets';
 import { coalescedRanges, compareValidationIds, rangesOverlap } from '@workspace/lib/sheets';
@@ -22,10 +22,8 @@ const FILTERED_MOVE_REFUSAL = 'Cannot cut or move rows a filter hides. Clear the
 
 type CarriedLines = { sheetId: string; rows: readonly number[]; columns: readonly number[] };
 
-// The rows and columns a copy, a move or the format painter carries, in order. Every row and column of the ranges comes
-// along, hidden ones too, as in Excel, except the rows an active filter hides, which stay out so the block closes up.
-// Ranges side by side share their rows, and ranges above each other share their columns. A merge can't close up, so one
-// that a filter's row straddles refuses the carry, with a notice, before anything is written.
+// The rows and columns a carry takes, in order: hidden ones too, as in Excel, except the rows an active filter hides,
+// so the block closes up. A merge can't close up, so one a filter's row straddles refuses the carry before any write.
 export function carriedLines(ctx: Context, sheetId: string, ranges: readonly SingleRange[]): CarriedLines | undefined {
     const sheet = getSheet(ctx, { id: sheetId });
     // A filter entry lists the rows it hides. A row the user has shown again since is not hidden any more.
@@ -73,9 +71,8 @@ export function movedLines(ctx: Context, sheetId: string, range: SingleRange): C
     return undefined;
 }
 
-// One place a carried block lands: its top-left cell, and how many of its rows and columns land there. The
-// format painter cuts its last tiles short at the edge of the selection, and a fill lands a tile either side of a hidden
-// line, each skipping the carried lines before it.
+// One place a carried block lands: its top-left cell, and how many of its rows and columns land there. A tile can
+// start past some carried lines, as a fill's does on either side of a hidden line.
 export type CarryTile = {
     row: number;
     column: number;
@@ -88,10 +85,8 @@ export type CarryTile = {
 // One cell a carry lands: the source cell, which land copies before it changes it, and where it lands and came from.
 type LandingCell = { source: Cell | null; r: number; c: number; sr: number; sc: number };
 
-// Lands the carried block on the current sheet once per tile: every cell with its border, validation rule, merge and
-// conditional format. land decides what of a source cell lands, so a copy can move a formula and the format
-// painter can keep the destination's value. The source is read before anything is written, so a tile over the source
-// reads the cells as they were. A cut then clears them.
+// Lands the carried block on the current sheet once per tile, each cell with its side tables. The source is read
+// before anything is written, so a tile over the source reads the cells as they were, and a cut then clears them.
 export function carryCells(
     ctx: Context,
     lines: CarriedLines,
@@ -172,8 +167,6 @@ export function carryCells(
                         merge[key] = { r, c, rs, cs };
                         anchors[`${sourceMc.r}_${sourceMc.c}`] = [r, c];
                     } else {
-                        // A paste reads the live cells, so a merge made since the copy can start outside the block.
-                        // Its cells land as plain ones.
                         const anchor = anchors[`${sourceMc.r}_${sourceMc.c}`];
                         if (anchor) cell = { mc: { r: anchor[0], c: anchor[1] } };
                         else {
@@ -316,9 +309,8 @@ export function moveCells(ctx: Context, lines: CarriedLines, range: SingleRange,
     );
 }
 
-// Where the cells of a range land in one tile: a range for each run of carried rows and columns it covers. A block
-// closed up over a filter's rows lands as one range too. Ranges copied out of the sheet's order can split one, and a
-// tile the format painter cut short takes only its first rows and columns.
+// Where the cells of a range land in one tile: a range for each run of carried rows and columns it covers, so a
+// block closed up over a filter's rows lands as one range.
 function landedRanges(range: SingleRange, lines: CarriedLines, tile: CarryTile): SingleRange[] {
     const { skipRows = 0, skipColumns = 0 } = tile;
     const rows = landedRuns(lines.rows.slice(skipRows, skipRows + tile.height), range.row, tile.row);

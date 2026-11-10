@@ -8,12 +8,13 @@ import numeral from 'numeral';
 import { cellValue } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell } from '../../engine/types';
-import type { Context, Selection } from '..';
-import { diff, getFlowdata, isdatetime, isRealNull, isRealNum } from '..';
 import { getSheet } from '../api/common';
-import type { FormulaCell } from '../types';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
+import type { FormulaCell, Selection } from '../types';
 import { snapshotContext } from './formula-cache';
 import { recomputeCells } from './refresh';
+import { diff, isdatetime, isRealNull, isRealNum } from './validation';
 
 // The menus' Ascending and Descending: the one selected range, by its first column.
 export function sortSelection(ctx: Context, isAsc: boolean) {
@@ -93,7 +94,7 @@ export function sortDataRange(
 }
 
 // The old place of each row in its sorted order by the column at `index`, empty cells last.
-export function sortedOrder(isAsc: boolean, index: number, data: readonly (Cell | null)[][]) {
+function sortedOrder(isAsc: boolean, index: number, data: readonly (Cell | null)[][]) {
     const ascending = (x: (Cell | null)[], y: (Cell | null)[]) => {
         const x1 = cellValue(x[index]);
         const y1 = cellValue(y[index]);

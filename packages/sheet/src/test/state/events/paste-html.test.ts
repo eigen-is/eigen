@@ -9,14 +9,9 @@ import type { Context } from '../../../state/context';
 import { handleCopy } from '../../../state/events/copy';
 import { handlePaste } from '../../../state/events/paste';
 import { normalizedCellAttr } from '../../../state/modules/cell';
-import {
-    COPY_ACTION_TABLE_MARKER,
-    consumePendingCopy,
-    copy,
-    rangeValueToClipboard,
-} from '../../../state/modules/clipboard';
+import { COPY_ACTION_TABLE_MARKER, consumePendingCopy, copy } from '../../../state/modules/clipboard';
 import { filterPatch } from '../../../state/utils';
-import { clipboardWith } from '../factories/clipboard';
+import { clipboardWith, copied } from '../factories/clipboard';
 import { syncablePaths } from '../factories/collab';
 import { contextFactory, editInPlace } from '../factories/context';
 import { pastedHtmlFactory } from '../factories/pasted-html';
@@ -680,7 +675,7 @@ describe('Copy HTML — numeric cells carry their full value', () => {
     function copiedHtml(cell: Cell): string {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][0] = cell;
-        return rangeValueToClipboard(ctx, 'id_1', [{ row: [0, 0], column: [0, 0] }])?.html ?? '';
+        return copied(ctx, [{ row: [0, 0], column: [0, 0] }])?.html ?? '';
     }
 
     it('a General number too long for General pastes back whole', () => {

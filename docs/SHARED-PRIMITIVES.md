@@ -5,13 +5,13 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2146 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2147 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (194)
+## Components (195)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -113,6 +113,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommentPanel` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-panel.tsx |
 | `CommentThread` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-thread.tsx |
 | `CreatedByMeta` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/created-by-meta.tsx |
+| `DeleteCommentDialog` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-lifecycle-dialogs.tsx |
 | `FilterSummary` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-filter-summary.tsx |
 | `MemberAvatar` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/member-avatar.tsx |
 | `MemberCommandList` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/member-command-list.tsx |
