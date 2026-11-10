@@ -1,5 +1,6 @@
 // What an organizer's removals owe the guests: dropping the last name on the list cancels their copy
-// just as dropping one of several does, and a cancelled occurrence says so in the notification centre.
+// just as dropping one of several does, a cancelled occurrence says so in the notification centre, and a deleted
+// series' CANCEL raises its SEQUENCE.
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { getHome } from '../../lib/home';
@@ -108,5 +109,45 @@ describe('Cancellations reaching the guest', () => {
         expect(cancelled.body).toContain('Occurrence Cancel Notice');
         // The instance that went, not the series: the tag the notification links through names its instant.
         expect(cancelled.tag).toBe(`calendar-invite:${series.id}:${Date.parse(`${TARGET}T09:00:00Z`)}`);
+    });
+
+    // RFC 5546 § 2.1.4: a CANCEL raises the SEQUENCE, and a deleted series has no file left to raise it in.
+    test("deleting a series mails a CANCEL above the series' last SEQUENCE", async () => {
+        const CAROL = 'carol.series-cancel@example.org';
+        const carol = { email: CAROL, name: 'Carol', status: 'pending', role: 'required' };
+        const series = await post({
+            title: 'Series Cancel Sequence',
+            startTime: SERIES_START,
+            endTime: SERIES_END,
+            allDay: false,
+            rrule: 'FREQ=WEEKLY;COUNT=4',
+            data: { attendees: [carol] },
+        });
+        await put(series.id, { startTime: `${TARGET}T09:00:00Z`, endTime: `${TARGET}T10:00:00Z` });
+        const stored = await assertJson<CalendarEvent>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${series.id}`,
+            ),
+        );
+
+        const mailer = await import('../../lib/mailer/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear();
+        try {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${series.id}`,
+                { method: 'DELETE' },
+            );
+            expect(res.status).toBe(200);
+            const cancel = await eventually(
+                async () => spy.mock.calls.map((call) => call[0]).find((m) => m.subject.startsWith('Canceled')),
+                'the CANCEL to reach Carol',
+            );
+            expect(cancel.icalEvent?.content).toContain(`\r\nSEQUENCE:${stored.sequence + 1}\r\n`);
+        } finally {
+            spy.mockRestore();
+        }
     });
 });

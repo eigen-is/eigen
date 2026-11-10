@@ -100,14 +100,17 @@ export async function propagateRsvp(
     });
 }
 
-// `attendees` is who held the event, because a cancelled occurrence is an EXDATE with no guest list of its own.
+// `attendees` is who held the event, because a cancelled occurrence is an EXDATE with no guest list of its own. A CANCEL
+// raises the SEQUENCE (RFC 5546 § 2.1.4): a date's exclusion stamp holds its raised number, and a deleted series has no
+// file left to hold one.
 export async function propagateCancellation(
     organizerHome: Home,
     user: User | undefined,
-    event: CalendarEvent,
+    cancelled: CalendarEvent,
     attendees: readonly Attendee[],
     series?: CalendarEvent,
 ): Promise<void> {
+    const event = series ? cancelled : { ...cancelled, sequence: cancelled.sequence + 1 };
     const occurrence = occurrenceRevision(event, series);
     const organizer = organizerOf(organizerHome, user);
     for (const attendee of attendees) {
