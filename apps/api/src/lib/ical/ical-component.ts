@@ -272,10 +272,9 @@ export function storedRevisions(resource: ICAL.Component): Map<string | null, Re
     return revisions;
 }
 
-// The RECURRENCE-ID the stored VEVENT of one occurrence names, as the organizer wrote it.
-export function recurrenceIdOf(resource: ICAL.Component, recurrenceKey: string | null): RecurrenceId | null {
-    const vevent = keyVEvents(resource).get(recurrenceKey);
-    return vevent ? readRecurrenceId(vevent) : null;
+// The RECURRENCE-ID each stored occurrence names, as the organizer wrote it, by its key; the master's under null.
+export function storedRecurrenceIds(resource: ICAL.Component): Map<string | null, RecurrenceId | null> {
+    return new Map([...keyVEvents(resource)].map(([key, vevent]) => [key, readRecurrenceId(vevent)]));
 }
 
 // The inbound-REQUEST rule matches a verified sender against this, so the imported address wins over the ORGANIZER the

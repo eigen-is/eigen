@@ -17,6 +17,7 @@ import {
     restampResource,
     serializeEventForImip,
     serializeResource,
+    storedRecurrenceIds,
     stripEigenStamps,
 } from '../../lib/ical';
 import { cpuClock } from '../cpu-time';
@@ -956,6 +957,47 @@ describe('round trip build → serialize → project', () => {
             'date-time',
             '2026-04-15T12:00:00',
         ]);
+    });
+});
+
+describe('storedRecurrenceIds', () => {
+    const date = (recurrenceId: string, start: string) => [
+        'BEGIN:VEVENT',
+        'UID:lone',
+        'DTSTAMP:20260101T000000Z',
+        `RECURRENCE-ID${recurrenceId}`,
+        `DTSTART${start}`,
+        'SUMMARY:One date',
+        'END:VEVENT',
+    ];
+
+    test('reads every occurrence of a file under its key, its RECURRENCE-ID as the organizer wrote it', () => {
+        const resource = parseResource(
+            vcal(
+                date(';TZID=America/New_York:20260505T170000', ';TZID=Europe/Amsterdam:20260505T230000'),
+                date(':20260507T090000Z', ';TZID=Pacific/Auckland:20260507T210000'),
+                date(':20260509T090000', ':20260509T090000'),
+            ),
+        );
+
+        expect(storedRecurrenceIds(resource)).toEqual(
+            new Map([
+                ['2026-05-05', { instant: new Date('2026-05-05T21:00:00Z'), timezone: 'America/New_York' }],
+                ['2026-05-07', { instant: new Date('2026-05-07T09:00:00Z'), timezone: null }],
+                ['2026-05-09', null],
+            ]),
+        );
+    });
+
+    test('a series holds its master under null, which names no occurrence', () => {
+        const resource = buildResource([MASTER, OVERRIDE]);
+
+        expect(storedRecurrenceIds(resource)).toEqual(
+            new Map([
+                [null, null],
+                ['2026-04-22', { instant: new Date('2026-04-22T10:00:00Z'), timezone: 'Europe/Amsterdam' }],
+            ]),
+        );
     });
 });
 

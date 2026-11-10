@@ -19,9 +19,9 @@ import {
     guestCutOf,
     isNewerRevision,
     patchEvent,
-    recurrenceIdOf,
     stampInvitationLink,
     storedOrganizerAddress,
+    storedRecurrenceIds,
     storedRevisions,
 } from '../ical';
 import type { EventPatch, Revision, VEventEdit } from '../ical/ical-component';
@@ -193,7 +193,8 @@ export async function rsvp(
         // Only the stored file names the occurrence as the organizer did: a copy of one date has no series to ask.
         const key = recurrenceDate ?? event.recurrenceDate;
         const resource = events.resourceOf(calendar, eventId);
-        const stored = key && resource ? recurrenceIdOf(events.storedComponent(calendar, resource), key) : null;
+        const stored =
+            key && resource ? storedRecurrenceIds(events.storedComponent(calendar, resource)).get(key) : null;
         const answered = { ...event, recurrenceId: stored };
         const mail = composeRsvpReply(answered, user.email, user.name ?? user.email, status, recurrenceDate);
         sendMail(mail).catch(console.error);
@@ -293,9 +294,10 @@ async function decideInboundRequest(
     // A copy of single dates gives way to the whole series once the organizer invites this Home to all of it, each
     // date under the key that series gives it.
     if (series.recurrenceDate && master) {
+        const recurrenceIds = storedRecurrenceIds(component);
         const dates = new Map(
             [...held.values()].map((copy) => {
-                const recurrenceId = recurrenceIdOf(component, copy.recurrenceDate);
+                const recurrenceId = recurrenceIds.get(copy.recurrenceDate) ?? null;
                 return [occurrenceKey({ recurrenceDate: copy.recurrenceDate, recurrenceId }, master), copy];
             }),
         );
