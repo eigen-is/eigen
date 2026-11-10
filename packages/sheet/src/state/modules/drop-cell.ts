@@ -5,19 +5,16 @@
 
 import dayjs from 'dayjs';
 import { cloneDeep } from 'es-toolkit/compat';
-import { createArrayResolver } from '../../engine/cell-resolver';
-import { numberDisplay, parseCellInput, update } from '../../engine/format';
+import { numberDisplay, parseCellInput, update, writeFormulaResult } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, SingleRange } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
-import type { Rect } from '../types';
+import type { FormulaCell, Rect } from '../types';
 import { carryCells } from './carry';
-import { setCellValue } from './cell';
 import { snapshotContext } from './formula-cache';
-import { computeFormula } from './formula-exec';
 import { colLocation, rowLocation, sheetPoint } from './location';
-import { jfrefreshgrid } from './refresh';
+import { cellsIn, recomputeCells } from './refresh';
 import { normalizeSelection } from './selection';
 
 type FillDirection = 'down' | 'up' | 'left' | 'right';
@@ -133,7 +130,7 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, cellArea: HTMLD
 
     ctx.selections = normalizeSelection(ctx, [{ row: [firstRow, lastRow], column: [firstCol, lastCol] }]);
 
-    updateDropCell(ctx, copyRange, applyRange, direction);
+    fillRange(ctx, copyRange, applyRange, direction);
 
     for (const selectedMoveEle of container.querySelectorAll('.sheet-cell-selected-move')) {
         if (!(selectedMoveEle instanceof HTMLElement)) continue;
@@ -150,27 +147,23 @@ export function fillFromEdge(ctx: Context, range: SingleRange, direction: 'down'
     const copyRange = down ? { row: [start, start], column } : { row, column: [start, start] };
     const applyRange = down ? { row: [start + 1, end], column } : { row, column: [start + 1, end] };
     if (fillTouchesMerge(ctx, copyRange, applyRange)) return;
-    updateDropCell(ctx, copyRange, applyRange, direction, false);
+    fillRange(ctx, copyRange, applyRange, direction, false);
 }
 
-export function updateDropCell(
+function fillRange(
     ctx: Context,
     copyRange: SingleRange,
     applyRange: SingleRange,
     direction: FillDirection,
     dragged = true,
 ) {
-    const d = getFlowdata(ctx);
     // A read through an immer draft makes a child draft of each cell, so the series read a plain view.
     const before = getFlowdata(snapshotContext(ctx));
-    if (ctx.allowEdit === false || d == null || before == null) return;
+    if (ctx.allowEdit === false || before == null) return;
 
     const config = getSheetConfig(ctx);
     const hiddenRows = new Set(Object.keys(config?.rowhidden ?? {}));
     const hiddenCols = new Set(Object.keys(config?.colhidden ?? {}));
-
-    // One live resolver per fill, not a snapshot per filled formula cell.
-    const resolver = createArrayResolver(ctx.sheets);
 
     const vertical = direction === 'down' || direction === 'up';
     const backward = direction === 'up' || direction === 'left';
@@ -216,17 +209,18 @@ export function updateDropCell(
         })),
     );
 
+    // A filled formula is a new one, so it lands with no value, as a paste's does, and the recompute gives it one.
+    const landed: FormulaCell[] = [];
     carryCells(ctx, lines, tiles, ({ r, c, sr, sc }) => {
         const cell = series.get(vertical ? c : r)?.[stepAt(vertical ? r : c)] ?? null;
         if (cell?.f == null) return cell;
-        // setCellValue types the result in place, so the cell lands first.
-        d[r][c] = cell;
-        const [value, f] = computeFormula(ctx, `=${functionCopy(cell.f, r - sr, c - sc)}`, { resolver });
-        setCellValue(ctx, r, c, d, { v: value, f });
-        return d[r][c];
+        cell.f = `=${functionCopy(cell.f, r - sr, c - sc)}`;
+        writeFormulaResult(cell, undefined);
+        landed.push({ r, c, id: ctx.currentSheetId });
+        return cell;
     });
 
-    jfrefreshgrid(ctx);
+    recomputeCells(ctx, cellsIn(applyRange, ctx.currentSheetId), landed);
 }
 
 // The runs of a span that no hidden line interrupts.

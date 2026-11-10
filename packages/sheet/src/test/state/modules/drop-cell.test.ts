@@ -3,41 +3,23 @@
 // in ALL four directions, and the display string renders through that format's
 // mask instead of an auto-detected one.
 //
-// Entry point: autoFillCell below, which selects the whole range and calls updateDropCell
-// as onDropCellSelectEnd does; results land in ctx.sheets[0].data (getFlowdata identity).
+// Entry point: dragFill, which drags the fill handle as a person does; results land in
+// ctx.sheets[0].data (getFlowdata identity).
 
 import { describe, expect, it } from 'bun:test';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import { parseCellInput } from '../../../engine/format';
 import type { Context } from '../../../state/context';
 import { setCellValue } from '../../../state/modules/cell';
-import { fillFromEdge, onDropCellSelectEnd, updateDropCell } from '../../../state/modules/drop-cell';
+import { fillFromEdge, onDropCellSelectEnd } from '../../../state/modules/drop-cell';
 import { execFunctionGroup, warmFormulaGraph } from '../../../state/modules/formula-exec';
-import { normalizeSelection } from '../../../state/modules/selection';
 import { validationAt } from '../../../state/modules/validation-rules';
 import type { Cell, DataValidationRule, SingleRange } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
 import { contextFactory } from '../factories/context';
+import { dragFill } from '../factories/grid-dom';
 
 enablePatches();
-
-function autoFillCell(
-    ctx: Context,
-    copyRange: SingleRange,
-    applyRange: SingleRange,
-    direction: 'up' | 'down' | 'left' | 'right',
-) {
-    ctx.selections = normalizeSelection(ctx, [
-        {
-            row: [Math.min(copyRange.row[0], applyRange.row[0]), Math.max(copyRange.row[1], applyRange.row[1])],
-            column: [
-                Math.min(copyRange.column[0], applyRange.column[0]),
-                Math.max(copyRange.column[1], applyRange.column[1]),
-            ],
-        },
-    ]);
-    updateDropCell(ctx, copyRange, applyRange, direction);
-}
 
 function grid(rows: number, cols: number): (Cell | null)[][] {
     return Array.from({ length: rows }, () => Array.from({ length: cols }, () => null));
@@ -66,7 +48,7 @@ describe('drag-fill keeps the number format in every direction', () => {
             d[0][0] = maskedFormula();
         }, src);
 
-        autoFillCell(ctx, src, { row: [0, 0], column: [1, 1] }, 'right');
+        dragFill(ctx, src, { row: [0, 0], column: [1, 1] }, 'right');
 
         const filled = ctx.sheets[0].data![0][1]!;
         expect(filled.ct?.fa).toBe('##0.00');
@@ -79,7 +61,7 @@ describe('drag-fill keeps the number format in every direction', () => {
             d[0][0] = maskedFormula();
         }, src);
 
-        autoFillCell(ctx, src, { row: [1, 1], column: [0, 0] }, 'down');
+        dragFill(ctx, src, { row: [1, 1], column: [0, 0] }, 'down');
 
         const filled = ctx.sheets[0].data![1][0]!;
         expect(filled.ct?.fa).toBe('##0.00');
@@ -92,7 +74,7 @@ describe('drag-fill keeps the number format in every direction', () => {
             d[2][2] = maskedFormula();
         }, src);
 
-        autoFillCell(ctx, src, { row: [1, 1], column: [2, 2] }, 'up');
+        dragFill(ctx, src, { row: [1, 1], column: [2, 2] }, 'up');
 
         const filled = ctx.sheets[0].data![1][2]!;
         expect(filled.ct?.fa).toBe('##0.00');
@@ -105,7 +87,7 @@ describe('drag-fill keeps the number format in every direction', () => {
             d[2][2] = maskedFormula();
         }, src);
 
-        autoFillCell(ctx, src, { row: [2, 2], column: [1, 1] }, 'left');
+        dragFill(ctx, src, { row: [2, 2], column: [1, 1] }, 'left');
 
         const filled = ctx.sheets[0].data![2][1]!;
         expect(filled.ct?.fa).toBe('##0.00');
@@ -118,7 +100,7 @@ describe('drag-fill keeps the number format in every direction', () => {
             d[0][0] = { f: '=5/2', v: 2.5, m: '2.5', ct: { fa: 'General', t: 'n' } };
         }, src);
 
-        autoFillCell(ctx, src, { row: [1, 1], column: [0, 0] }, 'down');
+        dragFill(ctx, src, { row: [1, 1], column: [0, 0] }, 'down');
 
         const filled = ctx.sheets[0].data![1][0]!;
         expect(filled.ct?.fa).toBe('General');
@@ -126,7 +108,7 @@ describe('drag-fill keeps the number format in every direction', () => {
     });
 });
 
-// The fill also carries the source cell's borders. updateDropCell built those entries on a
+// The fill also carries the source cell's borders. The fill once built those entries on a
 // cloneDeep of the config and dropped the clone on the floor, so dragging a bordered cell
 // produced no border at all. Driven through produceWithPatches so a write that never lands
 // on the sheet shows up as a missing entry rather than an aliased one.
@@ -145,7 +127,7 @@ describe('drag-fill carries the source cell borders', () => {
 
     it('lands the carried border on the sheet config', () => {
         const [filled] = produceWithPatches(borderedContext(), (ctx: Context) => {
-            autoFillCell(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 1], column: [0, 0] }, 'down');
+            dragFill(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 1], column: [0, 0] }, 'down');
         });
 
         expect(filled.sheets[0].config!.borderInfo).toEqual({ '0_0': sourceBorder, '1_0': sourceBorder });
@@ -159,7 +141,7 @@ describe('drag-fill carries the source cell borders', () => {
         }, src);
         ctx.sheets[0].config = { rowhidden: { 1: 0 }, borderInfo: { '1_0': sourceBorder } };
         const [filled] = produceWithPatches(ctx, (draft: Context) => {
-            autoFillCell(draft, src, { row: [2, 3], column: [0, 0] }, 'down');
+            dragFill(draft, src, { row: [2, 3], column: [0, 0] }, 'down');
         });
 
         expect(filled.sheets[0].data![3][0]?.v).toBe('b');
@@ -173,14 +155,14 @@ describe('drag-fill carries the source cell borders', () => {
         }, src);
         ctx.sheets[0].config = { borderInfo: { '1_0': sourceBorder } };
         const [filled] = produceWithPatches(ctx, (draft: Context) => {
-            autoFillCell(draft, { row: [0, 0], column: [0, 0] }, { row: [1, 1], column: [0, 0] }, 'down');
+            dragFill(draft, { row: [0, 0], column: [0, 0] }, { row: [1, 1], column: [0, 0] }, 'down');
         });
 
         expect(filled.sheets[0].config!.borderInfo).toEqual({});
     });
 });
 
-// Validation rules ride along with the fill in Excel and Google Sheets. updateDropCell
+// Validation rules ride along with the fill in Excel and Google Sheets. The fill once
 // carried them on a cloneDeep of the sheet's rules and never wrote the clone
 // back, so a dragged cell arrived with no rule — the same dead-clone shape the borders
 // above had. Source and apply ranges are disjoint by construction (onDropCellSelectEnd
@@ -208,7 +190,7 @@ describe('drag-fill carries the source cell data validation', () => {
 
     it('lands the rule on every filled cell, joined to the range it repeats', () => {
         const [filled] = produceWithPatches(verifiedContext(), (ctx: Context) => {
-            autoFillCell(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 2], column: [0, 0] }, 'down');
+            dragFill(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 2], column: [0, 0] }, 'down');
         });
 
         expect(filled.sheets[0].dataValidations).toEqual({ v: { ranges: [{ row: [0, 2], column: [0, 0] }], rule } });
@@ -217,7 +199,7 @@ describe('drag-fill carries the source cell data validation', () => {
     it('and the patch that survives filterPatch carries it, so peers and undo see it', () => {
         const base = verifiedContext();
         const [, patches] = produceWithPatches(base, (ctx: Context) => {
-            autoFillCell(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 1], column: [0, 0] }, 'down');
+            dragFill(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 1], column: [0, 0] }, 'down');
         });
 
         const synced = applyPatches(base, filterPatch(patches));
@@ -242,7 +224,7 @@ describe('drag-fill carries the source cell data validation', () => {
         };
         const started = performance.now();
         const [filled] = produceWithPatches(ctx, (draft: Context) => {
-            autoFillCell(draft, { row: [0, 0], column: [0, 0] }, { row: [1, rows - 1], column: [0, 0] }, 'down');
+            dragFill(draft, { row: [0, 0], column: [0, 0] }, { row: [1, rows - 1], column: [0, 0] }, 'down');
         });
         expect(performance.now() - started).toBeLessThan(5000);
         expect(filled.sheets[0].dataValidations?.v.ranges).toEqual([{ row: [0, rows - 1], column: [0, 0] }]);
@@ -256,7 +238,7 @@ describe('drag-fill carries the source cell data validation', () => {
             own: { ranges: [{ row: [2, 5], column: [0, 1] }], rule: other },
         };
         const [filled] = produceWithPatches(ctx, (draft: Context) => {
-            autoFillCell(draft, { row: [0, 1], column: [0, 1] }, { row: [2, 5], column: [0, 1] }, 'down');
+            dragFill(draft, { row: [0, 1], column: [0, 1] }, { row: [2, 5], column: [0, 1] }, 'down');
         });
         const rules = filled.sheets[0].dataValidations;
         for (let r = 2; r <= 5; r += 1) {
@@ -288,7 +270,7 @@ describe('drag-fill shifts a formula block by the distance to its source cell', 
                 d[r][c] = cell;
             }
         }, src);
-        autoFillCell(ctx, src, apply, direction);
+        dragFill(ctx, src, apply, direction);
         return ctx.sheets[0].data!;
     }
 
@@ -409,7 +391,7 @@ describe('a filled formula', () => {
             d[0][1] = { f: '=TEXT(A1,"000")', v: '007', m: '007', ct: { fa: 'General', t: 'g' } };
         }, src);
 
-        autoFillCell(ctx, src, { row: [1, 1], column: [1, 1] }, 'down');
+        dragFill(ctx, src, { row: [1, 1], column: [1, 1] }, 'down');
 
         const filled = ctx.sheets[0].data![1][1]!;
         expect([filled.v, filled.m]).toEqual(['008', '008']);
@@ -421,7 +403,7 @@ describe('a filled formula', () => {
             d[0][1] = { f: '=FILTER(A1,1)', v: 111, m: '111' };
         }, src);
 
-        autoFillCell(ctx, src, { row: [1, 1], column: [1, 1] }, 'down');
+        dragFill(ctx, src, { row: [1, 1], column: [1, 1] }, 'down');
 
         expect(ctx.sheets[0].data![0][1]?.v).toBe(111);
         expect(ctx.sheets[0].data![1][1]?.v).toBe('#NAME?');
@@ -435,7 +417,7 @@ describe('a filled formula', () => {
         }, src);
         warmFormulaGraph(ctx);
 
-        autoFillCell(ctx, src, { row: [1, 2], column: [1, 1] }, 'down');
+        dragFill(ctx, src, { row: [1, 2], column: [1, 1] }, 'down');
         setCellValue(ctx, 2, 0, ctx.sheets[0].data, 10);
         execFunctionGroup(ctx, [{ r: 2, c: 0, id: 'id_1' }]);
 
@@ -473,12 +455,7 @@ describe('a fill counts on from what its source holds', () => {
             along(first, last),
         );
         hide?.(ctx);
-        autoFillCell(
-            ctx,
-            along(first, last),
-            backward ? along(0, first - 1) : along(last + 1, last + count),
-            direction,
-        );
+        dragFill(ctx, along(first, last), backward ? along(0, first - 1) : along(last + 1, last + count), direction);
         return Array.from({ length: count }, (_, i) => {
             const at = backward ? first - 1 - i : last + 1 + i;
             return vertical ? ctx.sheets[0].data?.[at][0] : ctx.sheets[0].data?.[0][at];
@@ -690,7 +667,7 @@ describe('a fill counts on from what its source holds', () => {
             d[6][0] = { f: '=B7', v: 0, m: '0', ct: { fa: 'General', t: 'n' } };
             d[7][0] = number(5);
         }, src);
-        autoFillCell(ctx, src, { row: [4, 5], column: [0, 0] }, 'up');
+        dragFill(ctx, src, { row: [4, 5], column: [0, 0] }, 'up');
         const d = ctx.sheets[0].data;
         expect(d?.[5][0]?.v).toBe(5);
         expect(d?.[4][0]?.f).toBe('=B5');
@@ -737,7 +714,7 @@ describe('a fill counts on from what its source holds', () => {
             d[1][1] = number(20);
         }, src);
         ctx.sheets[0].config = { colhidden: { 0: 0 } };
-        autoFillCell(ctx, src, { row: [2, 3], column: [0, 1] }, 'down');
+        dragFill(ctx, src, { row: [2, 3], column: [0, 1] }, 'down');
         const d = ctx.sheets[0].data;
         expect([d?.[2][0], d?.[3][0]]).toEqual([null, null]);
         expect([d?.[2][1]?.v, d?.[3][1]?.v]).toEqual([30, 40]);
@@ -751,7 +728,7 @@ describe('a fill counts on from what its source holds', () => {
             d[0][1] = text('Item 5');
             d[1][1] = text('Item 10');
         }, src);
-        autoFillCell(ctx, src, { row: [2, 3], column: [0, 1] }, 'down');
+        dragFill(ctx, src, { row: [2, 3], column: [0, 1] }, 'down');
         const d = ctx.sheets[0].data;
         expect([d?.[2][0]?.m, d?.[3][0]?.m, d?.[2][1]?.m, d?.[3][1]?.m]).toEqual(['3', '4', 'Item 15', 'Item 20']);
     });

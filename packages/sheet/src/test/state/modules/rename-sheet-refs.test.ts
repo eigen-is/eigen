@@ -12,7 +12,7 @@ const { setCellValue } = await import('../../../state/modules/cell');
 const { execFunctionGroup, getcellrange, warmFormulaGraph } = await import('../../../state/modules/formula-exec');
 const { insertRowCol } = await import('../../../state/modules/rowcol');
 const { editSheetName } = await import('../../../state/modules/sheet');
-const { updateDropCell } = await import('../../../state/modules/drop-cell');
+const { dragFill } = await import('../factories/grid-dom');
 const { saveHyperlink } = await import('../../../state/modules/hyperlink');
 const { dataToCelldata } = await import('../../../engine/celldata');
 const { join, tab, tabEdit, tabReceive, tabRedo, tabUndo } = await import('../factories/collab');
@@ -468,8 +468,7 @@ describe('a rename after a fill down from a linked cell', () => {
         const base = t.ctx;
         const link = tabEdit(t, (ctx) => saveHyperlink(ctx, 0, 0, 'go', 'webpage', 'https://example.com'));
         const fill = tabEdit(t, (ctx) => {
-            ctx.selections = [{ row: [0, 1], column: [0, 0], row_focus: 0, column_focus: 0 }];
-            updateDropCell(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 1], column: [0, 0] }, 'down');
+            dragFill(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 1], column: [0, 0] }, 'down');
         });
         return { t, base, log: [link, fill] };
     }
