@@ -135,7 +135,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
             const data = { ...event.data, attendees: guests.length > 0 ? guests : undefined };
             return Object.values(data).some((v) => v !== undefined) ? data : null;
         };
-        // A date stores a guest list only when the user changed it, so a guest the series gains reaches it too.
+        // "This event" keeps the list a date already holds, and gives one to a date only when the user changed it.
         const dateGuests = typed.attendees ? attendees : isOverride ? (event.data?.attendees ?? []) : [];
         const timezone = allDay ? null : (event.timezone ?? viewerTimeZone());
         const edited = {
