@@ -47,7 +47,7 @@ export function ancestorIds(...pathIds: string[]): SQL {
     `;
 }
 
-// Every path below parentId, each one after its folder, trashed or not. A query adds it as `id IN (…)`, so
+// Every path below parentId, trashed or not. A query adds it as `id IN (…)`, so
 // one statement reaches a whole subtree, and SQLite's cap on a statement's variables never applies.
 export function descendantIds(parentId: string): SQL {
     return sql`

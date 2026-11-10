@@ -399,7 +399,6 @@ export class Mount {
         }
     }
 
-    // Each one after its folder, so a walk closes a document before the databases inside it.
     public collectDescendantIds(parentId: string): string[] {
         return this.db.all<{ id: string }>(descendantIds(parentId)).map((row) => row.id);
     }

@@ -113,7 +113,8 @@ export async function deleteFailedCopy(
 ): Promise<void> {
     if (!(await holdsOnlyCopy(mount, item, createdIds))) return deletePath(drive, mount, item, user);
     const members = await drive.getEffectiveMembers(mount.id, item.id);
-    // A document opened in the half-built copy between this close and the delete is closed under its editor.
+    // A document opened in the half-built copy between this close and the delete loses its database under the
+    // editor, which logs until its socket's read check closes it. The copy goes for good either way.
     await closeOpenDocumentsUnder(drive, mount, item.id);
     await mount.deletePath(item.id);
     drive.emit(isContainerType(item.type) ? SSEventType.DRIVE_FOLDER_DELETED : SSEventType.DRIVE_FILE_DELETED, item, {
@@ -130,16 +131,15 @@ async function holdsOnlyCopy(mount: Mount, item: DrivePath, createdIds: Readonly
     return true;
 }
 
-// Closes every collab document and every database open at or below the path, such as a chat's data.db.
-// Parents come first, so a document closes before its databases. The trash or the delete goes on either
-// way, so a close that fails is only logged.
+// Closes every collab document open at or below the path, then every database still open there, such as a
+// chat's data.db. The trash or the delete goes on either way, so a close that fails is only logged.
 async function closeOpenDocumentsUnder(drive: Drive, mount: Mount, pathId: string): Promise<void> {
-    for (const id of [pathId, ...mount.collectDescendantIds(pathId)]) {
-        await drive
-            .closeCollabDocument(mount.id, id, { skipFinalSnapshot: true })
-            .then(() => mount.closeDatabase(id, { skipFinalSnapshot: true }))
-            .catch((error: unknown) => console.error(`Failed to close ${id}:`, error));
+    const ids = [pathId, ...mount.collectDescendantIds(pathId)];
+    const logFailure = (id: string) => (error: unknown) => console.error(`Failed to close ${id}:`, error);
+    for (const id of ids) {
+        await drive.closeCollabDocument(mount.id, id, { skipFinalSnapshot: true }).catch(logFailure(id));
     }
+    for (const id of ids) await mount.closeDatabase(id, { skipFinalSnapshot: true }).catch(logFailure(id));
 }
 
 // Read access comes from the whole chain of folders, so every path below the folder with an ACL of its

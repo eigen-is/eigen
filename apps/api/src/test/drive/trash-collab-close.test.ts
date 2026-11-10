@@ -52,11 +52,24 @@ for (const storage of ['local-id', 'local-fullnames'] as const) {
             const collab = await home.drive.getCollabDocument(mountId, doc.id);
             collab.doc.getMap('state').set('marker', 'edited');
 
-            const res = await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/path/${doc.id}`, {
-                method: 'DELETE',
-            });
-            expect(res.status).toBe(200);
+            const errors = spyOn(console, 'error');
+            let logged: unknown[][];
+            try {
+                const res = await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/path/${doc.id}`, {
+                    method: 'DELETE',
+                });
+                expect(res.status).toBe(200);
+                logged = errors.mock.calls;
+            } finally {
+                errors.mockRestore();
+            }
+            expect(logged).toEqual([]);
             expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
+
+            await home.drive.restorePath(mountId, doc.id, home.user);
+            const restored = await home.drive.getCollabDocument(mountId, doc.id);
+            expect(restored.doc.getMap('state').get('marker')).toBe('edited');
+            await home.drive.closeCollabDocument(mountId, doc.id);
         });
 
         // A socket that connects to the open document after the mark joins it and is closed with it. One that
