@@ -45,7 +45,7 @@ export const SERVER_RECALC_BUDGET = {
     // don't, because a whole column costs one slot but many formulas reading it make many links.
     maxDependencyEdges: 40_000_000,
     // The cells the evaluation of ranges reads, which bounds the recalc time.
-    maxCellsRead: 120_000_000,
+    maxCellsRead: 32_000_000,
 };
 
 // What a compaction's run keeps after its fold's deadline: the encode and the reply, and the part of the last batch no
