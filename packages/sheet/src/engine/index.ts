@@ -25,8 +25,6 @@ export {
     rangeWithout,
     withCfRanges,
 } from './conditional-format';
-// CF rule shapes (`ConditionalFormatRule` etc.) live in `@workspace/lib/sheets` and
-// are surfaced through `./types` re-exports below.
 export { createDefaultSheets, DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT, decodeOrDefault } from './defaults';
 export {
     booleanDisplay,

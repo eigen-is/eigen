@@ -47,9 +47,8 @@ const errors: Record<string, string> = {
 
 export const errorValues = Object.values(errors);
 
-// Look up the user-facing error string (e.g. "#VALUE!") for an error id. Accepts ids with
-// or without surrounding `#!?` so it works both as a lookup and as a normalizer for
-// already-formatted error strings; a known `ErrorType` always resolves.
+// The text a cell shows for an error id, such as `#VALUE!` for `VALUE`. It strips `#`, `!` and `?` first, so it also
+// normalizes an error's own text.
 export default function error(type: ErrorType): string;
 export default function error(type: string): string | null;
 export default function error(type: string): string | null {
@@ -61,25 +60,19 @@ export function valueIsError(value: string): boolean {
     return errorValues.includes(value);
 }
 
-// formulajs's trapping functions, such as IFERROR and ISERROR, recognize an error by identity with one of formulajs's
-// own error objects, not by `instanceof`. So an error our operators throw, such as `Error('DIV/0')` from a division,
-// becomes formulajs's object for it when the throw turns into a returned value. An error we don't recognize, a
-// JavaScript bug rather than a formula error, passes through unchanged.
+// formulajs's IFERROR and ISERROR recognize an error by identity with its own error objects, not by `instanceof`, so
+// an error our operators throw becomes formulajs's object for it. Any other, a bug rather than a formula error, passes.
 export function toFormulaError(e: Error): Error {
     const formatted = error(e.message);
     return formulaErrors.find((f) => f.message === formatted) ?? e;
 }
 
-// The #NAME? of a real Excel function the engine lacks, such as FILTER. It reads #NAME? wherever it surfaces, but it
-// is not formulajs's #NAME?, so no trapping function recognizes it: IFERROR's fallback or ISERROR's TRUE would read as
-// the answer Excel computed. `callFunction` hands it on through every function, unless it sits in a branch IF or
-// CHOOSE skips.
+// The #NAME? of a real Excel function the engine lacks, such as FILTER. No trapping function recognizes it, because
+// IFERROR's fallback or ISERROR's TRUE would read as the answer Excel computed.
 export const UNSUPPORTED_FUNCTION = Error('#NAME?');
 
-// An operator applied to an array, as in `A1:A3*B1:B3`, which the engine doesn't compute element by element. It reads
-// #CALC!, Excel's word for what its calculation engine doesn't support, where a scalar operator's answer would be a
-// silent wrong one. Like UNSUPPORTED_FUNCTION it is handed on through every function. A #CALC! a cell holds is another
-// object, so only this one tells a recompute that the formula's own text can't be evaluated.
+// An operator over an array, as in `A1:A3*B1:B3`, reads #CALC! where a scalar answer would be silently wrong. A #CALC!
+// a cell holds is another object, so only this one tells a recompute that the formula's own text can't be evaluated.
 export const UNSUPPORTED_ARRAY_OPERATION = Error('#CALC!');
 
 export function isUnsupported(value: unknown): boolean {

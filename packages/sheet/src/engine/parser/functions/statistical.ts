@@ -1,8 +1,7 @@
 // The engine's statistical functions over criteria and ranges: MAXIFS and MINIFS, which formulajs 2.9.3 lacks,
 // AVERAGEIF and AVERAGEIFS, whose formulajs versions answer NaN over a blank, the error handling of its COUNTIF family,
-// and AGGREGATE's options and references. formula-function.ts registers them.
-// An error cell matches a criterion by the text it shows, as `COUNTIF(A1:A9,"#N/A")` counts the #N/A cells in Excel,
-// and so does an error criterion, as `COUNTIF(A1:A9,NA())` does.
+// and AGGREGATE's options and references. The formula registry calls them by name. An error cell matches a criterion
+// by the text it shows, as `COUNTIF(A1:A9,"#N/A")` counts the #N/A cells in Excel, and so does an error criterion.
 
 // @ts-expect-error - No types available for @formulajs/formulajs
 import * as formulajs from '@formulajs/formulajs';
@@ -87,10 +86,8 @@ export function averageif(params: FunctionArg[]): FormulaOutput {
     return average(numbersMeeting(grid, [range, test]));
 }
 
-// AGGREGATE(function, options, ref1, ref2, …) for functions 1–13, AGGREGATE(function, options, array, k) for 14–19:
-// formulajs reads only ref1 and ignores the options. The references are read as one range, and options that ignore
-// errors drop them from it first. The ones that skip hidden rows or nested subtotals ignore nothing more, because the
-// engine knows neither.
+// formulajs reads only ref1 and ignores the options, so the references are read as one range, its errors dropped when
+// the options say so. The engine knows no hidden rows or nested subtotals, so options that skip those skip nothing.
 export function aggregate(params: FormulaArg[]): FormulaOutput {
     const [fn, options, ...rest] = params;
     const [refs, k] = Number(fn) >= 14 ? [rest.slice(0, 1), rest[1]] : [rest, undefined];

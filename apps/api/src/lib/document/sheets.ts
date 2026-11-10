@@ -70,9 +70,8 @@ export function readSheetsFromDoc(
     }
 }
 
-// A compaction in the transform process: it replays the log over the snapshot and encodes the result as an import does.
-// The batches come as JSON text, which crosses to the process much faster than objects. A recompute past the budget
-// fails it, since a browser computes values the fold would store stale, so the log stays and every tab recomputes.
+// The batches come as JSON text, which crosses to the transform process much faster than objects. A recompute past
+// the budget fails the fold, which would store values a browser computes differently, so the log stays.
 export function compactSheetsSnapshot(
     snapshotJson: string | null,
     batchesJson: string,

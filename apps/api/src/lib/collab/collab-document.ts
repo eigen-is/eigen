@@ -35,8 +35,7 @@ import { DbProvider } from './db-provider';
 export const MESSAGE_SYNC = 0;
 export const MESSAGE_AWARENESS = 1;
 
-// A y-websocket client owns one awareness client id per document, and a tab that reconnects opens a
-// new socket with a new id. So 8 ids per socket tolerate a client that changes its id a few times.
+// A tab that reconnects opens a new socket with a new awareness client id, so 8 ids per socket tolerate a few changes.
 // The cap stops a flood that would grow the map every peer receives.
 const MAX_AWARENESS_CLIENT_IDS = 8;
 // A real awareness state is a name, a color, a user id and a cursor. That is a few hundred bytes, or a
@@ -356,9 +355,8 @@ export class CollabDocument {
             this.compaction = new AbortController();
             // It resolves whatever the run's outcome, with null when there is no snapshot to swap in.
             const compacted = await compactSheets(this.path, this.doc, this.compaction.signal);
-            // The swap deletes the folded batches, so a result whose batches still open the log first gets a version
-            // that keeps them. The version waits for the container lock while this document holds data.db. That is
-            // safe: the hold takes no place in the slot chain, and every closer of a live document destructs it first.
+            // The swap deletes the folded batches, so a version keeps them first. It waits for the container lock while
+            // this holds data.db, which is safe: the hold is outside the slot chain, and every closer destructs it first.
             let saved = false;
             if (
                 compacted !== null &&
