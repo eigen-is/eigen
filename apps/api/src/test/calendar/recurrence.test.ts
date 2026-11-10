@@ -5,7 +5,7 @@ import { describe, expect, test } from 'bun:test';
 import { localToUtc, truncateRRule, utcToLocal } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
-import { constrainRRule, expandRecurrence, lastKeptDate } from '../../lib/calendar/recurrence';
+import { constrainRRule, expandRecurrence } from '../../lib/calendar/recurrence';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
 import { computeOccurrenceTimes } from '../../lib/ical/wall-clock';
 
@@ -172,14 +172,6 @@ describe('expandRecurrence', () => {
     });
 });
 
-describe('lastKeptDate', () => {
-    test('a UTC UNTIL keeps the date its instant falls on in the series zone', () => {
-        expect(lastKeptDate('FREQ=DAILY;UNTIL=20260310T035959Z', 'America/New_York')).toBe('2026-03-09');
-        expect(lastKeptDate('FREQ=DAILY;UNTIL=20260309T150000Z', 'Asia/Tokyo')).toBe('2026-03-10');
-        expect(lastKeptDate('FREQ=DAILY;UNTIL=20260309', null)).toBe('2026-03-09');
-    });
-});
-
 describe('truncateRRule', () => {
     // Apple and Thunderbird read the UNTIL of a zoned series as an instant, so it falls between the kept and the cut day.
     test.each([
@@ -222,9 +214,10 @@ describe('truncateRRule', () => {
     });
 });
 
-// The organizer's series starts on Monday 2 March 2026 at 09:00 New York, and the guest cut it at 10 March.
+// The organizer's series starts on Monday 2 March 2026 at 09:00 New York, and the guest cut it from 10 March on.
 describe('constrainRRule', () => {
-    const CUT = 'FREQ=DAILY;UNTIL=20260310T035959Z';
+    const CUT = '2026-03-10';
+    const AT_CUT = 'FREQ=DAILY;UNTIL=20260310T035959Z';
     const organizer = (rrule: string): ParsedEvent => ({
         uid: 'constrained@example.com',
         title: 'Standup',
@@ -242,21 +235,51 @@ describe('constrainRRule', () => {
         recurrenceInstant: null,
         data: null,
     });
+    const allDay = (rrule: string): ParsedEvent => ({
+        ...organizer(rrule),
+        startTime: new Date('2026-03-02T00:00:00Z'),
+        endTime: new Date('2026-03-03T00:00:00Z'),
+        allDay: true,
+        timezone: null,
+    });
 
     test.each([
-        ['an endless rule', 'FREQ=DAILY', CUT],
-        ['a COUNT past the cut', 'FREQ=DAILY;COUNT=20', CUT],
-        ['an UNTIL past the cut', 'FREQ=DAILY;UNTIL=20260320T035959Z', CUT],
-        ['a COUNT before the cut', 'FREQ=DAILY;COUNT=5', 'FREQ=DAILY;COUNT=5'],
+        ['an endless rule', 'FREQ=DAILY', AT_CUT],
+        ['an UNTIL past the cut', 'FREQ=DAILY;UNTIL=20260320T035959Z', AT_CUT],
+        ['an UNTIL on the cut day', 'FREQ=DAILY;UNTIL=20260310T140000Z', AT_CUT],
+        ['an UNTIL on the last kept day', 'FREQ=DAILY;UNTIL=20260310T035959Z', 'FREQ=DAILY;UNTIL=20260310T035959Z'],
         ['an UNTIL before the cut', 'FREQ=DAILY;UNTIL=20260305T035959Z', 'FREQ=DAILY;UNTIL=20260305T035959Z'],
-    ])("the guest's copy ends at whichever comes first: %s", (_case, rrule, kept) => {
+        ['a DATE UNTIL before the cut', 'FREQ=DAILY;UNTIL=20260305', 'FREQ=DAILY;UNTIL=20260305'],
+        ['a DATE UNTIL on the cut day', 'FREQ=DAILY;UNTIL=20260310', AT_CUT],
+        // Accepted: an organizer's COUNT is not walked to its last date, so the guest's cut replaces it.
+        ['a COUNT', 'FREQ=DAILY;COUNT=5', AT_CUT],
+    ])('a timed copy ends at whichever comes first: %s', (_case, rrule, kept) => {
         expect(constrainRRule(organizer(rrule), CUT)).toBe(kept);
     });
 
-    test("a longer rule takes the guest's UNTIL as the guest's rule spells it", () => {
-        const weekly = { ...organizer('FREQ=WEEKLY;COUNT=20;BYDAY=MO'), timezone: null };
-        expect(constrainRRule(weekly, 'FREQ=WEEKLY;BYDAY=MO;UNTIL=20260309')).toBe(
-            'FREQ=WEEKLY;BYDAY=MO;UNTIL=20260309',
+    test.each([
+        ['an endless rule', 'FREQ=DAILY', 'FREQ=DAILY;UNTIL=20260309'],
+        ['a UTC UNTIL past the cut', 'FREQ=DAILY;UNTIL=20260320T000000Z', 'FREQ=DAILY;UNTIL=20260309'],
+        ['a DATE UNTIL on the last kept day', 'FREQ=DAILY;UNTIL=20260309', 'FREQ=DAILY;UNTIL=20260309'],
+        ['a DATE UNTIL before the cut', 'FREQ=DAILY;UNTIL=20260305', 'FREQ=DAILY;UNTIL=20260305'],
+    ])('an all-day copy ends at whichever comes first, as a DATE: %s', (_case, rrule, kept) => {
+        expect(constrainRRule(allDay(rrule), CUT)).toBe(kept);
+    });
+
+    test("a copy the guest never cut takes the organizer's rule as it is", () => {
+        expect(constrainRRule(organizer('FREQ=DAILY;UNTIL=20261231T045959Z'), null)).toBe(
+            'FREQ=DAILY;UNTIL=20261231T045959Z',
         );
+    });
+
+    test('a rule that never fires, from 1900, is cut without a walk', () => {
+        const never = {
+            ...organizer('FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30'),
+            startTime: new Date('1900-01-02T14:00:00Z'),
+        };
+        const startedAt = performance.now();
+
+        expect(constrainRRule(never, CUT)).toBe('FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30;UNTIL=20260310T035959Z');
+        expect(performance.now() - startedAt).toBeLessThan(100);
     });
 });

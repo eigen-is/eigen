@@ -49,6 +49,7 @@ iCalendar has no place for a row id, a creator, a color or an invitation link, s
 | `X-EIGEN-COLOR` | the per-event color |
 | `X-EIGEN-IMPORTED-ORGANIZER` | the organizer an imported file named |
 | `X-EIGEN-EXDATE` | beside each `EXDATE`: the exclusion's row id, SEQUENCE and message stamp |
+| `X-EIGEN-GUEST-CUT` | on a guest's copy: the first date their "delete this and following" removed ([§ An RSVP names its scope](#an-rsvp-names-its-scope)) |
 
 **An incoming stamp is never trusted.** `parseIcs` is the reader for bytes a stranger wrote, and its result type can't name an Eigen fact, so a forged one has nowhere to land. On a PUT, `restampResource` strips every Eigen property and parameter at every level, then copies the stamps back from the stored resource. It matches on UID plus recurrence key, never on the raw `RECURRENCE-ID` or `EXDATE` text, which clients rewrite between TZID, UTC and comma-joined forms. Only a resource nobody wrote before takes the caller's own stamps. Nothing that leaves the Home carries a stamp, except a CalDAV GET to the owner's own clients.
 
@@ -220,7 +221,11 @@ A copy without a rule has one occurrence, so `this` on it is `all`.
 
 An answer the organizer's Home records is announced as an event update, whether it came over the relay or by mail, so the organizer's open tabs show it.
 
-`constrainRRule` (`recurrence.ts`) keeps an organizer's later update from extending the rule past a guest's truncation, so "delete this and following" survives the next edit. The copy ends at whichever comes first: the organizer's rule stands unless it yields a date past the guest's `UNTIL`, whether it ends by `COUNT`, by `UNTIL` or not at all, so an organizer's earlier end is never stretched to the guest's cut. Finding that date walks the rule from its start to the cut, within the bounds of [§ Expansion is bounded](#expansion-is-bounded-because-it-walks-from-dtstart). The cut also drops the copy's moved and cancelled occurrences from that date on, and an update adds none back past the last date the rule keeps (`lastKeptDate`). A copy that is one occurrence of a series the guest doesn't hold answers for that occurrence: its RSVP names the organizer's `RECURRENCE-ID`, so it lands on the organizer's override that holds that occurrence's guests.
+A guest's "delete this and following" truncates their copy's rule and records the first date it removed as `X-EIGEN-GUEST-CUT` on the copy's master, so the organizer's next update can't bring those dates back. The line is what marks the cut as the guest's: an `UNTIL` on the copy may be the organizer's own, and an organizer who lengthens a series reaches every guest who never cut it. The cut also drops the copy's moved and cancelled occurrences from that date on, and an update adds none back.
+
+`constrainRRule` (`recurrence.ts`) holds an update to the cut by comparing days, never by walking the rule: a rule from 1900 that never fires walks to 9999 for seconds, inside the write lock. An organizer's `UNTIL` whose day in the series' wall clock falls before the cut stands. No end, a later `UNTIL` or a `COUNT` is cut at the cut by `truncateRRule`, in the incoming event's own form, so an all-day series gets a `DATE` `UNTIL`. A `COUNT` that ends before the cut is not walked to its last date, so the guest sees dates up to their cut that the organizer's series doesn't have, which is accepted.
+
+A copy that is one occurrence of a series the guest doesn't hold answers for that occurrence: its RSVP names the organizer's `RECURRENCE-ID`, so it lands on the organizer's override that holds that occurrence's guests.
 
 ## Every inbound REQUEST takes one locked decision
 

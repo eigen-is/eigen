@@ -574,15 +574,21 @@ describe('one REQUEST, one write', () => {
 // A guest's "delete this and following" cuts their copy's rule, and nothing of the series may outlive the cut.
 describe('a guest who removes this and following', () => {
     const SERIES = 'cut@external.com';
-    const series = (guest: string, title: string): ParsedEvent[] =>
+    const link = {
+        organizerEmail: ORG,
+        organizerEventId: SERIES,
+        organizerUserId: `external_${ORG}`,
+        createByUserId: `external_${ORG}`,
+    };
+    const series = (guest: string, title: string, rrule = 'FREQ=DAILY;COUNT=10', start = '20260504'): ParsedEvent[] =>
         parseIcs(
             vcal([
                 'BEGIN:VEVENT',
                 `UID:${SERIES}`,
                 `SUMMARY:${title}`,
-                'RRULE:FREQ=DAILY;COUNT=10',
-                'DTSTART:20260504T090000Z',
-                'DTEND:20260504T093000Z',
+                `RRULE:${rrule}`,
+                `DTSTART:${start}T090000Z`,
+                `DTEND:${start}T093000Z`,
                 'EXDATE:20260508T090000Z',
                 `ORGANIZER:mailto:${ORG}`,
                 `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${guest}`,
@@ -601,18 +607,12 @@ describe('a guest who removes this and following', () => {
             ]),
         ).events;
 
-    test('keeps no moved or cancelled occurrence past the cut', async () => {
+    // The guest holds the series from 4 May and cuts it from 7 May on.
+    async function cutCopy(rrule?: string) {
         const harness = await makeCalendar();
         const calendar = harness.instance;
-        const link = {
-            organizerEmail: ORG,
-            organizerEventId: SERIES,
-            organizerUserId: `external_${ORG}`,
-            createByUserId: `external_${ORG}`,
-        };
-        await calendar.receiveRequest(series(harness.user.email, 'Standup'), link);
+        await calendar.receiveRequest(series(harness.user.email, 'Standup', rrule), link);
         const master = findOrFail(await calendar.getEventsByUid(SERIES), (e) => !e.parentEventId);
-
         const me = makeSyntheticUser(harness.user.id, harness.user.name, harness.user.email);
         await calendar.rsvp(master.id, me, {
             status: 'declined',
@@ -620,6 +620,14 @@ describe('a guest who removes this and following', () => {
             recurrenceDate: '2026-05-07',
             remove: true,
         });
+        return { harness, calendar };
+    }
+
+    const storedRule = async (calendar: Calendar): Promise<string | null> =>
+        findOrFail(await calendar.getEventsByUid(SERIES), (e) => !e.parentEventId).rrule;
+
+    test('keeps no moved or cancelled occurrence past the cut', async () => {
+        const { harness, calendar } = await cutCopy();
 
         const range = await calendar.getEventsInRange(new Date('2026-05-01'), new Date('2026-06-01'));
         expect(range.map((occurrence) => occurrence.occurrenceDate)).toEqual([
@@ -633,6 +641,46 @@ describe('a guest who removes this and following', () => {
 
         const after = await calendar.getEventsByUid(SERIES);
         expect(after.map((event) => event.title)).toEqual(['Standup renamed']);
+    });
+
+    test('keeps the cut through an update that ends later', async () => {
+        const { harness, calendar } = await cutCopy();
+
+        await calendar.receiveRequest(series(harness.user.email, 'Standup', 'FREQ=DAILY;UNTIL=20260520T235959Z'), link);
+
+        expect(await storedRule(calendar)).toBe('FREQ=DAILY;UNTIL=20260506T235959Z');
+    });
+
+    test("takes an organizer's end before the cut as it is", async () => {
+        const { harness, calendar } = await cutCopy();
+
+        await calendar.receiveRequest(series(harness.user.email, 'Standup', 'FREQ=DAILY;UNTIL=20260505T090000Z'), link);
+
+        expect(await storedRule(calendar)).toBe('FREQ=DAILY;UNTIL=20260505T090000Z');
+    });
+
+    test('keeps the cut, fast, through a rule that never fires from 1900', async () => {
+        const { harness, calendar } = await cutCopy();
+        const never = series(harness.user.email, 'Standup', 'FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30', '19000102');
+        const startedAt = performance.now();
+
+        await calendar.receiveRequest(never, link);
+
+        expect(performance.now() - startedAt).toBeLessThan(1000);
+        const { calendarId } = findOrFail(await calendar.getEventsByUid(SERIES), (e) => !e.parentEventId);
+        const resource = findOrFail(await calendar.listResources(calendarId), (r) => r.uid === SERIES);
+        const text = await resourceTextOf(calendar, calendarId, resource.uri);
+        expect(text).toContain('RRULE:FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30;UNTIL=20260506T235959Z');
+    });
+
+    test("an organizer's longer series reaches a guest who never cut it", async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        await calendar.receiveRequest(series(harness.user.email, 'Standup', 'FREQ=DAILY;UNTIL=20260510T235959Z'), link);
+
+        await calendar.receiveRequest(series(harness.user.email, 'Standup', 'FREQ=DAILY;UNTIL=20261231T235959Z'), link);
+
+        expect(await storedRule(calendar)).toBe('FREQ=DAILY;UNTIL=20261231T235959Z');
     });
 });
 

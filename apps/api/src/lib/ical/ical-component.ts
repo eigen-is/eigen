@@ -213,15 +213,24 @@ export function patchEvent(
     return applyEdits(resource, new Map([[recurrenceKey, { kind: 'patch', patch, ctx }]]));
 }
 
-// A rule cut before `fromKey` keeps no override or exclusion from that date on, or a moved occurrence would outlive
-// the series.
-export function dropExceptionsFrom(resource: ICAL.Component, fromKey: string): void {
+// A guest's "delete this and following" from `fromKey` keeps no override or exclusion from that date on, or a moved
+// occurrence would outlive the series. The master records the cut, which every organizer update is held to.
+export function cutGuestCopy(resource: ICAL.Component, fromKey: string): void {
     const vevents = keyVEvents(resource);
     const past = new Set([...vevents].filter(([key]) => key !== null && key >= fromKey).map(([, v]) => v));
     if (past.size) keepSubcomponents(resource, (sub) => !past.has(sub));
     const master = vevents.get(null);
-    if (master) dropExclusions(master, (key) => key >= fromKey);
+    if (master) {
+        dropExclusions(master, (key) => key >= fromKey);
+        setProperty(master, rawProperty(EIGEN.guestCut, fromKey));
+    }
     syncVTimezones(resource);
+}
+
+// The first date a guest's own cut removed from their copy, null on a copy never cut.
+export function guestCutOf(resource: ICAL.Component): string | null {
+    const master = resource.getAllSubcomponents('vevent').find((vevent) => !vevent.hasProperty('recurrence-id'));
+    return master ? readStamp(master, EIGEN.guestCut) : null;
 }
 
 export function removeExclusion(resource: ICAL.Component, recurrenceKey: string, ctx: WriteContext): void {

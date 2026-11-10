@@ -20,7 +20,8 @@ import { ApiError } from '../core';
 import {
     applyEdits,
     buildResource,
-    dropExceptionsFrom,
+    cutGuestCopy,
+    guestCutOf,
     isNewerRevision,
     patchEvent,
     recurrenceInstantOf,
@@ -40,7 +41,7 @@ import * as events from './events';
 import { composeRsvpReply } from './imip';
 import { answeredOccurrence, propagateRsvp } from './invite-propagation';
 import { toEvent } from './mappers';
-import { constrainRRule, expandRecurrence, lastKeptDate } from './recurrence';
+import { constrainRRule, expandRecurrence } from './recurrence';
 import { prepareResource } from './resource-store';
 import * as schema from './schema';
 import { buildCalendarEvent } from './sse-events';
@@ -300,12 +301,12 @@ async function decideInboundRequest(
         if (!prior || isNewerRevision(parsed, prior)) latest.set(key, parsed);
     }
     const revisions = storedRevisions(component);
-    const lastKept = lastKeptDate(series.rrule, series.timezone);
+    const cut = guestCutOf(component);
     const edits = new Map<string | null, VEventEdit>();
     for (const [key, parsed] of latest) {
-        // A date past the guest's own cut of the series stays cut.
-        if (key && lastKept && key > lastKept) continue;
-        const edit = requestedEdit(calendar, series, held.get(key), parsed, key, revisions.get(key) ?? null);
+        // A date from the guest's own cut of the series on stays cut.
+        if (key && cut && key >= cut) continue;
+        const edit = requestedEdit(calendar, series, held.get(key), parsed, key, revisions.get(key) ?? null, cut);
         if (edit) edits.set(key, edit);
     }
     const changed = applyEdits(component, edits, held.get(null));
@@ -322,7 +323,7 @@ async function decideInboundRequest(
 }
 
 // What one requested event does to the copy: nothing, a patch of what the copy holds for its key, or a new override or
-// exclusion. `stored` is the copy's revision for that key, read before any edit.
+// exclusion. `stored` is the copy's revision for that key, read before any edit, and `cut` the guest's own cut.
 function requestedEdit(
     calendar: Calendar,
     series: CalendarEvent,
@@ -330,6 +331,7 @@ function requestedEdit(
     parsed: ParsedEvent,
     key: string | null,
     stored: Revision | null,
+    cut: string | null,
 ): VEventEdit | null {
     if (!isNewerRevision(parsed, stored)) return null;
     const held = heldAttendees(existing, series);
@@ -340,8 +342,7 @@ function requestedEdit(
     if (existing && (!existing.parentEventId || (existing.status === 'cancelled') === cancelled)) {
         // A cancelled exception is an EXDATE, which holds nothing more to patch.
         if (existing.parentEventId && cancelled) return null;
-        // Never extend the rule past what the guest has: they may have shortened it on purpose.
-        const rrule = key === null ? constrainRRule(parsed, series.rrule) : null;
+        const rrule = key === null ? constrainRRule(parsed, cut) : null;
         const patch = invitationPatch(existing, { ...parsed, timezone }, attendees, rrule);
         return { kind: 'patch', patch, ctx: events.writeContext(false, parsed.dtstamp) };
     }
@@ -670,7 +671,7 @@ async function removeThisAndFuture(calendar: Calendar, eventId: string, recurren
         const rrule = truncateRRule(event.rrule, recurrenceDate, event);
         await events.editResource(calendar, resource, (component) => {
             patchEvent(component, null, { rrule }, events.writeContext(false));
-            dropExceptionsFrom(component, recurrenceDate);
+            cutGuestCopy(component, recurrenceDate);
         });
     });
 }

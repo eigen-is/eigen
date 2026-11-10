@@ -23,6 +23,7 @@ export const EIGEN = {
     sequence: 'x-eigen-seq',
     dtstamp: 'x-eigen-dtstamp',
     importedOrganizer: 'x-eigen-imported-organizer',
+    guestCut: 'x-eigen-guest-cut',
 } as const;
 
 type EigenName = (typeof EIGEN)[keyof typeof EIGEN];
