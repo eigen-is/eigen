@@ -53,7 +53,7 @@ export function copySheet(ctx: Context, sheetId: string) {
         Object.values(sheetData.charts ?? {}).map((chart) => withFreshId(mapChartRefs(chart, toCopy))),
     );
     addSheet(ctx, copyId, sheetName, sheetData);
-    if (getSheetIndex(ctx, copyId) != null) setSheetOrder(ctx, { [copyId]: order });
+    setSheetOrder(ctx, { [copyId]: order });
 }
 
 // Sets the given sheets' orders and renumbers every sheet from 0, so the tab strip and the sheet list agree.

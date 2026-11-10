@@ -21,7 +21,7 @@ import type { DeleteRowColOp, InsertRowColOp } from './rowcol';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol, lineMove } from './rowcol';
 import { normalizeSheetConfig } from './sheet-config';
 import type { RenameSheetOp } from './sheet-name';
-import { applySheetDelete, applySheetRename, sheetNameRefusal } from './sheet-name';
+import { applySheetDelete, applySheetRename, legalSheetNames } from './sheet-name';
 import type { ShiftedSheet } from './types';
 import { error } from './validation';
 
@@ -102,10 +102,14 @@ export function applySheetsBatch(
     for (const op of batch) {
         if (op.op === 'addSheet') {
             if (!isNewSheet(op.value, result)) {
-                console.warn('[sheets] addSheet op has a malformed value, a taken id or a taken name', op.value);
+                console.warn('[sheets] addSheet op has a malformed value or a taken id', op.value);
                 continue;
             }
-            const added = withNormalizedSheet(op.value);
+            const [name] = legalSheetNames(
+                [op.value.name],
+                result.map((s) => s.name),
+            );
+            const added = withNormalizedSheet({ ...op.value, name });
             result = [...result, dataOpIds.has(op.value.id) ? withMaterializedData(added) : added];
             held = null;
         } else if (op.op === 'deleteSheet' && op.id) {
@@ -234,15 +238,15 @@ function isLine(value: unknown, type: 'row' | 'column'): value is number {
     return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < count;
 }
 
-// A new sheet needs an id no sheet has yet, because every later op names its sheet by id, and a name a rename could
-// take, or a delete or rename of one of two namesakes would break the formulas reading the other.
+// A new sheet needs an id no sheet has yet, because every later op names its sheet by id. Its name only needs to be
+// text: the add repairs and numbers it, so two tabs pressing + at once both keep their sheet under two names.
 function isNewSheet(v: unknown, sheets: readonly Sheet[]): v is Sheet {
     if (!isRecord(v)) return false;
     const { id, name, data, celldata, config } = v;
     if (data != null && !(Array.isArray(data) && data.every((row) => row == null || Array.isArray(row)))) return false;
     if (celldata != null && !(Array.isArray(celldata) && celldata.every(isRecord))) return false;
     if (config != null && !isRecord(config)) return false;
-    if (typeof id !== 'string' || typeof name !== 'string' || sheetNameRefusal(sheets, id, name)) return false;
+    if (typeof id !== 'string' || typeof name !== 'string') return false;
     return !sheets.some((s) => s.id === id) && sheetHoldsNoBadLink(v);
 }
 

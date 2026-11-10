@@ -98,8 +98,7 @@ function deriveGeometry(ctx: Context, { data }: Sheet) {
     createFilterOptions(ctx);
 }
 
-// The add switches to the sheet it adds, unless it names the new sheet's id, as a copy does. A name the sheet can't
-// take, such as a copy's of a name stored before the rule, refuses the add before it moves an order.
+// The add switches to the sheet it adds, unless it names the new sheet's id, as a copy does.
 export function addSheet(ctx: Context, newSheetId?: string, sheetName?: string, sheetData?: Sheet) {
     if (ctx.allowEdit === false) return;
     const id = newSheetId ?? sheetData?.id ?? crypto.randomUUID();
@@ -112,11 +111,6 @@ export function addSheet(ctx: Context, newSheetId?: string, sheetName?: string, 
         config: {},
     };
     if (sheetName !== undefined) sheet.name = sheetName;
-    const refusal = sheetNameRefusal(ctx.sheets, id, sheet.name);
-    if (refusal) {
-        ctx.warnDialog = refusal;
-        return;
-    }
     if (sheetData) shiftSheetOrders(ctx.sheets, sheetOrder(sheetData), 1);
     applyBatch(ctx, [{ op: 'addSheet', id, path: [], value: sheet }]);
     if (!newSheetId) changeSheet(ctx, id);

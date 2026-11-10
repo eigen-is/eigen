@@ -1025,19 +1025,50 @@ describe('sheet orders after two tabs change the sheet list at once', () => {
     });
 });
 
-// A name stored before imports repaired names can break the sheet-name rule, and its copy's name keeps the break.
-describe('a copy whose name the add refuses', () => {
-    test('says why and changes nothing, so its undo deletes no other tab', () => {
+// Two tabs pressing + at once both name the new tab Sheet4. The log puts A's add first, so B applies the log again from
+// before its own, as a late batch that doesn't commute makes it.
+describe('two tabs adding a sheet of one name at once', () => {
+    test('the later add takes the next free name and keeps its cells, on both tabs and for a joiner', () => {
+        const base = workbook();
+        const a = tab(base);
+        const b = tab(base);
+        const fromA = tabEdit(a, (ctx) => addSheet(ctx, 'x'), { addSheetOp: true });
+        const fromB = tabEdit(b, (ctx) => addSheet(ctx, 'y'), { addSheetOp: true });
+        const typedInB = tabEdit(b, (ctx) => {
+            changeSheet(ctx, 'y');
+            typed(0, 0, 'kept')(ctx);
+        });
+        const log = [fromA, fromB, typedInB];
+        tabReceive(a, fromB);
+        tabReceive(a, typedInB);
+        generateAPIs(
+            () => b.ctx,
+            (recipe) => {
+                b.ctx = produce(b.ctx, recipe);
+            },
+            () => {},
+            () => {},
+            b.history,
+        ).replayOps(base.sheets, log, new Set([fromA]));
+        const names = (sheets: readonly LibSheet[]) => sheets.map((s) => [s.id, s.name]);
+        expect(names(a.ctx.sheets).slice(3)).toEqual([
+            ['x', 'Sheet4'],
+            ['y', 'Sheet4 (2)'],
+        ]);
+        expect(a.ctx.sheets[4].data?.[0]?.[0]?.v).toBe('kept');
+        expect(view(b.ctx.sheets)).toEqual(view(a.ctx.sheets));
+        expect(view(join(base, log))).toEqual(view(a.ctx.sheets));
+    });
+
+    // A name stored before imports repaired names can break the sheet-name rule, and its copy's name keeps the break.
+    test('a copy of a tab whose stored name breaks the rule lands repaired, and its undo takes it away', () => {
         const base = produce(workbook(), (ctx: Context) => {
             ctx.sheets[0].name = 'Q1: Sales';
-            ctx.sheets[2].order = 3;
         });
         const a = tab(base);
-        const ops = tabEdit(a, (ctx) => copySheet(ctx, ONE), { addSheetOp: true });
-        expect(ops).toEqual([]);
-        expect(a.ctx.warnDialog).toBeTruthy();
-        expect(a.ctx.sheets.map((s) => [s.id, s.order])).toEqual(base.sheets.map((s) => [s.id, s.order]));
-        expect(tabUndo(a)).toEqual([]);
+        tabEdit(a, (ctx) => copySheet(ctx, ONE), { addSheetOp: true });
+        expect(a.ctx.sheets.map((s) => s.name)).toEqual(['Q1: Sales', 'Two', 'Three', 'Q1_ Sales(Copy)']);
+        tabUndo(a);
         expect(a.ctx.sheets.map((s) => s.id)).toEqual([ONE, TWO, THREE]);
     });
 });
