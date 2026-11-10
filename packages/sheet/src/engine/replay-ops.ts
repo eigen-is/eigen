@@ -6,7 +6,7 @@
 
 import { isRecord } from '@workspace/lib/guards';
 import type { Op, Sheet } from '@workspace/lib/sheets';
-import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import { isPatchOp, isStructuralBatch, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { opToPatchOnSheets, sheetHoldsNoBadLink } from '@workspace/lib/sheets/yjs-ops';
 import { enablePatches, Immer } from 'immer';
 import { isSheetName, sheetNameKey } from './a1-notation';
@@ -96,7 +96,7 @@ export function replaySheetsOps(
                     graph = null;
                 }
             }
-            const normalOps = batch.filter((op) => op.op === 'add' || op.op === 'remove' || op.op === 'replace');
+            const normalOps = batch.filter(isPatchOp);
             const [patches] = opToPatchOnSheets(result, normalOps);
             result = immer.applyPatches(result, patches);
             if (patches.length > 0) withinBudget(() => graph?.followPatches(result, patches));
@@ -123,10 +123,10 @@ export function replaySheetsOps(
 // What a batch's sheet, row and column ops can affect, or null when it holds none, since an edit carries its own
 // values. A cell its patches write counts too, because an undo's repairs change what the formulas reading them hold.
 export function seedsOf(ops: readonly Op[]): RecomputeSeeds | null {
+    if (!isStructuralBatch(ops)) return null;
     const cells: RecomputeSeeds['cells'][number][] = [];
     const lines: RecomputeSeeds['lines'][number][] = [];
     const names = new Set<string>();
-    let structural = false;
     // A later row or column op moves the lines an earlier one opened or closed, as it moves the cells on them.
     const moveLines = (id: string, type: 'row' | 'column', at: number, by: number) => {
         for (const [i, seed] of lines.entries()) {
@@ -149,15 +149,10 @@ export function seedsOf(ops: readonly Op[]): RecomputeSeeds | null {
         } else if (op.op === 'addSheet' || op.op === 'renameSheet') {
             const name = isRecord(op.value) ? op.value['name'] : undefined;
             if (typeof name === 'string') names.add(sheetNameKey(name));
-        } else if (op.op !== 'deleteSheet') {
-            if (field === 'data' && typeof r === 'number' && typeof c === 'number' && op.id) {
-                cells.push({ r, c, id: op.id });
-            }
-            continue;
+        } else if (isPatchOp(op) && field === 'data' && typeof r === 'number' && typeof c === 'number' && op.id) {
+            cells.push({ r, c, id: op.id });
         }
-        structural = true;
     }
-    if (!structural) return null;
     const reads = (formula: string) =>
         formula.includes(error.r) || [...names].some((name) => namesSheet(formula, name));
     return { cells, lines, reads };

@@ -79,17 +79,17 @@ export function compactSheetsSnapshot(
 ): { snapshot: string; dropped: number } {
     const { sheets, computed } = decodeOrDefault(snapshotJson);
     let dropped = 0;
-    const skipped: SkippedRecompute[] = [];
+    let skipped: SkippedRecompute | null = null;
     const replayed = replaySheetsOps(
         sheets,
         JSON.parse(batchesJson),
         (e) => {
-            if (e instanceof SkippedRecompute) skipped.push(e);
+            if (e instanceof SkippedRecompute) skipped ??= e;
             else dropped += 1;
         },
         SERVER_RECALC_BUDGET,
     );
-    if (skipped.length > 0) throw skipped[0];
+    if (skipped) throw skipped;
     // The compaction never recalculates, so a workbook nobody computed stays uncomputed, and an export computes it.
     return { snapshot: encodeSheetsSnapshot(replayed, { computed }), dropped };
 }

@@ -52,7 +52,7 @@ const TOUCH_THROTTLE_MS = 60_000;
 // How long a document with no socket stays open. A reload or a y-websocket retry within it
 // reattaches to the loaded document instead of loading it again.
 export const CLOSE_LINGER_MS = 60_000;
-// The origin of a compaction's swap. It changes what is stored, not what the workbook shows, so it moves no Modified time.
+// A compaction's swap changes what is stored, not what the workbook shows, so it moves no Modified time.
 const COMPACTION_ORIGIN = Symbol('compaction');
 // One 'edited' history row per user per window. The window lives in memory, so a document that closes
 // and opens again within it records an extra row. That is cheaper than storing the window.
@@ -350,8 +350,7 @@ export class CollabDocument {
         this.releaseHome = null;
     }
 
-    // A workbook folds the head of its op log into its snapshot first. The registry still holds the document meanwhile, so a
-    // socket that connects reattaches to it, and then the document stays open until the next linger.
+    // The registry still holds the document while a workbook folds its log, so a socket that connects reattaches to it.
     private async closeAfterLinger(): Promise<void> {
         if (sheetsNeedCompaction(this.path, this.doc)) {
             this.compaction = new AbortController();
