@@ -6,15 +6,20 @@ import { cloneDeep, sortBy } from 'es-toolkit/compat';
 import { mapChartRefs } from '../../engine/chart-data';
 import { copySheetName } from '../../engine/sheet-name';
 import type { Context } from '../context';
-import { addSheet, leaveCurrentSheet } from '../modules';
+import { addSheet, lastShownSheetRefusal, settleCurrentSheet } from '../modules';
 import { getSheetIndex, sheetOrder } from '../utils';
 
 export function hideSheet(ctx: Context, sheetId: string) {
     if (ctx.allowEdit === false) return;
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return;
-    if (sheetId === ctx.currentSheetId && !leaveCurrentSheet(ctx, sheetId)) return;
+    const refusal = lastShownSheetRefusal(ctx, sheetId, 'hide');
+    if (refusal) {
+        ctx.warnDialog = refusal;
+        return;
+    }
     ctx.sheets[index].hide = 1;
+    settleCurrentSheet(ctx);
 }
 
 export function showSheet(ctx: Context, sheetId: string) {
