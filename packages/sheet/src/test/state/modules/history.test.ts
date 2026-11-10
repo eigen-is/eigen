@@ -1026,6 +1026,23 @@ describe('sheet orders after two tabs change the sheet list at once', () => {
     });
 });
 
+// A name stored before imports repaired names can break the sheet-name rule, and its copy's name keeps the break.
+describe('a copy whose name the add refuses', () => {
+    test('says why and changes nothing, so its undo deletes no other tab', () => {
+        const base = produce(workbook(), (ctx: Context) => {
+            ctx.sheets[0].name = 'Q1: Sales';
+            ctx.sheets[2].order = 3;
+        });
+        const a = tab(base);
+        const ops = tabEdit(a, (ctx) => copySheet(ctx, ONE), { addSheetOp: true });
+        expect(ops).toEqual([]);
+        expect(a.ctx.warnDialog).toBeTruthy();
+        expect(a.ctx.sheets.map((s) => [s.id, s.order])).toEqual(base.sheets.map((s) => [s.id, s.order]));
+        expect(tabUndo(a)).toEqual([]);
+        expect(a.ctx.sheets.map((s) => s.id)).toEqual([ONE, TWO, THREE]);
+    });
+});
+
 // A row, column or sheet entry holds whole cell matrices, so the stack keeps fewer of those than of the rest.
 describe('the undo stack keeps the newest entries', () => {
     test('the newest 200', () => {

@@ -59,8 +59,8 @@ export function recordEntry(
             options: { deletedSheet: storedCopy(getSheet(before, { id: deleteSheetOp.id })) },
         };
     }
-    // An add puts its sheet last in the list, whatever its order.
-    if (addSheetOp) return structural({ addedSheet: storedCopy(after.sheets[after.sheets.length - 1]) });
+    const added = addSheetOp && after.sheets.find(({ id }) => getSheetIndex(before, id) == null);
+    if (added) return structural({ addedSheet: storedCopy(added) });
     const rowCol = { insertRowColOp, deleteRowColOp };
     return {
         patches: rowColMarker(rowCol) ? [] : bySheetId(patches, after.sheets),
