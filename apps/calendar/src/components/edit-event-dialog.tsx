@@ -132,16 +132,15 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
         const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
 
         const seriesGuests = (own: readonly Attendee[]) => {
-            const shown = new Set(serverAttendees.map((guest) => guest.email.toLowerCase()));
-            const listed = new Map(attendees.map((guest) => [guest.email.toLowerCase(), guest]));
-            const series = new Map(own.map((guest) => [guest.email.toLowerCase(), guest]));
-            for (const email of shown) {
-                if (!listed.has(email)) series.delete(email);
-            }
-            for (const [email, guest] of listed) {
-                if (!shown.has(email) && !series.has(email)) series.set(email, guest);
-            }
-            return [...series.values()];
+            const emails = (guests: readonly Attendee[]) => new Set(guests.map((guest) => guest.email.toLowerCase()));
+            const shown = emails(serverAttendees);
+            const listed = emails(attendees);
+            const owned = emails(own);
+            const kept = own.filter(({ email }) => !shown.has(email.toLowerCase()) || listed.has(email.toLowerCase()));
+            const joined = attendees.filter(
+                ({ email }) => !shown.has(email.toLowerCase()) && !owned.has(email.toLowerCase()),
+            );
+            return [...kept, ...joined];
         };
         // "This event" keeps the list a date already holds, and gives one to a date only when the user changed it.
         const dateGuests = typed.attendees ? attendees : isOverride ? (event.data?.attendees ?? []) : [];
