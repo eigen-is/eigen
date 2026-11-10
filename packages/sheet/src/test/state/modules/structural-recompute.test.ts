@@ -12,12 +12,11 @@ import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { applyOpBatch } from '../../../state/modules/apply-ops';
 import { updateCell } from '../../../state/modules/cell';
-import { warmFormulaGraph } from '../../../state/modules/formula-exec';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, deleteSheet, renameSheet } from '../../../state/modules/sheet';
 import type { Op, Sheet } from '../../../state/types';
 import { join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
-import { contextFactory, selectionFactory } from '../factories/context';
+import { contextFactory, heldGraph, selectionFactory } from '../factories/context';
 import { cellLinks } from '../factories/links';
 
 const n = (v: number) => ({ v, m: `${v}`, ct: { fa: 'General', t: 'n' } });
@@ -111,7 +110,7 @@ describe('a row delete', () => {
 
     test('the next edit finds the formula graph the recompute built', () => {
         const t = tab(start());
-        warmFormulaGraph(t.ctx);
+        heldGraph(t.ctx);
         removeRow(t, 1);
         expect(t.ctx.formulaCache.graph?.formulaAt('s1', 0, 2)?.formula).toBe('=SUM(A1:A2)');
         tabEdit(t, (d) => {
@@ -386,7 +385,7 @@ describe('an operator over a range', () => {
 
     test('keeps its stored number on an edit of what it reads', () => {
         const t = tab(start());
-        warmFormulaGraph(t.ctx);
+        heldGraph(t.ctx);
         tabEdit(t, (d) => {
             updateCell(d, 0, 0, null, 5);
         });
@@ -431,7 +430,7 @@ describe('what a recompute keeps', () => {
             ],
         });
         const t = tab(base);
-        warmFormulaGraph(t.ctx);
+        heldGraph(t.ctx);
         tabEdit(t, (d) => {
             updateCell(d, 0, 0, null, 5);
         });
@@ -455,7 +454,7 @@ describe('what a recompute keeps', () => {
 
     test('a formula reading a typo computes the #NAME? the typo shows', () => {
         const t = tab(book({ cells: [[f('=5', 5), f('=A1', 5), f('=IF(A1>0,A1+1,FILTER(A1:A1,1))', 6)]] }));
-        warmFormulaGraph(t.ctx);
+        heldGraph(t.ctx);
         tabEdit(t, (d) => {
             updateCell(d, 0, 0, null, '=FILTRE(1)');
         });
@@ -474,7 +473,7 @@ describe('what a recompute keeps', () => {
 
     test('a branch this build can compute recalculates beside one it lacks', () => {
         const t = tab(book({ cells: [[n(1), f('=IF(A1>0,A1+1,FILTER(A1:A1,1))', 2)]] }));
-        warmFormulaGraph(t.ctx);
+        heldGraph(t.ctx);
         tabEdit(t, (d) => {
             updateCell(d, 0, 0, null, 4);
         });
@@ -745,7 +744,7 @@ describe('an error typed into a formula', () => {
 
     test.each(LITERALS)('%s is a token, so a formula holding it computes on an edit', (literal) => {
         const t = tab(book({ cells: [[n(2), f(`=IF(A1=1,${literal},A1*2)`, 4)]] }));
-        warmFormulaGraph(t.ctx);
+        heldGraph(t.ctx);
         tabEdit(t, (d) => {
             updateCell(d, 0, 0, null, 5);
         });
@@ -798,7 +797,7 @@ describe('a long forged formula', () => {
     const costs = (formula: string) => {
         const t = tab(book({ cells: [[n(1), f(formula, 9)]] }));
         const started = performance.now();
-        warmFormulaGraph(t.ctx);
+        heldGraph(t.ctx);
         tabEdit(t, (d) => {
             updateCell(d, 0, 0, null, 5);
         });
@@ -818,7 +817,7 @@ describe('a long forged formula', () => {
 
     test('one past Excel`s limit keeps its number', () => {
         const t = tab(book({ cells: [[n(1), f(`=A1+${'1+'.repeat(5000)}1`, 9)]] }));
-        warmFormulaGraph(t.ctx);
+        heldGraph(t.ctx);
         tabEdit(t, (d) => {
             updateCell(d, 0, 0, null, 5);
         });

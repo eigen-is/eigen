@@ -4,13 +4,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
 import { updateCell } from '../../../state/modules/cell';
-import { warmFormulaGraph } from '../../../state/modules/formula-exec';
 import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { mergeCells } from '../../../state/modules/merge';
 import { getDataArr, getRegStr, updateMoreCell } from '../../../state/modules/split-column';
 import type { Cell } from '../../../state/types';
 import { join, tab, tabEdit, tabUndo } from '../factories/collab';
-import { contextFactory, selectionFactory } from '../factories/context';
+import { contextFactory, heldGraph, selectionFactory } from '../factories/context';
 
 function rowTab(row: (Cell | null)[]) {
     const t = tab(
@@ -19,7 +18,7 @@ function rowTab(row: (Cell | null)[]) {
             sheets: [{ name: 'One', id: 'id_1', order: 0, data: [row] }],
         }) as Context,
     );
-    warmFormulaGraph(t.ctx);
+    heldGraph(t.ctx);
     return t;
 }
 

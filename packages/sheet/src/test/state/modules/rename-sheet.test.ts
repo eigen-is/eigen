@@ -9,7 +9,7 @@ installHappyDom();
 const { SHEET_NAME_FORBIDDEN } = await import('../../../engine/a1-notation');
 const { defaultContext } = await import('../../../state/context');
 const { editSheetName } = await import('../../../state/modules/sheet');
-const { warmFormulaGraph } = await import('../../../state/modules/formula-exec');
+const { heldGraph } = await import('../factories/context');
 type Context = import('../../../state/context').Context;
 
 function workbook(): Context {
@@ -98,7 +98,7 @@ describe('a tab rename', () => {
         const ctx = workbook();
         const tab = document.createElement('span');
         tab.innerText = 'One';
-        const stays = warmFormulaGraph(ctx);
+        const stays = heldGraph(ctx);
         editSheetName(ctx, 's1', tab);
         expect(ctx.formulaCache.graph).toBe(stays);
         tab.innerText = 'Old';

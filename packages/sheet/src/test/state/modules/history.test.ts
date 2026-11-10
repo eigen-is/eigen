@@ -15,7 +15,6 @@ import type { Cell, ShiftedSheet } from '../../../engine/types';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { applyDataValidation } from '../../../state/modules/data-validation';
-import { warmFormulaGraph } from '../../../state/modules/formula-exec';
 import type { RowColMove } from '../../../state/modules/history-shift';
 import { deleteMove, insertMove, shiftEntries } from '../../../state/modules/history-shift';
 import { saveHyperlink } from '../../../state/modules/hyperlink';
@@ -27,7 +26,7 @@ import type { ConditionalFormatRule, DataValidationRule, Op, Sheet } from '../..
 import { commutes } from '../../../state/utils/commute';
 import type { Tab } from '../factories/collab';
 import { author, join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
-import { workbookContextFactory } from '../factories/context';
+import { heldGraph, workbookContextFactory } from '../factories/context';
 import { typed } from '../factories/edit-cycle';
 import { cellLinks } from '../factories/links';
 
@@ -801,7 +800,7 @@ describe("a formula is its cell's `f`, nothing else", () => {
         const t = tab(workbook());
         tabReceive(t, [{ op: 'replace', id: ONE, path: ['data', 50], value: [{ f: '=1+1', v: 2, m: '2' }] }]);
         t.ctx.formulaCache.forgetGraph();
-        expect(warmFormulaGraph(t.ctx).formulaAt(ONE, 50, 0)?.formula).toBe('=1+1');
+        expect(heldGraph(t.ctx).formulaAt(ONE, 50, 0)?.formula).toBe('=1+1');
     });
 
     test('a stored op on the old recalc list fails no batch, and leaves no list on the sheet', () => {

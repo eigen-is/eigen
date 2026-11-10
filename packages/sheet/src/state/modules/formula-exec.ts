@@ -8,7 +8,7 @@ import { createArrayResolver } from '../../engine/cell-resolver';
 import { FormulaGraph } from '../../engine/formula-graph';
 import { checkBracketNum, LAST_COLUMN, LAST_ROW, matrixWidth, resolveCellRange } from '../../engine/formula-utils';
 import { evaluateFormulas } from '../../engine/recalc';
-import type { Cell, CellResolver, FormulaDependency } from '../../engine/types';
+import type { Cell, FormulaDependency } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { FormulaCell } from '../types';
@@ -35,29 +35,11 @@ export function getcellrange(ctx: Context, txt: string): FormulaDependency | nul
     return { row: [range.row[0], lastRow], column: [range.column[0], lastColumn], sheetId: range.sheetId };
 }
 
-type ComputeFormulaOptions = {
-    id?: string;
-    // A pass over many formulas shares one, so no formula takes its own snapshot of the workbook.
-    resolver?: CellResolver;
-};
-
-// A formula's value, and its text with a missing closing bracket added.
-export function computeFormula(
-    ctx: Context,
-    txt: string,
-    {
-        id = ctx.currentSheetId,
-        resolver = createArrayResolver(snapshotContext(ctx).sheets),
-    }: ComputeFormulaOptions = {},
-): [Cell['v'], string] {
+// A formula's value on the current sheet, and its text with a missing closing bracket added.
+export function computeFormula(ctx: Context, txt: string): [Cell['v'], string] {
     const formula = checkBracketNum(txt) ? txt : `${txt})`;
-    return [ctx.formulaCache.engine.evaluate(formula, id, resolver).value, formula];
-}
-
-export function warmFormulaGraph(ctx: Context): FormulaGraph {
-    // Inside an edit ctx is an immer draft, and reading every formula through it is slow.
-    ctx.formulaCache.graph ??= new FormulaGraph(snapshotContext(ctx).sheets);
-    return ctx.formulaCache.graph;
+    const resolver = createArrayResolver(snapshotContext(ctx).sheets);
+    return [ctx.formulaCache.engine.evaluate(formula, ctx.currentSheetId, resolver).value, formula];
 }
 
 // Builds the formula graph while the browser is idle, such as after a load or a replay of the op log, so neither waits
@@ -99,4 +81,10 @@ export function execFunctionGroup(
         const { data } = ctx.sheets[idx];
         if (data != null) setCellValue(ctx, r, c, data, { v: result.value, f: formula });
     }
+}
+
+function warmFormulaGraph(ctx: Context): FormulaGraph {
+    // Inside an edit ctx is an immer draft, and reading every formula through it is slow.
+    ctx.formulaCache.graph ??= new FormulaGraph(snapshotContext(ctx).sheets);
+    return ctx.formulaCache.graph;
 }

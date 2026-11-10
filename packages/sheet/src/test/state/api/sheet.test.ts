@@ -8,12 +8,12 @@ import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../../../en
 import { copySheet, setSheetOrder } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { setCellValue } from '../../../state/modules/cell';
-import { execFunctionGroup, warmFormulaGraph } from '../../../state/modules/formula-exec';
+import { execFunctionGroup } from '../../../state/modules/formula-exec';
 import { addSheet, deleteSheet } from '../../../state/modules/sheet';
 import type { Sheet } from '../../../state/types';
 import { filterPatch, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
-import { contextFactory, selectionFactory, workbookContextFactory } from '../factories/context';
+import { contextFactory, heldGraph, selectionFactory, workbookContextFactory } from '../factories/context';
 
 describe('sheet/core/api/sheet', () => {
     const getContext = () =>
@@ -154,7 +154,7 @@ describe('sheet/core/api/sheet', () => {
             ],
         });
         const copied = produce(base, (draft: Context) => {
-            warmFormulaGraph(draft);
+            heldGraph(draft);
             copySheet(draft, 'id_1');
         });
         const copyId = copied.sheets[1].id ?? '';
