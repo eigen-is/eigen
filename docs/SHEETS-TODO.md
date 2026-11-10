@@ -277,8 +277,6 @@ The op log, its order and how edits reach the undo stack ([SHEETS.md](SHEETS.md#
 
 - [ ] **Two rules added at once at the rule cap leave the tabs apart until a reload**: on a sheet with 1,023 validation rules, two peers each add one. Each tab keeps its own and drops the peer's as past `MAX_VALIDATIONS` (`validationIds` in `packages/lib/src/sheets/yjs-ops.ts`), while a joiner keeps the one the log puts first. The two adds write different ids, so they commute and no tab applies the log again. Fix: a rule add that the cap could drop does not commute. **S**
 
-- [ ] **An undo then a redo can leave a `#REF!` cell typed as a number**: a recompute writes only a formula whose value changed (`withResults` in `engine/recalc.ts`), so when an undo puts back a cell whose value already reads `#REF!` but whose `ct.t` an earlier step left as `n`, the type stays wrong on that tab while a joiner's cell reads `e`. `apply-ops.test.ts` with seed 51 shows it at step 22. Writing a cell whose type differs, not only its value, closes it.
-
 ## Performance
 
 Measured on the 2.3 MB reference workbook: snapshot v2 12.6 MB, import 4.7 s, HTML render 7.3 s and 10.4 MB.

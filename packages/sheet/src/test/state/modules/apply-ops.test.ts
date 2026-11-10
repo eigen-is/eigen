@@ -24,7 +24,8 @@ import { typed } from '../factories/edit-cycle';
 import type { Random } from '../factories/workbook-fuzz';
 import { fresh, nextBatch, random, sizeOf, withAuthorValues, workbook } from '../factories/workbook-fuzz';
 
-const SEEDS = Array.from({ length: 24 }, (_, i) => i + 1);
+// Seed 51 once left a #REF! cell typed as a number after an undo and a redo.
+const SEEDS = [...Array.from({ length: 24 }, (_, i) => i + 1), 51];
 const STEPS = 60;
 
 afterEach(() => {
