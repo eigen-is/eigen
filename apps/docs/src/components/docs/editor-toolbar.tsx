@@ -1,7 +1,7 @@
 // The docs editor's toolbar: the menus on the left, the formatting icon row in the middle and the share cluster on the
 // right. It acts on the editor the caret is in, the body's, a band's or the open story's, and owns the dialogs its
 // menus open, such as Page setup and Word count. The editor hands it what it shares with the page, such as the panels'
-// and the outline's toggles.
+// and the outline's toggles, and the link dialog, which a link's right-click menu opens too.
 
 import { formatForDisplay, useHotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
@@ -65,7 +65,6 @@ import { ALIGNMENT_LOOK, FORMAT_HOTKEYS, FormatMenu, lookOption } from './format
 import { useToolbarState } from './hooks/use-toolbar-state';
 import { IndentationOptionsDialog } from './indentation-options-dialog';
 import { InsertMenu } from './insert-menu';
-import { LinkDialog } from './link-dialog';
 import type { PageNumberPreset } from './page-numbers';
 import { PageSetupDialog } from './page-setup-dialog';
 import { RestartNumberingDialog } from './restart-numbering-dialog';
@@ -115,6 +114,7 @@ type EditorToolbarProps = {
     onImageUpload?: (file: File) => void;
     onImagePickFromDrive?: (paths: DrivePath[]) => void;
     onReplaceImage: () => void;
+    onLink: () => void;
     // Only when the doc can hold comments. Insert offers its comment item only then.
     onAddComment?: () => void;
     onInsertEquation?: () => void;
@@ -155,6 +155,7 @@ export const EditorToolbar = ({
     onImageUpload,
     onImagePickFromDrive,
     onReplaceImage,
+    onLink,
     onAddComment,
     onInsertEquation,
     onInsertFootnote,
@@ -165,7 +166,6 @@ export const EditorToolbar = ({
     outlineShown,
     onToggleOutline,
 }: EditorToolbarProps) => {
-    const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [pageSetupOpen, setPageSetupOpen] = useState(false);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const [importPickerOpen, setImportPickerOpen] = useState(false);
@@ -207,14 +207,6 @@ export const EditorToolbar = ({
         },
         { target: document.documentElement },
     );
-
-    const handleLinkOperation = () => {
-        if (editor.isActive('link')) {
-            editor.chain().focus().unsetLink().run();
-        } else {
-            setLinkDialogOpen(true);
-        }
-    };
 
     const keepActiveEditorFocus = keepEditorFocus(editor);
 
@@ -333,7 +325,7 @@ export const EditorToolbar = ({
                                     active={active}
                                     keepEditorFocus={keepActiveEditorFocus}
                                     closePanels={isMobile ? undefined : closePanels}
-                                    onLink={handleLinkOperation}
+                                    onLink={onLink}
                                     onInsertImage={onImageUpload ? () => setImagePickerOpen(true) : undefined}
                                     onAddComment={onAddComment}
                                     onInsertEquation={onInsertEquation}
@@ -437,7 +429,7 @@ export const EditorToolbar = ({
                                             tooltipText="Add link"
                                             active={active.link}
                                             preventFocusLoss
-                                            onClick={handleLinkOperation}
+                                            onClick={onLink}
                                         />
                                         {active.link && (
                                             <TooltipButton
@@ -564,13 +556,6 @@ export const EditorToolbar = ({
                     accept="image/*"
                 />
             )}
-
-            <LinkDialog
-                editor={editor}
-                open={linkDialogOpen}
-                onOpenChange={setLinkDialogOpen}
-                onCloseAutoFocus={keepActiveEditorFocus}
-            />
 
             <PageSetupDialog
                 open={pageSetupOpen}

@@ -148,6 +148,7 @@ Includes the bugs that lose data or leak access.
 
 | Item | Effort | Notes |
 |---|---|---|
+| Docs: a link's right-click rows miss three places | S | A right-click on a link opens its Open, Copy, Edit and Remove rows only in body text (`linkAtPointer`, `link-menu-sections.tsx`). In a table cell the table menu wins, on a comment's highlight the comment's menu wins, and in a header, footer or open note the browser's menu shows. Spread `linkMenuSections` into the table and comment menus, and wire the bands' and story's editors. |
 | A restore never updates a team's member count | S | `restoreAuthRows` (`apps/api/src/lib/backup/auth-rows.ts`) inserts a restored user's `team_member` rows but leaves `team.member_count`, so the count leaves them out. Recount `member_count` for those teams in the same transaction, as `ensureAuthSchemaColumns` seeds it. |
 | `./eigen backup` can skip steps in its progress | XS | `follow()` (`apps/api/src/cli/backup.ts`) prints only the step it sees at each poll, so a fast backup jumps from "home 2 of 4" to "Saved". The archive holds every home. Print every step between the last one shown and the current one. |
 | An empty `backups/.staging/archive` folder stays after a backup | XS | A finished server backup leaves the folder behind; its mode is 0700, so it reveals nothing. Remove the folder when the job ends. |
