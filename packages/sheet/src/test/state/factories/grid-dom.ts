@@ -14,6 +14,8 @@ const g = globalThis as any;
 g.window = win;
 g.document = win.document;
 g.HTMLElement = win.HTMLElement;
+g.NodeFilter = win.NodeFilter;
+g.Text = win.Text;
 
 export const GRID_GEOMETRY = {
     defaultrowlen: 19,
@@ -32,6 +34,8 @@ export function gridElements(): { container: HTMLDivElement; scrollEl: HTMLDivEl
     g.window = win;
     g.document = win.document;
     g.HTMLElement = win.HTMLElement;
+    g.NodeFilter = win.NodeFilter;
+    g.Text = win.Text;
     const container = win.document.createElement('div') as unknown as HTMLDivElement;
     container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
     const scrollEl = win.document.createElement('div') as unknown as HTMLDivElement;
