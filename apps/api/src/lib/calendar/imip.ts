@@ -132,19 +132,6 @@ export function composeRsvpReply(
     };
 }
 
-// A part past the limit is no invitation, and the mail goes on without one.
-function extractCalendarAttachment(mail: { attachments: readonly Attachment[] }): {
-    ics: string;
-    method?: ImipMethod;
-} | null {
-    const attachment = mail.attachments.find(
-        (part) => isCalendarPart(part) && part.content.byteLength <= IMIP_MAX_BYTES,
-    );
-    if (!attachment) return null;
-
-    return { ics: Buffer.from(attachment.content).toString(), method: attachment.calendarMethod };
-}
-
 // Null for a part nobody can read, too large or unparseable: the mail widget renders that as an explicit error state.
 export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite | null {
     const cal = extractCalendarAttachment({ attachments: [attachment] });
@@ -321,4 +308,17 @@ function buildSection(label: string, value: string): string {
       <div style="font-weight:600;font-size:13px;color:${EMAIL_MUTED};margin-bottom:4px">${label}</div>
       <div style="font-size:14px;color:${EMAIL_TEXT}">${value}</div>
     </div>`;
+}
+
+// A part past the limit is no invitation, and the mail goes on without one.
+function extractCalendarAttachment(mail: { attachments: readonly Attachment[] }): {
+    ics: string;
+    method?: ImipMethod;
+} | null {
+    const attachment = mail.attachments.find(
+        (part) => isCalendarPart(part) && part.content.byteLength <= IMIP_MAX_BYTES,
+    );
+    if (!attachment) return null;
+
+    return { ics: Buffer.from(attachment.content).toString(), method: attachment.calendarMethod };
 }
