@@ -37,9 +37,8 @@ export type Cell = CellStyle & {
     ct?: CellType;
     qp?: number;
     bg?: string;
-    // Text rotation: signed degrees in [-90, 90] (positive = counter-clockwise / "up",
-    // negative = clockwise / "down"), or 'vertical' for stacked top-to-bottom characters.
-    // Matches Excel/OOXML's textRotation. Undefined or 0 = no rotation.
+    // Signed degrees in [-90, 90], positive counter-clockwise, or 'vertical' for stacked characters, as Excel's
+    // textRotation.
     rt?: number | 'vertical';
     link?: CellLink;
     commentCardIds?: string[];
@@ -56,9 +55,8 @@ export type CellWithRowAndCol = {
     v: Cell | null;
 };
 
-// One edit to a workbook, made by the editor from immer's patches and replayed by the editor and the API.
-// `value` stays `any` because the editor passes a cell, a sheet or a row or column op through it, with no field that
-// says which.
+// One edit to a workbook, made by the editor from immer's patches and replayed by every reader. `value` stays `any`
+// because it carries a cell, a sheet or a row or column op, with no field that says which.
 export type Op = {
     op: 'replace' | 'remove' | 'add' | 'insertRowCol' | 'deleteRowCol' | 'addSheet' | 'deleteSheet' | 'renameSheet';
     id?: string;
@@ -73,7 +71,7 @@ export function isStructuralBatch(batch: readonly Op[]): boolean {
     return batch.some((op) => !isPatchOp(op));
 }
 
-// A cell or field write, which every reader applies as an immer patch, where a row, column or sheet op runs its own code.
+// A cell or field write, which every reader applies as an immer patch. A row, column or sheet op runs its own code.
 export function isPatchOp(op: Op): op is Op & { op: 'add' | 'remove' | 'replace' } {
     return op.op === 'add' || op.op === 'remove' || op.op === 'replace';
 }
@@ -84,11 +82,8 @@ export type SingleRange = { row: number[]; column: number[] };
 export type Range = SingleRange[];
 
 export type BorderSide = { style: number; color: string };
-// One cell's own borders, keyed `${row}_${col}` in `SheetConfig.borderInfo` like
-// `merge`. A border belongs to the cell it was drawn on — nothing is mirrored onto
-// the neighbor across the shared edge — and a side that is absent has no border.
-// `s` is the editor's diagonal slash (painted top-left → bottom-right); it round-trips to
-// xlsx's diagonalDown border.
+// A border belongs to the cell it was drawn on and is never mirrored onto the neighbor across the edge. `s` is the
+// diagonal slash from top left to bottom right, xlsx's diagonalDown.
 export type CellBorderSides = {
     l?: BorderSide;
     r?: BorderSide;
@@ -129,9 +124,8 @@ export type BorderStyleName =
 
 export type MergeCell = { r: number; c: number; rs: number; cs: number };
 
-// An image or a chart floating over a sheet: unzoomed grid pixels from A1's top-left, rotated about its center by
-// `angle` degrees clockwise, absent reading as 0. `index` orders images and charts together for painting, a
-// fractional key with ties broken by id (floatingItems).
+// Unzoomed grid pixels from A1's top-left, rotated about the center by `angle` degrees clockwise. `index` is a
+// fractional key that orders images and charts together for painting, ties broken by id.
 export type SheetFloatingObject = {
     id: string;
     index: string;
@@ -146,27 +140,12 @@ export type SheetFloatingObject = {
 // render time.
 export type SheetImage = SheetFloatingObject & { mediaName: string };
 
-// The spec is stored a field per part, a keyed part a record of an entry's JSON per key, read only through readChartSpec
-// (@workspace/lib/charts); its range refs name sheets by id. The look is a canvas chart's own fields, each written apart
-// and read through readChartLook, flat where unset.
+// The spec is stored a field per part and read only through readChartSpec, its range refs naming sheets by id. The
+// look is a canvas chart's own fields, each written apart and read through readChartLook.
 export type SheetChart = SheetFloatingObject & Partial<ChartLook> & SheetChartSpecParts;
 
-// A data-validation rule, such as a list or a number check. A sheet holds each one with the ranges it covers
-// (SheetValidation). The editor writes it, and the canvas painter reads it for the list chevron and the tick box.
-//
-// `value1` is a string whatever the type: the list's items, comma-separated, or a range, for a dropdown, a number for
-// the number and text-length checks, the checked value for a tick box and a YYYY-MM-DD date for a date check.
-// `value2` holds the upper bound of a between or not-between check, and a tick box's unchecked value. A tick box
-// stores no checked flag: the cell's value says whether it is checked (isCheckboxChecked). `hintShow` and `hintValue`
-// make the prompt a selected cell shows, and `prohibitInput` refuses a value that fails the check (updateCell).
-//
-// `type` and `type2` are `string` rather than a narrow union: the `DataValidation` dialog assigns them from Radix
-// Select's `onValueChange(value: string)`, and a union would need narrowing at every callback. Known values:
-// type  ∈ dropdown | checkbox | number | number_integer | number_decimal |
-//         text_content | text_length | date
-// type2 ∈ between | notBetween | equal | notEqualTo | moreThanThe | lessThan |
-//         greaterOrEqualTo | lessThanOrEqualTo | include | exclude |
-//         earlierThan | noEarlierThan | laterThan | noLaterThan | true | ''
+// A data-validation rule, such as a list or a number check, which a sheet holds over its ranges. `type` and `type2` are
+// plain strings because the dialog sets them from a Select's string value.
 export type DataValidationRule = {
     type: string;
     type2: string;
@@ -251,8 +230,7 @@ export type Sheet = {
         range?: { row_focus: number; column_focus: number };
     };
     // The autofilter's range, whose header row shows the filter buttons. Each column's criteria live on the
-    // editor-only `filter` field. A filter without criteria, which a fresh enable and the xlsx importer write, is
-    // only this range.
+    // editor-only `filter` field.
     filterRange?: SingleRange;
     // The data-validation rules by id, each over its ranges. Materialized like the config collections, so a new rule
     // or a changed one is written under its own id and two peers editing different rules don't overwrite each other.
