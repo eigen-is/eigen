@@ -1,7 +1,7 @@
-// iMIP, the way calendar invitations travel by email. It builds the mails for an invitation, a cancellation and an
-// RSVP reply, with the calendar file attached, and it reads such a mail when one arrives. Inbound mail is only
-// trusted when the sender is verified, a calendar part past the mail size limit is skipped, and only a message's
-// first events are acted on.
+// iMIP, the way calendar invitations travel by email. Calendar saves, such as an organizer inviting guests or a guest
+// answering, mail through it: an invitation, a cancellation or an RSVP reply, with the calendar file attached. Mail
+// delivery hands it each calendar part that arrives, acted on only when our MTA verified the sender, and only for a
+// message's first events.
 
 import {
     formatEventWhen,
@@ -30,6 +30,13 @@ const IMIP_MAX_REPLY_DATES = 5;
 
 // A scheduling message is small, far below what a saved event may hold.
 const IMIP_MAX_BYTES = 1_048_576;
+
+const STATUS_LABELS: Record<Attendee['status'], string> = {
+    accepted: 'Accepted',
+    declined: 'Declined',
+    tentative: 'Tentatively accepted',
+    pending: 'Pending',
+};
 
 // The calendar file of one save's invitation mails. Nothing in it differs per guest, and its size is guests ×
 // exceptions, so a save builds it once.
@@ -87,13 +94,6 @@ export function composeCancelEmail(
         ),
     };
 }
-
-const STATUS_LABELS: Record<Attendee['status'], string> = {
-    accepted: 'Accepted',
-    declined: 'Declined',
-    tentative: 'Tentatively accepted',
-    pending: 'Pending',
-};
 
 // `event` names its occurrence by the instant its stored file holds, which a copy of one date can't compute.
 export function composeRsvpReply(
@@ -263,9 +263,7 @@ function icalEvent(
 
 function buildEventSummary(event: CalendarEvent): string {
     const repeats = rruleToText(event.rrule, event.timezone);
-    const lines: string[] = [];
-    lines.push(`What: ${event.title}`);
-    lines.push(`When: ${buildEventWhen(event)}`);
+    const lines = [`What: ${event.title}`, `When: ${buildEventWhen(event)}`];
     if (repeats) lines.push(`Repeats: ${repeats}`);
     if (event.location) lines.push(`Where: ${event.location}`);
     if (event.description) lines.push(`Description: ${event.description}`);
@@ -281,23 +279,13 @@ function buildEventWhen(event: CalendarEvent): string {
 }
 
 function buildEventHtml(event: CalendarEvent, footerLine: string, banner?: string): string {
-    return renderEigenEmail({
-        title: event.title,
-        bodyHtml: buildEventBodyHtml(event),
-        banner,
-        footerLine,
-    });
-}
-
-function buildEventBodyHtml(event: CalendarEvent): string {
-    const sections: string[] = [];
     const repeats = rruleToText(event.rrule, event.timezone);
-    sections.push(buildSection('When', escapeHtml(buildEventWhen(event))));
+    const sections = [buildSection('When', escapeHtml(buildEventWhen(event)))];
     if (repeats) sections.push(buildSection('Repeats', escapeHtml(repeats)));
     if (event.location) sections.push(buildSection('Where', escapeHtml(event.location)));
     if (event.description)
         sections.push(buildSection('Description', escapeHtml(event.description).replace(/\n/g, '<br>')));
-    return sections.join('\n');
+    return renderEigenEmail({ title: event.title, bodyHtml: sections.join('\n'), banner, footerLine });
 }
 
 function buildSection(label: string, value: string): string {
@@ -307,7 +295,6 @@ function buildSection(label: string, value: string): string {
     </div>`;
 }
 
-// A part past the limit is no invitation, and the mail goes on without one.
 function extractCalendarAttachment(mail: { attachments: readonly Attachment[] }): {
     ics: string;
     method?: ImipMethod;
