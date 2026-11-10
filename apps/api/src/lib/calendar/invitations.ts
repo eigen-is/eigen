@@ -432,7 +432,8 @@ function inboundExceptionPayload(parsed: ParsedEvent, recurrenceDate: string): I
     };
 }
 
-// The caller holds the write lock.
+// The caller holds the write lock. Returns false when it changed nothing, such as for a redelivery: an occurrence
+// already stored is patched, and only a new one is written whole.
 async function applyInvitationException(
     calendar: Calendar,
     linked: CalendarEvent,
@@ -445,6 +446,16 @@ async function applyInvitationException(
     if (!isNewerRevision(payload, storedRevision(component, recurrenceDate))) return false;
 
     const existing = events.exceptionOf(calendar, linked.id, recurrenceDate);
+    const cancelled = payload.status === 'cancelled';
+    const timezone = payload.timezone ?? linked.timezone;
+    if (existing && (existing.status === 'cancelled') === cancelled) {
+        // A cancelled occurrence is an EXDATE, which holds nothing more to patch.
+        if (cancelled) return false;
+        const patch = invitationPatch(existing, { ...payload, timezone, rrule: null }, null);
+        const changed = patchEvent(component, recurrenceDate, patch, events.writeContext(false, payload.dtstamp));
+        if (changed) await events.writeComponent(calendar, resource, component);
+        return changed;
+    }
     const data: EventData = {
         ...linked.data,
         attendees: payload.attendees ?? heldAttendees(existing, linked),
@@ -456,7 +467,7 @@ async function applyInvitationException(
         startTime: payload.startTime,
         endTime: payload.endTime,
         allDay: payload.allDay,
-        timezone: payload.timezone ?? linked.timezone,
+        timezone,
         parentEventId: linked.id,
         recurrenceDate,
         status: payload.status,

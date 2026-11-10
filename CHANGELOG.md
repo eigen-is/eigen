@@ -89,6 +89,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Time zones in calendar files** — an export keeps each event's time when two custom time zones share a name, and so does an import of a file holding several calendars. An event a calendar app saved in UTC shows as UTC, not GMT, and stays UTC when moved
 - **Importing a file that isn't a calendar** — Calendar says it is not a calendar file instead of showing an internal error
 - **Share notices in Calendar** — changing who a calendar is shared with, in Calendar or in a team's settings in Admin, no longer notifies people whose access stayed the same, so a notice they read stays read
+- **Repeated invitations in Calendar** — an invitation to a repeating event that arrives twice no longer notifies you again for each date its organizer changed
 - **A refused Save** — in Calendar, Contacts and Personal info in Space, a Save refused because the item changed elsewhere keeps what you typed and takes the other fields from the server
 - **Removing someone with a document open** — removing someone from a team or an organization, or deleting their account, cuts them off within 15 seconds from the documents they can no longer read. A password reset does too
 - **Losing access to an open document** — in Docs, Sheets, Slides, Vector and Stickies, the page switches to "You need access" within 15 seconds, or to sign-in if your account was deleted, instead of leaving an editor where typing goes nowhere

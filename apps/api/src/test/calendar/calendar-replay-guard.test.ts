@@ -243,6 +243,59 @@ describe('inbound message ordering', () => {
         expect((await calendar.getCalendarById(calendarId))!.ctag).toBe(before);
     });
 
+    test('a series REQUEST with a moved and a cancelled occurrence, delivered twice, writes nothing the second time', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const calendarId = (await calendar.getCalendars())[0].id;
+        const series = parseIcs(
+            vcal(
+                [
+                    'BEGIN:VEVENT',
+                    `UID:${UID}`,
+                    'SUMMARY:Title A',
+                    'DTSTART:20260501T090000Z',
+                    'DTEND:20260501T100000Z',
+                    'RRULE:FREQ=DAILY;COUNT=5',
+                    'EXDATE:20260503T090000Z',
+                    'SEQUENCE:2',
+                    `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+                    `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${GUEST}`,
+                    'DTSTAMP:20260401T100000Z',
+                    'END:VEVENT',
+                ],
+                [
+                    'BEGIN:VEVENT',
+                    `UID:${UID}`,
+                    'SUMMARY:Moved once',
+                    'RECURRENCE-ID:20260502T090000Z',
+                    'DTSTART:20260502T110000Z',
+                    'DTEND:20260502T120000Z',
+                    'SEQUENCE:2',
+                    `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+                    `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${GUEST}`,
+                    'DTSTAMP:20260401T100000Z',
+                    'END:VEVENT',
+                ],
+            ),
+        ).events;
+        const deliver = async () => {
+            for (const parsed of series) await calendar.receiveImipRequest(parsed, ORG);
+        };
+        await deliver();
+        expect((await calendar.getEventsByUid(UID)).map((e) => e.status)).toEqual([
+            'confirmed',
+            'cancelled',
+            'confirmed',
+        ]);
+        const ctag = (await calendar.getCalendarById(calendarId))?.ctag;
+        const broadcasts = harness.broadcasts.length;
+
+        await deliver();
+
+        expect((await calendar.getCalendarById(calendarId))?.ctag).toBe(ctag);
+        expect(harness.broadcasts.length).toBe(broadcasts);
+    });
+
     test('an occurrence REQUEST redelivered behind a newer one does not revert the occurrence', async () => {
         const { calendar } = await seeded();
 
