@@ -104,6 +104,12 @@
         outline: none;
     }
 
+    /* A heading with a link icon copies its link on a click anywhere on it. */
+    h2:has(.heading-anchor),
+    h3:has(.heading-anchor) {
+        cursor: pointer;
+    }
+
     code {
         background-color: var(--muted);
         color: var(--foreground);
@@ -141,6 +147,11 @@
 @media (pointer: coarse) {
     .site-prose .heading-anchor {
         display: none;
+    }
+
+    .site-prose h2:has(.heading-anchor),
+    .site-prose h3:has(.heading-anchor) {
+        cursor: auto;
     }
 }
 
