@@ -249,7 +249,7 @@ async function decideInboundRequest(
 ): Promise<InboundRequestOutcome> {
     const master = requested.find((e) => !e.recurrenceDate);
     const stored = calendar.joinedEvents().where(eq(schema.events.uid, requested[0].uid)).all().map(toEvent);
-    // An exception inherits the link and would answer for the series, so only own VEVENTs count (findLinkedEvents).
+    // An exception inherits the link and would answer for the series, so only own VEVENTs count.
     const series =
         stored.find((e) => !e.parentEventId && e.data?.organizerEventId) ?? stored.find((e) => !e.parentEventId);
     const resource = series && events.resourceOf(calendar, series.id);
@@ -370,22 +370,21 @@ async function fileNewInvitation(
             .find((row) => row.isDefault)?.id;
     if (!calendarId) return { kind: 'dropped', reason: 'no default calendar' };
 
-    // Each date the copy held is one the series states as an exception or, unmoved, as its master.
+    // Each date the copy held is one the series states as an exception or, unmoved, through its master. Only an
+    // exception takes over the date's row and answer.
     const revisions = replaces && storedRevisions(replaces.component);
     const heldRevision = (copy: CalendarEvent) => revisions?.get(copy.recurrenceDate) ?? null;
-    const heldBy = new Map<ParsedEvent, CalendarEvent>();
-    for (const copy of replaces?.copies ?? []) {
+    const heldByDate = new Map(replaces?.copies.map((copy) => [copy.recurrenceDate, copy]));
+    const stale = replaces?.copies.some((copy) => {
         const parsed = requested.find((e) => e.recurrenceDate === copy.recurrenceDate) ?? requested[0];
-        if (!heldBy.has(parsed)) heldBy.set(parsed, copy);
-    }
-    if ([...heldBy].some(([parsed, copy]) => !isNewerRevision(parsed, heldRevision(copy)))) {
-        return { kind: 'dropped', reason: 'nothing newer to apply' };
-    }
+        return !isNewerRevision(parsed, heldRevision(copy));
+    });
+    if (stale) return { kind: 'dropped', reason: 'nothing newer to apply' };
     const kept = replaces?.copies.at(0)?.data;
 
     const now = new Date();
     const rows = requested.map((parsed) => {
-        const held = heldBy.get(parsed);
+        const held = heldByDate.get(parsed.recurrenceDate);
         return eventForResource({
             id: held?.id ?? crypto.randomUUID(),
             calendarId,
@@ -499,8 +498,8 @@ function notifyInvitationUpdated(calendar: Calendar, parsed: ParsedEvent, link: 
     });
 }
 
-// The copy's master, or each date of a copy of single dates. An exception inherits the link and would answer for the series.
-// series.
+// The copy's master, or each date of a copy of single dates, never an exception: it inherits the link and would
+// answer for its series.
 function findLinkedEvents(calendar: Calendar, organizerEventId: string, organizerUserId: string): CalendarEvent[] {
     return calendar
         .joinedEvents()

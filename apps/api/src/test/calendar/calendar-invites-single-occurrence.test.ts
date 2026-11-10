@@ -652,4 +652,18 @@ describe('An invitation to several single dates of one series', () => {
         const range = await calendar.getEventsInRange(new Date('2028-03-01'), new Date('2028-04-01'));
         expect(range).toHaveLength(4);
     });
+
+    // A date the series doesn't list is an unmoved occurrence of it, so its answer stays with that date.
+    test("a whole-series message that lists no date takes neither date's row nor answer", async () => {
+        const { calendar, guest, me, rowOf } = await invitedToTwoDates();
+        const held = [rowOf('2028-03-13').id, rowOf('2028-03-20').id];
+        await calendar.rsvp(held[0], me, { status: 'accepted' });
+
+        await calendar.receiveRequest(parseIcs(vcal(series(guest))).events, LINK);
+
+        const [master] = await calendar.getEventsByUid(UID);
+        expect(master.rrule).toContain('FREQ=WEEKLY');
+        expect(held).not.toContain(master.id);
+        expect(master.data?.attendees?.[0]).toMatchObject({ email: guest, status: 'pending' });
+    });
 });
