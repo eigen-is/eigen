@@ -74,8 +74,7 @@ describe('CollabDocument Modified touch', () => {
             return original(...args);
         };
 
-        const doc = new CollabDocument(home.drive, path);
-        await doc.init();
+        const doc = await CollabDocument.open(home.drive, path);
         const conn = makeSpyConn();
         doc.subscribe(home.user, conn);
         return {

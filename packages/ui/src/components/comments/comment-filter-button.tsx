@@ -1,4 +1,8 @@
+// The filter button in a comment panel's header: a popover that narrows the cards by assignee, color and open
+// or resolved status. The filter state is the caller's useCommentFilter.
+
 import type { useCommentFilter } from '@workspace/lib/comments';
+import { COMMENT_STATUS_FILTERS, COMMENT_STATUS_LABELS } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
@@ -97,17 +101,19 @@ export function CommentFilterButton({ filter, members, currentUserEmail }: Comme
 
                 <div className="p-2">
                     <GroupLabel>Status</GroupLabel>
-                    <Tabs value={status} onValueChange={(v) => filter.setStatus(v as typeof status)}>
+                    <Tabs
+                        value={status}
+                        onValueChange={(v) => {
+                            const next = COMMENT_STATUS_FILTERS.find((s) => s === v);
+                            if (next) filter.setStatus(next);
+                        }}
+                    >
                         <TabsList className="w-full">
-                            <TabsTrigger value="open" className="flex-1 text-xs">
-                                Open
-                            </TabsTrigger>
-                            <TabsTrigger value="resolved" className="flex-1 text-xs">
-                                Resolved
-                            </TabsTrigger>
-                            <TabsTrigger value="all" className="flex-1 text-xs">
-                                All
-                            </TabsTrigger>
+                            {COMMENT_STATUS_FILTERS.map((s) => (
+                                <TabsTrigger key={s} value={s} className="flex-1 text-xs">
+                                    {COMMENT_STATUS_LABELS[s]}
+                                </TabsTrigger>
+                            ))}
                         </TabsList>
                     </Tabs>
                 </div>

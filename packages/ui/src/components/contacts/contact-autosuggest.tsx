@@ -1,3 +1,7 @@
+// A text field that suggests contacts as you type an address, such as a mail draft's To line or a share
+// list's add row. In append mode a pick adds to a comma-separated list; otherwise it replaces the value. Arrow keys,
+// Enter and Tab pick from the list, and the caller may own the value or leave it to the field.
+
 import { useContactSuggestions } from '@workspace/lib/contacts';
 import type { ContactSuggestion } from '@workspace/lib/types/contact';
 import { Input } from '@workspace/ui/components/input';
@@ -31,9 +35,8 @@ export function ContactAutosuggest({
     const [selectedIndex, setSelectedIndex] = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Handle controlled vs uncontrolled state
     const [internalValue, setInternalValue] = useState(initialValue);
-    const inputValue = controlledValue !== undefined ? controlledValue : internalValue;
+    const inputValue = controlledValue ?? internalValue;
 
     const { suggestions, isLoading } = useContactSuggestions(inputValue, onlyInternalMails, excludeEmails);
     const listOpen = isOpen && suggestions.length > 0;
@@ -42,14 +45,10 @@ export function ContactAutosuggest({
         (suggestion: ContactSuggestion) => {
             const formattedContact = `${suggestion.displayName} <${suggestion.email}>`;
 
-            let newValue: string;
-            if (appendMode) {
-                newValue = inputValue
+            const newValue =
+                appendMode && inputValue
                     ? `${[...inputValue.trim().split(',').slice(0, -1), formattedContact].join(', ')}, `
                     : formattedContact;
-            } else {
-                newValue = formattedContact;
-            }
 
             setInternalValue(newValue);
             setSelectedIndex(0);
@@ -105,7 +104,6 @@ export function ContactAutosuggest({
 
     const handleKeyDownSubmit = (event: React.KeyboardEvent<HTMLInputElement>) => {
         if (event.key !== 'Enter' || event.defaultPrevented) return;
-        // Empty-input Enter runs the caller's primary action instead of a no-op submit.
         if (!inputValue.trim() && onEmptyEnter) {
             event.preventDefault();
             onEmptyEnter();
@@ -138,7 +136,7 @@ export function ContactAutosuggest({
                     if (typeof externalInputRef === 'function') {
                         externalInputRef(elm);
                     } else if (externalInputRef) {
-                        (externalInputRef as React.MutableRefObject<HTMLInputElement | null>).current = elm;
+                        externalInputRef.current = elm;
                     }
                     inputRef.current = elm;
                 }}

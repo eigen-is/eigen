@@ -108,19 +108,18 @@ export function NoteCardDialog({
             className={cn(
                 'flex flex-row items-center gap-2 px-4 pt-4 pb-2 rounded-t-lg',
                 color &&
-                    // Inset shadow, not a border: the color bar must not shift the title.
-                    // Dark mode matches the mail list row / NoteCard: 2px inset stripe +
-                    // a 14% color-mix wash over --background (see --note-soft below).
+                    // An inset shadow, not a border, so the color bar doesn't shift the title. In dark mode
+                    // the header looks like a mail list row: a 2px stripe over a faint wash of the color.
                     'bg-(--note-bg) text-(--note-fg) dark:bg-(--note-soft) dark:text-card-foreground dark:shadow-[inset_2px_0_0_0_var(--note-indicator)]',
             )}
             style={
                 color
-                    ? ({
+                    ? {
                           '--note-bg': lightenColor(color, 0.5),
                           '--note-fg': isLightColor(lightenColor(color, 0.5)) ? '#000' : '#fff',
                           '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(color) ?? color,
                           '--note-soft': 'color-mix(in oklab, var(--note-indicator) 14%, var(--background))',
-                      } as React.CSSProperties)
+                      }
                     : undefined
             }
         >
@@ -143,16 +142,13 @@ export function NoteCardDialog({
                     </div>
                 ) : (
                     <>
-                        {/* Header + content cap at 42vh (60% of the 70vh dialog cap) so the thread
-                            below always keeps ≥40%. A percentage max-h would never resolve here —
-                            the dialog's max-h-[70vh] height stays indefinite. shrink-0 keeps a short
-                            body at full height when the thread is long (max-h alone does the cap). */}
+                        {/* 42vh is 60% of the dialog's 70vh, so the thread keeps the rest. A percentage
+                            would never resolve, as the dialog's own height stays indefinite. */}
                         <div className="flex max-h-[42vh] min-h-0 shrink-0 flex-col">
                             {header}
 
-                            {/* Rendered even when empty, with a floor under it: a title-only card would
-                                otherwise drop the body entirely and butt the meta row straight against
-                                the colored header. */}
+                            {/* Rendered even when empty, so a title-only card keeps a gap between the
+                                colored header and the meta row. */}
                             <div className="min-h-14 flex-1 overflow-y-auto px-4 py-3 text-sm text-foreground">
                                 <div
                                     ref={descriptionRef}

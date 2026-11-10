@@ -19,6 +19,7 @@ import { useProseMirrorSearchController } from '@workspace/ui/components/search/
 import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
 import { common, createLowlight } from 'lowlight';
 import { useCallback, useRef, useState } from 'react';
+import type { MarkdownStorage } from 'tiptap-markdown';
 import { Markdown } from 'tiptap-markdown';
 import { CodeEditorView } from './code-editor';
 import { ConflictDialog } from './conflict-dialog';
@@ -27,17 +28,24 @@ import { MarkdownToolbarButtons } from './markdown-toolbar';
 import { useCodeMirrorSearchController } from './use-codemirror-search-controller';
 import { useEditorSave } from './use-editor-save';
 
+declare module '@tiptap/core' {
+    interface Storage {
+        markdown: MarkdownStorage;
+    }
+}
+
 const lowlight = createLowlight(common);
 
-function detectBulletMarker(content: string): '-' | '*' | '+' {
-    const markers = content.match(/^[\s]*([*+-])\s/gm);
-    if (!markers) return '-';
+// On a tie the earlier marker wins, so a file with no list writes '-'.
+const MARKERS = ['-', '*', '+'] as const;
+
+function detectBulletMarker(content: string): (typeof MARKERS)[number] {
     const counts = { '-': 0, '*': 0, '+': 0 };
-    for (const m of markers) {
-        const char = m.trim()[0] as '-' | '*' | '+';
-        if (char in counts) counts[char]++;
+    for (const m of content.match(/^\s*[*+-]\s/gm) ?? []) {
+        const marker = MARKERS.find((c) => c === m.trim()[0]);
+        if (marker) counts[marker]++;
     }
-    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0] as '-' | '*' | '+';
+    return MARKERS.reduce((best, c) => (counts[c] > counts[best] ? c : best));
 }
 
 function detectLineEnding(content: string): string {
@@ -71,7 +79,6 @@ function useMarkdownExtensions(content: string) {
     ];
 }
 
-// Full markdown editor with save logic
 type MarkdownEditorProps = {
     content: string;
     frontmatter: string | null;
@@ -116,9 +123,8 @@ export function MarkdownEditor({
         },
     });
 
-    // One find bar over whichever surface is active: the TipTap doc in WYSIWYG, the CodeMirror source
-    // view in source mode. Swapping the controller identity makes the provider re-run the open search
-    // against the newly-active editor.
+    // One find bar over whichever view is active. A new controller makes the provider re-run an open search
+    // against the view the user switched to.
     const pmController = useProseMirrorSearchController(editor, canWrite);
     const cmController = useCodeMirrorSearchController(sourceView, canWrite);
     const searchController = sourceMode ? cmController : pmController;
@@ -126,7 +132,7 @@ export function MarkdownEditor({
     const getContent = useCallback((): string => {
         if (sourceMode) return sourceContent;
         if (!editor) return content;
-        const md = (editor.storage as unknown as Record<string, { getMarkdown: () => string }>).markdown.getMarkdown();
+        const md = editor.storage.markdown.getMarkdown();
         if (lineEndingRef.current === '\r\n') return md.replace(/\n/g, '\r\n');
         return md;
     }, [sourceMode, sourceContent, editor, content]);
@@ -157,10 +163,7 @@ export function MarkdownEditor({
             editor?.commands.setContent(sourceContent);
             setSourceMode(false);
         } else {
-            const md =
-                (
-                    editor?.storage as unknown as Record<string, { getMarkdown: () => string }> | undefined
-                )?.markdown?.getMarkdown() ?? '';
+            const md = editor?.storage.markdown.getMarkdown() ?? '';
             setSourceContent(md);
             setSourceMode(true);
         }

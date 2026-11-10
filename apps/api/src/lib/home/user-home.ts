@@ -16,11 +16,10 @@ import type { User } from '../user';
 import { Home } from './home';
 
 export class UserHome extends Home {
-    declare public settings: JsonStore<UserSettings>;
+    public override readonly settings = new JsonStore<UserSettings>(this.fs, PATHS.SETTINGS, {});
 
     public constructor(user: User, onClosed?: () => void) {
         super(user, getUserHomePath(user.id), onClosed);
-        this.settings = new JsonStore<UserSettings>(this.fs, PATHS.SETTINGS, {});
         this._contacts = new Contacts(this);
         this._mail = new Mail(this, new MaildirStore(this));
         this._drive = new Drive(this);

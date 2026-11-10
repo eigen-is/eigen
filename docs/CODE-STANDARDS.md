@@ -30,6 +30,7 @@ Six slips recur, with BAD/GOOD code in [CODE-EXAMPLES.md § Review Hot Spots](CO
 Types flow end to end: Elysia handler return type → Eden Treaty → hook → component ([CODE-EXAMPLES.md § Typing](CODE-EXAMPLES.md#typing)).
 
 - No casts or non-null assertions in new code: no `as Type`, `as any`, `as unknown as` or `!` (`as const` is fine). Narrow with a type guard or `instanceof`, or fix the type at its source (a handler's return type, a schema, an optional field that is always set). Removing an old cast elsewhere doesn't pay for a new one
+- A CSS variable in a `style` object needs no cast: React's `CSSProperties` accepts `--*` keys here (`style={{ '--gap': spacing }}`)
 - Eden responses keep their inferred type: the backend handler or domain method gets an explicit return type from `packages/lib/src/types/`
 - Shared types live in `packages/lib/src/types/[domain].ts`, never redefined; a missing one is added there. Only the leaf `@workspace/math` owns its own ([ARCHITECTURE.md § Dependency direction](ARCHITECTURE.md#dependency-direction))
 - `type` over `interface`, except when methods are needed
@@ -72,7 +73,8 @@ Workspace imports resolve through each package's `exports` map, never tsconfig a
 
 Worked examples: [CODE-EXAMPLES.md § Key Patterns](CODE-EXAMPLES.md#key-patterns).
 
-- **Query keys** are hierarchical per domain (`driveKeys.folder(ownerId, mountId, pathId)`) and always include `ownerId`, or personal and team contexts serve each other's stale cache. Every `useQuery` has a `queryKey` from the domain keys, a `queryFn` that checks errors, an `enabled` guard and an explicit `staleTime`
+- **Query keys** are hierarchical per domain (`driveKeys.folder(ownerId, mountId, pathId)`) and always include `ownerId`, or personal and team contexts serve each other's stale cache. Every `useQuery` has a `queryKey` from the domain keys, a `queryFn` that checks errors, an `enabled` guard or `skipToken` and an explicit `staleTime`
+- **A query whose argument may be missing** passes `skipToken` as its `queryFn` (`queryFn: teamId ? () => … : skipToken`) instead of `enabled: !!teamId` plus `teamId!`, so the guard also narrows the type
 - **Eden Treaty**: `driveApi({ ownerId })({ mountId }).folder({ pathId }).get()`, typed from the Elysia routes
 - **Errors are handled in hooks**, never app components: every `useMutation` has an `onError` using `onMutationError` from `api-error.ts`; apps add no `try/catch` + `toast.error()` ([NOTIFICATIONS.md](NOTIFICATIONS.md))
 - **Invalidation**: export `invalidateFoo(queryClient, ...)` beside the query keys; apps call it, never `useQueryClient` + `invalidateQueries()`

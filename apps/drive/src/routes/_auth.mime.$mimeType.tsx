@@ -3,7 +3,6 @@
 // offers New for that kind only.
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useAggregateMimeContent, usePathInfo, validateDriveSearch } from '@workspace/lib/drive';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByMime } from '@workspace/lib/types/drive';
@@ -21,8 +20,8 @@ function MimeRoute() {
     const { mimeType } = Route.useParams();
     const navigate = useNavigate();
     const { pid, uid, mid } = Route.useSearch();
-    const auth = useAuth();
-    const ownerId = auth.user!.id;
+    const { user } = Route.useRouteContext();
+    const ownerId = user.id;
     const { data: selectedPath = null } = usePathInfo(uid || ownerId, mid || DEFAULT_MOUNT_ID, pid);
 
     const { data: folderContents = [], isLoading, error } = useAggregateMimeContent(mimeType);

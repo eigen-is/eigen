@@ -3,7 +3,6 @@
 // team drive routes render it, and the selection lives in the URL they own.
 
 import { openDocument } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth';
 import {
     DEFAULT_MOUNT_ID,
     useAggregateMimeContent,
@@ -23,6 +22,7 @@ import { useDriveQuickLook } from './use-drive-quick-look';
 
 type EigenDocListViewProps = {
     config: EigenDocAppConfig;
+    viewerId: string;
     pid?: string;
     uid?: string;
     mid?: string;
@@ -37,6 +37,7 @@ type EigenDocListViewProps = {
 
 export function EigenDocListView({
     config,
+    viewerId,
     pid,
     uid,
     mid,
@@ -47,8 +48,7 @@ export function EigenDocListView({
     onNavigateBack,
 }: EigenDocListViewProps) {
     const { rootPath } = useContext(EigenDocDriveContext);
-    const { user } = useAuth();
-    const effectiveOwnerId = ownerId || user!.id;
+    const effectiveOwnerId = ownerId ?? viewerId;
     const isMountScoped = !!mountId;
     const effectiveMountId = mid || mountId || DEFAULT_MOUNT_ID;
 
@@ -65,10 +65,10 @@ export function EigenDocListView({
 
     // The viewer's own index gathers their personal drive and all their team drives. Another owner without
     // a mount gets a plain listing of that owner, and a view with a mount lists only that mount.
-    const isOwnAggregate = !isMountScoped && effectiveOwnerId === user!.id;
+    const isOwnAggregate = !isMountScoped && effectiveOwnerId === viewerId;
     const aggregate = useAggregateMimeContent(isOwnAggregate ? config.mimeType : '');
     const ownerScoped = useMimeContent(isMountScoped || isOwnAggregate ? '' : effectiveOwnerId, config.mimeType);
-    const mountScoped = useMountMimeContent(isMountScoped ? effectiveOwnerId : '', mountId || '', config.mimeType);
+    const mountScoped = useMountMimeContent(isMountScoped ? effectiveOwnerId : '', mountId ?? '', config.mimeType);
     const {
         data: folderContents = [],
         isLoading,

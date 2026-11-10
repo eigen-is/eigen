@@ -551,12 +551,10 @@ describe('an open that is still loading the document', () => {
     ): Promise<Socket> {
         const owner = ctx.alice.user;
         const loading = Promise.withResolvers<void>();
-        const init = CollabDocument.prototype.init;
-        const inits = spyOn(CollabDocument.prototype, 'init').mockImplementationOnce(async function (
-            this: CollabDocument,
-        ) {
+        const open = CollabDocument.open;
+        const inits = spyOn(CollabDocument, 'open').mockImplementationOnce(async (drive, path) => {
             await loading.promise;
-            return init.call(this);
+            return open(drive, path);
         });
         try {
             const socket = connect(user, owner.id, mountId, docId);

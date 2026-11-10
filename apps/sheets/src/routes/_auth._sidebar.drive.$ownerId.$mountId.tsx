@@ -14,9 +14,11 @@ function TeamDriveRoute() {
     const { ownerId, mountId } = Route.useParams();
     const { pid, uid, mid } = Route.useSearch();
     const navigate = useNavigate();
+    const { user } = Route.useRouteContext();
     return (
         <EigenDocListView
             config={SHEETS_CONFIG}
+            viewerId={user.id}
             ownerId={ownerId}
             mountId={mountId}
             pid={pid}
