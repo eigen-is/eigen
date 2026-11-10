@@ -6,6 +6,7 @@ import { localToUtc, truncateRRule, utcToLocal } from '@workspace/lib/calendar/c
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
 import { constrainRRule, expandRecurrence, lastKeptDate } from '../../lib/calendar/recurrence';
+import type { ParsedEvent } from '../../lib/ical/ical-parse';
 import { computeOccurrenceTimes } from '../../lib/ical/wall-clock';
 
 // Each zone's 2026 transition days, and the wall times its spring-forward day skips. A skipped wall
@@ -221,19 +222,41 @@ describe('truncateRRule', () => {
     });
 });
 
+// The organizer's series starts on Monday 2 March 2026 at 09:00 New York, and the guest cut it at 10 March.
 describe('constrainRRule', () => {
-    test("an organizer's longer rule takes the guest's UNTIL as the guest's rule spells it", () => {
-        expect(constrainRRule('FREQ=WEEKLY;COUNT=20;BYDAY=MO', 'FREQ=WEEKLY;BYDAY=MO;UNTIL=20260309')).toBe(
-            'FREQ=WEEKLY;BYDAY=MO;UNTIL=20260309',
-        );
-        expect(constrainRRule('FREQ=DAILY', 'FREQ=DAILY;UNTIL=20260310T035959Z')).toBe(
-            'FREQ=DAILY;UNTIL=20260310T035959Z',
-        );
+    const CUT = 'FREQ=DAILY;UNTIL=20260310T035959Z';
+    const organizer = (rrule: string): ParsedEvent => ({
+        uid: 'constrained@example.com',
+        title: 'Standup',
+        description: null,
+        location: null,
+        startTime: new Date('2026-03-02T14:00:00Z'),
+        endTime: new Date('2026-03-02T15:00:00Z'),
+        allDay: false,
+        rrule,
+        timezone: 'America/New_York',
+        status: 'confirmed',
+        sequence: 0,
+        dtstamp: null,
+        recurrenceDate: null,
+        recurrenceInstant: null,
+        data: null,
     });
 
-    test("an organizer's shorter rule stands", () => {
-        expect(constrainRRule('FREQ=DAILY;UNTIL=20260305T035959Z', 'FREQ=DAILY;UNTIL=20260310T035959Z')).toBe(
-            'FREQ=DAILY;UNTIL=20260305T035959Z',
+    test.each([
+        ['an endless rule', 'FREQ=DAILY', CUT],
+        ['a COUNT past the cut', 'FREQ=DAILY;COUNT=20', CUT],
+        ['an UNTIL past the cut', 'FREQ=DAILY;UNTIL=20260320T035959Z', CUT],
+        ['a COUNT before the cut', 'FREQ=DAILY;COUNT=5', 'FREQ=DAILY;COUNT=5'],
+        ['an UNTIL before the cut', 'FREQ=DAILY;UNTIL=20260305T035959Z', 'FREQ=DAILY;UNTIL=20260305T035959Z'],
+    ])("the guest's copy ends at whichever comes first: %s", (_case, rrule, kept) => {
+        expect(constrainRRule(organizer(rrule), CUT)).toBe(kept);
+    });
+
+    test("a longer rule takes the guest's UNTIL as the guest's rule spells it", () => {
+        const weekly = { ...organizer('FREQ=WEEKLY;COUNT=20;BYDAY=MO'), timezone: null };
+        expect(constrainRRule(weekly, 'FREQ=WEEKLY;BYDAY=MO;UNTIL=20260309')).toBe(
+            'FREQ=WEEKLY;BYDAY=MO;UNTIL=20260309',
         );
     });
 });

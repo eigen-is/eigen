@@ -341,7 +341,7 @@ function requestedEdit(
         // A cancelled exception is an EXDATE, which holds nothing more to patch.
         if (existing.parentEventId && cancelled) return null;
         // Never extend the rule past what the guest has: they may have shortened it on purpose.
-        const rrule = key === null ? constrainRRule(parsed.rrule, series.rrule) : null;
+        const rrule = key === null ? constrainRRule(parsed, series.rrule) : null;
         const patch = invitationPatch(existing, { ...parsed, timezone }, attendees, rrule);
         return { kind: 'patch', patch, ctx: events.writeContext(false, parsed.dtstamp) };
     }

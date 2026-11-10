@@ -99,6 +99,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Your answer in Calendar** — your answer to an invitation no longer resets when the organizer makes a small edit, such as a new title
 - **Several dates of one event in Calendar** — when you're invited to several dates of a repeating event, cancelling or deleting one of them no longer removes the others
 - **Answering one moved date in Calendar** — when someone outside your server invites you to one moved date of a repeating event, your answer or decline reaches that date in their calendar
+- **Invitations you shortened in Calendar** — after you end an invitation with **This and following events**, an organizer's update that ends the series sooner keeps their end instead of running on to yours
 - **Invitations to repeating events in Calendar** — an invitation to a repeating event with moved or cancelled dates notifies you once, and one that arrives twice notifies you no more. A date the organizer took you off shows as cancelled
 - **Invitations from before you joined** — an invitation to a repeating event sent before you had an account arrives with its moved and cancelled dates, and one to a single date of it arrives as that date
 - **Mailed invitations in Calendar** — an invitation by mail that lists a moved date before its repeating event keeps the moved date
