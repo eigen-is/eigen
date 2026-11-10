@@ -124,9 +124,9 @@ export class FormulaGraph {
     }
 
     // Every formula that reads one of `cells`, the `chosen` ones, and every formula reading those in turn, each after
-    // what it reads, given the sheets the graph follows. Each one's `dependents` is refilled so the sort sees fresh
-    // edges. The entries a lookup will visit are counted as a formula joins, before any scan, and the links as the
-    // walk makes them, so a walk past a budget throws early.
+    // what it reads. A sheet of `sheets` whose bounds changed first lists its cut formulas again, and a throw past the
+    // slot budget there leaves the graph short, so its holder drops it. The entries a lookup will visit are counted
+    // as a formula joins, before any scan, and the links as the walk makes them, so a walk past a budget throws early.
     public affected(
         sheets: readonly WorkingSheet[],
         cells: readonly CellAt[],
@@ -193,8 +193,8 @@ export class FormulaGraph {
 
     // Lists the ranges a formula reads: every reference in its text, as Excel lists a cell's precedents, so the range
     // INDEX picks from covers the reference it returns. Each range is cut to its sheet's bounds and the line past them,
-    // where a delete of the sheet's last lines seeds the readers of what it took: only a formula cell is looked up, so
-    // `SUM(A1:XFD1048576)` costs about what the sheet spans, not 16 million blocks.
+    // where a delete of the sheet's last lines seeds the readers of what it took: a lookup asks only for a cell on the
+    // sheet, so `SUM(A1:XFD1048576)` costs about what the sheet spans, not 16 million blocks.
     private list(node: FormulaCellInfo): void {
         const listed: FormulaDependency[] = [];
         walkFormulaRefs(node.formula, (reference) => {
@@ -205,12 +205,7 @@ export class FormulaGraph {
             const r1 = Math.min(extent.rows, cells.r1);
             const c1 = Math.min(extent.columns, cells.c1);
             if (r1 < cells.r1 || c1 < cells.c1) {
-                let cut = this.cut.get(cells.sheetId);
-                if (cut == null) {
-                    cut = new Set();
-                    this.cut.set(cells.sheetId, cut);
-                }
-                cut.add(node);
+                this.cut.set(cells.sheetId, (this.cut.get(cells.sheetId) ?? new Set()).add(node));
             }
             if (cells.r0 <= r1 && cells.c0 <= c1) {
                 listed.push({ row: [cells.r0, r1], column: [cells.c0, c1], sheetId: cells.sheetId });

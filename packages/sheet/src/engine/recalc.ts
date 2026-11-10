@@ -18,8 +18,8 @@ import type { EvaluationResult, FormulaCellInfo } from './types';
 
 type FormulaResult = CellAt & { formula: string; result: EvaluationResult };
 
-// What bounds an untrusted workbook's formulas. Past any of them a pass throws before it evaluates. Without them there
-// is no bound.
+// What bounds an untrusted workbook's formulas. Past any of them a pass throws a RangeError, before it evaluates or,
+// for the cells read, at the formula after the one that passed it. Without them there is no bound.
 export type RecalcBudgets = {
     maxDependencySlots?: number;
     maxDependencyVisits?: number;

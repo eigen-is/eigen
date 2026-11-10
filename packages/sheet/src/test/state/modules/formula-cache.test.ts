@@ -285,9 +285,9 @@ describe('setFormulaCellInfo — a reference to a sheet with no matrix', () => {
 
 // The editor's formula graph and the server's recalc must find the same cells a formula reads, or an edit recalculates
 // what an export would not. A whole column or row reads the same on any sheet, even Empty with no rows, and Holey,
-// whose first row is missing, as a matrix from a stored file's rows can be. A function's arguments are read like any other part of the formula, INDEX, OFFSET and
-// INDIRECT included.
-describe('setFormulaCellInfo — the cells a formula reads', () => {
+// whose first row is missing, as a matrix from a stored file's rows can be. A function's arguments are read like any
+// other part of the formula, INDEX, OFFSET and INDIRECT included.
+describe('the formula graph — the cells a formula reads', () => {
     const grid = (rows: number, cols: number): (Cell | null)[][] =>
         Array.from({ length: rows }, () => Array.from({ length: cols }, () => null));
     const everyRow: [number, number] = [0, 1_048_575];

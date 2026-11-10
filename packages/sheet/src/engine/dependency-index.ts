@@ -76,11 +76,8 @@ export class DependencyIndex {
 
             if (r0 === r1 && c0 === c1) {
                 const point = packCell(r0, c0);
-                let sheetPoints = this.points.get(sheetId);
-                if (sheetPoints == null) {
-                    sheetPoints = new Map();
-                    this.points.set(sheetId, sheetPoints);
-                }
+                const sheetPoints = this.points.get(sheetId) ?? new Map<number, Set<string>>();
+                this.points.set(sheetId, sheetPoints);
                 const keys = sheetPoints.get(point);
                 // `=A1+A1` lists its formula once.
                 if (keys == null) sheetPoints.set(point, new Set([key]));
@@ -90,12 +87,8 @@ export class DependencyIndex {
             } else {
                 const entry: RangeEntry = { r0, r1, c0, c1, key };
                 const layout = layoutOf(cells);
-                let ranges = this.buckets[layout].get(sheetId);
-                if (ranges == null) {
-                    ranges = new Map();
-                    this.buckets[layout].set(sheetId, ranges);
-                }
-                const sheetRanges = ranges;
+                const sheetRanges = this.buckets[layout].get(sheetId) ?? new Map<number, Set<RangeEntry>>();
+                this.buckets[layout].set(sheetId, sheetRanges);
                 forEachSlot(entry, layout, (slot) => {
                     const entries = sheetRanges.get(slot);
                     if (entries == null) sheetRanges.set(slot, new Set([entry]));

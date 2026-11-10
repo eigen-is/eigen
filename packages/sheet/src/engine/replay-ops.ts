@@ -39,9 +39,9 @@ type DeleteValue = Omit<DeleteRowColOp, 'id'>;
 // without the budget computes, so such sheets are no state to store.
 export class SkippedRecompute extends Error {}
 
-// A batch the replay can't apply is reported to `onDropped`, and so is a recompute past `budgets` as a SkippedRecompute,
-// whose batch stands with the values it had. A caller that wants a count of its own passes it. By default each one is
-// logged as a warning.
+// A batch the replay can't apply is reported to `onDropped`, and so is a recompute past `budgets`, as a
+// SkippedRecompute whose batch stands with the values it had. A caller that wants a count of its own passes it. By
+// default each one is logged as a warning.
 export function replaySheetsOps(
     sheets: Sheet[],
     opBatches: Op[][],
@@ -51,9 +51,9 @@ export function replaySheetsOps(
     // Every base sheet carries its config collections before the first op, so the config patches the editor writes
     // resolve here as they do in the editor.
     let result = sheets.map(withNormalizedSheet);
-    // Built at the first batch that recomputes, and kept until a batch renames, adds or deletes a sheet.
+    // Built at the first batch that recomputes, and kept until a batch renames, adds or deletes a sheet, or a step on
+    // it passes a budget, which may leave it short.
     let graph: FormulaGraph | null = null;
-    // A step past a budget may leave the graph short, so the graph goes, and the next recompute builds it whole.
     const withinBudget = (step: () => void): RangeError | null => {
         try {
             step();
