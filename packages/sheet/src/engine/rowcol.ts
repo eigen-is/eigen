@@ -36,8 +36,7 @@ export type DeleteRowColOp = {
     id: string;
 };
 
-// The engine refuses an insert past the sheet's size limit with this error. The editor's menus say so, and the replay
-// and a peer's applyOp skip the op's whole batch.
+// An insert past the sheet's size limit throws this, and every reader skips its whole batch.
 export class RowColError extends Error {}
 
 type InsertLines = Pick<InsertRowColOp, 'index' | 'count' | 'direction'>;
@@ -58,9 +57,8 @@ export function lineMove(op: InsertLines | DeleteLines): LineMove {
 
 type AxisRange = { row: readonly number[]; column: readonly number[] };
 
-// Excel's rule for a range across an insert: an insert at or before its first row (or column) moves it, one inside
-// grows it, one right after leaves it. A range stops at the grid's last row or column, as Excel's does. A range the
-// insert leaves as it was comes back as the same object, so its owner writes nothing.
+// Excel's rule: an insert at or before a range's first line moves it, one inside grows it, one right after leaves it,
+// and it stops at the grid's last line. A range left as it was comes back as itself, so its owner writes nothing.
 export function shiftRangeForInsert<R extends AxisRange>(
     range: R,
     op: Pick<InsertRowColOp, 'type' | 'index' | 'count' | 'direction'>,
@@ -217,9 +215,8 @@ export function shiftCellKeyedForDelete<T>(
     return shifted;
 }
 
-// An op on one sheet only moves the refs that resolve to that sheet: unqualified ones in
-// formulas on it, and `Sheet!`-qualified ones anywhere. A CF `formula` rule reads its cells
-// through its own text, so it shifts by the same rules as a cell formula on its sheet.
+// An op on one sheet moves only the refs that resolve to it: unqualified ones on it and `Sheet!`-qualified ones
+// anywhere, a conditional format's formula rule among them.
 function shiftFormulasAcrossSheets<S extends Sheet>(
     sheets: S[],
     targetIndex: number,
@@ -251,9 +248,8 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
     );
 }
 
-// A chart ref names its sheet by id, so an op on one sheet moves the refs to it on every sheet's
-// charts, and the points along them. Only a chart whose refs moved is rewritten; a malformed
-// spec stays as stored.
+// A chart ref names its sheet by id, so an op moves the refs to its sheet on every sheet's charts, and the points along
+// them. Only a chart whose refs moved is rewritten.
 function shiftChartsAcrossSheets<S extends Sheet>(
     sheets: S[],
     sheetId: string,
@@ -306,9 +302,8 @@ export function shiftKeyedMapForDelete(
     return shifted;
 }
 
-// Generic over S, so the editor's wider sheet keeps its type. Nothing is deep-cloned or written in place: in the editor
-// the inputs may be immer drafts, so rows an op doesn't touch keep their objects, and a row insert on a large sheet
-// doesn't walk every cell. The values the op leaves stale are recomputeAfter's.
+// Nothing is deep-cloned or written in place, since in the editor the inputs may be drafts: rows an op doesn't touch
+// keep their objects. The values the op leaves stale are recomputeAfter's.
 export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op: InsertRowColOp): S[] {
     const targetIndex = sheets.findIndex((s) => s.id === op.id);
     if (targetIndex === -1) return sheets;
@@ -484,9 +479,8 @@ export function shiftValidations(
     return shifted ?? validations;
 }
 
-// The frozen pane, moved whole: a peer's unfreeze removes `frozen`, and a write into a field that is gone would not
-// apply. A bare type such as 'both' with a range freezes as its range form does, so it moves too. A focus below 0 means
-// the op deleted the whole band, so that axis stops freezing, and the pane goes with its last axis.
+// The frozen pane, moved whole, since a peer's unfreeze removes `frozen` and a write into it would not apply. A delete
+// of the whole band ends that axis's freeze, and the pane goes with its last axis.
 function shiftFrozen(frozen: Sheet['frozen'], type: 'row' | 'column', { at, to }: LineMove): Sheet['frozen'] {
     if (!frozen?.range || !(type === 'row' ? freezesRows(frozen) : freezesColumns(frozen))) return frozen;
     const axis = type === 'row' ? 'row_focus' : 'column_focus';
@@ -564,10 +558,8 @@ function writeFilter(
     for (const row of hidden) cfg.rowhidden[row] = 0;
 }
 
-// The op moved the cells from index `from` on its axis but not their `mc` stamps, so every merge that reaches that far
-// stamps its cells again, empty cells included, inside the grid: past it a stamp would widen its row alone. A merge
-// that ends right before `from` may have lost its last rows to a delete, so it stamps too. A row op shares the rows it
-// did not insert with the sheet before it, so a row is copied before its first stamp.
+// The op moved the cells from `from` on but not their `mc` stamps, so each merge reaching that far, or ending right
+// before it, stamps its cells again within each row. A row the op shares with the sheet before it is copied first.
 function stampMerges(data: CellMatrix, merges: Record<string, MergeCell>, type: 'row' | 'column', from: number) {
     const copied = new Set<number>();
     for (const { r, c, rs, cs } of Object.values(merges)) {

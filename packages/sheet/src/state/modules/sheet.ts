@@ -54,15 +54,14 @@ export function leaveCurrentSheet(ctx: Context, excludeId?: string) {
     return true;
 }
 
-// Undo and redo can remove or hide the sheet on screen.
+// A batch, an undo or a redo can remove or hide the sheet on screen.
 export function settleCurrentSheet(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null || ctx.sheets[index].hide === 1) leaveCurrentSheet(ctx);
 }
 
-// The per-sheet paint data is derived in the recipe that makes the sheet current, so no frame mixes sheets and the
-// recipe can read the new geometry, as a jump to a cell on that sheet does. A sheet nobody selected in opens on A1: a
-// key needs a cursor.
+// The per-sheet paint data is derived in the recipe that makes the sheet current, so no frame mixes sheets and a jump
+// to a cell there reads the new geometry. A sheet nobody selected in opens on A1: a key needs a cursor.
 export function applySheetView(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;

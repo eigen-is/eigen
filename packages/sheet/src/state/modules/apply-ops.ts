@@ -39,9 +39,8 @@ export function applyOpBatch(
     }
 }
 
-// The batch inside a recipe: applied to the sheets the draft holds, then written into it. An op the shape check or the
-// sheet refuses throws before anything is written. A row or column op lands for a read-only viewer too, or the grid
-// and the metadata patches part ways.
+// The batch inside a recipe, applied to the plain sheets first so a refused op throws before any write. A row op lands
+// for a read-only viewer too, or the grid and the metadata patches part ways.
 export function applyBatch(ctx: Context, ops: Op[], moveView = true): AppliedRowCol[] {
     const { formulaCache } = ctx;
     const { sheets } = snapshotContext(ctx);
@@ -65,18 +64,14 @@ export function applyBatch(ctx: Context, ops: Op[], moveView = true): AppliedRow
     return moved;
 }
 
-// The sheet fields written entry by entry, with how many levels down from the field: the charts chart by chart, each
-// chart field by field and each of its maps entry by entry, and the validation rules rule by rule. Every other field
-// is written whole.
+// The sheet fields written entry by entry, with how many levels down; every other field is written whole.
 const WRITTEN_BY_ENTRY: ReadonlyMap<string, number> = new Map([
     ['charts', 3],
     ['dataValidations', 1],
 ]);
 
 // Writes what the batch changed into the context field by field, so the undo entry immer records puts back only that
-// and leaves a peer's later changes alone. `before` is the plain view of the sheets the batch started from. A sheet
-// the batch deleted leaves the list, even when the batch adds its id back, and one it added joins it last, as the
-// engine orders them.
+// and leaves a peer's later changes alone. A sheet it deleted is replaced, never written into, even under its old id.
 function writeSheets(ctx: Context, ops: readonly Op[], before: readonly Sheet[], after: readonly Sheet[]) {
     const deleted = new Set(ops.flatMap(({ op, id }) => (op === 'deleteSheet' && id ? [id] : [])));
     const was = new Map(before.filter(({ id }) => !deleted.has(id)).map((sheet) => [sheet.id, sheet]));
@@ -96,9 +91,8 @@ function writeSheets(ctx: Context, ops: readonly Op[], before: readonly Sheet[],
     }
 }
 
-// Writes into `target` each entry `next` holds other than `was`, the plain value of `target` before the batch, and
-// deletes each entry `next` lacks. Comparing with the draft instead would write an unchanged value back, which immer 9
-// records as a removal. `depth` says how many levels down an entry is written entry by entry, per key or for all.
+// Writes into `target` what `next` holds other than `was`, its plain value before the batch, and deletes what `next`
+// lacks. Compared with the draft instead, an unchanged value would be written back, which immer records as a removal.
 function writeChanges(
     target: Record<string, unknown>,
     was: Readonly<Record<string, unknown>>,

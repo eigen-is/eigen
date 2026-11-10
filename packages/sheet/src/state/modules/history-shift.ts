@@ -97,9 +97,8 @@ export function namesStructuralOp({ options }: History): boolean {
     );
 }
 
-// Immer records a list that grew or shrank, such as the grid in a paste past its edge or the conditional format rules,
-// as a write of its `length`. Stepping that back cuts off what a peer appended, and no per-target check can see it. A
-// list inside one target, such as a rule's ranges, is that target's write.
+// Immer records a list that grew or shrank as a write of its `length`, and stepping that back cuts off what a peer
+// appended. A list inside one target, such as a rule's ranges, is that target's write.
 function writesListLength({ path }: Patch): boolean {
     return path.at(-1) === 'length' && path.length === unitOf(path).length;
 }

@@ -99,7 +99,7 @@ export class FormulaGraph {
     }
 
     // Follows cell writes, given the sheets they left, each path starting at its sheet's index. A write that moves the
-    // cells after it, such as a whole row or an added cell, reads its sheet again, and one of a whole sheet builds anew.
+    // cells after it, such as a whole row or an added cell, reads its sheet again; one of a whole sheet builds anew.
     public followPatches(sheets: readonly WorkingSheet[], patches: readonly Patch[]): void {
         const reread = new Set<WorkingSheet>();
         for (const { op, path } of patches) {
@@ -120,10 +120,8 @@ export class FormulaGraph {
         }
     }
 
-    // Every formula that reads one of `cells`, the `chosen` ones, and every formula reading those in turn, each after
-    // what it reads. A sheet of `sheets` whose bounds changed first lists its cut formulas again, and a throw past the
-    // slot budget there leaves the graph short, so its holder drops it. The entries a lookup will visit are counted
-    // as a formula joins, before any scan, and the links as the walk makes them, so a walk past a budget throws early.
+    // Every formula that reads one of `cells`, the `chosen` ones and their readers in turn, each after what it reads.
+    // Visits are counted as a formula joins, before any scan, so a walk past a budget throws early.
     public affected(
         sheets: readonly WorkingSheet[],
         cells: readonly CellAt[],
@@ -170,7 +168,6 @@ export class FormulaGraph {
         this.cut.clear();
         // The finder keeps names and ids only, so the graph holds no sheet's cells.
         this.walk = { findSheet: sheetFinder(sheets.map(({ id, name }) => ({ id, name }))), cellTextToIndexList: {} };
-        // A sheet with no matrix, such as a copy nobody opened, has no cell a formula reads yet: its size is none.
         for (const { id, data } of sheets) this.extents.set(id, extentOf(data));
         for (const sheet of sheets) this.read(sheet);
     }
@@ -191,10 +188,8 @@ export class FormulaGraph {
         this.index.delete(node.key);
     }
 
-    // Lists the ranges a formula reads: every reference in its text, as Excel lists a cell's precedents, so the range
-    // INDEX picks from covers the reference it returns. Each range is cut to its sheet's bounds and the line past them,
-    // where a delete of the sheet's last lines seeds the readers of what it took: a lookup asks only for a cell on the
-    // sheet, so `SUM(A1:XFD1048576)` costs about what the sheet spans, not 16 million blocks.
+    // Lists every reference in the formula's text, as Excel lists precedents, each cut to its sheet's bounds and the
+    // line past them, where a delete of the sheet's last lines seeds the readers of what it took.
     private list(node: FormulaCellInfo): void {
         const listed: FormulaDependency[] = [];
         walkFormulaRefs(node.formula, (reference) => {
@@ -244,9 +239,8 @@ export class FormulaGraph {
     }
 }
 
-// The bounds a sheet's ranges are cut to: its rows and columns, each rounded up by at most an eighth, so a row op that
-// grows or shrinks a sheet by a line seldom lists its cut formulas again. Past its cells a range lists slots no formula
-// cell is in, which a lookup never asks for.
+// A sheet's rows and columns, each rounded up by at most an eighth, so a row op that grows or shrinks the sheet by a
+// line seldom lists its cut formulas again.
 function extentOf(data: CellMatrix | null | undefined): SheetExtent {
     const bound = (n: number) => {
         const step = 2 ** Math.max(0, Math.floor(Math.log2(n)) - 3);

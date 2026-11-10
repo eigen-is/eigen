@@ -135,9 +135,8 @@ function movedSelection(selection: Selection, move: RowColMove, data: CellMatrix
     return onMergeHead(row ? { ...shifted, row_focus: start } : { ...shifted, column_focus: start }, data);
 }
 
-// The focus a delete moved may be in a merge, which shows only its head: it takes the head, and the box covers the
-// merge, as a click there does. This reads the cell's `mc`, since mergeBorder also needs the geometry of the current
-// sheet as it is drawn, and here the op has just changed it, or it is another sheet's.
+// A focus a delete moved into a merge takes its head, with the box over the merge, as a click does. It reads the cells'
+// `mc`, since mergeBorder reads the geometry as drawn, which the op has just changed or which is another sheet's.
 function onMergeHead(selection: Selection, data: CellMatrix): Selection {
     const { row, column } = selection;
     const mc = data[selection.row_focus ?? row[0]]?.[selection.column_focus ?? column[0]]?.mc;
