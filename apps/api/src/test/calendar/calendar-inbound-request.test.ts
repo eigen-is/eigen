@@ -133,6 +133,28 @@ describe('inbound iMIP REQUEST', () => {
         expect(await calendar.listResources(id)).toHaveLength(0);
     });
 
+    test('a REQUEST that cancels the whole series cancels the copy', async () => {
+        const { calendar } = await harnessWith();
+        await receiveMailed(calendar, parsedOf(request()), ORG);
+
+        await receiveMailed(calendar, parsedOf(request(['STATUS:CANCELLED'])), ORG);
+
+        const rows = await calendar.getEventsByUid(UID);
+        expect(rows).toHaveLength(1);
+        expect(rows[0].status).toBe('cancelled');
+    });
+
+    test('a REQUEST that restores a cancelled series confirms the copy', async () => {
+        const { calendar } = await harnessWith();
+        await receiveMailed(calendar, parsedOf(request(['STATUS:CANCELLED'])), ORG);
+
+        await receiveMailed(calendar, parsedOf(request(['STATUS:CONFIRMED'])), ORG);
+
+        const rows = await calendar.getEventsByUid(UID);
+        expect(rows).toHaveLength(1);
+        expect(rows[0].status).toBe('confirmed');
+    });
+
     test('a REQUEST the store refuses for its size is dropped, not half-written', async () => {
         const { calendar, id } = await harnessWith();
         const huge = 'x'.repeat(6_000_000);

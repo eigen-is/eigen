@@ -334,7 +334,7 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
     const IMIP_UID = 'single-occurrence@external.com';
     const IMIP_ORG = 'organizer@external.com';
 
-    const imipOccurrence = (summary: string, sequence: number, dtstamp: string): ParsedEvent =>
+    const imipOccurrence = (summary: string, sequence: number, dtstamp: string, extra: string[] = []): ParsedEvent =>
         parseIcs(
             vcal([
                 'BEGIN:VEVENT',
@@ -347,6 +347,7 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
                 `ORGANIZER;CN=Ext Org:mailto:${IMIP_ORG}`,
                 'ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:guest@test.local',
                 `DTSTAMP:${dtstamp}`,
+                ...extra,
                 'END:VEVENT',
             ]),
         ).events[0];
@@ -379,6 +380,34 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         expect(stored[0].title).toBe('One Instance Only');
         expect(stored[0].parentEventId).toBeNull();
         expect(stored[0].data?.organizerEventId).toBe(IMIP_UID);
+    });
+
+    test('an iMIP REQUEST cancelling the single occurrence cancels the copy', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        await receiveMailed(calendar, imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
+
+        const cancelled = imipOccurrence('One Instance Only', 1, '20280302T100000Z', ['STATUS:CANCELLED']);
+        await receiveMailed(calendar, cancelled, IMIP_ORG);
+
+        const stored = await calendar.getEventsByUid(IMIP_UID);
+        expect(stored).toHaveLength(1);
+        expect(stored[0].status).toBe('cancelled');
+    });
+
+    test('an iMIP REQUEST cancelling another occurrence leaves the single occurrence alone', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        await receiveMailed(calendar, imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
+
+        const cancelled = imipOccurrence('Another Date', 1, '20280302T100000Z', ['STATUS:CANCELLED']);
+        const elsewhere = { ...cancelled, recurrenceDate: '2028-03-20', recurrenceInstant: null };
+        await receiveMailed(calendar, elsewhere, IMIP_ORG);
+
+        const stored = await calendar.getEventsByUid(IMIP_UID);
+        expect(stored).toHaveLength(1);
+        expect(stored[0].title).toBe('One Instance Only');
+        expect(stored[0].status).toBe('confirmed');
     });
 
     test('an iMIP series REQUEST with no ORGANIZER leaves the single occurrence alone', async () => {

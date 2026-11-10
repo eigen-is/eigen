@@ -308,14 +308,18 @@ function applyRequestedEvent(
     const attendees = keepOwnAnswer(calendar, parsed, existing, held, stored);
     const cancelled = parsed.status === 'cancelled';
     const timezone = key ? (parsed.timezone ?? series.timezone) : parsed.timezone;
-    if (existing && (existing.status === 'cancelled') === cancelled) {
-        // A cancelled occurrence is an EXDATE, which holds nothing more to patch.
-        if (cancelled) return false;
+    // The copy's own VEVENT, a master or one occurrence, is cancelled by its status. Only an exception is an EXDATE.
+    const isSeries = existing === series;
+    if (isSeries || (existing && (existing.status === 'cancelled') === cancelled)) {
+        // A cancelled exception is an EXDATE, which holds nothing more to patch.
+        if (!isSeries && cancelled) return false;
         // Never extend the rule past what the guest has: they may have shortened it on purpose.
-        const rrule = existing === series ? constrainRRule(parsed.rrule, series.rrule) : null;
+        const rrule = isSeries ? constrainRRule(parsed.rrule, series.rrule) : null;
         const patch = invitationPatch(existing, { ...parsed, timezone }, attendees, rrule);
         return patchEvent(component, key, patch, events.writeContext(false, parsed.dtstamp));
     }
+    // A copy of one occurrence has no series to exclude another date from.
+    if (cancelled && series.recurrenceDate) return false;
     events.putException(component, series, {
         ...parsed,
         timezone,
@@ -328,7 +332,7 @@ function applyRequestedEvent(
 }
 
 // The caller holds the write lock. A new copy is built from the message in the default calendar. A copy of one
-// occurrence that the series replaces keeps its file, reminders and color, and its row and answer go to that occurrence.
+// occurrence the series replaces keeps its file, reminders and color, and its row and answer go to that occurrence.
 async function fileNewInvitation(
     calendar: Calendar,
     requested: readonly ParsedEvent[],
@@ -593,8 +597,8 @@ async function rsvpForOccurrence(
             return changed ? parent.calendarId : null;
         }
 
-        // A zone moves an occurrence at most a day off its key's date. A date the rule doesn't yield is no occurrence, and
-        // an answer doesn't make it one.
+        // A zone moves an occurrence at most a day off its key's date. A date the rule doesn't yield is no occurrence,
+        // and an answer doesn't make it one.
         const day = Date.parse(`${key}T00:00:00Z`);
         const occurrence =
             existing ??

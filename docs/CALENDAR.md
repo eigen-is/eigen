@@ -230,7 +230,7 @@ The two transports differ only in what they hand it. A mail carries a file, and 
 
 A relayed message naming this Home as its own organizer is dropped, because adopting it would make an event a linked copy of itself.
 
-**An occurrence copy gives way to the series.** When the organizer later invites the guest to the whole series, the series is written over the standalone copy's file in one write. The guest's reminders and color carry over, and that occurrence keeps the copy's row id and the guest's answer. A CANCEL for that occurrence deletes the copy outright, since there is no series to exclude it from.
+**An occurrence copy gives way to the series.** When the organizer later invites the guest to the whole series, the series is written over the standalone copy's file in one write. The guest's reminders and color carry over, and that occurrence keeps the copy's row id and the guest's answer. A CANCEL for that occurrence deletes the copy outright, since there is no series to exclude it from. A REQUEST that marks it cancelled sets the copy's own status, as one cancelling a whole series does on its master, and one cancelling another date is dropped. Only an exception of a held series becomes an `EXDATE`.
 
 ## Revisions are ordered, and a redelivery is applied as one
 
