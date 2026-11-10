@@ -238,14 +238,12 @@ export async function processInboundImip(
             );
             if (!ownerEvent) continue;
             if (parsed.recurrenceDate) {
-                // False: an answer never brings back an occurrence the organizer deleted.
                 await calendar.receiveRsvpForOccurrence(
                     ownerEvent.id,
                     attendee.email,
                     attendee.status,
                     parsed.recurrenceDate,
                     parsed.recurrenceUtc,
-                    false,
                 );
             } else if (ownerEvent.data?.attendees?.some((a) => a.email.toLowerCase() === sender)) {
                 await calendar.receiveAttendeeStatus(ownerEvent.id, attendee.email, attendee.status);

@@ -155,11 +155,10 @@ export function receiveRsvpForOccurrence(
     status: Attendee['status'],
     recurrenceDate: string,
     recurrenceUtc: Date | null,
-    restoreCancelled: boolean,
 ): Promise<void> {
     return unlessRefused(
         eventId,
-        () => rsvpForOccurrence(calendar, eventId, email, status, recurrenceDate, recurrenceUtc, restoreCancelled),
+        () => rsvpForOccurrence(calendar, eventId, email, status, recurrenceDate, recurrenceUtc, false),
         undefined,
     );
 }
@@ -581,7 +580,7 @@ function withAttendeeStatus(attendees: Attendee[], email: string, status: Attend
 }
 
 // A guest may restore an occurrence they removed themselves. On the organizer's Home an answer only moves the
-// PARTSTAT (RFC 5546), so that receiver passes false for restoreCancelled.
+// PARTSTAT (RFC 5546), so it never brings back an occurrence the organizer deleted.
 async function rsvpForOccurrence(
     calendar: Calendar,
     eventId: string,

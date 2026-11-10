@@ -477,8 +477,7 @@ describe('an answer that names a date', () => {
             allDay: false,
             data: { attendees: GUESTS },
         });
-        const answer = (date: string) =>
-            calendar.receiveRsvpForOccurrence(event.id, GUEST, 'accepted', date, null, false);
+        const answer = (date: string) => calendar.receiveRsvpForOccurrence(event.id, GUEST, 'accepted', date, null);
         const overrides = () => calendar.getEventsByUid(event.uid).then((all) => all.filter((e) => e.parentEventId));
         return { calendar, calendarId, event, answer, overrides, broadcasts: harness.broadcasts };
     };

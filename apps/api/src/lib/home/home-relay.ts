@@ -147,15 +147,12 @@ async function deliver(targetId: string, message: DeliveredMessage): Promise<voi
             break;
         case 'calendar:rsvp':
             if (message.recurrenceDate) {
-                // An answer from an attendee only sets their status. It never brings back an occurrence
-                // that the organizer deleted.
                 await home.calendar.receiveRsvpForOccurrence(
                     message.eventId,
                     message.attendeeEmail,
                     message.status,
                     message.recurrenceDate,
                     null,
-                    false,
                 );
             } else {
                 await home.calendar.receiveAttendeeStatus(message.eventId, message.attendeeEmail, message.status);

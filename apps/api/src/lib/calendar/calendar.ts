@@ -557,17 +557,8 @@ export class Calendar {
         status: Attendee['status'],
         recurrenceDate: string,
         recurrenceUtc: Date | null,
-        restoreCancelled = true,
     ): Promise<void> {
-        return invitations.receiveRsvpForOccurrence(
-            this,
-            eventId,
-            email,
-            status,
-            recurrenceDate,
-            recurrenceUtc,
-            restoreCancelled,
-        );
+        return invitations.receiveRsvpForOccurrence(this, eventId, email, status, recurrenceDate, recurrenceUtc);
     }
 
     public async pendingInvitations(email: string): Promise<InvitationRequest[]> {
