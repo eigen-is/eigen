@@ -131,10 +131,6 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     const write = async (action: RecurringAction) => {
         const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
 
-        const dataWith = (guests: Attendee[]) => {
-            const data = { ...event.data, attendees: guests.length > 0 ? guests : undefined };
-            return Object.values(data).some((v) => v !== undefined) ? data : null;
-        };
         const seriesGuests = (own: readonly Attendee[]) => {
             const shown = new Set(serverAttendees.map((guest) => guest.email.toLowerCase()));
             const listed = new Map(attendees.map((guest) => [guest.email.toLowerCase(), guest]));
@@ -162,7 +158,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
             ...edited,
             rrule: isOverride ? undefined : rruleString,
             timezone,
-            data: dataWith(attendees),
+            data: { ...event.data, attendees },
         };
         // The master is saved with what the user changed, never with the clicked occurrence's own times: taking
         // those would drag the series' start onto that date and drop every occurrence before it. Its guests are its
@@ -216,7 +212,8 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 calendarId: event.calendarId,
                 ...updates,
                 rrule: null,
-                data: dataWith(dateGuests),
+                // An empty list hands the date back to the series' guests.
+                data: { ...event.data, attendees: dateGuests },
                 parentEventId: targetId,
                 recurrenceDate: event.occurrenceDate,
                 etag: heldEtag,

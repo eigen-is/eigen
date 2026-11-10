@@ -315,6 +315,14 @@ test('All events from a date with its own list applies only the guests added or 
     expect(JSON.stringify(savedForSeries())).not.toContain('https://');
 });
 
+test("removing a one-off event's last guest saves an empty list", async () => {
+    await open({ ...dentist, data: { attendees: [ada] } });
+    await click(`Remove ${ada.email}`);
+    await save();
+    await settle();
+    expect(savedForSeries()?.data?.attendees).toEqual([]);
+});
+
 test("a move to another owner's calendar asks first, and Move saves and closes it once", async () => {
     await open({ ...dentist, data: guests }, 'u2');
     await save();
