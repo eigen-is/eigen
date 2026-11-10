@@ -253,7 +253,9 @@ function occurrenceKey<Key extends string | null>(
     held: CalendarEvent | ParsedEvent,
 ): Key | string {
     const stated = occurrence.recurrenceId;
-    return stated && !held.recurrenceDate ? recurrenceKeyIn(stated.instant, held.timezone) : occurrence.recurrenceDate;
+    return stated && !held.recurrenceDate && !held.allDay
+        ? recurrenceKeyIn(stated.instant, held.timezone)
+        : occurrence.recurrenceDate;
 }
 
 // The caller holds the write lock, so two deliveries at once never file two masters for one UID. The copy's revisions

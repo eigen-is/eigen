@@ -9,7 +9,7 @@ import type ICAL from 'ical.js';
 import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
 import { ApiError, failsPreconditions, normalizeResourceUri } from '../core';
 import { keepSubcomponents, parseResource, restampResource, stripEigenStamps } from '../ical';
-import { EIGEN, readStamp, recurrenceKeyOf, seriesTimezones, uidOf } from '../ical/ical-parse';
+import { EIGEN, readStamp, recurrenceKeyOf, seriesStarts, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import {
     EVENT_MAX_BYTES,
@@ -299,12 +299,12 @@ function isLinkedCopy(stored: ICAL.Component): boolean {
 
 function adoptAlarms(stored: ICAL.Component, incoming: ICAL.Component): void {
     const incomingVEvents = incoming.getAllSubcomponents('vevent');
-    const zones = seriesTimezones(incomingVEvents);
-    const byKey = new Map(incomingVEvents.map((v) => [`${uidOf(v)}|${recurrenceKeyOf(v, zones) ?? ''}`, v]));
+    const starts = seriesStarts(incomingVEvents);
+    const byKey = new Map(incomingVEvents.map((v) => [`${uidOf(v)}|${recurrenceKeyOf(v, starts) ?? ''}`, v]));
     const storedVEvents = stored.getAllSubcomponents('vevent');
-    const storedZones = seriesTimezones(storedVEvents);
+    const storedStarts = seriesStarts(storedVEvents);
     for (const vevent of storedVEvents) {
-        const match = byKey.get(`${uidOf(vevent)}|${recurrenceKeyOf(vevent, storedZones) ?? ''}`);
+        const match = byKey.get(`${uidOf(vevent)}|${recurrenceKeyOf(vevent, storedStarts) ?? ''}`);
         if (!match) continue;
         keepSubcomponents(vevent, (sub) => sub.name !== 'valarm');
         const alarms = match.getAllSubcomponents('valarm');

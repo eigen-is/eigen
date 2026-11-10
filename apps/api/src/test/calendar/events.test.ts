@@ -242,6 +242,53 @@ describe('a lone occurrence a client wrote', () => {
     });
 });
 
+// An all-day series has no clock, so a timed EXDATE or RECURRENCE-ID names the date it is written on, here in Auckland,
+// where midnight is the day before in UTC.
+describe('an all-day series a client wrote with timed exceptions', () => {
+    test('each exception names the date it is written on', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const calendar = harness.instance;
+        const body = vcal(
+            [
+                'BEGIN:VEVENT',
+                'UID:all-day',
+                'DTSTAMP:20260101T000000Z',
+                'DTSTART;VALUE=DATE:20260504',
+                'DTEND;VALUE=DATE:20260505',
+                'RRULE:FREQ=DAILY;COUNT=4',
+                'EXDATE;TZID=Pacific/Auckland:20260505T000000',
+                'SUMMARY:Holiday',
+                'END:VEVENT',
+            ],
+            [
+                'BEGIN:VEVENT',
+                'UID:all-day',
+                'DTSTAMP:20260101T000000Z',
+                'RECURRENCE-ID;TZID=Pacific/Auckland:20260506T000000',
+                'DTSTART;VALUE=DATE:20260506',
+                'DTEND;VALUE=DATE:20260507',
+                'SUMMARY:Moved',
+                'END:VEVENT',
+            ],
+        );
+        await putResource(calendar, calendarId, 'all-day.ics', body);
+
+        const keys = storedEvents(calendar, calendarId).map((e) => [e.recurrenceDate, e.status]);
+        expect(keys.toSorted()).toEqual([
+            [null, 'confirmed'],
+            ['2026-05-05', 'cancelled'],
+            ['2026-05-06', 'confirmed'],
+        ]);
+        const range = await calendar.getEventsInRange(new Date('2026-05-01'), new Date('2026-06-01'));
+        expect(range.map((o) => [o.occurrenceDate, o.title])).toEqual([
+            ['2026-05-04', 'Holiday'],
+            ['2026-05-06', 'Moved'],
+            ['2026-05-07', 'Holiday'],
+        ]);
+    });
+});
+
 describe('moveEvent', () => {
     const seriesOf = async (harness: TestHome<Calendar>, calendarId: string, uid: string, uri: string) => {
         await putResource(harness.instance, calendarId, uri, vcal(vevent(uid, 'Movable')));

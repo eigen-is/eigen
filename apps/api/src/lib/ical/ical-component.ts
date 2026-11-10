@@ -24,7 +24,7 @@ import {
     readTimestamp,
     recurrenceKeyOf,
     sequenceOf,
-    seriesTimezones,
+    seriesStarts,
     uidOf,
     utcStampString,
 } from './ical-parse';
@@ -186,7 +186,7 @@ export function applyEdits(resource: ICAL.Component, edits: ReadonlyMap<string |
     if (master && unexcluded.size) dropExclusions(master, (key) => unexcluded.has(key));
     // A copy of single dates has no master to hold an EXDATE, so an excluded date just goes with its VEVENT.
     if (master && exclusions.size) {
-        const excluded = exdateKeys(master, propTzid(master.getFirstProperty('dtstart')));
+        const excluded = exdateKeys(master);
         keepProperties(master, (prop) => prop.name !== EIGEN.exdate || !exclusions.has(String(prop.getFirstValue())));
         for (const [key, { event, ctx }] of exclusions) {
             if (!excluded.has(key)) master.addProperty(occurrenceProperty('exdate', master, key));
@@ -261,7 +261,7 @@ export function storedRevisions(resource: ICAL.Component): Map<string | null, Re
     const master = vevents.get(null);
     if (master) {
         const stamps = readExclusionStamps(master);
-        for (const key of exdateKeys(master, propTzid(master.getFirstProperty('dtstart')))) {
+        for (const key of exdateKeys(master)) {
             const stamp = stamps.get(key);
             revisions.set(key, { sequence: stamp?.sequence ?? sequenceOf(master), dtstamp: stamp?.dtstamp ?? null });
         }
@@ -324,7 +324,7 @@ export function restampResource(
     stripEigenStamps(incoming);
 
     const storedVEvents = stored?.getAllSubcomponents('vevent') ?? [];
-    const storedZones = seriesTimezones(storedVEvents);
+    const storedStarts = seriesStarts(storedVEvents);
     const storedByKey = new Map<
         string,
         TrustedStamps & { eventId: string | null; color: string | null; guestCut: string | null }
@@ -332,7 +332,7 @@ export function restampResource(
     const storedStamps = new Map<string, ExclusionStamp>();
     for (const vevent of storedVEvents) {
         const uid = uidOf(vevent);
-        const key = recurrenceKeyOf(vevent, storedZones);
+        const key = recurrenceKeyOf(vevent, storedStarts);
         storedByKey.set(`${uid}|${key ?? ''}`, {
             eventId: readStamp(vevent, EIGEN.eventId),
             createByUserId: readStamp(vevent, EIGEN.createdBy),
@@ -354,10 +354,10 @@ export function restampResource(
     };
 
     const incomingVEvents = incoming.getAllSubcomponents('vevent');
-    const incomingZones = seriesTimezones(incomingVEvents);
+    const incomingStarts = seriesStarts(incomingVEvents);
     for (const vevent of incomingVEvents) {
         const uid = uidOf(vevent);
-        const match = storedByKey.get(`${uid}|${recurrenceKeyOf(vevent, incomingZones) ?? ''}`);
+        const match = storedByKey.get(`${uid}|${recurrenceKeyOf(vevent, incomingStarts) ?? ''}`);
 
         addStamp(vevent, EIGEN.eventId, claim(match?.eventId));
         addStamp(vevent, EIGEN.createdBy, trusted.createByUserId ?? match?.createByUserId);
@@ -369,7 +369,7 @@ export function restampResource(
 
         // Read once: the scan for SEQUENCE lengthens with every stamp this loop adds.
         const sequence = sequenceOf(vevent);
-        for (const key of exdateKeys(vevent, incomingZones.get(uid) ?? null)) {
+        for (const key of exdateKeys(vevent)) {
             const prior = storedStamps.get(`${uid}|${key}`);
             vevent.addProperty(
                 exclusionStamp(key, claim(prior?.id), prior?.sequence ?? sequence, prior?.dtstamp ?? null),
@@ -677,13 +677,13 @@ function patchReminders(vevent: ICAL.Component, reminders: readonly Reminder[]):
     return true;
 }
 
-// Each VEVENT by the occurrence key its RECURRENCE-ID names in the series' zone, the master under null.
+// Each VEVENT by the occurrence key its RECURRENCE-ID names, the master under null.
 function keyVEvents(resource: ICAL.Component): Map<string | null, ICAL.Component> {
     const vevents = resource.getAllSubcomponents('vevent');
-    const zones = seriesTimezones(vevents);
+    const starts = seriesStarts(vevents);
     const keyed = new Map<string | null, ICAL.Component>();
     for (const vevent of vevents) {
-        const key = recurrenceKeyOf(vevent, zones);
+        const key = recurrenceKeyOf(vevent, starts);
         if (!keyed.has(key)) keyed.set(key, vevent);
     }
     return keyed;
@@ -734,15 +734,13 @@ function touch(vevent: ICAL.Component, ctx: WriteContext, scheduling: boolean, s
 
 // Drop one occurrence's EXDATE value and the stamp beside it, whatever form the client wrote them in.
 function dropExclusions(vevent: ICAL.Component, drops: (recurrenceKey: string) => boolean): boolean {
-    const seriesTz = propTzid(vevent.getFirstProperty('dtstart'));
+    const start = vevent.getFirstProperty('dtstart');
     const gone = new Set(vevent.getAllProperties(EIGEN.exdate).filter((stamp) => drops(String(stamp.getFirstValue()))));
     let removed = gone.size > 0;
     for (const prop of vevent.getAllProperties('exdate')) {
         const values = prop.getValues();
         const tzid = propTzid(prop);
-        const kept = values.filter(
-            (v) => !(v instanceof ICAL.Time) || !drops(icalTimeToRecurrenceKey(v, tzid, seriesTz)),
-        );
+        const kept = values.filter((v) => !(v instanceof ICAL.Time) || !drops(icalTimeToRecurrenceKey(v, tzid, start)));
         if (kept.length === values.length) continue;
         removed = true;
         if (kept.length) prop.setValues(kept);
@@ -754,12 +752,13 @@ function dropExclusions(vevent: ICAL.Component, drops: (recurrenceKey: string) =
 
 // ical.js keeps `EXDATE:a,b` as one two-valued property and clients rewrite the form freely, so only the recurrence key
 // identifies an exclusion.
-function exdateKeys(vevent: ICAL.Component, seriesTz: string | null): Set<string> {
+function exdateKeys(vevent: ICAL.Component): Set<string> {
+    const start = vevent.getFirstProperty('dtstart');
     const keys = new Set<string>();
     for (const prop of vevent.getAllProperties('exdate')) {
         const tzid = propTzid(prop);
         for (const value of prop.getValues()) {
-            if (value instanceof ICAL.Time) keys.add(icalTimeToRecurrenceKey(value, tzid, seriesTz));
+            if (value instanceof ICAL.Time) keys.add(icalTimeToRecurrenceKey(value, tzid, start));
         }
     }
     return keys;

@@ -770,6 +770,39 @@ describe('a lone occurrence named in another zone', () => {
         const range = await calendar.getEventsInRange(new Date('2026-05-01'), new Date('2026-06-01'));
         expect(range).toHaveLength(10);
     });
+
+    // An all-day series has no clock, so the occurrence is the date the RECURRENCE-ID is written on.
+    test('on an all-day series, replaces the date it is written on', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const guest = harness.user.email;
+        const daily = [
+            'SUMMARY:Holiday',
+            'RRULE:FREQ=DAILY;COUNT=4',
+            'DTSTART;VALUE=DATE:20260504',
+            'DTEND;VALUE=DATE:20260505',
+        ];
+        await calendar.receiveRequest(parseIcs(vcal(vevent(guest, daily))).events, link);
+
+        const lone = [
+            'SUMMARY:Moved',
+            'RECURRENCE-ID;TZID=Pacific/Auckland:20260506T000000',
+            'DTSTART;VALUE=DATE:20260506',
+            'DTEND;VALUE=DATE:20260507',
+            'SEQUENCE:1',
+        ];
+        await calendar.receiveRequest(parseIcs(vcal(vevent(guest, lone))).events, link);
+
+        const override = findOrFail(await calendar.getEventsByUid(SERIES), (e) => !!e.parentEventId);
+        expect(override.recurrenceDate).toBe('2026-05-06');
+        const range = await calendar.getEventsInRange(new Date('2026-05-01'), new Date('2026-06-01'));
+        expect(range.map((o) => [o.occurrenceDate, o.title])).toEqual([
+            ['2026-05-04', 'Holiday'],
+            ['2026-05-05', 'Holiday'],
+            ['2026-05-06', 'Moved'],
+            ['2026-05-07', 'Holiday'],
+        ]);
+    });
 });
 
 // A copy of single dates holds no master, so the zone its RECURRENCE-ID is written in is the only series zone it knows.
