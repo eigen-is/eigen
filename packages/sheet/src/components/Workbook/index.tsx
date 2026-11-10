@@ -92,10 +92,9 @@ const CUT_BY_PEER_NOTICE = {
     redo: "Someone else edited this spreadsheet, so this can't be redone anymore.",
 };
 
-// The copied cell range as a text item. Every clipboard item carries its drawn box. A sheet has no zoom, so the row and
-// column edges give the box in pixels. The first cell's font size goes along, so an app that keeps the box, such as
-// slides, draws the text at the size it had here and not at its own larger default, which the box would clip. A copy
-// always has a selection, so the [0, 0] fallback never applies.
+// The copied cell range as a text item, its box in pixels from the row and column edges, as a sheet has no zoom. The
+// first cell's font size goes along, so an app that keeps the box, such as slides, draws the text at that size and not
+// at its own larger default, which the box would clip.
 function buildCellRangeClipboardItem(ctx: Context, text: string): EigenClipboardTextItem {
     const [r1, r2] = ctx.selections?.[0]?.row ?? [0, 0];
     const [c1, c2] = ctx.selections?.[0]?.column ?? [0, 0];
@@ -112,7 +111,7 @@ function buildCellRangeClipboardItem(ctx: Context, text: string): EigenClipboard
 // The image or chart the person selected on the current sheet. It is read from ctx.sheets, not from the editable
 // current sheet, so a viewer's panel and copy see it too.
 function activeFloating(ctx: Context): { image?: SheetImage; chart?: SheetChart } {
-    const sheet = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) ?? -1];
+    const sheet = ctx.sheets.find(({ id }) => id === ctx.currentSheetId);
     const { activeObject } = ctx;
     return {
         image: activeObject?.kind === 'image' ? sheet?.images?.[activeObject.id] : undefined,

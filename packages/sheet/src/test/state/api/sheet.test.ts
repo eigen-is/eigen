@@ -5,7 +5,7 @@ import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import { produce, produceWithPatches } from 'immer';
 import { celldataToData, dataToCelldata } from '../../../engine/celldata';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../../../engine/defaults';
-import { copySheet, getAllSheets, setSheetOrder } from '../../../state/api/sheet';
+import { copySheet, setSheetOrder } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { setCellValue } from '../../../state/modules/cell';
 import { execFunctionGroup, warmFormulaGraph } from '../../../state/modules/formula-exec';
@@ -20,12 +20,6 @@ describe('sheet/core/api/sheet', () => {
         contextFactory({
             selections: selectionFactory([0, 0], [0, 0], 0, 0),
         }) as Context;
-    test('getAllSheets', () => {
-        const ctx = getContext();
-        expect(getAllSheets(ctx).length).toBe(2);
-        expect(getAllSheets(ctx)).toMatchObject([{ id: 'id_1' }, { id: 'id_2' }]);
-    });
-
     test('setSheetOrder renumbers every sheet from 0', () => {
         const ctx = getContext();
         setSheetOrder(ctx, { id_1: 2, id_2: 1 });
