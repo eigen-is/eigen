@@ -601,7 +601,7 @@ async function updateAttendeeStatus(
     if (calendarId) calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
 }
 
-function withAttendeeStatus(attendees: Attendee[], email: string, status: Attendee['status']): Attendee[] {
+function withAttendeeStatus(attendees: readonly Attendee[], email: string, status: Attendee['status']): Attendee[] {
     return attendees.map((a) => (a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a));
 }
 

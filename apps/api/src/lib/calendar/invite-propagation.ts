@@ -27,8 +27,8 @@ export async function propagateInvitation(
     organizerHome: Home,
     event: CalendarEvent,
     user: User,
-    oldAttendees: Attendee[],
-    newAttendees: Attendee[],
+    oldAttendees: readonly Attendee[],
+    newAttendees: readonly Attendee[],
     series?: CalendarEvent,
     exceptions: readonly CalendarEvent[] = [],
 ): Promise<void> {
