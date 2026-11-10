@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2143 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2142 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -245,7 +245,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (305)
+## Hooks (304)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -543,7 +543,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
 | `useFilePasteTarget` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
 | `useFocusReturn` | `@workspace/ui/hooks/use-focus-return` | packages/ui/src/hooks/use-focus-return.ts |
-| `useFocusTrap` | `@workspace/ui/hooks/use-focus-trap` | packages/ui/src/hooks/use-focus-trap.ts |
 | `useFollowedFields` | `@workspace/ui/hooks/use-followed-fields` | packages/ui/src/hooks/use-followed-fields.ts |
 | `useKeyboardListNavigation` | `@workspace/ui/hooks/use-keyboard-list-navigation` | packages/ui/src/hooks/use-keyboard-list-navigation.ts |
 | `useLatchedDocSearchTerm` | `@workspace/ui/hooks/use-latched-doc-search-term` | packages/ui/src/hooks/use-latched-doc-search-term.ts |
