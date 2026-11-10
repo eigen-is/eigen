@@ -1042,7 +1042,7 @@ describe('document/sheets — the base a snapshot starts', () => {
 
     test('a replacing import stamps a fresh base without compactedFrom, in the same transaction', () => {
         const doc = new Y.Doc();
-        writeSheetsSnapshot(doc, encodeSheetsSnapshot([], { computed: true }), 'older');
+        writeSheetsSnapshot(doc, encodeSheetsSnapshot([], { computed: true }), { compactedFrom: 'older', folded: 0 });
         const old = readSheetsBase(doc);
         expect(old?.compactedFrom).toBe('older');
         doc.getArray<Op[]>('ops').push([[{ op: 'replace', path: ['x'], value: 1 }]]);
