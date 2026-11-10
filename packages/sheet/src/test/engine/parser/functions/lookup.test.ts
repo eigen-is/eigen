@@ -54,6 +54,17 @@ const resolver = createArrayResolver([
         name: 'Labels',
         data: rows([[null, 'Real (Low)', 5, 'Real (Central)', 'Real (High)']]),
     },
+    {
+        // Excel for the web's blank-lookup case: A1 and A3 empty, and C1, the lookup value, empty too.
+        id: 's5',
+        name: 'Blanks',
+        data: rows([
+            [null, 'one', null],
+            ['x', 'two', null],
+            [null, 'three', null],
+            [5, 'four', null],
+        ]),
+    },
 ]);
 
 const engine = new FormulaEngine();
@@ -269,6 +280,19 @@ describe('HLOOKUP', () => {
         expect(value('=HLOOKUP("C",Across!A2:D3,2,FALSE)')).toBe(3);
         expect(value('=HLOOKUP(25,Across!A1:D3,2)')).toBe('b');
         expect(value('=HLOOKUP(30,Across!A1:D3,4,FALSE)')).toBe('#REF!');
+    });
+});
+
+describe('a blank lookup value', () => {
+    test('MATCH and VLOOKUP read it as 0 and find no empty cell, nor does "" or 0', () => {
+        expect(value('=MATCH(Blanks!C1,Blanks!A1:A4,0)')).toBe('#N/A');
+        expect(value('=VLOOKUP(Blanks!C1,Blanks!A1:B4,2,FALSE)')).toBe('#N/A');
+        expect(value('=MATCH(0,Blanks!A1:A4,0)')).toBe('#N/A');
+        expect(value('=MATCH("",Blanks!A1:A4,0)')).toBe('#N/A');
+    });
+
+    test('XMATCH finds the first empty cell', () => {
+        expect(value('=XMATCH(Blanks!C1,Blanks!A1:A4)')).toBe(1);
     });
 });
 

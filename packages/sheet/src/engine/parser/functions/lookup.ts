@@ -1,6 +1,7 @@
-// The engine's lookups: XLOOKUP and XMATCH, which formulajs 2.9.3 lacks, and MATCH, INDEX, ROWS and COLUMNS, where
-// formulajs's differ from Excel's. The function registry calls them. It has already handed on an error in any argument but the
-// arrays, such as an error match_mode, so these functions only see errors inside the arrays they search or return from.
+// The engine's lookups, such as XLOOKUP and XMATCH, which formulajs 2.9.3 lacks, and MATCH and VLOOKUP, where
+// formulajs's differ from Excel's. The function registry calls them. It has already handed on an error in any argument
+// but the arrays, such as an error match_mode, so these functions only see errors inside the arrays they search or
+// return from.
 
 import type { FormulaArg, FormulaOutput, FormulaValue } from '../../types';
 import { ERROR_NOT_AVAILABLE, ERROR_REF, ERROR_VALUE } from '../error';
@@ -139,7 +140,8 @@ function matchType(params: FunctionArg[], position: number): number {
 }
 
 // Where match_type `type` lands the lookup in `values`; a miss is #N/A. 0 is an exact match with wildcards, and 1 and
-// -1 are Excel's binary search, which lands on the last of a run of duplicates. A blank lookup value is 0.
+// -1 are Excel's binary search, which lands on the last of a run of duplicates. A blank lookup value is 0, so it finds
+// no empty cell, where XMATCH's finds one.
 function matchPosition(lookup: FunctionArg, values: FormulaValue[], type: number): number {
     const wanted = lookupValue(lookup) ?? 0;
     let found = -1;
