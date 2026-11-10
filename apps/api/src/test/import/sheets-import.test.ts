@@ -11,7 +11,7 @@ import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import * as collabSchema from '../../lib/collab/schema';
 import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { ApiError } from '../../lib/core';
-import { readLiveSheets, readSheetsFromDoc } from '../../lib/document/sheets';
+import { addSheetsBatch, readSheetsFromDoc } from '../../lib/document/sheets';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getHome } from '../../lib/home/get-home';
@@ -329,6 +329,52 @@ describe('Sheets xlsx import/convert', () => {
         expect(await listVersions(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, sheetsDoc.id)).toEqual([]);
     });
 
+    // A running total of 2,000 rows recomputes about 2M cells at each of the three row inserts, a second or more of
+    // replay, which the transform process runs while the event loop keeps turning.
+    test('an insert replays the workbook in the transform process, its row inserts recomputed off the event loop', async () => {
+        const sheetsDoc = await uploadAndConvert(buildXlsxBuffer([{ a1: 'A1', value: 'Mine' }], 'Data'), 'totals.xlsx');
+        const home = await getHome(ctx.alice.user.id);
+        const { doc } = await home.drive.getCollabDocument(mountId, sheetsDoc.id);
+        const [own] = readSheetsFromDoc(doc, { recalc: false }).sheets;
+        const celldata = Array.from({ length: 2_000 }, (_, r) => [
+            { r, c: 0, v: { v: 1, m: '1' } },
+            { r, c: 1, v: { f: `=SUM(A$1:A${r + 1})`, v: r + 1, m: String(r + 1) } },
+        ]).flat();
+        const totals: Sheet = { id: 'totals', name: 'Totals', order: 1, config: {}, celldata };
+        writeSheetsSnapshot(doc, encodeSheetsSnapshot([own, totals], { computed: true }), null);
+        const insertRow: Op = {
+            op: 'insertRowCol',
+            id: 'totals',
+            path: [],
+            value: { type: 'row', index: 1, count: 1, direction: 'lefttop' },
+        };
+        sheetsOpLog(doc).push([[insertRow], [insertRow], [insertRow]]);
+
+        // The write settles the request without a turn of the timers, so the time since the last tick counts too.
+        let last = performance.now();
+        let longestTurn = 0;
+        const tick = () => {
+            const now = performance.now();
+            longestTurn = Math.max(longestTurn, now - last);
+            last = now;
+        };
+        const ticker = setInterval(tick, 5);
+        try {
+            await assertJson<ImportResult>(await importRequest(sheetsDoc.id, dataAndSummary(), 'insert'));
+        } finally {
+            clearInterval(ticker);
+            tick();
+        }
+
+        expect(longestTurn).toBeLessThan(500);
+        expect((await readLive(sheetsDoc.id)).map((sheet) => sheet.name)).toEqual([
+            'Data',
+            'Totals',
+            'Data(Copy)',
+            'Summary',
+        ]);
+    }, 60_000);
+
     test('an import answers with what the file held that did not come over', async () => {
         const sheetsDoc = await uploadAndConvert(buildXlsxBuffer([{ a1: 'A1', value: 'Mine' }]), 'summary-target.xlsx');
         const iconSet = '<cfRule type="iconSet" priority="1"><iconSet iconSet="3Arrows"/></cfRule>';
@@ -433,32 +479,30 @@ describe('Sheets xlsx import/convert', () => {
         }
     }, 60_000);
 
-    test('an insert is weighed again in its write, against what another insert added while its pictures were saved', async () => {
+    // The owner's ruling: the weigh is the transform's, so another insert in the meantime can take the workbook one
+    // import past the caps.
+    test('an insert pushes the tabs the transform built, though another insert grew the workbook while its pictures were saved', async () => {
         const sheetsDoc = await uploadAndConvert(buildXlsxBuffer([{ a1: 'A1', value: 'Own' }]), 'grown-meanwhile.xlsx');
         const home = await getHome(ctx.alice.user.id);
         const { path } = await home.drive.resolveFile(mountId, sheetsDoc.id);
         const user = await getUserById(ctx.alice.user.id);
         if (!user) throw new Error('alice missing');
         const ops = sheetsOpLog((await home.drive.getCollabDocument(mountId, sheetsDoc.id)).doc);
-        // The first open weighs the file before its pictures; the workbook grows before the write opens it again.
+        // The first open reads the workbook for the transform; it grows before the write opens it again.
         const realGet = home.drive.getCollabDocument.bind(home.drive);
         let opens = 0;
         const getSpy = spyOn(home.drive, 'getCollabDocument').mockImplementation(async (id, pathId) => {
             if (++opens === 2) ops.push([[fullSheet]]);
             return realGet(id, pathId);
         });
-        let error: unknown;
         try {
             await importIntoDocument(home.drive, path, Buffer.from(await labelled()), { mode: 'insert' }, user);
-        } catch (e) {
-            error = e;
         } finally {
             getSpy.mockRestore();
         }
         try {
             expect(opens).toBe(2);
-            expect(error).toMatchObject({ status: 413, message: IMPORT_MESSAGES.xlsx.tooLarge });
-            expect(ops).toHaveLength(1);
+            expect(ops.toArray().map((batch) => batch.map((op) => op.value.name))).toEqual([['Full'], ['Pictures']]);
         } finally {
             ops.delete(0, ops.length);
         }
@@ -2223,18 +2267,23 @@ describe('an insert weighed with the workbook it joins', () => {
         expect(thrownBy(() => assertInsertFits(workbook, { cells: 1, text: 10 }))).toBeNull();
     });
 
+    const fileJson = encodeSheetsSnapshot([sheetOf('File', [])], { computed: true });
+
     test('a sheet no tab has flushed weighs with the stored ones', () => {
-        const doc = new Y.Doc();
-        writeSheetsSnapshot(doc, encodeSheetsSnapshot([sheetOf('Stored', numbers(10))], { computed: true }), null);
         const pending = sheetOf('Pending', numbers(10));
-        sheetsOpLog(doc).push([[{ op: 'addSheet', id: pending.id, path: [], value: pending }]]);
-        expect(sheetsWeight(readLiveSheets(doc)).cells).toBe(20);
+        const workbook = {
+            snapshot: encodeSheetsSnapshot([sheetOf('Stored', numbers(10))], { computed: true }),
+            batches: JSON.stringify([[{ op: 'addSheet', id: pending.id, path: [], value: pending }]]),
+        };
+        const insert = (cells: number) => () => addSheetsBatch(workbook, fileJson, { cells, text: 0 });
+        expect(thrownBy(insert(MAX_CELLS - 19))).toMatchObject(refused);
+        expect(thrownBy(insert(MAX_CELLS - 20))).toBeNull();
     });
 
     // A file weighs no more than the reader charged it, so the largest a replace accepts sits at both caps.
     test('a file as large as a replace accepts goes into a workbook never flushed', () => {
         const file = { cells: MAX_CELLS, text: MAX_TEXT };
-        expect(thrownBy(() => assertInsertFits(readLiveSheets(new Y.Doc()), file))).toBeNull();
+        expect(thrownBy(() => addSheetsBatch({ snapshot: null, batches: '[]' }, fileJson, file))).toBeNull();
     });
 });
 

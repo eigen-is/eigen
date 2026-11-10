@@ -15,7 +15,7 @@ Two details surprise people: only the export read recalculates a sheet ([§ The 
 | Type | Reader | Returns | Writer |
 |---|---|---|---|
 | `.eigendoc` | `readEigendocFromDoc`, `readEigendocPage`, `readEigendocStyle` (`doc.ts`) | ProseMirror `JSONContent`, the `PageSetup`, the `NormalStyle` | `commitEigendocImport` |
-| `.eigensheets` | `readSheetsFromDoc` (`sheets.ts`) | `{ sheets, recalcError }` | `writeSheetsSnapshot`, `appendSheetsToYjs` |
+| `.eigensheets` | `readSheetsFromDoc` (`sheets.ts`) | `{ sheets, recalcError }` | `writeSheetsSnapshot`, an insert's `addSheetsBatch` |
 | `.eigenslides` | `readVectorFromDoc` (`packages/lib/src/vector/read-vector.ts`) | `VectorScene` | `replaceSlidesInYjs`, `insertSlidesIntoYjs` (`slides.ts`), for the pptx import |
 | `.eigenvector` | `readVectorFromDoc` | `VectorScene` | none |
 | `.eigenstickies` | `readStickiesContent` (`stickies.ts`, main thread) | card and column text | none |
@@ -66,7 +66,7 @@ Each type has a replacing writer. `writeSheetsSnapshot` sets `state.snapshot`, s
 
 They write into the live `CollabDocument`, so the change persists and reaches connected editors like any edit, and a sheet editor remounts on the new snapshot. But nothing merges. The sheet ops a peer made since the last compaction are cleared with the rest, and a peer's unsynced typing inside a deleted paragraph has nowhere to land. So an Import… that replaces saves a version first ([EXPORT.md](EXPORT.md#a-replace-saves-a-version-first)), and `Drive` still has no check for an open session ([ROADMAP.md](ROADMAP.md)). `convertToDocument` writes into a document it has just created, so no one can be editing it.
 
-The inserting writers add records and rewrite none, so a live editor keeps what it holds, its undo stack and its comments. `insertSlidesIntoYjs` writes every slide and element under a fresh id after the current slide ([SLIDES.md](SLIDES.md#the-deck-writer-inserts-under-fresh-ids-and-only-a-replace-clears-the-deck)). `appendSheetsToYjs` pushes the file's sheets as `addSheet` ops onto `ops`, which an open tab applies like a peer's new tab ([SHEETS.md](SHEETS.md#an-imported-tab-arrives-as-an-addsheet-op-renamed-as-duplicate-names-a-copy)). It decodes the file's snapshot on the main thread to rename and re-id its sheets, and the ops hold the sheets whole until the next compaction folds them into the snapshot.
+The inserting writers add records and rewrite none, so a live editor keeps what it holds, its undo stack and its comments. `insertSlidesIntoYjs` writes every slide and element under a fresh id after the current slide ([SLIDES.md](SLIDES.md#the-deck-writer-inserts-under-fresh-ids-and-only-a-replace-clears-the-deck)). An xlsx insert pushes the file's sheets as `addSheet` ops onto `ops`, which an open tab applies like a peer's new tab ([SHEETS.md](SHEETS.md#an-imported-tab-arrives-as-an-addsheet-op-renamed-as-duplicate-names-a-copy)). `addSheetsBatch` builds them in the transform process, renaming and re-iding the file's sheets against the workbook it replays there, and the ops hold the sheets whole until the next compaction folds them into the snapshot.
 
 ## See also
 

@@ -17,7 +17,7 @@ import * as Y from 'yjs';
 import { CLOSE_LINGER_MS, CollabDocument, MESSAGE_SYNC } from '../../lib/collab/collab-document';
 import { readYjsStateFromFile } from '../../lib/collab/yjs-loader';
 import { ApiError } from '../../lib/core/errors';
-import { compactSheetsSnapshot, readLiveSheets } from '../../lib/document/sheets';
+import { compactSheetsSnapshot, readSheetsFromDoc } from '../../lib/document/sheets';
 import type { DocumentTransformRequest, DocumentTransformResponse } from '../../lib/document/transform/protocol';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import { BUSY_MESSAGE, documentTransformRunner } from '../../lib/document/transform/runner';
@@ -119,7 +119,7 @@ function snapshotValues(doc: Y.Doc): [number, number, unknown][] {
 
 // The workbook as a tab opening the doc shows it: the snapshot with every batch left in the log replayed.
 function liveSheets(doc: Y.Doc) {
-    return readLiveSheets(doc).map(({ id, name, order, celldata }) => ({
+    return readSheetsFromDoc(doc, { recalc: false }).sheets.map(({ id, name, order, celldata }) => ({
         id,
         name,
         order,
