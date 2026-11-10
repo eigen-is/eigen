@@ -261,6 +261,7 @@ describe('VLOOKUP', () => {
     test('a blank lookup value is 0, so it finds no blank cell', () => {
         expect(value('=VLOOKUP(G1,G1:H6,2,FALSE)')).toBe('#N/A');
         expect(value('=IFNA(VLOOKUP(G1,G1:H6,2,FALSE),"")')).toBe('');
+        expect(value('=IFNA(VLOOKUP(G1,G1:H6,2,FALSE),"")*5')).toBe(0);
     });
 
     test('an approximate match takes the last row at or below over ascending data', () => {

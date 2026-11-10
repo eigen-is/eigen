@@ -162,6 +162,29 @@ describe('.parse() math', () => {
         expect(parser!.parse('+NA()')).toMatchObject({ error: '#N/A', result: null });
     });
 
+    // Google Sheets' rule, where Excel gives #VALUE!. Only the empty text: any other text that isn't a number stays #VALUE!.
+    test('an empty text is 0 in arithmetic, and only in arithmetic', () => {
+        for (const [formula, result] of [
+            ['""*5', 0],
+            ['""+1', 1],
+            ['5-""', 5],
+            ['""/2', 0],
+            ['""^2', 0],
+            ['-""', 0],
+            ['+""', 0],
+            ['""%', 0],
+        ] as const) {
+            expect(parser!.parse(formula)).toMatchObject({ error: null, result });
+        }
+        expect(parser!.parse('2/""')).toMatchObject({ error: '#DIV/0!', result: null });
+        expect(parser!.parse('"abc"*5')).toMatchObject({ error: '#VALUE!', result: null });
+        expect(parser!.parse('" "*5')).toMatchObject({ error: '#VALUE!', result: null });
+        expect(parser!.parse('"3"*2')).toMatchObject({ error: null, result: 6 });
+        expect(parser!.parse('""&"a"')).toMatchObject({ error: null, result: 'a' });
+        expect(parser!.parse('""=0')).toMatchObject({ error: null, result: false });
+        expect(parser!.parse('"">0')).toMatchObject({ error: null, result: false });
+    });
+
     test('number literals', () => {
         expect(parser!.parse('1e3')).toMatchObject({ error: null, result: 1000 });
         expect(parser!.parse('1E3')).toMatchObject({ error: null, result: 1000 });

@@ -19,10 +19,10 @@ describe('evaluate-by-operator dispatch', () => {
     });
 
     test('arithmetic operators convert thrown errors to returned formulajs Errors', () => {
-        // `"" + 1` throws #VALUE! inside add.ts; the dispatcher must return the
+        // `"a" + 1` throws #VALUE! inside add.ts; the dispatcher must return the
         // Error so the grammar can keep reducing (an outer IF may discard it) —
         // as formulajs's own singleton, so IFERROR/ISERROR recognize it by identity.
-        const result = evaluateByOperator('+', ['', 1]);
+        const result = evaluateByOperator('+', ['a', 1]);
         expect(result).toBeInstanceOf(Error);
         expect((result as Error).message).toBe('#VALUE!');
         expect(callFunction('IFERROR', [result, 'fallback'])).toBe('fallback');
