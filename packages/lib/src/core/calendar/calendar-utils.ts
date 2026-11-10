@@ -276,9 +276,10 @@ function ordinalSuffix(n: number): string {
 export function rruleToText(rrule: string | null): string | null {
     if (!rrule) return null;
     try {
-        return RRule.fromString(rrule)
+        const text = RRule.fromString(rrule)
             .toText()
             .replace(ORDINAL_IN_TEXT, (_, digits: string) => `${digits}${ordinalSuffix(Number(digits))}`);
+        return text[0].toUpperCase() + text.slice(1);
     } catch {
         return rrule;
     }

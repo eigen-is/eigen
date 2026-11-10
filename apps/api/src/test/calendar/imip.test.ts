@@ -259,6 +259,15 @@ describe('iMIP Outbound Email Composition', () => {
         expect(mail.html).toContain('12:00 PM – 1:00 PM (Europe/Amsterdam)');
     });
 
+    test('invitation mail says how a series repeats, right after when', () => {
+        const mail = invite({ ...MOCK_EVENT, rrule: 'FREQ=WEEKLY;BYDAY=WE' }, organizer);
+        expect(mail.text).toContain('(UTC)\nRepeats: Every week on Wednesday\nWhere: Room 42');
+        expect(mail.html).toMatch(
+            /\(UTC\)<\/div>\s*<\/div>\s*<div[^>]*>\s*<div[^>]*>Repeats<\/div>\s*<div[^>]*>Every week on Wednesday</,
+        );
+        expect(invite(MOCK_EVENT, organizer).text).not.toContain('Repeats');
+    });
+
     test('invitation mail names no zone for an all-day event', () => {
         const day = { startTime: new Date('2026-04-15T00:00:00Z'), endTime: new Date('2026-04-16T00:00:00Z') };
         const mail = invite({ ...MOCK_EVENT, ...day, allDay: true, timezone: 'Europe/Amsterdam' }, organizer);

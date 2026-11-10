@@ -3,7 +3,12 @@
 // trusted when the sender is verified, a calendar part past the mail size limit is skipped, and only a message's
 // first events are acted on.
 
-import { formatEventWhen, isInvitationFromOthers, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
+import {
+    formatEventWhen,
+    isInvitationFromOthers,
+    normalizeTimezone,
+    rruleToText,
+} from '@workspace/lib/calendar/calendar-utils';
 import { escapeHtml } from '@workspace/lib/html';
 import type { Attendee, CalendarEvent, ImipMethod, Organizer } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment, CalendarInvite } from '@workspace/lib/types/mail';
@@ -261,10 +266,11 @@ function icalEvent(
 }
 
 function buildEventSummary(event: CalendarEvent): string {
-    const when = buildEventWhen(event);
+    const repeats = rruleToText(event.rrule);
     const lines: string[] = [];
     lines.push(`What: ${event.title}`);
-    lines.push(`When: ${when}`);
+    lines.push(`When: ${buildEventWhen(event)}`);
+    if (repeats) lines.push(`Repeats: ${repeats}`);
     if (event.location) lines.push(`Where: ${event.location}`);
     if (event.description) lines.push(`Description: ${event.description}`);
     return lines.join('\n');
@@ -289,7 +295,9 @@ function buildEventHtml(event: CalendarEvent, footerLine: string, banner?: strin
 
 function buildEventBodyHtml(event: CalendarEvent): string {
     const sections: string[] = [];
+    const repeats = rruleToText(event.rrule);
     sections.push(buildSection('When', escapeHtml(buildEventWhen(event))));
+    if (repeats) sections.push(buildSection('Repeats', escapeHtml(repeats)));
     if (event.location) sections.push(buildSection('Where', escapeHtml(event.location)));
     if (event.description)
         sections.push(buildSection('Description', escapeHtml(event.description).replace(/\n/g, '<br>')));

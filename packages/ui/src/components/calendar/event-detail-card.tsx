@@ -43,9 +43,7 @@ export function EventDetailCard({
     remainingAttendees = 0,
     className,
 }: EventDetailCardProps) {
-    const recurrence = rruleToText(rrule ?? null);
-    // Sentence case here, not CSS `capitalize`, which title-cases every word of "every week on Sunday".
-    const recurrenceText = recurrence && recurrence[0].toUpperCase() + recurrence.slice(1);
+    const recurrenceText = rruleToText(rrule ?? null);
     const cancelled = status === 'cancelled';
 
     return (
