@@ -270,12 +270,12 @@ function buildEventSummary(event: CalendarEvent): string {
     return lines.join('\n');
 }
 
-// Invitation mail has no viewer, so an event with no stored zone renders in UTC and says so, instead of borrowing the
+// Invitation mail has no viewer, so a timed event names the zone it renders in, UTC when it stores none rather than the
 // server's.
 function buildEventWhen(event: CalendarEvent): string {
-    const timezone = normalizeTimezone(event.timezone);
+    const timezone = normalizeTimezone(event.timezone) ?? 'UTC';
     const when = formatEventWhen(event.startTime, event.endTime, event.allDay, timezone, 'UTC');
-    return timezone || event.allDay ? when : `${when} (UTC)`;
+    return event.allDay ? when : `${when} (${timezone})`;
 }
 
 function buildEventHtml(event: CalendarEvent, footerLine: string, banner?: string): string {

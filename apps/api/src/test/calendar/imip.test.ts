@@ -253,10 +253,16 @@ describe('iMIP Outbound Email Composition', () => {
         expect(mail.html).toContain('(UTC)');
     });
 
-    test('invitation mail renders a stored zone as its own wall clock, unlabelled', () => {
+    test('invitation mail renders a stored zone as its own wall clock and names it', () => {
         const mail = invite({ ...MOCK_EVENT, timezone: 'Europe/Amsterdam' }, organizer);
-        expect(mail.text).toContain('12:00 PM – 1:00 PM');
-        expect(mail.text).not.toContain('(UTC)');
+        expect(mail.text).toContain('12:00 PM – 1:00 PM (Europe/Amsterdam)');
+        expect(mail.html).toContain('12:00 PM – 1:00 PM (Europe/Amsterdam)');
+    });
+
+    test('invitation mail names no zone for an all-day event', () => {
+        const day = { startTime: new Date('2026-04-15T00:00:00Z'), endTime: new Date('2026-04-16T00:00:00Z') };
+        const mail = invite({ ...MOCK_EVENT, ...day, allDay: true, timezone: 'Europe/Amsterdam' }, organizer);
+        expect(mail.text).toContain('When: Wednesday, 15 Apr 2026\n');
     });
 
     test('an updated invitation uses the updated subject and method', () => {
