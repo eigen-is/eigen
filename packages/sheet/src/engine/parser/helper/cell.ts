@@ -38,9 +38,12 @@ export function unquoteSheetName(raw: string): string {
     return raw.replace(/^'|'$/g, '').replace(/''/g, "'");
 }
 
+const PRINTABLE_ASCII = /^[ -~]*$/;
+
 // What two sheet names are compared by. Each character folds to its uppercase on its own, so the Greek final ς
-// matches σ, and one whose uppercase is longer keeps its case, so ß never matches ss.
+// matches σ, and one whose uppercase is longer keeps its case, so ß never matches ss. ASCII folds in one step.
 export function sheetNameKey(name: string): string {
+    if (PRINTABLE_ASCII.test(name)) return name.toUpperCase();
     let key = '';
     for (const char of name) {
         const upper = char.toUpperCase();

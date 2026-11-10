@@ -16,8 +16,8 @@ import { TRANSFORM_LIMITS } from './transform/runner';
 // A compaction waits for the one transform child behind whatever holds it, at worst an export, and then runs under its
 // own deadline. Past the two together, the document closes without it.
 const COMPACTION_BUDGET_MS = TRANSFORM_LIMITS.export.deadlineMs + TRANSFORM_LIMITS.compact.deadlineMs;
-// A structural batch costs the fold a rewrite and a recompute of the formulas, up to seconds each on a large workbook,
-// so one fold takes at most this many and stays inside its deadline. The next close folds on from there.
+// A structural batch costs the fold a rewrite and a recompute of the formulas, so one fold takes at most this many to
+// stay inside its deadline. The next close folds on from there.
 const MAX_STRUCTURAL_BATCHES = 20;
 // A workbook whose compaction keeps failing, such as one too large for the child's memory, stops trying until the API
 // restarts, so it doesn't hold the one child at every close.
@@ -34,9 +34,8 @@ export function sheetsNeedCompaction(path: DrivePath, doc: Y.Doc): boolean {
     return (compactionFailures.get(path.id) ?? 0) < MAX_COMPACTION_FAILURES;
 }
 
-// Resolves to the new snapshot JSON with the batches it folded, the log's first ones, or to null when the run ended
-// without one. Only a run that failed on the workbook counts toward giving up. A busy runner, a canceled run or a
-// shutdown says nothing about the workbook.
+// Null when the run ended without a snapshot. Only a run that failed on the workbook counts toward giving up, never a
+// busy runner, a canceled run or a shutdown.
 export async function compactSheets(
     path: DrivePath,
     doc: Y.Doc,

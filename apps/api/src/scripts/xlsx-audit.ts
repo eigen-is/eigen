@@ -1,14 +1,7 @@
 // Audits an xlsx importer on a corpus. For each file it records the outcome, the import's time and peak memory, what
 // the imported sheets hold per feature beside what the package's XML holds, and a fingerprint per cell, so compare can
-// set two runs side by side. Every import runs in a child process of its own, so a hang or a blow-up is cut and
-// recorded. The roundtrip command is the xlsx writer's gate: each file is imported, written and imported again, and the
-// two imports are compared key by key.
-//
-// Usage:
-//   bun apps/api/src/scripts/xlsx-audit.ts run <corpus dir...> --out <dir> [--importer <module>] [--name <label>] [--timeout <s>] [--max-rss <MB>]
-//   bun apps/api/src/scripts/xlsx-audit.ts compare <runA> <runB> [--heldout <list> --set tuned|heldout]
-//   bun apps/api/src/scripts/xlsx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--dump <dir>] [--timeout <s>] [--max-rss <MB>]
-//   bun apps/api/src/scripts/xlsx-audit.ts split <corpus dir...> --out <list> [--real <key prefix>...] [--count <n>] [--seed <s>]
+// set two runs side by side. Its roundtrip command is the xlsx writer's gate. Every import runs in a child process of
+// its own, so a hang or a blow-up is cut and recorded. A run with no valid arguments prints its usage.
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -457,11 +450,8 @@ async function importOne(
     };
 }
 
-// The importer module exports `xlsxToSheets` with the signature of ours. The child is handed the file's path as an
-// argument, so its peak memory is that import's alone, and nothing in a corpus is ever run. A file is keyed by its
-// corpus folder's name and its path inside it. The cell fingerprints go to a gzipped file per file, and the text of each
-// sheet's top-left corner to its result, so compare can show what differs. A run of a private corpus stays out of the
-// repo.
+// The child is handed only the file's path, so its peak memory is that import's alone and nothing in a corpus is ever
+// run. The importer module exports `xlsxToSheets` with the signature of ours.
 export async function runAudit(options: {
     corpora: string[];
     out: string;
@@ -1022,11 +1012,8 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
     return differences;
 }
 
-// The cells whose rule two sheets' validations give differently, one difference for each pair of rules. Each side is
-// read as the editor reads a cell: of the rules that cover it, the highest id wins. Each import numbers its rules
-// afresh, so the sides compare by the rule each cell gets, never by ids or ranges. The walk starts from the block
-// around every range and cuts a block in two at a range's edge until each side gives the whole block one rule. So a
-// large block no edge crosses, such as most of a sheet-wide rule, is read once.
+// Each import numbers its rules afresh, so the sides compare by the rule each cell gets, never by ids or ranges. A block
+// is cut in two at a range's edge until each side gives it one rule, so a large block no edge crosses is read once.
 function validationDifferences(
     a: Sheet['dataValidations'],
     b: Sheet['dataValidations'],
@@ -1071,9 +1058,8 @@ function validationDifferences(
 
 type RankedRange = { range: SingleRange; rank: number; rule: DataValidationRule };
 
-// The rule one side gives every cell of a block, with no rule when no range meets it, or undefined when its cells get
-// different rules. Every range given meets the block. The highest place wins a cell, so the block is one rule's when a
-// range of the highest place covers it whole.
+// Undefined when the block's cells get different rules. The highest place wins a cell, so the block is one rule's when
+// a range of the highest place covers it whole.
 function blockRule(block: SingleRange, ranked: readonly RankedRange[]): { rule?: DataValidationRule } | undefined {
     if (ranked.length === 0) return {};
     let top = 0;
@@ -1318,10 +1304,8 @@ async function xlsxRoundtripChild(
     });
 }
 
-// The writer module (`--writer`) exports writeXlsx's signature. A difference is listed when LISTED explains it, and
-// unlisted otherwise. The run passes with no crash, no cut and no unlisted difference, so every width and height came
-// back to the pixel. A file the first import refuses is skipped, so a reader that newly refuses one still passes here,
-// and a compare of two corpus runs catches that.
+// A file the first import refuses is skipped, so a reader that newly refuses one passes here, and a compare of two
+// corpus runs catches it. The writer module (`--writer`) exports writeXlsx's signature.
 export function runRoundtrip(options: RoundtripOptions): Promise<RoundtripMeta> {
     return runGate(XLSX_GATE, options);
 }

@@ -66,11 +66,8 @@ const BRANCHES: Record<string, (position: number, count: number) => boolean> = {
     SWITCH: (i, count) => i > 0 && (i % 2 === 0 || i === count - 1),
 };
 
-// The arguments each function reads an error in itself, where any other hands the error on, as in Excel. ISERROR
-// and IFERROR inspect it, COUNT skips it, a lookup reads past the cells it doesn't land on, and an *IF function
-// matches an error cell, an error criterion too, by the text it shows. A lookup's options are not exempt:
-// VLOOKUP's range_lookup or MATCH's match_type as an error is that error. IFS and SWITCH stop at the condition that
-// holds, so they hand on only an error they reach.
+// The arguments each function reads an error in itself, where any other hands the error on, as in Excel. A lookup's
+// options are not exempt, and IFS and SWITCH stop at the condition that holds, so they hand on only errors they reach.
 const all = () => true;
 const READS_ERRORS: Record<string, (position: number) => boolean> = {
     ISBLANK: all,
@@ -122,11 +119,8 @@ export function isRegisteredFunction(name: string): boolean {
     return availableFunctions[name.toUpperCase()] != null;
 }
 
-// A name Excel doesn't know either, such as a typo, is #NAME? in-band, so IFERROR and ISERROR around it see it as they
-// see any error, as in Excel. A real Excel function the engine lacks is UNSUPPORTED_FUNCTION, which every function
-// hands on, IFERROR, IFNA, ISERROR and ERROR.TYPE too, because their answer would read as the one Excel computed.
-// Only a branch IF, CHOOSE, IFS, SWITCH, IFERROR or IFNA doesn't take may hold it, and the function returns the one it
-// takes. A function the engine lacks hands on a #REF! it is given, because that is Excel's answer whatever the function.
+// A name Excel doesn't know either, such as a typo, is a #NAME? IFERROR can trap, as in Excel. An Excel function the
+// engine lacks hands on a #REF! it is given, and is otherwise UNSUPPORTED_FUNCTION, which only an untaken branch holds.
 export function callFunction(name: string, params: FunctionArg[] = []): FormulaOutput {
     const upper = name.toUpperCase();
     const callable = availableFunctions[upper];
@@ -148,9 +142,8 @@ export function callFunction(name: string, params: FunctionArg[] = []): FormulaO
     return inBand(() => callable(...params));
 }
 
-// Arithmetic and comparison operators coerce their operands, which would swallow an upstream Error: `Error + 1`
-// would be 1 and `Error > 0` FALSE. So they hand the first Error on unchanged, as Excel does. A function does the same
-// in `callFunction`, but for the arguments it reads errors in. They are scalar, so an array operand has no answer here.
+// Coercion would swallow an upstream Error, `Error + 1` being 1, so an operator hands the first Error on unchanged, as
+// Excel does. The operators are scalar, so an array operand has no answer here.
 const symbolOperators: (OperatorCallable & { SYMBOL: string })[] = [
     add,
     ampersand,
@@ -166,7 +159,7 @@ const symbolOperators: (OperatorCallable & { SYMBOL: string })[] = [
     minus,
 ];
 
-// An empty text is 0 to these, Google Sheets' rule, where Excel's is #VALUE!. The grammar's signs and `%` come here too.
+// An empty text is 0 to these, Google Sheets' rule, where Excel's is #VALUE!. The grammar's signs and `%` come here.
 const ARITHMETIC = new Set<OperatorCallable>([add, divide, minus, multiply, power]);
 for (const operator of symbolOperators) {
     const arithmetic = ARITHMETIC.has(operator);
