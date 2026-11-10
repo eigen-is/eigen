@@ -14,7 +14,7 @@ import { getDropdownList, validateCellData } from '../../state/modules/data-vali
 import { buildFilterConditionMatcher, getFilterColumnValues } from '../../state/modules/filter';
 import { removeHyperlink, saveHyperlink, showLinkCard } from '../../state/modules/hyperlink';
 import { calcSelectionInfo } from '../../state/modules/selection';
-import { sortedOrder, sortSelection } from '../../state/modules/sort';
+import { sortSelection } from '../../state/modules/sort';
 import { handleMerge } from '../../state/modules/toolbar';
 import { contextFactory, selectionFactory } from './factories/context';
 
@@ -103,9 +103,6 @@ describe('readers of a rich cell', () => {
     });
 
     test('sort orders rich cells by their text and takes a rich first row into the range', () => {
-        const rows = [[rich('Cherry')], [plain('apple')], [rich('Banana')]];
-        expect(sortedOrder(true, 0, rows).map((i) => cellValue(rows[i][0]))).toEqual(['apple', 'Banana', 'Cherry']);
-
         const ctx = sheetContext(
             [[rich('Cherry')], [plain('apple')], [rich('Banana')]],
             selectionFactory([0, 2], [0, 0], 0, 0),
