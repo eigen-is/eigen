@@ -1357,6 +1357,23 @@ describe('validation rules on two tabs and a joiner', () => {
         expect(joined).toEqual(rules(b));
     });
 
+    // The undo of a delete sends the rule the delete took whole under its own id, so a rule B added meanwhile stays.
+    test('an undo of a row delete that took a rule keeps a rule a peer added meanwhile', () => {
+        const s = session(ruled());
+        s.edit(s.a, apply([4, 5], [0, 0], TICKS));
+        s.edit(s.a, ...deleteRows(3, 6));
+        const fromB = tabEdit(s.b, apply([0, 1], [3, 3], TICKS));
+        const step = tabUndo(s.a);
+        tabReceive(s.a, fromB);
+        tabReceive(s.b, step);
+        const joined = join(ruled(), [...s.batches, fromB, step])[0].dataValidations;
+        for (const validations of [rules(s.a), rules(s.b), joined]) {
+            expect(validationAt(validations, 0, 3)?.type).toBe('checkbox');
+            expect(validationAt(validations, 4, 0)?.type).toBe('checkbox');
+        }
+        expect(joined).toEqual(rules(s.b));
+    });
+
     test('an undo of a row insert keeps a cut of a rule the peer sent at once', () => {
         const { b, joined } = raceUndo((ctx) => clearValidations(ctx.sheets[0], { row: [8, 10], column: [0, 0] }));
         const cut = [{ row: [0, 6], column: [0, 0] }];
