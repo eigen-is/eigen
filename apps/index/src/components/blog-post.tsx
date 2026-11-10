@@ -23,7 +23,7 @@ type BlogPostProps = {
 
 export function BlogPost({ post, body, older, newer }: BlogPostProps) {
     return (
-        <SitePage toolbar={<ArticleBreadcrumb trail={[{ label: 'Blog', to: '/blog' }]} />}>
+        <SitePage toolbar={<ArticleBreadcrumb trail={[{ label: 'Blog', to: '/blog' }]} page={post.title} />}>
             <ReadingLayout aside={<ArticleToc toc={post.toc} />}>
                 <article>
                     <h1 className="site-title">{post.title}</h1>

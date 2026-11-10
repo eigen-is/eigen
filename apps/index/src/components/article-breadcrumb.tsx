@@ -1,6 +1,6 @@
-// The trail in a public page's toolbar, such as "Support › Sheets" on an article or "Blog" on a post. A crumb with a
-// `to` links; a crumb with an icon is a Support section, drawn in medium weight in the page's current color. The
-// page's own title is never a crumb. Support articles, sections and blog posts use it.
+// The trail in a public page's toolbar, such as "Support › Sheets › Get started with Sheets" on an article or
+// "Blog › Eigen: Vector" on a post. Each crumb links up the tree, and the last one names the page you are reading.
+// Support articles, sections and blog posts use it.
 
 import { Link } from '@tanstack/react-router';
 import {
@@ -8,45 +8,35 @@ import {
     BreadcrumbItem,
     BreadcrumbLink,
     BreadcrumbList,
+    BreadcrumbPage,
     BreadcrumbSeparator,
 } from '@workspace/ui/components/breadcrumb';
-import { cn } from '@workspace/ui/lib/utils';
-import type { LucideIcon } from 'lucide-react';
 import { Fragment } from 'react';
 
-export type Crumb = { label: string; to?: string; icon?: LucideIcon };
-
 type ArticleBreadcrumbProps = {
-    trail: Crumb[];
+    trail: { label: string; to: string }[];
+    page: string;
 };
 
-export function ArticleBreadcrumb({ trail }: ArticleBreadcrumbProps) {
+export function ArticleBreadcrumb({ trail, page }: ArticleBreadcrumbProps) {
     return (
         <Breadcrumb>
             <BreadcrumbList className="h-5 flex-nowrap gap-1.5 text-sm sm:gap-1.5">
-                {trail.map(({ label, to, icon: Icon }, i) => (
-                    <Fragment key={label}>
-                        {i > 0 && <BreadcrumbSeparator className="[&>svg]:size-3 [&>svg]:opacity-60" />}
-                        <BreadcrumbItem>
-                            {to ? (
-                                <BreadcrumbLink
-                                    asChild
-                                    className={cn(
-                                        Icon &&
-                                            'inline-flex items-center gap-1.5 font-medium text-(--app-current-color) hover:text-(--app-current-color) hover:opacity-75',
-                                    )}
-                                >
-                                    <Link to={to} activeOptions={{ exact: true }}>
-                                        {Icon && <Icon className="size-3.5" />}
-                                        {label}
-                                    </Link>
-                                </BreadcrumbLink>
-                            ) : (
-                                label
-                            )}
+                {trail.map(({ label, to }) => (
+                    <Fragment key={to}>
+                        <BreadcrumbItem className="shrink-0">
+                            <BreadcrumbLink asChild>
+                                <Link to={to} activeOptions={{ exact: true }}>
+                                    {label}
+                                </Link>
+                            </BreadcrumbLink>
                         </BreadcrumbItem>
+                        <BreadcrumbSeparator className="[&>svg]:size-3 [&>svg]:opacity-60" />
                     </Fragment>
                 ))}
+                <BreadcrumbItem className="min-w-0">
+                    <BreadcrumbPage className="truncate">{page}</BreadcrumbPage>
+                </BreadcrumbItem>
             </BreadcrumbList>
         </Breadcrumb>
     );

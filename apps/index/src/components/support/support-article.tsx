@@ -27,12 +27,9 @@ export function SupportArticle({ article, body, related }: SupportArticleProps) 
                 <ArticleBreadcrumb
                     trail={[
                         { label: 'Support', to: '/support' },
-                        {
-                            label: config?.title ?? article.section,
-                            to: `/support/${article.section}`,
-                            icon: config?.icon,
-                        },
+                        { label: config?.title ?? article.section, to: `/support/${article.section}` },
                     ]}
+                    page={article.title}
                 />
             }
         >
