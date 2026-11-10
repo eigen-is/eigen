@@ -6,22 +6,19 @@ import type { ArticleMeta } from '../../content/manifest';
 import { ArticleBreadcrumb } from '../article-breadcrumb';
 import { SitePage } from '../site-page';
 import { ArticleRows } from './article-rows';
-import { getSection } from './sections';
+import type { SectionConfig } from './sections';
 
-export function SupportSection({ section, articles }: { section: string; articles: ArticleMeta[] }) {
-    const config = getSection(section);
+export function SupportSection({ section, articles }: { section: SectionConfig; articles: ArticleMeta[] }) {
     const sorted = [...articles].sort((a, b) => a.order - b.order);
 
     return (
         <SitePage
-            color={config?.color}
-            toolbar={
-                <ArticleBreadcrumb trail={[{ label: 'Support', to: '/support' }]} page={config?.title ?? section} />
-            }
+            color={section.color}
+            toolbar={<ArticleBreadcrumb trail={[{ label: 'Support', to: '/support' }]} page={section.title} />}
         >
             <div className="site-wide py-12">
-                <h1 className="site-title">{config?.title ?? section}</h1>
-                {config && <p className="mt-2 text-sm text-muted-foreground">{config.description}</p>}
+                <h1 className="site-title">{section.title}</h1>
+                <p className="mt-2 text-sm text-muted-foreground">{section.description}</p>
                 <div className="mt-6">
                     <ArticleRows articles={sorted} />
                 </div>

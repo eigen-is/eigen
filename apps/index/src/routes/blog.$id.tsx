@@ -3,7 +3,7 @@
 // mounts its own page, so the next one opens at the top.
 
 import { createFileRoute, useParams } from '@tanstack/react-router';
-import { EmptyState, LoadingState, useLayout } from '@workspace/ui';
+import { ErrorState, LoadingState, useLayout } from '@workspace/ui';
 import { useEffect } from 'react';
 import { BlogPost } from '../components/blog-post';
 import { SitePage } from '../components/site-page';
@@ -40,7 +40,7 @@ function BlogPostComponent() {
     }, [post?.title, setDocumentTitle]);
 
     if (!post || !body) {
-        return <SitePage>{post ? <LoadingState /> : <EmptyState message="Post not found." />}</SitePage>;
+        return <SitePage>{post ? <LoadingState /> : <ErrorState />}</SitePage>;
     }
 
     // The posts run newest first, so the newer one stands before this post and the older one after.
