@@ -187,14 +187,12 @@ export function applyEdits(
         if (!master) throw new Error('applyEdits: an EXDATE names its instant through the master row');
         const excluded = exdateKeys(vevent, propTzid(vevent.getFirstProperty('dtstart')));
         keepProperties(vevent, (prop) => prop.name !== EIGEN.exdate || !exclusions.has(String(prop.getFirstValue())));
-        let ctx: WriteContext | undefined;
-        for (const [key, exclusion] of exclusions) {
+        for (const [key, { event, ctx }] of exclusions) {
             if (!excluded.has(key)) vevent.addProperty(exdateProperty(master, key, normalizeTimezone(master.timezone)));
-            const stamp = clampStamp(exclusion.ctx.dtstamp, exclusion.ctx.now);
-            vevent.addProperty(exclusionStamp(key, exclusion.event.id, exclusion.event.sequence, stamp));
-            ctx = exclusion.ctx;
+            vevent.addProperty(exclusionStamp(key, event.id, event.sequence, clampStamp(ctx.dtstamp, ctx.now)));
         }
-        if (ctx) touch(vevent, ctx, true);
+        // One touch for the batch, so its SEQUENCE moves once.
+        touch(vevent, [...exclusions.values()][0].ctx, true);
     }
     if (changed) syncVTimezones(resource);
     return changed;
@@ -214,19 +212,21 @@ export function patchEvent(
 // A rule cut before `fromKey` keeps no override or exclusion from that date on, or a moved occurrence would outlive
 // the series.
 export function dropExceptionsFrom(resource: ICAL.Component, fromKey: string): void {
-    const past = new Set([...keyVEvents(resource)].filter(([key]) => key !== null && key >= fromKey).map(([, v]) => v));
+    const vevents = keyVEvents(resource);
+    const past = new Set([...vevents].filter(([key]) => key !== null && key >= fromKey).map(([, v]) => v));
     if (past.size) keepSubcomponents(resource, (sub) => !past.has(sub));
-    const master = masterVEvent(resource);
+    const master = vevents.get(null);
     if (master) dropExclusions(master, (key) => key >= fromKey);
     syncVTimezones(resource);
 }
 
 export function removeExclusion(resource: ICAL.Component, recurrenceKey: string, ctx: WriteContext): void {
-    const vevent = masterVEvent(resource);
+    const vevents = keyVEvents(resource);
+    const vevent = vevents.get(null);
     if (!vevent) throw new Error('removeExclusion: the resource holds no master VEVENT');
     // A client may cancel an occurrence as a STATUS:CANCELLED override rather than an EXDATE, and both go back the same
     // way.
-    const override = keyVEvents(resource).get(recurrenceKey);
+    const override = vevents.get(recurrenceKey);
     if (override) {
         keepSubcomponents(resource, (sub) => sub !== override);
         syncVTimezones(resource);
@@ -265,7 +265,7 @@ export function storedRevisions(resource: ICAL.Component): Map<string | null, Re
 // The inbound-REQUEST rule matches a verified sender against this, so the imported address wins over the ORGANIZER the
 // file carries.
 export function storedOrganizerAddress(resource: ICAL.Component): string | null {
-    const vevent = masterVEvent(resource);
+    const vevent = keyVEvents(resource).get(null);
     if (!vevent) return null;
     const imported = readStamp(vevent, EIGEN.importedOrganizer);
     if (imported) return imported.toLowerCase();
@@ -652,10 +652,6 @@ function patchReminders(vevent: ICAL.Component, reminders: readonly Reminder[]):
     const recipient = calAddress(vevent.getFirstProperty('organizer')?.getFirstValue());
     for (const reminder of reminders) vevent.addSubcomponent(alarmComponent(reminder, title, recipient));
     return true;
-}
-
-function masterVEvent(resource: ICAL.Component): ICAL.Component | null {
-    return resource.getAllSubcomponents('vevent').find((v) => !v.getFirstProperty('recurrence-id')) ?? null;
 }
 
 // Each VEVENT by the occurrence key its RECURRENCE-ID names in the series' zone, the master under null.
