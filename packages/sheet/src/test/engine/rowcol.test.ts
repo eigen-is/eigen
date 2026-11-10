@@ -319,8 +319,8 @@ describe('applySheetsInsertRowCol/Delete — a merge past the last column', () =
                 config: { merge: { '0_1': { r: 0, c: 1, rs: 1, cs: 3 } } },
             },
         ];
-        const [{ data }] = op(sheets);
-        expect(data?.map((row) => row.length)).toEqual([data?.[1].length, data?.[1].length]);
+        const widths = op(sheets)[0].data?.map((row) => row.length) ?? [];
+        expect(new Set(widths).size).toBe(1);
     });
 });
 
