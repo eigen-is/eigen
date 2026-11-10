@@ -634,6 +634,46 @@ describe('An invitation to several single dates of one series', () => {
         expect((await calendar.getEventsByUid(UID)).map((e) => e.recurrenceDate)).toEqual(['2028-03-20']);
     });
 
+    test("the guest's delete of the last date takes the copy with it", async () => {
+        const { calendar, id, me, rowOf } = await invitedToTwoDates();
+
+        await calendar.deleteEvent(id, rowOf('2028-03-13').id, me);
+        await calendar.deleteEvent(id, rowOf('2028-03-20').id, me);
+
+        expect(await calendar.listResources(id)).toHaveLength(0);
+    });
+
+    test('a date delivered again moves no ctag', async () => {
+        const { calendar, id, guest } = await invitedToTwoDates();
+        const ctag = (await calendar.getCollection(id))?.ctag;
+
+        await calendar.receiveRequest(parseIcs(vcal(date(guest, '0320', 'Second date'))).events, LINK);
+
+        expect((await calendar.getCollection(id))?.ctag).toBe(ctag);
+    });
+
+    // A CalDAV client reads the copy, sets a reminder on the second date and puts the file back.
+    test('a GET, a PUT back and a REPORT keep both dates and their rows', async () => {
+        const { calendar, id, rowOf } = await invitedToTwoDates();
+        const ids = [rowOf('2028-03-13').id, rowOf('2028-03-20').id];
+        const [{ uri }] = await calendar.listResources(id);
+        const served = await calendar.getResource(id, uri);
+        if (!served) throw new Error('the copy has no stored bytes');
+        const alarm = 'BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT30M\r\nDESCRIPTION:Reminder\r\nEND:VALARM\r\n';
+        const body = new TextDecoder()
+            .decode(served.bytes)
+            .replace(/(SUMMARY:Second date[\s\S]*?)END:VEVENT/, `$1${alarm}END:VEVENT`);
+
+        const put = await calendar.putResource(id, uri, body, { ifMatch: `"${served.etag}"`, ifNoneMatch: null });
+
+        expect(put.ok).toBe(true);
+        const reported = await calendar.getResourcesInRange(id, new Date('2028-03-01'), new Date('2028-04-01'));
+        expect(reported.map((resource) => resource.uri)).toEqual([uri]);
+        expect([rowOf('2028-03-13').id, rowOf('2028-03-20').id]).toEqual(ids);
+        expect(rowOf('2028-03-13').data?.reminders).toBeUndefined();
+        expect(rowOf('2028-03-20').data?.reminders).toEqual([{ type: 'notification', minutes: 30 }]);
+    });
+
     test('a whole-series message replaces the copy, and each date keeps its row and answer', async () => {
         const { calendar, id, guest, me, rowOf } = await invitedToTwoDates();
         const [first, second] = [rowOf('2028-03-13'), rowOf('2028-03-20')];
