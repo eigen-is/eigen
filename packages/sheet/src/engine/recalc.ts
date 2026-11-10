@@ -49,15 +49,13 @@ export function recalcSheets(sheets: readonly Sheet[], budgets: RecalcBudgets = 
     for (const { id, r, c, result } of evaluateFormulas(order, working, engine, true)) {
         const row = working.find((w) => w.id === id)?.data[r];
         const existing = row?.[c];
-        if (!row || existing == null) continue;
-        row[c] = withResult(existing, result);
+        if (row && existing) row[c] = withResult(existing, result);
     }
     return finish();
 }
 
-// The sheets with what the seeds affect computed again, over the formula graph the caller holds for them. Every reader
-// runs it, so the values stay off the wire: a clock or a random number keeps its stored value, as every tab must agree.
-// Past a budget it throws a RangeError, and the graph may be left short, so the caller drops it.
+// Every reader runs it, so the values stay off the wire and a clock or a random number keeps its stored value. Past a
+// budget it throws a RangeError and may leave the graph short, so the caller drops it.
 export function recomputeAfter<S extends WorkingSheet>(
     sheets: S[],
     seeds: RecomputeSeeds,
@@ -69,10 +67,8 @@ export function recomputeAfter<S extends WorkingSheet>(
     return withResults(sheets, evaluateFormulas(order, sheets, engine, true));
 }
 
-// Evaluates formulas in order, each value reaching the next through `computed`, which the resolver reads before the
-// matrices, so a reader gets the value without the type the cell keeps. A cell the pass leaves alone is read as stored:
-// a clock or a random number when `keepVolatile` says so, and whatever a formula holds, a number, an error or empty
-// text, when this build can't evaluate its text.
+// Each value reaches the next formula through `computed`, which the resolver reads before the matrices, so it carries
+// no stale type. A cell the pass skips, such as a kept clock or a formula this build can't evaluate, reads as stored.
 export function evaluateFormulas(
     order: readonly FormulaCellInfo[],
     sheets: readonly WorkingSheet[],
@@ -87,15 +83,10 @@ export function evaluateFormulas(
         // A read past the budget fails its formula, which the pass would carry on past: it stops at the next.
         engine.assertWithinCellBudget();
         if (keepVolatile && VOLATILE_RE.test(formula)) continue;
-        try {
-            const result = engine.evaluate(formula, id, resolver);
-            const cell = stored.getCell(id, r, c);
-            if (cell?.v != null && engine.cantEvaluate(formula, result)) continue;
-            computed.set(computedKey(r, c, id), { v: result.value });
-            results.push({ r, c, id, formula, result });
-        } catch {
-            // An unexpected throw, such as ERROR_REF for a bad sheet name, leaves the stored value.
-        }
+        const result = engine.evaluate(formula, id, resolver);
+        if (stored.getCell(id, r, c)?.v != null && engine.cantEvaluate(formula, result)) continue;
+        computed.set(computedKey(r, c, id), { v: result.value });
+        results.push({ r, c, id, formula, result });
     }
     engine.assertWithinCellBudget();
     return results;
@@ -123,7 +114,7 @@ function withResults<S extends WorkingSheet>(sheets: S[], results: readonly Form
     const byId = new Map(sheets.map((sheet) => [sheet.id, sheet]));
     for (const { r, c, id, result } of results) {
         const before = byId.get(id)?.data;
-        const existing = before?.[r]?.[c];
+        const existing = before?.[r][c];
         if (!before || existing == null || existing.v === result.value) continue;
         let data = written.get(id);
         if (!data) {
