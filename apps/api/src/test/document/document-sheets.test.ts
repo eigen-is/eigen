@@ -882,7 +882,10 @@ describe('document/sheets — addSheetsBatch', () => {
 
     test('a link to a renamed sheet that spells its name in another case follows the new name', () => {
         const doc = workbook();
-        const celldata = [...(file[0].celldata ?? []), { r: 0, c: 1, v: { link: { type: 'sheet', address: 'DATA' } } }];
+        const celldata = [
+            ...(file[0].celldata ?? []),
+            { r: 0, c: 1, v: { link: { type: 'sheet' as const, address: 'DATA' } } },
+        ];
         append(doc, encodeSheetsSnapshot([{ ...file[0], celldata }], { computed: true }));
         const { sheets } = readSheetsFromDoc(doc, { recalc: false });
         expect(cellLinks(sheets[1])).toEqual({ '0_1': { type: 'sheet', address: 'Data(Copy)' } });

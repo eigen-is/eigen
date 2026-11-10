@@ -5,7 +5,7 @@
 import { getMarkRange } from '@tiptap/core';
 import type { Editor } from '@tiptap/react';
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import { webLinkHref } from '@workspace/lib/sheets/web-link';
+import { webLinkHref } from '@workspace/lib/validation';
 import type { MenuSectionsProps } from '@workspace/ui/components/context-menu';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { Copy, ExternalLink, Pencil, Unlink } from 'lucide-react';

@@ -2,10 +2,13 @@
 // to a web page, a range or a sheet in the workbook, and its OK waits for an address Sheets can open. Picking a range
 // hands its place to the range picker, which opens this dialog again with the draft, back on the link's cell.
 
+import type { CellLinkType } from '@workspace/lib/sheets';
+import { isCellLinkType } from '@workspace/lib/sheets';
 import { FieldError } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { LinkAddressField, LinkTextField } from '@workspace/ui/components/link-fields';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { cn } from '@workspace/ui/lib/utils';
 import { Grid3x3 } from 'lucide-react';
@@ -29,14 +32,14 @@ import { CellRangeDialog } from '../CellRangeDialog';
 const RANGE_PICKER_WIDTH = 380;
 const RANGE_PICKER_GAP = 5;
 
-const LINK_TYPES = [
+const LINK_TYPES: { text: string; value: CellLinkType }[] = [
     { text: 'Webpages', value: 'webpage' },
     { text: 'Cell range', value: 'cellrange' },
     { text: 'Sheet', value: 'sheet' },
 ];
 
 // The fields as the user left them when the range picker took this dialog's place.
-type LinkDraft = { text: string; type: string; address: string };
+type LinkDraft = { text: string; type: CellLinkType; address: string };
 
 export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: LinkDraft }) {
     const { context, setContext, refs } = useContext(WorkbookContext);
@@ -47,11 +50,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
     const [linkAddress, setLinkAddress] = useState(draft?.address ?? link.originAddress);
     const { r, c } = link;
     const validity = isLinkValid(linkType, linkAddress);
-    const invalidBorder = linkAddress && !validity.isValid && 'border-destructive';
     const refusalId = useId();
-    const describedBy = validity.tooltip ? refusalId : undefined;
-
-    const refusal = validity.tooltip && <FieldError id={refusalId}>{validity.tooltip}</FieldError>;
 
     // The position is in sheet-content coordinates, where the cell's overlay region applies the pane's scroll. The
     // picker is portaled and fixed, so it is converted here off the same pane the region would use.
@@ -99,21 +98,13 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                 onSubmit={() => setContext((ctx) => saveHyperlink(ctx, r, c, linkText, linkType, linkAddress))}
             >
                 <div className="space-y-3">
-                    <div className="space-y-1.5">
-                        <Label htmlFor="link-text">Display text</Label>
-                        <Input
-                            id="link-text"
-                            spellCheck="false"
-                            autoFocus
-                            value={linkText}
-                            onChange={(e) => setLinkText(e.target.value)}
-                        />
-                    </div>
+                    <LinkTextField value={linkText} onValueChange={setLinkText} autoFocus />
                     <div className="space-y-1.5">
                         <Label htmlFor="link-type">Link type</Label>
                         <Select
                             value={linkType}
                             onValueChange={(value) => {
+                                if (!isCellLinkType(value)) return;
                                 if (value === 'cellrange') {
                                     pickRange({ text: linkText, type: value, address: '' });
                                     return;
@@ -139,28 +130,15 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                             </SelectContent>
                         </Select>
                     </div>
-                    {linkType === 'webpage' && (
-                        <div className="space-y-1.5">
-                            <Label htmlFor="link-address">Link address</Label>
-                            <Input
-                                id="link-address"
-                                aria-describedby={describedBy}
-                                className={cn(invalidBorder)}
-                                spellCheck="false"
-                                value={linkAddress}
-                                onChange={(e) => setLinkAddress(e.target.value)}
-                            />
-                            {refusal}
-                        </div>
-                    )}
+                    {linkType === 'webpage' && <LinkAddressField value={linkAddress} onValueChange={setLinkAddress} />}
                     {linkType === 'cellrange' && (
                         <div className="space-y-1.5">
                             <Label htmlFor="link-cell">Cell range</Label>
                             <div className="relative">
                                 <Input
                                     id="link-cell"
-                                    aria-describedby={describedBy}
-                                    className={cn('pr-9', invalidBorder)}
+                                    aria-describedby={validity.tooltip ? refusalId : undefined}
+                                    className={cn('pr-9', validity.tooltip && 'border-destructive')}
                                     spellCheck="false"
                                     value={linkAddress}
                                     onChange={(e) => setLinkAddress(e.target.value)}
@@ -174,7 +152,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                                     <Grid3x3 className="size-4" aria-hidden="true" />
                                 </button>
                             </div>
-                            {refusal}
+                            {validity.tooltip && <FieldError id={refusalId}>{validity.tooltip}</FieldError>}
                         </div>
                     )}
                     {linkType === 'sheet' && (
@@ -198,7 +176,6 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                                     ))}
                                 </SelectContent>
                             </Select>
-                            {refusal}
                         </div>
                     )}
                 </div>

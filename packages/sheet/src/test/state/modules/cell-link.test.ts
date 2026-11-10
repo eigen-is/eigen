@@ -1,6 +1,7 @@
 // A link lives on its cell: what each writer of a cell does to it, and what a peer's whole sheet may bring.
 
 import { describe, expect, test } from 'bun:test';
+import type { CellLink } from '@workspace/lib/sheets';
 import { renameSheetTexts, sheetFinder } from '../../../engine';
 import { replaySheetsOps } from '../../../engine/replay-ops';
 import type { Context } from '../../../state/context';
@@ -19,7 +20,7 @@ import { author, tab, tabEdit, tabUndo } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 import { cellLinks } from '../factories/links';
 
-const LINK = { type: 'webpage', address: 'https://eigen.is' };
+const LINK: CellLink = { type: 'webpage', address: 'https://eigen.is' };
 const everyCell = [{ row: [0, 0], column: [0, 1], row_focus: 0, column_focus: 0 }];
 
 function grid(): Context {
@@ -44,6 +45,12 @@ function linkedGrid(): Context {
     const { next } = author(grid(), (ctx) => saveHyperlink(ctx, 0, 0, 'a', LINK.type, LINK.address));
     return next;
 }
+
+test('a web address is saved without the spaces around it', () => {
+    const ctx = grid();
+    saveHyperlink(ctx, 0, 0, 'a', 'webpage', '  eigen.is  ');
+    expect(getCellHyperlink(ctx, 0, 0)).toEqual({ type: 'webpage', address: 'eigen.is' });
+});
 
 describe('the writers of a cell', () => {
     test('a typed value keeps the link, as Excel does', () => {
@@ -104,7 +111,7 @@ describe('the writers of a cell', () => {
 });
 
 describe('a link to a sheet', () => {
-    const toOther = { type: 'sheet', address: 'Other' };
+    const toOther: CellLink = { type: 'sheet', address: 'Other' };
 
     test('a rename reaches it in the stored list a file import holds', () => {
         const sheet = { id: 'x', name: 'x', celldata: [{ r: 0, c: 0, v: { link: toOther } }] };
@@ -137,6 +144,7 @@ describe("a peer's whole sheet", () => {
         ['a list cell with a null link', { celldata: [{ r: 0, c: 0, v: { link: null } }] }],
         ['a matrix cell with a link that is text', { data: [[{ link: 'https://eigen.is' }]] }],
         ['an address that is no text', { data: [[{ link: { type: 'webpage', address: 5 } }]] }],
+        ['a link of a kind no reader follows', { data: [[{ link: { type: 'file', address: 'x' } }]] }],
     ])('is refused for %s', (_, cells) => {
         expect(added({ ...named, ...cells })).toEqual([]);
     });

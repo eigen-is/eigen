@@ -4,6 +4,7 @@
 // picker takes the dialog's place, and its OK, Cancel or Escape brings it back with the draft, on the link's sheet.
 
 import { describe, expect, mock, test } from 'bun:test';
+import type { CellLinkType } from '@workspace/lib/sheets';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 
@@ -21,14 +22,24 @@ const SHEETS = [
     { id: 'id_2', name: 'Sheet2', order: 1, config: {}, data: [[null, null]] },
 ];
 
-const linkedSheet = (type: string, address: string) => ({
+const linkedSheet = (type: CellLinkType, address: string) => ({
     ...SHEETS[0],
     data: [[{ v: 'go', link: { type, address } }, null]],
 });
 
 // The link card on A1, inside a stand-in for the grid that listens as cellArea does: editing for Insert link, or the
 // hover card of a link already there.
-const openCard = async ({ isEditing = true, originType = 'webpage', originAddress = '', scrolling = false } = {}) => {
+const openCard = async ({
+    isEditing = true,
+    originType = 'webpage',
+    originAddress = '',
+    scrolling = false,
+}: {
+    isEditing?: boolean;
+    originType?: CellLinkType;
+    originAddress?: string;
+    scrolling?: boolean;
+} = {}) => {
     gridMouseDown.mockClear();
     const dialog = await renderSheetDialog(
         () => {},
@@ -303,7 +314,7 @@ describe('the range picker', () => {
         c: 0,
         rc: '0_0',
         originText: '',
-        originType: 'webpage',
+        originType: 'webpage' as const,
         originAddress: 'https://eigen.is',
         position: { left: 0, top: 0, right: 74, bottom: 20 },
     };

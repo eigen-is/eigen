@@ -9,6 +9,7 @@
 // stays DOM-free.
 
 import { describe, expect, it } from 'bun:test';
+import type { CellLink } from '@workspace/lib/sheets';
 import type { Cell, DefaultConditionalFormatRule } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { copy } from '../../../state/modules/clipboard';
@@ -682,7 +683,7 @@ describe('pasted formulas and the dependency map', () => {
 });
 
 describe('hyperlinks travel with an internal paste', () => {
-    const link = { type: 'webpage', address: 'https://eigen.is' };
+    const link: CellLink = { type: 'webpage', address: 'https://eigen.is' };
     function linkedCtx() {
         return makeCtx(6, 6, (d) => {
             d[0][0] = { v: 'site', m: 'site', link };

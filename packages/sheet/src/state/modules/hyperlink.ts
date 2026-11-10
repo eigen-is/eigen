@@ -3,7 +3,8 @@
 // sheet names that sheet, and following it finds the sheet by name. Saving new text writes over the cell, so the
 // formulas that read it recompute.
 
-import { resolveWebLink } from '@workspace/lib/sheets/web-link';
+import type { CellLinkType } from '@workspace/lib/sheets';
+import { resolveWebLink, webLinkHref } from '@workspace/lib/validation';
 import { cloneDeep } from 'es-toolkit/compat';
 import { findSheetByName } from '../../engine/a1-notation';
 import { cellValue, dropRuns } from '../../engine/format';
@@ -44,18 +45,19 @@ export function saveHyperlink(
     r: number,
     c: number,
     linkText: string,
-    linkType: string,
+    linkType: CellLinkType,
     linkAddress: string,
 ) {
     const flowdata = getFlowdata(ctx);
-    if (flowdata != null && linkType && linkAddress) {
+    if (flowdata != null && linkAddress) {
+        const address = linkType === 'webpage' ? linkAddress.trim() : linkAddress;
         const cell = (flowdata[r][c] ??= {});
-        cell.link = { type: linkType, address: linkAddress };
+        cell.link = { type: linkType, address };
         cell.fc = 'rgb(0, 0, 255)';
         cell.un = 1;
         // New text replaces the cell's value, its formula and a rich cell's runs, as in Excel; the text the card
         // showed, left as it was, keeps the cell as it was.
-        const text = linkText || linkAddress;
+        const text = linkText || address;
         if (`${cellValue(cell) ?? ''}` !== text) {
             dropRuns(cell);
             delete cell.f;
@@ -133,17 +135,10 @@ export function goToLink(ctx: Context, r: number, c: number) {
     ctx.linkCard = undefined;
 }
 
-// A space anywhere between the scheme and the first /, ? or #.
-const HOST_WITH_SPACE = /^[^/?#]*:\/*[^/?#]*\s/;
-
-export function isLinkValid(linkType: string, linkAddress: string) {
+export function isLinkValid(linkType: CellLinkType, linkAddress: string) {
     if (!linkAddress) return { isValid: false, tooltip: '' };
-    if (linkType === 'webpage') {
-        // Valid means goToLink would open it. Chrome's parser escapes a space in the host name instead of refusing it.
-        const address = resolveWebLink(linkAddress);
-        if (address == null || !URL.canParse(address) || HOST_WITH_SPACE.test(address)) {
-            return { isValid: false, tooltip: 'Please enter a valid link' };
-        }
+    if (linkType === 'webpage' && webLinkHref(linkAddress) == null) {
+        return { isValid: false, tooltip: 'Please enter a valid link' };
     }
     if (linkType === 'cellrange' && !iscelldata(linkAddress)) {
         return { isValid: false, tooltip: 'Please enter a valid cell range, such as Sheet1!A1:C8' };

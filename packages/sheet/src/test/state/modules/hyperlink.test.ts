@@ -6,6 +6,7 @@
 // scripting schemes must be unreachable.
 
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { webLinkHref } from '@workspace/lib/validation';
 import type { Context } from '../../../state/context';
 import { goToLink, isLinkValid } from '../../../state/modules/hyperlink';
 import { contextFactory } from '../factories/context';
@@ -136,8 +137,6 @@ describe('isLinkValid scheme allowlist', () => {
     });
 
     test('accepts everything navigation would open — same gate as goToLink', () => {
-        // The old charset regex rejected these while goToLink happily opened
-        // them; validity now derives from resolveWebLink + URL.canParse.
         expect(isLinkValid('webpage', 'localhost:3000').isValid).toBe(true);
         expect(isLinkValid('webpage', 'https://example.com/x;y=1#frag').isValid).toBe(true);
         expect(isLinkValid('webpage', 'https://en.wikipedia.org/wiki/Foo_(bar)').isValid).toBe(true);
@@ -166,3 +165,10 @@ describe('isLinkValid scheme allowlist', () => {
         expect(isLinkValid('webpage', 'file:///etc/passwd').isValid).toBe(false);
     });
 });
+
+test.each(['https://eig en.is/', 'javascript:alert(1)', 'https://eigen.is/help', '  eigen.is  '])(
+    "the sheet's dialog takes %p as the doc's does",
+    (address) => {
+        expect(isLinkValid('webpage', address).isValid).toBe(webLinkHref(address) != null);
+    },
+);

@@ -13,7 +13,7 @@ import {
     sheetDefaultColWidth,
     sheetDefaultRowHeight,
 } from '@workspace/lib/sheets';
-import { resolveWebLink } from '@workspace/lib/sheets/web-link';
+import { resolveWebLink } from '@workspace/lib/validation';
 import { escapeXml } from '@workspace/lib/xml';
 import { parseA1Range, quoteSheetName, rangeToA1, toA1, unquoteSheetName } from '@workspace/sheet/engine';
 import { R_NS, SML_NS } from '../../../ooxml/ooxml';

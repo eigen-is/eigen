@@ -3,6 +3,7 @@
 // where the source has none.
 
 import { describe, expect, test } from 'bun:test';
+import type { CellLink } from '@workspace/lib/sheets';
 import { produce } from 'immer';
 import type { Context } from '../../../state/context';
 import { onCellsMoveEnd } from '../../../state/modules/move-cells';
@@ -66,7 +67,7 @@ describe('onCellsMoveEnd carries borders', () => {
 
 describe('onCellsMoveEnd carries links', () => {
     test('a linked source moves its link to the destination', () => {
-        const link = { type: 'webpage', address: 'https://eigen.is' };
+        const link: CellLink = { type: 'webpage', address: 'https://eigen.is' };
         const ctx = moveTopLeftToRowTwo((data) => {
             data[0][0] = { v: 'site', m: 'site', link };
         }, {});

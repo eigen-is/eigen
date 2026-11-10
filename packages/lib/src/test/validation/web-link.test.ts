@@ -1,7 +1,7 @@
 // A link dialog stores what webLinkHref makes of an address: it adds https to an address without a scheme, and refuses
 // one no browser opens, such as a scripting scheme or a host with a space in it.
 import { expect, test } from 'bun:test';
-import { webLinkHref } from '../../sheets/web-link';
+import { webLinkHref } from '../../validation/web-link';
 
 test.each([
     ['https://eigen.is/help', 'https://eigen.is/help'],

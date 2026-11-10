@@ -2,6 +2,7 @@
 // sources and links. The batch is one op every receiver's engine runs, so a peer, a joiner, an undo and a redo agree.
 
 import { describe, expect, test } from 'bun:test';
+import type { CellLink } from '@workspace/lib/sheets';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { cellLinks } from '../factories/links';
 
@@ -476,7 +477,7 @@ describe('a rename after a fill down from a linked cell', () => {
 
     test('the fill ships the link of the cell it fills, with its value', () => {
         const { t, log } = linkedAndFilled();
-        const link = { type: 'webpage', address: 'https://example.com' };
+        const link: CellLink = { type: 'webpage', address: 'https://example.com' };
         expect(t.ctx.sheets[0].data?.[1][0]?.link).toEqual(link);
         expect(log[1].find(({ path }) => path.join() === 'data,1,0')?.value?.link).toEqual(link);
     });
@@ -509,7 +510,7 @@ describe('a rename after a fill down from a linked cell', () => {
         const rename = renameFirst(t, 'Renamed');
         const joined = join(base, [...log, forged, rename]);
         expect(joined[0].name).toBe('Renamed');
-        const link = { type: 'webpage', address: 'https://example.com' };
+        const link: CellLink = { type: 'webpage', address: 'https://example.com' };
         expect(cellLinks(joined[0])).toEqual({ '0_0': link, '1_0': link });
         expect(cellLinks(t.ctx.sheets[0])).toEqual(cellLinks(joined[0]));
     });

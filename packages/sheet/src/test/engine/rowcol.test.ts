@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { newSheetChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
-import type { Cell, Sheet, SheetChart, SheetConfig } from '@workspace/lib/sheets';
+import type { Cell, CellLink, Sheet, SheetChart, SheetConfig } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
 import { createArrayResolver } from '../../engine/cell-resolver';
@@ -657,7 +657,7 @@ const onAxis = (type: 'row' | 'column', span: Span) =>
     type === 'row' ? { row: span, column: OTHER } : { row: OTHER, column: span };
 
 describe('applySheetsInsertRowCol/Delete — links', () => {
-    const link = { type: 'webpage', address: 'https://eigen.is' };
+    const link: CellLink = { type: 'webpage', address: 'https://eigen.is' };
     const linkedCell = (v: string): Cell => ({ ...cell(v), link });
     const linked = () => [
         makeSheet('s1', 'Sheet1', [
