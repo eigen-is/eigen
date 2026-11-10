@@ -27,6 +27,11 @@
     @apply text-4xl font-medium tracking-tight;
 }
 
+/* The muted panel of the site, such as a landing block or the table of contents beside an article. */
+.site-panel {
+    @apply rounded-lg bg-muted p-5;
+}
+
 .site-wide {
     width: 100%;
     max-width: calc(var(--site-wide) + 2 * var(--app-gutter-x));

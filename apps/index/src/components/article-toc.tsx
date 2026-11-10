@@ -53,18 +53,16 @@ export function ArticleToc({ toc, label = 'On this page' }: ArticleTocProps) {
     if (entries.length < 2) return null;
 
     return (
-        <nav className="sticky top-12 max-h-[calc(100dvh-8rem)] overflow-y-auto text-sm leading-snug [scrollbar-width:none]">
+        <nav className="site-panel sticky top-12 max-h-[calc(100dvh-8rem)] overflow-y-auto text-sm leading-snug [scrollbar-width:none]">
             <p className="eigen-section-label mb-3 h-5 leading-5">{label}</p>
-            <ul className="border-l">
+            <ul>
                 {entries.map((entry) => (
                     <li key={entry.id}>
                         <a
                             href={`#${entry.id}`}
                             className={cn(
-                                '-ml-px flex justify-between gap-2 border-l-2 py-1 pl-3 transition-colors hover:text-foreground',
-                                entry.id === activeId
-                                    ? 'border-(--app-current-color) font-medium text-foreground'
-                                    : 'border-transparent text-muted-foreground',
+                                'flex justify-between gap-2 py-1 transition-colors hover:text-foreground',
+                                entry.id === activeId ? 'font-medium text-foreground' : 'text-muted-foreground',
                             )}
                         >
                             {entry.text}

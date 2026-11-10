@@ -6,7 +6,6 @@ import { copyToClipboard } from '@workspace/lib/clipboard';
 import { Badge } from '@workspace/ui/components/badge';
 import { CodeBlock, CodeBlockContent } from '@workspace/ui/components/code-block';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
-import { cn } from '@workspace/ui/lib/utils';
 import { Copy } from 'lucide-react';
 
 const INSTALL_COMMAND = 'curl -fsSL https://eigen.is/install | sh';
@@ -29,9 +28,6 @@ const BLOCKS = [
     },
 ];
 
-const TITLE = 'text-lg font-medium';
-const BLOCK = 'rounded-lg bg-muted p-5';
-
 type LandingBlocksProps = {
     showInstall: boolean;
 };
@@ -41,8 +37,8 @@ export function LandingBlocks({ showInstall }: LandingBlocksProps) {
         <div className="site-wide mt-auto pb-10">
             <div className="grid grid-cols-1 gap-6 md:grid-cols-3 md:gap-10">
                 {BLOCKS.map((block) => (
-                    <div key={block.title} className={cn(BLOCK, 'flex flex-col')}>
-                        <h2 className={TITLE}>{block.title}</h2>
+                    <div key={block.title} className="site-panel flex flex-col">
+                        <h2 className="text-lg font-medium">{block.title}</h2>
                         <p className="mt-2 text-sm text-pretty text-muted-foreground">{block.text}</p>
                         <div className="mt-auto flex flex-wrap gap-1.5 pt-3">
                             {block.tags.map((tag) => (
