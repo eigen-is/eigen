@@ -1,5 +1,5 @@
 // DELETE on one occurrence of a series: a live override is the occurrence, so deleting it drops that
-// instance, and deleting the cancelled row that stands for a dropped instance puts it back.
+// instance, and deleting the cancelled row that stands for a dropped instance changes nothing.
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import * as propagation from '../../lib/calendar/invite-propagation';
@@ -113,14 +113,14 @@ describe('Removing one occurrence of a series', () => {
         expect(ics).toContain(`EXDATE:${TARGET.replace(/-/g, '')}T090000Z`);
         expect(ics).not.toContain('RECURRENCE-ID');
         expect(ics).not.toContain('STATUS:CANCELLED');
-
-        // The cancelled row keeps the override's id, so deleting it puts the occurrence back.
-        await deleteEvent(override.id);
-        expect(await occurrencesOf(parent.uid)).toHaveLength(4);
     });
 
-    test('deleting the cancelled row of a dropped occurrence puts it back', async () => {
-        const parent = await series('Occurrence Delete Cancelled');
+    // A cancelled row is the date already gone. No UI shows it, and a DELETE of it changes nothing, like one of a row
+    // deleted before, whether an EXDATE or a client's STATUS:CANCELLED override stands for it.
+    test('deleting the cancelled row of a dropped occurrence changes nothing', async () => {
+        const parent = await series('Occurrence Delete Cancelled', {
+            attendees: [{ email: 'carol.restore@example.org', name: 'Carol', status: 'pending', role: 'required' }],
+        });
         await post({
             title: 'Occurrence Delete Cancelled',
             startTime: `${TARGET}T09:00:00Z`,
@@ -130,53 +130,6 @@ describe('Removing one occurrence of a series', () => {
             recurrenceDate: TARGET,
             status: 'cancelled',
         });
-        expect(await occurrencesOf(parent.uid)).toHaveLength(3);
-
-        const home = await getHome(ctx.alice.user.id);
-        const cancelled = findOrFail(
-            await home.calendar.getEventsByUid(parent.uid),
-            (e) => e.status === 'cancelled' && e.recurrenceDate === TARGET,
-        );
-        await deleteEvent(cancelled.id);
-
-        const restored = await occurrencesOf(parent.uid);
-        expect(restored).toHaveLength(4);
-        expect(findOrFail(restored, (e) => e.occurrenceDate === TARGET).title).toBe('Occurrence Delete Cancelled');
-    });
-
-    // Putting an occurrence back cancels nothing, so the series' guests get no CANCEL for it.
-    test('putting a dropped occurrence back sends its guests no cancellation', async () => {
-        const parent = await series('Occurrence Restore Guests', {
-            attendees: [{ email: 'carol.restore@example.org', name: 'Carol', status: 'pending', role: 'required' }],
-        });
-        await post({
-            title: 'Occurrence Restore Guests',
-            startTime: `${TARGET}T09:00:00Z`,
-            endTime: `${TARGET}T10:00:00Z`,
-            allDay: false,
-            parentEventId: parent.id,
-            recurrenceDate: TARGET,
-            status: 'cancelled',
-        });
-        const home = await getHome(ctx.alice.user.id);
-        const cancelled = findOrFail(
-            await home.calendar.getEventsByUid(parent.uid),
-            (e) => e.status === 'cancelled' && e.recurrenceDate === TARGET,
-        );
-
-        const spy = spyOn(propagation, 'propagateCancellation').mockResolvedValue();
-        spy.mockClear();
-        await deleteEvent(cancelled.id);
-        const cancellations = spy.mock.calls.length;
-        spy.mockRestore();
-
-        expect(cancellations).toBe(0);
-        expect(await occurrencesOf(parent.uid)).toHaveLength(4);
-    });
-
-    // A client may cancel an occurrence as a STATUS:CANCELLED override instead of an EXDATE. Deleting that
-    // row puts the occurrence back, exactly as deleting an EXDATE-cancelled one does.
-    test("deleting a client's cancelled override puts the occurrence back", async () => {
         const uid = 'client-cancelled-override@device';
         const put = await davRequest('PUT', `/dav/calendars/${ctx.alice.user.id}/${calendarId}/cancelled.ics`, {
             email: ctx.alice.user.email,
@@ -206,19 +159,23 @@ describe('Removing one occurrence of a series', () => {
             ),
         });
         expect(put.status).toBe(201);
-        expect(await occurrencesOf(uid)).toHaveLength(3);
 
         const home = await getHome(ctx.alice.user.id);
-        const cancelled = findOrFail(
-            await home.calendar.getEventsByUid(uid),
-            (e) => e.status === 'cancelled' && e.recurrenceDate === TARGET,
-        );
-        await deleteEvent(cancelled.id);
-
-        const restored = await occurrencesOf(uid);
-        expect(restored).toHaveLength(4);
-        expect(findOrFail(restored, (e) => e.occurrenceDate === TARGET).title).toBe('Client Cancelled Override');
-        // The occurrence is the master's expansion again, so no row of its own survives — as an EXDATE restore leaves none.
-        expect((await home.calendar.getEventsByUid(uid)).filter((e) => e.parentEventId)).toHaveLength(0);
+        const spy = spyOn(propagation, 'propagateCancellation').mockResolvedValue();
+        spy.mockClear();
+        for (const held of [parent.uid, uid]) {
+            const before = findOrFail(await home.calendar.listResources(calendarId), (r) => r.uid === held);
+            const cancelled = findOrFail(
+                await home.calendar.getEventsByUid(held),
+                (e) => e.status === 'cancelled' && e.recurrenceDate === TARGET,
+            );
+            await deleteEvent(cancelled.id);
+            expect(await occurrencesOf(held)).toHaveLength(3);
+            const after = findOrFail(await home.calendar.listResources(calendarId), (r) => r.uid === held);
+            expect(after.etag).toBe(before.etag);
+        }
+        const cancellations = spy.mock.calls.length;
+        spy.mockRestore();
+        expect(cancellations).toBe(0);
     });
 });

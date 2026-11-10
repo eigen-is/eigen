@@ -13,7 +13,6 @@ import {
     parseResource,
     patchEvent,
     projectResource,
-    removeExclusion,
     restampResource,
     serializeEventForImip,
     serializeResource,
@@ -1266,14 +1265,6 @@ describe('structural edits', () => {
         expect(stamps[0].getFirstParameter('x-eigen-event-id')).toBe('evt-cancel-2');
     });
 
-    test('removeExclusion drops the EXDATE value and its stamp', () => {
-        const resource = buildResource([MASTER, EXCLUSION]);
-        removeExclusion(resource, '2026-04-29', CTX);
-
-        expect(masterOf(resource).getAllProperties('exdate')).toHaveLength(0);
-        expect(masterOf(resource).getAllProperties('x-eigen-exdate')).toHaveLength(0);
-    });
-
     // Re-instating a cancelled occurrence: an EXDATE left beside the new override would keep the
     // occurrence excluded and project a second, cancelled row for the same key.
     test('putOverride drops the exclusion of the key it overrides', () => {
@@ -1310,7 +1301,6 @@ describe('structural edits', () => {
 // cannot place — an occurrence nothing overrides, a row that names no occurrence, an override-only
 // body — is a bug in the store, not a resource to rewrite.
 describe('refusals', () => {
-    const overrideOnly = () => parseResource(serializeResource(buildResource([OVERRIDE])));
     const unkeyed = { ...OVERRIDE, recurrenceDate: null };
 
     test('patchEvent refuses an occurrence the resource does not hold', () => {
@@ -1325,10 +1315,6 @@ describe('refusals', () => {
 
     test('an exclusion refuses an exclusion that names no occurrence', () => {
         expect(() => exclude(buildResource([MASTER]), unkeyed)).toThrow('names no occurrence');
-    });
-
-    test('removeExclusion refuses a resource with no master VEVENT', () => {
-        expect(() => removeExclusion(overrideOnly(), '2026-04-29', CTX)).toThrow('holds no master VEVENT');
     });
 });
 
@@ -1465,13 +1451,13 @@ describe('a removal costs one pass over the list', () => {
         expect(names.indexOf('x-last')).toBe(names.lastIndexOf('x-pad') + 1);
     });
 
-    test('putting back an occurrence named by a long run of repeated EXDATEs', () => {
+    test('an override over an occurrence named by a long run of repeated EXDATEs', () => {
         const resource = parseResource(
-            vcal(series(...padding(40_000), ...Array<string>(30_000).fill('EXDATE;VALUE=DATE:20260420'), 'X-LAST:z')),
+            vcal(series(...padding(40_000), ...Array<string>(30_000).fill('EXDATE:20260420T120000Z'), 'X-LAST:z')),
         );
 
         const cpuMs = cpuClock();
-        removeExclusion(resource, '2026-04-20', CTX);
+        putOverride(resource, { ...OVERRIDE, uid: 'large@eigen', recurrenceDate: '2026-04-20', timezone: null });
         expect(cpuMs()).toBeLessThan(800);
 
         const names = masterNames(resource);

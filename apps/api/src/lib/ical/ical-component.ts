@@ -232,20 +232,6 @@ export function guestCutOf(resource: ICAL.Component): string | null {
     return master ? readStamp(master, EIGEN.guestCut) : null;
 }
 
-export function removeExclusion(resource: ICAL.Component, recurrenceKey: string, ctx: WriteContext): void {
-    const vevents = keyVEvents(resource);
-    const vevent = vevents.get(null);
-    if (!vevent) throw new Error('removeExclusion: the resource holds no master VEVENT');
-    // A client may cancel an occurrence as a STATUS:CANCELLED override rather than an EXDATE, and both go back the same
-    // way.
-    const override = vevents.get(recurrenceKey);
-    if (override) {
-        keepSubcomponents(resource, (sub) => sub !== override);
-        syncVTimezones(resource);
-    }
-    if (dropExclusions(vevent, (key) => key === recurrenceKey) || override) touch(vevent, ctx, true);
-}
-
 // RFC 5546 § 2.1.5 orders on SEQUENCE then DTSTAMP. A one-second DTSTAMP cannot separate two revisions, so an equal
 // stamp is applied as the redelivery it is and only a strictly lower SEQUENCE loses.
 export function isNewerRevision(incoming: Revision, stored: Revision | null): boolean {

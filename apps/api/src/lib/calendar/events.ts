@@ -10,15 +10,7 @@ import { and, eq } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import { RRule } from 'rrule';
 import { ApiError } from '../core';
-import {
-    applyEdits,
-    buildResource,
-    parseResource,
-    patchEvent,
-    removeExclusion,
-    storedRecurrenceIds,
-    storedRevisions,
-} from '../ical';
+import { applyEdits, buildResource, parseResource, patchEvent, storedRecurrenceIds, storedRevisions } from '../ical';
 import type { EventPatch, EventToBuild, VEventEdit, WriteContext } from '../ical/ical-component';
 import { serializeEventForImip } from '../ical/ical-component';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
@@ -102,8 +94,8 @@ export async function deleteEvent(
     if (!existing) return;
 
     const invitation = isInvitationFromOthers(existing, calendar.home.user.email) ? existing.data : null;
-    // An override without its own list has its series' guests. Deleting a cancelled row answers and cancels nothing: an
-    // occurrence comes back, and a cancelled master's PUT already fanned out STATUS:CANCELLED.
+    // An override without its own list has its series' guests. A cancelled master answers and cancels nothing: its PUT
+    // already fanned out STATUS:CANCELLED.
     const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
     const held = existing.status === 'cancelled' ? [] : heldAttendees(existing, series);
     const declining = user && held.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
@@ -235,7 +227,8 @@ export async function eraseStoredEvent(
     expectedEtag?: string,
 ): Promise<EventToBuild | null> {
     const existing = eventById(calendar, id);
-    if (!existing) return null;
+    // A cancelled date is gone already, so deleting its row again changes nothing, as a second delete does.
+    if (!existing || (existing.parentEventId && existing.status === 'cancelled')) return null;
     if (existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
     const resource = resourceOf(calendar, id);
     if (!resource) throw new ApiError(404, 'Event not found');
@@ -252,9 +245,7 @@ export async function eraseStoredEvent(
     const recurrenceId = storedRecurrenceIds(component).get(existing.recurrenceDate);
     const ctx = writeContext(actorIsOrganizer(parent ?? existing));
     const exclusion: VEventEdit = { kind: 'exclusion', event: existing, ctx };
-    // A cancelled row is the exclusion itself, so deleting it puts the occurrence back.
-    if (parent && existing.status === 'cancelled') removeExclusion(component, existing.recurrenceDate, ctx);
-    else applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]));
+    applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]));
     if (component.getFirstSubcomponent('vevent')) await writeComponent(calendar, resource, component);
     else await calendar.purgeResource(resource);
     // A CANCEL names the revision the exclusion was stamped with.

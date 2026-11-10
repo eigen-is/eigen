@@ -11,7 +11,6 @@ export {
     newVCalendar,
     PRODID,
     patchEvent,
-    removeExclusion,
     restampResource,
     serializeEventForImip,
     serializeResource,
