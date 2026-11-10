@@ -577,7 +577,7 @@ describe('a batch that writes a sheet id', () => {
             value: { type: 'row', index: 1, count: 1, direction: 'rightbottom' },
         };
         const deleteFirst: Op = { op: 'deleteRowCol', id: 's9', path: [], value: { type: 'row', start: 0, end: 0 } };
-        const batches = [[insertLast], [{ op: 'replace', id: 's1', path: ['id'], value: 's9' }], [deleteFirst]];
+        const batches: Op[][] = [[insertLast], [{ op: 'replace', id: 's1', path: ['id'], value: 's9' }], [deleteFirst]];
         const [replayed] = replaySheetsOps([sheet], batches);
         expect(replayed.data?.[0]?.[1]).toMatchObject({ f: '=SUM(A1)', v: 2 });
     });
