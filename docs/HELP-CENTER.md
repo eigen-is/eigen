@@ -111,7 +111,7 @@ The overview lists the posts newest first from the build-time manifest, so every
 
 ## The landing page
 
-`routes/index.tsx` is the landing page: the `EigenCyclingLogo` wordmark with the pitch, the buttons, and three blocks (`components/landing-blocks.tsx`). The wordmark cycles through the enabled apps from an effect, so the prerender and the first client render are the same. The buttons are Login, the waitlist button and the admin's `landing.links`, and the install line under the blocks, a `CopyInput`, shows only when `landing.showInstall` is on ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)). The Login button is in the static HTML. The rest come from `/p/config` and appear after load. A demo server shows the Enter demo button and a line about the demo instead of the pitch.
+`routes/index.tsx` is the landing page: the `EigenCyclingLogo` wordmark with the pitch, centered above the buttons, and three blocks along the bottom (`components/landing-blocks.tsx`), each a sentence over `Badge` tags that name its protocols or formats. The wordmark cycles through the enabled apps from an effect, so the prerender and the first client render are the same. The buttons are Login, the waitlist button and the admin's `landing.links`, and the install line under the blocks, a `CodeBlock` with a copy button, shows only when `landing.showInstall` is on ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)). The Login button is in the static HTML. The rest come from `/p/config` and appear after load. A demo server shows the Enter demo button and a line about the demo instead of the pitch.
 
 ## What comes next
 

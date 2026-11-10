@@ -1,26 +1,36 @@
-// What Eigen stands for, as three short blocks across the landing page, and under them, when the server's admin
-// turned it on, the one line that installs Eigen with a button to copy it.
+// What Eigen stands for, as three short blocks along the bottom of the landing page, each a plain sentence over tags
+// that name the protocols or formats behind it. Under them, when the server's admin turned it on, one row holds the
+// line that installs Eigen and a button to copy it.
 
-import { CopyInput } from '@workspace/ui';
+import { copyToClipboard } from '@workspace/lib/clipboard';
+import { Badge } from '@workspace/ui/components/badge';
+import { CodeBlock, CodeBlockContent } from '@workspace/ui/components/code-block';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
+import { cn } from '@workspace/ui/lib/utils';
+import { Copy } from 'lucide-react';
 
 const INSTALL_COMMAND = 'curl -fsSL https://eigen.is/install | sh';
 
 const BLOCKS = [
     {
         title: 'Native sync',
-        text: 'Works seamlessly with the devices and apps you already use. No vendor lock-in.',
+        text: 'Works with the mail, calendar, contacts and file apps on your phone, Mac or PC. No vendor lock-in.',
+        tags: ['IMAP', 'SMTP', 'CalDAV', 'CardDAV', 'WebDAV'],
     },
     {
         title: 'Office compatible',
-        text: 'Bring the documents you have, and take them with you when you leave.',
+        text: 'Edit documents, spreadsheets and presentations in the browser. Bring the files you have, and take them with you when you leave.',
+        tags: ['.docx', '.xlsx', '.pptx'],
     },
     {
         title: 'Built for data sovereignty',
-        text: 'Runs on your own hardware, and the code is MIT licensed. Mail, contacts and calendars stay in standard .eml, .vcf and .ics.',
+        text: 'Runs on your own hardware, and the code is MIT licensed. Your mail, contacts and calendars stay in open formats.',
+        tags: ['.eml', '.vcf', '.ics'],
     },
 ];
 
-const TITLE = 'text-xl font-medium';
+const TITLE = 'text-lg font-medium';
+const BLOCK = 'rounded-lg bg-muted p-5';
 
 type LandingBlocksProps = {
     showInstall: boolean;
@@ -28,24 +38,36 @@ type LandingBlocksProps = {
 
 export function LandingBlocks({ showInstall }: LandingBlocksProps) {
     return (
-        <div className="site-wide pb-10">
+        <div className="site-wide mt-auto grid grid-cols-1 gap-6 pb-10 md:gap-10">
             <div className="grid grid-cols-1 gap-6 md:grid-cols-3 md:gap-10">
                 {BLOCKS.map((block) => (
-                    <div key={block.title}>
+                    <div key={block.title} className={cn(BLOCK, 'flex flex-col')}>
                         <h2 className={TITLE}>{block.title}</h2>
                         <p className="mt-2 text-sm text-pretty text-muted-foreground">{block.text}</p>
+                        <div className="mt-auto flex flex-wrap gap-1.5 pt-3">
+                            {block.tags.map((tag) => (
+                                <Badge key={tag} variant="outline">
+                                    {tag}
+                                </Badge>
+                            ))}
+                        </div>
                     </div>
                 ))}
             </div>
             {showInstall && (
-                <div className="mt-10 grid items-center gap-4 md:grid-cols-2 md:gap-10">
-                    <div>
-                        <h2 className={TITLE}>Install Eigen in one line</h2>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            Eigen is pre-1.0. Expect rough edges, and breaking changes until 1.0.
-                        </p>
+                <div className={cn(BLOCK, 'flex flex-col gap-3 md:flex-row md:items-center md:gap-6')}>
+                    <h2 className={cn(TITLE, 'shrink-0')}>Install Eigen in one line</h2>
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <CodeBlock className="min-w-0 flex-1">
+                            <CodeBlockContent>{INSTALL_COMMAND}</CodeBlockContent>
+                        </CodeBlock>
+                        <TooltipButton
+                            icon={Copy}
+                            tooltipText="Copy to clipboard"
+                            className="shrink-0"
+                            onClick={() => copyToClipboard(INSTALL_COMMAND)}
+                        />
                     </div>
-                    <CopyInput value={INSTALL_COMMAND} />
                 </div>
             )}
         </div>
