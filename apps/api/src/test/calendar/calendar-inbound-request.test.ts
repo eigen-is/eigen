@@ -771,6 +771,42 @@ describe('a lone occurrence named in another zone', () => {
         expect(range).toHaveLength(10);
     });
 
+    // A floating RECURRENCE-ID names no instant, so it names the date it is written on.
+    test('written floating, replaces the date it is written on', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const guest = harness.user.email;
+        const daily = [
+            'SUMMARY:Auckland standup',
+            'RRULE:FREQ=DAILY;COUNT=4',
+            'DTSTART;TZID=Pacific/Auckland:20260504T090000',
+            'DTEND;TZID=Pacific/Auckland:20260504T093000',
+        ];
+        await calendar.receiveRequest(parseIcs(vcal(vevent(guest, daily))).events, link);
+
+        const lone = [
+            'SUMMARY:Moved to New York',
+            'RECURRENCE-ID:20260506T090000',
+            'DTSTART;TZID=America/New_York:20260505T180000',
+            'DTEND;TZID=America/New_York:20260505T183000',
+            'SEQUENCE:1',
+        ];
+        await calendar.receiveRequest(parseIcs(vcal(vevent(guest, lone))).events, link);
+
+        const override = findOrFail(await calendar.getEventsByUid(SERIES), (e) => !!e.parentEventId);
+        expect(override.recurrenceDate).toBe('2026-05-06');
+        const resource = findOrFail(await calendar.listResources(override.calendarId), (r) => r.uid === SERIES);
+        const text = await resourceTextOf(calendar, override.calendarId, resource.uri);
+        expect(text).toContain('RECURRENCE-ID;TZID=Pacific/Auckland:20260506T090000\r\n');
+        const range = await calendar.getEventsInRange(new Date('2026-05-01'), new Date('2026-06-01'));
+        expect(range.map((o) => [o.occurrenceDate, o.title])).toEqual([
+            ['2026-05-04', 'Auckland standup'],
+            ['2026-05-05', 'Auckland standup'],
+            ['2026-05-06', 'Moved to New York'],
+            ['2026-05-07', 'Auckland standup'],
+        ]);
+    });
+
     // An all-day series has no clock, so the occurrence is the date the RECURRENCE-ID is written on.
     test('on an all-day series, replaces the date it is written on', async () => {
         const harness = await makeCalendar();

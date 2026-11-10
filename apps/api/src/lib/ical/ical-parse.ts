@@ -180,12 +180,14 @@ export function recurrenceKeyOf(
 }
 
 // A copy of one date holds no master to name its occurrence through, so it keeps the organizer's line to write back.
+// A floating value names no instant, only the date it keys on.
 export function readRecurrenceId(vevent: ICAL.Component): RecurrenceId | null {
     const prop = vevent.getFirstProperty('recurrence-id');
     const value = prop?.getFirstValue();
     if (!(value instanceof ICAL.Time) || value.isDate) return null;
+    if (value.zone !== ICAL.Timezone.utcTimezone && !prop?.getParameter('tzid')) return null;
     const timezone = propTzid(prop);
-    return { instant: icalTimeToInstant(value, timezone, propTzid(vevent.getFirstProperty('dtstart'))), timezone };
+    return { instant: icalTimeToInstant(value, timezone, null), timezone };
 }
 
 // A non-numeric SEQUENCE reads as 0: NaN slips past the RFC 5546 replay guard's `<=`, false for every comparison.
@@ -267,7 +269,7 @@ export function readExclusionStamps(vevent: ICAL.Component): Map<string, Exclusi
     return stamps;
 }
 
-// A timed RECURRENCE-ID: the instant it names, and the zone it is written in, null for UTC.
+// A RECURRENCE-ID that names an instant, and the zone it is written in, null for UTC or a zone only the file defines.
 export type RecurrenceId = { instant: Date; timezone: string | null };
 
 export type ParsedEvent = {
