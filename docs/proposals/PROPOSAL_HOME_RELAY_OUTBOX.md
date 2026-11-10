@@ -183,7 +183,7 @@ A crash between delivery and ack delivers again, so delivery is at least once. *
 3. Done: a guest's PARTSTAT stays unless the message's SEQUENCE is strictly higher than the stored one (`keepOwnAnswer`), for every event of a REQUEST. It also protects an answer given just after an update was enqueued.
 4. Done: a REQUEST takes one decision and writes at most once, patching what the copy holds, so a repeat that changes nothing writes nothing and sends no notice.
 5. `cancelInvitationOccurrence` returns early when the occurrence is already excluded at an equal revision. A guest's own removal stamps `sequence: 0` and no dtstamp, so an organizer's message still gets through.
-6. Three stuck lanes end. `rsvpForOccurrence` returns on a missing parent, where it throws 404 and `unlessRefused` rethrows it today. `removeOccurrence` returns on a resource with no master, where `addExclusion` throws today. A disabled team calendar's 404 becomes a drop in the relay's "home without a calendar" check, which also asks the `TeamHome` for its `calendar.enabled` setting. It doesn't override `hasCalendar`, because `calendarOf` uses that, and `get-calendar.ts` and `routes/home.ts` rely on the 404 from `pullCalendars`.
+6. Three stuck lanes end. `rsvpForOccurrence` returns on a missing parent, where it throws 404 and `unlessRefused` rethrows it today. `removeOccurrence` returns on a missing parent too, where it throws 404 today. A disabled team calendar's 404 becomes a drop in the relay's "home without a calendar" check, which also asks the `TeamHome` for its `calendar.enabled` setting. It doesn't override `hasCalendar`, because `calendarOf` uses that, and `get-calendar.ts` and `routes/home.ts` rely on the 404 from `pullCalendars`.
 
 **These stay, each at its cost:**
 
