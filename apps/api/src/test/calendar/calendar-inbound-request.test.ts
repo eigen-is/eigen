@@ -4,9 +4,11 @@ import type { Attendee } from '@workspace/lib/types/calendar';
 import type { Calendar } from '../../lib/calendar/calendar';
 import { parseIcs } from '../../lib/ical';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
+import { makeSyntheticUser } from '../../lib/user';
 import { CALENDAR_TEST_ROOT, makeCalendar, receiveMailed, storedEvents } from '../calendar-test-helpers';
 import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
+import { findOrFail } from '../setup';
 
 // The one decision an inbound iMIP REQUEST takes (L36): update the copy it is linked to, adopt an event
 // this Home already holds when the verified sender is the organizer it names, or drop it — never a second
@@ -489,5 +491,65 @@ describe('one REQUEST, one write', () => {
         const [adopted] = await calendar.getEventsByUid(UID);
         expect(adopted.data?.organizerEventId).toBe(UID);
         expect(adopted.data?.attendees?.find((a) => a.email === harness.user.email)?.status).toBe('accepted');
+    });
+});
+
+// A guest's "delete this and following" cuts their copy's rule, and nothing of the series may outlive the cut.
+describe('a guest who removes this and following', () => {
+    const SERIES = 'cut@external.com';
+    const series = (guest: string, title: string): ParsedEvent[] =>
+        parseIcs(
+            vcal([
+                'BEGIN:VEVENT',
+                `UID:${SERIES}`,
+                `SUMMARY:${title}`,
+                'RRULE:FREQ=DAILY;COUNT=10',
+                'DTSTART:20260504T090000Z',
+                'DTEND:20260504T093000Z',
+                'EXDATE:20260508T090000Z',
+                `ORGANIZER:mailto:${ORG}`,
+                `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${guest}`,
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+                'BEGIN:VEVENT',
+                `UID:${SERIES}`,
+                `SUMMARY:${title} moved`,
+                'RECURRENCE-ID:20260510T090000Z',
+                'DTSTART:20260510T140000Z',
+                'DTEND:20260510T143000Z',
+                `ORGANIZER:mailto:${ORG}`,
+                `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${guest}`,
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ]),
+        ).events;
+
+    test('keeps no moved or cancelled occurrence past the cut', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const link = {
+            organizerEmail: ORG,
+            organizerEventId: SERIES,
+            organizerUserId: `external_${ORG}`,
+            createByUserId: `external_${ORG}`,
+        };
+        await calendar.receiveRequest(series(harness.user.email, 'Standup'), link);
+        const master = findOrFail(await calendar.getEventsByUid(SERIES), (e) => !e.parentEventId);
+
+        const me = makeSyntheticUser(harness.user.id, harness.user.name, harness.user.email);
+        await calendar.rsvp(master.id, me, {
+            status: 'declined',
+            scope: 'this-and-following',
+            recurrenceDate: '2026-05-07',
+            remove: true,
+        });
+
+        const range = await calendar.getEventsInRange(new Date('2026-05-01'), new Date('2026-06-01'));
+        expect(range.map((occurrence) => occurrence.occurrenceDate)).toEqual([
+            '2026-05-04',
+            '2026-05-05',
+            '2026-05-06',
+        ]);
+        expect(await calendar.getEventsByUid(SERIES)).toHaveLength(1);
     });
 });

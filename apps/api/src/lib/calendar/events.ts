@@ -477,7 +477,7 @@ function assertEtag(resource: StoredResource, expectedEtag: string | undefined):
 }
 
 // Caller holds the write lock: the bytes it mutates are the bytes the commit overwrites.
-async function editResource(
+export async function editResource(
     calendar: Calendar,
     resource: StoredResource,
     mutate: (component: ICAL.Component) => void,

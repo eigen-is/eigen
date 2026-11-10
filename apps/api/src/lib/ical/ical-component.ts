@@ -233,7 +233,7 @@ export function putOverride(resource: ICAL.Component, master: CalendarEvent, ove
     const existing = findVEvent(resource, key);
     if (existing) keepSubcomponents(resource, (sub) => sub !== existing);
     const vevent = masterVEvent(resource);
-    if (vevent) dropExclusion(vevent, key);
+    if (vevent) dropExclusions(vevent, (excluded) => excluded === key);
     resource.addSubcomponent(buildVEvent(override, { master }));
     syncVTimezones(resource);
 }
@@ -263,6 +263,16 @@ export function addExclusion(
     touch(vevent, ctx, true);
 }
 
+// A rule cut before `fromKey` keeps no override or exclusion from that date on, or a moved occurrence would outlive
+// the series.
+export function dropExceptionsFrom(resource: ICAL.Component, fromKey: string): void {
+    const past = new Set([...overridesByKey(resource)].filter(([key]) => key >= fromKey).map(([, vevent]) => vevent));
+    if (past.size) keepSubcomponents(resource, (sub) => !past.has(sub));
+    const master = masterVEvent(resource);
+    if (master) dropExclusions(master, (key) => key >= fromKey);
+    syncVTimezones(resource);
+}
+
 export function removeExclusion(resource: ICAL.Component, recurrenceKey: string, ctx: WriteContext): void {
     const vevent = masterVEvent(resource);
     if (!vevent) throw new Error('removeExclusion: the resource holds no master VEVENT');
@@ -273,7 +283,7 @@ export function removeExclusion(resource: ICAL.Component, recurrenceKey: string,
         keepSubcomponents(resource, (sub) => sub !== override);
         syncVTimezones(resource);
     }
-    if (dropExclusion(vevent, recurrenceKey) || override) touch(vevent, ctx, true);
+    if (dropExclusions(vevent, (key) => key === recurrenceKey) || override) touch(vevent, ctx, true);
 }
 
 // RFC 5546 § 2.1.5 orders on SEQUENCE then DTSTAMP. A one-second DTSTAMP cannot separate two revisions, so an equal
@@ -686,17 +696,13 @@ function touch(vevent: ICAL.Component, ctx: WriteContext, scheduling: boolean, s
 }
 
 // Drop one occurrence's EXDATE value and the stamp beside it, whatever form the client wrote them in.
-function dropExclusion(vevent: ICAL.Component, recurrenceKey: string): boolean {
+function dropExclusions(vevent: ICAL.Component, drops: (recurrenceKey: string) => boolean): boolean {
     const seriesTz = propTzid(vevent.getFirstProperty('dtstart'));
-    const gone = new Set(
-        vevent.getAllProperties(EIGEN.exdate).filter((stamp) => stamp.getFirstValue() === recurrenceKey),
-    );
+    const gone = new Set(vevent.getAllProperties(EIGEN.exdate).filter((stamp) => drops(String(stamp.getFirstValue()))));
     let removed = gone.size > 0;
     for (const prop of vevent.getAllProperties('exdate')) {
         const values = prop.getValues();
-        const kept = values.filter(
-            (v) => !(v instanceof ICAL.Time) || icalTimeToRecurrenceKey(v, seriesTz) !== recurrenceKey,
-        );
+        const kept = values.filter((v) => !(v instanceof ICAL.Time) || !drops(icalTimeToRecurrenceKey(v, seriesTz)));
         if (kept.length === values.length) continue;
         removed = true;
         if (kept.length) prop.setValues(kept);

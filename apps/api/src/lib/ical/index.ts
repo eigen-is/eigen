@@ -2,6 +2,7 @@ export { spliceBlocks } from './blocks';
 export {
     addExclusion,
     buildResource,
+    dropExceptionsFrom,
     isNewerRevision,
     keepProperties,
     keepSubcomponents,

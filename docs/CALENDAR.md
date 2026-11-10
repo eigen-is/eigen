@@ -216,7 +216,7 @@ A copy without a rule has one occurrence, so `this` on it is `all`.
 
 An answer the organizer's Home records is announced as an event update, whether it came over the relay or by mail, so the organizer's open tabs show it.
 
-`constrainRRule` (`recurrence.ts`) keeps an organizer's later update from extending the rule past a guest's truncation, so "delete this and following" survives the next edit. A copy that is one occurrence of a series the guest doesn't hold answers for that occurrence: its RSVP names its own `RECURRENCE-ID`, so it lands on the organizer's override that holds that occurrence's guests.
+`constrainRRule` (`recurrence.ts`) keeps an organizer's later update from extending the rule past a guest's truncation, so "delete this and following" survives the next edit. The cut also drops the copy's moved and cancelled occurrences from that date on. A copy that is one occurrence of a series the guest doesn't hold answers for that occurrence: its RSVP names its own `RECURRENCE-ID`, so it lands on the organizer's override that holds that occurrence's guests.
 
 ## Every inbound REQUEST takes one locked decision
 
