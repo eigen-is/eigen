@@ -188,12 +188,14 @@ export function applyEdits(resource: ICAL.Component, edits: ReadonlyMap<string |
     if (master && exclusions.size) {
         const excluded = exdateKeys(master);
         keepProperties(master, (prop) => prop.name !== EIGEN.exdate || !exclusions.has(String(prop.getFirstValue())));
+        // One touch for the batch, so its SEQUENCE moves once. An organizer's exclusion takes the raised number, which
+        // outranks what a guest held the date at, its series' or its own.
+        touch(master, [...exclusions.values()][0].ctx, true);
         for (const [key, { event, ctx }] of exclusions) {
             if (!excluded.has(key)) master.addProperty(occurrenceProperty('exdate', master, key));
-            master.addProperty(exclusionStamp(key, event.id, event.sequence, clampStamp(ctx.dtstamp, ctx.now)));
+            const sequence = ctx.actorIsOrganizer ? Math.max(sequenceOf(master), event.sequence) : event.sequence;
+            master.addProperty(exclusionStamp(key, event.id, sequence, clampStamp(ctx.dtstamp, ctx.now)));
         }
-        // One touch for the batch, so its SEQUENCE moves once.
-        touch(master, [...exclusions.values()][0].ctx, true);
     }
     if (changed) syncVTimezones(resource);
     return changed;

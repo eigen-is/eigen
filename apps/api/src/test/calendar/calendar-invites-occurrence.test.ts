@@ -179,6 +179,8 @@ describe('Occurrence edits of an invited series', () => {
                             .find((m) => m.subject.startsWith(subject) && m.to.some((t) => t.address === address)),
                     `the ${subject} to reach ${address}`,
                 ),
+            sent: (address: string) =>
+                spy.mock.calls.map((call) => call[0]).filter((m) => m.to.some((t) => t.address === address)),
             restore: () => spy.mockRestore(),
         };
     }
@@ -382,6 +384,122 @@ describe('Occurrence edits of an invited series', () => {
             ),
         );
         expect(deleted.ics).toContain(`SEQUENCE:${await masterSequence()}\r\n`);
+    });
+
+    const sequenceIn = (ics: string) => Number(/\r\nSEQUENCE:(\d+)\r\n/.exec(ics)?.[1]);
+
+    // Three series time edits raise the series' SEQUENCE past a date moved before them.
+    async function bumpSeriesThrice(series: CalendarEvent) {
+        for (const shift of [1, 2, 3]) {
+            const start = new Date(Date.parse(SERIES_START) + (shift * HOUR) / 4);
+            expect(
+                (await putEvent(series.id, { startTime: start, endTime: new Date(start.getTime() + HOUR) })).status,
+            ).toBe(200);
+        }
+        const master = findOrFail(await aliceOccurrences(series.uid), (e) => !e.parentEventId);
+        await untilBob(series.uid, (occ) => occ.some((e) => !e.parentEventId && e.sequence === master.sequence));
+    }
+
+    // A date's own SEQUENCE rises with each change to it, so neither the CANCEL that removes a guest nor the REQUEST
+    // that adds them back reads as stale to that guest, whatever the series' number.
+    for (const moved of [true, false]) {
+        test(`a guest removed from ${moved ? 'a moved' : 'an unmoved'} date and added back gets it again`, async () => {
+            const CAROL = `carol.readd-${moved}@example.org`;
+            const charlie = { email: ctx.charlie.user.email, name: 'Charlie', status: 'pending', role: 'required' };
+            const { series, target, attendees } = await seededWithExternal(`Weekly Readd ${moved}`, CAROL);
+            const date = moved ? target : '2027-02-16';
+            if (moved) await moveOccurrence(series, target, `Readd Moved ${moved}`, { attendees });
+            await bumpSeriesThrice(series);
+
+            const start = new Date(`${date}T12:00:00Z`);
+            const times = { startTime: start, endTime: new Date(start.getTime() + HOUR) };
+            const held = findOrFail(await aliceOccurrences(series.uid), (e) => e.occurrenceDate === date).sequence;
+            const cancel = await cancelMailTo(CAROL, async () => {
+                if (!moved) {
+                    await editOccurrence(series.id, date, {
+                        title: 'Readd Charlie',
+                        ...times,
+                        data: { attendees: [charlie] },
+                    });
+                    return new Response();
+                }
+                const override = findOrFail(await aliceOccurrences(series.uid), (e) => e.occurrenceDate === date);
+                return putEvent(override.id, { data: { attendees: [charlie] } });
+            });
+            expect(sequenceIn(cancel.ics)).toBeGreaterThanOrEqual(held);
+            await untilBob(series.uid, (occ) => occ.length === 3);
+
+            const override = findOrFail(await aliceOccurrences(series.uid), (e) => e.occurrenceDate === date);
+            const mail = await catchMail();
+            try {
+                const readded = { data: { attendees: [charlie, ...attendees] } };
+                expect((await putEvent(override.id, readded)).status).toBe(200);
+                const request = unfolded(await mail.to(CAROL, 'Invitation'));
+                expect(sequenceIn(request)).toBeGreaterThan(sequenceIn(cancel.ics));
+            } finally {
+                mail.restore();
+            }
+            const back = await untilBob(series.uid, (occ) => occ.length === 4);
+            expect(back.map((e) => e.occurrenceDate)).toContain(date);
+        });
+    }
+
+    test("a date moved past its series' SEQUENCE is cancelled at its own", async () => {
+        const CAROL = 'carol.own-sequence@example.org';
+        const { series, target, attendees } = await seededWithExternal('Weekly Own Sequence', CAROL);
+        const override = await moveOccurrence(series, target, 'Own Sequence Moved', { attendees });
+        const mail = await catchMail();
+        let seen = 0;
+        try {
+            for (const hours of [2, 3]) {
+                const start = new Date(Date.parse(`${target}T09:00:00Z`) + hours * HOUR);
+                const moved = { startTime: start, endTime: new Date(start.getTime() + HOUR) };
+                expect((await putEvent(override.id, moved)).status).toBe(200);
+            }
+            const updates = await eventually(async () => {
+                const sent = mail.sent(CAROL);
+                return sent.length === 2 ? sent : undefined;
+            }, 'both updates to reach Carol');
+            seen = Math.max(...updates.map((sent) => sequenceIn(unfolded(sent))));
+        } finally {
+            mail.restore();
+        }
+
+        const cancel = await cancelMailTo(CAROL, () => putEvent(override.id, { status: 'cancelled' }));
+        expect(sequenceIn(cancel.ics)).toBeGreaterThanOrEqual(seen);
+        await untilBob(series.uid, (occ) => occ.length === 3);
+    });
+
+    test('a date restored after its cancellation reaches the guest with its next edit', async () => {
+        const CAROL = 'carol.restore@example.org';
+        const { series, attendees } = await seededWithExternal('Weekly Restore', CAROL);
+        const date = '2027-02-16';
+        let cancelled: CalendarEvent | undefined;
+        const cancel = await cancelMailTo(CAROL, async () => {
+            cancelled = await editOccurrence(series.id, date, { title: series.title, status: 'cancelled' });
+            return new Response();
+        });
+        await untilBob(series.uid, (occ) => occ.length === 3);
+        const restore = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${cancelled?.id}`,
+            { method: 'DELETE' },
+        );
+        expect(restore.status).toBe(200);
+
+        const mail = await catchMail();
+        try {
+            const start = new Date(`${date}T12:00:00Z`);
+            const edited = { startTime: start, endTime: new Date(start.getTime() + HOUR), data: { attendees } };
+            await editOccurrence(series.id, date, { title: 'Restored And Edited', ...edited });
+            const request = unfolded(await mail.to(CAROL, 'Updated invitation: Restored And Edited'));
+            expect(sequenceIn(request)).toBeGreaterThan(sequenceIn(cancel.ics));
+        } finally {
+            mail.restore();
+        }
+        await untilBob(series.uid, (occ) =>
+            occ.some((e) => e.occurrenceDate === date && e.title === 'Restored And Edited'),
+        );
     });
 
     test('a series-wide edit after an occurrence edit keeps the override and moves the master', async () => {

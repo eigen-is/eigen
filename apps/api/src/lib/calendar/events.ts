@@ -10,7 +10,15 @@ import { and, eq } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import { RRule } from 'rrule';
 import { ApiError } from '../core';
-import { applyEdits, buildResource, parseResource, patchEvent, removeExclusion, storedRecurrenceIds } from '../ical';
+import {
+    applyEdits,
+    buildResource,
+    parseResource,
+    patchEvent,
+    removeExclusion,
+    storedRecurrenceIds,
+    storedRevisions,
+} from '../ical';
 import type { EventPatch, EventToBuild, VEventEdit, WriteContext } from '../ical/ical-component';
 import { serializeEventForImip } from '../ical/ical-component';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
@@ -249,7 +257,9 @@ export async function eraseStoredEvent(
     else applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]));
     if (component.getFirstSubcomponent('vevent')) await writeComponent(calendar, resource, component);
     else await calendar.purgeResource(resource);
-    return erased;
+    // A CANCEL names the revision the exclusion was stamped with.
+    const sequence = storedRevisions(component).get(existing.recurrenceDate)?.sequence ?? existing.sequence;
+    return { ...erased, sequence };
 }
 
 // The stored component of a resource: the bytes are the truth, so every path that parses them reads them itself.
@@ -300,17 +310,19 @@ export async function editResource(
     await writeComponent(calendar, resource, component);
 }
 
-// An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp.
+// An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp. An organizer's
+// new date starts at its series' SEQUENCE, the revision its guests held it at; a receiver states the organizer's own.
 export function exceptionEdit(parent: CalendarEvent, input: CreateEventArgs): VEventEdit {
+    const organizer = actorIsOrganizer(parent);
     const event = eventForResource({
         id: crypto.randomUUID(),
         calendarId: parent.calendarId,
         uid: parent.uid,
-        input: { ...input, rrule: null },
+        input: { ...input, rrule: null, sequence: input.sequence ?? (organizer ? parent.sequence : undefined) },
         now: new Date(),
     });
     if (event.status !== 'cancelled') return { kind: 'override', event };
-    return { kind: 'exclusion', event, ctx: writeContext(actorIsOrganizer(parent), input.dtstamp) };
+    return { kind: 'exclusion', event, ctx: writeContext(organizer, input.dtstamp) };
 }
 
 export function writeContext(actorIsOrganizer: boolean, dtstamp?: Date | null): WriteContext {

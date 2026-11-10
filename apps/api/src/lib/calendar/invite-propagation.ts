@@ -64,12 +64,11 @@ export async function propagateInvitation(
         }
     }
 
-    const cancelled = atSeriesRevision(event, series);
     for (const attendee of oldAttendees.filter((a) => notSelf(a) && !newEmails.has(a.email.toLowerCase()))) {
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || isGuest(targetUser)) {
-                const mail = composeCancelEmail(cancelled, organizer, [attendee], series);
+                const mail = composeCancelEmail(event, organizer, [attendee], series);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
                 continue;
             }
@@ -77,7 +76,7 @@ export async function propagateInvitation(
                 type: 'calendar:invitation-removal',
                 orgEventId: series?.id ?? event.id,
                 orgUserId: organizerHome.user.id,
-                occurrence: occurrenceRevision(cancelled, series),
+                occurrence: occurrenceRevision(event, series),
             });
         } catch (error) {
             console.error('Failed to cancel invitation:', error);
@@ -109,8 +108,7 @@ export async function propagateCancellation(
     attendees: readonly Attendee[],
     series?: CalendarEvent,
 ): Promise<void> {
-    const cancelled = atSeriesRevision(event, series);
-    const occurrence = occurrenceRevision(cancelled, series);
+    const occurrence = occurrenceRevision(event, series);
     const organizer = organizerOf(organizerHome, user);
     for (const attendee of attendees) {
         try {
@@ -120,7 +118,7 @@ export async function propagateCancellation(
                     console.warn(`Skipped the iMIP cancel to ${attendee.email}: the organizer has no address`);
                     continue;
                 }
-                const mail = composeCancelEmail(cancelled, organizer, [attendee], series);
+                const mail = composeCancelEmail(event, organizer, [attendee], series);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
                 continue;
             }
@@ -229,12 +227,6 @@ export function answeredOccurrence(event: CalendarEvent): string | undefined {
 function organizerOf(organizerHome: Home, user: User | undefined): Organizer {
     const named = organizerHome.user.email ? organizerHome.user : user;
     return { userId: organizerHome.user.id, email: named?.email ?? '', name: named?.name };
-}
-
-// RFC 5546 § 2.1.4: each CANCEL raises the SEQUENCE, and cancelling a date raises the series'. A guest holds an unmoved
-// date at the series' number, so a CANCEL naming the date's own older one would read as stale.
-function atSeriesRevision(event: CalendarEvent, series: CalendarEvent | undefined): CalendarEvent {
-    return series ? { ...event, sequence: Math.max(event.sequence, series.sequence) } : event;
 }
 
 // The revision its receiver orders the removal against; undefined for a message about the whole series.
