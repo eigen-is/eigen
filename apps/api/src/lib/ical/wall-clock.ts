@@ -70,16 +70,20 @@ export function wallClockRule(rrule: string, tz: string | null): Partial<Options
     return options;
 }
 
-// A key names a day in the series' wall clock, and only BYHOUR, BYMINUTE and BYSECOND move its time from DTSTART's, so
-// the start follows from the key with no walk of the rule. A rule with several times a day keys to the earliest.
 export function computeOccurrenceTimes(
     parent: CalendarEvent,
     recurrenceDate: string,
 ): { startTime: Date; endTime: Date } {
     const durationMs = parent.endTime.getTime() - parent.startTime.getTime();
-    const tz = parent.timezone;
-    const stated = tz ? wallClockDate(parent.startTime, tz) : parent.startTime;
-    const rule = parent.rrule ? RRule.parseString(parent.rrule) : {};
+    const startTime = occurrenceStart(parent.startTime, parent.timezone, parent.rrule, recurrenceDate);
+    return { startTime, endTime: new Date(startTime.getTime() + durationMs) };
+}
+
+// A key names a day in the series' wall clock, and only BYHOUR, BYMINUTE and BYSECOND move its time from DTSTART's, so
+// the start follows from the key with no walk of the rule. A rule with several times a day keys to the earliest.
+export function occurrenceStart(dtstart: Date, tz: string | null, rrule: string | null, recurrenceDate: string): Date {
+    const stated = tz ? wallClockDate(dtstart, tz) : dtstart;
+    const rule = rrule ? RRule.parseString(rrule) : {};
     const earliest = (listed: number | number[] | null | undefined, own: number) => Math.min(...[listed ?? own].flat());
     const wall = new Date(`${recurrenceDate}T00:00:00Z`);
     wall.setUTCHours(
@@ -87,8 +91,7 @@ export function computeOccurrenceTimes(
         earliest(rule.byminute, stated.getUTCMinutes()),
         earliest(rule.bysecond, stated.getUTCSeconds()),
     );
-    const startTime = tz ? fromWallClock(wall, tz) : wall;
-    return { startTime, endTime: new Date(startTime.getTime() + durationMs) };
+    return tz ? fromWallClock(wall, tz) : wall;
 }
 
 function fromWallClock(date: Date, tz: string): Date {

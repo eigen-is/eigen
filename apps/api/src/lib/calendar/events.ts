@@ -373,7 +373,7 @@ async function patchStoredEvent(
         const ctx = writeContext(actorIsOrganizer(parent));
         const exclusion: VEventEdit = { kind: 'exclusion', event: existing, ctx };
         await editResource(calendar, resource, (component) => {
-            applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]), parent);
+            applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]));
         });
         // The EXDATE row sits at the original slot; the guests last saw the occurrence at its moved one.
         const cancelled = requireEvent(calendar, id);
@@ -434,7 +434,7 @@ export async function eraseStoredEvent(
     const exclusion: VEventEdit = { kind: 'exclusion', event: existing, ctx };
     // A cancelled row is the exclusion itself, so deleting it puts the occurrence back.
     if (parent && existing.status === 'cancelled') removeExclusion(component, existing.recurrenceDate, ctx);
-    else applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]), parent);
+    else applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]));
     if (component.getFirstSubcomponent('vevent')) await writeComponent(calendar, resource, component);
     else await calendar.purgeResource(resource);
     return erased;
@@ -458,7 +458,7 @@ async function writeOverride(
     if (!key) throw new ApiError(400, 'Invalid occurrence date');
 
     const edit = exceptionEdit(parent, input);
-    await editResource(calendar, resource, (component) => applyEdits(component, new Map([[key, edit]]), parent));
+    await editResource(calendar, resource, (component) => applyEdits(component, new Map([[key, edit]])));
     const stored = exceptionOf(calendar, parent.id, key);
     return stored ?? requireEvent(calendar, parent.id);
 }

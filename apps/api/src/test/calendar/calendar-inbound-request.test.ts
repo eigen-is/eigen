@@ -769,6 +769,57 @@ describe('a lone occurrence named in another zone', () => {
     });
 });
 
+// A guest's copy names a new occurrence by the series the same message states, never by the one it held before.
+describe('a series moved in the same message as a new occurrence', () => {
+    const SERIES = 'moved-with-override@external.com';
+    const link = {
+        organizerEmail: ORG,
+        organizerEventId: SERIES,
+        organizerUserId: `external_${ORG}`,
+        createByUserId: `external_${ORG}`,
+    };
+    const master = (guest: string, hour: string, sequence: number): string[] => [
+        'BEGIN:VEVENT',
+        `UID:${SERIES}`,
+        'SUMMARY:Weekly',
+        'RRULE:FREQ=WEEKLY;COUNT=4',
+        `DTSTART;TZID=Europe/Amsterdam:20260504T${hour}0000`,
+        `DTEND;TZID=Europe/Amsterdam:20260504T${hour}3000`,
+        `SEQUENCE:${sequence}`,
+        `ORGANIZER:mailto:${ORG}`,
+        `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${guest}`,
+        `DTSTAMP:2026010${sequence + 1}T000000Z`,
+        'END:VEVENT',
+    ];
+
+    test("names the override's RECURRENCE-ID at the series' new time", async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const guest = harness.user.email;
+        await calendar.receiveRequest(parseIcs(vcal(master(guest, '09', 0))).events, link);
+
+        const override = [
+            'BEGIN:VEVENT',
+            `UID:${SERIES}`,
+            'SUMMARY:Weekly, longer',
+            'RECURRENCE-ID;TZID=Europe/Amsterdam:20260511T100000',
+            'DTSTART;TZID=Europe/Amsterdam:20260511T100000',
+            'DTEND;TZID=Europe/Amsterdam:20260511T120000',
+            'SEQUENCE:1',
+            `ORGANIZER:mailto:${ORG}`,
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${guest}`,
+            'DTSTAMP:20260102T000000Z',
+            'END:VEVENT',
+        ];
+        await calendar.receiveRequest(parseIcs(vcal(master(guest, '10', 1), override)).events, link);
+
+        const { calendarId } = findOrFail(await calendar.getEventsByUid(SERIES), (e) => !e.parentEventId);
+        const resource = findOrFail(await calendar.listResources(calendarId), (r) => r.uid === SERIES);
+        const text = await resourceTextOf(calendar, calendarId, resource.uri);
+        expect(text).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20260511T100000\r\n');
+    });
+});
+
 // Google and Outlook match a reply to their occurrence by the instant its RECURRENCE-ID names, which a copy of one
 // date can only take from the organizer's own line: it holds no series to compute that instant from.
 describe('a copy of one moved date', () => {

@@ -28,7 +28,7 @@ import {
     utcStampString,
 } from './ical-parse';
 import { buildVTimezone } from './vtimezone';
-import { computeOccurrenceTimes } from './wall-clock';
+import { occurrenceStart } from './wall-clock';
 
 export const PRODID = '-//Eigen//CalDAV//EN';
 
@@ -65,7 +65,7 @@ const STAMP_HORIZON_MS = 24 * 60 * 60 * 1000;
 
 type Exclusion = { key: string; exclusion: CalendarEvent };
 
-type BuildOptions = { master?: CalendarEvent; exclusions?: Exclusion[] };
+type BuildOptions = { master?: ICAL.Component; exclusions?: Exclusion[] };
 
 export type Revision = { sequence: number; dtstamp?: Date | null };
 
@@ -86,19 +86,20 @@ export function buildResource(events: readonly EventToBuild[]): ICAL.Component {
     }
 
     for (const group of groups.values()) {
-        const master = group[0].recurrenceDate == null ? group[0] : undefined;
+        const lead = group[0].recurrenceDate == null ? group[0] : undefined;
         const exclusions: Exclusion[] = [];
-        const built: EventToBuild[] = [];
+        const overrides: EventToBuild[] = [];
         for (const event of group) {
-            if (master && event.recurrenceDate != null && event.status === 'cancelled') {
+            if (event === lead) continue;
+            if (lead && event.recurrenceDate != null && event.status === 'cancelled') {
                 exclusions.push({ key: event.recurrenceDate, exclusion: event });
             } else {
-                built.push(event);
+                overrides.push(event);
             }
         }
-        for (const event of built) {
-            vcalendar.addSubcomponent(buildVEvent(event, event === master ? { master, exclusions } : { master }));
-        }
+        const master = lead && buildVEvent(lead, { exclusions });
+        if (master) vcalendar.addSubcomponent(master);
+        for (const event of overrides) vcalendar.addSubcomponent(buildVEvent(event, { master }));
     }
 
     syncVTimezones(vcalendar);
@@ -135,7 +136,7 @@ export function serializeEventForImip(
         : buildResource([event, ...exceptions.map((exception) => withGuests(exception, event))]);
     if (series) {
         // A RECURRENCE-ID names its instant in the SERIES' zone, which the occurrence's own may not be.
-        vcalendar.addSubcomponent(buildVEvent(withGuests(event, series), { master: series }));
+        vcalendar.addSubcomponent(buildVEvent(withGuests(event, series), { master: buildVEvent(series) }));
         syncVTimezones(vcalendar);
     }
     vcalendar.addPropertyWithValue('method', method);
@@ -152,13 +153,10 @@ export type VEventEdit =
     | { kind: 'exclusion'; event: CalendarEvent; ctx: WriteContext };
 
 // One pass for a batch keyed by occurrence, the master under null. It runs in the map's order, so a master listed first
-// renames the overrides before their own patches; overrides and EXDATEs name their instant through `master`.
-export function applyEdits(
-    resource: ICAL.Component,
-    edits: ReadonlyMap<string | null, VEventEdit>,
-    master?: CalendarEvent,
-): boolean {
+// is patched before the overrides and EXDATEs that name their instant through it.
+export function applyEdits(resource: ICAL.Component, edits: ReadonlyMap<string | null, VEventEdit>): boolean {
     const vevents = keyVEvents(resource);
+    const master = vevents.get(null);
     const replaced = new Set<ICAL.Component>();
     const unexcluded = new Set<string>();
     const exclusions = new Map<string, { event: CalendarEvent; ctx: WriteContext }>();
@@ -184,19 +182,17 @@ export function applyEdits(
     }
     if (replaced.size) keepSubcomponents(resource, (sub) => !replaced.has(sub));
 
-    const vevent = vevents.get(null);
-    if (vevent && unexcluded.size) dropExclusions(vevent, (key) => unexcluded.has(key));
+    if (master && unexcluded.size) dropExclusions(master, (key) => unexcluded.has(key));
     // A copy of single dates has no master to hold an EXDATE, so an excluded date just goes with its VEVENT.
-    if (vevent && exclusions.size) {
-        if (!master) throw new Error('applyEdits: an EXDATE names its instant through the master row');
-        const excluded = exdateKeys(vevent, propTzid(vevent.getFirstProperty('dtstart')));
-        keepProperties(vevent, (prop) => prop.name !== EIGEN.exdate || !exclusions.has(String(prop.getFirstValue())));
+    if (master && exclusions.size) {
+        const excluded = exdateKeys(master, propTzid(master.getFirstProperty('dtstart')));
+        keepProperties(master, (prop) => prop.name !== EIGEN.exdate || !exclusions.has(String(prop.getFirstValue())));
         for (const [key, { event, ctx }] of exclusions) {
-            if (!excluded.has(key)) vevent.addProperty(exdateProperty(master, key, normalizeTimezone(master.timezone)));
-            vevent.addProperty(exclusionStamp(key, event.id, event.sequence, clampStamp(ctx.dtstamp, ctx.now)));
+            if (!excluded.has(key)) master.addProperty(occurrenceProperty('exdate', master, key));
+            master.addProperty(exclusionStamp(key, event.id, event.sequence, clampStamp(ctx.dtstamp, ctx.now)));
         }
         // One touch for the batch, so its SEQUENCE moves once.
-        touch(vevent, [...exclusions.values()][0].ctx, true);
+        touch(master, [...exclusions.values()][0].ctx, true);
     }
     if (changed) syncVTimezones(resource);
     return changed;
@@ -422,15 +418,15 @@ function buildVEvent(event: EventToBuild, options: BuildOptions = {}): ICAL.Comp
     // A cancelled exception rides as an EXDATE in the master's own DTSTART form, never as a STATUS:CANCELLED override,
     // which Thunderbird omits from its next PUT.
     const exclusions = options.exclusions ?? [];
-    for (const { key } of exclusions) vevent.addProperty(exdateProperty(event, key, tzid));
+    for (const { key } of exclusions) vevent.addProperty(occurrenceProperty('exdate', vevent, key));
 
-    // RECURRENCE-ID names the ORIGINAL occurrence in the master's DTSTART form, value type included (RFC 5545
-    // §3.8.4.4). A moved startTime or the override's own all-day toggle would match no occurrence.
     if (event.recurrenceDate) {
-        const master = options.master ?? event;
         const stated = options.master ? null : event.recurrenceInstant;
-        const when = stated ?? occurrenceInstant(master, event.recurrenceDate);
-        vevent.addProperty(timeProperty('recurrence-id', when, normalizeTimezone(master.timezone), master.allDay));
+        vevent.addProperty(
+            stated
+                ? timeProperty('recurrence-id', stated, tzid, event.allDay)
+                : occurrenceProperty('recurrence-id', options.master ?? vevent, event.recurrenceDate),
+        );
     }
 
     if (event.data?.url) vevent.addProperty(rawProperty('url', event.data.url));
@@ -762,13 +758,17 @@ function exdateKeys(vevent: ICAL.Component, seriesTz: string | null): Set<string
     return keys;
 }
 
-function exdateProperty(master: CalendarEvent, key: string, tzid: string | null): ICAL.Property {
-    return timeProperty('exdate', occurrenceInstant(master, key), tzid, master.allDay);
-}
-
-// An EXDATE and a RECURRENCE-ID both name the ORIGINAL instant, never the moved start of the override that replaced it.
-function occurrenceInstant(master: CalendarEvent, key: string): Date {
-    return master.allDay ? new Date(`${key}T00:00:00Z`) : computeOccurrenceTimes(master, key).startTime;
+// An EXDATE and a RECURRENCE-ID both name the ORIGINAL occurrence in the master's DTSTART form, value type included
+// (RFC 5545 §3.8.4.4). The moved start of the override that replaced it, or its own all-day toggle, would match none.
+function occurrenceProperty(name: string, master: ICAL.Component, key: string): ICAL.Property {
+    const dtstart = master.getFirstProperty('dtstart');
+    const value = dtstart?.getFirstValue();
+    if (!(value instanceof ICAL.Time) || value.isDate)
+        return timeProperty(name, new Date(`${key}T00:00:00Z`), null, true);
+    const tzid = propTzid(dtstart);
+    const rule = master.getFirstPropertyValue('rrule');
+    const start = icalTimeToInstant(value, tzid, null);
+    return timeProperty(name, occurrenceStart(start, tzid, rule ? String(rule) : null, key), tzid, false);
 }
 
 function exclusionStamp(key: string, id: string, sequence: number, dtstamp: Date | null): ICAL.Property {

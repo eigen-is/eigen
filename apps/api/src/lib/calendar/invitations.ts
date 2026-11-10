@@ -303,7 +303,7 @@ async function decideInboundRequest(
         const edit = requestedEdit(calendar, series, held.get(key), parsed, key, revisions.get(key) ?? null, cut);
         if (edit) edits.set(key, edit);
     }
-    const changed = applyEdits(component, edits, held.get(null));
+    const changed = applyEdits(component, edits);
     if (claim) {
         // A claim stands whatever the message's revision, and the occurrences just added take the link too.
         stampInvitationLink(component, link);
