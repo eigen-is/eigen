@@ -21,9 +21,8 @@ const RELATIVE_CELL = new RegExp(
 );
 const NUMONLY = /^(?:[0-9]+$)/;
 
-// The actions compile rather than evaluate: every expression reduces to a thunk, so one parse
-// serves any number of evaluations (Parser.compile). A thunk runs its operands left to right,
-// the order the parser reduces them in. Terminals and literal pieces stay plain values.
+// A thunk runs its operands left to right, the order the parser reduces them in. Terminals and literal pieces stay
+// plain values.
 const run = (value: any): any => (typeof value === "function" ? value() : value);
 const operator = (yy: any, op: string, left: any, right: any) => () =>
     yy.evaluateByOperator(op, [run(left), run(right)]);
@@ -883,11 +882,8 @@ export class Parser {
         const $0 = $$.length - 1;
         switch (yystate) {
             case 1: {
-                // Top-level Formula production. A bare reference to an empty cell
-                // (e.g. `='Sheet'!B13` when B13 has no value) produces `undefined`
-                // here; if we returned that, Jison would fall through to the
-                // accept-state below and surface its `return true` sentinel as the
-                // formula's value. Excel treats empty cells as 0 in value context.
+                // A bare reference to an empty cell is undefined, which would reach the accept state's `true`. Excel
+                // shows 0.
                 const expression = $$[$0 - 1];
                 return () => {
                     const v = run(expression);
