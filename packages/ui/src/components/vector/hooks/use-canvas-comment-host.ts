@@ -139,6 +139,8 @@ export function useCanvasCommentHost({
                 const el = doc.elements.find((e) => e.id === anchorId);
                 const ids = el ? parseIdList(el.commentCardIds) : [];
                 if (el && !ids.includes(card.id)) {
+                    // Untracked, as the delete is: the card lives in the comments map, outside the UndoManager's
+                    // scope, so a ⌘Z that took back the anchor alone would orphan the new card.
                     doc.updateElementUntracked(anchorId, { commentCardIds: serializeIdList([...ids, card.id]) });
                 }
             }
