@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, freeze, rows, columns, headers]
 related: [sheets/rows-and-columns]
 order: 90
-updated: 2026-06-08
+updated: 2026-11-10
 ---
 
 Freezing keeps one or more rows or columns pinned to the top or left of the grid while the rest of the sheet scrolls. This is useful when your first row or column contains headers you want to keep in view.
@@ -28,3 +28,5 @@ You can drag the freeze boundary without using the menu. A small handle sits at 
 ## Remove a freeze
 
 Open **View → Freeze** and choose **Cancel freezing**. This removes all frozen rows and columns on the current sheet.
+
+Deleting every frozen row or column also ends the freeze, for everyone. **Undo** brings it back until someone else edits the spreadsheet.

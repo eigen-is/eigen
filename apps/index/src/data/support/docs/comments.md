@@ -6,7 +6,7 @@ category: Collaboration
 tags: [docs, comments, collaboration, review]
 related: [docs/share-a-document, docs/create-and-edit]
 order: 80
-updated: 2026-11-09
+updated: 2026-11-10
 ---
 
 Comments let you leave a note on any piece of text or image in a document. Each comment has its own thread, so collaborators can reply, discuss, and resolve it without touching the document itself.
@@ -38,7 +38,7 @@ A red dot on a comment means it has something new for you: a reply in a thread y
 
 ## Read a comment without opening it
 
-Rest your mouse on highlighted text, or on the triangle of a commented image, chart, text box, or equation, and the comment's card appears beside it. Click the card to open the thread.
+Rest your mouse on highlighted text, or on the triangle of a commented image, chart, text box, or equation, and the comment's card appears below it. Click the card to open the thread.
 
 ## Filter and find comments
 
