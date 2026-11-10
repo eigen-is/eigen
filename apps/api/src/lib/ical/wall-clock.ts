@@ -101,7 +101,7 @@ export function expandWallClock(
 }
 
 // A key names a day in the series' wall clock, and only BYHOUR, BYMINUTE and BYSECOND move its time from DTSTART's, so
-// the start follows from the key with no walk of the rule. A rule with several times a day keys to the first it lists.
+// the start follows from the key with no walk of the rule. A rule with several times a day keys to the earliest.
 export function computeOccurrenceTimes(
     parent: CalendarEvent,
     recurrenceDate: string,
@@ -110,12 +110,12 @@ export function computeOccurrenceTimes(
     const tz = parent.timezone;
     const stated = tz ? wallClockDate(parent.startTime, tz) : parent.startTime;
     const rule = parent.rrule ? RRule.parseString(parent.rrule) : {};
-    const first = (listed: number | number[] | null | undefined, own: number) => [listed ?? own].flat()[0];
+    const earliest = (listed: number | number[] | null | undefined, own: number) => Math.min(...[listed ?? own].flat());
     const wall = new Date(`${recurrenceDate}T00:00:00Z`);
     wall.setUTCHours(
-        first(rule.byhour, stated.getUTCHours()),
-        first(rule.byminute, stated.getUTCMinutes()),
-        first(rule.bysecond, stated.getUTCSeconds()),
+        earliest(rule.byhour, stated.getUTCHours()),
+        earliest(rule.byminute, stated.getUTCMinutes()),
+        earliest(rule.bysecond, stated.getUTCSeconds()),
     );
     const startTime = tz ? fromWallClock(wall, tz) : wall;
     return { startTime, endTime: new Date(startTime.getTime() + durationMs) };

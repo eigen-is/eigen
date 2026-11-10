@@ -200,6 +200,11 @@ describe('a stored rule that does not expand', () => {
         expect(startTime.toISOString()).toBe('2026-03-03T10:00:00.000Z');
     });
 
+    test('a day with several times keys to its earliest, in whatever order the rule lists them', () => {
+        const { startTime } = computeOccurrenceTimes(rowWith('FREQ=DAILY;BYHOUR=17,9;BYMINUTE=45,15'), '2026-03-03');
+        expect(startTime.toISOString()).toBe('2026-03-03T09:15:00.000Z');
+    });
+
     test('parseIcs keeps a rule it does not walk, for the store to judge', () => {
         const { events } = parseIcs(vcal(series('FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30')));
         expect(events[0].rrule).toBe('FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30');
