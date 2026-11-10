@@ -513,7 +513,7 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
                     const exdateTzid = propTzid(exdateProp);
                     for (const value of exdateProp.getValues()) {
                         if (!(value instanceof ICAL.Time)) continue;
-                        const isDateOnly = value.isDate;
+                        const exAllDay = allDay || value.isDate;
                         const key = icalTimeToRecurrenceKey(value, exdateTzid, dtstart);
                         if (excluded.has(key)) continue;
                         excluded.add(key);
@@ -521,7 +521,7 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
 
                         let exStartTime: Date;
                         let exEndTime: Date;
-                        if (isDateOnly) {
+                        if (exAllDay) {
                             exStartTime = startOfDay(value);
                             exEndTime = new Date(exStartTime.getTime() + 86400_000);
                         } else {
@@ -537,7 +537,7 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
                                 location: null,
                                 startTime: exStartTime,
                                 endTime: exEndTime,
-                                allDay: isDateOnly,
+                                allDay: exAllDay,
                                 rrule: null,
                                 timezone: tzid,
                                 status: 'cancelled',

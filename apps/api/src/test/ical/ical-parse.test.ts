@@ -195,6 +195,28 @@ describe('parseIcs over a year that is not four digits', () => {
     });
 });
 
+describe('parseIcs over an all-day series with a timed EXDATE', () => {
+    test('the cancelled row is all day, on the date the EXDATE is written on', () => {
+        const { events } = parseIcs(
+            vcal([
+                'BEGIN:VEVENT',
+                'UID:all-day',
+                'DTSTART;VALUE=DATE:20260504',
+                'DTEND;VALUE=DATE:20260505',
+                'RRULE:FREQ=DAILY;COUNT=4',
+                'EXDATE;TZID=Pacific/Auckland:20260505T000000',
+                'SUMMARY:Holiday',
+                'END:VEVENT',
+            ]),
+        );
+        const cancelled = events.find((e) => e.status === 'cancelled');
+
+        expect(
+            cancelled && [cancelled.recurrenceDate, cancelled.allDay, cancelled.startTime, cancelled.endTime],
+        ).toEqual(['2026-05-05', true, new Date('2026-05-05T00:00:00Z'), new Date('2026-05-06T00:00:00Z')]);
+    });
+});
+
 // RFC 5545 §3.6.1 lets an event state its length as a DURATION instead of a DTEND, which Apple and
 // Outlook both emit — an end derived from DTSTART alone turns a three-hour meeting into an hour and a
 // three-day trip into one day.
