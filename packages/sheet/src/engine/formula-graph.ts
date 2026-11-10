@@ -64,7 +64,7 @@ export class FormulaGraph {
             this.list(node);
             return;
         }
-        const added: FormulaCellInfo = { formula, key: `f${this.nextKey}`, r, c, id, dependents: [] };
+        const added: FormulaCellInfo = { formula, key: `f${this.nextKey}`, r, c, id };
         this.nextKey += 1;
         this.nodes[added.key] = added;
         this.cellsOn(id).set(packCell(r, c), added);
@@ -144,19 +144,22 @@ export class FormulaGraph {
             visit(node);
             affected.add(node);
         };
-        const link = (readers: string[]) => {
-            edges += readers.length;
+        const link = ({ id, r, c }: CellAt) => {
+            const keys = this.index.dependentsOf(id, r, c);
+            edges += keys.length;
             if (edges > maxDependencyEdges) throw new RangeError('Formula references past the edge budget');
-            for (const key of readers) join(this.nodes[key]);
-            return readers;
+            const linked = keys.map((key) => this.nodes[key]);
+            for (const node of linked) join(node);
+            return linked;
         };
         for (const node of chosen) join(node);
         for (const cell of cells) {
             visit(cell);
-            link(this.index.dependentsOf(cell.id, cell.r, cell.c));
+            link(cell);
         }
-        for (const node of affected) node.dependents = link(this.index.dependentsOf(node.id, node.r, node.c));
-        return getCalculationOrder([...affected], this.nodes);
+        const readers = new Map<FormulaCellInfo, FormulaCellInfo[]>();
+        for (const node of affected) readers.set(node, link(node));
+        return getCalculationOrder([...affected], readers);
     }
 
     private build(sheets: readonly WorkingSheet[]): void {

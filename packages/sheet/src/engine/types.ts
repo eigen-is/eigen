@@ -101,8 +101,6 @@ export type FormulaCellInfo = {
     r: number;
     c: number;
     id: string;
-    // The keys of the formulas that read this cell.
-    dependents: readonly string[];
 };
 
 export type FormulaCellInfoMap = {
