@@ -35,10 +35,8 @@ describe('state/formula-editor — functionHTMLGenerate', () => {
     });
 });
 
-// The formula editor restores the caret by stripping the spans off this HTML, splitting on
-// `</span>`, and using the segment lengths as offsets into the rendered text nodes. Escaped
-// tokens are longer as markup than on screen, so the decoded segments — not the raw ones —
-// have to add back up to the formula.
+// The editor puts the caret back as an offset into its whole text after a rebuild, so the
+// spans must render exactly the typed formula, escaped tokens included.
 describe('state/formula-editor — generated HTML measures like its rendered text', () => {
     for (const formula of ['=A1&B1', '=A1<B1', '=IF(A1<>2,1,0)', '=A1>=5', '=CONCAT("a&b")']) {
         test(`${formula} decodes back to itself`, () => {

@@ -59,6 +59,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Deleting rows and columns in Sheets** — when a delete takes what you selected, yours, someone else's or an undo, your selection stays at that position, on the row or column that took its place. The name box, the arrow keys and typing work from there, and a place inside a merged cell selects the merged cell, so what you type shows
 - **Inserting rows and columns in Sheets** — inserting above or left of a cell you are editing moves the edit with its cell, so it no longer writes into the row that slid under it
 - **Comments in Sheets** — **Clear formatting** keeps a cell's link and comment, and **Delete comment** in a cell's menu asks first
+- **Typing a formula in Sheets** — a formula with a quoted text or a line break (Alt+Enter) types as you type it, instead of the rest landing at its start, such as `=VLOOKUP("k3",A1:B4,2)`
 - **Array formulas in Sheets** — a formula such as `SUMPRODUCT(A1:A3*B1:B3)`, which Sheets can't calculate yet, keeps the number it has when you edit around it, instead of turning into 0. Typed new, it shows `#CALC!`
 - **Drafts in Mail** — a save that fails, or a crash during one, no longer loses the draft. An attached email stays an attachment, and removing an attachment never takes another with it
 - **Older drafts in Mail** — a draft saved before this update loses its Bcc and its links to Drive documents, whose pills stay plain links in the text

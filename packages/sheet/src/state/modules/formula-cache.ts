@@ -66,8 +66,6 @@ export class FormulaCache {
 
     public rangedrag_row_start?: boolean;
 
-    public functionRangeIndex?: number[];
-
     public functionlistMap: Record<string, unknown>;
 
     public engine: FormulaEngine;
