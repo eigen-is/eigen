@@ -209,6 +209,7 @@ function requestedEvent(
         dtstamp: event.updatedAt,
         recurrenceDate,
         recurrenceInstant: null,
+        recurrenceUtc: null,
         data: { organizer, attendees: [...attendees] },
     };
 }

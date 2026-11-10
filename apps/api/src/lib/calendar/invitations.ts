@@ -4,12 +4,7 @@
 // answer back, and the organizer's Home records it through receiveAttendeeStatus and receiveRsvpForOccurrence.
 // Callers, such as the home relay and inbound mail, use Calendar.
 
-import {
-    heldAttendees,
-    isInvitationFromOthers,
-    truncateRRule,
-    utcToLocal,
-} from '@workspace/lib/calendar/calendar-utils';
+import { heldAttendees, isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import { calendarInviteTag } from '@workspace/lib/notification/tags';
 import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
 import { isExternalOwnerId } from '@workspace/lib/types/owner';
@@ -31,7 +26,7 @@ import {
 } from '../ical';
 import type { EventPatch, Revision, VEventEdit } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
-import { computeOccurrenceTimes, parseRecurrenceKey, recurrenceKey } from '../ical/wall-clock';
+import { computeOccurrenceTimes, parseRecurrenceKey, recurrenceKeyIn } from '../ical/wall-clock';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
 import { actorDisplayName } from '../user';
@@ -91,7 +86,7 @@ export async function cancelInvitationOccurrence(
     organizerEventId: string,
     organizerUserId: string,
     recurrenceDate: string,
-    recurrenceInstant: Date | null | undefined,
+    recurrenceUtc: Date | null,
     revision: Revision,
 ): Promise<void> {
     // The write returns the occurrence's start, so the notice after the lock names the occurrence that went.
@@ -105,7 +100,7 @@ export async function cancelInvitationOccurrence(
                 const resource = events.resourceOf(calendar, linked.id);
                 if (!resource) return null;
                 const component = events.storedComponent(calendar, resource);
-                const key = recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, linked.timezone);
+                const key = recurrenceUtc ? recurrenceKeyIn(recurrenceUtc, linked.timezone) : recurrenceDate;
                 if (!isNewerRevision(revision, storedRevisions(component).get(key) ?? null)) return null;
                 // A copy of single dates has no series to remove one from, so the date goes, the copy with its last.
                 if (linked.recurrenceDate) {
@@ -159,12 +154,12 @@ export function receiveRsvpForOccurrence(
     email: string,
     status: Attendee['status'],
     recurrenceDate: string,
-    recurrenceInstant: Date | null | undefined,
+    recurrenceUtc: Date | null,
     restoreCancelled: boolean,
 ): Promise<void> {
     return unlessRefused(
         eventId,
-        () => rsvpForOccurrence(calendar, eventId, email, status, recurrenceDate, recurrenceInstant, restoreCancelled),
+        () => rsvpForOccurrence(calendar, eventId, email, status, recurrenceDate, recurrenceUtc, restoreCancelled),
         undefined,
     );
 }
@@ -294,9 +289,9 @@ async function decideInboundRequest(
     // A RECURRENCE-ID the message repeats keeps its newest event.
     const latest = new Map<string | null, ParsedEvent>();
     for (const parsed of requested) {
-        const key = parsed.recurrenceDate
-            ? recurrenceKeyForSeries(parsed.recurrenceDate, parsed.recurrenceInstant, series.timezone)
-            : null;
+        const key = parsed.recurrenceUtc
+            ? recurrenceKeyIn(parsed.recurrenceUtc, series.timezone)
+            : parsed.recurrenceDate;
         const prior = latest.get(key);
         if (!prior || isNewerRevision(parsed, prior)) latest.set(key, parsed);
     }
@@ -424,18 +419,6 @@ async function fileNewInvitation(
         creditBytes: replaces?.resource.size ?? 0,
     });
     return { kind: 'created', calendarId };
-}
-
-// A lone VEVENT cannot tell the parser the series' timezone. So a UTC RECURRENCE-ID is turned into a date in the
-// timezone of the stored series here.
-function recurrenceKeyForSeries(
-    recurrenceDate: string,
-    recurrenceInstant: Date | null | undefined,
-    tz: string | null,
-): string {
-    if (!recurrenceInstant || !tz) return recurrenceDate;
-    const { year, month, day } = utcToLocal(recurrenceInstant, tz);
-    return recurrenceKey(year, month, day);
 }
 
 // The guest's own answer stands until the organizer reschedules, which raises the SEQUENCE. An organizer's list can
@@ -605,7 +588,7 @@ async function rsvpForOccurrence(
     email: string,
     status: Attendee['status'],
     recurrenceDate: string,
-    recurrenceInstant: Date | null | undefined,
+    recurrenceUtc: Date | null,
     restoreCancelled: boolean,
 ): Promise<void> {
     const calendarId = await calendar.writeLock.run(async () => {
@@ -613,7 +596,7 @@ async function rsvpForOccurrence(
         const parent = events.eventById(calendar, eventId);
         if (!parent) return null;
 
-        const key = recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, parent.timezone);
+        const key = recurrenceUtc ? recurrenceKeyIn(recurrenceUtc, parent.timezone) : recurrenceDate;
         const existing = events.exceptionOf(calendar, eventId, key);
         // A deleted occurrence is an EXDATE, which carries no attendee list to record a PARTSTAT in.
         if (existing?.status === 'cancelled' && !restoreCancelled) return null;

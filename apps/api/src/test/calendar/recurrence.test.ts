@@ -233,6 +233,7 @@ describe('constrainRRule', () => {
         dtstamp: null,
         recurrenceDate: null,
         recurrenceInstant: null,
+        recurrenceUtc: null,
         data: null,
     });
     const allDay = (rrule: string): ParsedEvent => ({

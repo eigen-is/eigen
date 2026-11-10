@@ -420,7 +420,7 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         await receiveMailed(calendar, imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
 
         const cancelled = imipOccurrence('Another Date', 1, '20280302T100000Z', ['STATUS:CANCELLED']);
-        const elsewhere = { ...cancelled, recurrenceDate: '2028-03-20', recurrenceInstant: null };
+        const elsewhere = { ...cancelled, recurrenceDate: '2028-03-20', recurrenceInstant: null, recurrenceUtc: null };
         await receiveMailed(calendar, elsewhere, IMIP_ORG);
 
         const stored = await calendar.getEventsByUid(IMIP_UID);
@@ -531,6 +531,7 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
             uid: IMIP_UID,
             recurrenceDate,
             recurrenceInstant: null,
+            recurrenceUtc: null,
             title,
             description: null,
             location: null,

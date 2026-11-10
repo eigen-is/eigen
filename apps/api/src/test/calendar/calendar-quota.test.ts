@@ -94,6 +94,7 @@ async function inviteFromAlice(user: TestUser, uid: string): Promise<CalendarEve
                 dtstamp: null,
                 recurrenceDate: null,
                 recurrenceInstant: null,
+                recurrenceUtc: null,
                 data: {
                     organizer: { userId: ctx.alice.user.id, email: ctx.alice.user.email, name: 'Alice' },
                     attendees: [{ email: user.email, status: 'pending', role: 'required' }],
@@ -590,6 +591,7 @@ describe('Calendar storage quota', () => {
                         dtstamp: null,
                         recurrenceDate: null,
                         recurrenceInstant: null,
+                        recurrenceUtc: null,
                         data: {
                             organizer: { userId: ctx.alice.user.id, email: ctx.alice.user.email, name: 'Alice' },
                             attendees: [{ email: user.email, status: 'pending', role: 'required' }],

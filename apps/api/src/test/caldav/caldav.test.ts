@@ -1782,6 +1782,7 @@ describe('CalDAV', () => {
                     dtstamp: null,
                     recurrenceDate: null,
                     recurrenceInstant: null,
+                    recurrenceUtc: null,
                     data: { organizer: { userId: '', email: 'boss@example.com', name: 'Boss' } },
                 },
                 'boss@example.com',

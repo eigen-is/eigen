@@ -104,6 +104,7 @@ const relayed = (title: string, sequence: number, dtstamp: string): ParsedEvent 
     dtstamp: new Date(dtstamp),
     recurrenceDate: null,
     recurrenceInstant: null,
+    recurrenceUtc: null,
     data: {
         organizer: { userId: 'organizer-home', email: ORG, name: 'Ext Org' },
         attendees: [{ email: GUEST, status: 'pending', role: 'required' }],

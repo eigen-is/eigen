@@ -4,13 +4,13 @@
 // row id has nowhere to land. Only projectResource, which the calendar store runs on a resource it wrote, reads
 // Eigen's own lines.
 
-import { localToUtc, normalizeTimezone, utcToLocal } from '@workspace/lib/calendar/calendar-utils';
+import { localToUtc, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, EventData, ImipMethod, Organizer, Reminder } from '@workspace/lib/types/calendar';
 import { IMIP_METHODS } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
 import { isExpandableRrule, isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
 import { vtimezoneOffset } from './vtimezone';
-import { recurrenceKey, wallClockDate } from './wall-clock';
+import { recurrenceKey, recurrenceKeyIn, wallClockDate } from './wall-clock';
 
 // Lowercase, because ical.js lowercases every name it reads.
 export const EIGEN = {
@@ -149,12 +149,7 @@ export function icalTimeToRecurrenceKey(t: ICAL.Time, seriesTz: string | null): 
     // across zones.
     if (t.isDate || t.zone !== ICAL.Timezone.utcTimezone) return recurrenceKey(t.year, t.month, t.day);
     // A timed series crossing midnight UTC has a UTC day one off, so this form keys through the series' zone.
-    const instant = t.toJSDate();
-    if (seriesTz) {
-        const { year, month, day } = utcToLocal(instant, seriesTz);
-        return recurrenceKey(year, month, day);
-    }
-    return recurrenceKey(instant.getUTCFullYear(), instant.getUTCMonth() + 1, instant.getUTCDate());
+    return recurrenceKeyIn(t.toJSDate(), seriesTz);
 }
 
 // Keyed by UID because a previewed or imported file holds every series a calendar has, each in its author's own zone.
@@ -278,9 +273,11 @@ export type ParsedEvent = {
     // RFC 5546 § 2.1.5 breaks a SEQUENCE tie with it, so a receiver can order two messages sent without a bump.
     dtstamp: Date | null;
     recurrenceDate: string | null;
-    // The instant a timed RECURRENCE-ID names. A copy of one date has no master to compute it from, so it keeps this,
-    // and a mailed lone occurrence re-keys through it against the linked event's zone.
+    // The instant a timed RECURRENCE-ID names. A copy of one date has no master to compute it from, so it keeps this.
     recurrenceInstant: Date | null;
+    // The same instant when it was written in UTC. A lone occurrence's file may not hold its series' zone, so the
+    // receiver keys it again through the zone of the copy it lands on.
+    recurrenceUtc: Date | null;
     data: EventData | null;
 };
 
@@ -447,6 +444,10 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
                 recurrenceValue instanceof ICAL.Time && !recurrenceValue.isDate
                     ? icalTimeToInstant(recurrenceValue, propTzid(recurrenceId), tzid)
                     : null;
+            const recurrenceUtc =
+                recurrenceValue instanceof ICAL.Time && recurrenceValue.zone === ICAL.Timezone.utcTimezone
+                    ? recurrenceInstant
+                    : null;
 
             const attendees = vevent.getAllProperties('attendee').map(projectAttendee);
             const reminders = projectReminders(vevent);
@@ -485,6 +486,7 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
                     dtstamp,
                     recurrenceDate,
                     recurrenceInstant,
+                    recurrenceUtc,
                     data,
                 },
                 stamps: {
@@ -543,6 +545,7 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
                                 dtstamp,
                                 recurrenceDate: key,
                                 recurrenceInstant: null,
+                                recurrenceUtc: null,
                                 data: null,
                             },
                             stamps: {

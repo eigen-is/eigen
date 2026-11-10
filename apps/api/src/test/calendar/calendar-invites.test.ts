@@ -272,6 +272,7 @@ describe('Calendar Invites', () => {
             dtstamp: null,
             recurrenceDate: null,
             recurrenceInstant: null,
+            recurrenceUtc: null,
             data: { organizer: { userId: ctx.alice.user.id, email: organizerEmail, name: 'Alice' } },
         });
         const linkOf = (organizerEventId: string, organizerUserId = ctx.alice.user.id) => ({

@@ -69,8 +69,8 @@ type BuildOptions = { master?: CalendarEvent; exclusions?: Exclusion[] };
 
 export type Revision = { sequence: number; dtstamp?: Date | null };
 
-// A row about to be written. An occurrence carries the instant its RECURRENCE-ID names when a message or the stored
-// file stated it, since a copy of one date holds no master to compute that from.
+// A row about to be written. An occurrence without its master carries the instant its RECURRENCE-ID names when a
+// message or the stored file stated it, since it holds no master to compute that from.
 export type EventToBuild = CalendarEvent & { recurrenceInstant?: Date | null };
 
 export function buildResource(events: readonly EventToBuild[]): ICAL.Component {
@@ -423,7 +423,8 @@ function buildVEvent(event: EventToBuild, options: BuildOptions = {}): ICAL.Comp
     // §3.8.4.4). A moved startTime or the override's own all-day toggle would match no occurrence.
     if (event.recurrenceDate) {
         const master = options.master ?? event;
-        const when = event.recurrenceInstant ?? occurrenceInstant(master, event.recurrenceDate);
+        const stated = options.master ? null : event.recurrenceInstant;
+        const when = stated ?? occurrenceInstant(master, event.recurrenceDate);
         vevent.addProperty(timeProperty('recurrence-id', when, normalizeTimezone(master.timezone), master.allDay));
     }
 

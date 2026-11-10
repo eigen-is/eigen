@@ -249,6 +249,7 @@ describe('relayed invitation', () => {
         dtstamp: new Date('2026-01-01T00:00:00Z'),
         recurrenceDate: null,
         recurrenceInstant: null,
+        recurrenceUtc: null,
         data: {
             organizer: { userId: ORG_HOME, email, name: 'Ext Org' },
             attendees: [{ email: 'owner@test.local', status: 'pending', role: 'required' }],
@@ -415,6 +416,7 @@ describe('one REQUEST, one write', () => {
             sequence: 0,
             dtstamp: new Date('2026-04-01T10:00:00Z'),
             recurrenceInstant: null,
+            recurrenceUtc: null,
             data: {
                 organizer: { userId: LINK.organizerUserId, email: ORG, name: 'Ext Org' },
                 attendees: [{ email: guest, status, role: 'required' as const }],
@@ -681,6 +683,52 @@ describe('a guest who removes this and following', () => {
         await calendar.receiveRequest(series(harness.user.email, 'Standup', 'FREQ=DAILY;UNTIL=20261231T235959Z'), link);
 
         expect(await storedRule(calendar)).toBe('FREQ=DAILY;UNTIL=20261231T235959Z');
+    });
+});
+
+// RFC 5545 states a RECURRENCE-ID in the master's zone, so a TZID value keys on its own wall date wherever it lands.
+describe('a lone occurrence named in another zone', () => {
+    const SERIES = 'date-line@external.com';
+    const link = {
+        organizerEmail: ORG,
+        organizerEventId: SERIES,
+        organizerUserId: `external_${ORG}`,
+        createByUserId: `external_${ORG}`,
+    };
+    const vevent = (guest: string, lines: string[]): string[] => [
+        'BEGIN:VEVENT',
+        `UID:${SERIES}`,
+        `ORGANIZER:mailto:${ORG}`,
+        `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${guest}`,
+        'DTSTAMP:20260101T000000Z',
+        ...lines,
+        'END:VEVENT',
+    ];
+
+    test('keys on its own wall date, not the date in the series zone', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const guest = harness.user.email;
+        const daily = [
+            'SUMMARY:Auckland standup',
+            'RRULE:FREQ=DAILY;COUNT=10',
+            'DTSTART;TZID=Pacific/Auckland:20260504T090000',
+            'DTEND;TZID=Pacific/Auckland:20260504T093000',
+        ];
+        await calendar.receiveRequest(parseIcs(vcal(vevent(guest, daily))).events, link);
+
+        // 17:00 on 5 May in New York is 09:00 on 6 May in Auckland.
+        const lone = [
+            'SUMMARY:Renamed in New York',
+            'RECURRENCE-ID;TZID=America/New_York:20260505T170000',
+            'DTSTART;TZID=America/New_York:20260505T170000',
+            'DTEND;TZID=America/New_York:20260505T173000',
+            'SEQUENCE:1',
+        ];
+        await calendar.receiveRequest(parseIcs(vcal(vevent(guest, lone))).events, link);
+
+        const override = findOrFail(await calendar.getEventsByUid(SERIES), (e) => !!e.parentEventId);
+        expect(override.recurrenceDate).toBe('2026-05-05');
     });
 });
 

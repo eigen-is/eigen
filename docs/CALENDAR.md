@@ -125,7 +125,7 @@ The edit dialog opens on an occurrence but "All events in series" saves on the m
 
 An override's `RECURRENCE-ID` and an `EXDATE` both name the occurrence the series would have had, computed from the master in the master's own DTSTART form, value type included. It is never the override's moved start, and never `VALUE=DATE` because the override was toggled to all day. Either would match no occurrence and orphan the override (RFC 5545 §3.8.4.4).
 
-A copy of one date holds no master to compute that instant from, so it keeps the instant the organizer's own `RECURRENCE-ID` named, and only its file does: no column holds it. Every iMIP REPLY therefore names its occurrence by what the stored file holds (`recurrenceInstantOf`), read before a delete erases it, and Google and Outlook match the answer to their occurrence by that instant. A mailed lone occurrence re-keys through the same instant against the zone of the copy it lands on.
+A copy of one date holds no master to compute that instant from, so it keeps the instant the organizer's own `RECURRENCE-ID` named, and only its file does: no column holds it. Every iMIP REPLY therefore names its occurrence by what the stored file holds (`recurrenceInstantOf`), read before a delete erases it, and Google and Outlook match the answer to their occurrence by that instant. A mailed lone occurrence whose `RECURRENCE-ID` is in UTC keys again through the zone of the copy it lands on, because its own file may not hold the series' zone. A TZID value keeps its own wall date there too.
 
 ## An occurrence is keyed by its wall-clock date in the series' zone
 

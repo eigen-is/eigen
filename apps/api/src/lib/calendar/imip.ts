@@ -221,7 +221,7 @@ export async function processInboundImip(
                     parsed.uid,
                     externalOwnerId(organizerEmail),
                     parsed.recurrenceDate,
-                    parsed.recurrenceInstant,
+                    parsed.recurrenceUtc,
                     parsed,
                 );
             } else {
@@ -244,7 +244,7 @@ export async function processInboundImip(
                     attendee.email,
                     attendee.status,
                     parsed.recurrenceDate,
-                    parsed.recurrenceInstant,
+                    parsed.recurrenceUtc,
                     false,
                 );
             } else if (ownerEvent.data?.attendees?.some((a) => a.email.toLowerCase() === sender)) {

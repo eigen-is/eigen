@@ -530,7 +530,7 @@ export class Calendar {
         orgEventId: string,
         orgUserId: string,
         recurrenceDate: string,
-        recurrenceInstant: Date | null | undefined,
+        recurrenceUtc: Date | null,
         revision: Revision,
     ): Promise<void> {
         return invitations.cancelInvitationOccurrence(
@@ -538,7 +538,7 @@ export class Calendar {
             orgEventId,
             orgUserId,
             recurrenceDate,
-            recurrenceInstant,
+            recurrenceUtc,
             revision,
         );
     }
@@ -556,7 +556,7 @@ export class Calendar {
         email: string,
         status: Attendee['status'],
         recurrenceDate: string,
-        recurrenceInstant?: Date | null,
+        recurrenceUtc: Date | null,
         restoreCancelled = true,
     ): Promise<void> {
         return invitations.receiveRsvpForOccurrence(
@@ -565,7 +565,7 @@ export class Calendar {
             email,
             status,
             recurrenceDate,
-            recurrenceInstant,
+            recurrenceUtc,
             restoreCancelled,
         );
     }
