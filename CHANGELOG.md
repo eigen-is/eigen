@@ -37,7 +37,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pasting edited cells in Sheets** — if you edit cells after copying them, a paste in the same tab brings them as they are now
 - **Validation limits in Sheets** — an edit that would push a validation rule past its limit goes through, and the cells past it get no rule
 - **Speed in Sheets** — editing a cell in a workbook of 100,000 formulas takes milliseconds, where it took over a tenth of a second, and a cell that 100,000 formulas read no longer stalls a sheet for a minute
-- **Deleted invitations in Calendar** — an invitation from someone on your server that you deleted comes back, faded as declined, when its organizer changes the event, as one that came by mail already did
+- **Deleted invitations in Calendar** — an invitation from someone on your server that you deleted comes back, faded as declined and with its moved and cancelled dates, when its organizer changes the event. So does a date you removed
 - **Large invites in Mail** — a calendar invite over 1 MiB shows "This calendar invitation could not be read" instead of a preview, and no longer changes your calendar by itself
 - **Unusual repeat rules in Calendar** — an event whose repeat rule would take the server too long to work out shows on its first date only, and calendar apps still get the whole rule. An invite whose rule names no frequency arrives as one event instead of getting lost
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
@@ -95,7 +95,9 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Cancelling team events** — deleting a team event with outside guests sends them a cancellation from you
 - **Declining one date in Calendar** — declining or answering one date of an invitation that doesn't repeat no longer fails or goes unrecorded
 - **Your answer in Calendar** — your answer to an invitation no longer resets when the organizer makes a small edit, such as a new title
-- **Repeated invitations in Calendar** — an invitation to a repeating event that arrives twice no longer notifies you again for each date its organizer changed
+- **Invitations to repeating events in Calendar** — an invitation to a repeating event with moved or cancelled dates notifies you once, and one that arrives twice notifies you no more. A date the organizer took you off shows as cancelled
+- **Invitations from before you joined** — an invitation to a repeating event sent before you had an account arrives with its moved and cancelled dates, and one to a single date of it arrives as that date
+- **Mailed invitations in Calendar** — an invitation by mail that lists a moved date before its repeating event keeps the moved date
 - **A refused Save** — in Calendar, Contacts and Personal info in Space, a Save refused because the item changed elsewhere keeps what you typed and takes the other fields from the server
 - **Removing someone with a document open** — removing someone from a team or an organization, or deleting their account, cuts them off within 15 seconds from the documents they can no longer read. A password reset does too
 - **Losing access to an open document** — in Docs, Sheets, Slides, Vector and Stickies, the page switches to "You need access" within 15 seconds, or to sign-in if your account was deleted, instead of leaving an editor where typing goes nowhere

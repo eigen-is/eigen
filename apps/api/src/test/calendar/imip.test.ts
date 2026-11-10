@@ -1516,11 +1516,8 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
     });
 });
 
-// Audit #A / #B: an external organizer editing or canceling ONE occurrence of a recurring meeting
-// sends a lone VEVENT with a RECURRENCE-ID. Pre-fix, REQUEST fed it to receiveInvitationUpdate (which
-// nulled the master's rrule and moved its start) and CANCEL fed it to removeInvitation (which dropped
-// the whole event) — either way the attendee lost the entire series the first time the organizer
-// touched a single instance.
+// An external organizer editing or canceling ONE occurrence of a recurring meeting sends a lone VEVENT with a
+// RECURRENCE-ID. It reaches that occurrence of the attendee's series alone, never the whole series.
 describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     const ORG = 'external.series.organizer@example.com';
