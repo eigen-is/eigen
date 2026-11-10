@@ -45,6 +45,12 @@ function linkedGrid(): Context {
     return next;
 }
 
+test('a web address is saved without the spaces around it', () => {
+    const ctx = grid();
+    saveHyperlink(ctx, 0, 0, 'a', 'webpage', '  eigen.is  ');
+    expect(getCellHyperlink(ctx, 0, 0)).toEqual({ type: 'webpage', address: 'eigen.is' });
+});
+
 describe('the writers of a cell', () => {
     test('a typed value keeps the link, as Excel does', () => {
         const { next } = author(linkedGrid(), (ctx) => updateCell(ctx, 0, 0, null, 'typed'));
