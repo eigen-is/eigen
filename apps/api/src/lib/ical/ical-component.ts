@@ -378,6 +378,30 @@ export function restampResource(
     }
 }
 
+// A PUT to a linked copy keeps the stored file, which is the organizer's, and takes only the client's alarms.
+export function adoptAlarms(stored: ICAL.Component, incoming: ICAL.Component): void {
+    const incomingVEvents = incoming.getAllSubcomponents('vevent');
+    const incomingStarts = seriesStarts(incomingVEvents);
+    const byKey = new Map(
+        incomingVEvents.map((v) => [occurrenceMatchKey(uidOf(v), recurrenceKeyOf(v, incomingStarts)), v]),
+    );
+    const storedVEvents = stored.getAllSubcomponents('vevent');
+    const storedStarts = seriesStarts(storedVEvents);
+    for (const vevent of storedVEvents) {
+        const match = byKey.get(occurrenceMatchKey(uidOf(vevent), recurrenceKeyOf(vevent, storedStarts)));
+        if (!match) continue;
+        keepSubcomponents(vevent, (sub) => sub.name !== 'valarm');
+        const alarms = match.getAllSubcomponents('valarm');
+        // Detached all at once, because adding a component to a new parent removes it from the old one per item.
+        keepSubcomponents(match, (sub) => sub.name !== 'valarm');
+        for (const alarm of alarms) {
+            // The one write path that keeps a client's own subcomponents: its Eigen lines are still untrusted.
+            stripEigenStamps(alarm);
+            vevent.addSubcomponent(alarm);
+        }
+    }
+}
+
 // A stamp far ahead of the receiver's clock would outrank every genuine update at the same SEQUENCE (RFC 5546 § 2.1.5).
 export function clampStamp(dtstamp: Date | null | undefined, now: Date): Date | null {
     if (!dtstamp) return null;
@@ -395,11 +419,6 @@ export function keepSubcomponents(comp: ICAL.Component, keep: (sub: ICAL.Compone
     const kept = comp.getAllSubcomponents().filter(keep);
     comp.removeAllSubcomponents();
     for (const sub of kept) comp.addSubcomponent(sub);
-}
-
-// One occurrence across two versions of a file, such as the stored resource and a PUT that replaces it.
-export function occurrenceMatchKey(uid: string, recurrenceKey: string | null): string {
-    return `${uid}|${recurrenceKey ?? ''}`;
 }
 
 function buildVEvent(event: EventToBuild, options: BuildOptions = {}): ICAL.Component {
@@ -681,6 +700,11 @@ function patchReminders(vevent: ICAL.Component, reminders: readonly Reminder[]):
     const recipient = calAddress(vevent.getFirstProperty('organizer')?.getFirstValue());
     for (const reminder of reminders) vevent.addSubcomponent(alarmComponent(reminder, title, recipient));
     return true;
+}
+
+// One occurrence across two versions of a file, such as the stored resource and a PUT that replaces it.
+function occurrenceMatchKey(uid: string, recurrenceKey: string | null): string {
+    return `${uid}|${recurrenceKey ?? ''}`;
 }
 
 // Each VEVENT by the occurrence key its RECURRENCE-ID names, the master under null.

@@ -1,5 +1,6 @@
 export { spliceBlocks } from './blocks';
 export {
+    adoptAlarms,
     applyEdits,
     buildResource,
     cutGuestCopy,
@@ -8,7 +9,6 @@ export {
     keepProperties,
     keepSubcomponents,
     newVCalendar,
-    occurrenceMatchKey,
     PRODID,
     patchEvent,
     removeExclusion,
