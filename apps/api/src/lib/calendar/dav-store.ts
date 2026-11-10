@@ -299,8 +299,8 @@ function isLinkedCopy(stored: ICAL.Component): boolean {
 
 function adoptAlarms(stored: ICAL.Component, incoming: ICAL.Component): void {
     const incomingVEvents = incoming.getAllSubcomponents('vevent');
-    const starts = seriesStarts(incomingVEvents);
-    const byKey = new Map(incomingVEvents.map((v) => [`${uidOf(v)}|${recurrenceKeyOf(v, starts) ?? ''}`, v]));
+    const incomingStarts = seriesStarts(incomingVEvents);
+    const byKey = new Map(incomingVEvents.map((v) => [`${uidOf(v)}|${recurrenceKeyOf(v, incomingStarts) ?? ''}`, v]));
     const storedVEvents = stored.getAllSubcomponents('vevent');
     const storedStarts = seriesStarts(storedVEvents);
     for (const vevent of storedVEvents) {

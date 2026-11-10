@@ -244,10 +244,8 @@ async function unlessRefused<T>(uid: string, apply: () => Promise<T>, dropped: T
     }
 }
 
-// A RECURRENCE-ID names an instant, and its occurrence is the day the series' wall clock shows then. A lone
-// occurrence's file may not state the series' zone, so against a master, held or arriving, the instant keys in that
-// master's zone. A copy of single dates knows none but the zone the RECURRENCE-ID is written in, which the parser
-// keyed on.
+// A lone occurrence's file may not state the series' zone, so against a timed master, held or arriving, its instant
+// keys in that master's zone. Otherwise the parser's key stands, from the zone the RECURRENCE-ID is written in.
 function occurrenceKey<Key extends string | null>(
     occurrence: { recurrenceDate: Key; recurrenceId: RecurrenceId | null },
     held: CalendarEvent | ParsedEvent,

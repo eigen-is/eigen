@@ -466,9 +466,10 @@ function patchVEvent(
     patch: EventPatch,
     ctx: WriteContext,
 ): boolean {
-    const storedTz = propTzid(vevent.getFirstProperty('dtstart'));
+    const dtstart = vevent.getFirstProperty('dtstart');
+    const storedTz = propTzid(dtstart);
     const tzid = patch.timezone !== undefined ? normalizeTimezone(patch.timezone) : storedTz;
-    const storedStart = vevent.getFirstProperty('dtstart')?.getFirstValue();
+    const storedStart = dtstart?.getFirstValue();
     const allDay = patch.allDay ?? (storedStart instanceof ICAL.Time && storedStart.isDate);
 
     let changed = isMaster && followMaster(resource, vevent, patch);

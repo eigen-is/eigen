@@ -16,8 +16,8 @@ export type InvitationLink = {
 // A REQUEST from one Home to another: one series' events, or one occurrence's, and the link its envelope vouches for.
 export type InvitationRequest = { events: readonly ParsedEvent[]; link: InvitationLink };
 
-// One occurrence a message names: its sender's key, and the RECURRENCE-ID a mailed message states, which the receiver
-// keys again in the series it holds.
+// One occurrence a message names: its sender's key, and the RECURRENCE-ID a mailed message states, null from the relay,
+// which the receiver keys again in the series it holds.
 export type OccurrenceRef = { recurrenceDate: string; recurrenceId: RecurrenceId | null };
 
 // The wire shape minus the positional calendarId, plus the fields only the server sets, which the web app never sends.
