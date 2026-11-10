@@ -12,11 +12,10 @@ import { functionStrChange, mayShiftOffSheet } from '../../engine/formula-shift'
 import { isFormula } from '../../engine/formula-utils';
 import type { DeleteRowColOp, InsertRowColOp, LineMove } from '../../engine/rowcol';
 import {
+    LINE_MAPS,
     lineMove,
-    shiftCellKeyedForDelete,
-    shiftCellKeyedForInsert,
-    shiftKeyedMapForDelete,
-    shiftKeyedMapForInsert,
+    shiftCellKeyed,
+    shiftKeyedMap,
     shiftMergeForDelete,
     shiftMergeForInsert,
     shiftRangeForDelete,
@@ -37,8 +36,6 @@ export type RowColMove = LineMove & {
         findSheet: (name: string) => Sheet | undefined,
     ) => string;
     merge: (merge: Record<string, MergeCell>) => Record<string, MergeCell>;
-    keyed: (map: Record<string, number>) => Record<string, number>;
-    cellKeyed: <T>(map: Record<string, T>) => Record<string, T>;
     // Where a range ends up, or null for one the op deletes.
     range: (range: SingleRange) => SingleRange | null;
 };
@@ -52,8 +49,6 @@ export function insertMove(op: InsertRowColOp): RowColMove {
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'add', axisName(type), direction, index, count, name, onTargetSheet, findSheet),
         merge: (merge) => shiftMergeForInsert({ merge }, type, index, count, direction),
-        keyed: (map) => shiftKeyedMapForInsert(map, index, count, direction),
-        cellKeyed: (map) => shiftCellKeyedForInsert(map, type, index, count, direction),
         range: (range) => shiftRangeForInsert(range, op),
     };
 }
@@ -68,8 +63,6 @@ export function deleteMove(op: DeleteRowColOp): RowColMove {
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'del', axisName(type), null, start, count, name, onTargetSheet, findSheet),
         merge: (merge) => shiftMergeForDelete({ merge }, type, start, count),
-        keyed: (map) => shiftKeyedMapForDelete(map, start, end),
-        cellKeyed: (map) => shiftCellKeyedForDelete(map, type, start, end),
         range: (range) => shiftRangeForDelete(range, op),
     };
 }
@@ -251,18 +244,18 @@ class Shifter {
             return { ...patch, path: [...head, entry[0]], value: entry[1] };
         }
         if (map === 'borderInfo') return this.cellKeyed(patch, [key, ...below]);
-        const axis = this.move.type === 'row' ? ROW_MAPS : COLUMN_MAPS;
-        if (axis.has(String(map))) {
-            const [moved] = Object.keys(this.move.keyed({ [key]: 0 }));
+        const { type } = this.move;
+        if (LINE_MAPS[type].some((name) => name === map)) {
+            const [moved] = Object.keys(shiftKeyedMap({ [key]: 0 }, this.move));
             return moved == null ? null : { ...patch, path: [...head, moved, ...below] };
         }
-        return (this.move.type === 'row' ? COLUMN_MAPS : ROW_MAPS).has(String(map)) ? patch : null;
+        return LINE_MAPS[type === 'row' ? 'column' : 'row'].some((name) => name === map) ? patch : null;
     }
 
     // An "r_c" key at the head of `rest`, such as a border.
     private cellKeyed(patch: Patch, [key, ...below]: (string | number)[]): Patch | null {
         if (typeof key !== 'string') return null;
-        const [moved] = Object.keys(this.move.cellKeyed({ [key]: true }));
+        const [moved] = Object.keys(shiftCellKeyed({ [key]: true }, this.move.type, this.move));
         if (moved == null) return null;
         const depth = patch.path.length - below.length - 1;
         return { ...patch, path: [...patch.path.slice(0, depth), moved, ...below] };
@@ -331,6 +324,3 @@ const POSITION_FREE_FIELDS = new Set<string | number>([
     'defaultColWidth',
     'images',
 ]);
-
-const ROW_MAPS = new Set(['rowlen', 'rowhidden', 'customHeight']);
-const COLUMN_MAPS = new Set(['columnlen', 'colhidden', 'customWidth']);
