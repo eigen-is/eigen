@@ -253,10 +253,25 @@ describe('iMIP Outbound Email Composition', () => {
         expect(mail.html).toContain('(UTC)');
     });
 
-    test('invitation mail renders a stored zone as its own wall clock, unlabelled', () => {
+    test('invitation mail renders a stored zone as its own wall clock and names it', () => {
         const mail = invite({ ...MOCK_EVENT, timezone: 'Europe/Amsterdam' }, organizer);
-        expect(mail.text).toContain('12:00 PM – 1:00 PM');
-        expect(mail.text).not.toContain('(UTC)');
+        expect(mail.text).toContain('12:00 PM – 1:00 PM (Europe/Amsterdam)');
+        expect(mail.html).toContain('12:00 PM – 1:00 PM (Europe/Amsterdam)');
+    });
+
+    test('invitation mail says how a series repeats, right after when', () => {
+        const mail = invite({ ...MOCK_EVENT, rrule: 'FREQ=WEEKLY;BYDAY=WE' }, organizer);
+        expect(mail.text).toContain('(UTC)\nRepeats: Every week on Wednesday\nWhere: Room 42');
+        expect(mail.html).toMatch(
+            /\(UTC\)<\/div>\s*<\/div>\s*<div[^>]*>\s*<div[^>]*>Repeats<\/div>\s*<div[^>]*>Every week on Wednesday</,
+        );
+        expect(invite(MOCK_EVENT, organizer).text).not.toContain('Repeats');
+    });
+
+    test('invitation mail names no zone for an all-day event', () => {
+        const day = { startTime: new Date('2026-04-15T00:00:00Z'), endTime: new Date('2026-04-16T00:00:00Z') };
+        const mail = invite({ ...MOCK_EVENT, ...day, allDay: true, timezone: 'Europe/Amsterdam' }, organizer);
+        expect(mail.text).toContain('When: Wednesday, 15 Apr 2026\n');
     });
 
     test('an updated invitation uses the updated subject and method', () => {
@@ -304,6 +319,15 @@ describe('iMIP Outbound Email Composition', () => {
         // (the VTIMEZONE block's own FREQ=YEARLY observances are unrelated).
         expect(ics).not.toContain('RRULE:FREQ=WEEKLY');
         expect(ics).toContain('DECLINED');
+    });
+
+    test("a one-date reply's mail names that date and no repeat rule", () => {
+        const mail = composeRsvpReply(RECURRING_EVENT, 'bob@external.com', 'Bob', 'declined', '2026-04-08');
+        expect(mail.html).toContain('8 Apr 2026');
+        expect(mail.html).not.toContain('1 Apr 2026');
+        expect(mail.html).not.toContain('Repeats');
+        expect(mail.text).toContain('8 Apr 2026');
+        expect(mail.text).not.toContain('Repeats');
     });
 
     test('composeRsvpReply for the whole series sends no RECURRENCE-ID (RFC 5546)', () => {
@@ -1176,6 +1200,45 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
 
         const answered = (await home.calendar.getEventsByUid(event.uid)).flatMap((row) => row.recurrenceDate ?? []);
         expect(answered.sort()).toEqual(['2026-05-10', '2026-05-11', '2026-05-12', '2026-05-13', '2026-05-14']);
+    });
+
+    // The series' answer is the sender's answer on every date, so it goes first and a date's own answer stands.
+    test("a REPLY's answer for one date stands whichever of its events the file lists first", async () => {
+        const home = await getHome(ctx.bob.user.id);
+        const event = await home.calendar.createEvent(bobCalendarId, {
+            title: 'Answer Order',
+            startTime: new Date('2026-05-04T10:00:00Z'),
+            endTime: new Date('2026-05-04T11:00:00Z'),
+            allDay: false,
+            rrule: 'FREQ=DAILY;COUNT=5',
+            data: { attendees: [{ email: 'order@external.com', status: 'pending', role: 'required' }] },
+        });
+        const answer = (partstat: string, recurrenceId: string[]) => [
+            'BEGIN:VEVENT',
+            `UID:${event.uid}`,
+            ...recurrenceId,
+            'DTSTART:20260505T100000Z',
+            `ATTENDEE;PARTSTAT=${partstat}:mailto:order@external.com`,
+            'END:VEVENT',
+        ];
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REPLY',
+            ...answer('DECLINED', ['RECURRENCE-ID:20260505T100000Z']),
+            ...answer('ACCEPTED', []),
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        await processInboundImip(home, calendarMail(ics, 'order@external.com'), {
+            verified: true,
+            reason: 'dkim pass',
+        });
+
+        const rows = await home.calendar.getEventsByUid(event.uid);
+        const statusOn = (date: string | null) =>
+            rows.find((row) => row.recurrenceDate === date)?.data?.attendees?.[0]?.status;
+        expect([statusOn(null), statusOn('2026-05-05')]).toEqual(['accepted', 'declined']);
     });
 
     test('a verified sender with a part past the mail size limit writes nothing', async () => {

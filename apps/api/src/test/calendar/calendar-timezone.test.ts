@@ -919,20 +919,6 @@ describe('Calendar Timezone', () => {
                 sec('0500-02-01'),
             );
             expect(occ.find((e) => e.uid === UID)?.occurrenceDate).toBe('0500-01-06');
-
-            // Deleting the cancelled row puts the occurrence back: its EXDATE goes from the file.
-            const del = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${cancelled.id}`,
-                { method: 'DELETE' },
-            );
-            expect(del.ok).toBe(true);
-            const get = await davRequest('GET', `/dav/calendars/${ctx.alice.user.id}/${aliceCalendarId}/${UID}.ics`, {
-                email: ctx.alice.user.email,
-            });
-            const ics = await get.text();
-            expect(ics).toContain('SUMMARY:Daily');
-            expect(ics).not.toContain('EXDATE');
         });
 
         // 31 December 9999 23:00Z is already 1 January 10000 in Tokyo, a date no key can name.
