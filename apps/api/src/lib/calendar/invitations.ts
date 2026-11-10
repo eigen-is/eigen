@@ -4,7 +4,12 @@
 // answer back, and the organizer's Home records it through receiveAttendeeStatus and receiveRsvpForOccurrence.
 // Callers, such as the home relay and inbound mail, use Calendar.
 
-import { heldAttendees, isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
+import {
+    heldAttendees,
+    isInvitationFromOthers,
+    truncateRRule,
+    utcToLocal,
+} from '@workspace/lib/calendar/calendar-utils';
 import { calendarInviteTag } from '@workspace/lib/notification/tags';
 import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
 import { isExternalOwnerId } from '@workspace/lib/types/owner';
@@ -24,7 +29,7 @@ import {
 } from '../ical';
 import type { EventPatch, Revision, VEventEdit, WriteContext } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
-import { computeOccurrenceTimes, parseRecurrenceKey, recurrenceKey, utcToLocal } from '../ical/wall-clock';
+import { computeOccurrenceTimes, parseRecurrenceKey, recurrenceKey } from '../ical/wall-clock';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
 import { actorDisplayName } from '../user';

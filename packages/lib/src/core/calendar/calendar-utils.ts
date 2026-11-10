@@ -122,6 +122,61 @@ export function normalizeTimezone(timezone: string | null | undefined): string |
     return answer;
 }
 
+type LocalComponents = { year: number; month: number; day: number; hour: number; minute: number; second: number };
+
+export function utcToLocal(date: Date, tz: string): LocalComponents {
+    const parts = dateFormatter({
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    }).formatToParts(date);
+    const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value);
+    return {
+        year: get('year'),
+        month: get('month'),
+        day: get('day'),
+        hour: get('hour') % 24,
+        minute: get('minute'),
+        second: get('second'),
+    };
+}
+
+export function localToUtc(
+    tz: string,
+    year: number,
+    month: number,
+    day: number,
+    hour: number,
+    minute: number,
+    second: number,
+): Date {
+    const targetMs = Date.UTC(year, month - 1, day, hour, minute, second);
+    const offsetAt = (ms: number): number => {
+        const local = utcToLocal(new Date(ms), tz);
+        return Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second) - ms;
+    };
+
+    let resolved = targetMs - offsetAt(targetMs);
+    if (resolved + offsetAt(resolved) !== targetMs) {
+        // The first guess landed the other side of a transition: solve again with the offset in effect there.
+        const corrected = targetMs - offsetAt(resolved);
+        // A wall time the spring-forward gap skips resolves with the pre-transition offset — the later instant.
+        if (corrected + offsetAt(corrected) !== targetMs) return new Date(Math.max(resolved, corrected));
+        resolved = corrected;
+    }
+
+    // RFC 5545 resolves an ambiguous fall-back time to the earlier occurrence. The step back is the day's own shift,
+    // because Lord Howe moves 30 minutes.
+    const shift = offsetAt(resolved - 86400_000) - offsetAt(resolved + 86400_000);
+    const earlier = resolved - shift;
+    return new Date(shift > 0 && earlier + offsetAt(earlier) === targetMs ? earlier : resolved);
+}
+
 // fallbackTimeZone is explicit because the server's own zone is a lie, so mail written there passes 'UTC'.
 export function formatEventWhen(
     start: Date,

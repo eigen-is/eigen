@@ -4,13 +4,13 @@
 // row id has nowhere to land. Only projectResource, which the calendar store runs on a resource it wrote, reads
 // Eigen's own lines.
 
-import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
+import { localToUtc, normalizeTimezone, utcToLocal } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, EventData, ImipMethod, Organizer, Reminder } from '@workspace/lib/types/calendar';
 import { IMIP_METHODS } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
 import { isExpandableRrule, isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
 import { vtimezoneOffset } from './vtimezone';
-import { localToUtc, recurrenceKey, utcToLocal, wallClockDate } from './wall-clock';
+import { recurrenceKey, wallClockDate } from './wall-clock';
 
 // Lowercase, because ical.js lowercases every name it reads.
 export const EIGEN = {

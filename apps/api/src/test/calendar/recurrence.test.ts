@@ -2,9 +2,9 @@
 // A wall time an hour either side of a DST transition is the case that decides whether an occurrence
 // lands on the clock its author named.
 import { describe, expect, test } from 'bun:test';
+import { localToUtc, utcToLocal } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import { expandRecurrence, lastKeptDate } from '../../lib/calendar/recurrence';
-import { localToUtc, utcToLocal } from '../../lib/ical/wall-clock';
 
 // Each zone's 2026 transition days, and the wall times its spring-forward day skips. A skipped wall
 // time resolves with the pre-transition offset, so the clock reads one gap later (RFC 5545 §3.3.5).
