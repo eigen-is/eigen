@@ -178,7 +178,8 @@ export async function rsvp(
     const isAttendee = event.data.attendees?.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
     if (!isAttendee) throw new ApiError(403, 'Not an attendee');
 
-    const scope = input.scope ?? 'all';
+    // A copy without a rule has one occurrence, so an answer for this one is an answer for all of it.
+    const scope = input.scope === 'this' && !event.rrule ? 'all' : (input.scope ?? 'all');
     const organizerUserId = event.data.organizer.userId;
     const organizerEventId = event.data.organizerEventId;
     const isExternalOrganizer = isExternalOwnerId(organizerUserId);
@@ -653,8 +654,9 @@ async function rsvpForOccurrence(
     restoreCancelled: boolean,
 ): Promise<void> {
     const calendarId = await calendar.writeLock.run(async () => {
+        // A series deleted while the answer travelled has nothing left to record it on.
         const parent = events.eventById(calendar, eventId);
-        if (!parent) throw new ApiError(404, 'Event not found');
+        if (!parent) return null;
 
         const key = recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, parent.timezone);
         const existing = events.exceptionOf(calendar, eventId, key);

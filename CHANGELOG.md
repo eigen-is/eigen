@@ -93,6 +93,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Mailed replies in Calendar** — a guest's answer that arrives by mail shows in your open Calendar tabs without a reload
 - **Guest replies on shared calendars** — an outside guest's reply to an event someone saved on another person's calendar reaches that calendar. The invitation names the calendar's owner as organizer
 - **Cancelling team events** — deleting a team event with outside guests sends them a cancellation from you
+- **Declining one date in Calendar** — declining or answering one date of an invitation that doesn't repeat no longer fails or goes unrecorded
 - **Your answer in Calendar** — your answer to an invitation no longer resets when the organizer makes a small edit, such as a new title
 - **Repeated invitations in Calendar** — an invitation to a repeating event that arrives twice no longer notifies you again for each date its organizer changed
 - **A refused Save** — in Calendar, Contacts and Personal info in Space, a Save refused because the item changed elsewhere keeps what you typed and takes the other fields from the server

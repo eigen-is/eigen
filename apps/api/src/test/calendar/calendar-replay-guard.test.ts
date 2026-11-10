@@ -411,6 +411,37 @@ describe("the guest's own answer", () => {
         expect(mine(await masterOf(calendar))).toBe('pending');
     });
 
+    // A copy without a rule has one occurrence, so an answer for "this one" is an answer for all of it.
+    test('to one date of a copy without a rule answers for the copy', async () => {
+        const { calendar, me, mine } = await answered();
+        const single = request('Single', 2, '20260401T100000Z', [], me.email).replace(
+            'RRULE:FREQ=DAILY;COUNT=5\r\n',
+            '',
+        );
+        // One occurrence of a series this Home doesn't hold files as a copy of its own, with no rule either.
+        const lone = occurrence('Lone', 2, '20260401T100000Z')
+            .replace(`UID:${UID}`, 'UID:lone@external.com')
+            .replace(`mailto:${GUEST}`, `mailto:${me.email}`);
+        await calendar.receiveImipRequest(parsedOf(single), ORG);
+        await calendar.receiveImipRequest(parsedOf(lone), ORG);
+        const [copy] = await calendar.getEventsByUid('lone@external.com');
+
+        await calendar.rsvp((await masterOf(calendar)).id, me, {
+            status: 'accepted',
+            scope: 'this',
+            recurrenceDate: '2026-05-01',
+        });
+        await calendar.rsvp(copy.id, me, {
+            status: 'declined',
+            scope: 'this',
+            recurrenceDate: '2026-05-02',
+            remove: true,
+        });
+
+        expect(mine(await masterOf(calendar))).toBe('accepted');
+        expect(await calendar.getEventsByUid('lone@external.com')).toEqual([]);
+    });
+
     test('stays on one occurrence through an update to it at the same SEQUENCE', async () => {
         const { calendar, me, mine } = await answered();
         const moved = (summary: string, sequence: number, dtstamp: string) =>
@@ -477,6 +508,15 @@ describe('an answer that names a date', () => {
         await answer('2027-02-10');
 
         expect(await overrides()).toEqual([]);
+    });
+
+    test('to a series the organizer deleted meanwhile is dropped', async () => {
+        const { calendar, calendarId, event, answer } = await stored(MONDAYS);
+        await calendar.deleteEvent(calendarId, event.id);
+
+        await answer('2027-02-08');
+
+        expect(await calendar.getEventsByUid(event.uid)).toEqual([]);
     });
 
     test('records the answer on a date the rule yields, at the slot the series has', async () => {

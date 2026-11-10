@@ -212,6 +212,8 @@ A series-wide edit of the title, description or location reaches each override t
 | `this-and-following` + `remove` | the copy's rule is truncated and a series-wide decline goes out |
 | `remove` alone | the copy is deleted, as a decline |
 
+A copy without a rule has one occurrence, so `this` on it is `all`.
+
 An answer the organizer's Home records is announced as an event update, whether it came over the relay or by mail, so the organizer's open tabs show it.
 
 `constrainRRule` (`recurrence.ts`) keeps an organizer's later update from extending the rule past a guest's truncation, so "delete this and following" survives the next edit. A copy that is one occurrence of a series the guest doesn't hold answers for that occurrence: its RSVP names its own `RECURRENCE-ID`, so it lands on the organizer's override that holds that occurrence's guests.
@@ -236,7 +238,7 @@ A relayed message naming this Home as its own organizer is dropped, because adop
 
 A guest's own answer outlives an update at the same SEQUENCE, because an organizer's list can still say needs-action for a reply it hasn't read yet. Only a higher SEQUENCE, which marks a rescheduling, puts the organizer's list in its place. `keepOwnAnswer` is that one rule for the series and for each occurrence.
 
-Receivers never raise. A message over `EVENT_MAX_BYTES` or the storage budget is logged and dropped, because the mail it rode in on has landed and nobody is waiting for a 413 or a 507.
+Receivers never raise. A message over `EVENT_MAX_BYTES` or the storage budget is logged and dropped, because the mail it rode in on has landed and nobody is waiting for a 413 or a 507. So is an answer to a series the organizer deleted while it travelled.
 
 ## iMIP mail carries the projected event, never the stored bytes
 
