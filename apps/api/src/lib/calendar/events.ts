@@ -94,8 +94,8 @@ export async function deleteEvent(
     if (!existing) return;
 
     const invitation = isInvitationFromOthers(existing, calendar.home.user.email) ? existing.data : null;
-    // An override's guests come from its series, as propagateWrite's do. Deleting a cancelled row answers and cancels
-    // nothing: an occurrence comes back, and a cancelled master's PUT already fanned out STATUS:CANCELLED.
+    // An override without its own list has its series' guests. Deleting a cancelled row answers and cancels nothing: an
+    // occurrence comes back, and a cancelled master's PUT already fanned out STATUS:CANCELLED.
     const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
     const held = existing.status === 'cancelled' ? [] : heldAttendees(existing, series);
     const declining = user && held.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
@@ -285,7 +285,7 @@ export function exceptionOf(
     return row ? toEvent(row) : null;
 }
 
-// An override is one occurrence of its series: the series states the guest list, and every message names its id.
+// An override is one occurrence of its series, so every message about it names the series' id.
 async function propagateWrite(
     calendar: Calendar,
     event: CalendarEvent,
