@@ -288,7 +288,7 @@ describe('versions HTTP routes', () => {
         collab.doc.getMap('state').set('marker', 'V2');
         expect(collab.doc.getMap('state').get('marker')).toBe('V2');
 
-        await drive.restoreContainer(aliceMountId, sheetsPath.id, savedV1.name);
+        await drive.restoreContainer(aliceMountId, sheetsPath.id, savedV1.name, home.user);
 
         // Same live Y.Doc instance, now with V1's content — no eviction.
         expect(collab.doc.getMap('state').get('marker')).toBe('V1');
@@ -363,8 +363,8 @@ describe('versions HTTP routes', () => {
 
         collab.doc.getMap('state').set('marker', 'V2');
         const results = await Promise.allSettled([
-            drive.restoreContainer(aliceMountId, sheetsPath.id, saved.name),
-            drive.restoreContainer(aliceMountId, sheetsPath.id, saved.name),
+            drive.restoreContainer(aliceMountId, sheetsPath.id, saved.name, home.user),
+            drive.restoreContainer(aliceMountId, sheetsPath.id, saved.name, home.user),
         ]);
         expect(results.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled']);
         expect(collab.doc.getMap('state').get('marker')).toBe('V1');
@@ -420,7 +420,7 @@ describe('versions HTTP routes', () => {
         fragment().insert(fragment().length, [paragraph('V2')]);
         expect(fragment().toString()).toContain('V2');
 
-        await drive.restoreContainer(aliceMountId, docPath.id, savedV1.name);
+        await drive.restoreContainer(aliceMountId, docPath.id, savedV1.name, home.user);
 
         // Same live Y.Doc instance, back to V1's XML, V2 gone — no reload.
         const restored = fragment().toString();

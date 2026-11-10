@@ -82,7 +82,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
             const fileName = body.fileName.trim().normalize('NFC');
             if (!fileName) throw new ApiError(422, 'A chat name is required');
 
-            const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId));
+            const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId, user));
 
             // A chat the wizard named gets a free name beside its siblings, and a typed name is a 409 on a clash.
             // The free name is picked with the extension on, as the siblings are stored, and create adds it again.
@@ -112,10 +112,10 @@ export const chatRouter = new Elysia({ name: 'chat' })
                         { suppressShareEmail: 'registered' },
                     );
                 } catch (err) {
-                    await drive.deletePath(params.mountId, chat.id).catch((e) => {
+                    await drive.deletePath(params.mountId, chat.id, user).catch((e) => {
                         console.warn(`Failed to trash orphaned chat ${chat.id} after share failure:`, e);
                     });
-                    await drive.permanentlyDelete(params.mountId, chat.id).catch((e) => {
+                    await drive.permanentlyDelete(params.mountId, chat.id, user).catch((e) => {
                         console.warn(`Failed to purge orphaned chat ${chat.id} after share failure:`, e);
                     });
                     throw err;

@@ -982,7 +982,7 @@ export class Mount {
         destParentId: string,
         name: string,
         discard: DiscardCopy,
-        actor?: { id: string; email: string },
+        actor: { id: string; email: string },
     ): Promise<DrivePath> {
         return copy.copyPath(this, tree, destParentId, name, discard, actor);
     }

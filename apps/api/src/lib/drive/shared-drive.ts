@@ -193,7 +193,7 @@ export class SharedDrive {
         mountId: string,
         parentId: string,
         folderName: string,
-        _user?: User,
+        _user: User,
         containerType?: DriveContainerType,
     ): Promise<DrivePath> {
         await this.requireWrite(mountId, parentId);
@@ -230,7 +230,7 @@ export class SharedDrive {
         mountId: string,
         pathId: string,
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
-        options: ContentWriteOptions = {},
+        options: ContentWriteOptions,
     ): Promise<ContentWriteResult> {
         await this.requireWrite(mountId, pathId);
         return this.drive.writeFileContent(mountId, pathId, data, { ...options, user: this.user });
@@ -265,7 +265,7 @@ export class SharedDrive {
         srcPathId: string,
         destParentId: string,
         name: string,
-        _user?: User,
+        _user: User,
         to?: CopyTarget,
     ): Promise<DrivePath> {
         const memberships = await getMemberships(this.user.id);

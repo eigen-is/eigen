@@ -70,7 +70,7 @@ describe('an upload beside a name the disk folds alike', () => {
         const root = await home.drive.getRootFolder(mount.id);
         if (!root) throw new Error('no root');
         const upload = (name: string) =>
-            home.drive.createFileFromData(mount.id, root.id, name, 'text/plain', Buffer.from(name));
+            home.drive.createFileFromData(mount.id, root.id, name, 'text/plain', Buffer.from(name), home.user);
         await upload('Straße.txt');
         await upload('STRASSE (2).txt');
 

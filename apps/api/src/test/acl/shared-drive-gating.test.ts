@@ -203,17 +203,17 @@ describe('SharedDrive gating enumeration', () => {
         copyPath: {
             gate: 'denies',
             reason: 'read-gated on source, write-gated on target',
-            call: (sd) => sd.copyPath(mountId, fileId, folderId, 'copy.txt'),
+            call: (sd) => sd.copyPath(mountId, fileId, folderId, 'copy.txt', charlie),
         },
         writeFileContent: {
             gate: 'denies',
             reason: 'write-gated',
-            call: (sd) => sd.writeFileContent(mountId, fileId, Buffer.from('x')),
+            call: (sd) => sd.writeFileContent(mountId, fileId, Buffer.from('x'), { user: charlie }),
         },
         createFolder: {
             gate: 'denies',
             reason: 'write-gated on the parent',
-            call: (sd) => sd.createFolder(mountId, folderId, 'intruder'),
+            call: (sd) => sd.createFolder(mountId, folderId, 'intruder', charlie),
         },
         uploadFiles: {
             gate: 'denies',

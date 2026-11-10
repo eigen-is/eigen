@@ -3,7 +3,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { Mount } from '../../lib/mount/mount';
 import { createGetLocalDatabase } from '../fault-storage-helpers';
-import { createTestMountConfig } from '../mount-test-helpers';
+import { createTestMountConfig, TEST_ACTOR } from '../mount-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-folder-depth-${Date.now()}`);
 const TOO_DEEP = { status: 400, message: 'Folders can be nested at most 256 levels deep' };
@@ -69,9 +69,9 @@ describe('Folders nest at most 256 levels deep', () => {
         const a = await threeDeep('CopyMe');
         const discard = (pathId: string): Promise<void> => mount.deletePath(pathId);
         const before = await mount.listFolder(levels[254]!);
-        await expect(mount.copyPath(await mount.listCopy(a), levels[254]!, 'CopyMe', discard)).rejects.toMatchObject(
-            TOO_DEEP,
-        );
+        await expect(
+            mount.copyPath(await mount.listCopy(a), levels[254]!, 'CopyMe', discard, TEST_ACTOR),
+        ).rejects.toMatchObject(TOO_DEEP);
         expect(await mount.listFolder(levels[254]!)).toEqual(before);
     });
 });

@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { getHome } from '../../lib/home';
+import type { User } from '../../lib/user';
 import { STALL_BOUND_MS, settlesWithin } from '../fault-storage-helpers';
 import { assertJson, authedRequest, chatGet, chatPost, driveGet, drivePost, getTestContext } from '../setup';
 
@@ -17,6 +18,7 @@ const macrotask = () => new Promise<void>((r) => setTimeout(r, 0));
 describe('chat restore racing message posts', () => {
     let ctx: TestCtx;
     let drive: DriveT;
+    let alice: User;
     let mountId: string;
     let rootId: string;
 
@@ -26,7 +28,9 @@ describe('chat restore racing message posts', () => {
         mountId = mounts![0].id;
         const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
         rootId = root.id;
-        drive = (await getHome(ctx.alice.user.id)).drive;
+        const home = await getHome(ctx.alice.user.id);
+        drive = home.drive;
+        alice = home.user;
     });
 
     test('one data.db, coherent message set', async () => {
@@ -51,7 +55,7 @@ describe('chat restore racing message posts', () => {
                 }
             })();
             const [restoreRes] = await Promise.allSettled([
-                drive.restoreContainer(mountId, chat.id, saved.name),
+                drive.restoreContainer(mountId, chat.id, saved.name, alice),
                 posts,
             ]);
 
@@ -79,6 +83,7 @@ describe('chat restore racing message posts', () => {
 describe('chat request in flight across a version restore', () => {
     let ctx: TestCtx;
     let drive: DriveT;
+    let alice: User;
     let mountId: string;
     let rootId: string;
 
@@ -87,7 +92,9 @@ describe('chat request in flight across a version restore', () => {
         mountId = 'default';
         const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
         rootId = root.id;
-        drive = (await getHome(ctx.alice.user.id)).drive;
+        const home = await getHome(ctx.alice.user.id);
+        drive = home.drive;
+        alice = home.user;
     });
 
     // A chat with one saved version, holding 'v1', and a newer message 'v2' the restore rolls back.
@@ -121,7 +128,7 @@ describe('chat request in flight across a version restore', () => {
                 },
             );
             await entered.promise;
-            await drive.restoreContainer(mountId, chat.id, version);
+            await drive.restoreContainer(mountId, chat.id, version, alice);
             gate.resolve();
             expect([200, 503]).toContain((await posting).status);
         } finally {
@@ -148,7 +155,7 @@ describe('chat request in flight across a version restore', () => {
                 `/chat/${ctx.alice.user.id}/${mountId}/${chat.id}/messages`,
             );
             await entered.promise;
-            const restoring = drive.restoreContainer(mountId, chat.id, version);
+            const restoring = drive.restoreContainer(mountId, chat.id, version, alice);
             expect(await settlesWithin([restoring], STALL_BOUND_MS)).toBe(false);
             gate.resolve();
             const messages = await assertJson<ChatMessage[]>(await reading);

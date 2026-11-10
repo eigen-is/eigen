@@ -322,12 +322,12 @@ describe('Container write guard', () => {
         // The routes refuse such a write before they reach the drive, and the drive refuses it again for any
         // caller that comes later.
         test('the drive refuses new bytes for a database or a version', async () => {
-            const drive = (await getHome(aliceId())).drive;
+            const { drive, user } = await getHome(aliceId());
             const files = parts.filter((part) => part.type === 'file');
             for (const part of files) {
-                await expect(drive.writeFileContent(mountId, part.id, Buffer.from('overwrite'))).rejects.toThrow(
-                    'Cannot change a part of a document on its own',
-                );
+                await expect(
+                    drive.writeFileContent(mountId, part.id, Buffer.from('overwrite'), { user }),
+                ).rejects.toThrow('Cannot change a part of a document on its own');
             }
             for (const part of files) {
                 const after = await driveGet<DrivePath>(

@@ -149,7 +149,7 @@ describe('Drive', () => {
                 aliceMountId,
                 aliceRootId,
                 'Typed.eigendoc',
-                undefined,
+                home.user,
                 'doc',
             );
             expect(created.type).toBe('doc');

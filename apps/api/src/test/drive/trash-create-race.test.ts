@@ -19,7 +19,7 @@ describe('a create into a folder that goes to the trash', () => {
             const [mount] = home.drive.getMounts();
             const root = await home.drive.getRootFolder(mount.id);
             if (!root) throw new Error('no root');
-            const folder = await home.drive.createFolder(mount.id, root.id, 'race-folder');
+            const folder = await home.drive.createFolder(mount.id, root.id, 'race-folder', home.user);
 
             let release!: () => void;
             const gate = new Promise<void>((resolve) => {
@@ -34,10 +34,10 @@ describe('a create into a folder that goes to the trash', () => {
                 },
             });
             const upload = home.drive
-                .createFileFromData(mount.id, folder.id, 'late.txt', 'text/plain', body)
+                .createFileFromData(mount.id, folder.id, 'late.txt', 'text/plain', body, home.user)
                 .catch((e: unknown) => e);
             await Bun.sleep(20);
-            await home.drive.deletePath(mount.id, folder.id);
+            await home.drive.deletePath(mount.id, folder.id, home.user);
             release();
             const result = await upload;
 
@@ -57,23 +57,25 @@ describe('a create into a folder that goes to the trash', () => {
         const [mount] = home.drive.getMounts();
         const root = await home.drive.getRootFolder(mount.id);
         if (!root) throw new Error('no root');
-        const folder = await home.drive.createFolder(mount.id, root.id, 'trashing');
+        const folder = await home.drive.createFolder(mount.id, root.id, 'trashing', home.user);
         const doc: DrivePath = await home.drive.create(mount.id, root.id, 'outside', DRIVE_TYPE_DOC, home.user);
 
         const trashPath = mount.trashPath.bind(mount);
         const attempts: unknown[] = [];
         const spy = spyOn(mount, 'trashPath').mockImplementationOnce(async (pathId) => {
-            attempts.push(await home.drive.movePath(mount.id, doc.id, folder.id).catch((e: unknown) => e));
+            attempts.push(await home.drive.movePath(mount.id, doc.id, folder.id, home.user).catch((e: unknown) => e));
             attempts.push(
                 await home.drive
                     .create(mount.id, folder.id, 'inside', DRIVE_TYPE_DOC, home.user)
                     .catch((e: unknown) => e),
             );
-            attempts.push(await home.drive.copyPath(mount.id, doc.id, folder.id, 'copy').catch((e: unknown) => e));
+            attempts.push(
+                await home.drive.copyPath(mount.id, doc.id, folder.id, 'copy', home.user).catch((e: unknown) => e),
+            );
             return trashPath(pathId);
         });
         try {
-            await home.drive.deletePath(mount.id, folder.id);
+            await home.drive.deletePath(mount.id, folder.id, home.user);
         } finally {
             spy.mockRestore();
         }

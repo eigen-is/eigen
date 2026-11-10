@@ -28,6 +28,7 @@ import {
     settlesWithin,
     waitFor,
 } from '../fault-storage-helpers';
+import { TEST_ACTOR } from '../mount-test-helpers';
 import { getTestContext } from '../setup';
 
 // A mount whose real S3Storage talks to a FakeS3Server that stalls, fails or cuts its reads.
@@ -253,7 +254,13 @@ describe('S3 reads that fail', () => {
         const before = readdirSync(mount.tmpDir);
         fake.faults.set(await mount.getStorageKey(fileId), 'cut');
         await expect(
-            mount.copyPath(await mount.listCopy(fileId), rootId, 'c copy.bin', (pathId) => mount.deletePath(pathId)),
+            mount.copyPath(
+                await mount.listCopy(fileId),
+                rootId,
+                'c copy.bin',
+                (pathId) => mount.deletePath(pathId),
+                TEST_ACTOR,
+            ),
         ).rejects.toThrow();
         expect(readdirSync(mount.tmpDir)).toEqual(before);
     });

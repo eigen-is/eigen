@@ -17,6 +17,7 @@ import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
 import type { Home } from '../home';
 import { broadcastToOwnerAndMembers, sendToUserHomes } from '../home/home-relay';
+import type { Mount } from '../mount';
 import { CONTAINER_DATA_DB, CONTAINER_MEDIA_FOLDER } from '../mount/container-dbs';
 import type { User } from '../user';
 import { getUserByEmail } from '../user';
@@ -38,11 +39,11 @@ export class ChatRoom {
         public readonly containerPath: DrivePath | null,
     ) {}
 
-    public static async create(drive: Drive, mountId: string, roomId: string): Promise<void> {
+    public static async create(drive: Drive, mount: Mount, roomId: string): Promise<void> {
         // The databases are set up in one step that cleans up after itself. A storage failure then leaves
         // no data.db row without a database, which would make every later init answer 503.
-        await drive.provisionManagedDbs(mountId, roomId, [{ name: CONTAINER_DATA_DB, config: CHAT_ROOM_DB_CONFIG }]);
-        await drive.createFolder(mountId, roomId, CONTAINER_MEDIA_FOLDER);
+        await drive.provisionManagedDbs(mount.id, roomId, [{ name: CONTAINER_DATA_DB, config: CHAT_ROOM_DB_CONFIG }]);
+        await mount.createFolder(roomId, CONTAINER_MEDIA_FOLDER);
     }
 
     // Finds the room's data.db. It opens nothing: each method below opens data.db for its own queries.
@@ -377,17 +378,14 @@ export class ChatRoom {
 
         if (existing.attachments) {
             // An attachment is a file name in this chat's own media folder. It is looked up only there, so a
-            // crafted name can't trash another path of the owner's.
-            const mediaFolder = await this.drive.getChildByName(
-                this.path.mountId,
-                this.path.id,
-                CONTAINER_MEDIA_FOLDER,
-            );
+            // crafted name can't delete another path of the owner's. It goes for good, like the message.
+            const { mount } = await this.drive.resolveFile(this.path.mountId, this.path.id);
+            const mediaFolder = await mount.getChildByName(this.path.id, CONTAINER_MEDIA_FOLDER);
             if (mediaFolder) {
                 for (const attachment of existing.attachments) {
                     if (typeof attachment !== 'string') continue;
-                    const media = await this.drive.getChildByName(this.path.mountId, mediaFolder.id, attachment);
-                    if (media) await this.drive.deletePath(this.path.mountId, media.id);
+                    const media = await mount.getChildByName(mediaFolder.id, attachment);
+                    if (media) await mount.deletePath(media.id);
                 }
             }
         }

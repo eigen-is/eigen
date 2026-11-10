@@ -290,8 +290,9 @@ describe('a membership that goes closes the sockets that lost read at the next t
         const teamId = await newTeamWith(removed);
         const mountId = await firstMountId(owner.sessionToken, owner.id);
         const root = await driveGet<DrivePath>(owner.sessionToken, owner.id, mountId, 'root');
-        const drive = (await getHome(owner.id)).drive;
-        const folder = await drive.createFolder(mountId, root.id, `Revoke folder ${crypto.randomUUID()}`);
+        const home = await getHome(owner.id);
+        const drive = home.drive;
+        const folder = await drive.createFolder(mountId, root.id, `Revoke folder ${crypto.randomUUID()}`, home.user);
         await drive.updateACL(mountId, folder.id, [{ id: teamOwnerId(teamId), read: true, write: false }]);
         const doc = await drivePost<DrivePath>(
             owner.sessionToken,
@@ -496,9 +497,9 @@ describe('a share that goes', () => {
         const root = await driveGet<DrivePath>(owner.sessionToken, owner.id, mountId, 'root');
         const home = await getHome(owner.id);
         const drive = home.drive;
-        const folder = await drive.createFolder(mountId, root.id, `Shared ${crypto.randomUUID()}`);
+        const folder = await drive.createFolder(mountId, root.id, `Shared ${crypto.randomUUID()}`, home.user);
         await drive.updateACL(mountId, folder.id, [{ id: sharee.email, read: true, write: true }]);
-        const inner = await drive.createFolder(mountId, folder.id, 'Inner');
+        const inner = await drive.createFolder(mountId, folder.id, 'Inner', home.user);
         const doc = await drivePost<DrivePath>(
             owner.sessionToken,
             owner.id,

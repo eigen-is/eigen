@@ -26,7 +26,14 @@ describe('sharing pushed by a trash, a restore or a rename', () => {
     });
 
     async function sharedWithBob(name: string): Promise<DrivePath> {
-        const file = await alice.drive.createFileFromData(MOUNT, rootId, name, 'text/plain', Buffer.from('x'));
+        const file = await alice.drive.createFileFromData(
+            MOUNT,
+            rootId,
+            name,
+            'text/plain',
+            Buffer.from('x'),
+            alice.user,
+        );
         await shareWithBob(file.id);
         return file;
     }
@@ -49,7 +56,7 @@ describe('sharing pushed by a trash, a restore or a rename', () => {
     }
 
     test('a trash that fails keeps the item in Bob’s Shared with me', async () => {
-        const folder = await alice.drive.createFolder(MOUNT, rootId, `failing-trash-${Date.now()}`);
+        const folder = await alice.drive.createFolder(MOUNT, rootId, `failing-trash-${Date.now()}`, alice.user);
         await shareWithBob(folder.id);
         expect(await inBobsList(folder.id)).toBe(true);
 
@@ -118,13 +125,14 @@ describe('sharing pushed by a trash, a restore or a rename', () => {
     });
 
     test('a share that lands while a folder goes to the trash never reaches Bob', async () => {
-        const folder = await alice.drive.createFolder(MOUNT, rootId, `share-during-trash-${Date.now()}`);
+        const folder = await alice.drive.createFolder(MOUNT, rootId, `share-during-trash-${Date.now()}`, alice.user);
         const inner = await alice.drive.createFileFromData(
             MOUNT,
             folder.id,
             'inner.txt',
             'text/plain',
             Buffer.from('x'),
+            alice.user,
         );
         const { mount } = await alice.drive.resolveFile(MOUNT, folder.id);
         // The share passes its checks before the trash, and its row write waits until the trash is in.

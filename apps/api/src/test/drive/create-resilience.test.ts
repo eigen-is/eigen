@@ -161,7 +161,7 @@ describe('Version restore under degraded storage', () => {
 
         const document = await drive.getCollabDocument(MOUNT_ID, doc.id);
         document.doc.getMap('state').set('marker', 'later');
-        await drive.restoreContainer(MOUNT_ID, doc.id, saved.name);
+        await drive.restoreContainer(MOUNT_ID, doc.id, saved.name, user);
         expect(document.doc.getMap('state').get('marker')).toBe('saved');
         await drive.closeCollabDocument(MOUNT_ID, doc.id);
         await settleContainer(mount, doc.id);
@@ -187,7 +187,7 @@ describe('Version restore under degraded storage', () => {
             return replaceTempFrom(tempId, source);
         });
         try {
-            await drive.restoreContainer(MOUNT_ID, doc.id, saved.name);
+            await drive.restoreContainer(MOUNT_ID, doc.id, saved.name, user);
         } finally {
             spy.mockRestore();
         }

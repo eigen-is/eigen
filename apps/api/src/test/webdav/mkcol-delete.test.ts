@@ -62,13 +62,13 @@ describe('WebDAV MKCOL/DELETE', () => {
     });
 
     test('MKCOL at depth 256 creates the folder, and at 257 → 400', async () => {
-        const drive = (await getHome(ctx.alice.user.id)).drive;
+        const home = await getHome(ctx.alice.user.id);
         let parentId = (await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root')).id;
         const names: string[] = [];
         for (let depth = 1; depth <= 255; depth++) {
             const name = depth === 1 ? 'Deep' : `d${depth}`;
             names.push(name);
-            parentId = (await drive.createFolder(mountId, parentId, name)).id;
+            parentId = (await home.drive.createFolder(mountId, parentId, name, home.user)).id;
         }
         const base = `/webdav/${ctx.alice.user.id}/${mountId}/${names.join('/')}`;
         expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', `${base}/d256/`)).status).toBe(201);

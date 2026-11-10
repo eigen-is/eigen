@@ -108,7 +108,7 @@ describe('Chat wizard — chats folder', () => {
         await driveDelete(ctx.bob.user.sessionToken, ctx.bob.user.id, mountId, `path/${seeded!.id}`);
 
         const home = await getHome(ctx.bob.user.id);
-        const chatsId = await home.drive.ensureChatsFolder(mountId);
+        const chatsId = await home.drive.ensureChatsFolder(mountId, home.user);
         expect(chatsId).not.toBe(seeded!.id);
 
         const after = await driveGetList(ctx.bob.user.sessionToken, ctx.bob.user.id, mountId, `folder/${root.id}`);
@@ -136,7 +136,7 @@ describe('Chat wizard — chats folder', () => {
         await driveUpload(ctx.charlie.user.sessionToken, ctx.charlie.user.id, mountId, root.id, file);
 
         const home = await getHome(ctx.charlie.user.id);
-        const result = await home.drive.ensureChatsFolder(mountId);
+        const result = await home.drive.ensureChatsFolder(mountId, home.user);
         expect(result).toBe(root.id);
 
         // Nothing renamed or created: still exactly one untrashed `chats`, still the non-folder file.

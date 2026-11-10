@@ -68,7 +68,7 @@ A post, edit or delete sends a `chat:` event to the home that owns the room and 
 
 ## A deleted message keeps its row and loses its content
 
-Delete sets `deletedAt`, empties the content and trashes the message's attachments from the room's `media/` folder. The list hides a deleted row entirely, with no tombstone.
+Delete sets `deletedAt`, empties the content and deletes the message's attachments for good from the room's `media/` folder, through the mount, like the message itself. The list hides a deleted row entirely, with no tombstone.
 
 ## What waits to be sent belongs to one room
 
