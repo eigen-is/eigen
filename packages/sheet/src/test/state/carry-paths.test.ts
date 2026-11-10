@@ -8,6 +8,7 @@ import type { ConditionalFormatRule, DataValidationRule } from '@workspace/lib/s
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { Context } from '../../state/context';
 import { copy } from '../../state/modules/clipboard';
+import { mergeCells } from '../../state/modules/merge';
 import { pasteHandlerOfPaintModel } from '../../state/modules/selection';
 import { sortRange } from '../../state/modules/sort';
 import { handleFormatPainter } from '../../state/modules/toolbar';
@@ -930,5 +931,26 @@ describe('the format painter lands rules as a copy does', () => {
             // The carried rows are 0 and 2, so only the second landed row is inside the rule.
             expect(sheet.conditionalFormatRules).toEqual([greater([range(1, 2, 0, 0), range(6, 6, 2, 2)])]);
         });
+    });
+});
+
+// A paste reads the live cells, so a merge made after the copy can start outside the copied block.
+test('a copied cell merged since into a merge above the block lands as a plain cell', () => {
+    const s = session((d) => {
+        d[0][0] = text('top');
+        d[1][0] = text('copied');
+    });
+    s.edit(s.a, (ctx) => {
+        ctx.selections = select(1, 1, 0, 0);
+        copy(ctx);
+    });
+    s.edit(s.a, (ctx) => mergeCells(ctx, ONE, [range(0, 1, 0, 0)], 'merge-all'));
+    s.edit(s.a, (ctx) => {
+        ctx.selections = select(5, 5, 3, 3);
+        pasteCopy(ctx);
+    });
+    expectEveryoneAgrees(s, (sheet) => {
+        expect(sheet.data?.[5][3]?.mc).toBeUndefined();
+        expect(sheet.config?.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 1 } });
     });
 });
