@@ -281,8 +281,8 @@ describe('inbound message ordering', () => {
         expect((await masterOf(calendar)).title).toBe('Title B');
     });
 
-    // An occurrence the attendee dropped keeps a stamp with the sequence a fresh exclusion carries and no
-    // DTSTAMP at all, so the organizer's own message for it has nothing to lose an ordering to.
+    // An occurrence the attendee dropped keeps the revision the copy held for it, the series', so the organizer's next
+    // message for it outranks the removal and a stale one does not.
     test("an organizer's occurrence message reaches an occurrence the attendee removed locally", async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
@@ -296,7 +296,9 @@ describe('inbound message ordering', () => {
         });
         expect((await exceptionOf(calendar))?.status).toBe('cancelled');
 
-        await receiveMailed(calendar, parsedOf(occurrence('Back on', 0, '20260401T120000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(occurrence('Too old', 2, '20260401T090000Z')), ORG);
+        expect((await exceptionOf(calendar))?.status).toBe('cancelled');
+        await receiveMailed(calendar, parsedOf(occurrence('Back on', 2, '20260401T120000Z')), ORG);
 
         expect((await exceptionOf(calendar))?.status).toBe('confirmed');
         expect((await exceptionOf(calendar))?.title).toBe('Back on');

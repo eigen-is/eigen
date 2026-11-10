@@ -445,6 +445,143 @@ describe('Occurrence edits of an invited series', () => {
         });
     }
 
+    const highestIn = (ics: string) => Math.max(...[...ics.matchAll(/\r\nSEQUENCE:(\d+)/g)].map((m) => Number(m[1])));
+    // Every mail's highest SEQUENCE, in the order `address` got them.
+    const sequencesTo = (mail: Awaited<ReturnType<typeof catchMail>>, address: string) =>
+        mail.sent(address).map((sent) => highestIn(unfolded(sent)));
+
+    // RFC 5546 § 2.1.4: each scheduling change takes the file's highest SEQUENCE plus one, so whatever a guest holds for
+    // a date, the series' number or the date's own, the next change outranks it.
+    test('a date moved three times, then the series, then the date again, outranks every revision before it', async () => {
+        const CAROL = 'carol.high-water@example.org';
+        const { series, target, attendees } = await seededWithExternal('Weekly High Water', CAROL);
+        const held = findOrFail(await aliceOccurrences(series.uid), (e) => !e.parentEventId).sequence;
+        const mail = await catchMail();
+        const sent: number[] = [];
+        try {
+            const at = (hours: number) => {
+                const start = new Date(Date.parse(`${target}T09:00:00Z`) + hours * HOUR);
+                return { startTime: start, endTime: new Date(start.getTime() + HOUR) };
+            };
+            const override = await editOccurrence(series.id, target, {
+                title: 'High Water',
+                ...at(1),
+                data: { attendees },
+            });
+            for (const hours of [2, 3]) expect((await putEvent(override.id, at(hours))).status).toBe(200);
+            const later = new Date(Date.parse(SERIES_START) + HOUR / 2);
+            expect(
+                (await putEvent(series.id, { startTime: later, endTime: new Date(later.getTime() + HOUR) })).status,
+            ).toBe(200);
+            expect((await putEvent(override.id, at(4))).status).toBe(200);
+            await eventually(async () => {
+                const seen = mail.sent(CAROL);
+                return seen.length === 5 ? seen : undefined;
+            }, 'all five updates to reach Carol');
+            sent.push(...sequencesTo(mail, CAROL));
+        } finally {
+            mail.restore();
+        }
+        for (const [n, sequence] of sent.entries()) expect(sequence).toBeGreaterThan(n ? sent[n - 1] : held);
+        const moved = new Date(Date.parse(`${target}T09:00:00Z`) + 4 * HOUR).getTime();
+        await untilBob(series.uid, (occ) => occ.some((e) => new Date(e.startTime).getTime() === moved));
+    });
+
+    test("a date that keeps the series' guests takes a new SEQUENCE with every move", async () => {
+        const CAROL = 'carol.inherit-bump@example.org';
+        const { series, target } = await seededWithExternal('Weekly Inherit Bump', CAROL);
+        const mail = await catchMail();
+        let sent: number[] = [];
+        try {
+            const override = await moveOccurrence(series, target, 'Inherit Bump Moved', { attendees: [] });
+            const start = new Date(Date.parse(`${target}T09:00:00Z`) + 2 * HOUR);
+            expect(
+                (await putEvent(override.id, { startTime: start, endTime: new Date(start.getTime() + HOUR) })).status,
+            ).toBe(200);
+            await eventually(
+                async () => (mail.sent(CAROL).length === 2 ? true : undefined),
+                'both moves to reach Carol',
+            );
+            sent = sequencesTo(mail, CAROL);
+        } finally {
+            mail.restore();
+        }
+        expect(sent[1]).toBeGreaterThan(sent[0]);
+    });
+
+    test("a date's CANCEL after another date's and a series edit outranks the series' last REQUEST", async () => {
+        const CAROL = 'carol.cancel-after-series@example.org';
+        const { series, target, attendees } = await seededWithExternal('Weekly Cancel After Series', CAROL);
+        const override = await moveOccurrence(series, target, 'Cancel After Series Moved', { attendees });
+        await cancelMailTo(CAROL, async () => {
+            await editOccurrence(series.id, '2027-02-16', { title: series.title, status: 'cancelled' });
+            return new Response();
+        });
+        const mail = await catchMail();
+        let request = '';
+        try {
+            const later = new Date(Date.parse(SERIES_START) + HOUR / 2);
+            const moved = { startTime: later, endTime: new Date(later.getTime() + HOUR), data: { attendees } };
+            expect((await putEvent(series.id, moved)).status).toBe(200);
+            request = unfolded(await mail.to(CAROL, 'Updated invitation'));
+        } finally {
+            mail.restore();
+        }
+
+        const cancel = await cancelMailTo(CAROL, () => putEvent(override.id, { status: 'cancelled' }));
+        expect(sequenceIn(cancel.ics)).toBeGreaterThan(highestIn(request));
+        await untilBob(series.uid, (occ) => occ.length === 2);
+    });
+
+    // Bob's answer is recorded on Alice's date, which is no change of her schedule.
+    test("a guest's answer for one date does not raise the organizer's SEQUENCE", async () => {
+        const { series } = await seeded('Weekly Answer No Bump');
+        const date = '2027-02-16';
+        const bobMaster = findOrFail(await bobOccurrences(series.uid), (e) => !e.parentEventId);
+        const before = findOrFail(await aliceOccurrences(series.uid), (e) => !e.parentEventId).sequence;
+        expect(
+            (await rsvpAsBob(bobMaster.id, { status: 'tentative', scope: 'this', recurrenceDate: date })).status,
+        ).toBe(200);
+        const answered = await eventually(async () => {
+            const one = (await aliceOccurrences(series.uid)).find((e) => e.occurrenceDate === date);
+            return one && statusOf(one, ctx.bob.user.email) === 'tentative' ? one : undefined;
+        }, "Bob's answer to reach Alice");
+        expect(answered.sequence).toBe(before);
+        expect(findOrFail(await aliceOccurrences(series.uid), (e) => !e.parentEventId).sequence).toBe(before);
+    });
+
+    // A DELETE is a new revision of the date it removes, even when the date's own number is the file's highest.
+    test("a moved date's DELETE mails a CANCEL that is no repeat of its last REQUEST", async () => {
+        const CAROL = 'carol.delete-revision@example.org';
+        const { series, target, attendees } = await seededWithExternal('Weekly Delete Revision', CAROL);
+        const override = await moveOccurrence(series, target, 'Delete Revision Moved', { attendees });
+        const mail = await catchMail();
+        let request = '';
+        try {
+            const start = new Date(Date.parse(`${target}T09:00:00Z`) + 2 * HOUR);
+            const moved = { startTime: start, endTime: new Date(start.getTime() + HOUR) };
+            expect((await putEvent(override.id, moved)).status).toBe(200);
+            request = unfolded(await mail.to(CAROL, 'Updated invitation'));
+        } finally {
+            mail.restore();
+        }
+        const stampOf = (ics: string) => /\r\nDTSTAMP:(\S+)\r\n/.exec(ics)?.[1];
+        setSystemTime(new Date(Date.now() + 5000));
+        try {
+            const cancel = await cancelMailTo(CAROL, () =>
+                authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${override.id}`,
+                    { method: 'DELETE' },
+                ),
+            );
+            expect(sequenceIn(cancel.ics)).toBeGreaterThan(sequenceIn(request));
+            expect(stampOf(cancel.ics)).not.toBe(stampOf(request));
+        } finally {
+            setSystemTime();
+        }
+    });
+
     test("a date moved past its series' SEQUENCE is cancelled at its own", async () => {
         const CAROL = 'carol.own-sequence@example.org';
         const { series, target, attendees } = await seededWithExternal('Weekly Own Sequence', CAROL);

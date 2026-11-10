@@ -19,18 +19,19 @@ import {
     storedRecurrenceIds,
     stripEigenStamps,
 } from '../../lib/ical';
+import type { WriteContext } from '../../lib/ical/ical-component';
 import { cpuClock } from '../cpu-time';
 import { vcal } from '../ics-test-helpers';
 
 const CTX = { now: new Date('2026-06-01T10:00:00Z'), actorIsOrganizer: true };
 
 // One override edit, the way the store adds an occurrence it did not hold.
-const putOverride = (resource: ICAL.Component, override: CalendarEvent): boolean =>
-    applyEdits(resource, new Map([[override.recurrenceDate, { kind: 'override', event: override }]]));
+const putOverride = (resource: ICAL.Component, override: CalendarEvent, ctx: WriteContext = CTX): boolean =>
+    applyEdits(resource, new Map([[override.recurrenceDate, { kind: 'override', event: override, ctx }]]));
 
 // One exclusion edit, the way the store cancels an occurrence.
-const exclude = (resource: ICAL.Component, exclusion: CalendarEvent): boolean =>
-    applyEdits(resource, new Map([[exclusion.recurrenceDate, { kind: 'exclusion', event: exclusion, ctx: CTX }]]));
+const exclude = (resource: ICAL.Component, exclusion: CalendarEvent, ctx: WriteContext = CTX): boolean =>
+    applyEdits(resource, new Map([[exclusion.recurrenceDate, { kind: 'exclusion', id: exclusion.id, ctx }]]));
 
 const masterOf = (resource: ICAL.Component): ICAL.Component =>
     resource.getAllSubcomponents('vevent').find((v) => !v.getFirstProperty('recurrence-id'))!;
@@ -338,56 +339,95 @@ describe('kitchen-sink fidelity under a patch', () => {
 
 describe('SEQUENCE', () => {
     const timesPatch = { startTime: new Date('2026-04-15T14:00:00Z'), endTime: new Date('2026-04-15T15:00:00Z') };
+    const guest = { ...CTX, actorIsOrganizer: false };
+    const sequenceOf = (vevent: ICAL.Component) => Number(vevent.getFirstPropertyValue('sequence'));
+    // The series at SEQUENCE 3, a moved date at 6, and a cancelled one stamped 5.
+    const highWater = () => {
+        const resource = parseResource(serializeResource(buildResource([MASTER, { ...OVERRIDE, sequence: 6 }])));
+        exclude(resource, EXCLUSION, { ...guest, sequence: 5 });
+        return resource;
+    };
 
-    test('bumps on a scheduling change by the organizer of an event with attendees', () => {
+    test("an organizer's scheduling change takes the file's highest SEQUENCE plus one", () => {
         const resource = parseResource(KITCHEN_SINK);
         patchEvent(resource, null, timesPatch, CTX);
-        expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(3);
+        expect(sequenceOf(masterOf(resource))).toBe(3);
+
+        const moved = highWater();
+        patchEvent(moved, null, timesPatch, CTX);
+        expect(sequenceOf(masterOf(moved))).toBe(7);
     });
 
-    test('does not bump when the actor is not the organizer', () => {
-        const resource = parseResource(KITCHEN_SINK);
-        patchEvent(resource, null, timesPatch, { ...CTX, actorIsOrganizer: false });
-        expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(2);
-    });
-
-    test('does not bump when the event has no attendees', () => {
+    test('an event with no attendees takes the raised number too', () => {
         const resource = parseResource(vcal(VTZ_AMS, KITCHEN_MASTER));
         masterOf(resource).removeAllProperties('attendee');
         patchEvent(resource, null, timesPatch, CTX);
-        expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(2);
+        expect(sequenceOf(masterOf(resource))).toBe(3);
     });
 
-    test('does not bump for a change that is not scheduling-significant', () => {
+    test("an organizer's new date, and a cancelled one, outrank every revision the file holds", () => {
+        const added = highWater();
+        putOverride(added, { ...OVERRIDE, id: 'evt-new', recurrenceDate: '2026-05-06', sequence: 0 });
+        expect(
+            sequenceOf(overridesOf(added).find((v) => v.getFirstPropertyValue('x-eigen-event-id') === 'evt-new')!),
+        ).toBe(7);
+
+        const cancelled = highWater();
+        exclude(cancelled, { ...EXCLUSION, id: 'evt-gone', recurrenceDate: '2026-05-06' });
+        const stamp = masterOf(cancelled)
+            .getAllProperties('x-eigen-exdate')
+            .find((prop) => prop.getFirstValue() === '2026-05-06')!;
+        expect(stamp.getFirstParameter('x-eigen-seq')).toBe('7');
+        expect(stamp.getFirstParameter('x-eigen-dtstamp')).toBe('20260601T100000Z');
+        expect(sequenceOf(masterOf(cancelled))).toBe(7);
+    });
+
+    // An attendee copy mirrors the organizer's revision instead of computing one: the RFC 5546 replay guard compares
+    // the stored number against the next message's.
+    test('a receiver never raises: a date it adds mirrors what it holds for that date, else the series', () => {
+        const resource = highWater();
+        putOverride(resource, { ...OVERRIDE, id: 'evt-own', recurrenceDate: '2026-04-29' }, guest);
+        putOverride(resource, { ...OVERRIDE, id: 'evt-fresh', recurrenceDate: '2026-05-06' }, guest);
+        const byId = (id: string) =>
+            overridesOf(resource).find((v) => v.getFirstPropertyValue('x-eigen-event-id') === id)!;
+        expect(sequenceOf(byId('evt-own'))).toBe(5);
+        expect(sequenceOf(byId('evt-fresh'))).toBe(3);
+
+        patchEvent(resource, null, timesPatch, guest);
+        expect(sequenceOf(masterOf(resource))).toBe(3);
+        exclude(resource, { ...EXCLUSION, id: 'evt-mine', recurrenceDate: '2026-05-13' }, guest);
+        expect(sequenceOf(masterOf(resource))).toBe(3);
+    });
+
+    test('a stated sequence is written as given, whatever the organizer rule would say', () => {
+        const resource = parseResource(KITCHEN_SINK);
+        patchEvent(resource, null, timesPatch, { ...guest, sequence: 9 });
+        expect(sequenceOf(masterOf(resource))).toBe(9);
+        patchEvent(
+            resource,
+            null,
+            { ...timesPatch, startTime: new Date('2026-04-15T16:00:00Z') },
+            { ...CTX, sequence: 4 },
+        );
+        expect(sequenceOf(masterOf(resource))).toBe(4);
+    });
+
+    test('a stated sequence alone is a change worth writing', () => {
+        const resource = parseResource(KITCHEN_SINK);
+        expect(patchEvent(resource, null, {}, { ...guest, sequence: 7 })).toBe(true);
+        expect(sequenceOf(masterOf(resource))).toBe(7);
+    });
+
+    test('does not raise for a change that is not scheduling-significant', () => {
         const resource = parseResource(KITCHEN_SINK);
         patchEvent(resource, null, { title: 'Renamed sink', location: 'Room 9' }, CTX);
-        expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(2);
+        expect(sequenceOf(masterOf(resource))).toBe(2);
 
         patchEvent(resource, null, { description: null }, CTX);
-        expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(2);
+        expect(sequenceOf(masterOf(resource))).toBe(2);
     });
 
-    // An attendee copy mirrors the organizer's revision instead of computing one: the RFC 5546 replay
-    // guard compares the stored number against the next message's.
-    test('a submitted sequence is written as given, whatever the bump rule would say', () => {
-        const resource = parseResource(KITCHEN_SINK);
-        patchEvent(resource, null, { ...timesPatch, sequence: 9 }, { ...CTX, actorIsOrganizer: false });
-        expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(9);
-    });
-
-    test('a submitted sequence wins over the organizer bump', () => {
-        const resource = parseResource(KITCHEN_SINK);
-        patchEvent(resource, null, { ...timesPatch, sequence: 4 }, CTX);
-        expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(4);
-    });
-
-    test('a sequence alone is a change worth writing', () => {
-        const resource = parseResource(KITCHEN_SINK);
-        expect(patchEvent(resource, null, { sequence: 7 }, { ...CTX, actorIsOrganizer: false })).toBe(true);
-        expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(7);
-    });
-
-    test('bumps on an attendee-set change and never moves CREATED', () => {
+    test('raises on an attendee-set change and never moves CREATED', () => {
         const resource = parseResource(KITCHEN_SINK);
         patchEvent(
             resource,
@@ -395,7 +435,7 @@ describe('SEQUENCE', () => {
             { data: { attendees: [{ email: 'bob@x.com', name: 'Bob', status: 'pending', role: 'required' }] } },
             CTX,
         );
-        expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(3);
+        expect(sequenceOf(masterOf(resource))).toBe(3);
         expect(String(masterOf(resource).getFirstPropertyValue('created'))).toBe('2025-12-01T09:00:00Z');
     });
 });
@@ -422,9 +462,9 @@ describe('clearing a field', () => {
 
     test('a guest copy mirrors the organizer sequence alongside a cleared field', () => {
         const resource = series(...FILLED);
-        const guest = { ...CTX, actorIsOrganizer: false };
+        const guest = { ...CTX, actorIsOrganizer: false, sequence: 3 };
 
-        expect(patchEvent(resource, null, { location: null, sequence: 3 }, guest)).toBe(true);
+        expect(patchEvent(resource, null, { location: null }, guest)).toBe(true);
 
         expect(masterOf(resource).getFirstProperty('location')).toBeNull();
         expect(String(masterOf(resource).getFirstPropertyValue('last-modified'))).toBe('2026-06-01T10:00:00Z');
@@ -448,8 +488,8 @@ describe('clearing a field', () => {
         expect(serializeResource(absent)).toBe(before);
 
         const filled = series(...FILLED);
-        const restated = { description: 'Agenda', location: 'Room 9', sequence: 3 };
-        expect(patchEvent(filled, null, restated, CTX)).toBe(false);
+        const restated = { description: 'Agenda', location: 'Room 9' };
+        expect(patchEvent(filled, null, restated, { ...CTX, sequence: 3 })).toBe(false);
         expect(masterOf(filled).getFirstProperty('last-modified')).toBeNull();
     });
 });

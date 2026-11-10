@@ -11,6 +11,7 @@ export {
     newVCalendar,
     PRODID,
     patchEvent,
+    raisedSequence,
     restampResource,
     serializeEventForImip,
     serializeResource,

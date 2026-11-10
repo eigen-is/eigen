@@ -33,12 +33,11 @@ import { occurrenceStart } from './wall-clock';
 
 export const PRODID = '-//Eigen//CalDAV//EN';
 
-// `dtstamp` is the scheduling message's own stamp; a local edit states none and the clock stands in.
-export type WriteContext = { now: Date; actorIsOrganizer: boolean; dtstamp?: Date | null };
+// Who acts, as the caller says, and the revision a message states for the item its edit names. A local write states
+// no revision, and the clock stands in for its stamp.
+export type WriteContext = { now: Date; actorIsOrganizer: boolean; sequence?: number; dtstamp?: Date | null };
 
-// `sequence` is the one field no HTTP save submits: an invitation receiver mirrors the organizer's number, which
-// beats the bump rule.
-export type EventPatch = Omit<UpdateEventInput, 'calendarId' | 'id' | 'etag'> & { sequence?: number };
+export type EventPatch = Omit<UpdateEventInput, 'calendarId' | 'id' | 'etag'>;
 
 type TrustedStamps = {
     createByUserId?: string | null;
@@ -148,53 +147,65 @@ export function serializeEventForImip(
 }
 
 // What applyEdits does to one occurrence key: patch the VEVENT there, put a new override in its place, or exclude it.
+// An exclusion names the id its cancelled row keeps.
 export type VEventEdit =
     | { kind: 'patch'; patch: EventPatch; ctx: WriteContext }
-    | { kind: 'override'; event: EventToBuild }
-    | { kind: 'exclusion'; event: CalendarEvent; ctx: WriteContext };
+    | { kind: 'override'; event: EventToBuild; ctx: WriteContext }
+    | { kind: 'exclusion'; id: string; ctx: WriteContext };
 
 // One pass for a batch keyed by occurrence, the master under null. It runs in the map's order, so a master listed first
 // is patched before the overrides and EXDATEs that name their instant through it.
 export function applyEdits(resource: ICAL.Component, edits: ReadonlyMap<string | null, VEventEdit>): boolean {
     const vevents = keyVEvents(resource);
     const master = vevents.get(null);
+    // Read before any edit, so each item one batch reschedules takes the same number.
+    const held = revisionsOf(vevents);
+    const raised = raisedSequence(held);
+    // A new item starts from what the file holds for its date, the series' revision when it holds none.
+    const heldFor = (key: string) => held.get(key) ?? held.get(null) ?? { sequence: 0, dtstamp: null };
     const replaced = new Set<ICAL.Component>();
     const unexcluded = new Set<string>();
-    const exclusions = new Map<string, { event: CalendarEvent; ctx: WriteContext }>();
+    const exclusions = new Map<string, { id: string; revision: Revision }>();
+    let exclusionCtx: WriteContext | undefined;
     let changed = false;
     for (const [key, edit] of edits) {
         const vevent = vevents.get(key);
         if (edit.kind === 'patch') {
             if (!vevent) throw new Error(`applyEdits: the resource holds no VEVENT for ${key ?? 'the master'}`);
-            changed = patchVEvent(resource, vevent, key === null, edit.patch, edit.ctx) || changed;
+            changed = patchVEvent(resource, vevent, key === null, edit.patch, edit.ctx, raised) || changed;
             continue;
         }
         if (key === null) throw new Error('applyEdits: the override or exclusion names no occurrence');
         if (vevent) replaced.add(vevent);
         changed = true;
         if (edit.kind === 'exclusion') {
-            exclusions.set(key, edit);
+            exclusions.set(key, {
+                id: edit.id,
+                revision: revisionAfter(edit.ctx, raised, heldFor(key), edit.ctx.sequence),
+            });
+            exclusionCtx ??= edit.ctx;
             continue;
         }
         // An EXDATE left beside a new override would keep the occurrence out of the expansion and project a second,
         // cancelled row for the same key.
         unexcluded.add(key);
-        resource.addSubcomponent(buildVEvent(edit.event, { master }));
+        const { sequence, dtstamp } = heldFor(key);
+        const override = buildVEvent({ ...edit.event, sequence, updatedAt: dtstamp ?? edit.ctx.now }, { master });
+        touch(override, edit.ctx, raised, edit.ctx.sequence);
+        resource.addSubcomponent(override);
     }
     if (replaced.size) keepSubcomponents(resource, (sub) => !replaced.has(sub));
 
     if (master && unexcluded.size) dropExclusions(master, (key) => unexcluded.has(key));
     // A copy of single dates has no master to hold an EXDATE, so an excluded date just goes with its VEVENT.
-    if (master && exclusions.size) {
+    if (master && exclusionCtx) {
         const excluded = exdateKeys(master);
         keepProperties(master, (prop) => prop.name !== EIGEN.exdate || !exclusions.has(String(prop.getFirstValue())));
-        // One touch for the batch, so its SEQUENCE moves once. An organizer's exclusion takes the raised number, which
-        // outranks what a guest held the date at, its series' or its own.
-        touch(master, [...exclusions.values()][0].ctx, true);
-        for (const [key, { event, ctx }] of exclusions) {
+        // A cancelled date is a change to its series too (RFC 5546 § 2.1.4), made once for the batch.
+        touch(master, exclusionCtx, raised);
+        for (const [key, { id, revision }] of exclusions) {
             if (!excluded.has(key)) master.addProperty(occurrenceProperty('exdate', master, key));
-            const sequence = ctx.actorIsOrganizer ? Math.max(sequenceOf(master), event.sequence) : event.sequence;
-            master.addProperty(exclusionStamp(key, event.id, sequence, clampStamp(ctx.dtstamp, ctx.now)));
+            master.addProperty(exclusionStamp(key, id, revision.sequence, revision.dtstamp ?? null));
         }
     }
     if (changed) syncVTimezones(resource);
@@ -244,7 +255,18 @@ export function isNewerRevision(incoming: Revision, stored: Revision | null): bo
 // Each occurrence's revision by its key, the master's under null. A cancelled occurrence keeps no VEVENT, so its
 // revision is the stamp beside its EXDATE, or the series' own number when a client wrote that EXDATE itself.
 export function storedRevisions(resource: ICAL.Component): Map<string | null, Revision> {
-    const vevents = keyVEvents(resource);
+    return revisionsOf(keyVEvents(resource));
+}
+
+// The number the organizer's next scheduling change takes: one above every revision the file holds, so it outranks
+// whatever a guest holds of any date, the series' number or the date's own (RFC 5546 § 2.1.4).
+export function raisedSequence(revisions: ReadonlyMap<string | null, Revision>): number {
+    let highest = 0;
+    for (const { sequence } of revisions.values()) highest = Math.max(highest, sequence);
+    return highest + 1;
+}
+
+function revisionsOf(vevents: ReadonlyMap<string | null, ICAL.Component>): Map<string | null, Revision> {
     const revisions = new Map<string | null, Revision>();
     const master = vevents.get(null);
     if (master) {
@@ -477,6 +499,7 @@ function patchVEvent(
     isMaster: boolean,
     patch: EventPatch,
     ctx: WriteContext,
+    raised: number,
 ): boolean {
     const dtstart = vevent.getFirstProperty('dtstart');
     const storedTz = propTzid(dtstart);
@@ -484,7 +507,7 @@ function patchVEvent(
     const storedStart = dtstart?.getFirstValue();
     const allDay = patch.allDay ?? (storedStart instanceof ICAL.Time && storedStart.isDate);
 
-    let changed = isMaster && followMaster(resource, vevent, patch, ctx);
+    let changed = isMaster && followMaster(resource, vevent, patch, ctx, raised);
     let scheduling = false;
 
     changed = setOptional(vevent, 'summary', patch.title) || changed;
@@ -543,10 +566,10 @@ function patchVEvent(
         if (data.reminders) changed = patchReminders(vevent, data.reminders) || changed;
     }
 
-    if (patch.sequence !== undefined && sequenceOf(vevent) !== patch.sequence) changed = true;
+    if (ctx.sequence !== undefined && sequenceOf(vevent) !== ctx.sequence) changed = true;
 
     if (!changed) return false;
-    touch(vevent, ctx, scheduling, patch.sequence);
+    touch(vevent, ctx, scheduling ? raised : null, ctx.sequence);
     return true;
 }
 
@@ -610,7 +633,13 @@ function shapeForImip(vevent: ICAL.Component, method: ImipMethod): void {
 // A series-wide edit reaches an override whose value equals the master's BEFORE the edit; one that set its own keeps
 // it. Times never follow. A guest the edit adds to or drops from the series joins or leaves every override that holds
 // its own list. Each override it changes is a new revision of that date. It has to run before the master is patched.
-function followMaster(resource: ICAL.Component, master: ICAL.Component, patch: EventPatch, ctx: WriteContext): boolean {
+function followMaster(
+    resource: ICAL.Component,
+    master: ICAL.Component,
+    patch: EventPatch,
+    ctx: WriteContext,
+    raised: number,
+): boolean {
     const fields: Array<[string, string, string]> = [];
     for (const [name, value] of [
         ['summary', patch.title],
@@ -647,7 +676,7 @@ function followMaster(resource: ICAL.Component, master: ICAL.Component, patch: E
             membersChanged = attendees.membersChanged;
         }
         if (!followed) continue;
-        touch(vevent, ctx, membersChanged);
+        touch(vevent, ctx, membersChanged ? raised : null);
         changed = true;
     }
     return changed;
@@ -757,21 +786,24 @@ function setOptional(comp: ICAL.Component, name: string, value?: string | null, 
     return !!comp.getFirstPropertyValue(name) && clearProperty(comp, name);
 }
 
-// A submitted sequence is the organizer's own number, which an attendee copy mirrors rather than computes. Without one
-// the bump rule decides.
-function touch(vevent: ICAL.Component, ctx: WriteContext, scheduling: boolean, sequence?: number): void {
+// `raised` is passed for a scheduling change, and `stated` is the number a message gives the item it names.
+function touch(vevent: ICAL.Component, ctx: WriteContext, raised: number | null, stated?: number): void {
     setProperty(vevent, utcStamp('last-modified', ctx.now));
-    // DTSTAMP on a copy of somebody else's event orders the next message, so only a message moves it, never a local
-    // edit.
-    if (ctx.dtstamp || ctx.actorIsOrganizer) {
-        setProperty(vevent, utcStamp('dtstamp', clampStamp(ctx.dtstamp, ctx.now) ?? ctx.now));
-    }
-    if (sequence !== undefined) {
-        vevent.updatePropertyWithValue('sequence', sequence);
-        return;
-    }
-    if (!scheduling || !ctx.actorIsOrganizer || vevent.getAllProperties('attendee').length === 0) return;
-    vevent.updatePropertyWithValue('sequence', sequenceOf(vevent) + 1);
+    const held = sequenceOf(vevent);
+    const { sequence, dtstamp } = revisionAfter(ctx, raised, { sequence: held, dtstamp: null }, stated);
+    if (dtstamp) setProperty(vevent, utcStamp('dtstamp', dtstamp));
+    if (sequence !== held) vevent.updatePropertyWithValue('sequence', sequence);
+}
+
+// The one rule for a revision (RFC 5546 § 2.1.4). A receiver mirrors what a message states, since a number of its own
+// would outrank the organizer's next update, and on its copy only a message moves DTSTAMP. The organizer's scheduling
+// change takes `raised`. Any other write keeps what is `held`.
+function revisionAfter(ctx: WriteContext, raised: number | null, held: Revision, stated?: number): Revision {
+    const stamped = !!ctx.dtstamp || ctx.actorIsOrganizer;
+    return {
+        sequence: stated ?? (ctx.actorIsOrganizer && raised !== null ? raised : held.sequence),
+        dtstamp: stamped ? (clampStamp(ctx.dtstamp, ctx.now) ?? ctx.now) : held.dtstamp,
+    };
 }
 
 // Drop one occurrence's EXDATE value and the stamp beside it, whatever form the client wrote them in.

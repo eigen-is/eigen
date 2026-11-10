@@ -496,8 +496,8 @@ describe('CalDAV round-trip fidelity', () => {
             const row = await storedRow('rt-when-series@client');
             const updated = await dialogSave(row, 'Weekly stand-up', { start: 3600_000, end: 3600_000 });
 
-            // No guest to reschedule, so the revision holds (RFC 5546).
-            expect(updated.sequence).toBe(row.sequence);
+            // A move is a scheduling change, guests or not (RFC 5546 § 2.1.4).
+            expect(updated.sequence).toBe(row.sequence + 1);
             expect(whenOf(await getIcs('rt-when-series.ics'), 'rt-when-series@client')).toMatchObject({
                 dtstart: ['dtstart', { tzid: 'Europe/Amsterdam' }, 'date-time', '2026-09-28T11:00:00'],
                 dtend: ['dtend', { tzid: 'Europe/Amsterdam' }, 'date-time', '2026-09-28T12:00:00'],

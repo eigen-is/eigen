@@ -100,9 +100,7 @@ export async function propagateRsvp(
     });
 }
 
-// `attendees` is who held the event, because a cancelled occurrence is an EXDATE with no guest list of its own. A CANCEL
-// raises the SEQUENCE (RFC 5546 § 2.1.4): a date's exclusion stamp holds its raised number, and a deleted series has no
-// file left to hold one.
+// `attendees` is who held the event, because a cancelled occurrence is an EXDATE with no guest list of its own.
 export async function propagateCancellation(
     organizerHome: Home,
     user: User | undefined,
@@ -110,8 +108,7 @@ export async function propagateCancellation(
     attendees: readonly Attendee[],
     series?: CalendarEvent,
 ): Promise<void> {
-    const event = series ? cancelled : { ...cancelled, sequence: cancelled.sequence + 1 };
-    const occurrence = occurrenceRevision(event, series);
+    const occurrence = occurrenceRevision(cancelled, series);
     const organizer = organizerOf(organizerHome, user);
     for (const attendee of attendees) {
         try {
@@ -121,13 +118,13 @@ export async function propagateCancellation(
                     console.warn(`Skipped the iMIP cancel to ${attendee.email}: the organizer has no address`);
                     continue;
                 }
-                const mail = composeCancelEmail(event, organizer, [attendee], series);
+                const mail = composeCancelEmail(cancelled, organizer, [attendee], series);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
                 continue;
             }
             await sendToHome(targetUser.id, {
                 type: 'calendar:invitation-removal',
-                orgEventId: series?.id ?? event.id,
+                orgEventId: series?.id ?? cancelled.id,
                 orgUserId: organizerHome.user.id,
                 occurrence,
             });

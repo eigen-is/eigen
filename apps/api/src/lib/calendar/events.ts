@@ -10,8 +10,16 @@ import { and, eq } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import { RRule } from 'rrule';
 import { ApiError } from '../core';
-import { applyEdits, buildResource, parseResource, patchEvent, storedRecurrenceIds, storedRevisions } from '../ical';
-import type { EventPatch, EventToBuild, VEventEdit, WriteContext } from '../ical/ical-component';
+import {
+    applyEdits,
+    buildResource,
+    parseResource,
+    patchEvent,
+    raisedSequence,
+    storedRecurrenceIds,
+    storedRevisions,
+} from '../ical';
+import type { EventPatch, EventToBuild, Revision, VEventEdit, WriteContext } from '../ical/ical-component';
 import { serializeEventForImip } from '../ical/ical-component';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
 import { parseRecurrenceKey } from '../ical/wall-clock';
@@ -234,22 +242,24 @@ export async function eraseStoredEvent(
     if (!resource) throw new ApiError(404, 'Event not found');
     assertEtag(resource, expectedEtag);
 
+    const series = existing.parentEventId ? requireEvent(calendar, existing.parentEventId) : existing;
+    const ctx = writeContext(!isInvitationFromOthers(series, calendar.home.user.email));
+    const component = storedComponent(calendar, resource);
     if (!existing.recurrenceDate) {
+        // The purge leaves no file to raise the SEQUENCE in, so the series' CANCEL takes its number here.
+        const sequence = raisedSequence(storedRevisions(component));
         await calendar.purgeResource(resource);
-        return existing;
+        return { ...existing, sequence, updatedAt: ctx.now };
     }
     // A copy of single dates has no master: it loses one date at a time, and goes whole with its last.
-    const series = existing.parentEventId ? requireEvent(calendar, existing.parentEventId) : existing;
-    const component = storedComponent(calendar, resource);
     const recurrenceId = storedRecurrenceIds(component).get(existing.recurrenceDate);
-    const ctx = writeContext(!isInvitationFromOthers(series, calendar.home.user.email));
-    const exclusion: VEventEdit = { kind: 'exclusion', event: existing, ctx };
-    applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]));
+    applyEdits(component, new Map([[existing.recurrenceDate, { kind: 'exclusion', id: existing.id, ctx }]]));
     if (component.getFirstSubcomponent('vevent')) await writeComponent(calendar, resource, component);
     else await calendar.purgeResource(resource);
-    // A CANCEL names the revision the exclusion was stamped with.
-    const sequence = storedRevisions(component).get(existing.recurrenceDate)?.sequence ?? existing.sequence;
-    return { ...existing, recurrenceId, sequence };
+    if (!existing.parentEventId) return { ...existing, recurrenceId };
+    // The CANCEL names the revision the exclusion was stamped with.
+    const { sequence, updatedAt } = requireEvent(calendar, id);
+    return { ...existing, recurrenceId, sequence, updatedAt };
 }
 
 // The stored component of a resource: the bytes are the truth, so every path that parses them reads them itself.
@@ -300,23 +310,24 @@ export async function editResource(
     await writeComponent(calendar, resource, component);
 }
 
-// An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp. An organizer's
-// new date starts at its series' SEQUENCE, the revision its guests held it at; a receiver states the organizer's own.
+// An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp.
 export function exceptionEdit(parent: CalendarEvent, input: CreateEventArgs, ctx: WriteContext): VEventEdit {
-    const sequence = input.sequence ?? (ctx.actorIsOrganizer ? parent.sequence : undefined);
+    const id = crypto.randomUUID();
+    if (input.status === 'cancelled') return { kind: 'exclusion', id, ctx };
+    const exception = { ...input, rrule: null, dtstamp: ctx.dtstamp };
     const event = eventForResource({
-        id: crypto.randomUUID(),
+        id,
         calendarId: parent.calendarId,
         uid: parent.uid,
-        input: { ...input, rrule: null, sequence },
+        input: exception,
         now: ctx.now,
     });
-    if (event.status !== 'cancelled') return { kind: 'override', event };
-    return { kind: 'exclusion', event, ctx };
+    return { kind: 'override', event, ctx };
 }
 
-export function writeContext(actorIsOrganizer: boolean, dtstamp?: Date | null): WriteContext {
-    return { now: new Date(), actorIsOrganizer, dtstamp };
+// `revision` is what a message states for the item an edit names; a local write states none.
+export function writeContext(actorIsOrganizer: boolean, revision?: Revision): WriteContext {
+    return { now: new Date(), actorIsOrganizer, sequence: revision?.sequence, dtstamp: revision?.dtstamp };
 }
 
 export function exceptionOf(
@@ -422,7 +433,7 @@ async function patchStoredEvent(
     assertEtag(resource, expectedEtag);
 
     if (existing.parentEventId && input.status === 'cancelled') {
-        const exclusion: VEventEdit = { kind: 'exclusion', event: existing, ctx: writeContext(organizer) };
+        const exclusion: VEventEdit = { kind: 'exclusion', id: existing.id, ctx: writeContext(organizer) };
         await editResource(calendar, resource, (component) => {
             applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]));
         });
@@ -475,7 +486,7 @@ async function writeOverride(
     if (!key) throw new ApiError(400, 'Invalid occurrence date');
 
     const organizer = !isInvitationFromOthers(parent, calendar.home.user.email);
-    const edit = exceptionEdit(parent, input, writeContext(organizer, input.dtstamp));
+    const edit = exceptionEdit(parent, input, writeContext(organizer));
     await editResource(calendar, resource, (component) => applyEdits(component, new Map([[key, edit]])));
     const stored = exceptionOf(calendar, parent.id, key);
     return stored ?? requireEvent(calendar, parent.id);
