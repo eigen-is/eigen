@@ -188,8 +188,8 @@ async function handleRequest(jobId: number, request: DocumentTransformRequest): 
     // So does a compaction, which the main thread read from the live document.
     if (request.kind === 'compact') {
         const { compactSheetsSnapshot } = await import('../sheets');
-        const { snapshot, dropped } = compactSheetsSnapshot(request.snapshot, request.batches);
-        return { ok: true, result: { snapshot: toTransferableText(snapshot), dropped }, warnings: [] };
+        const { snapshot, dropped, folded } = compactSheetsSnapshot(request.snapshot, request.batches);
+        return { ok: true, result: { snapshot: toTransferableText(snapshot), dropped, folded }, warnings: [] };
     }
 
     // Every other kind reads a stored document, so materialization is shared.

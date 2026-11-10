@@ -82,8 +82,8 @@ function stubRunner() {
 
 function succeed(run: StubbedRun): void {
     if (run.request.kind !== 'compact') throw new Error(`unexpected ${run.request.kind} job`);
-    const { snapshot, dropped } = compactSheetsSnapshot(run.request.snapshot, run.request.batches);
-    run.settle({ ok: true, result: { snapshot: toTransferableText(snapshot), dropped }, warnings: [] });
+    const { snapshot, dropped, folded } = compactSheetsSnapshot(run.request.snapshot, run.request.batches);
+    run.settle({ ok: true, result: { snapshot: toTransferableText(snapshot), dropped, folded }, warnings: [] });
 }
 
 function fail(run: StubbedRun): void {
@@ -151,11 +151,6 @@ function structuralLog(count: number): Op[][] {
         log.push(edit(i % 6, 0, i * 10));
     }
     return log;
-}
-
-function structuralIndexes(log: Op[][]): number[] {
-    const patch = new Set(['add', 'remove', 'replace']);
-    return [...log.keys()].filter((i) => log[i].some((op) => !patch.has(op.op)));
 }
 
 describe('CollabDocument compacts a workbook at close', () => {
@@ -649,27 +644,26 @@ describe('CollabDocument compacts a workbook at close', () => {
         }
     });
 
-    // Each row or column op, and each sheet's add, delete or rename, costs the replay a rewrite and a recompute of the
-    // formulas, so a close folds at most twenty of them and the next close goes on from there.
-    test('a close folds the log up to its 21st structural batch, and the snapshot with the rest reads as the whole log', async () => {
+    // The fold starts no batch once 30 s have passed, stores the ones it finished, and the next close folds on.
+    test('a fold past 30 s stops before its next batch, and the snapshot with the rest reads as the whole log', async () => {
         const stub = stubRunner();
-        const log = structuralLog(25);
-        const sheet = await openLingeringSheet('compaction-bounded', log, true);
+        const log = structuralLog(5);
+        const sheet = await openLingeringSheet('compaction-timed', log, true);
         try {
             const whole = liveSheets(sheet.doc.doc);
             const closed = sheet.nextClose();
             lingerOut(sheet.doc);
             jest.useRealTimers();
+            // Each read of the clock is 11 s on, so the fourth batch would start past 30 s.
+            let now = 0;
+            const clock = spyOn(performance, 'now').mockImplementation(() => (now += 11_000));
             succeed(stub.runs[0]);
+            clock.mockRestore();
             await closed;
-
-            // The 21st structural batch, the rest of the log after it, and every cheap batch before it.
-            const at = structuralIndexes(log)[20];
-            expect(sheet.ops.toArray()).toEqual(log.slice(at));
+            expect(sheet.ops.toArray()).toEqual(log.slice(3));
             expect(liveSheets(sheet.doc.doc)).toEqual(whole);
             expect(sheet.closes()).toBe(1);
 
-            // The next close folds the rest.
             const closedAgain = sheet.nextClose();
             jest.useFakeTimers();
             lingerOut(sheet.doc);
@@ -685,10 +679,33 @@ describe('CollabDocument compacts a workbook at close', () => {
         }
     });
 
-    test('a close folds a log of exactly twenty structural batches whole', async () => {
+    test('a fold takes its first batch however late it starts', async () => {
         const stub = stubRunner();
-        const log = structuralLog(20);
-        const sheet = await openLingeringSheet('compaction-bound-edge', log, true);
+        const log = structuralLog(2);
+        const sheet = await openLingeringSheet('compaction-timed-first', log, true);
+        try {
+            const whole = liveSheets(sheet.doc.doc);
+            const closed = sheet.nextClose();
+            lingerOut(sheet.doc);
+            jest.useRealTimers();
+            let now = 0;
+            const clock = spyOn(performance, 'now').mockImplementation(() => (now += 31_000));
+            succeed(stub.runs[0]);
+            clock.mockRestore();
+            await closed;
+            expect(sheet.ops.toArray()).toEqual(log.slice(1));
+            expect(liveSheets(sheet.doc.doc)).toEqual(whole);
+        } finally {
+            stub.restore();
+            sheet.restore();
+            sheet.doc.destruct();
+        }
+    });
+
+    test('a log that folds inside 30 s folds whole, however many structural batches it holds', async () => {
+        const stub = stubRunner();
+        const log = structuralLog(25);
+        const sheet = await openLingeringSheet('compaction-timed-whole', log, true);
         try {
             const whole = liveSheets(sheet.doc.doc);
             const closed = sheet.nextClose();

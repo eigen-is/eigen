@@ -264,8 +264,9 @@ export type DocImportTransformResult = {
 export type DocImportResult = DocImportTransformResult & { warnings: TransformWarning[] };
 // A pptx's update plus its pictures: the main thread only applies the update and writes the media through Mount.
 export type SlidesImportTransformResult = { update: ArrayBuffer; images: TransformMedia[] };
-// The compacted snapshot's JSON as UTF-8 bytes, and how many op batches the replay dropped because they failed to apply.
-export type SheetsCompactionResult = { snapshot: ArrayBuffer; dropped: number };
+// The compacted snapshot's JSON as UTF-8 bytes, how many op batches the replay dropped because they failed to apply,
+// and how many of the log's first batches it folded.
+export type SheetsCompactionResult = { snapshot: ArrayBuffer; dropped: number; folded: number };
 // The media files and comment threads the job's document names.
 export type ReferencesResult = { references: DocumentReferences };
 
