@@ -114,6 +114,8 @@ A TZID `Intl` doesn't know goes through `propTzid` (`ical-parse.ts`). It tries t
 
 An `RRULE` is stored as written and expanded in memory per query. An override is a VEVENT in the same resource, projected with `parentEventId` and `recurrenceDate`. An override keeps its stored occurrence key even after it moved, because the frontend sends that key back in a `scope='this'` RSVP.
 
+A `UNTIL` ending in `Z` beside a zoned start is an instant (RFC 5545 §3.3.10), so `wallClockRule` (`wall-clock.ts`) moves it into the series' wall clock before the walk, and a cut writes one: `truncateRRule` ends the series one second before the cut day starts in its zone, which every client reads as the same day.
+
 A range read (`occurrences.ts`) is bounded by its window, not by the size of the Home. It loads the single events overlapping the window, the masters starting before its end (a rule never steps back before DTSTART), and their overrides plus any override moved into the window.
 
 The edit dialog opens on an occurrence but "All events in series" saves on the master. So `seriesEditFromOccurrence` (`packages/lib/src/core/calendar/calendar-utils.ts`) sends a delta. The master's times shift by what the user moved, and a text field travels only when retyped. A series-wide text edit also reaches every override that still carried the master's old value; one that set its own keeps it.

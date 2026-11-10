@@ -86,6 +86,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Calendar files from others** — a calendar file someone else made, in a mail invite, from a calendar app or in an import, no longer freezes the server
 - **Guest emails in Calendar** — changing only an event's color or reminder, or moving a one-off event to another time zone without changing when it happens, no longer emails its guests. Neither does a save that changes nothing
 - **Events from other calendar apps** — the first save in Calendar of an event made in another calendar app no longer rewrites what you didn't change, or emails its guests
+- **Repeating events that end in Calendar** — a repeating event from Apple Calendar or another app ends on the date it names, and one you end with **This and following events** ends on the same day in other calendar apps
 - **Guest replies in Calendar** — a guest's answer for a date a repeating event doesn't have no longer adds that date to it
 - **Long date ranges in Calendar** — a repeating event lasting several days shows when it began before the days in view, in Calendar and in calendar apps. A calendar app asking for more than five years at once gets the events past the first five
 - **Time zones in calendar files** — an export keeps each event's time when two custom time zones share a name, and so does an import of a file holding several calendars. An event a calendar app saved in UTC shows as UTC, not GMT, and stays UTC when moved
