@@ -19,8 +19,10 @@ export type InvitationRequest = { events: readonly ParsedEvent[]; link: Invitati
 // The wire shape minus the positional calendarId, plus the fields only the server sets, which the web app never sends.
 export type CreateEventArgs = Omit<CreateEventInput, 'calendarId'> & {
     sequence?: number;
-    // Set only by an invitation receiver: the organizer's stamp replaces the local clock so the next message can be ordered against it.
+    // Set only by an invitation receiver. The organizer's stamp replaces the local clock, so the next message can be
+    // ordered against it, and a copy of one date keeps the instant the organizer's RECURRENCE-ID named.
     dtstamp?: Date | null;
+    recurrenceInstant?: Date | null;
     createByUserId?: string | null;
     uid?: string | null;
 };

@@ -23,6 +23,7 @@ import {
     dropExceptionsFrom,
     isNewerRevision,
     patchEvent,
+    recurrenceInstantOf,
     stampInvitationLink,
     storedOrganizerAddress,
     storedRevisions,
@@ -197,7 +198,12 @@ export async function rsvp(
     const ownOccurrence = answeredOccurrence(event);
 
     const sendRsvpReply = (status: Attendee['status'], recurrenceDate?: string) => {
-        const mail = composeRsvpReply(event, user.email, user.name ?? user.email, status, recurrenceDate);
+        // Only the stored file names the occurrence as the organizer did: a copy of one date has no series to ask.
+        const key = recurrenceDate ?? event.recurrenceDate;
+        const resource = events.resourceOf(calendar, eventId);
+        const stored = key && resource ? recurrenceInstantOf(events.storedComponent(calendar, resource), key) : null;
+        const answered = { ...event, recurrenceInstant: stored };
+        const mail = composeRsvpReply(answered, user.email, user.name ?? user.email, status, recurrenceDate);
         sendMail(mail).catch(console.error);
     };
     // An event a CalDAV client stored can name an organizer but link to no event on their Home. Nobody hears it then.

@@ -276,8 +276,8 @@ export type ParsedEvent = {
     // RFC 5546 § 2.1.5 breaks a SEQUENCE tie with it, so a receiver can order two messages sent without a bump.
     dtstamp: Date | null;
     recurrenceDate: string | null;
-    // A UTC RECURRENCE-ID, kept because a mailed lone occurrence has no master to name the series' zone: the caller
-    // re-keys it against the linked event's.
+    // The instant a timed RECURRENCE-ID names. A copy of one date has no master to compute it from, so it keeps this,
+    // and a mailed lone occurrence re-keys through it against the linked event's zone.
     recurrenceInstant: Date | null;
     data: EventData | null;
 };
@@ -442,10 +442,8 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
             const recurrenceDate = recurrenceKeyOf(vevent, zones);
             const recurrenceValue = recurrenceId?.getFirstValue();
             const recurrenceInstant =
-                recurrenceValue instanceof ICAL.Time &&
-                !recurrenceValue.isDate &&
-                recurrenceValue.zone === ICAL.Timezone.utcTimezone
-                    ? recurrenceValue.toJSDate()
+                recurrenceValue instanceof ICAL.Time && !recurrenceValue.isDate
+                    ? icalTimeToInstant(recurrenceValue, propTzid(recurrenceId), tzid)
                     : null;
 
             const attendees = vevent.getAllProperties('attendee').map(projectAttendee);

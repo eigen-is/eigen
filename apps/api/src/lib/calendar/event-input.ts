@@ -1,12 +1,14 @@
+// The rules a new event or occurrence must meet before the store writes it, and the row its file is built from. The
+// event writes check and shape a create or an override here, and the invitation receiver shapes a filed copy the same
+// way, so each new VEVENT starts from one row shape.
+
 import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
-import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
 import { ApiError } from '../core';
+import type { EventToBuild } from '../ical/ical-component';
 import { clampStamp } from '../ical/ical-component';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
 import type { CreateEventArgs } from './types';
-
-// The invariants a stored event has to satisfy, and the row shape `buildResource` reads.
 
 // What a create refuses before it writes anything, so a refused event leaves the collection untouched.
 export function validateEventInput(input: { rrule?: string | null; startTime: Date; endTime: Date }): void {
@@ -24,7 +26,7 @@ export function validateEventInput(input: { rrule?: string | null; startTime: Da
             throw new ApiError(400, 'Recurring event start time is out of range');
         }
     }
-    // Inbound iMIP clamps instead (imip.ts); zero duration stays legal, RFC 5545 §3.6.1 permits DTEND == DTSTART.
+    // Zero length stays legal: RFC 5545 §3.6.1 lets DTEND equal DTSTART.
     if (input.endTime < input.startTime) throw new ApiError(400, 'Event end time cannot be before start time');
 }
 
@@ -35,7 +37,7 @@ export function eventForResource(args: {
     uid: string;
     input: CreateEventArgs;
     now: Date;
-}): CalendarEvent {
+}): EventToBuild {
     const { id, calendarId, uid, input, now } = args;
     return {
         id,
@@ -52,6 +54,7 @@ export function eventForResource(args: {
         timezone: normalizeTimezone(input.timezone),
         parentEventId: input.parentEventId ?? null,
         recurrenceDate: input.recurrenceDate ?? null,
+        recurrenceInstant: input.recurrenceInstant,
         status: input.status ?? 'confirmed',
         sequence: input.sequence ?? 0,
         etag: '',

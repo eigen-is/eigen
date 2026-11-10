@@ -1,11 +1,19 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { rmSync } from 'node:fs';
 import type { Attendee } from '@workspace/lib/types/calendar';
+import ICAL from 'ical.js';
 import type { Calendar } from '../../lib/calendar/calendar';
 import { parseIcs } from '../../lib/ical';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
+import { icalTimeToInstant, parseResource, propTzid } from '../../lib/ical/ical-parse';
 import { makeSyntheticUser } from '../../lib/user';
-import { CALENDAR_TEST_ROOT, makeCalendar, receiveMailed, storedEvents } from '../calendar-test-helpers';
+import {
+    CALENDAR_TEST_ROOT,
+    makeCalendar,
+    receiveMailed,
+    resourceTextOf,
+    storedEvents,
+} from '../calendar-test-helpers';
 import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 import { findOrFail } from '../setup';
@@ -625,5 +633,69 @@ describe('a guest who removes this and following', () => {
 
         const after = await calendar.getEventsByUid(SERIES);
         expect(after.map((event) => event.title)).toEqual(['Standup renamed']);
+    });
+});
+
+// Google and Outlook match a reply to their occurrence by the instant its RECURRENCE-ID names, which a copy of one
+// date can only take from the organizer's own line: it holds no series to compute that instant from.
+describe('a copy of one moved date', () => {
+    const DATE = 'one-moved-date@external.com';
+    const ORIGINAL = new Date('2028-03-13T08:00:00Z');
+    const moved = (guest: string): ParsedEvent =>
+        parsedOf(
+            vcal([
+                'BEGIN:VEVENT',
+                `UID:${DATE}`,
+                'SUMMARY:Moved standup',
+                'RECURRENCE-ID;TZID=Europe/Amsterdam:20280313T090000',
+                'DTSTART;TZID=Europe/Amsterdam:20280313T110000',
+                'DTEND;TZID=Europe/Amsterdam:20280313T120000',
+                `ORGANIZER:mailto:${ORG}`,
+                `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${guest}`,
+                'DTSTAMP:20280101T000000Z',
+                'END:VEVENT',
+            ]),
+        );
+    const recurrenceInstant = (ics: string): Date | null => {
+        const prop = parseResource(ics).getFirstSubcomponent('vevent')?.getFirstProperty('recurrence-id');
+        const value = prop?.getFirstValue();
+        return value instanceof ICAL.Time ? icalTimeToInstant(value, propTzid(prop), null) : null;
+    };
+
+    async function filed() {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        await receiveMailed(calendar, moved(harness.user.email), ORG);
+        const [copy] = await calendar.getEventsByUid(DATE);
+        const me = makeSyntheticUser(harness.user.id, harness.user.name, harness.user.email);
+        const mailer = await import('../../lib/mailer/mailer');
+        const sent = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        sent.mockClear();
+        const reply = () => findOrFail(sent.mock.calls, ([mail]) => mail.icalEvent?.method === 'REPLY')[0];
+        return { calendar, copy, me, sent, reply };
+    }
+
+    test("keeps the organizer's RECURRENCE-ID, and an answer names it", async () => {
+        const { calendar, copy, me, sent, reply } = await filed();
+        try {
+            const resource = findOrFail(await calendar.listResources(copy.calendarId), (r) => r.uid === DATE);
+            expect(recurrenceInstant(await resourceTextOf(calendar, copy.calendarId, resource.uri))).toEqual(ORIGINAL);
+
+            await calendar.rsvp(copy.id, me, { status: 'accepted' });
+            expect(recurrenceInstant(reply().icalEvent?.content ?? '')).toEqual(ORIGINAL);
+        } finally {
+            sent.mockRestore();
+        }
+    });
+
+    test("a delete declines the organizer's occurrence", async () => {
+        const { calendar, copy, me, sent, reply } = await filed();
+        try {
+            await calendar.deleteEvent(copy.calendarId, copy.id, me);
+            expect(reply().icalEvent?.content).toContain('PARTSTAT=DECLINED');
+            expect(recurrenceInstant(reply().icalEvent?.content ?? '')).toEqual(ORIGINAL);
+        } finally {
+            sent.mockRestore();
+        }
     });
 });

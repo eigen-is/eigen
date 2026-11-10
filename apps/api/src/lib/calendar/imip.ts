@@ -11,6 +11,7 @@ import { isCalendarPart } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
 import type { Home } from '../home';
 import { parseIcs, serializeEventForImip } from '../ical';
+import type { EventToBuild } from '../ical/ical-component';
 import { computeOccurrenceTimes } from '../ical/wall-clock';
 import { EMAIL_MUTED, EMAIL_TEXT, renderEigenEmail } from '../mailer/mail-template';
 import type { OutboundICalEvent, OutboundMail } from '../mailer/mailer';
@@ -89,8 +90,9 @@ const STATUS_LABELS: Record<Attendee['status'], string> = {
     pending: 'Pending',
 };
 
+// `event` names its occurrence by the instant its stored file holds, which a copy of one date can't compute.
 export function composeRsvpReply(
-    event: CalendarEvent,
+    event: EventToBuild,
     attendeeEmail: string,
     attendeeName: string,
     status: Attendee['status'],
@@ -99,7 +101,7 @@ export function composeRsvpReply(
     const organizer = event.data?.organizer;
     if (!organizer) throw new Error('Event has no organizer');
 
-    const replyEvent: CalendarEvent = {
+    const replyEvent: EventToBuild = {
         ...event,
         data: {
             ...event.data,
@@ -259,7 +261,7 @@ function withOrganizer(event: CalendarEvent, organizer: Organizer): CalendarEven
 // `series` makes the body name its occurrence with a RECURRENCE-ID, or it would read as a message about the whole
 // series. A master's `exceptions` ride beside it.
 function icalEvent(
-    event: CalendarEvent,
+    event: EventToBuild,
     method: 'REQUEST' | 'REPLY' | 'CANCEL',
     series?: CalendarEvent,
     exceptions?: readonly CalendarEvent[],

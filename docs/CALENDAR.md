@@ -124,6 +124,8 @@ The edit dialog opens on an occurrence but "All events in series" saves on the m
 
 An override's `RECURRENCE-ID` and an `EXDATE` both name the occurrence the series would have had, computed from the master in the master's own DTSTART form, value type included. It is never the override's moved start, and never `VALUE=DATE` because the override was toggled to all day. Either would match no occurrence and orphan the override (RFC 5545 §3.8.4.4).
 
+A copy of one date holds no master to compute that instant from, so it keeps the instant the organizer's own `RECURRENCE-ID` named, and only its file does: no column holds it. Every iMIP REPLY therefore names its occurrence by what the stored file holds (`recurrenceInstantOf`), read before a delete erases it, and Google and Outlook match the answer to their occurrence by that instant. A mailed lone occurrence re-keys through the same instant against the zone of the copy it lands on.
+
 ## An occurrence is keyed by its wall-clock date in the series' zone
 
 An occurrence key is a `YYYY-MM-DD` date. A range read also carries timestamps, so it stays on the reviving treaty, and the read hooks (`withOccurrenceDay`) put the key back from the `Date` the reviver makes of it. Expansion runs in wall-clock space, so an override must key to the same date to attach to its occurrence. A TZID `RECURRENCE-ID` or `EXDATE` keys on its own wall components, the RFC 5545 canonical form. A UTC value converts to the series' zone first, because a timed series crossing midnight UTC has a UTC day one off. Floating and `DATE` values keep their raw components. The series zone comes from each UID's master, and a master with no TZID keeps its series in UTC. An occurrence a file holds without its master keys through its own DTSTART's zone, else the file's first master's, and `recurrenceKeyOf` is that one rule for the projected row and for every edit of the file. `apps/api/src/test/calendar/calendar-timezone.test.ts` pins the keying.
@@ -218,7 +220,7 @@ A copy without a rule has one occurrence, so `this` on it is `all`.
 
 An answer the organizer's Home records is announced as an event update, whether it came over the relay or by mail, so the organizer's open tabs show it.
 
-`constrainRRule` (`recurrence.ts`) keeps an organizer's later update from extending the rule past a guest's truncation, so "delete this and following" survives the next edit. The cut also drops the copy's moved and cancelled occurrences from that date on, and an update adds none back past the last date the rule keeps (`lastKeptDate`). A copy that is one occurrence of a series the guest doesn't hold answers for that occurrence: its RSVP names its own `RECURRENCE-ID`, so it lands on the organizer's override that holds that occurrence's guests.
+`constrainRRule` (`recurrence.ts`) keeps an organizer's later update from extending the rule past a guest's truncation, so "delete this and following" survives the next edit. The cut also drops the copy's moved and cancelled occurrences from that date on, and an update adds none back past the last date the rule keeps (`lastKeptDate`). A copy that is one occurrence of a series the guest doesn't hold answers for that occurrence: its RSVP names the organizer's `RECURRENCE-ID`, so it lands on the organizer's override that holds that occurrence's guests.
 
 ## Every inbound REQUEST takes one locked decision
 

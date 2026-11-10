@@ -7,7 +7,7 @@ import { heldAttendees, localToUtc, normalizeTimezone, utcToLocal } from '@works
 import { stripControlChars, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Attendee, CalendarEvent, ImipMethod, Reminder, UpdateEventInput } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
-import type { ExclusionStamp } from './ical-parse';
+import type { ExclusionStamp, ParsedEvent } from './ical-parse';
 import {
     calAddress,
     EIGEN,
@@ -69,11 +69,15 @@ type BuildOptions = { master?: CalendarEvent; exclusions?: Exclusion[] };
 
 export type Revision = { sequence: number; dtstamp?: Date | null };
 
-export function buildResource(events: readonly CalendarEvent[]): ICAL.Component {
+// A row about to be written. An occurrence carries the instant its RECURRENCE-ID names when a message or the stored
+// file stated it, since a copy of one date holds no master to compute that from.
+export type EventToBuild = CalendarEvent & Partial<Pick<ParsedEvent, 'recurrenceInstant'>>;
+
+export function buildResource(events: readonly EventToBuild[]): ICAL.Component {
     const vcalendar = newVCalendar();
 
     // The master leads its group, because every override's RECURRENCE-ID is computed from it.
-    const groups = new Map<string, CalendarEvent[]>();
+    const groups = new Map<string, EventToBuild[]>();
     for (const event of events) {
         const group = groups.get(event.uid) ?? [];
         groups.set(event.uid, group);
@@ -84,7 +88,7 @@ export function buildResource(events: readonly CalendarEvent[]): ICAL.Component 
     for (const group of groups.values()) {
         const master = group[0].recurrenceDate == null ? group[0] : undefined;
         const exclusions: Exclusion[] = [];
-        const built: CalendarEvent[] = [];
+        const built: EventToBuild[] = [];
         for (const event of group) {
             if (master && event.recurrenceDate != null && event.status === 'cancelled') {
                 exclusions.push({ key: event.recurrenceDate, exclusion: event });
@@ -115,7 +119,7 @@ export function serializeResource(resource: ICAL.Component): string {
 // `series` is the master of the one occurrence `event` is, since only it knows a moved override's ORIGINAL instant. A
 // master travels with its `exceptions`, or the guest draws a moved occurrence at its old slot and a deleted one at all.
 export function serializeEventForImip(
-    event: CalendarEvent,
+    event: EventToBuild,
     method: ImipMethod,
     series?: CalendarEvent,
     exceptions: readonly CalendarEvent[] = [],
@@ -144,7 +148,7 @@ export function serializeEventForImip(
 // What applyEdits does to one occurrence key: patch the VEVENT there, put a new override in its place, or exclude it.
 export type VEventEdit =
     | { kind: 'patch'; patch: EventPatch; ctx: WriteContext }
-    | { kind: 'override'; event: CalendarEvent }
+    | { kind: 'override'; event: EventToBuild }
     | { kind: 'exclusion'; event: CalendarEvent; ctx: WriteContext };
 
 // One pass for a batch keyed by occurrence, the master under null. It runs in the map's order, so a master listed first
@@ -262,6 +266,12 @@ export function storedRevisions(resource: ICAL.Component): Map<string | null, Re
     return revisions;
 }
 
+// The instant the stored VEVENT of one occurrence names in its RECURRENCE-ID, as the organizer wrote it.
+export function recurrenceInstantOf(resource: ICAL.Component, recurrenceKey: string): Date | null {
+    const vevent = keyVEvents(resource).get(recurrenceKey);
+    return vevent ? instantOf(vevent, 'recurrence-id', propTzid(vevent.getFirstProperty('dtstart'))) : null;
+}
+
 // The inbound-REQUEST rule matches a verified sender against this, so the imported address wins over the ORGANIZER the
 // file carries.
 export function storedOrganizerAddress(resource: ICAL.Component): string | null {
@@ -376,7 +386,7 @@ export function keepSubcomponents(comp: ICAL.Component, keep: (sub: ICAL.Compone
     for (const sub of kept) comp.addSubcomponent(sub);
 }
 
-function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Component {
+function buildVEvent(event: EventToBuild, options: BuildOptions = {}): ICAL.Component {
     const vevent = new ICAL.Component('vevent');
     // A row holding a non-IANA zone serializes as absolute UTC, rather than letting Intl throw and 500 a whole CalDAV
     // collection.
@@ -404,7 +414,7 @@ function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Com
     // §3.8.4.4). A moved startTime or the override's own all-day toggle would match no occurrence.
     if (event.recurrenceDate) {
         const master = options.master ?? event;
-        const when = occurrenceInstant(master, event.recurrenceDate);
+        const when = event.recurrenceInstant ?? occurrenceInstant(master, event.recurrenceDate);
         vevent.addProperty(timeProperty('recurrence-id', when, normalizeTimezone(master.timezone), master.allDay));
     }
 

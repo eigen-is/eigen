@@ -10,8 +10,8 @@ import { and, eq } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import { RRule } from 'rrule';
 import { ApiError } from '../core';
-import { applyEdits, buildResource, parseResource, patchEvent, removeExclusion } from '../ical';
-import type { EventPatch, VEventEdit, WriteContext } from '../ical/ical-component';
+import { applyEdits, buildResource, parseResource, patchEvent, recurrenceInstantOf, removeExclusion } from '../ical';
+import type { EventPatch, EventToBuild, VEventEdit, WriteContext } from '../ical/ical-component';
 import { serializeEventForImip } from '../ical/ical-component';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
 import { parseRecurrenceKey } from '../ical/wall-clock';
@@ -406,13 +406,14 @@ async function patchStoredEvent(
     return { updated: requireEvent(calendar, id), existing };
 }
 
-// Caller holds the write lock; the row it answers with is what the decline or cancellation mail is composed from.
+// Caller holds the write lock; the row it answers with is what the decline or cancellation mail is composed from, its
+// occurrence named as the bytes it erases named it.
 export async function eraseStoredEvent(
     calendar: Calendar,
     calendarId: string,
     id: string,
     expectedEtag?: string,
-): Promise<CalendarEvent | null> {
+): Promise<EventToBuild | null> {
     const existing = eventById(calendar, id);
     if (!existing) return null;
     if (existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
@@ -420,22 +421,23 @@ export async function eraseStoredEvent(
     if (!resource) throw new ApiError(404, 'Event not found');
     assertEtag(resource, expectedEtag);
 
-    if (existing.recurrenceDate) {
-        // A synthetic exclusion row carries no data of its own, so the link is the master's to state. A copy of single
-        // dates has no master: it loses one date at a time, and goes whole with its last.
-        const parent = existing.parentEventId ? requireEvent(calendar, existing.parentEventId) : undefined;
-        const component = storedComponent(calendar, resource);
-        const ctx = writeContext(actorIsOrganizer(parent ?? existing));
-        const exclusion: VEventEdit = { kind: 'exclusion', event: existing, ctx };
-        // A cancelled row is the exclusion itself, so deleting it puts the occurrence back.
-        if (parent && existing.status === 'cancelled') removeExclusion(component, existing.recurrenceDate, ctx);
-        else applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]), parent);
-        if (component.getFirstSubcomponent('vevent')) await writeComponent(calendar, resource, component);
-        else await calendar.purgeResource(resource);
-    } else {
+    if (!existing.recurrenceDate) {
         await calendar.purgeResource(resource);
+        return existing;
     }
-    return existing;
+    // A synthetic exclusion row carries no data of its own, so the link is the master's to state. A copy of single
+    // dates has no master: it loses one date at a time, and goes whole with its last.
+    const parent = existing.parentEventId ? requireEvent(calendar, existing.parentEventId) : undefined;
+    const component = storedComponent(calendar, resource);
+    const erased = { ...existing, recurrenceInstant: recurrenceInstantOf(component, existing.recurrenceDate) };
+    const ctx = writeContext(actorIsOrganizer(parent ?? existing));
+    const exclusion: VEventEdit = { kind: 'exclusion', event: existing, ctx };
+    // A cancelled row is the exclusion itself, so deleting it puts the occurrence back.
+    if (parent && existing.status === 'cancelled') removeExclusion(component, existing.recurrenceDate, ctx);
+    else applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]), parent);
+    if (component.getFirstSubcomponent('vevent')) await writeComponent(calendar, resource, component);
+    else await calendar.purgeResource(resource);
+    return erased;
 }
 
 async function writeOverride(

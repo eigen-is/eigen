@@ -335,12 +335,16 @@ describe('iMIP Outbound Email Composition', () => {
         expect(ics).not.toContain('RRULE:FREQ=WEEKLY');
     });
 
-    // A guest invited to ONE occurrence holds a standalone copy that keeps its RECURRENCE-ID, so the reply
-    // it sends names that occurrence and the organizer answers it on their override, not on the series.
+    // A guest invited to ONE occurrence holds a standalone copy that keeps the organizer's RECURRENCE-ID, so the
+    // reply names that original slot and the organizer answers it on their override, not on the series.
     test('a reply from a standalone single-occurrence copy names that occurrence', () => {
-        const standalone: CalendarEvent = { ...MOVED_OCCURRENCE, parentEventId: null };
+        const standalone = {
+            ...MOVED_OCCURRENCE,
+            parentEventId: null,
+            recurrenceInstant: new Date('2026-04-08T14:00:00Z'),
+        };
         const ics = unfold(composeRsvpReply(standalone, 'bob@external.com', 'Bob', 'accepted'));
-        expect(ics).toContain('RECURRENCE-ID;TZID=America/New_York:20260408T');
+        expect(ics).toContain(ORIGINAL_SLOT);
         expect(ics).toContain('ACCEPTED');
     });
 

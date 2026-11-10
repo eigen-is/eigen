@@ -9,6 +9,7 @@ export {
     newVCalendar,
     PRODID,
     patchEvent,
+    recurrenceInstantOf,
     removeExclusion,
     restampResource,
     serializeEventForImip,
