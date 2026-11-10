@@ -6,7 +6,6 @@ import { escapeHtml } from '@workspace/lib/html';
 import type { Context } from '../context';
 import { getSheetConfig } from '../context';
 import type { RangeOrWholeAxis, Rect } from '../types';
-import { seletedHighlistByindex } from '.';
 import { getRangetxt, mergeMoveMain } from './cell';
 import { rangeColor } from './color';
 import { selectTextOffsets } from './cursor';
@@ -14,17 +13,14 @@ import { formulaUIState, setFunctionHTMLIndex } from './formula-cache';
 import { caretTakesRange } from './formula-editor';
 import { getcellrange } from './formula-exec';
 import { colLocation, rowLocation, sheetPoint } from './location';
-
-function parseElement(eleString: string) {
-    return new DOMParser().parseFromString(eleString, 'text/html').body.childNodes[0];
-}
+import { seletedHighlistByindex } from './selection';
 
 export function createFormulaRangeSelect(ctx: Context, select: { rangeIndex: number } & Rect) {
     ctx.formulaRangeSelect = select;
 }
 
 export function createRangeHighlight(ctx: Context, inputInnerHtmlStr: string, ignoreRangeIndex = -1) {
-    const $span = parseElement(`<div>${inputInnerHtmlStr}</div>`) as HTMLElement;
+    const $span = new DOMParser().parseFromString(inputInnerHtmlStr, 'text/html').body;
     const formulaRanges: {
         rangeIndex: number;
         left: number;
@@ -97,16 +93,14 @@ export function rangeSetValue(
     ) {
         const span = $editor.querySelector(`span[rangeindex='${ctx.formulaCache.rangechangeindex}']`);
         if (span instanceof HTMLElement) {
-            // `range` embeds the sheet's name, which updateSheetName only screens for the
-            // six characters a reference may not contain — markup is a legal sheet name,
-            // and this is innerHTML. The caret offset stays the RAW length: that is what
-            // the browser renders, where the escaped markup is longer (commit ac3ff70df).
+            // The reference holds a sheet's name, and markup is a legal one. The caret counts the text as rendered,
+            // which the escaped markup is longer than.
             span.innerHTML = escapeHtml(range);
             selectTextOffsets(span, range.length, range.length);
         }
     } else {
         const function_str = `<span class="sheet-formula-functionrange-cell" rangeindex="${formulaUIState.functionHTMLIndex}" dir="auto" style="color:${rangeColor(formulaUIState.functionHTMLIndex)};">${escapeHtml(range)}</span>`;
-        const newEle = parseElement(function_str);
+        const newEle = new DOMParser().parseFromString(function_str, 'text/html').body.childNodes[0];
         const refEle = ctx.formulaCache.rangeSetValueTo;
         if (refEle?.parentNode) {
             const leftPar = document.getElementsByClassName('sheet-formula-text-lpar')?.[0];
@@ -147,7 +141,7 @@ export function onFormulaRangeDragEnd(ctx: Context) {
                 ctx.formulaCache.rangedrag_row_start)
         )
             ctx.formulaRangeSelect = {
-                rangeIndex: ctx.formulaCache.rangeIndex || 0,
+                rangeIndex: ctx.formulaCache.rangeIndex ?? 0,
                 left,
                 top,
                 width,
@@ -169,6 +163,28 @@ function setRangeSelect(container: HTMLDivElement, left: number, top: number, he
     }
 }
 
+// Where the picked range spans on one axis as the pointer reaches the line from `start` to `end`, the line `index`:
+// from the line to the far edge of what was picked, keeping the picked line the drag began on.
+function dragSpan(
+    picked: number[],
+    pickedStart: number,
+    pickedSize: number,
+    start: number,
+    end: number,
+    index: number,
+) {
+    if (pickedStart > start) return { start, size: pickedStart + pickedSize - start, span: [index, picked[1]] };
+    if (pickedStart === start) return { start, size: pickedStart + pickedSize - start, span: [index, picked[0]] };
+    return { start: pickedStart, size: end - pickedStart - 1, span: [picked[0], index] };
+}
+
+// The range being picked, with the pixel rect it was picked at.
+function pickedRange(ctx: Context) {
+    const picked = ctx.formulaCache.func_selectedrange;
+    if (picked?.left == null || picked.top == null || picked.width == null || picked.height == null) return undefined;
+    return { picked, left: picked.left, top: picked.top, width: picked.width, height: picked.height };
+}
+
 export function rangeDrag(
     ctx: Context,
     e: MouseEvent,
@@ -177,79 +193,32 @@ export function rangeDrag(
     container: HTMLDivElement,
     fxInput?: HTMLDivElement | null,
 ) {
-    const { func_selectedrange } = ctx.formulaCache;
-    if (
-        !func_selectedrange ||
-        func_selectedrange.left == null ||
-        func_selectedrange.height == null ||
-        func_selectedrange.top == null ||
-        func_selectedrange.width == null
-    )
-        return;
+    const from = pickedRange(ctx);
+    if (!from) return;
+    const { picked } = from;
     const { x, y } = sheetPoint(ctx, e, cellArea);
-    const [row_pre, row, row_index] = rowLocation(y, ctx.visibledatarow);
+    const [rowStart, rowEnd, row] = rowLocation(y, ctx.visibledatarow);
+    const [colStart, colEnd, col] = colLocation(x, ctx.visibledatacolumn);
+    const rows = dragSpan(picked.row, from.top, from.height, rowStart, rowEnd, row);
+    const columns = dragSpan(picked.column, from.left, from.width, colStart, colEnd, col);
 
-    const [col_pre, col, col_index] = colLocation(x, ctx.visibledatacolumn);
+    let rowSpan = rows.span;
+    let columnSpan = columns.span;
+    let top = rows.start;
+    let height = rows.size;
+    let left = columns.start;
+    let width = columns.size;
+    const merged = mergeMoveMain(ctx, columnSpan, rowSpan, top, height, left, width);
+    if (merged != null) [columnSpan, rowSpan, top, height, left, width] = merged;
 
-    let top = 0;
-    let height = 0;
-    let rowseleted = [];
+    picked.row = rowSpan;
+    picked.column = columnSpan;
+    picked.left_move = left;
+    picked.width_move = width;
+    picked.top_move = top;
+    picked.height_move = height;
 
-    if (func_selectedrange.top > row_pre) {
-        top = row_pre;
-        height = func_selectedrange.top + func_selectedrange.height - row_pre;
-        rowseleted = [row_index, func_selectedrange.row[1]];
-    } else if (func_selectedrange.top === row_pre) {
-        top = row_pre;
-        height = func_selectedrange.top + func_selectedrange.height - row_pre;
-        rowseleted = [row_index, func_selectedrange.row[0]];
-    } else {
-        top = func_selectedrange.top;
-        height = row - func_selectedrange.top - 1;
-        rowseleted = [func_selectedrange.row[0], row_index];
-    }
-
-    let left = 0;
-    let width = 0;
-    let columnseleted = [];
-
-    if (func_selectedrange.left > col_pre) {
-        left = col_pre;
-        width = func_selectedrange.left + func_selectedrange.width - col_pre;
-        columnseleted = [col_index, func_selectedrange.column[1]];
-    } else if (func_selectedrange.left === col_pre) {
-        left = col_pre;
-        width = func_selectedrange.left + func_selectedrange.width - col_pre;
-        columnseleted = [col_index, func_selectedrange.column[0]];
-    } else {
-        left = func_selectedrange.left;
-        width = col - func_selectedrange.left - 1;
-        columnseleted = [func_selectedrange.column[0], col_index];
-    }
-
-    const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, top, height, left, width);
-    if (changeparam != null) {
-        [columnseleted, rowseleted, top, height, left, width] = changeparam;
-    }
-
-    func_selectedrange.row = rowseleted;
-    func_selectedrange.column = columnseleted;
-
-    func_selectedrange.left_move = left;
-    func_selectedrange.width_move = width;
-    func_selectedrange.top_move = top;
-    func_selectedrange.height_move = height;
-
-    rangeSetValue(
-        ctx,
-        cellInput,
-        {
-            row: rowseleted,
-            column: columnseleted,
-        },
-        fxInput,
-    );
-
+    rangeSetValue(ctx, cellInput, { row: rowSpan, column: columnSpan }, fxInput);
     setRangeSelect(container, left, top, height, width);
     e.preventDefault();
 }
@@ -262,62 +231,27 @@ export function rangeDragColumn(
     container: HTMLDivElement,
     fxInput?: HTMLDivElement | null,
 ) {
-    const { func_selectedrange } = ctx.formulaCache;
-    if (
-        !func_selectedrange ||
-        func_selectedrange.left == null ||
-        func_selectedrange.height == null ||
-        func_selectedrange.top == null ||
-        func_selectedrange.width == null
-    )
-        return;
+    const from = pickedRange(ctx);
+    if (!from) return;
+    const { picked } = from;
     const { x } = sheetPoint(ctx, e, cellArea);
+    const lastRow = ctx.visibledatarow.length - 1;
+    const bottom = ctx.visibledatarow[lastRow];
+    const [colStart, colEnd, col] = colLocation(x, ctx.visibledatacolumn);
+    const columns = dragSpan(picked.column, from.left, from.width, colStart, colEnd, col);
 
-    const { visibledatarow } = ctx;
-    const row_index = visibledatarow.length - 1;
-    const row = visibledatarow[row_index];
-    const row_pre = 0;
+    let columnSpan = columns.span;
+    let left = columns.start;
+    let width = columns.size;
+    const merged = mergeMoveMain(ctx, columnSpan, [0, lastRow], 0, bottom - 1, left, width);
+    if (merged != null) [columnSpan, , , , left, width] = merged;
 
-    const [col_pre, col, col_index] = colLocation(x, ctx.visibledatacolumn);
+    picked.column = columnSpan;
+    picked.left_move = left;
+    picked.width_move = width;
 
-    let left = 0;
-    let width = 0;
-    let columnseleted = [];
-
-    if (func_selectedrange.left > col_pre) {
-        left = col_pre;
-        width = func_selectedrange.left + func_selectedrange.width - col_pre;
-        columnseleted = [col_index, func_selectedrange.column[1]];
-    } else if (func_selectedrange.left === col_pre) {
-        left = col_pre;
-        width = func_selectedrange.left + func_selectedrange.width - col_pre;
-        columnseleted = [col_index, func_selectedrange.column[0]];
-    } else {
-        left = func_selectedrange.left;
-        width = col - func_selectedrange.left - 1;
-        columnseleted = [func_selectedrange.column[0], col_index];
-    }
-
-    const changeparam = mergeMoveMain(ctx, columnseleted, [0, row_index], row_pre, row - row_pre - 1, left, width);
-    if (changeparam != null) {
-        [columnseleted, , , , left, width] = changeparam;
-    }
-
-    func_selectedrange.column = columnseleted;
-    func_selectedrange.left_move = left;
-    func_selectedrange.width_move = width;
-
-    rangeSetValue(
-        ctx,
-        cellInput,
-        {
-            row: [null, null],
-            column: columnseleted,
-        },
-        fxInput,
-    );
-
-    setRangeSelect(container, left, row_pre, row - row_pre - 1, width);
+    rangeSetValue(ctx, cellInput, { row: [null, null], column: columnSpan }, fxInput);
+    setRangeSelect(container, left, 0, bottom - 1, width);
 }
 
 export function rangeDragRow(
@@ -328,60 +262,25 @@ export function rangeDragRow(
     container: HTMLDivElement,
     fxInput?: HTMLDivElement | null,
 ) {
-    const { func_selectedrange } = ctx.formulaCache;
-    if (
-        !func_selectedrange ||
-        func_selectedrange.left == null ||
-        func_selectedrange.height == null ||
-        func_selectedrange.top == null ||
-        func_selectedrange.width == null
-    )
-        return;
-
+    const from = pickedRange(ctx);
+    if (!from) return;
+    const { picked } = from;
     const { y } = sheetPoint(ctx, e, cellArea);
+    const [rowStart, rowEnd, row] = rowLocation(y, ctx.visibledatarow);
+    const lastColumn = ctx.visibledatacolumn.length - 1;
+    const right = ctx.visibledatacolumn[lastColumn];
+    const rows = dragSpan(picked.row, from.top, from.height, rowStart, rowEnd, row);
 
-    const [row_pre, row, row_index] = rowLocation(y, ctx.visibledatarow);
+    let rowSpan = rows.span;
+    let top = rows.start;
+    let height = rows.size;
+    const merged = mergeMoveMain(ctx, [0, lastColumn], rowSpan, top, height, 0, right - 1);
+    if (merged != null) [, rowSpan, top, height] = merged;
 
-    const { visibledatacolumn } = ctx;
-    const col_index = visibledatacolumn.length - 1;
-    const col = visibledatacolumn[col_index];
-    const col_pre = 0;
+    picked.row = rowSpan;
+    picked.top_move = top;
+    picked.height_move = height;
 
-    let top = 0;
-    let height = 0;
-    let rowseleted = [];
-
-    if (func_selectedrange.top > row_pre) {
-        top = row_pre;
-        height = func_selectedrange.top + func_selectedrange.height - row_pre;
-        rowseleted = [row_index, func_selectedrange.row[1]];
-    } else if (func_selectedrange.top === row_pre) {
-        top = row_pre;
-        height = func_selectedrange.top + func_selectedrange.height - row_pre;
-        rowseleted = [row_index, func_selectedrange.row[0]];
-    } else {
-        top = func_selectedrange.top;
-        height = row - func_selectedrange.top - 1;
-        rowseleted = [func_selectedrange.row[0], row_index];
-    }
-
-    const changeparam = mergeMoveMain(ctx, [0, col_index], rowseleted, top, height, col_pre, col - col_pre - 1);
-    if (changeparam != null) {
-        [, rowseleted, top, height] = changeparam;
-    }
-
-    func_selectedrange.row = rowseleted;
-    func_selectedrange.top_move = top;
-    func_selectedrange.height_move = height;
-
-    rangeSetValue(
-        ctx,
-        cellInput,
-        {
-            row: rowseleted,
-            column: [null, null],
-        },
-        fxInput,
-    );
-    setRangeSelect(container, col_pre, top, height, col - col_pre - 1);
+    rangeSetValue(ctx, cellInput, { row: rowSpan, column: [null, null] }, fxInput);
+    setRangeSelect(container, 0, top, height, right - 1);
 }
