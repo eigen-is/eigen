@@ -991,6 +991,48 @@ describe('a copy of one date named in UTC', () => {
         expect(events.map((e) => [e.title, e.recurrenceDate])).toEqual([['Moved', '2026-05-09']]);
         expect(text.match(/BEGIN:VEVENT/g)).toHaveLength(1);
     });
+
+    // Outlook states a zone it can't name only in the file, which Eigen writes back as UTC, so the date keys in UTC.
+    test('named in a zone only its file defines, keeps one copy through an update', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const guest = harness.user.email;
+        const custom = (title: string, sequence: number) =>
+            parseIcs(
+                vcal(
+                    [
+                        'BEGIN:VTIMEZONE',
+                        'TZID:Customized Time Zone',
+                        'BEGIN:STANDARD',
+                        'DTSTART:16010101T000000',
+                        'TZOFFSETFROM:+1300',
+                        'TZOFFSETTO:+1300',
+                        'END:STANDARD',
+                        'END:VTIMEZONE',
+                    ],
+                    [
+                        'BEGIN:VEVENT',
+                        `UID:${DATE}`,
+                        'RECURRENCE-ID;TZID=Customized Time Zone:20260510T003000',
+                        `SUMMARY:${title}`,
+                        `SEQUENCE:${sequence}`,
+                        `DTSTAMP:2026010${sequence + 1}T000000Z`,
+                        `ORGANIZER:mailto:${ORG}`,
+                        `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${guest}`,
+                        'DTSTART;TZID=Customized Time Zone:20260510T003000',
+                        'DTEND;TZID=Customized Time Zone:20260510T013000',
+                        'END:VEVENT',
+                    ],
+                ),
+            ).events;
+
+        await calendar.receiveRequest(custom('Early call', 0), link);
+        await calendar.receiveRequest(custom('Renamed', 1), link);
+
+        const { events, text } = await stored(calendar);
+        expect(events.map((e) => [e.title, e.recurrenceDate])).toEqual([['Renamed', '2026-05-09']]);
+        expect(text).toContain('RECURRENCE-ID:20260509T113000Z\r\n');
+    });
 });
 
 // A guest's copy names a new occurrence by the series the same message states, never by the one it held before.

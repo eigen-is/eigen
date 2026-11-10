@@ -142,9 +142,8 @@ function startOfDay(t: ICAL.Time): Date {
     return new Date(Date.UTC(t.year, t.month - 1, t.day));
 }
 
-// A RECURRENCE-ID or an EXDATE names an instant (RFC 5545), and expansion keys each occurrence by its day on the
-// series' wall clock, so a timed value keys in the zone of the series' DTSTART. An all-day series has no clock, and an
-// occurrence held without its master knows no zone but the one it is written in, so both key on the date as written.
+// A timed RECURRENCE-ID or EXDATE names an instant (RFC 5545), keyed on its day in the zone of the series' DTSTART. An
+// all-day series has no clock, so a value on it keys on the date it is written on.
 export function icalTimeToRecurrenceKey(t: ICAL.Time, tzid: string | null, seriesStart: ICAL.Property | null): string {
     const start = seriesStart?.getFirstValue();
     if (t.isDate || !(start instanceof ICAL.Time) || start.isDate) return recurrenceKey(t.year, t.month, t.day);
@@ -168,7 +167,8 @@ export function uidOf(vevent: ICAL.Component): string {
     return String(vevent.getFirstPropertyValue('uid') ?? '');
 }
 
-// The occurrence key a VEVENT's RECURRENCE-ID names, null for a master, through `starts` from seriesStarts.
+// The occurrence key a VEVENT's RECURRENCE-ID names, null for a master, through `starts` from seriesStarts. Held
+// without its master, an occurrence knows no zone but the one its RECURRENCE-ID is written in, UTC included.
 export function recurrenceKeyOf(
     vevent: ICAL.Component,
     starts: ReadonlyMap<string, ICAL.Property | null>,
@@ -176,7 +176,7 @@ export function recurrenceKeyOf(
     const prop = vevent.getFirstProperty('recurrence-id');
     const value = prop?.getFirstValue();
     if (!(value instanceof ICAL.Time)) return null;
-    return icalTimeToRecurrenceKey(value, propTzid(prop), starts.get(uidOf(vevent)) ?? null);
+    return icalTimeToRecurrenceKey(value, propTzid(prop), starts.get(uidOf(vevent)) ?? prop);
 }
 
 // A copy of one date holds no master to name its occurrence through, so it keeps the organizer's line to write back.
