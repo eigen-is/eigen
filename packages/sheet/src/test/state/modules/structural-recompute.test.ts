@@ -298,6 +298,17 @@ describe('a name a formula holds that no sheet held', () => {
         const batch = tabEdit(t, (d) => addSheet(d, 's3', undefined, value), { addSheetOp: true });
         for (const sheets of [t.ctx.sheets, join(base, [batch])]) expect(at(sheets, 's2', 0, 0)?.v).toBe(7);
     });
+
+    test('an added sheet that lands renamed onto it does too', () => {
+        const base = book({ cells: [[n(10)]] }, { cells: [[f("='One (2)'!A1", '#REF!')]] });
+        const t = tab(base);
+        const value: Sheet = { name: 'One', id: 's3', order: 2, data: [[n(7)]], row: 1, column: 1 };
+        const batch = tabEdit(t, (d) => addSheet(d, 's3', undefined, value), { addSheetOp: true });
+        for (const sheets of [t.ctx.sheets, join(base, [batch])]) {
+            expect(sheets.find((s) => s.id === 's3')?.name).toBe('One (2)');
+            expect(at(sheets, 's2', 0, 0)?.v).toBe(7);
+        }
+    });
 });
 
 describe('a row op`s undo', () => {

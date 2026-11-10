@@ -7,30 +7,24 @@ import type { Cell, Sheet } from '@workspace/lib/sheets';
 import { ApiError } from '../../core/errors';
 import { IMPORT_MESSAGES } from '../messages';
 
-// A cell costs about 480 B in the sheets alone, and recalc and the snapshot copy it: the cells emitted count, merged and
-// validated ones among them, and every sheet's span, so a tiny file can't declare far-apart cells whose grid recalc
-// walks. The byte cap catches a bomb of few cells.
+// A cell costs about 480 B in the sheets alone, and recalc and the snapshot copy it. Every sheet's span counts too, so a
+// tiny file can't declare far-apart cells whose grid recalc walks.
 export const MAX_CELLS = 4_000_000;
 
-// The snapshot spells a cell's text out per cell, its value, its display and a rich string's runs; real workbooks emit
-// under 120M characters.
+// The snapshot spells a cell's text out per cell: its value, its display and a rich string's runs.
 export const MAX_TEXT = 250_000_000;
-// A shared formula's copy is translated, and a formula that uses a defined name is walked, before either is weighed,
-// at about 3M characters a second. The corpus spends at most 4.3M characters, 1.2M of them on names, in a GOV.UK
-// inspections workbook of 24,706 copies. The budget is nearly four times that, about 5 s.
+// A shared formula's copy is translated, and a formula that uses a defined name is walked, before either is weighed.
 export const MAX_SHARED_FORMULA_TEXT = 16_000_000;
-// Recalc materializes a sheet's rows by its columns, each at least a default grid's, at about 13 bytes a slot, so a
-// narrow sheet's span is far smaller than its grid. The corpus builds at most 27.3M, in docling's inflated test file of
-// one sheet of a million rows. Four times that recalcs in about a second at 1.4 GB.
+// Recalc materializes a sheet's rows by its columns, each at least a default grid's, so a narrow sheet's span is far
+// smaller than its grid.
 export const MAX_GRID_SLOTS = 110_000_000;
 
 // A workbook's stored cells and the characters of their text.
 export type SheetsWeight = { cells: number; text: number };
 
-// The file's sheets and the open workbook's weigh in one unit. The text is counted in the fields the reader charges per
-// cell, so a file weighs no more here than the reader let through. What else the reader charges, such as borders,
-// merges and the text of links and rules, is left out.
-export function sheetsWeight(sheets: Sheet[]): SheetsWeight {
+// The file's sheets and the open workbook's weigh in one unit. The text is counted in fields the reader charges per
+// cell, so a file weighs no more here than the reader let through.
+export function sheetsWeight(sheets: readonly Sheet[]): SheetsWeight {
     let cells = 0;
     let text = 0;
     for (const sheet of sheets) {
@@ -44,7 +38,7 @@ export function sheetsWeight(sheets: Sheet[]): SheetsWeight {
 
 // The reader bounds each file alone, so an insert weighs the file with the workbook it joins against the same caps.
 // Then no workbook grown by inserts holds more than one import may.
-export function assertInsertFits(workbook: Sheet[], file: SheetsWeight): void {
+export function assertInsertFits(workbook: readonly Sheet[], file: SheetsWeight): void {
     const { cells, text } = sheetsWeight(workbook);
     if (cells + file.cells > MAX_CELLS || text + file.text > MAX_TEXT) {
         throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);

@@ -55,10 +55,8 @@ export function warmFormulaGraphOnIdle(getContext: () => Context): () => void {
     return () => clearTimeout(id);
 }
 
-// Recomputes the formulas at `formulasAt` and every formula that reads a cell in `changedCells` or one of those,
-// directly or through another formula, and writes each result its cell doesn't hold yet. The cells are already
-// written, and the formula graph already knows them. A clock or a random number recomputes here, as its author's value
-// then goes out on the wire.
+// Recomputes `formulasAt` and every formula reading `changedCells`, directly or not, once the graph knows the written
+// cells. A clock or a random number recomputes here, since its author's value goes out on the wire.
 export function execFunctionGroup(
     ctx: Context,
     changedCells: readonly FormulaCell[],

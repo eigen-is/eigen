@@ -55,9 +55,8 @@ export function replaySheetsOps(
     return (result ?? sheets.map(withNormalizedSheet)).map(withSyncedCelldataIfData);
 }
 
-// The replay one batch at a time: the sheets after each batch, and what it dropped, as replaySheetsOps reports it. A
-// caller can stop between two batches and keep the sheets after any of them, since a batch never changes the sheets it
-// is given. The cells of a sheet holding the dense matrix are in `data`, not yet written back to `celldata`.
+// The replay one batch at a time, which a caller may stop between two, since a batch never changes the sheets it is
+// given. A sheet holding the dense matrix has its cells in `data`, not yet written back to `celldata`.
 export function* replaySheetsSteps(
     sheets: Sheet[],
     opBatches: readonly Op[][],
@@ -149,7 +148,7 @@ export function applySheetsBatch(
     result = immer.applyPatches(result, patches);
     if (hidesEverySheet(sheets, result)) throw new Error('A batch may not hide or delete every sheet');
     if (patches.length > 0) withinBudget(() => held?.followPatches(result, patches));
-    const seeds = seedsOf(batch, moved);
+    const seeds = seedsOf(batch, moved, result);
     let skipped: RangeError | null = null;
     if (seeds) {
         const materialized = result.map(withMaterializedData);
@@ -166,7 +165,11 @@ export function applySheetsBatch(
 
 // What a batch's sheet, row and column ops can affect, or null when it holds none, since an edit carries its own
 // values. A cell its patches write counts too, because an undo's repairs change what the formulas reading them hold.
-function seedsOf(ops: readonly Op[], moved: readonly AppliedRowColOp[]): RecomputeSeeds | null {
+function seedsOf(
+    ops: readonly Op[],
+    moved: readonly AppliedRowColOp[],
+    sheets: readonly Sheet[],
+): RecomputeSeeds | null {
     if (!isStructuralBatch(ops)) return null;
     const lines: RecomputeSeeds['lines'][number][] = [];
     for (const { op } of moved) {
@@ -184,8 +187,10 @@ function seedsOf(ops: readonly Op[], moved: readonly AppliedRowColOp[]): Recompu
     for (const op of ops) {
         const [field, r, c] = op.path;
         if (op.op === 'addSheet' || op.op === 'renameSheet') {
-            const name = isRecord(op.value) ? op.value['name'] : undefined;
-            if (typeof name === 'string') names.add(sheetNameKey(name));
+            // An add whose name was taken landed under another, so the name comes from the sheet, not the op.
+            const id = op.op === 'addSheet' && isRecord(op.value) ? op.value['id'] : op.id;
+            const name = sheets.find((s) => s.id === id)?.name;
+            if (name !== undefined) names.add(sheetNameKey(name));
         } else if (isPatchOp(op) && field === 'data' && typeof r === 'number' && typeof c === 'number' && op.id) {
             cells.push({ r, c, id: op.id });
         }

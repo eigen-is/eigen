@@ -45,7 +45,7 @@ export const SERVER_RECALC_BUDGET = {
     // don't, because a whole column costs one slot but many formulas reading it make many links.
     maxDependencyEdges: 40_000_000,
     // The cells the evaluation of ranges reads, which bounds the recalc time.
-    maxCellsRead: 120_000_000,
+    maxCellsRead: 32_000_000,
 };
 
 // What a compaction's run keeps after its fold's deadline: the encode and the reply, and the part of the last batch no
@@ -78,11 +78,8 @@ export function readSheetsFromDoc(
     }
 }
 
-// A compaction in the transform process folds the head of the log, the batches it replays before `deadlineAt`, the
-// wall-clock time its job is killed at, less the margin. A batch whose recompute runs past that, or past any budget,
-// would store values a browser computes differently, so the fold ends before it and the next close starts with it;
-// one that is the first fails the fold, and the log stays. The batches come as JSON text, which crosses to the process
-// much faster than objects.
+// A compaction folds the head of the log, the batches it replays before `deadlineAt`, the wall-clock time its job is
+// killed at. A batch past the deadline or a budget would store values a browser computes differently, so it waits.
 export function compactSheetsSnapshot(
     snapshotJson: string | null,
     batchesJson: string,
@@ -110,9 +107,8 @@ export function compactSheetsSnapshot(
     return { snapshot: encodeSheetsSnapshot(replayed, { computed }), dropped, folded };
 }
 
-// Import… as new tabs: one batch of addSheet ops the main thread pushes after the workbook's own, so an open tab adds
-// them live as a peer's and keeps its view and its undo. The workbook is replayed as a tab opening it shows it, so a
-// sheet an earlier insert added holds its name and weighs with the rest.
+// Import… as new tabs: one batch of addSheet ops, which an open tab adds live as a peer's and keeps its undo. The
+// workbook is replayed as a tab opening it shows it, so a sheet an earlier insert added holds its name.
 export function addSheetsBatch(workbook: SheetsWorkbookJson, snapshotJson: string, weight: SheetsWeight): Op[] {
     const current = replaySheetsOps(
         decodeOrDefault(workbook.snapshot).sheets,
