@@ -85,10 +85,10 @@ function richContext(): Context {
     return ctx;
 }
 
-function emittedOps(recipe: (ctx: Context) => void, options: Parameters<typeof patchToOp>[2]): [Op[], Context] {
+function emittedOps(recipe: (ctx: Context) => void, options: Parameters<typeof patchToOp>[3]): [Op[], Context] {
     const base = richContext();
     const [next, patches] = produceWithPatches(base, recipe);
-    return [patchToOp(next, filterPatch(patches), options), next];
+    return [patchToOp(base, next, filterPatch(patches), options), next];
 }
 
 function run(ctx: Context, { insertRowColOp, deleteRowColOp }: PatchOptions) {
@@ -146,7 +146,7 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
         const base = richContext();
         const baseSheets = structuredClone(base.sheets);
         const [next, patches] = produceWithPatches(base, (ctx: Context) => insertRowCol(ctx, INSERT_OP));
-        const ops = patchToOp(next, filterPatch(patches), { insertRowColOp: INSERT_OP });
+        const ops = patchToOp(base, next, filterPatch(patches), { insertRowColOp: INSERT_OP });
         expectConverged(replaySheetsOps(baseSheets, [ops]), next);
     });
 
@@ -155,7 +155,7 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
         const base = richContext();
         const baseSheets = structuredClone(base.sheets);
         const [next, patches] = produceWithPatches(base, (ctx: Context) => insertRowCol(ctx, op));
-        const ops = patchToOp(next, filterPatch(patches), { insertRowColOp: op });
+        const ops = patchToOp(base, next, filterPatch(patches), { insertRowColOp: op });
         expect(next.sheets[0].data?.[2]?.[3]?.f).toBe('=C1+C2');
         expectConverged(replaySheetsOps(baseSheets, [ops]), next);
     });
@@ -164,7 +164,7 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
         const base = richContext();
         const baseSheets = structuredClone(base.sheets);
         const [next, patches] = produceWithPatches(base, (ctx: Context) => deleteRowCol(ctx, DELETE_OP));
-        const ops = patchToOp(next, filterPatch(patches), { deleteRowColOp: DELETE_OP });
+        const ops = patchToOp(base, next, filterPatch(patches), { deleteRowColOp: DELETE_OP });
         expectConverged(replaySheetsOps(baseSheets, [ops]), next);
     });
 
@@ -192,7 +192,7 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
         base.sheets[0].data![3]![3] = { mc: { r: 2, c: 2 } };
         const baseSheets = structuredClone(base.sheets);
         const [next, patches] = produceWithPatches(base, (ctx: Context) => insertRowCol(ctx, op));
-        const ops = patchToOp(next, filterPatch(patches), { insertRowColOp: op });
+        const ops = patchToOp(base, next, filterPatch(patches), { insertRowColOp: op });
         expectConverged(replaySheetsOps(baseSheets, [ops]), next);
     });
 });

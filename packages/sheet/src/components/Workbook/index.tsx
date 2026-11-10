@@ -241,7 +241,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     globalCache.current.redoList = [];
                     globalCache.current.cutByPeer = undefined;
                 }
-                onOp?.(patchToOp(result, filteredPatches, entry.options));
+                onOp?.(patchToOp(base, result, filteredPatches, entry.options));
             },
             [commit, onOp],
         );

@@ -137,12 +137,12 @@ export function deleteSheet(ctx: Context, id: string) {
     shiftSheetOrders(ctx.sheets, order, -1);
 }
 
-// A sheet added at order `at`, or deleted from it, moves the sheets from there on one place. Only the author's edit
-// does this, since the batch carries the orders and moving them again for two batches sent at once would double it.
+// A sheet added at order `at` moves the sheets from there on one place, and one deleted from it the sheets past it, so
+// a sheet two tabs left on the same order keeps its place. Only the author's edit moves them: the batch carries them.
 export function shiftSheetOrders(sheets: Sheet[], at: number, by: 1 | -1) {
     for (const sheet of sheets) {
         const order = sheetOrder(sheet);
-        if (order >= at) sheet.order = order + by;
+        if (order > at || (order === at && by > 0)) sheet.order = order + by;
     }
 }
 

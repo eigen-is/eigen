@@ -18,7 +18,7 @@ enablePatches();
 
 export function emitOps(base: Context, recipe: (ctx: Context) => void): Op[] {
     const [next, patches] = produceWithPatches(base, recipe);
-    return patchToOp(next, filterPatch(patches));
+    return patchToOp(base, next, filterPatch(patches));
 }
 
 export function receiveOps(ctx: Context, ops: Op[]): Context {
@@ -45,7 +45,7 @@ export function author(base: Context, recipe: (ctx: Context) => void, options: P
     const entry = recordEntry(base, next, filterPatch(patches), filterPatch(inverse), options);
     return {
         next,
-        ops: patchToOp(next, filterPatch(patches), entry.options),
+        ops: patchToOp(base, next, filterPatch(patches), entry.options),
         patches: filterPatch(patches),
         inverse: filterPatch(inverse),
         entry,
