@@ -131,7 +131,12 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     const write = async (action: RecurringAction) => {
         const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
 
-        const data = { ...event.data, attendees: attendees.length > 0 ? attendees : undefined };
+        const dataWith = (guests: Attendee[]) => {
+            const data = { ...event.data, attendees: guests.length > 0 ? guests : undefined };
+            return Object.values(data).some((v) => v !== undefined) ? data : null;
+        };
+        // A date stores a guest list only when the user changed it, so a guest the series gains reaches it too.
+        const dateGuests = typed.attendees ? attendees : isOverride ? (event.data?.attendees ?? []) : [];
         const timezone = allDay ? null : (event.timezone ?? viewerTimeZone());
         const edited = {
             title: title.trim(),
@@ -145,7 +150,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
             ...edited,
             rrule: isOverride ? undefined : rruleString,
             timezone,
-            data: Object.values(data).some((v) => v !== undefined) ? data : null,
+            data: dataWith(attendees),
         };
         // The master is saved with what the user changed, never with the clicked occurrence's own times: taking
         // those would drag the series' start onto that date and drop every occurrence before it.
@@ -198,6 +203,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 calendarId: event.calendarId,
                 ...updates,
                 rrule: null,
+                data: dataWith(dateGuests),
                 parentEventId: targetId,
                 recurrenceDate: event.occurrenceDate,
                 etag: heldEtag,

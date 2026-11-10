@@ -496,7 +496,7 @@ function actorIsOrganizer(event: CalendarEvent): boolean {
 }
 
 // Every exception a master holds, overrides and cancellations alike, in the order the file lists them.
-function exceptionsOf(calendar: Calendar, parentEventId: string): CalendarEvent[] {
+export function exceptionsOf(calendar: Calendar, parentEventId: string): CalendarEvent[] {
     return calendar.joinedEvents().where(eq(schema.events.parentEventId, parentEventId)).all().map(toEvent);
 }
 

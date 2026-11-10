@@ -1,12 +1,15 @@
 // One occurrence of an invited series, over the Home relay: the organizer's "this event" edit must reach
 // the guest as an exception on their linked series — never as an update of the whole series — and the
-// same for a second edit, a cancellation and a guest's RSVP. Driven through the routes the calendar app
-// calls (docs/CALENDAR.md § An occurrence message names the series).
+// same for a second edit, a cancellation and a guest's RSVP. A date that holds its own guest list follows the
+// series' guests and each guest's answer for the whole series. Driven through the routes the calendar app calls
+// (docs/CALENDAR.md § An occurrence message names the series).
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
+import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, EventData } from '@workspace/lib/types/calendar';
+import { processInboundImip } from '../../lib/calendar/imip';
 import { getHome } from '../../lib/home';
 import { parseIcs } from '../../lib/ical';
 import { davRequest } from '../dav-test-helpers';
+import { vcal } from '../ics-test-helpers';
 import { assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
 
 const SERIES_START = '2027-02-02T09:00:00Z';
@@ -193,6 +196,36 @@ describe('Occurrence edits of an invited series', () => {
             mail.restore();
         }
     }
+
+    // An outside guest's client answering by mail: the whole series, or the one date `date` names.
+    async function mailedReply(series: CalendarEvent, from: string, partstat: string, date?: string) {
+        const day = (date ?? SERIES_START.slice(0, 10)).replaceAll('-', '');
+        const ics = vcal([
+            'METHOD:REPLY',
+            'BEGIN:VEVENT',
+            `UID:${series.uid}`,
+            ...(date ? [`RECURRENCE-ID;TZID=${TZ}:${day}T100000`] : []),
+            `DTSTART;TZID=${TZ}:${day}T100000`,
+            `DTEND;TZID=${TZ}:${day}T110000`,
+            'DTSTAMP:20270101T000000Z',
+            `ORGANIZER:mailto:${ctx.alice.user.email}`,
+            `ATTENDEE;PARTSTAT=${partstat}:mailto:${from}`,
+            'END:VEVENT',
+        ]);
+        const content = Buffer.from(ics);
+        const attachment = { contentType: 'text/calendar', content, index: 0, size: content.length };
+        await processInboundImip(
+            await getHome(ctx.alice.user.id),
+            {
+                attachments: [{ ...attachment, calendarMethod: 'REPLY' }],
+                from: { value: [{ address: from, name: '' }], text: '' },
+            },
+            { verified: true, reason: 'a verified test sender' },
+        );
+    }
+
+    const statusOf = (event: { data?: EventData | null } | undefined, email: string) =>
+        event?.data?.attendees?.find((a) => a.email === email)?.status;
 
     test('moving one occurrence moves that occurrence on the guest and leaves the series alone', async () => {
         const { series, target } = await seeded('Weekly Occurrence Move');
@@ -529,17 +562,112 @@ describe('Occurrence edits of an invited series', () => {
         }
     });
 
-    test('a guest added to a series gets an occurrence they are not on as cancelled', async () => {
+    test('a guest added to a series reaches a date that holds its own list', async () => {
         const charlie = { email: ctx.charlie.user.email, name: 'Charlie', status: 'pending', role: 'required' };
-        const series = await createSeries('Weekly Not On One', [charlie]);
+        const series = await createSeries('Weekly Own List', [charlie]);
         const target = '2027-02-16';
         await editOccurrence(series.id, target, { title: 'Charlie Only', data: { attendees: [charlie] } });
 
         expect((await putEvent(series.id, { data: { attendees: [charlie, ...guests()] } })).status).toBe(200);
 
-        const reached = await untilBob(series.uid, (occ) => occ.length >= 3);
-        expect(reached.map((e) => e.occurrenceDate)).not.toContain(target);
-        expect(reached).toHaveLength(3);
+        const reached = await untilBob(series.uid, (occ) => occ.length === 4);
+        expect(findOrFail(reached, (e) => e.occurrenceDate === target).title).toBe('Charlie Only');
+        const own = findOrFail(await aliceOccurrences(series.uid), (e) => e.occurrenceDate === target);
+        expect(own.data?.attendees?.map((a) => a.email)).toEqual([charlie.email, ctx.bob.user.email]);
+    });
+
+    // Anna moves one date, Carol declines another by mail, and Anna adds Erin and later drops Carol: every date that
+    // holds its own list takes the same change, and the mail Erin gets lists her on each of its VEVENTs.
+    test("the series' guest changes reach every date that holds its own list, in each copy and each mail", async () => {
+        const CAROL = 'carol.own-list@example.org';
+        const ERIN = 'erin@outside.test';
+        const { series, target, attendees } = await seededWithExternal('Weekly Own Lists', CAROL);
+        await moveOccurrence(series, target, 'Own List Moved', { attendees });
+        const declined = '2027-02-16';
+        await mailedReply(series, CAROL, 'DECLINED', declined);
+
+        const erin = { email: ERIN, name: 'Erin', status: 'pending', role: 'required' };
+        const mail = await catchMail();
+        try {
+            expect((await putEvent(series.id, { data: { attendees: [...attendees, erin] } })).status).toBe(200);
+            const vevents = unfolded(await mail.to(ERIN, 'Invitation'))
+                .split('BEGIN:VEVENT')
+                .slice(1);
+            expect(vevents).toHaveLength(3);
+            for (const vevent of vevents) expect(vevent).toContain(`:mailto:${ERIN}\r\n`);
+        } finally {
+            mail.restore();
+        }
+
+        const mine = await aliceOccurrences(series.uid);
+        for (const date of [target, declined]) {
+            const own = findOrFail(mine, (e) => e.occurrenceDate === date);
+            expect(own.parentEventId).toBe(series.id);
+            expect(statusOf(own, ERIN)).toBe('pending');
+        }
+        expect(
+            statusOf(
+                findOrFail(mine, (e) => e.occurrenceDate === declined),
+                CAROL,
+            ),
+        ).toBe('declined');
+        const { overrides } = await eventually(async () => {
+            const stored = await bobStored(series.uid);
+            return stored.overrides.length === 2 && stored.overrides.every((e) => statusOf(e, ERIN))
+                ? stored
+                : undefined;
+        }, "Erin to reach the dates of Bob's copy");
+        expect(
+            statusOf(
+                findOrFail(overrides, (e) => e.recurrenceDate === declined),
+                CAROL,
+            ),
+        ).toBe('declined');
+
+        const withoutCarol = [...guests(), erin];
+        expect((await putEvent(series.id, { data: { attendees: withoutCarol } })).status).toBe(200);
+        for (const own of (await aliceOccurrences(series.uid)).filter((e) => e.parentEventId)) {
+            expect(own.data?.attendees?.map((a) => a.email)).toEqual([ctx.bob.user.email, ERIN]);
+        }
+    });
+
+    test("a guest's answer for the series reaches every date, and an answer for one date only that date", async () => {
+        const CAROL = 'carol.series-answer@example.org';
+        const { series, target, attendees } = await seededWithExternal('Weekly Series Answer', CAROL);
+        await moveOccurrence(series, target, 'Series Answer Moved', { attendees });
+        const other = '2027-02-16';
+        const carolOn = async (date: string) =>
+            statusOf(
+                (await aliceOccurrences(series.uid)).find((e) => e.occurrenceDate === date),
+                CAROL,
+            );
+
+        await mailedReply(series, CAROL, 'ACCEPTED');
+        expect(await carolOn(target)).toBe('accepted');
+        await mailedReply(series, CAROL, 'DECLINED', other);
+        expect([await carolOn(target), await carolOn(other)]).toEqual(['accepted', 'declined']);
+        // The series' answer is already accepted, and the one date still takes it.
+        await mailedReply(series, CAROL, 'ACCEPTED');
+        expect(await carolOn(other)).toBe('accepted');
+
+        // Bob answers in his own copy, which takes the same rule and tells Alice over the relay.
+        const bobMaster = findOrFail(await bobOccurrences(series.uid), (e) => !e.parentEventId);
+        const oneDate = { status: 'tentative', scope: 'this', recurrenceDate: other };
+        expect((await rsvpAsBob(bobMaster.id, oneDate)).status).toBe(200);
+        await eventually(async () => {
+            const one = (await aliceOccurrences(series.uid)).find((e) => e.occurrenceDate === other);
+            return statusOf(one, ctx.bob.user.email) === 'tentative' ? one : undefined;
+        }, "Bob's answer for one date to reach Alice");
+        expect((await rsvpAsBob(bobMaster.id, { status: 'accepted' })).status).toBe(200);
+        const bobs = await bobOccurrences(series.uid);
+        expect([target, other].map((date) => bobStatus(findOrFail(bobs, (e) => e.occurrenceDate === date)))).toEqual([
+            'accepted',
+            'accepted',
+        ]);
+        await eventually(async () => {
+            const mine = await aliceOccurrences(series.uid);
+            return mine.every((e) => statusOf(e, ctx.bob.user.email) === 'accepted') ? mine : undefined;
+        }, "Bob's answer to reach every date of Alice's series");
     });
 
     const bobStatus = (event: CalendarEventOccurrence) =>

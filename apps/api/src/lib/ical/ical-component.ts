@@ -620,7 +620,8 @@ function shapeForImip(vevent: ICAL.Component, method: ImipMethod): void {
 }
 
 // A series-wide edit reaches an override whose value equals the master's BEFORE the edit; one that set its own keeps
-// it. Times never follow. It has to run before the master is patched.
+// it. Times never follow. A guest the edit adds to or drops from the series joins or leaves every override that holds
+// its own list. It has to run before the master is patched.
 function followMaster(resource: ICAL.Component, master: ICAL.Component, patch: EventPatch): boolean {
     const fields: Array<[string, string, string]> = [];
     for (const [name, value] of [
@@ -631,7 +632,10 @@ function followMaster(resource: ICAL.Component, master: ICAL.Component, patch: E
         if (value === undefined) continue;
         fields.push([name, String(master.getFirstPropertyValue(name) ?? ''), value ?? '']);
     }
-    if (!fields.length) return false;
+    const guests = patch.data?.attendees;
+    if (!fields.length && !guests) return false;
+    const wasGuest = new Set(master.getAllProperties('attendee').map(addressOf));
+    const isGuest = new Set(guests?.map((guest) => guest.email.toLowerCase()));
 
     const uid = uidOf(master);
     let changed = false;
@@ -641,8 +645,20 @@ function followMaster(resource: ICAL.Component, master: ICAL.Component, patch: E
             if (String(vevent.getFirstPropertyValue(name) ?? '') !== before) continue;
             changed = setOptional(vevent, name, after) || changed;
         }
+        const listed = vevent.getAllProperties('attendee');
+        if (!guests || !listed.length) continue;
+        const own = new Set(listed.map(addressOf));
+        const kept = listed.filter((prop) => !wasGuest.has(addressOf(prop)) || isGuest.has(addressOf(prop)));
+        const joined = guests.filter(
+            ({ email }) => !wasGuest.has(email.toLowerCase()) && !own.has(email.toLowerCase()),
+        );
+        changed = patchAttendees(vevent, [...kept.map(projectAttendee), ...joined]).changed || changed;
     }
     return changed;
+}
+
+function addressOf(prop: ICAL.Property): string {
+    return calAddress(prop.getFirstValue()).toLowerCase();
 }
 
 // Each property is touched in place rather than re-emitted, so CUTYPE, RSVP, SCHEDULE-STATUS and every X- parameter a
@@ -654,13 +670,13 @@ function patchAttendees(
     const current = vevent.getAllProperties('attendee');
     const byEmail = new Map<string, ICAL.Property[]>();
     for (const prop of current) {
-        const email = calAddress(prop.getFirstValue()).toLowerCase();
+        const email = addressOf(prop);
         const listed = byEmail.get(email);
         if (listed) listed.push(prop);
         else byEmail.set(email, [prop]);
     }
     const wanted = new Set(attendees.map((a) => a.email.toLowerCase()));
-    const isWanted = (prop: ICAL.Property) => wanted.has(calAddress(prop.getFirstValue()).toLowerCase());
+    const isWanted = (prop: ICAL.Property) => wanted.has(addressOf(prop));
 
     let membersChanged = !current.every(isWanted);
     if (membersChanged) keepProperties(vevent, (prop) => prop.name !== 'attendee' || isWanted(prop));

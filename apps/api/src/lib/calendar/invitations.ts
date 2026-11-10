@@ -575,23 +575,25 @@ async function updateAttendeeStatus(
     email: string,
     status: Attendee['status'],
 ): Promise<void> {
-    // The guest list is read inside the write lock, so one answer never overwrites another.
+    // The guest list is read inside the write lock, so one answer never overwrites another. An answer for the series is
+    // the guest's answer on every date, one that holds its own list included.
     const calendarId = await calendar.writeLock.run(async () => {
         const event = events.eventById(calendar, eventId);
         if (!event?.data?.attendees) return null;
         const resource = events.resourceOf(calendar, eventId);
         if (!resource) return null;
 
-        const attendees = withAttendeeStatus(event.data.attendees, email, status);
-        const patch = { data: { ...event.data, attendees } };
-        const changed = await events.patchResource(
-            calendar,
-            resource,
-            event.recurrenceDate,
-            patch,
-            events.writeContext(false),
-        );
-        return changed ? event.calendarId : null;
+        const dates = event.recurrenceDate ? [] : events.exceptionsOf(calendar, eventId);
+        const edits = new Map<string | null, VEventEdit>();
+        for (const held of [event, ...dates]) {
+            if (!held.data?.attendees?.length) continue;
+            const data = { ...held.data, attendees: withAttendeeStatus(held.data.attendees, email, status) };
+            edits.set(held.recurrenceDate, { kind: 'patch', patch: { data }, ctx: events.writeContext(false) });
+        }
+        const component = events.storedComponent(calendar, resource);
+        if (!applyEdits(component, edits)) return null;
+        await events.writeComponent(calendar, resource, component);
+        return event.calendarId;
     });
     if (calendarId) calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
 }
