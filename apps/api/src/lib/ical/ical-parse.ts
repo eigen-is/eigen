@@ -171,8 +171,8 @@ export function uidOf(vevent: ICAL.Component): string {
     return String(vevent.getFirstPropertyValue('uid') ?? '');
 }
 
-// The occurrence key a VEVENT's RECURRENCE-ID names, null for a master; `zones` is seriesTimezones of its file. An
-// occurrence without its master keys through its own DTSTART's zone, else the file's first master's: exporters drop UIDs.
+// The occurrence key a VEVENT's RECURRENCE-ID names, null for a master, through `zones` from seriesTimezones. An
+// occurrence with no master keys in its own DTSTART's zone, else the file's first master's, since exporters drop UIDs.
 export function recurrenceKeyOf(vevent: ICAL.Component, zones: ReadonlyMap<string, string | null>): string | null {
     const value = vevent.getFirstProperty('recurrence-id')?.getFirstValue();
     if (!(value instanceof ICAL.Time)) return null;
