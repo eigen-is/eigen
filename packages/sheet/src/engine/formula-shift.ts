@@ -155,9 +155,8 @@ export function inlineNames(
     return txt.startsWith('=') ? `=${walked}` : walked;
 }
 
-// The text of a formula a cut or a drag moved, by Excel's rule: a ref wholly inside the moved block follows its cells,
-// `$` or not, and any other ref still means the cell it meant, so on another sheet it names the one it came from.
-// `from` and `to` are the sheets' names. The text comes back without its `=`.
+// A ref wholly inside the block a cut or a drag moved follows its cells, `$` or not, as in Excel, and any other names
+// the cell it meant, from another sheet by the sheet it came from. The text comes back without its `=`.
 export function moveFormulaRefs(
     txt: string,
     block: { row: readonly number[]; column: readonly number[] },
@@ -211,8 +210,6 @@ export function functionStrChange(
     });
 }
 
-const PRINTABLE_ASCII = /^[ -~]*$/;
-
 // Whether functionStrChange may change a formula off the op's sheet, `name`, asked without the walk: there only a ref
 // naming the sheet moves, so text holding no spelling of the name stays.
 export function mayShiftOffSheet(name: string): (txt: string) => boolean {
@@ -222,8 +219,7 @@ export function mayShiftOffSheet(name: string): (txt: string) => boolean {
         .filter((run) => run !== '');
     return (txt) => {
         if (!txt.includes('!')) return false;
-        // On ASCII text toUpperCase gives sheetNameKey's key without its step per character.
-        const key = PRINTABLE_ASCII.test(txt) ? txt.toUpperCase() : sheetNameKey(txt);
+        const key = sheetNameKey(txt);
         return runs.every((run) => key.includes(run));
     };
 }
@@ -238,9 +234,8 @@ export function detectAbsolute(txt: string): [boolean, boolean] {
     ];
 }
 
-// The character walker every reader here shares. It drops one leading `=` and reads the text as leaves and structure.
-// A leaf `iscelldata` reads as a ref goes to `onRef`; any other leaf goes to `onName`. A function name is no leaf. Only
-// a leaf a callback gives back changed is written anew, so every other character stays as typed.
+// A leaf `iscelldata` reads as a ref goes to `onRef`, any other leaf but a function name to `onName`, and one leading
+// `=` is dropped. Only a leaf a callback changes is written anew, so every other character stays as typed.
 export function walkFormulaRefs(
     txt: string,
     onRef: (ref: string) => string,
@@ -261,7 +256,7 @@ export function walkFormulaRefs(
         if (str === '') start = at;
         str += text;
     };
-    // Walks the leaf `token`, which ends before `end`, and writes what comes back over it, keeping the whitespace around.
+    // Walks the leaf `token`, which ends before `end`, and writes what comes back over it, keeping its whitespace.
     const write = (token: string, end: number) => {
         if (token === '') return;
         const walked = refOf(token, onRef, onName);
