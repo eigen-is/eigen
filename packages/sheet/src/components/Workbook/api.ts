@@ -223,7 +223,7 @@ export function generateAPIs(
         revealSearchMatch: (cell: SearchHighlight) =>
             setContext((draftCtx) => revealSearchMatch(draftCtx, cell), { noHistory: true }),
 
-        // For a host control that took the focus, such as a comments pane row, so the keys move the cursor again.
+        // Gives the keys back to the grid after a control outside it took the focus.
         focusGrid: () => getContext().getRefs().cellInput.current?.focus({ preventScroll: true }),
 
         // Replace rewrites every occurrence in one cell, and replaceAll every match. Each is one recipe, so one undo
