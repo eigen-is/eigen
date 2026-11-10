@@ -6,6 +6,7 @@
 // Deep import (not the @workspace/lib/calendar barrel) to keep React out of the API module graph.
 import { occurrenceDateToString } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
+import type { Options } from 'rrule';
 import { RRule } from 'rrule';
 import { MAX_OCCURRENCES, MAX_RECURRENCE_START } from './recurrence-limits';
 
@@ -88,7 +89,7 @@ export function expandWallClock(
     if (from.getTime() > MAX_RECURRENCE_START) return [];
 
     const rule = new RRule({
-        ...RRule.parseString(rrule),
+        ...wallClockRule(rrule, tz),
         dtstart: tz ? wallClockDate(dtstart, tz) : dtstart,
     });
 
@@ -98,6 +99,14 @@ export function expandWallClock(
             startTime: tz ? fromWallClock(date, tz) : date,
             occurrenceDate: occurrenceDateToString(date),
         }));
+}
+
+// RFC 5545 makes a UTC UNTIL beside a zoned start an instant, so it moves into the wall clock the rule steps in. A
+// date-only or floating UNTIL names wall-clock time already, and rrule parses all three alike.
+export function wallClockRule(rrule: string, tz: string | null): Partial<Options> {
+    const options = RRule.parseString(rrule);
+    if (tz && options.until && /UNTIL=\d{8}T\d{6}Z/i.test(rrule)) options.until = wallClockDate(options.until, tz);
+    return options;
 }
 
 // A key names a day in the series' wall clock, and only BYHOUR, BYMINUTE and BYSECOND move its time from DTSTART's, so

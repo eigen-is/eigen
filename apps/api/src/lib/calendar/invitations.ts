@@ -289,7 +289,7 @@ async function decideInboundRequest(
         if (!prior || isNewerRevision(parsed, prior)) latest.set(key, parsed);
     }
     const revisions = storedRevisions(component);
-    const lastKept = lastKeptDate(series.rrule);
+    const lastKept = lastKeptDate(series.rrule, series.timezone);
     const edits = new Map<string | null, VEventEdit>();
     for (const [key, parsed] of latest) {
         // A date past the guest's own cut of the series stays cut.

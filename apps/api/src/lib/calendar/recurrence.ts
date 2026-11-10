@@ -6,7 +6,7 @@
 import { occurrenceDateToString, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
-import { expandWallClock, wallClockDate } from '../ical/wall-clock';
+import { expandWallClock, wallClockDate, wallClockRule } from '../ical/wall-clock';
 
 export function expandRecurrence(event: CalendarEvent, rangeStart: Date, rangeEnd: Date): CalendarEventOccurrence[] {
     if (!event.rrule) return [];
@@ -38,11 +38,10 @@ export function constrainRRule(incoming: string | null, local: string | null): s
     return truncateRRule(incoming, new Date(localUntil.getTime() + 86400_000));
 }
 
-// The last date a guest's shortened rule keeps, which constrainRRule holds every update to. The expansion reads UNTIL
-// in the series' wall clock, so its UTC date is that date.
-export function lastKeptDate(local: string | null): string | null {
-    const until = ruleUntil(local);
-    return until && occurrenceDateToString(until);
+// The last date a guest's shortened rule keeps, which constrainRRule holds every update to.
+export function lastKeptDate(local: string | null, tz: string | null): string | null {
+    const until = local && wallClockRule(local, tz).until;
+    return until ? occurrenceDateToString(until) : null;
 }
 
 function ruleUntil(rrule: string | null): Date | null {

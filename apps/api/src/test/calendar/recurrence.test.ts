@@ -3,7 +3,7 @@
 // lands on the clock its author named.
 import { describe, expect, test } from 'bun:test';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
-import { expandRecurrence } from '../../lib/calendar/recurrence';
+import { expandRecurrence, lastKeptDate } from '../../lib/calendar/recurrence';
 import { localToUtc, utcToLocal } from '../../lib/ical/wall-clock';
 
 // Each zone's 2026 transition days, and the wall times its spring-forward day skips. A skipped wall
@@ -150,5 +150,29 @@ describe('expandRecurrence', () => {
         ]);
         expect(occurrences.map((o) => o.startTime.toISOString())).toContain('2026-11-01T07:30:00.000Z');
         expect(occurrences.map((o) => o.occurrenceDate)).toContain('2026-11-01');
+    });
+
+    // RFC 5545 §3.3.10: beside a TZID DTSTART, UNTIL is a UTC instant, as Apple writes it for a series that ends.
+    test.each([
+        ['Europe/Amsterdam', '2026-03-01T08:00:00Z', 'UNTIL=20260310T080000Z', '2026-03-10'],
+        ['America/New_York', '2026-03-01T14:00:00Z', 'UNTIL=20260310T125959Z', '2026-03-09'],
+    ])('a daily 09:00 %s series ends at the instant its UTC UNTIL names', (tz, start, until, last) => {
+        const series = { ...SERIES, startTime: new Date(start), timezone: tz, rrule: `FREQ=DAILY;${until}` };
+        const occurrences = expandRecurrence(
+            series,
+            new Date('2026-03-01T00:00:00Z'),
+            new Date('2026-03-20T00:00:00Z'),
+        );
+
+        expect(occurrences.at(-1)?.occurrenceDate).toBe(last);
+        expect(occurrences.every((o) => wallOf(o.startTime, tz).endsWith('09:00'))).toBe(true);
+    });
+});
+
+describe('lastKeptDate', () => {
+    test('a UTC UNTIL keeps the date its instant falls on in the series zone', () => {
+        expect(lastKeptDate('FREQ=DAILY;UNTIL=20260310T035959Z', 'America/New_York')).toBe('2026-03-09');
+        expect(lastKeptDate('FREQ=DAILY;UNTIL=20260309T150000Z', 'Asia/Tokyo')).toBe('2026-03-10');
+        expect(lastKeptDate('FREQ=DAILY;UNTIL=20260309', null)).toBe('2026-03-09');
     });
 });
