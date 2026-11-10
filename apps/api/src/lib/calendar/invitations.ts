@@ -4,7 +4,12 @@
 // answer back, and the organizer's Home records it through receiveAttendeeStatus and receiveRsvpForOccurrence.
 // Callers, such as the home relay and inbound mail, use Calendar.
 
-import { heldAttendees, isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
+import {
+    heldAttendees,
+    isInvitationFromOthers,
+    truncateRRule,
+    utcToLocal,
+} from '@workspace/lib/calendar/calendar-utils';
 import { calendarInviteTag } from '@workspace/lib/notification/tags';
 import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
 import { isExternalOwnerId } from '@workspace/lib/types/owner';
@@ -24,7 +29,7 @@ import {
 } from '../ical';
 import type { EventPatch, Revision, VEventEdit } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
-import { computeOccurrenceTimes, parseRecurrenceKey, recurrenceKey, utcToLocal } from '../ical/wall-clock';
+import { computeOccurrenceTimes, parseRecurrenceKey, recurrenceKey } from '../ical/wall-clock';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
 import { actorDisplayName } from '../user';
@@ -289,7 +294,7 @@ async function decideInboundRequest(
         if (!prior || isNewerRevision(parsed, prior)) latest.set(key, parsed);
     }
     const revisions = storedRevisions(component);
-    const lastKept = lastKeptDate(series.rrule);
+    const lastKept = lastKeptDate(series.rrule, series.timezone);
     const edits = new Map<string | null, VEventEdit>();
     for (const [key, parsed] of latest) {
         // A date past the guest's own cut of the series stays cut.
@@ -656,7 +661,7 @@ async function removeThisAndFuture(calendar: Calendar, eventId: string, recurren
         if (!event.rrule) throw new ApiError(400, 'Not a recurring event');
         const resource = events.resourceOf(calendar, eventId);
         if (!resource) throw new ApiError(404, 'Event not found');
-        const rrule = truncateRRule(event.rrule, new Date(`${recurrenceDate}T00:00:00Z`));
+        const rrule = truncateRRule(event.rrule, recurrenceDate, event.timezone);
         await events.editResource(calendar, resource, (component) => {
             patchEvent(component, null, { rrule }, events.writeContext(false));
             dropExceptionsFrom(component, recurrenceDate);

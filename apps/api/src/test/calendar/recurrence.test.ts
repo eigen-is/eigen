@@ -2,9 +2,11 @@
 // A wall time an hour either side of a DST transition is the case that decides whether an occurrence
 // lands on the clock its author named.
 import { describe, expect, test } from 'bun:test';
+import { localToUtc, truncateRRule, utcToLocal } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
-import { expandRecurrence } from '../../lib/calendar/recurrence';
-import { localToUtc, utcToLocal } from '../../lib/ical/wall-clock';
+import { RRule } from 'rrule';
+import { constrainRRule, expandRecurrence, lastKeptDate } from '../../lib/calendar/recurrence';
+import { computeOccurrenceTimes } from '../../lib/ical/wall-clock';
 
 // Each zone's 2026 transition days, and the wall times its spring-forward day skips. A skipped wall
 // time resolves with the pre-transition offset, so the clock reads one gap later (RFC 5545 §3.3.5).
@@ -150,5 +152,88 @@ describe('expandRecurrence', () => {
         ]);
         expect(occurrences.map((o) => o.startTime.toISOString())).toContain('2026-11-01T07:30:00.000Z');
         expect(occurrences.map((o) => o.occurrenceDate)).toContain('2026-11-01');
+    });
+
+    // RFC 5545 §3.3.10: beside a TZID DTSTART, UNTIL is a UTC instant, as Apple writes it for a series that ends.
+    test.each([
+        ['Europe/Amsterdam', '2026-03-01T08:00:00Z', 'UNTIL=20260310T080000Z', '2026-03-10'],
+        ['America/New_York', '2026-03-01T14:00:00Z', 'UNTIL=20260310T125959Z', '2026-03-09'],
+    ])('a daily 09:00 %s series ends at the instant its UTC UNTIL names', (tz, start, until, last) => {
+        const series = { ...SERIES, startTime: new Date(start), timezone: tz, rrule: `FREQ=DAILY;${until}` };
+        const occurrences = expandRecurrence(
+            series,
+            new Date('2026-03-01T00:00:00Z'),
+            new Date('2026-03-20T00:00:00Z'),
+        );
+
+        expect(occurrences.at(-1)?.occurrenceDate).toBe(last);
+        expect(occurrences.every((o) => wallOf(o.startTime, tz).endsWith('09:00'))).toBe(true);
+    });
+});
+
+describe('lastKeptDate', () => {
+    test('a UTC UNTIL keeps the date its instant falls on in the series zone', () => {
+        expect(lastKeptDate('FREQ=DAILY;UNTIL=20260310T035959Z', 'America/New_York')).toBe('2026-03-09');
+        expect(lastKeptDate('FREQ=DAILY;UNTIL=20260309T150000Z', 'Asia/Tokyo')).toBe('2026-03-10');
+        expect(lastKeptDate('FREQ=DAILY;UNTIL=20260309', null)).toBe('2026-03-09');
+    });
+});
+
+describe('truncateRRule', () => {
+    // Apple and Thunderbird read the UNTIL of a zoned series as an instant, so it falls between the kept and the cut day.
+    test.each([
+        ['America/New_York', '2026-03-02T01:00:00Z', 'FREQ=DAILY;UNTIL=20260310T035959Z'],
+        ['Asia/Tokyo', '2026-02-28T23:00:00Z', 'FREQ=DAILY;UNTIL=20260309T145959Z'],
+    ])('a cut of a daily %s series keeps the day before the cut day', (tz, start, cut) => {
+        const rrule = truncateRRule('FREQ=DAILY', '2026-03-10', tz);
+        const series = { ...SERIES, startTime: new Date(start), timezone: tz, rrule };
+        const occurrences = expandRecurrence(
+            series,
+            new Date('2026-03-01T00:00:00Z'),
+            new Date('2026-03-20T00:00:00Z'),
+        );
+        const until = RRule.parseString(rrule).until?.getTime() ?? 0;
+
+        expect(rrule).toBe(cut);
+        expect(occurrences.at(-1)?.occurrenceDate).toBe('2026-03-09');
+        expect(computeOccurrenceTimes(series, '2026-03-09').startTime.getTime()).toBeLessThanOrEqual(until);
+        expect(computeOccurrenceTimes(series, '2026-03-10').startTime.getTime()).toBeGreaterThan(until);
+    });
+
+    test('a cut of an all-day series ends on the day before the cut day', () => {
+        const rrule = truncateRRule('FREQ=DAILY;COUNT=30', '2026-03-10', null);
+        const series = {
+            ...SERIES,
+            allDay: true,
+            startTime: new Date('2026-03-01T00:00:00Z'),
+            endTime: new Date('2026-03-02T00:00:00Z'),
+            timezone: null,
+            rrule,
+        };
+        const occurrences = expandRecurrence(
+            series,
+            new Date('2026-03-01T00:00:00Z'),
+            new Date('2026-04-01T00:00:00Z'),
+        );
+
+        expect(rrule).toBe('FREQ=DAILY;UNTIL=20260309T235959Z');
+        expect(occurrences.at(-1)?.occurrenceDate).toBe('2026-03-09');
+    });
+});
+
+describe('constrainRRule', () => {
+    test("an organizer's longer rule takes the guest's UNTIL as the guest's rule spells it", () => {
+        expect(constrainRRule('FREQ=WEEKLY;COUNT=20;BYDAY=MO', 'FREQ=WEEKLY;BYDAY=MO;UNTIL=20260309')).toBe(
+            'FREQ=WEEKLY;BYDAY=MO;UNTIL=20260309',
+        );
+        expect(constrainRRule('FREQ=DAILY', 'FREQ=DAILY;UNTIL=20260310T035959Z')).toBe(
+            'FREQ=DAILY;UNTIL=20260310T035959Z',
+        );
+    });
+
+    test("an organizer's shorter rule stands", () => {
+        expect(constrainRRule('FREQ=DAILY;UNTIL=20260305T035959Z', 'FREQ=DAILY;UNTIL=20260310T035959Z')).toBe(
+            'FREQ=DAILY;UNTIL=20260305T035959Z',
+        );
     });
 });

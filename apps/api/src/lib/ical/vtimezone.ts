@@ -3,8 +3,8 @@
 // vtimezoneOffset reads the offset a file's own zone states at a wall time, for a TZID no name resolves, such as
 // Outlook's "Customized Time Zone"; the parser calls it for every such time.
 
+import { utcToLocal } from '@workspace/lib/calendar/calendar-utils';
 import ICAL from 'ical.js';
-import { utcToLocal } from './wall-clock';
 
 const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 const DAY_MS = 86_400_000;

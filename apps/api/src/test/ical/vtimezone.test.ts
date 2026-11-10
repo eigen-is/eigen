@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { utcToLocal } from '@workspace/lib/calendar/calendar-utils';
 import ICAL from 'ical.js';
 import { buildVTimezone } from '../../lib/ical/vtimezone';
-import { utcToLocal } from '../../lib/ical/wall-clock';
 
 const count = (lines: string[], line: string) => lines.filter((l) => l === line).length;
 

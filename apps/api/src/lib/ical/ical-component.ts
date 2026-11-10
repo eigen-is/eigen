@@ -3,7 +3,7 @@
 // calendar store calls it for every write. `ICAL.Component.toString()` is the only serializer, so folding,
 // escaping and quoting stay ical.js's problem and an untouched property survives an edit as the client wrote it.
 
-import { heldAttendees, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
+import { heldAttendees, localToUtc, normalizeTimezone, utcToLocal } from '@workspace/lib/calendar/calendar-utils';
 import { stripControlChars, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Attendee, CalendarEvent, ImipMethod, Reminder, UpdateEventInput } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
@@ -28,7 +28,7 @@ import {
     utcStampString,
 } from './ical-parse';
 import { buildVTimezone } from './vtimezone';
-import { computeOccurrenceTimes, localToUtc, utcToLocal } from './wall-clock';
+import { computeOccurrenceTimes } from './wall-clock';
 
 export const PRODID = '-//Eigen//CalDAV//EN';
 
