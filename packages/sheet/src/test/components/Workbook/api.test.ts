@@ -660,17 +660,18 @@ describe("the selection follows a peer's row and column ops", () => {
 
     // Two peers each deleting most of the rows can leave none, which every reader applies. No cell is left to land on,
     // and the keys throw on a selection with no cell under it.
-    it('a delete of every row or column applies and drops the selection', () => {
+    it('a delete of every row or column keeps the last, and the selection lands on it', () => {
         const rows = applyPeerOps(selected(2, 1), [remove('row', 0, 3)]);
-        expect(rows.sheets[0].data).toEqual([]);
-        expect(rows.selections).toBeUndefined();
+        expect(rows.sheets[0].data).toHaveLength(1);
+        expect(focus(rows)).toEqual([[0, 0], [1, 1], 0, 1]);
         const columns = applyPeerOps(selected(2, 1), [remove('column', 0, 3)]);
-        expect(columns.sheets[0].data?.[0]).toEqual([]);
-        expect(columns.selections).toBeUndefined();
+        expect(columns.sheets[0].data?.[0]).toHaveLength(1);
+        expect(focus(columns)).toEqual([[2, 2], [0, 0], 2, 0]);
     });
 
-    it('a delete of every row on a sheet the tab left drops the selection kept for it', () => {
-        expect(applyPeerOps(leftBehind(), [remove('row', 0, 3)]).sheetViewRecord.id_1?.selections).toBeUndefined();
+    it('a delete of every row on a sheet the tab left lands the selection kept for it on the last', () => {
+        const [kept] = applyPeerOps(leftBehind(), [remove('row', 0, 3)]).sheetViewRecord.id_1?.selections ?? [];
+        expect([kept?.row, kept?.row_focus]).toEqual([[0, 0], 0]);
     });
 
     describe('a landing on a merged cell', () => {
