@@ -106,23 +106,16 @@ export function composeRsvpReply(
     const organizer = event.data?.organizer;
     if (!organizer) throw new Error('Event has no organizer');
 
+    // A scope:'this' RSVP carries a RECURRENCE-ID (RFC 5546), so the organizer applies the PARTSTAT to that instance
+    // alone.
     const replyEvent: EventToBuild = {
         ...event,
+        ...(recurrenceDate && { rrule: null, recurrenceDate, ...computeOccurrenceTimes(event, recurrenceDate) }),
         data: {
             ...event.data,
             attendees: [{ email: attendeeEmail, name: attendeeName, status, role: 'required' }],
         },
     };
-
-    // A scope:'this' RSVP carries a RECURRENCE-ID (RFC 5546), so the organizer applies the PARTSTAT to that instance
-    // alone.
-    if (recurrenceDate) {
-        const { startTime, endTime } = computeOccurrenceTimes(event, recurrenceDate);
-        replyEvent.rrule = null;
-        replyEvent.recurrenceDate = recurrenceDate;
-        replyEvent.startTime = startTime;
-        replyEvent.endTime = endTime;
-    }
 
     const statusLabel = STATUS_LABELS[status].toLowerCase();
     return {
@@ -131,7 +124,7 @@ export function composeRsvpReply(
         subject: `${STATUS_LABELS[status]}: ${event.title}`,
         text: `${attendeeName} has ${statusLabel} the invitation: ${event.title}`,
         html: buildEventHtml(
-            event,
+            replyEvent,
             `Reply from ${attendeeName}`,
             `${escapeHtml(attendeeName)} has ${statusLabel} the invitation`,
         ),

@@ -321,6 +321,13 @@ describe('iMIP Outbound Email Composition', () => {
         expect(ics).toContain('DECLINED');
     });
 
+    test("a one-date reply's mail names that date and no repeat rule", () => {
+        const mail = composeRsvpReply(RECURRING_EVENT, 'bob@external.com', 'Bob', 'declined', '2026-04-08');
+        expect(mail.html).toContain('8 Apr 2026');
+        expect(mail.html).not.toContain('1 Apr 2026');
+        expect(mail.html).not.toContain('Repeats');
+    });
+
     test('composeRsvpReply for the whole series sends no RECURRENCE-ID (RFC 5546)', () => {
         const mail = composeRsvpReply(RECURRING_EVENT, 'bob@external.com', 'Bob', 'accepted');
         expect(mail.icalEvent?.content).not.toContain('RECURRENCE-ID');
