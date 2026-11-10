@@ -230,18 +230,18 @@ export async function runImportToSlidesUpdate(
     return { ...result, warnings };
 }
 
-// Op batches folded into a workbook's snapshot. The signal ends the job queued or running, so the caller bounds the
-// whole wait with it.
+// A workbook's log folded into its snapshot, as many of its first batches as the fold takes in its time. The signal
+// ends the job queued or running, so the caller bounds the whole wait with it.
 export async function runSheetsCompaction(
     snapshot: string | null,
     batches: readonly Op[][],
     signal: AbortSignal,
-): Promise<{ snapshot: string; dropped: number }> {
+): Promise<{ snapshot: string; dropped: number; folded: number }> {
     const { result } = await runTransformRequest(
         { kind: 'compact', documentType: 'eigensheets', snapshot, batches: JSON.stringify(batches) },
         { priority: 'background', signal },
     );
-    return { snapshot: new TextDecoder().decode(result.snapshot), dropped: result.dropped };
+    return { ...result, snapshot: new TextDecoder().decode(result.snapshot) };
 }
 
 // The parts one document's state names.

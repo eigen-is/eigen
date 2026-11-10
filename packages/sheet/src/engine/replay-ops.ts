@@ -40,9 +40,10 @@ export class SkippedRecompute extends Error {}
 
 // A batch the replay can't apply goes to `onDropped`, and so does a recompute past `budgets` as a SkippedRecompute,
 // whose batch stands with the values it had. By default each is logged as a warning.
+// The batches come as an iterable, so a caller can stop the replay between two of them.
 export function replaySheetsOps(
     sheets: Sheet[],
-    opBatches: Op[][],
+    opBatches: Iterable<Op[]>,
     onDropped: (dropped: unknown) => void = (e) => console.warn('[sheets] replay skipped a batch or its recompute:', e),
     budgets: RecalcBudgets = {},
 ): Sheet[] {

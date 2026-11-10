@@ -1,7 +1,7 @@
 // A workbook's Yjs doc, read and written on the server. The transform process reads it as Sheet[], for example for an
-// export or a preview, and replays the pending ops over the snapshot as a browser does. It also folds the ops into a
-// new snapshot when the document closes. Some writers change the doc through it, such as an import that adds tabs or
-// a version restore that stamps a fresh base.
+// export or a preview, and replays the pending ops over the snapshot as a browser does. It also folds the head of the
+// ops into a new snapshot when the document closes. Some writers change the doc through it, such as an import that
+// adds tabs or a version restore that stamps a fresh base.
 
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import {
@@ -41,8 +41,11 @@ export const SERVER_RECALC_BUDGET = {
     // don't, because a whole column costs one slot but many formulas reading it make many links.
     maxDependencyEdges: 40_000_000,
     // The cells the evaluation of ranges reads, which bounds the recalc time.
-    maxCellsRead: 32_000_000,
+    maxCellsRead: 120_000_000,
 };
+
+// A fold starts no batch past this, so one more batch at the recalc budget still ends inside the transform's deadline.
+const FOLD_TIME_MS = 30_000;
 
 // A stored workbook is read in the transform process, which loads the Yjs doc first. `recalcError` is set when the
 // recalc failed and the sheets keep their replayed values.
@@ -70,19 +73,31 @@ export function readSheetsFromDoc(
     }
 }
 
-// A compaction in the transform process: it replays the log over the snapshot and encodes the result as an import does.
-// The batches come as JSON text, which crosses to the process much faster than objects. A recompute past the budget
-// fails it, since a browser computes values the fold would store stale, so the log stays and every tab recomputes.
+// A compaction in the transform process: it replays the head of the log over the snapshot and encodes the result as an
+// import does, with how many batches it folded. The batches come as JSON text, which crosses to the process much
+// faster than objects. A recompute past the budget fails it, since a browser computes values the fold would store
+// stale, so the log stays and every tab recomputes.
 export function compactSheetsSnapshot(
     snapshotJson: string | null,
     batchesJson: string,
-): { snapshot: string; dropped: number } {
+): { snapshot: string; dropped: number; folded: number } {
+    const stopAt = performance.now() + FOLD_TIME_MS;
     const { sheets, computed } = decodeOrDefault(snapshotJson);
+    const log: Op[][] = JSON.parse(batchesJson);
+    let folded = 0;
+    // The first batch always folds, so every compaction shortens the log.
+    function* untilStop() {
+        for (const batch of log) {
+            if (folded > 0 && performance.now() > stopAt) return;
+            folded += 1;
+            yield batch;
+        }
+    }
     let dropped = 0;
     let skipped: SkippedRecompute | null = null;
     const replayed = replaySheetsOps(
         sheets,
-        JSON.parse(batchesJson),
+        untilStop(),
         (e) => {
             if (e instanceof SkippedRecompute) skipped ??= e;
             else dropped += 1;
@@ -91,7 +106,7 @@ export function compactSheetsSnapshot(
     );
     if (skipped) throw skipped;
     // The compaction never recalculates, so a workbook nobody computed stays uncomputed, and an export computes it.
-    return { snapshot: encodeSheetsSnapshot(replayed, { computed }), dropped };
+    return { snapshot: encodeSheetsSnapshot(replayed, { computed }), dropped, folded };
 }
 
 // The workbook as a tab opening the doc shows it, with every pending op replayed.

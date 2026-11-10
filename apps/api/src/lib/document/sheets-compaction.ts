@@ -1,11 +1,10 @@
 // The main thread's side of a workbook's compaction, which folds the head of the op log into a new snapshot when the
-// collab document closes. It decides whether a close compacts and how much of the log it folds, runs the fold in the
-// transform process under a time budget, and stops trying a workbook whose compactions keep failing. The collab
-// document asks for it at the end of its linger, and swaps the new snapshot in only while the log still opens with the
-// batches it folded.
+// collab document closes. It decides whether a close compacts, runs the fold in the transform process, and stops
+// trying a workbook whose compactions keep failing. The collab document asks for it at the end of its linger, and swaps
+// the new snapshot in only while the log still opens with the batches it folded.
 
 import type { Op } from '@workspace/lib/sheets';
-import { isCurrentSheetsSnapshot, isStructuralBatch, readSheetsSnapshotJson, sheetsOpLog } from '@workspace/lib/sheets';
+import { isCurrentSheetsSnapshot, readSheetsSnapshotJson, sheetsOpLog } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_SHEETS } from '@workspace/lib/types/drive';
 import type * as Y from 'yjs';
@@ -16,9 +15,6 @@ import { TRANSFORM_LIMITS } from './transform/runner';
 // A compaction waits for the one transform child behind whatever holds it, at worst an export, and then runs under its
 // own deadline. Past the two together, the document closes without it.
 const COMPACTION_BUDGET_MS = TRANSFORM_LIMITS.export.deadlineMs + TRANSFORM_LIMITS.compact.deadlineMs;
-// A structural batch costs the fold a rewrite and a recompute of the formulas, up to seconds each on a large workbook,
-// so one fold takes at most this many and stays inside its deadline. The next close folds on from there.
-const MAX_STRUCTURAL_BATCHES = 20;
 // A workbook whose compaction keeps failing, such as one too large for the child's memory, stops trying until the API
 // restarts, so it doesn't hold the one child at every close.
 const MAX_COMPACTION_FAILURES = 3;
@@ -44,24 +40,20 @@ export async function compactSheets(
 ): Promise<{ snapshot: string; folded: readonly Op[][] } | null> {
     // Read from the live doc in one step, as data.db can lag behind.
     const log = sheetsOpLog(doc).toArray();
-    let end = 0;
-    let structural = 0;
-    for (const batch of log) {
-        if (isStructuralBatch(batch)) structural++;
-        if (structural > MAX_STRUCTURAL_BATCHES) break;
-        end++;
-    }
-    const folded = log.slice(0, end);
     try {
         const budget = AbortSignal.any([signal, AbortSignal.timeout(COMPACTION_BUDGET_MS)]);
-        const { snapshot, dropped } = await runSheetsCompaction(readSheetsSnapshotJson(doc) ?? null, folded, budget);
+        const { snapshot, dropped, folded } = await runSheetsCompaction(
+            readSheetsSnapshotJson(doc) ?? null,
+            log,
+            budget,
+        );
         compactionFailures.delete(path.id);
         if (dropped > 0) {
             console.warn(
                 `[sheets] compaction dropped ${dropped} op ${dropped === 1 ? 'batch' : 'batches'} path=${path.id}`,
             );
         }
-        return { snapshot, folded };
+        return { snapshot, folded: log.slice(0, folded) };
     } catch (err) {
         if (err instanceof ApiError && err.status === 503) return null;
         if (err instanceof TransformFailedError && (err.code === 'canceled' || err.code === 'shutdown')) return null;
