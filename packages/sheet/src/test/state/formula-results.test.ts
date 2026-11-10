@@ -202,22 +202,22 @@ describe('an empty-text result', () => {
         for (const sheet of s.readers()) expect(at(sheet, 'B1')).toEqual(IMPORTED);
     });
 
-    test('plus one is #VALUE!, on either cell, as in Excel', () => {
+    test('plus one is 1, on either cell, as in Google Sheets', () => {
         const s = session({ A1: number(1), C1: IMPORTED });
         s.edit(typed('B1', IF_ONE));
         s.edit(typed('B2', '=B1+1'));
         s.edit(typed('C2', '=C1+1'));
-        expectEveryone(s, 'B2', { v: '#VALUE!' });
-        expectEveryone(s, 'C2', { v: '#VALUE!' });
+        expectEveryone(s, 'B2', { v: 1 });
+        expectEveryone(s, 'C2', { v: 1 });
     });
 
     test('a reader gives one answer, in the pass of the flip and in a later one', () => {
         const s = session({ A1: number(0), B1: held(IF_ONE, 5), C1: held('=B1+1', 6), H1: number(1) });
         s.edit(typed('A1', '1'));
         expectEveryone(s, 'B1', { v: '', m: '' });
-        expectEveryone(s, 'C1', { v: '#VALUE!' });
+        expectEveryone(s, 'C1', { v: 1 });
         s.edit(typed('C2', '=B1+1'));
-        expectEveryone(s, 'C2', { v: '#VALUE!' });
+        expectEveryone(s, 'C2', { v: 1 });
     });
 
     test('takes away the type an error left', () => {

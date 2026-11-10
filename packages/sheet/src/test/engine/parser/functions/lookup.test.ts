@@ -48,6 +48,23 @@ const resolver = createArrayResolver([
             [1, 'Cherry'],
         ]),
     },
+    {
+        // A row of labels with a blank and a number between them, as a scenario picker holds.
+        id: 's4',
+        name: 'Labels',
+        data: rows([[null, 'Real (Low)', 5, 'Real (Central)', 'Real (High)']]),
+    },
+    {
+        // Excel for the web's blank-lookup case: A1 and A3 empty, and C1, the lookup value, empty too.
+        id: 's5',
+        name: 'Blanks',
+        data: rows([
+            [null, 'one', null],
+            ['x', 'two', null],
+            [null, 'three', null],
+            [5, 'four', null],
+        ]),
+    },
 ]);
 
 const engine = new FormulaEngine();
@@ -186,11 +203,97 @@ describe('XMATCH', () => {
     });
 });
 
+describe('MATCH', () => {
+    test('match_type 0 finds text across a row that holds blanks, numbers and parentheses', () => {
+        expect(value('=MATCH("Real (Central)",Labels!A1:E1,0)')).toBe(4);
+        expect(value('=MATCH("real (high)",Labels!A1:E1,0)')).toBe(5);
+        expect(value('=MATCH("x",A1:A6,0)')).toBe('#N/A');
+    });
+
+    test('match_type 0 matches the whole text, with * ? and ~ as wildcards', () => {
+        expect(value('=MATCH("an",B1:B6,0)')).toBe('#N/A');
+        expect(value('=MATCH("ch*",B1:B6,0)')).toBe(3);
+        expect(value('=MATCH("?pple",B1:B6,0)')).toBe(1);
+        expect(value('=MATCH("~*star",B1:B6,0)')).toBe(6);
+    });
+
+    test('a value matches only its own kind, and a blank lookup value is 0', () => {
+        expect(value('=MATCH("30",A1:A6,0)')).toBe('#N/A');
+        expect(value('=MATCH(5,Labels!A1:E1,0)')).toBe(3);
+        expect(value('=MATCH(G1,Labels!A1:E1,0)')).toBe('#N/A');
+    });
+
+    test('match_type 1, the default, takes the last value at or below over ascending data', () => {
+        expect(value('=MATCH(25,A1:A6)')).toBe(2);
+        expect(value('=MATCH(25,A1:A6,1)')).toBe(2);
+        expect(value('=MATCH(99,A1:A6,1)')).toBe(6);
+        expect(value('=MATCH(5,A1:A6)')).toBe('#N/A');
+        expect(value('=MATCH(2,H1:H6)')).toBe(4);
+        expect(value('=MATCH("c",Across!A2:D2)')).toBe(3);
+    });
+
+    test('match_type -1 takes the last value at or above over descending data', () => {
+        expect(value('=MATCH(25,E1:E6,-1)')).toBe(2);
+        expect(value('=MATCH(2,I1:I6,-1)')).toBe(4);
+        expect(value('=MATCH(99,E1:E6,-1)')).toBe('#N/A');
+    });
+
+    test('an empty match_type is 0, an exact match', () => {
+        expect(value('=MATCH(25,A1:A6,)')).toBe('#N/A');
+        expect(value('=MATCH(30,A1:A6,)')).toBe(3);
+    });
+});
+
 describe('VLOOKUP', () => {
     test('an empty range_lookup is FALSE, an exact match, as in Excel', () => {
         expect(value('=VLOOKUP(25,A1:B6,2)')).toBe('banana');
         expect(value('=VLOOKUP(25,A1:B6,2,)')).toBe('#N/A');
         expect(value('=VLOOKUP(30,A1:B6,2,)')).toBe('Cherry');
+    });
+
+    test('an exact match is case-insensitive, with * ? and ~ as wildcards, and only of its own kind', () => {
+        expect(value('=VLOOKUP("APPLE",B1:C6,2,FALSE)')).toBe(1.5);
+        expect(value('=VLOOKUP("ch*",B1:C6,2,FALSE)')).toBe(4);
+        expect(value('=VLOOKUP("~*star",B1:C6,2,FALSE)')).toBe(6);
+        expect(value('=VLOOKUP("30",A1:B6,2,FALSE)')).toBe('#N/A');
+    });
+
+    test('a blank lookup value is 0, so it finds no blank cell', () => {
+        expect(value('=VLOOKUP(G1,G1:H6,2,FALSE)')).toBe('#N/A');
+        expect(value('=IFNA(VLOOKUP(G1,G1:H6,2,FALSE),"")')).toBe('');
+        expect(value('=IFNA(VLOOKUP(G1,G1:H6,2,FALSE),"")*5')).toBe(0);
+    });
+
+    test('an approximate match takes the last row at or below over ascending data', () => {
+        expect(value('=VLOOKUP(99,A1:B6,2,TRUE)')).toBe('*star');
+        expect(value('=VLOOKUP(5,A1:B6,2,TRUE)')).toBe('#N/A');
+        expect(value('=VLOOKUP(25,A1:B6,2,-1)')).toBe('banana');
+    });
+
+    test('a column past the table is #REF!, one below 1 #VALUE!', () => {
+        expect(value('=VLOOKUP(30,A1:B6,3,FALSE)')).toBe('#REF!');
+        expect(value('=VLOOKUP(30,A1:B6,0,FALSE)')).toBe('#VALUE!');
+    });
+});
+
+describe('HLOOKUP', () => {
+    test('searches the first row and returns from the row asked for', () => {
+        expect(value('=HLOOKUP("C",Across!A2:D3,2,FALSE)')).toBe(3);
+        expect(value('=HLOOKUP(25,Across!A1:D3,2)')).toBe('b');
+        expect(value('=HLOOKUP(30,Across!A1:D3,4,FALSE)')).toBe('#REF!');
+    });
+});
+
+describe('a blank lookup value', () => {
+    test('MATCH and VLOOKUP read it as 0 and find no empty cell, nor does "" or 0', () => {
+        expect(value('=MATCH(Blanks!C1,Blanks!A1:A4,0)')).toBe('#N/A');
+        expect(value('=VLOOKUP(Blanks!C1,Blanks!A1:B4,2,FALSE)')).toBe('#N/A');
+        expect(value('=MATCH(0,Blanks!A1:A4,0)')).toBe('#N/A');
+        expect(value('=MATCH("",Blanks!A1:A4,0)')).toBe('#N/A');
+    });
+
+    test('XMATCH finds the first empty cell', () => {
+        expect(value('=XMATCH(Blanks!C1,Blanks!A1:A4)')).toBe(1);
     });
 });
 
@@ -214,6 +317,13 @@ describe('INDEX', () => {
         expect(value('=INDEX(C1:D6,7,0)')).toBe('#REF!');
         expect(value('=INDEX(C1:D6,0,3)')).toBe('#REF!');
         expect(value('=INDEX(C1:D6,-1,0)')).toBe('#VALUE!');
+    });
+
+    test('an empty cell it gives shows 0, as a reference to one does', () => {
+        expect(value('=INDEX(Labels!A1:E1,,1)')).toBe(0);
+        expect(value('=INDEX(Labels!A1:E1,1)')).toBe(0);
+        expect(value('=Labels!A1:E1')).toBe(0);
+        expect(value('=Labels!A1')).toBe(0);
     });
 
     test('a row and a column still give one cell', () => {

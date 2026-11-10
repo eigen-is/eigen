@@ -125,9 +125,9 @@ export class FormulaEngine {
         });
 
         // The engine has no spill, so an array result keeps its top-left value, the one Excel's spill anchor holds.
-        // That value may be an error a cell holds, as in `=A1:B2`.
+        // That value may be an error a cell holds, as in `=A1:B2`, and an empty cell is 0, as a bare reference to one is.
         let result = evaluated;
-        while (Array.isArray(result)) result = result[0];
+        while (Array.isArray(result)) result = result[0] ?? 0;
         const failure = result instanceof Error ? (errorParser(result.message) ?? errorParser(ERROR)) : error;
         if (failure != null) {
             return { value: failure, arrayOperation };
@@ -137,10 +137,7 @@ export class FormulaEngine {
         // or EOMONTH cell would turn into text on the xlsx round trip.
         const serial = result instanceof Date ? dateToSerial(result) : result;
         // NaN and Infinity survive no JSON, so a tab and a joiner would hold different cells. Excel's word is #NUM!.
-        if (typeof serial === 'number' && !Number.isFinite(serial)) {
-            const overflow = errorParser(ERROR_NUM);
-            return { value: overflow };
-        }
+        if (typeof serial === 'number' && !Number.isFinite(serial)) return { value: errorParser(ERROR_NUM) };
 
         // Any other non-primitive is stored as its string.
         if (typeof serial === 'string' || typeof serial === 'number' || typeof serial === 'boolean') {

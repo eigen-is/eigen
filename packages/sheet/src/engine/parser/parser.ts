@@ -16,7 +16,7 @@ import errorParser, {
 import { callFunction, evaluateByOperator } from './evaluate-by-operator/evaluate-by-operator';
 import { Parser as GrammarParser } from './grammar-parser/grammar-parser';
 import { extractLabel, offsetCoordinate, offsetRange, toLabel } from './helper/cell';
-import { invertNumber, toNumber } from './helper/number';
+import { toNumber } from './helper/number';
 import { trimEdges } from './helper/string';
 
 type GrammarParserInstance = { parse: (expression: string) => CompiledFormula; yy: Record<string, unknown> };
@@ -35,7 +35,6 @@ export class Parser {
         this.parser.yy = {
             toNumber,
             trimEdges,
-            invertNumber,
             // An error typed into a formula, such as `#N/A`, is a value like a computed one, so ISERROR,
             // ERROR.TYPE or IFERROR around it can inspect it, as in Excel.
             errorValue: (errorName: string) => toFormulaError(Error(errorName)),
@@ -104,17 +103,12 @@ export class Parser {
         return { error, result };
     }
 
-    // Folded like function names (evaluate-by-operator) and cell labels (helper/cell):
-    // Excel writes bare TRUE/FALSE/NULL lower-cased into xlsx formula text, and both Excel
-    // and Sheets resolve them case-insensitively.
+    // Excel writes TRUE, FALSE and NULL lower-cased into xlsx formula text, and reads a name in any case.
     public setVariable(name: string, value: FormulaArg): Parser {
         this.variables[name.toUpperCase()] = value;
         return this;
     }
 
-    // `FormulaArg` because variables feed directly into the grammar's arithmetic/comparison
-    // pipelines, which expect scalars or arrays (e.g. `setVariable('range', [1, 2, 3])` for
-    // CORREL-style formulas).
     public getVariable(name: string): FormulaArg {
         return this.variables[name.toUpperCase()];
     }

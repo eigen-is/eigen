@@ -2,7 +2,6 @@
 // parse table and actions are the source of the formula grammar. The .jison grammar beside it is the readable copy,
 // and an edit here is made there too. Its parse turns a formula into a thunk, so one parse serves many evaluations.
 
-import { ERROR_VALUE, UNSUPPORTED_ARRAY_OPERATION } from "../error";
 import { OMITTED } from "../omitted";
 
 const simpleSheetName = "[A-Za-z0-9_\u00C0-\u02AF]+";
@@ -22,9 +21,8 @@ const RELATIVE_CELL = new RegExp(
 );
 const NUMONLY = /^(?:[0-9]+$)/;
 
-// The actions compile rather than evaluate: every expression reduces to a thunk, so one parse
-// serves any number of evaluations (Parser.compile). A thunk runs its operands left to right,
-// the order the parser reduces them in. Terminals and literal pieces stay plain values.
+// A thunk runs its operands left to right, the order the parser reduces them in. Terminals and literal pieces stay
+// plain values.
 const run = (value: any): any => (typeof value === "function" ? value() : value);
 const operator = (yy: any, op: string, left: any, right: any) => () =>
     yy.evaluateByOperator(op, [run(left), run(right)]);
@@ -884,11 +882,8 @@ export class Parser {
         const $0 = $$.length - 1;
         switch (yystate) {
             case 1: {
-                // Top-level Formula production. A bare reference to an empty cell
-                // (e.g. `='Sheet'!B13` when B13 has no value) produces `undefined`
-                // here; if we returned that, Jison would fall through to the
-                // accept-state below and surface its `return true` sentinel as the
-                // formula's value. Excel treats empty cells as 0 in value context.
+                // A bare reference to an empty cell is undefined, which would reach the accept state's `true`. Excel
+                // shows 0.
                 const expression = $$[$0 - 1];
                 return () => {
                     const v = run(expression);
@@ -952,30 +947,13 @@ export class Parser {
             case 18:
                 this.$ = operator(yy, "^", $$[$0 - 2], $$[$0]);
                 break;
+            // A sign is its operator applied to 0, so its operand coerces as a binary operator's does.
             case 19:
-            case 20: {
-                // A blank operand coerces to 0 (undefined from the helper), but an Error
-                // operand must propagate and an unparseable string must surface as #VALUE!,
-                // the way the binary operators do — `-NA()` or `-"a"` returning 0 is a
-                // silent wrong answer.
-                const operand = $$[$0];
-                const sign = yystate === 19 ? yy.invertNumber : yy.toNumber;
-                this.$ = () => {
-                    const value = run(operand);
-                    if (value instanceof Error) {
-                        return value;
-                    }
-                    if (Array.isArray(value)) {
-                        return UNSUPPORTED_ARRAY_OPERATION;
-                    }
-                    const n1 = sign(value);
-                    if (n1 !== undefined && isNaN(n1)) {
-                        throw Error(ERROR_VALUE);
-                    }
-                    return n1 ?? 0;
-                };
+                this.$ = operator(yy, "-", 0, $$[$0]);
                 break;
-            }
+            case 20:
+                this.$ = operator(yy, "+", 0, $$[$0]);
+                break;
             case 21: {
                 const name = $$[$0 - 2];
                 this.$ = () => yy.callFunction(name);

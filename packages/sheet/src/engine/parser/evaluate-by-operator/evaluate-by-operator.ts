@@ -165,11 +165,16 @@ const symbolOperators: (OperatorCallable & { SYMBOL: string })[] = [
     notEqual,
     minus,
 ];
+
+// An empty text is 0 to these, Google Sheets' rule, where Excel's is #VALUE!. The grammar's signs and `%` come here too.
+const ARITHMETIC = new Set<OperatorCallable>([add, divide, minus, multiply, power]);
 for (const operator of symbolOperators) {
+    const arithmetic = ARITHMETIC.has(operator);
     availableOperators[operator.SYMBOL] = (...params) => {
         const error = params.find((p) => p instanceof Error);
         if (error !== undefined) return error;
-        return params.some((p) => Array.isArray(p)) ? UNSUPPORTED_ARRAY_OPERATION : operator(...params);
+        if (params.some((p) => Array.isArray(p))) return UNSUPPORTED_ARRAY_OPERATION;
+        return operator(...(arithmetic ? params.map((p) => (p === '' ? 0 : p)) : params));
     };
 }
 
