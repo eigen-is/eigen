@@ -5,7 +5,7 @@ type: faq
 tags: [calendar, invitations, external, imip, rsvp]
 related: [calendar/invite-people, calendar/respond-to-invitation, calendar/create-event]
 order: 70
-updated: 2026-09-24
+updated: 2026-11-10
 ---
 
 Eigen can exchange calendar invitations with people who use other calendar apps, such as Google Calendar, Apple Calendar, or Outlook. This works through standard invitation emails: when you invite an external guest, they receive an email they can accept or decline in their own app. When someone outside Eigen invites you, the invitation arrives in Mail and the event is added to your calendar automatically.
@@ -20,7 +20,7 @@ If you later update the event, Eigen sends an updated invitation email automatic
 
 ## What does an external guest see?
 
-External guests receive a plain invitation email with the event title, date and time, location (if any), and description. Their calendar app handles the rest: most will show an **Accept / Decline** prompt and, if accepted, add the event to their calendar.
+External guests receive a plain invitation email with the event title, date and time with its time zone, how often it repeats (if it does), location (if any), and description. Their calendar app handles the rest: most will show an **Accept / Decline** prompt and, if accepted, add the event to their calendar.
 
 Their response comes back to you as a reply email. When that email arrives in Eigen Mail, Eigen reads the reply and updates the attendee's status on your event. If your Eigen doesn't host your email, the reply lands in your usual mailbox instead, and your event doesn't show the answer.
 
