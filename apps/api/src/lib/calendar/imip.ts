@@ -192,7 +192,10 @@ export async function processInboundImip(
     if (events.length > IMIP_MAX_EVENTS) {
         console.info(`iMIP: acting on the first ${IMIP_MAX_EVENTS} of ${events.length} events from ${sender}`);
     }
-    const acted = events.slice(0, IMIP_MAX_EVENTS);
+    // A series' answer is its sender's answer on every date, so the master goes first and a date's own answer after it.
+    const acted = events
+        .slice(0, IMIP_MAX_EVENTS)
+        .toSorted((a, b) => Number(!!a.recurrenceDate) - Number(!!b.recurrenceDate));
     for (const parsed of acted) {
         if (parsed.endTime < parsed.startTime) parsed.endTime = parsed.startTime;
     }
