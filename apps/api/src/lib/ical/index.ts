@@ -7,7 +7,6 @@ export {
     guestCutOf,
     isNewerRevision,
     keepProperties,
-    keepSubcomponents,
     newVCalendar,
     PRODID,
     patchEvent,

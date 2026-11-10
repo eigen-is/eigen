@@ -425,7 +425,7 @@ export function keepProperties(comp: ICAL.Component, keep: (prop: ICAL.Property)
     for (const prop of kept) comp.addProperty(prop);
 }
 
-export function keepSubcomponents(comp: ICAL.Component, keep: (sub: ICAL.Component) => boolean): void {
+function keepSubcomponents(comp: ICAL.Component, keep: (sub: ICAL.Component) => boolean): void {
     const kept = comp.getAllSubcomponents().filter(keep);
     comp.removeAllSubcomponents();
     for (const sub of kept) comp.addSubcomponent(sub);
