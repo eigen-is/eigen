@@ -318,7 +318,7 @@ async function decideInboundRequest(
     for (const [key, parsed] of latest) {
         // A date from the guest's own cut of the series on stays cut.
         if (key && cut && key >= cut) continue;
-        const edit = requestedEdit(calendar, series, held.get(key), parsed, key, revisions.get(key) ?? null, cut);
+        const edit = requestedEdit(calendar, series, held.get(key), parsed, key, revisions, cut);
         if (edit) edits.set(key, edit);
     }
     const changed = applyEdits(component, edits);
@@ -335,19 +335,22 @@ async function decideInboundRequest(
 }
 
 // What one requested event does to the copy: nothing, a patch of what the copy holds for its key, or a new override or
-// exclusion. `stored` is the copy's revision for that key, read before any edit, and `cut` the guest's own cut.
+// exclusion. `revisions` are the copy's, read before any edit, and `cut` is the guest's own cut.
 function requestedEdit(
     calendar: Calendar,
     series: CalendarEvent,
     existing: CalendarEvent | undefined,
     parsed: ParsedEvent,
     key: string | null,
-    stored: Revision | null,
+    revisions: ReadonlyMap<string | null, Revision>,
     cut: string | null,
 ): VEventEdit | null {
+    const stored = revisions.get(key) ?? null;
     if (!isNewerRevision(parsed, stored)) return null;
-    const held = heldAttendees(existing, series);
-    const attendees = keepOwnAnswer(calendar, parsed, existing, held, stored);
+    // A removed date holds no list, so the guest's answer for the series is no answer to it.
+    const removed = existing?.parentEventId && existing.status === 'cancelled';
+    const held = removed ? [] : heldAttendees(existing, series);
+    const attendees = keepOwnAnswer(calendar, parsed, held, stored ?? revisions.get(null) ?? null, cut);
     const cancelled = parsed.status === 'cancelled';
     const timezone = key ? (parsed.timezone ?? series.timezone) : parsed.timezone;
     // The copy's own VEVENT, a master or a single date, is cancelled by its status. Only an exception is an EXDATE.
@@ -356,18 +359,18 @@ function requestedEdit(
         if (existing.parentEventId && cancelled) return null;
         const rrule = key === null ? constrainRRule(parsed, cut) : null;
         const patch = invitationPatch(existing, { ...parsed, timezone }, attendees, rrule);
-        return { kind: 'patch', patch, ctx: events.writeContext(false, parsed.dtstamp) };
+        return { kind: 'patch', patch, ctx: events.writeContext(false, parsed) };
     }
     // A copy of single dates has no series to exclude another date from.
     if (cancelled && series.recurrenceDate) return null;
-    return events.exceptionEdit(series, {
+    const exception = {
         ...parsed,
         timezone,
-        parentEventId: series.id,
         recurrenceDate: key,
         data: { ...series.data, attendees: attendees ?? held },
         createByUserId: series.createByUserId,
-    });
+    };
+    return events.exceptionEdit(series, exception, events.writeContext(false, parsed));
 }
 
 // The caller holds the write lock. A new copy is built from the message in the default calendar. A copy of single dates
@@ -422,7 +425,7 @@ async function fileNewInvitation(
                     organizer: { ...organizer, userId: link.organizerUserId },
                     organizerEventId: link.organizerEventId,
                     attendees: held
-                        ? keepOwnAnswer(calendar, parsed, held, held.data?.attendees ?? [], heldRevision(held))
+                        ? keepOwnAnswer(calendar, parsed, held.data?.attendees ?? [], heldRevision(held), null)
                         : parsed.data?.attendees,
                     // A linked copy lets the guest keep their own reminders and color.
                     reminders: kept?.reminders ?? parsed.data?.reminders,
@@ -441,20 +444,23 @@ async function fileNewInvitation(
     return { kind: 'created', calendarId };
 }
 
-// The guest's own answer stands until the organizer reschedules, which raises the SEQUENCE. An organizer's list can
-// still say NEEDS-ACTION for a reply it hasn't read yet, and a date the guest removed holds no list but a decline.
+// The guest's answer on their own copy is theirs: a message only asks again, as NEEDS-ACTION at a higher SEQUENCE than
+// the copy holds, when the organizer reschedules. With no answer given, the message's stands, as one the guest gave
+// from another client, except the decline a cut copy's organizer echoes, which answers none of the dates kept.
 function keepOwnAnswer(
     calendar: Calendar,
     parsed: ParsedEvent,
-    existing: CalendarEvent | undefined,
     held: readonly Attendee[],
     stored: Revision | null,
+    cut: string | null,
 ): Attendee[] | undefined {
     const incoming = parsed.data?.attendees;
     const email = calendar.home.user.email.toLowerCase();
-    const removed = existing?.parentEventId && existing.status === 'cancelled';
-    const own = removed ? 'declined' : held.find((a) => a.email.toLowerCase() === email)?.status;
-    if (!incoming || !own || !stored || parsed.sequence > stored.sequence) return incoming;
+    const own = held.find((a) => a.email.toLowerCase() === email)?.status;
+    const theirs = incoming?.find((a) => a.email.toLowerCase() === email)?.status;
+    const asked = theirs === 'pending' && stored && parsed.sequence > stored.sequence;
+    const echoedCut = cut && theirs === 'declined';
+    if (!incoming || !own || asked || (own === 'pending' && !echoedCut)) return incoming;
     return withAttendeeStatus(incoming, email, own);
 }
 
@@ -478,8 +484,6 @@ function invitationPatch(
         timezone: parsed.timezone,
         status: parsed.status,
         data: attendees ? { ...stored.data, attendees } : undefined,
-        // The guest's copy keeps the organizer's revision, so the next message has a number to beat.
-        sequence: parsed.sequence,
     };
 }
 
@@ -527,28 +531,19 @@ function findLinkedEvents(calendar: Calendar, organizerEventId: string, organize
         .map(toEvent);
 }
 
-// The caller holds the write lock. The CANCEL's revision is stored, so a stale redelivery can be ordered against it.
+// The caller holds the write lock. A CANCEL's revision is stored, so a stale redelivery can be ordered against it; the
+// guest's own removal states none.
 async function removeOccurrence(
     calendar: Calendar,
     eventId: string,
     recurrenceDate: string,
     revision?: Revision,
 ): Promise<void> {
-    const parent = events.eventById(calendar, eventId);
-    if (!parent) throw new ApiError(404, 'Event not found');
-    const { startTime, endTime } = computeOccurrenceTimes(parent, recurrenceDate);
-    await events.writeEvent(calendar, parent.calendarId, {
-        title: parent.title,
-        startTime,
-        endTime,
-        allDay: parent.allDay,
-        timezone: parent.timezone,
-        parentEventId: eventId,
-        recurrenceDate,
-        status: 'cancelled',
-        sequence: revision?.sequence,
-        dtstamp: revision?.dtstamp,
-        uid: parent.uid,
+    const resource = events.resourceOf(calendar, eventId);
+    if (!resource) throw new ApiError(404, 'Event not found');
+    const ctx = events.writeContext(false, revision);
+    await events.editResource(calendar, resource, (component) => {
+        applyEdits(component, new Map([[recurrenceDate, { kind: 'exclusion', id: crypto.randomUUID(), ctx }]]));
     });
 }
 
@@ -575,28 +570,30 @@ async function updateAttendeeStatus(
     email: string,
     status: Attendee['status'],
 ): Promise<void> {
-    // The guest list is read inside the write lock, so one answer never overwrites another.
+    // The guest list is read inside the write lock, so one answer never overwrites another. An answer for the series is
+    // the guest's answer on every date, one that holds its own list included.
     const calendarId = await calendar.writeLock.run(async () => {
         const event = events.eventById(calendar, eventId);
         if (!event?.data?.attendees) return null;
         const resource = events.resourceOf(calendar, eventId);
         if (!resource) return null;
 
-        const attendees = withAttendeeStatus(event.data.attendees, email, status);
-        const patch = { data: { ...event.data, attendees } };
-        const changed = await events.patchResource(
-            calendar,
-            resource,
-            event.recurrenceDate,
-            patch,
-            events.writeContext(false),
-        );
-        return changed ? event.calendarId : null;
+        const dates = event.recurrenceDate ? [] : events.exceptionsOf(calendar, eventId);
+        const edits = new Map<string | null, VEventEdit>();
+        for (const held of [event, ...dates]) {
+            if (!held.data?.attendees?.length) continue;
+            const data = { ...held.data, attendees: withAttendeeStatus(held.data.attendees, email, status) };
+            edits.set(held.recurrenceDate, { kind: 'patch', patch: { data }, ctx: events.writeContext(false) });
+        }
+        const component = events.storedComponent(calendar, resource);
+        if (!applyEdits(component, edits)) return null;
+        await events.writeComponent(calendar, resource, component);
+        return event.calendarId;
     });
     if (calendarId) calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
 }
 
-function withAttendeeStatus(attendees: Attendee[], email: string, status: Attendee['status']): Attendee[] {
+function withAttendeeStatus(attendees: readonly Attendee[], email: string, status: Attendee['status']): Attendee[] {
     return attendees.map((a) => (a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a));
 }
 
@@ -626,11 +623,12 @@ async function rsvpForOccurrence(
         if (!invitees.some((a) => a.email.toLowerCase() === email.toLowerCase())) return null;
         const attendees = withAttendeeStatus(invitees, email, status);
 
+        // The answer is the guest's, so it raises no SEQUENCE on either side.
+        const ctx = events.writeContext(false);
+        const resource = events.resourceOf(calendar, parent.id);
+        if (!resource) return null;
         if (existing && existing.status !== 'cancelled') {
-            const resource = events.resourceOf(calendar, existing.id);
-            if (!resource) return null;
-            const patch = { data: { ...data, attendees } };
-            const changed = await events.patchResource(calendar, resource, key, patch, events.writeContext(false));
+            const changed = await events.patchResource(calendar, resource, key, { data: { ...data, attendees } }, ctx);
             return changed ? parent.calendarId : null;
         }
 
@@ -643,21 +641,24 @@ async function rsvpForOccurrence(
                 (candidate) => candidate.occurrenceDate === key,
             );
         if (!slot) return null;
-        await events.writeEvent(calendar, parent.calendarId, {
-            title: slot.title,
-            description: parent.description,
-            location: parent.location,
-            startTime: slot.startTime,
-            endTime: slot.endTime,
-            allDay: parent.allDay,
-            timezone: parent.timezone,
-            parentEventId: eventId,
-            recurrenceDate: key,
-            status: 'confirmed',
-            data: { ...data, attendees },
-            createByUserId: parent.createByUserId,
-            uid: parent.uid,
-        });
+        const answered = events.exceptionEdit(
+            parent,
+            {
+                title: slot.title,
+                description: parent.description,
+                location: parent.location,
+                startTime: slot.startTime,
+                endTime: slot.endTime,
+                allDay: parent.allDay,
+                timezone: parent.timezone,
+                recurrenceDate: key,
+                status: 'confirmed',
+                data: { ...data, attendees },
+                createByUserId: parent.createByUserId,
+            },
+            ctx,
+        );
+        await events.editResource(calendar, resource, (component) => applyEdits(component, new Map([[key, answered]])));
         return parent.calendarId;
     });
     if (calendarId) calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);

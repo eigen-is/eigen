@@ -27,8 +27,8 @@ export async function propagateInvitation(
     organizerHome: Home,
     event: CalendarEvent,
     user: User,
-    oldAttendees: Attendee[],
-    newAttendees: Attendee[],
+    oldAttendees: readonly Attendee[],
+    newAttendees: readonly Attendee[],
     series?: CalendarEvent,
     exceptions: readonly CalendarEvent[] = [],
 ): Promise<void> {
@@ -104,11 +104,11 @@ export async function propagateRsvp(
 export async function propagateCancellation(
     organizerHome: Home,
     user: User | undefined,
-    event: CalendarEvent,
+    cancelled: CalendarEvent,
     attendees: readonly Attendee[],
     series?: CalendarEvent,
 ): Promise<void> {
-    const occurrence = occurrenceRevision(event, series);
+    const occurrence = occurrenceRevision(cancelled, series);
     const organizer = organizerOf(organizerHome, user);
     for (const attendee of attendees) {
         try {
@@ -118,13 +118,13 @@ export async function propagateCancellation(
                     console.warn(`Skipped the iMIP cancel to ${attendee.email}: the organizer has no address`);
                     continue;
                 }
-                const mail = composeCancelEmail(event, organizer, [attendee], series);
+                const mail = composeCancelEmail(cancelled, organizer, [attendee], series);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
                 continue;
             }
             await sendToHome(targetUser.id, {
                 type: 'calendar:invitation-removal',
-                orgEventId: series?.id ?? event.id,
+                orgEventId: series?.id ?? cancelled.id,
                 orgUserId: organizerHome.user.id,
                 occurrence,
             });

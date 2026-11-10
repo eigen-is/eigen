@@ -1,9 +1,14 @@
-// iMIP, the way calendar invitations travel by email. It builds the mails for an invitation, a cancellation and an
-// RSVP reply, with the calendar file attached, and it reads such a mail when one arrives. Inbound mail is only
-// trusted when the sender is verified, a calendar part past the mail size limit is skipped, and only a message's
-// first events are acted on.
+// iMIP, the way calendar invitations travel by email. Calendar saves, such as an organizer inviting guests or a guest
+// answering, mail through it: an invitation, a cancellation or an RSVP reply, with the calendar file attached. Mail
+// delivery hands it each calendar part that arrives, acted on only when our MTA verified the sender, and only for a
+// message's first events.
 
-import { formatEventWhen, isInvitationFromOthers, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
+import {
+    formatEventWhen,
+    isInvitationFromOthers,
+    normalizeTimezone,
+    rruleToText,
+} from '@workspace/lib/calendar/calendar-utils';
 import { escapeHtml } from '@workspace/lib/html';
 import type { Attendee, CalendarEvent, ImipMethod, Organizer } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment, CalendarInvite } from '@workspace/lib/types/mail';
@@ -25,6 +30,13 @@ const IMIP_MAX_REPLY_DATES = 5;
 
 // A scheduling message is small, far below what a saved event may hold.
 const IMIP_MAX_BYTES = 1_048_576;
+
+const STATUS_LABELS: Record<Attendee['status'], string> = {
+    accepted: 'Accepted',
+    declined: 'Declined',
+    tentative: 'Tentatively accepted',
+    pending: 'Pending',
+};
 
 // The calendar file of one save's invitation mails. Nothing in it differs per guest, and its size is guests ×
 // exceptions, so a save builds it once.
@@ -83,13 +95,6 @@ export function composeCancelEmail(
     };
 }
 
-const STATUS_LABELS: Record<Attendee['status'], string> = {
-    accepted: 'Accepted',
-    declined: 'Declined',
-    tentative: 'Tentatively accepted',
-    pending: 'Pending',
-};
-
 // `event` names its occurrence by the instant its stored file holds, which a copy of one date can't compute.
 export function composeRsvpReply(
     event: EventToBuild,
@@ -101,32 +106,25 @@ export function composeRsvpReply(
     const organizer = event.data?.organizer;
     if (!organizer) throw new Error('Event has no organizer');
 
+    // A scope:'this' RSVP carries a RECURRENCE-ID (RFC 5546), so the organizer applies the PARTSTAT to that instance
+    // alone.
     const replyEvent: EventToBuild = {
         ...event,
+        ...(recurrenceDate && { rrule: null, recurrenceDate, ...computeOccurrenceTimes(event, recurrenceDate) }),
         data: {
             ...event.data,
             attendees: [{ email: attendeeEmail, name: attendeeName, status, role: 'required' }],
         },
     };
 
-    // A scope:'this' RSVP carries a RECURRENCE-ID (RFC 5546), so the organizer applies the PARTSTAT to that instance
-    // alone.
-    if (recurrenceDate) {
-        const { startTime, endTime } = computeOccurrenceTimes(event, recurrenceDate);
-        replyEvent.rrule = null;
-        replyEvent.recurrenceDate = recurrenceDate;
-        replyEvent.startTime = startTime;
-        replyEvent.endTime = endTime;
-    }
-
     const statusLabel = STATUS_LABELS[status].toLowerCase();
     return {
         from: { name: attendeeName, address: attendeeEmail },
         to: [{ name: organizer.name ?? '', address: organizer.email }],
         subject: `${STATUS_LABELS[status]}: ${event.title}`,
-        text: `${attendeeName} has ${statusLabel} the invitation: ${event.title}`,
+        text: `${attendeeName} has ${statusLabel} the invitation:\n\n${buildEventSummary(replyEvent)}`,
         html: buildEventHtml(
-            event,
+            replyEvent,
             `Reply from ${attendeeName}`,
             `${escapeHtml(attendeeName)} has ${statusLabel} the invitation`,
         ),
@@ -211,8 +209,11 @@ export async function processInboundImip(
         return;
     }
 
+    // A series' answer is its sender's answer on every date, so the master goes first and a date's own answer after it.
+    const ordered =
+        method === 'REPLY' ? acted.toSorted((a, b) => Number(!!a.recurrenceDate) - Number(!!b.recurrenceDate)) : acted;
     let replyDates = 0;
-    for (const parsed of acted) {
+    for (const parsed of ordered) {
         const { recurrenceDate } = parsed;
         if (method === 'CANCEL') {
             const organizerEmail = parsed.data?.organizer?.email;
@@ -261,39 +262,30 @@ function icalEvent(
 }
 
 function buildEventSummary(event: CalendarEvent): string {
-    const when = buildEventWhen(event);
-    const lines: string[] = [];
-    lines.push(`What: ${event.title}`);
-    lines.push(`When: ${when}`);
+    const repeats = rruleToText(event.rrule, event.timezone);
+    const lines = [`What: ${event.title}`, `When: ${buildEventWhen(event)}`];
+    if (repeats) lines.push(`Repeats: ${repeats}`);
     if (event.location) lines.push(`Where: ${event.location}`);
     if (event.description) lines.push(`Description: ${event.description}`);
     return lines.join('\n');
 }
 
-// Invitation mail has no viewer, so an event with no stored zone renders in UTC and says so, instead of borrowing the
+// Invitation mail has no viewer, so a timed event names the zone it renders in, UTC when it stores none rather than the
 // server's.
 function buildEventWhen(event: CalendarEvent): string {
-    const timezone = normalizeTimezone(event.timezone);
+    const timezone = normalizeTimezone(event.timezone) ?? 'UTC';
     const when = formatEventWhen(event.startTime, event.endTime, event.allDay, timezone, 'UTC');
-    return timezone || event.allDay ? when : `${when} (UTC)`;
+    return event.allDay ? when : `${when} (${timezone})`;
 }
 
 function buildEventHtml(event: CalendarEvent, footerLine: string, banner?: string): string {
-    return renderEigenEmail({
-        title: event.title,
-        bodyHtml: buildEventBodyHtml(event),
-        banner,
-        footerLine,
-    });
-}
-
-function buildEventBodyHtml(event: CalendarEvent): string {
-    const sections: string[] = [];
-    sections.push(buildSection('When', escapeHtml(buildEventWhen(event))));
+    const repeats = rruleToText(event.rrule, event.timezone);
+    const sections = [buildSection('When', escapeHtml(buildEventWhen(event)))];
+    if (repeats) sections.push(buildSection('Repeats', escapeHtml(repeats)));
     if (event.location) sections.push(buildSection('Where', escapeHtml(event.location)));
     if (event.description)
         sections.push(buildSection('Description', escapeHtml(event.description).replace(/\n/g, '<br>')));
-    return sections.join('\n');
+    return renderEigenEmail({ title: event.title, bodyHtml: sections.join('\n'), banner, footerLine });
 }
 
 function buildSection(label: string, value: string): string {
@@ -303,7 +295,6 @@ function buildSection(label: string, value: string): string {
     </div>`;
 }
 
-// A part past the limit is no invitation, and the mail goes on without one.
 function extractCalendarAttachment(mail: { attachments: readonly Attachment[] }): {
     ics: string;
     method?: ImipMethod;

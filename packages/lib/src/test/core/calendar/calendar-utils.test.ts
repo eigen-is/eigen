@@ -175,33 +175,50 @@ describe('occurrenceDateToString', () => {
 });
 
 describe('rruleToText', () => {
-    test('says a recurrence in words', () => {
-        expect(rruleToText('FREQ=WEEKLY;BYDAY=SU')).toBe('every week on Sunday');
+    test('says a recurrence as a sentence', () => {
+        expect(rruleToText('FREQ=WEEKLY;BYDAY=SU', null)).toBe('Every week on Sunday');
+    });
+
+    test('the last date reads day-month-year', () => {
+        expect(rruleToText('FREQ=WEEKLY;BYDAY=WE;UNTIL=20261215T225959Z', 'Europe/Amsterdam')).toBe(
+            'Every week on Wednesday until 15 December 2026',
+        );
+    });
+
+    // A cut stores the last second before the cut day in the event's zone, which west of UTC is the next UTC day.
+    test('a timed last date is the wall date in the event zone', () => {
+        expect(rruleToText('FREQ=WEEKLY;BYDAY=TU;UNTIL=20261216T045959Z', 'America/New_York')).toBe(
+            'Every week on Tuesday until 15 December 2026',
+        );
+    });
+
+    test('an all-day last date reads as written', () => {
+        expect(rruleToText('FREQ=DAILY;UNTIL=20261215', 'America/New_York')).toBe('Every day until 15 December 2026');
     });
 
     test('an event that does not repeat has nothing to say', () => {
-        expect(rruleToText(null)).toBeNull();
+        expect(rruleToText(null, null)).toBeNull();
     });
 
     // A file's own RRULE is untrusted input: the card prints it verbatim rather than nothing.
     test('a rule rrule cannot read comes back as itself', () => {
-        expect(rruleToText('FREQ=NEVER')).toBe('FREQ=NEVER');
+        expect(rruleToText('FREQ=NEVER', null)).toBe('FREQ=NEVER');
     });
 
     // rrule's own ordinals stop at a month day, so anything past the 31st reads "131th" without this.
     test('a day of the year past the 31st still gets the right ordinal', () => {
-        const text = rruleToText('FREQ=YEARLY;BYYEARDAY=32,101,111,112,113,121,131');
-        expect(text).toBe('every year on the 32nd, 101st, 111th, 112th, 113th, 121st and 131st day');
+        const text = rruleToText('FREQ=YEARLY;BYYEARDAY=32,101,111,112,113,121,131', null);
+        expect(text).toBe('Every year on the 32nd, 101st, 111th, 112th, 113th, 121st and 131st day');
     });
 
     test('the teens and the month days rrule already spells keep their suffix', () => {
-        expect(rruleToText('FREQ=MONTHLY;BYMONTHDAY=1,2,3,11,12,13,21,22,23,31')).toBe(
-            'every month on the 1st, 2nd, 3rd, 11th, 12th, 13th, 21st, 22nd, 23rd and 31st',
+        expect(rruleToText('FREQ=MONTHLY;BYMONTHDAY=1,2,3,11,12,13,21,22,23,31', null)).toBe(
+            'Every month on the 1st, 2nd, 3rd, 11th, 12th, 13th, 21st, 22nd, 23rd and 31st',
         );
     });
 
     test('a count and an interval are numbers, not ordinals', () => {
-        expect(rruleToText('FREQ=WEEKLY;INTERVAL=2;COUNT=13')).toBe('every 2 weeks for 13 times');
+        expect(rruleToText('FREQ=WEEKLY;INTERVAL=2;COUNT=13', null)).toBe('Every 2 weeks for 13 times');
     });
 });
 
