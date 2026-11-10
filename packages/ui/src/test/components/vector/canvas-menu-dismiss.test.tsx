@@ -79,6 +79,7 @@ async function render(tool: VectorTool, selected: string[] = []) {
         const [selectedIds, setSelectedIds] = useState(selected);
         selection = selectedIds;
         return createElement(CanvasEditor, {
+            onCommentHover: () => {},
             doc: canvas,
             viewport: 'infinite',
             styleDefaults: VECTOR_STYLE_DEFAULTS,

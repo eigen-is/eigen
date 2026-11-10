@@ -198,7 +198,7 @@ type CanvasEditorProps = {
     // The document's cards, for the mark's color, which is the card's own, as on a commented sheet cell.
     commentCards?: Readonly<Record<string, CommentCard>>;
     onAddComment?: (elementId: string) => void;
-    onCommentHover?: (target: CommentHoverTarget | null) => void;
+    onCommentHover: (target: CommentHoverTarget | null) => void;
     // ⌘F: every match rings, and the one stepped to rings brighter and flashes. Both come from the host's
     // useCanvasDocSearch, and the canvas only paints them.
     searchMatchedIds?: ReadonlySet<string>;
@@ -1663,7 +1663,7 @@ function CommentMark({
 }) {
     const pointerOnMark = useRef(false);
     const reportGone = useEffectEvent(() => {
-        if (pointerOnMark.current) onCommentHover?.(null);
+        if (pointerOnMark.current) onCommentHover(null);
     });
     useEffect(() => () => reportGone(), []);
 
@@ -1675,18 +1675,18 @@ function CommentMark({
             style={style}
             onPointerEnter={(e) => {
                 pointerOnMark.current = true;
-                onCommentHover?.({ cardId, rect: e.currentTarget.getBoundingClientRect() });
+                onCommentHover({ cardId, rect: e.currentTarget.getBoundingClientRect() });
             }}
             onPointerLeave={() => {
                 pointerOnMark.current = false;
-                onCommentHover?.(null);
+                onCommentHover(null);
             }}
             // The container captures the pointer on pointerdown, so no click lands here. The mark opens from the
             // pointer event and keeps the press off the canvas.
             onPointerDown={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
-                onCommentHover?.(null);
+                onCommentHover(null);
                 onOpenCard(cardId);
             }}
             // The pointerdown above swallows the click it would become, so the keyboard needs its own opener.
