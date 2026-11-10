@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'bun:test';
 import { localToUtc, utcToLocal } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
-import { expandRecurrence, lastKeptDate } from '../../lib/calendar/recurrence';
+import { constrainRRule, expandRecurrence, lastKeptDate } from '../../lib/calendar/recurrence';
 
 // Each zone's 2026 transition days, and the wall times its spring-forward day skips. A skipped wall
 // time resolves with the pre-transition offset, so the clock reads one gap later (RFC 5545 §3.3.5).
@@ -174,5 +174,22 @@ describe('lastKeptDate', () => {
         expect(lastKeptDate('FREQ=DAILY;UNTIL=20260310T035959Z', 'America/New_York')).toBe('2026-03-09');
         expect(lastKeptDate('FREQ=DAILY;UNTIL=20260309T150000Z', 'Asia/Tokyo')).toBe('2026-03-10');
         expect(lastKeptDate('FREQ=DAILY;UNTIL=20260309', null)).toBe('2026-03-09');
+    });
+});
+
+describe('constrainRRule', () => {
+    test("an organizer's longer rule takes the guest's UNTIL as the guest's rule spells it", () => {
+        expect(constrainRRule('FREQ=WEEKLY;COUNT=20;BYDAY=MO', 'FREQ=WEEKLY;BYDAY=MO;UNTIL=20260309')).toBe(
+            'FREQ=WEEKLY;BYDAY=MO;UNTIL=20260309',
+        );
+        expect(constrainRRule('FREQ=DAILY', 'FREQ=DAILY;UNTIL=20260310T035959Z')).toBe(
+            'FREQ=DAILY;UNTIL=20260310T035959Z',
+        );
+    });
+
+    test("an organizer's shorter rule stands", () => {
+        expect(constrainRRule('FREQ=DAILY;UNTIL=20260305T035959Z', 'FREQ=DAILY;UNTIL=20260310T035959Z')).toBe(
+            'FREQ=DAILY;UNTIL=20260305T035959Z',
+        );
     });
 });

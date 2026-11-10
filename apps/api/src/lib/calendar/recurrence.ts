@@ -3,7 +3,7 @@
 // the limits on a rule belong to the iCalendar layer.
 
 // Deep import (not the @workspace/lib/calendar barrel) to keep React out of the API module graph.
-import { occurrenceDateToString, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
+import { occurrenceDateToString } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
 import { expandWallClock, wallClockDate, wallClockRule } from '../ical/wall-clock';
@@ -30,20 +30,19 @@ export function expandRecurrence(event: CalendarEvent, rangeStart: Date, rangeEn
     return results;
 }
 
+// Two UNTILs of one series are of one kind, so they compare as rrule parses them. A longer rule takes the guest's UNTIL
+// as their rule spells it.
 export function constrainRRule(incoming: string | null, local: string | null): string | null {
-    const localUntil = ruleUntil(local);
-    if (!incoming || !localUntil) return incoming;
-    const incomingUntil = ruleUntil(incoming);
-    if (incomingUntil && incomingUntil <= localUntil) return incoming;
-    return truncateRRule(incoming, new Date(localUntil.getTime() + 86400_000));
+    if (!incoming || !local) return incoming;
+    const localUntil = RRule.parseString(local).until;
+    const incomingUntil = RRule.parseString(incoming).until;
+    if (!localUntil || (incomingUntil && incomingUntil <= localUntil)) return incoming;
+    const kept = incoming.split(';').filter((part) => !/^(UNTIL|COUNT)=/i.test(part));
+    return [...kept, ...local.split(';').filter((part) => /^UNTIL=/i.test(part))].join(';');
 }
 
 // The last date a guest's shortened rule keeps, which constrainRRule holds every update to.
 export function lastKeptDate(local: string | null, tz: string | null): string | null {
     const until = local && wallClockRule(local, tz).until;
     return until ? occurrenceDateToString(until) : null;
-}
-
-function ruleUntil(rrule: string | null): Date | null {
-    return rrule ? (RRule.parseString(rrule).until ?? null) : null;
 }
