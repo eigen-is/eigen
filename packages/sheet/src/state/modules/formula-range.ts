@@ -9,7 +9,7 @@ import type { RangeOrWholeAxis, Rect } from '../types';
 import { seletedHighlistByindex } from '.';
 import { getRangetxt, mergeMoveMain } from './cell';
 import { rangeColor } from './color';
-import { moveToEnd } from './cursor';
+import { selectTextOffsets } from './cursor';
 import { formulaUIState, setFunctionHTMLIndex } from './formula-cache';
 import { israngeseleciton } from './formula-editor';
 import { getcellrange } from './formula-exec';
@@ -61,23 +61,6 @@ export function createRangeHightlight(ctx: Context, inputInnerHtmlStr: string, i
     ctx.formulaRangeHighlight = formulaRanges;
 }
 
-export function setCaretPosition(ctx: Context, textDom: HTMLElement, children: number, pos: number) {
-    try {
-        const el = textDom;
-        const range = document.createRange();
-        const sel = window.getSelection();
-        range.setStart(el.childNodes[children], pos);
-        range.collapse(true);
-        sel?.removeAllRanges();
-        sel?.addRange(range);
-        el.focus();
-    } catch (err) {
-        console.error(err);
-        const resizeTo = ctx.formulaCache.rangeResizeTo?.[0];
-        if (resizeTo) moveToEnd(resizeTo);
-    }
-}
-
 export function rangeSetValue(
     ctx: Context,
     cellInput: HTMLDivElement,
@@ -119,7 +102,7 @@ export function rangeSetValue(
             // and this is innerHTML. The caret offset stays the RAW length: that is what
             // the browser renders, where the escaped markup is longer (commit ac3ff70df).
             span.innerHTML = escapeHtml(range);
-            setCaretPosition(ctx, span, 0, range.length);
+            selectTextOffsets(span, range.length, range.length);
         }
     } else {
         const function_str = `<span class="sheet-formula-functionrange-cell" rangeindex="${formulaUIState.functionHTMLIndex}" dir="auto" style="color:${rangeColor(formulaUIState.functionHTMLIndex)};">${escapeHtml(range)}</span>`;
@@ -138,11 +121,8 @@ export function rangeSetValue(
             $editor.appendChild(newEle);
         }
         ctx.formulaCache.rangechangeindex = formulaUIState.functionHTMLIndex;
-        const span = $editor.querySelector(
-            `span[rangeindex='${ctx.formulaCache.rangechangeindex}']`,
-        ) as HTMLSpanElement;
-
-        setCaretPosition(ctx, span, 0, range.length);
+        const span = $editor.querySelector(`span[rangeindex='${ctx.formulaCache.rangechangeindex}']`);
+        if (span instanceof HTMLElement) selectTextOffsets(span, range.length, range.length);
         setFunctionHTMLIndex(formulaUIState.functionHTMLIndex + 1);
     }
 

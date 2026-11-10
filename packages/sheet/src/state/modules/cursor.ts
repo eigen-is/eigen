@@ -23,14 +23,6 @@ export function selectTextOffsets(editor: HTMLElement, start: number, end: numbe
     selection?.addRange(range);
 }
 
-export function moveToEnd(obj: HTMLDivElement) {
-    // Firefox places no caret in an editor without the focus.
-    obj.focus();
-    const selection = window.getSelection();
-    selection?.selectAllChildren(obj);
-    selection?.collapseToEnd();
-}
-
 function textOffsetAt(editor: HTMLElement, node: Node, nodeOffset: number): number {
     const range = document.createRange();
     range.selectNodeContents(editor);

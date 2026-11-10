@@ -52,8 +52,6 @@ export class FormulaCache {
 
     public selectingRangeIndex: number;
 
-    public rangeResizeTo?: HTMLDivElement[];
-
     public rangeSetValueTo?: Node | null;
 
     public rangeIndex?: number;
