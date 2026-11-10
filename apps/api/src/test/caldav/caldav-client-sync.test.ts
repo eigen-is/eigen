@@ -6,6 +6,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import { getHome } from '../../lib/home';
+import type { ParsedEvent } from '../../lib/ical/ical-parse';
 import { basicAuth, davRequest } from '../dav-test-helpers';
 import { app, assertJson, authedRequest, getTestContext } from '../setup';
 
@@ -265,33 +266,34 @@ describe('CalDAV client sync on web-created events', () => {
     // CalDAV client sees the organizer's update, a PARTSTAT change and a cancellation (L43). Before the
     // file seam these four paths wrote rows without touching the tag, so no delta ever carried them.
     describe('an invitation writer moves the change tag', () => {
-        const ORGANIZER = 'external_l43.organizer@external.com';
+        const ORGANIZER = 'l43.organizer@external.com';
+
+        const request = (uid: string, rrule: string | null, sequence = 0): ParsedEvent => ({
+            uid,
+            title: 'Linked series',
+            description: null,
+            location: null,
+            startTime: new Date('2026-05-04T09:00:00Z'),
+            endTime: new Date('2026-05-04T10:00:00Z'),
+            allDay: false,
+            rrule,
+            timezone: null,
+            status: 'confirmed',
+            sequence,
+            dtstamp: null,
+            recurrenceDate: null,
+            recurrenceInstant: null,
+            data: {
+                organizer: { userId: '', email: ORGANIZER, name: 'Org' },
+                attendees: [{ email: ctx.alice.user.email, status: 'pending', role: 'required' }],
+            },
+        });
 
         async function seedInvitation(uid: string, rrule: string | null): Promise<{ uri: string; eventId: string }> {
             const home = await getHome(userId);
-            const eventId = await home.calendar.receiveInvitation({
-                uid,
-                title: 'Linked series',
-                description: null,
-                location: null,
-                startTime: new Date('2026-05-04T09:00:00Z'),
-                endTime: new Date('2026-05-04T10:00:00Z'),
-                allDay: false,
-                rrule,
-                timezone: null,
-                status: 'confirmed',
-                sequence: 0,
-                data: {
-                    organizer: { userId: ORGANIZER, email: 'l43.organizer@external.com', name: 'Org' },
-                    organizerEventId: uid,
-                    attendees: [{ email: ctx.alice.user.email, status: 'pending', role: 'required' }],
-                },
-                createByUserId: ORGANIZER,
-                organizerEventId: uid,
-                organizerUserId: ORGANIZER,
-            });
+            await home.calendar.receiveImipRequest(request(uid, rrule), ORGANIZER);
             const uri = (await home.calendar.listResources(calendarId)).find((r) => r.uid === uid)!.uri;
-            return { uri, eventId: eventId! };
+            return { uri, eventId: (await home.calendar.getEventsByUid(uid))[0].id };
         }
 
         const syncToken = async (): Promise<string> =>
@@ -304,17 +306,15 @@ describe('CalDAV client sync on web-created events', () => {
             const { uri } = await seedInvitation(uid, null);
             const before = await syncToken();
 
-            await (await getHome(userId)).calendar.receiveInvitationUpdate(uid, ORGANIZER, {
-                title: 'Linked series (moved)',
-                description: null,
-                location: null,
-                startTime: new Date('2026-05-04T11:00:00Z'),
-                endTime: new Date('2026-05-04T12:00:00Z'),
-                allDay: false,
-                rrule: null,
-                status: 'confirmed',
-                sequence: 1,
-            });
+            await (await getHome(userId)).calendar.receiveImipRequest(
+                {
+                    ...request(uid, null, 1),
+                    title: 'Linked series (moved)',
+                    startTime: new Date('2026-05-04T11:00:00Z'),
+                    endTime: new Date('2026-05-04T12:00:00Z'),
+                },
+                ORGANIZER,
+            );
 
             expect(await delta(before)).toContain(uri);
             expect((await davGet(uri)).ics).toContain('SUMMARY:Linked series (moved)');
@@ -378,7 +378,7 @@ describe('CalDAV client sync on web-created events', () => {
             await home.calendar.receiveRsvpForOccurrence(eventId, ctx.alice.user.email, 'accepted', '2026-05-11');
             const before = await syncToken();
 
-            await home.calendar.removeInvitation(uid, ORGANIZER);
+            await home.calendar.removeInvitation(uid, `external_${ORGANIZER}`);
 
             const xml = await delta(before);
             expect(xml).toContain(uri);

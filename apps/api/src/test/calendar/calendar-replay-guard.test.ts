@@ -2,7 +2,6 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { rmSync } from 'node:fs';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import type { Calendar } from '../../lib/calendar/calendar';
-import type { ReceiveInvitationPayload } from '../../lib/calendar/types';
 import { parseIcs } from '../../lib/ical';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
 import { utcStampString } from '../../lib/ical/ical-parse';
@@ -83,8 +82,14 @@ const masterOf = async (calendar: Calendar): Promise<CalendarEvent> =>
 const exceptionOf = async (calendar: Calendar): Promise<CalendarEvent | undefined> =>
     (await calendar.getEventsByUid(UID)).find((e) => e.parentEventId);
 
-// The relay's own payload for the same series, so both transports are pinned by the same rule.
-const relayPayload = (title: string, sequence: number, dtstamp: Date): ReceiveInvitationPayload => ({
+// The relay's own message for the same series, so both transports are pinned by the same rule.
+const RELAY_LINK = {
+    organizerEmail: ORG,
+    organizerEventId: 'organizer-event',
+    organizerUserId: 'organizer-home',
+    createByUserId: 'organizer-home',
+};
+const relayed = (title: string, sequence: number, dtstamp: string): ParsedEvent => ({
     uid: UID,
     title,
     description: null,
@@ -96,16 +101,15 @@ const relayPayload = (title: string, sequence: number, dtstamp: Date): ReceiveIn
     timezone: null,
     status: 'confirmed',
     sequence,
-    dtstamp,
+    dtstamp: new Date(dtstamp),
+    recurrenceDate: null,
+    recurrenceInstant: null,
     data: {
         organizer: { userId: 'organizer-home', email: ORG, name: 'Ext Org' },
-        organizerEventId: 'organizer-event',
-        attendees: [{ email: 'guest@test.local', status: 'pending', role: 'required' }],
+        attendees: [{ email: GUEST, status: 'pending', role: 'required' }],
     },
-    createByUserId: 'organizer-home',
-    organizerEventId: 'organizer-event',
-    organizerUserId: 'organizer-home',
 });
+const relay = (calendar: Calendar, ...requested: ParsedEvent[]) => calendar.receiveRequest(requested, RELAY_LINK);
 
 describe('inbound message ordering', () => {
     beforeAll(() => {
@@ -127,36 +131,12 @@ describe('inbound message ordering', () => {
     test('the relay applies the same rule to its unordered per-attendee fan-out', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
-        await calendar.receiveInvitation(relayPayload('Title A', 2, new Date('2026-04-01T10:00:00Z')));
+        await relay(calendar, relayed('Title A', 2, '2026-04-01T10:00:00Z'));
 
-        await calendar.receiveInvitationUpdate('organizer-event', 'organizer-home', {
-            title: 'Title B',
-            description: null,
-            location: null,
-            startTime: new Date('2026-05-01T09:00:00Z'),
-            endTime: new Date('2026-05-01T10:00:00Z'),
-            allDay: false,
-            rrule: 'FREQ=DAILY;COUNT=5',
-            timezone: null,
-            status: 'confirmed',
-            sequence: 2,
-            dtstamp: new Date('2026-04-01T12:00:00Z'),
-        });
+        await relay(calendar, relayed('Title B', 2, '2026-04-01T12:00:00Z'));
         expect((await masterOf(calendar)).title).toBe('Title B');
 
-        await calendar.receiveInvitationUpdate('organizer-event', 'organizer-home', {
-            title: 'Title A',
-            description: null,
-            location: null,
-            startTime: new Date('2026-05-01T09:00:00Z'),
-            endTime: new Date('2026-05-01T10:00:00Z'),
-            allDay: false,
-            rrule: 'FREQ=DAILY;COUNT=5',
-            timezone: null,
-            status: 'confirmed',
-            sequence: 2,
-            dtstamp: new Date('2026-04-01T10:00:00Z'),
-        });
+        await relay(calendar, relayed('Title A', 2, '2026-04-01T10:00:00Z'));
 
         expect((await masterOf(calendar)).title).toBe('Title B');
     });
@@ -165,21 +145,21 @@ describe('inbound message ordering', () => {
     test('a relayed occurrence edit redelivered behind a newer one does not revert the occurrence', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
-        await calendar.receiveInvitation(relayPayload('Title A', 2, new Date('2026-04-01T10:00:00Z')));
+        await relay(calendar, relayed('Title A', 2, '2026-04-01T10:00:00Z'));
 
-        const occurrenceEdit = (title: string, dtstamp: string): ReceiveInvitationPayload => ({
-            ...relayPayload(title, 2, new Date(dtstamp)),
+        const occurrenceEdit = (title: string, dtstamp: string): ParsedEvent => ({
+            ...relayed(title, 2, dtstamp),
             recurrenceDate: '2026-05-02',
             rrule: null,
             startTime: new Date('2026-05-02T11:00:00Z'),
             endTime: new Date('2026-05-02T12:00:00Z'),
         });
 
-        await calendar.receiveInvitation(occurrenceEdit('Moved once', '2026-04-01T11:00:00Z'));
-        await calendar.receiveInvitation(occurrenceEdit('Moved twice', '2026-04-01T12:00:00Z'));
+        await relay(calendar, occurrenceEdit('Moved once', '2026-04-01T11:00:00Z'));
+        await relay(calendar, occurrenceEdit('Moved twice', '2026-04-01T12:00:00Z'));
         expect((await exceptionOf(calendar))?.title).toBe('Moved twice');
 
-        await calendar.receiveInvitation(occurrenceEdit('Moved once', '2026-04-01T11:00:00Z'));
+        await relay(calendar, occurrenceEdit('Moved once', '2026-04-01T11:00:00Z'));
 
         expect((await exceptionOf(calendar))?.title).toBe('Moved twice');
         // The series itself never took the occurrence's title.
@@ -211,25 +191,10 @@ describe('inbound message ordering', () => {
     test('the relay applies a cleared description at the same SEQUENCE', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
-        await calendar.receiveInvitation({
-            ...relayPayload('Title A', 2, new Date('2026-04-01T10:00:00Z')),
-            description: 'Agenda',
-        });
+        await relay(calendar, { ...relayed('Title A', 2, '2026-04-01T10:00:00Z'), description: 'Agenda' });
         expect((await masterOf(calendar)).description).toBe('Agenda');
 
-        await calendar.receiveInvitationUpdate('organizer-event', 'organizer-home', {
-            title: 'Title A',
-            description: null,
-            location: null,
-            startTime: new Date('2026-05-01T09:00:00Z'),
-            endTime: new Date('2026-05-01T10:00:00Z'),
-            allDay: false,
-            rrule: 'FREQ=DAILY;COUNT=5',
-            timezone: null,
-            status: 'confirmed',
-            sequence: 2,
-            dtstamp: new Date('2026-04-01T12:00:00Z'),
-        });
+        await relay(calendar, relayed('Title A', 2, '2026-04-01T12:00:00Z'));
 
         expect((await masterOf(calendar)).description).toBeNull();
     });

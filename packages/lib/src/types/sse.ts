@@ -43,7 +43,6 @@ export const SSEventType = {
     CALENDAR_INVITE_RECEIVED: 'calendar:invite-received',
     CALENDAR_INVITE_UPDATED: 'calendar:invite-updated',
     CALENDAR_INVITE_CANCELLED: 'calendar:invite-cancelled',
-    CALENDAR_INVITE_RSVP: 'calendar:invite-rsvp',
     CALENDAR_EVENTS_CHANGED: 'calendar:events-changed',
     NOTIFICATION_CREATED: 'notification:created',
     NOTIFICATION_CHANGED: 'notification:changed',

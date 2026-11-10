@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getHome } from '../../lib/home';
+import type { ParsedEvent } from '../../lib/ical/ical-parse';
 import { assertJson, authedRequest, collectSSE, eventually, findOrFail, getTestContext } from '../setup';
 
 describe('Calendar Invites', () => {
@@ -81,6 +82,8 @@ describe('Calendar Invites', () => {
             expect(linked.data!.organizer!.userId).toBe(ctx.alice.user.id);
             expect(linked.data!.organizer!.email).toBe(ctx.alice.user.email);
             expect(linked.data!.organizerEventId).toBe(inviteEvent.id);
+            // Unlike a mailed file, the relayed REQUEST lists the guests alone, never the organizer.
+            expect(linked.data?.attendees?.map((a) => a.email)).toEqual([ctx.bob.user.email]);
         });
 
         test('exactly one linked copy reaches the attendee', async () => {
@@ -252,90 +255,82 @@ describe('Calendar Invites', () => {
     });
 
     // A re-received invite lands under a fresh name, so one sync delta carries the deleted resource as a
-    // 404 and the new one as a 200 — never one href as both. Driven at the domain level, like the linked-
-    // event seeding in calendar.test.ts: the REST layer has no re-invite-after-delete flow to exercise it.
+    // 404 and the new one as a 200, never one href as both.
     describe('Re-received invitation after local delete', () => {
-        test('syncs once as a 200 with a non-null eventCtag and no 404 tombstone', async () => {
-            const bobHome = await getHome(ctx.bob.user.id);
-            const cal = bobHome.calendar;
+        const relayed = (uid: string, title: string, organizerEmail: string, sequence = 0): ParsedEvent => ({
+            uid,
+            title,
+            description: null,
+            location: null,
+            startTime: new Date('2026-11-12T09:00:00Z'),
+            endTime: new Date('2026-11-12T10:00:00Z'),
+            allDay: false,
+            rrule: null,
+            timezone: null,
+            status: 'confirmed',
+            sequence,
+            dtstamp: null,
+            recurrenceDate: null,
+            recurrenceInstant: null,
+            data: { organizer: { userId: ctx.alice.user.id, email: organizerEmail, name: 'Alice' } },
+        });
+        const linkOf = (organizerEventId: string, organizerUserId = ctx.alice.user.id) => ({
+            organizerEmail: ctx.alice.user.email,
+            organizerEventId,
+            organizerUserId,
+            createByUserId: organizerUserId,
+        });
+
+        // A deleted copy is no record of an answer, so the organizer's next save files it again, as a mailed one does.
+        test("the organizer's next save files a deleted copy again, under a fresh name", async () => {
+            const created = await createEventWithAttendees('Re-received Invite', [{ email: ctx.bob.user.email }]);
+            await bobEvent((e) => e.title === 'Re-received Invite');
+            const cal = (await getHome(ctx.bob.user.id)).calendar;
             const defaultCal = findOrFail(await cal.getCalendars(), (c) => c.isDefault);
-            const uid = `reinvite-${crypto.randomUUID()}`;
-            const payload = {
-                uid,
-                title: 'Re-received Invite',
-                description: null,
-                location: null,
-                startTime: new Date('2026-11-10T09:00:00Z'),
-                endTime: new Date('2026-11-10T10:00:00Z'),
-                allDay: false,
-                rrule: null,
-                timezone: null,
-                status: 'confirmed' as const,
-                sequence: 0,
-                data: {
-                    organizer: { userId: ctx.alice.user.id, email: ctx.alice.user.email, name: 'Alice' },
-                    organizerEventId: `org-${uid}`,
+            const first = findOrFail(await cal.listResources(defaultCal.id), (r) => r.uid === created.uid);
+            const firstId = (await cal.getEventsByUid(created.uid))[0].id;
+            // The client's sync token, captured after the first receive and before the delete and the re-receive.
+            const preCtag = (await cal.getCalendarById(defaultCal.id))?.ctag ?? 0;
+
+            await cal.deleteEvent(defaultCal.id, firstId);
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${created.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'Re-received Invite, renamed' }),
                 },
-                createByUserId: ctx.alice.user.id,
-                organizerEventId: `org-${uid}`,
-                organizerUserId: ctx.alice.user.id,
-            };
+            );
+            const changed = await eventually(async () => {
+                const rows = (await cal.getChangedResourcesSince(defaultCal.id, preCtag)).filter(
+                    (r) => r.uid === created.uid,
+                );
+                return rows.length ? rows : undefined;
+            }, 'the copy filed again');
 
-            const firstId = await cal.receiveInvitation(payload);
-            const firstUri = findOrFail(await cal.listResources(defaultCal.id), (r) => r.uid === uid).uri;
-            // The client's sync token, captured after the first receive and before the delete + re-receive.
-            const preCtag = (await cal.getCalendarById(defaultCal.id))!.ctag;
-
-            await cal.deleteEvent(defaultCal.id, firstId!); // Bob deletes his linked copy → tombstones the uri
-            const secondId = await cal.receiveInvitation(payload); // Alice re-sends the same invite
-            expect(secondId).not.toBe(firstId);
-
-            const changed = (await cal.getChangedResourcesSince(defaultCal.id, preCtag)).filter((r) => r.uid === uid);
             const deleted = await cal.getDeletedResourcesSince(defaultCal.id, preCtag);
             expect(changed).toHaveLength(1);
-            expect(changed[0].uri).not.toBe(firstUri);
-            expect(deleted.map((d) => d.uri)).toContain(firstUri);
+            expect(changed[0].uri).not.toBe(first.uri);
+            expect(deleted.map((d) => d.uri)).toContain(first.uri);
             expect(deleted.some((d) => d.uri === changed[0].uri)).toBe(false);
         });
 
         test('a second link on one UID is dropped, and never a second master', async () => {
-            const bobHome = await getHome(ctx.bob.user.id);
-            const cal = bobHome.calendar;
+            const cal = (await getHome(ctx.bob.user.id)).calendar;
             const defaultCal = findOrFail(await cal.getCalendars(), (c) => c.isDefault);
             const uid = `collide-${crypto.randomUUID()}`;
-            const payload = {
-                uid,
-                title: 'Colliding Invite',
-                description: null,
-                location: null,
-                startTime: new Date('2026-11-12T09:00:00Z'),
-                endTime: new Date('2026-11-12T10:00:00Z'),
-                allDay: false,
-                rrule: null,
-                timezone: null,
-                status: 'confirmed' as const,
-                sequence: 0,
-                data: {
-                    organizer: { userId: ctx.alice.user.id, email: ctx.alice.user.email, name: 'Alice' },
-                    organizerEventId: `org-a-${uid}`,
-                },
-                createByUserId: ctx.alice.user.id,
-                organizerEventId: `org-a-${uid}`,
-                organizerUserId: ctx.alice.user.id,
-            };
-            await cal.receiveInvitation(payload);
-            const preCtag = (await cal.getCalendarById(defaultCal.id))!.ctag;
+            await cal.receiveRequest([relayed(uid, 'Colliding Invite', ctx.alice.user.email)], linkOf(`org-a-${uid}`));
+            const preCtag = (await cal.getCalendarById(defaultCal.id))?.ctag;
 
-            // The same uid under another organizer key slips past the linked-event dedupe; the calendar
-            // already holds that UID, so the invitation is dropped instead of throwing on the unique
-            // index, and it leaves no phantom ctag bump for every client to poll an empty delta for.
-            const second = await cal.receiveInvitation({
-                ...payload,
-                organizerEventId: `org-b-${uid}`,
-                organizerUserId: ctx.charlie.user.id,
-            });
-            expect(second).toBeNull();
-            expect((await cal.getCalendarById(defaultCal.id))!.ctag).toBe(preCtag);
+            // The same uid under another organizer key; the calendar already holds that UID, so the invitation is
+            // dropped instead of throwing on the unique index, and it leaves no phantom ctag bump for every client
+            // to poll an empty delta for.
+            await cal.receiveRequest(
+                [relayed(uid, 'Colliding Invite', ctx.alice.user.email, 1)],
+                linkOf(`org-b-${uid}`, ctx.charlie.user.id),
+            );
+            expect((await cal.getCalendarById(defaultCal.id))?.ctag).toBe(preCtag);
             expect(await cal.getEventsByUid(uid)).toHaveLength(1);
         });
 
@@ -344,31 +339,15 @@ describe('Calendar Invites', () => {
             const cal = bobHome.calendar;
             const uid = `nameless-${crypto.randomUUID()}`;
             const orgEventId = `org-${uid}`;
-            const payload = {
-                uid,
-                title: 'Nameless Invite',
-                description: null,
-                location: null,
-                startTime: new Date('2026-11-14T09:00:00Z'),
-                endTime: new Date('2026-11-14T10:00:00Z'),
-                allDay: false,
-                rrule: null,
-                timezone: null,
-                status: 'confirmed' as const,
-                sequence: 0,
-                data: { organizer: { userId: ctx.alice.user.id, email: '' }, organizerEventId: orgEventId },
-                createByUserId: ctx.alice.user.id,
-                organizerEventId: orgEventId,
-                organizerUserId: ctx.alice.user.id,
+            const nameless = (title: string, sequence: number): ParsedEvent => {
+                const event = relayed(uid, title, '', sequence);
+                return { ...event, data: { organizer: { userId: ctx.alice.user.id, email: '' } } };
             };
+            const link = { ...linkOf(orgEventId), organizerEmail: '' };
             const persist = spyOn(bobHome.notifications, 'persist');
             try {
-                await cal.receiveInvitation(payload);
-                await cal.receiveInvitationUpdate(orgEventId, ctx.alice.user.id, {
-                    ...payload,
-                    title: 'Nameless Invite Moved',
-                    sequence: 1,
-                });
+                await cal.receiveRequest([nameless('Nameless Invite', 0)], link);
+                await cal.receiveRequest([nameless('Nameless Invite Moved', 1)], link);
                 await cal.removeInvitation(orgEventId, ctx.alice.user.id);
                 const notices = persist.mock.calls.map((call) => call[0]).filter((n) => n.tag?.includes(orgEventId));
                 expect(notices.map((n) => n.title)).toEqual([
@@ -990,7 +969,7 @@ describe('Calendar Invites', () => {
         await bobEvent((e) => e.title === 'Projected Payload');
 
         const messages = spy.mock.calls.map((call) => JSON.stringify(call[1]));
-        expect(messages.some((message) => message.includes('calendar:invitation'))).toBe(true);
+        expect(messages.some((message) => message.includes('calendar:request'))).toBe(true);
         expect(messages.some((message) => message.toUpperCase().includes('X-EIGEN'))).toBe(false);
         spy.mockRestore();
     });

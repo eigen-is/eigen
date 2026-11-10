@@ -1,7 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { rmSync } from 'node:fs';
 import type { Calendar } from '../../lib/calendar/calendar';
-import type { ReceiveInvitationPayload } from '../../lib/calendar/types';
 import { parseIcs } from '../../lib/ical';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
 import { CALENDAR_TEST_ROOT, makeCalendar, storedEvents } from '../calendar-test-helpers';
@@ -160,9 +159,15 @@ describe('relayed invitation', () => {
     const ORG_HOME = 'organizer-home-id';
     const ORG_EVENT = 'organizer-event-id';
 
-    const payload = (): ReceiveInvitationPayload => ({
+    const LINK = {
+        organizerEmail: ORG,
+        organizerEventId: ORG_EVENT,
+        organizerUserId: ORG_HOME,
+        createByUserId: ORG_HOME,
+    };
+    const requested = (title = 'Quarterly review', sequence = 2, email = ORG): ParsedEvent => ({
         uid: UID,
-        title: 'Quarterly review',
+        title,
         description: null,
         location: null,
         startTime: new Date('2026-05-01T09:00:00Z'),
@@ -171,16 +176,14 @@ describe('relayed invitation', () => {
         rrule: null,
         timezone: null,
         status: 'confirmed',
-        sequence: 2,
+        sequence,
         dtstamp: new Date('2026-01-01T00:00:00Z'),
+        recurrenceDate: null,
+        recurrenceInstant: null,
         data: {
-            organizer: { userId: ORG_HOME, email: ORG, name: 'Ext Org' },
-            organizerEventId: ORG_EVENT,
+            organizer: { userId: ORG_HOME, email, name: 'Ext Org' },
             attendees: [{ email: 'owner@test.local', status: 'pending', role: 'required' }],
         },
-        createByUserId: ORG_HOME,
-        organizerEventId: ORG_EVENT,
-        organizerUserId: ORG_HOME,
     });
 
     test('a UID the Home holds in another calendar is never filed a second time', async () => {
@@ -189,9 +192,28 @@ describe('relayed invitation', () => {
         const other = await calendar.createCalendar({ name: 'Work', color: '#aabbcc' });
         expect((await calendar.putResource(other.id, 'mine.ics', stored(null), NO_PRECONDITIONS)).ok).toBe(true);
 
-        expect(await calendar.receiveInvitation(payload())).toBeNull();
+        await calendar.receiveRequest([requested()], LINK);
 
-        expect(await calendar.getEventsByUid(UID)).toHaveLength(1);
+        const rows = await calendar.getEventsByUid(UID);
+        expect(rows).toHaveLength(1);
+        expect(rows[0].data?.organizerEventId).toBeUndefined();
+    });
+
+    // The link is the organizer's Home and event, never an address, so only that Home updates the copy.
+    test('an update applies by the link it names, whatever address it carries', async () => {
+        const { calendar } = await harnessWith();
+        await calendar.receiveRequest([requested()], LINK);
+
+        await calendar.receiveRequest([requested('Renamed by the organizer', 3, 'organizer.alias@external.com')], {
+            ...LINK,
+            organizerEmail: 'organizer.alias@external.com',
+        });
+        await calendar.receiveRequest([requested('Renamed by a stranger', 4)], {
+            ...LINK,
+            organizerUserId: 'stranger',
+        });
+
+        expect((await calendar.getEventsByUid(UID)).map((row) => row.title)).toEqual(['Renamed by the organizer']);
     });
 
     // A Home is never its own organizer. Adopting such a payload would turn its own event into a linked
@@ -205,15 +227,13 @@ describe('relayed invitation', () => {
             true,
         );
 
-        const self = payload();
-        const sent = await calendar.receiveInvitation({
-            ...self,
-            data: { ...self.data, organizer: { userId: harness.user.id, email: harness.user.email, name: 'Me' } },
-            createByUserId: harness.user.id,
+        await calendar.receiveRequest([requested('Quarterly review', 2, harness.user.email)], {
+            ...LINK,
+            organizerEmail: harness.user.email,
             organizerUserId: harness.user.id,
+            createByUserId: harness.user.id,
         });
 
-        expect(sent).toBeNull();
         const rows = await calendar.getEventsByUid(UID);
         expect(rows).toHaveLength(1);
         expect(rows[0].data?.organizerEventId).toBeUndefined();
@@ -293,7 +313,7 @@ describe('relayed invitation', () => {
         const other = await calendar.createCalendar({ name: 'Work', color: '#aabbcc' });
         expect((await calendar.putResource(other.id, 'mine.ics', stored(ORG), NO_PRECONDITIONS)).ok).toBe(true);
 
-        await calendar.receiveInvitation(payload());
+        await calendar.receiveRequest([requested()], LINK);
 
         const rows = await calendar.getEventsByUid(UID);
         expect(rows).toHaveLength(1);

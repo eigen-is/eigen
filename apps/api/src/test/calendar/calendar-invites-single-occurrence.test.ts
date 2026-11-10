@@ -430,9 +430,16 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
     test('a stale relayed series invitation leaves the newer single occurrence alone', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
-        const payload = (title: string, sequence: number, dtstamp: string, recurrenceDate: string | null) => ({
+        const link = {
+            organizerEmail: IMIP_ORG,
+            organizerEventId: 'organizer-event',
+            organizerUserId: 'organizer-home',
+            createByUserId: 'organizer-home',
+        };
+        const requested = (title: string, sequence: number, dtstamp: string, recurrenceDate: string | null) => ({
             uid: IMIP_UID,
             recurrenceDate,
+            recurrenceInstant: null,
             title,
             description: null,
             location: null,
@@ -446,16 +453,12 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
             dtstamp: new Date(dtstamp),
             data: {
                 organizer: { userId: 'organizer-home', email: IMIP_ORG, name: 'Ext Org' },
-                organizerEventId: 'organizer-event',
                 attendees: [{ email: 'guest@test.local', status: 'pending' as const, role: 'required' as const }],
             },
-            createByUserId: 'organizer-home',
-            organizerEventId: 'organizer-event',
-            organizerUserId: 'organizer-home',
         });
-        await calendar.receiveInvitation(payload('One Instance Only', 3, '2028-03-03T10:00:00Z', '2028-03-13'));
+        await calendar.receiveRequest([requested('One Instance Only', 3, '2028-03-03T10:00:00Z', '2028-03-13')], link);
 
-        await calendar.receiveInvitation(payload('Stale Series', 1, '2028-03-01T10:00:00Z', null));
+        await calendar.receiveRequest([requested('Stale Series', 1, '2028-03-01T10:00:00Z', null)], link);
 
         const stored = await calendar.getEventsByUid(IMIP_UID);
         expect(stored).toHaveLength(1);

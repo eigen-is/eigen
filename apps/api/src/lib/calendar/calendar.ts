@@ -40,7 +40,7 @@ import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propa
 import * as shares from './shares';
 import { buildCalendarEvent } from './sse-events';
 import { exportEvents, importEvents } from './transfer';
-import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from './types';
+import type { CreateEventArgs, InvitationLink } from './types';
 
 export class Calendar {
     private managedDb!: ManagedDatabase<typeof schema>;
@@ -529,16 +529,8 @@ export class Calendar {
 
     // --- Invitations ---
 
-    public async receiveInvitation(payload: ReceiveInvitationPayload): Promise<string | null> {
-        return invitations.receiveInvitation(this, payload);
-    }
-
-    public async receiveInvitationUpdate(
-        orgEventId: string,
-        orgUserId: string,
-        payload: InvitationUpdatePayload,
-    ): Promise<void> {
-        return invitations.receiveInvitationUpdate(this, orgEventId, orgUserId, payload);
+    public async receiveRequest(requested: readonly ParsedEvent[], link: InvitationLink): Promise<void> {
+        return invitations.receiveRequest(this, requested, link);
     }
 
     public async receiveImipRequest(parsed: ParsedEvent, sender: string): Promise<void> {

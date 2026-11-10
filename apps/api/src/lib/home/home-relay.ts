@@ -22,7 +22,7 @@ import { settlesWithin } from '../../utils/timing';
 import { captureBytes, snapshotHome } from '../backup/snapshot-home';
 import type { Calendar } from '../calendar/calendar';
 import { readCalendarTotalSize } from '../calendar/resource-store';
-import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/types';
+import type { CreateEventArgs, InvitationLink } from '../calendar/types';
 import {
     getAvatarsDir,
     getDataRoot,
@@ -36,6 +36,7 @@ import { readContactsTotalSize } from '../contacts/card-store';
 import { LocalFilesystem } from '../core';
 import type { RecentRow } from '../drive/recent';
 import type { EventPatch } from '../ical/ical-component';
+import type { ParsedEvent } from '../ical/ical-parse';
 import { readMailTotalSize } from '../mail/maildir-store';
 import type { Memberships, User } from '../user';
 import { getMemberships, getOwnerExists, getUserById, getUsersByEmails, isGuest, updateUser } from '../user';
@@ -59,8 +60,7 @@ export type HomeMessage =
           actorEmail?: string;
           actorName?: string;
       }
-    | { type: 'calendar:invitation'; payload: ReceiveInvitationPayload }
-    | { type: 'calendar:invitation-update'; orgEventId: string; orgUserId: string; payload: InvitationUpdatePayload }
+    | { type: 'calendar:request'; events: readonly ParsedEvent[]; link: InvitationLink }
     | {
           type: 'calendar:invitation-removal';
           orgEventId: string;
@@ -130,18 +130,8 @@ async function deliver(targetId: string, message: DeliveredMessage): Promise<voi
                 );
             }
             break;
-        case 'calendar:invitation': {
-            const received = await home.calendar.receiveInvitation(message.payload);
-            // The organizer's home believes this home holds a copy, so a refused invitation is logged.
-            if (!received) {
-                console.info(
-                    `home-relay: ${targetId} dropped the invitation ${message.payload.uid} from ${message.payload.organizerUserId}`,
-                );
-            }
-            break;
-        }
-        case 'calendar:invitation-update':
-            await home.calendar.receiveInvitationUpdate(message.orgEventId, message.orgUserId, message.payload);
+        case 'calendar:request':
+            await home.calendar.receiveRequest(message.events, message.link);
             break;
         case 'calendar:invitation-removal':
             if (message.occurrence) {

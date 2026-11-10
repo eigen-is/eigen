@@ -37,6 +37,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pasting edited cells in Sheets** — if you edit cells after copying them, a paste in the same tab brings them as they are now
 - **Validation limits in Sheets** — an edit that would push a validation rule past its limit goes through, and the cells past it get no rule
 - **Speed in Sheets** — editing a cell in a workbook of 100,000 formulas takes milliseconds, where it took over a tenth of a second, and a cell that 100,000 formulas read no longer stalls a sheet for a minute
+- **Deleted invitations in Calendar** — an invitation from someone on your server that you deleted comes back, faded as declined, when its organizer changes the event, as one that came by mail already did
 - **Large invites in Mail** — a calendar invite over 1 MiB shows "This calendar invitation could not be read" instead of a preview, and no longer changes your calendar by itself
 - **Unusual repeat rules in Calendar** — an event whose repeat rule would take the server too long to work out shows on its first date only, and calendar apps still get the whole rule. An invite whose rule names no frequency arrives as one event instead of getting lost
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
@@ -89,6 +90,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Time zones in calendar files** — an export keeps each event's time when two custom time zones share a name, and so does an import of a file holding several calendars. An event a calendar app saved in UTC shows as UTC, not GMT, and stays UTC when moved
 - **Importing a file that isn't a calendar** — Calendar says it is not a calendar file instead of showing an internal error
 - **Share notices in Calendar** — changing who a calendar is shared with, in Calendar or in a team's settings in Admin, no longer notifies people whose access stayed the same, so a notice they read stays read
+- **Mailed replies in Calendar** — a guest's answer that arrives by mail shows in your open Calendar tabs without a reload
 - **Guest replies on shared calendars** — an outside guest's reply to an event someone saved on another person's calendar reaches that calendar. The invitation names the calendar's owner as organizer
 - **Cancelling team events** — deleting a team event with outside guests sends them a cancellation from you
 - **Your answer in Calendar** — your answer to an invitation no longer resets when the organizer makes a small edit, such as a new title

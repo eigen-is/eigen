@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, ImipMethod } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment } from '@workspace/lib/types/mail';
+import { SSEventType } from '@workspace/lib/types/sse';
 import {
     composeCancelEmail,
     composeInviteEmail,
@@ -17,7 +18,7 @@ import { storedEvents } from '../calendar-test-helpers';
 import { basicAuth } from '../dav-test-helpers';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 import { vcal } from '../ics-test-helpers';
-import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+import { app, assertJson, authedRequest, collectSSE, findOrFail, getTestContext } from '../setup';
 
 // Inbound iMIP acts only on a message our verifying MTA authenticated. These helpers stand in for
 // the Authentication-Results header OpenDKIM would prepend: a DKIM pass aligned with the sender's
@@ -694,11 +695,15 @@ describe('iMIP METHOD:REPLY inbound (integration)', () => {
             '--reply-boundary--',
         ].join('\r\n');
 
+        const sse = await collectSSE(ctx.alice.user.id);
         const deliverRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/deliver/${ctx.alice.user.email}`, {
             method: 'POST',
             body: new TextEncoder().encode(replyEmail).buffer,
         });
         expect(deliverRes.status).toBe(200);
+        sse.stop();
+        // Alice's open tabs hear the answer, as they do one relayed from a guest on this server.
+        expect(sse.events.some((e) => e.type === SSEventType.CALENDAR_EVENT_UPDATED)).toBe(true);
 
         // Step 3: Check Alice's event now shows attendee as accepted
         const from = Math.floor(Date.now() / 1000);
@@ -974,35 +979,34 @@ describe('Calendar timezone crash (audit P1-7b, integration)', () => {
 });
 
 // A row poisoned BEFORE the ingestion fix (bad TZID stored verbatim) must not 500 reads forever.
-// receiveInvitation persists the timezone as-is, standing in for such a row; isolated on `charlie`.
+// A REQUEST whose parsed zone is that TZID stands in for such a row; isolated on `charlie`.
 describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let calendarId: string;
 
-    const organizerId = 'external_outlook@external.com';
-
-    async function receivePoisonedInvite(uid: string): Promise<string | null> {
+    async function receivePoisonedInvite(uid: string): Promise<string> {
         const home = await getHome(ctx.charlie.user.id);
-        return home.calendar.receiveInvitation({
-            uid,
-            title: `Poisoned ${uid}`,
-            description: null,
-            location: null,
-            startTime: new Date('2026-09-10T09:00:00Z'),
-            endTime: new Date('2026-09-10T10:00:00Z'),
-            allDay: false,
-            rrule: 'FREQ=WEEKLY;COUNT=3',
-            timezone: 'Customer Standard Time',
-            status: 'confirmed',
-            sequence: 0,
-            data: {
-                organizer: { userId: organizerId, email: 'outlook@external.com', name: 'Outlook' },
-                organizerEventId: uid,
+        await home.calendar.receiveImipRequest(
+            {
+                uid,
+                title: `Poisoned ${uid}`,
+                description: null,
+                location: null,
+                startTime: new Date('2026-09-10T09:00:00Z'),
+                endTime: new Date('2026-09-10T10:00:00Z'),
+                allDay: false,
+                rrule: 'FREQ=WEEKLY;COUNT=3',
+                timezone: 'Customer Standard Time',
+                status: 'confirmed',
+                sequence: 0,
+                dtstamp: null,
+                recurrenceDate: null,
+                recurrenceInstant: null,
+                data: { organizer: { userId: '', email: 'outlook@external.com', name: 'Outlook' } },
             },
-            createByUserId: organizerId,
-            organizerEventId: uid,
-            organizerUserId: organizerId,
-        });
+            'outlook@external.com',
+        );
+        return findOrFail(await home.calendar.getEventsByUid(uid), (e) => !e.parentEventId).id;
     }
 
     beforeAll(async () => {
@@ -2280,26 +2284,26 @@ describe('iMIP inbound self-addressed messages', () => {
             data: { organizer: { userId: ctx.charlie.user.id, email: ctx.charlie.user.email, name: 'Charlie' } },
         });
         // The link a CANCEL binds to, as an earlier self-addressed REQUEST would have left it.
-        await home.calendar.receiveInvitation({
-            uid: `${uid}-linked`,
-            title: 'Still mine',
-            description: null,
-            location: null,
-            startTime: new Date('2026-09-02T09:00:00Z'),
-            endTime: new Date('2026-09-02T10:00:00Z'),
-            allDay: false,
-            rrule: null,
-            timezone: null,
-            status: 'confirmed',
-            sequence: 0,
-            data: {
-                organizer: { userId: '', email: ctx.charlie.user.email, name: 'Charlie' },
-                organizerEventId: `${uid}-linked`,
+        await home.calendar.receiveImipRequest(
+            {
+                uid: `${uid}-linked`,
+                title: 'Still mine',
+                description: null,
+                location: null,
+                startTime: new Date('2026-09-02T09:00:00Z'),
+                endTime: new Date('2026-09-02T10:00:00Z'),
+                allDay: false,
+                rrule: null,
+                timezone: null,
+                status: 'confirmed',
+                sequence: 0,
+                dtstamp: null,
+                recurrenceDate: null,
+                recurrenceInstant: null,
+                data: { organizer: { userId: '', email: ctx.charlie.user.email, name: 'Charlie' } },
             },
-            createByUserId: ctx.charlie.user.id,
-            organizerEventId: `${uid}-linked`,
-            organizerUserId: `external_${ctx.charlie.user.email}`,
-        });
+            ctx.charlie.user.email,
+        );
 
         const ics = [
             'BEGIN:VCALENDAR',

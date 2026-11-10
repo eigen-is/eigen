@@ -4,6 +4,7 @@
 // decide what arrives, so an entry left by a revoked share delivers nothing.
 
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
+import { requestedEvent } from '../calendar/invite-propagation';
 import { pullCalendarShares, pullPendingInvitations, pullSharedPaths, sendToHome } from '../home/home-relay';
 import { getTeam } from '../team';
 import type { User } from '../user';
@@ -58,29 +59,16 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
             }
 
             if (teamId) continue;
+            const organizer = { userId: fromUserId, email: owner.email, name: owner.name };
             for (const event of await pullPendingInvitations(fromUserId, user.email)) {
                 await sendToHome(user.id, {
-                    type: 'calendar:invitation',
-                    payload: {
-                        uid: event.uid,
-                        title: event.title,
-                        description: event.description,
-                        location: event.location,
-                        startTime: event.startTime,
-                        endTime: event.endTime,
-                        allDay: event.allDay,
-                        rrule: event.rrule,
-                        timezone: event.timezone,
-                        status: event.status,
-                        sequence: event.sequence,
-                        data: {
-                            organizer: { userId: fromUserId, email: owner.email, name: owner.name },
-                            organizerEventId: event.id,
-                            attendees: event.data?.attendees,
-                        },
-                        createByUserId: fromUserId,
+                    type: 'calendar:request',
+                    events: [requestedEvent(event, null, organizer, event.data?.attendees ?? [])],
+                    link: {
+                        organizerEmail: owner.email.toLowerCase(),
                         organizerEventId: event.id,
                         organizerUserId: fromUserId,
+                        createByUserId: fromUserId,
                     },
                 });
             }

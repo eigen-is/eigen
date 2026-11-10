@@ -1,11 +1,11 @@
-// Invitations as they reach a Home. A guest's Home files an invitation that comes from another Home on this
-// server or from verified mail, applies its updates and cancellations, and ignores a message older than the one
-// it holds. rsvp sends the guest's answer back, and the organizer's Home records that answer through
+// Invitations as they reach a Home. Every REQUEST, from another Home on this server or from verified mail, takes one
+// decision: file a copy, update the copy linked to its organizer, or drop it, as it does a message older than the copy.
+// A cancellation follows the same link. rsvp sends the guest's answer back, and the organizer's Home records it through
 // receiveAttendeeStatus and receiveRsvpForOccurrence. Callers, such as the home relay and inbound mail, use Calendar.
 
 import { heldAttendees, isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import { calendarInviteTag } from '@workspace/lib/notification/tags';
-import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
 import { externalOwnerId, isExternalOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { and, eq, isNull } from 'drizzle-orm';
@@ -26,17 +26,9 @@ import { toEvent } from './mappers';
 import { constrainRRule, expandRecurrence } from './recurrence';
 import * as schema from './schema';
 import { buildCalendarEvent } from './sse-events';
-import type { InvitationExceptionPayload, InvitationUpdatePayload, ReceiveInvitationPayload } from './types';
+import type { InvitationLink } from './types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-// What the transport vouches for about an inbound REQUEST. None of it comes from the message body.
-type InvitationLink = {
-    organizerEmail: string;
-    organizerEventId: string;
-    organizerUserId: string;
-    createByUserId: string;
-};
 
 // What the decision on an inbound REQUEST did. The broadcast and the notice run after the write lock is released.
 type InboundRequestOutcome =
@@ -45,84 +37,42 @@ type InboundRequestOutcome =
 
 const REFUSED: InboundRequestOutcome = { kind: 'dropped', reason: 'the store would not keep it' };
 
-// A REQUEST relayed from the organizer's Home. It returns null for a dropped message, so the sender can say so.
-export async function receiveInvitation(calendar: Calendar, payload: ReceiveInvitationPayload): Promise<string | null> {
+// A REQUEST, relayed from another Home or mailed by a verified sender. Each event takes the decision on its own.
+export async function receiveRequest(
+    calendar: Calendar,
+    requested: readonly ParsedEvent[],
+    link: InvitationLink,
+): Promise<void> {
     // A Home is never its own organizer: adopting such a message would make its own event a linked copy of itself.
-    if (payload.organizerUserId === calendar.home.user.id) {
-        console.info(
-            `calendar: dropped a relayed invitation for ${payload.uid} — this Home is named as its own organizer`,
+    if (link.organizerUserId === calendar.home.user.id) {
+        console.info(`calendar: dropped a REQUEST that names this Home, ${link.organizerUserId}, as its organizer`);
+        return;
+    }
+    for (const parsed of requested) {
+        const outcome = await unlessRefused(
+            parsed.uid,
+            () => calendar.writeLock.run(() => decideInboundRequest(calendar, parsed, link)),
+            REFUSED,
         );
-        return null;
+        if (outcome.kind === 'dropped') {
+            console.info(
+                `calendar: dropped a REQUEST for ${parsed.uid} from ${link.organizerUserId} — ${outcome.reason}`,
+            );
+            continue;
+        }
+        settleInboundRequest(calendar, outcome, parsed, link);
     }
-    const link: InvitationLink = {
-        organizerEmail: payload.data.organizer?.email.toLowerCase() ?? '',
-        organizerEventId: payload.organizerEventId,
-        organizerUserId: payload.organizerUserId,
-        createByUserId: payload.createByUserId,
-    };
-    const parsed = relayedRequest(payload);
-    const outcome = await unlessRefused(
-        payload.uid,
-        () => calendar.writeLock.run(() => decideInboundRequest(calendar, parsed, link)),
-        REFUSED,
-    );
-    if (outcome.kind === 'dropped') {
-        console.info(`calendar: dropped a relayed invitation for ${payload.uid} — ${outcome.reason}`);
-        return null;
-    }
-    return settleInboundRequest(calendar, outcome, parsed, link);
 }
 
 // The caller has verified `sender` as the DKIM-aligned From address. Mail links an invitation by that address alone.
-export async function receiveImipRequest(calendar: Calendar, parsed: ParsedEvent, sender: string): Promise<void> {
+export function receiveImipRequest(calendar: Calendar, parsed: ParsedEvent, sender: string): Promise<void> {
     const organizerUserId = externalOwnerId(sender);
-    const link: InvitationLink = {
+    return receiveRequest(calendar, [parsed], {
         organizerEmail: sender,
         organizerEventId: parsed.uid,
         organizerUserId,
         createByUserId: organizerUserId,
-    };
-    const outcome = await unlessRefused(
-        parsed.uid,
-        () => calendar.writeLock.run(() => decideInboundRequest(calendar, parsed, link)),
-        REFUSED,
-    );
-    if (outcome.kind === 'dropped') {
-        console.info(`iMIP: dropped a REQUEST for ${parsed.uid} from ${sender} — ${outcome.reason}`);
-        return;
-    }
-    settleInboundRequest(calendar, outcome, parsed, link);
-}
-
-export async function receiveInvitationUpdate(
-    calendar: Calendar,
-    organizerEventId: string,
-    organizerUserId: string,
-    payload: InvitationUpdatePayload,
-): Promise<void> {
-    const linked = await unlessRefused(
-        organizerEventId,
-        () =>
-            calendar.writeLock.run(async () => {
-                const linked = findLinkedEvent(calendar, organizerEventId, organizerUserId);
-                if (!linked) return null;
-                // An update to one occurrence attaches as an exception. A full update would collapse the series.
-                const key = exceptionKeyOf(linked, payload.recurrenceDate);
-                const applied = key
-                    ? await applyInvitationException(calendar, linked, {
-                          ...payload,
-                          recurrenceDate: key,
-                          recurrenceInstant: null,
-                          timezone: payload.timezone ?? null,
-                      })
-                    : await applyInvitationUpdate(calendar, linked, payload);
-                return applied ? linked : null;
-            }),
-        null,
-    );
-    if (linked) {
-        notifyInvitationUpdated(calendar, linked, payload.title, payload.startTime, organizerEventId, organizerUserId);
-    }
+    });
 }
 
 // Cancels one occurrence only. removeInvitation would delete the guest's whole linked series.
@@ -284,42 +234,22 @@ async function unlessRefused<T>(uid: string, apply: () => Promise<T>, dropped: T
     }
 }
 
-// The relay carries the same REQUEST an iMIP mail does, so both take the same decision.
-function relayedRequest(payload: ReceiveInvitationPayload): ParsedEvent {
-    return {
-        uid: payload.uid,
-        title: payload.title,
-        description: payload.description,
-        location: payload.location,
-        startTime: payload.startTime,
-        endTime: payload.endTime,
-        allDay: payload.allDay,
-        rrule: payload.rrule,
-        timezone: payload.timezone,
-        status: payload.status,
-        sequence: payload.sequence,
-        dtstamp: payload.dtstamp ?? null,
-        recurrenceDate: payload.recurrenceDate ?? null,
-        // A relayed key is already a date in the series' own timezone, so there is no UTC instant to re-key from.
-        recurrenceInstant: null,
-        data: payload.data,
-    };
-}
-
 // The caller holds the write lock, so two deliveries at once never file two masters for one UID.
 async function decideInboundRequest(
     calendar: Calendar,
     parsed: ParsedEvent,
     link: InvitationLink,
 ): Promise<InboundRequestOutcome> {
-    const sender = link.organizerEmail;
     const stored = calendar.joinedEvents().where(eq(schema.events.uid, parsed.uid)).all().map(toEvent);
     // Only the master counts, as in findLinkedEvent. An exception inherits the link and would answer for the series.
     const linked = stored.find((e) => !e.parentEventId && e.data?.organizer && e.data?.organizerEventId);
 
     if (linked) {
-        // Only the stored organizer may update the copy, so another guest cannot take over the invitation.
-        if (linked.data?.organizer?.email.toLowerCase() !== sender) {
+        // Only the organizer the copy is linked to may update it, so another guest cannot take over the invitation.
+        if (
+            linked.data?.organizer?.userId !== link.organizerUserId ||
+            linked.data.organizerEventId !== link.organizerEventId
+        ) {
             return { kind: 'dropped', reason: 'the sender is not the organizer this copy is linked to' };
         }
         // A copy of one occurrence gives way to the whole series once the organizer invites this Home to all of it.
@@ -334,8 +264,8 @@ async function decideInboundRequest(
         // An edit to one occurrence attaches as an exception. A full update would collapse the series.
         const key = exceptionKeyOf(linked, parsed.recurrenceDate);
         const moved = key
-            ? await applyInvitationException(calendar, linked, inboundExceptionPayload(parsed, key))
-            : await applyInvitationUpdate(calendar, linked, inboundUpdatePayload(parsed));
+            ? await applyInvitationException(calendar, linked, parsed, key)
+            : await applyInvitationUpdate(calendar, linked, parsed);
         return moved ? { kind: 'updated', event: linked } : { kind: 'dropped', reason: 'nothing newer to apply' };
     }
 
@@ -344,7 +274,7 @@ async function decideInboundRequest(
         // The organizer may claim an event nobody linked, but only when it names the verified sender.
         const resource = events.resourceOf(calendar, master.id);
         const component = resource ? events.storedComponent(calendar, resource) : null;
-        if (!resource || !component || storedOrganizerAddress(component) !== sender) {
+        if (!resource || !component || storedOrganizerAddress(component) !== link.organizerEmail) {
             return { kind: 'dropped', reason: 'the stored event names another organizer' };
         }
         if (parsed.recurrenceDate) {
@@ -409,27 +339,9 @@ async function fileNewInvitation(
 
 // The occurrence a message names, or null when it names the stored copy itself. A stored copy can be one
 // occurrence of a series this Home does not hold.
-function exceptionKeyOf(linked: CalendarEvent, recurrenceDate: string | null | undefined): string | null {
+function exceptionKeyOf(linked: CalendarEvent, recurrenceDate: string | null): string | null {
     if (!recurrenceDate || recurrenceDate === linked.recurrenceDate) return null;
     return recurrenceDate;
-}
-
-function inboundExceptionPayload(parsed: ParsedEvent, recurrenceDate: string): InvitationExceptionPayload {
-    return {
-        recurrenceDate,
-        recurrenceInstant: parsed.recurrenceInstant,
-        title: parsed.title,
-        description: parsed.description,
-        location: parsed.location,
-        startTime: parsed.startTime,
-        endTime: parsed.endTime,
-        allDay: parsed.allDay,
-        timezone: parsed.timezone,
-        status: parsed.status,
-        sequence: parsed.sequence,
-        dtstamp: parsed.dtstamp,
-        attendees: parsed.data?.attendees,
-    };
 }
 
 // The caller holds the write lock. Returns false when it changed nothing, such as for a redelivery: an occurrence
@@ -437,43 +349,43 @@ function inboundExceptionPayload(parsed: ParsedEvent, recurrenceDate: string): I
 async function applyInvitationException(
     calendar: Calendar,
     linked: CalendarEvent,
-    payload: InvitationExceptionPayload,
+    parsed: ParsedEvent,
+    key: string,
 ): Promise<boolean> {
-    const recurrenceDate = recurrenceKeyForSeries(payload.recurrenceDate, payload.recurrenceInstant, linked.timezone);
+    const recurrenceDate = recurrenceKeyForSeries(key, parsed.recurrenceInstant, linked.timezone);
     const resource = events.resourceOf(calendar, linked.id);
     if (!resource) return false;
     const component = events.storedComponent(calendar, resource);
     const stored = storedRevision(component, recurrenceDate);
-    if (!isNewerRevision(payload, stored)) return false;
+    if (!isNewerRevision(parsed, stored)) return false;
 
     const existing = events.exceptionOf(calendar, linked.id, recurrenceDate);
     const held = heldAttendees(existing, linked);
-    const attendees = keepOwnAnswer(calendar, payload, held, stored);
-    const cancelled = payload.status === 'cancelled';
-    const timezone = payload.timezone ?? linked.timezone;
+    const attendees = keepOwnAnswer(calendar, parsed, held, stored);
+    const cancelled = parsed.status === 'cancelled';
+    const timezone = parsed.timezone ?? linked.timezone;
     if (existing && (existing.status === 'cancelled') === cancelled) {
         // A cancelled occurrence is an EXDATE, which holds nothing more to patch.
         if (cancelled) return false;
-        const patch = invitationPatch(existing, { ...payload, timezone, rrule: null, attendees }, null);
-        const changed = patchEvent(component, recurrenceDate, patch, events.writeContext(false, payload.dtstamp));
+        const patch = invitationPatch(existing, { ...parsed, timezone }, attendees, null);
+        const changed = patchEvent(component, recurrenceDate, patch, events.writeContext(false, parsed.dtstamp));
         if (changed) await events.writeComponent(calendar, resource, component);
         return changed;
     }
-    const data: EventData = { ...linked.data, attendees: attendees ?? held };
     await events.writeEvent(calendar, linked.calendarId, {
-        title: payload.title,
-        description: payload.description,
-        location: payload.location,
-        startTime: payload.startTime,
-        endTime: payload.endTime,
-        allDay: payload.allDay,
+        title: parsed.title,
+        description: parsed.description,
+        location: parsed.location,
+        startTime: parsed.startTime,
+        endTime: parsed.endTime,
+        allDay: parsed.allDay,
         timezone,
         parentEventId: linked.id,
         recurrenceDate,
-        status: payload.status,
-        sequence: payload.sequence,
-        dtstamp: payload.dtstamp,
-        data,
+        status: parsed.status,
+        sequence: parsed.sequence,
+        dtstamp: parsed.dtstamp,
+        data: { ...linked.data, attendees: attendees ?? held },
         createByUserId: linked.createByUserId,
         uid: linked.uid,
     });
@@ -492,46 +404,25 @@ function recurrenceKeyForSeries(
     return recurrenceKey(year, month, day);
 }
 
-function inboundUpdatePayload(parsed: ParsedEvent): InvitationUpdatePayload {
-    return {
-        title: parsed.title,
-        description: parsed.description,
-        location: parsed.location,
-        startTime: parsed.startTime,
-        endTime: parsed.endTime,
-        allDay: parsed.allDay,
-        rrule: parsed.rrule,
-        timezone: parsed.timezone,
-        status: parsed.status,
-        sequence: parsed.sequence,
-        dtstamp: parsed.dtstamp,
-        attendees: parsed.data?.attendees,
-    };
-}
-
 // The caller holds the write lock. Returns false when it changed nothing, such as for a replay the stored copy
 // already outranks.
-async function applyInvitationUpdate(
-    calendar: Calendar,
-    linked: CalendarEvent,
-    payload: InvitationUpdatePayload,
-): Promise<boolean> {
+async function applyInvitationUpdate(calendar: Calendar, linked: CalendarEvent, parsed: ParsedEvent): Promise<boolean> {
     const resource = events.resourceOf(calendar, linked.id);
     if (!resource) return false;
     const component = events.storedComponent(calendar, resource);
     // A copy that is one occurrence of a series this Home does not hold is keyed by its RECURRENCE-ID.
     const stored = storedRevision(component, linked.recurrenceDate);
-    if (!isNewerRevision(payload, stored)) return false;
+    if (!isNewerRevision(parsed, stored)) return false;
 
     // Never extend the rrule past what the guest has: they may have shortened it on purpose.
-    const rrule = constrainRRule(payload.rrule, linked.rrule);
-    const attendees = keepOwnAnswer(calendar, payload, linked.data?.attendees ?? [], stored);
+    const rrule = constrainRRule(parsed.rrule, linked.rrule);
+    const attendees = keepOwnAnswer(calendar, parsed, linked.data?.attendees ?? [], stored);
     // A redelivery changes nothing, so it bumps no ctag and sends no second notice.
     const changed = patchEvent(
         component,
         linked.recurrenceDate,
-        invitationPatch(linked, { ...payload, attendees }, rrule),
-        events.writeContext(false, payload.dtstamp),
+        invitationPatch(linked, parsed, attendees, rrule),
+        events.writeContext(false, parsed.dtstamp),
     );
     if (!changed) return false;
     await events.writeComponent(calendar, resource, component);
@@ -542,33 +433,39 @@ async function applyInvitationUpdate(
 // still say NEEDS-ACTION for a reply it hasn't read yet.
 function keepOwnAnswer(
     calendar: Calendar,
-    payload: { sequence: number; attendees?: Attendee[] },
+    parsed: ParsedEvent,
     held: readonly Attendee[],
     stored: Revision | null,
 ): Attendee[] | undefined {
+    const incoming = parsed.data?.attendees;
     const email = calendar.home.user.email.toLowerCase();
     const own = held.find((a) => a.email.toLowerCase() === email);
-    if (!payload.attendees || !own || !stored || payload.sequence > stored.sequence) return payload.attendees;
-    return withAttendeeStatus(payload.attendees, email, own.status);
+    if (!incoming || !own || !stored || parsed.sequence > stored.sequence) return incoming;
+    return withAttendeeStatus(incoming, email, own.status);
 }
 
 // An organizer's client repeats the times in every message. Only a time that differs from the stored row is patched.
-function invitationPatch(linked: CalendarEvent, payload: InvitationUpdatePayload, rrule: string | null): EventPatch {
-    const moved = payload.startTime.getTime() !== linked.startTime.getTime();
-    const ended = payload.endTime.getTime() !== linked.endTime.getTime();
+function invitationPatch(
+    stored: CalendarEvent,
+    parsed: ParsedEvent,
+    attendees: Attendee[] | undefined,
+    rrule: string | null,
+): EventPatch {
+    const moved = parsed.startTime.getTime() !== stored.startTime.getTime();
+    const ended = parsed.endTime.getTime() !== stored.endTime.getTime();
     return {
-        title: payload.title,
-        description: payload.description,
-        location: payload.location,
-        startTime: moved ? payload.startTime : undefined,
-        endTime: ended ? payload.endTime : undefined,
-        allDay: payload.allDay !== linked.allDay ? payload.allDay : undefined,
+        title: parsed.title,
+        description: parsed.description,
+        location: parsed.location,
+        startTime: moved ? parsed.startTime : undefined,
+        endTime: ended ? parsed.endTime : undefined,
+        allDay: parsed.allDay !== stored.allDay ? parsed.allDay : undefined,
         rrule: rrule ?? undefined,
-        timezone: payload.timezone,
-        status: payload.status,
-        data: payload.attendees ? { ...linked.data, attendees: payload.attendees } : undefined,
+        timezone: parsed.timezone,
+        status: parsed.status,
+        data: attendees ? { ...stored.data, attendees } : undefined,
         // The guest's copy keeps the organizer's revision, so the next message has a number to beat.
-        sequence: payload.sequence,
+        sequence: parsed.sequence,
     };
 }
 
@@ -592,7 +489,7 @@ async function adoptAsInvitation(
         component,
         null,
         {
-            ...invitationPatch(master, inboundUpdatePayload(parsed), parsed.rrule),
+            ...invitationPatch(master, parsed, undefined, parsed.rrule),
             data: { ...master.data, organizer, attendees: parsed.data?.attendees },
         },
         events.writeContext(false, parsed.dtstamp),
@@ -721,11 +618,11 @@ async function updateAttendeeStatus(
     status: Attendee['status'],
 ): Promise<void> {
     // The guest list is read inside the write lock, so one answer never overwrites another.
-    await calendar.writeLock.run(async () => {
+    const calendarId = await calendar.writeLock.run(async () => {
         const event = events.eventById(calendar, eventId);
-        if (!event?.data?.attendees) return;
+        if (!event?.data?.attendees) return null;
         const resource = events.resourceOf(calendar, eventId);
-        if (!resource) return;
+        if (!resource) return null;
 
         const attendees = withAttendeeStatus(event.data.attendees, email, status);
         await events.patchResource(
@@ -735,7 +632,9 @@ async function updateAttendeeStatus(
             { data: { ...event.data, attendees } },
             events.writeContext(false),
         );
+        return event.calendarId;
     });
+    if (calendarId) calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
 }
 
 function withAttendeeStatus(attendees: Attendee[], email: string, status: Attendee['status']): Attendee[] {

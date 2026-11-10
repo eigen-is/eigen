@@ -197,7 +197,7 @@ When the organizer deletes, every copy is cancelled. When an attendee deletes, i
 
 A guest holds one linked series, and an override on it inherits the series' link. So every message about one occurrence names the series' event id plus the occurrence key, never the override's own row id. The receiver attaches it through `applyInvitationException`, the same path an iMIP REQUEST with a `RECURRENCE-ID` takes. The `RECURRENCE-ID` names the original instant, which only the series knows once the override has moved.
 
-An override whose guest list is empty or absent has the series' guests, read through `heldAttendees` by every sender, the RSVP path and the calendar app's dialogs. It stores no list of its own, so a guest added to the series later reaches every occurrence. So one occurrence can't be made guest-less: emptying its list hands it back to the series, and deleting the occurrence is how its guests lose it. A guest added to a series then gets every existing override as an update and every cancelled occurrence as a removal, or their copy would show a moved occurrence at its old slot.
+An override whose guest list is empty or absent has the series' guests, read through `heldAttendees` by every sender, the RSVP path and the calendar app's dialogs. It stores no list of its own, so a guest added to the series later reaches every occurrence. So one occurrence can't be made guest-less: emptying its list hands it back to the series, and deleting the occurrence is how its guests lose it. A guest added to a series then gets every existing override and every cancelled occurrence with it, or their copy would show a moved occurrence at its old slot.
 
 A series-wide edit of the title, description or location reaches each override that still carried the master's old value. Guests run the same rule, so a moved occurrence is renamed everywhere without a message of its own.
 
@@ -212,13 +212,17 @@ A series-wide edit of the title, description or location reaches each override t
 | `this-and-following` + `remove` | the copy's rule is truncated and a series-wide decline goes out |
 | `remove` alone | the copy is deleted, as a decline |
 
+An answer the organizer's Home records is announced as an event update, whether it came over the relay or by mail, so the organizer's open tabs show it.
+
 `constrainRRule` (`recurrence.ts`) keeps an organizer's later update from extending the rule past a guest's truncation, so "delete this and following" survives the next edit. A copy that is one occurrence of a series the guest doesn't hold answers for that occurrence: its RSVP names its own `RECURRENCE-ID`, so it lands on the organizer's override that holds that occurrence's guests.
 
 ## Every inbound REQUEST takes one locked decision
 
-A REQUEST relayed from another Home ([SCALABILITY.md](SCALABILITY.md)) and one mailed over iMIP both go through `decideInboundRequest`. It runs inside the write lock and looks up the UID Home-wide, so two concurrent deliveries can't file two masters for one UID.
+A REQUEST relayed from another Home ([SCALABILITY.md](SCALABILITY.md)) and one mailed over iMIP both go through `receiveRequest` and, per event, `decideInboundRequest`. It runs inside the write lock and looks up the UID Home-wide, so two concurrent deliveries can't file two masters for one UID.
 
-1. **Update.** A stored copy linked to an organizer takes the message, but only when the sender is that organizer, so a co-attendee can't hijack it. A REQUEST for one occurrence attaches as an override, since a full update would collapse the series.
+The two transports differ only in what they hand it. A mail carries a file, and its link is the verified sender, `external_<address>` with the UID as the event. The relay message `calendar:request` carries the events a mail would, already parsed, and the link its envelope vouches for: the organizer's Home and event. It carries no reminder, no stamp and only the guest list, so a local copy never counts the organizer as an attendee, as a mailed file does. A guest added to a series gets the master and every moved and cancelled occurrence in one message. An update sends the master alone, because the guest's copy renames its own overrides with the series ([§ An occurrence message names the series](#an-occurrence-message-names-the-series)). The mail-only limits, the DKIM verdict, `IMIP_MAX_BYTES`, the self-sent drop and `IMIP_MAX_EVENTS`, don't apply to the relay, which only our own Homes write. A guest who deleted their copy gets it back with the organizer's next update, by either transport, since a delete leaves nothing behind but the declined answer the organizer holds.
+
+1. **Update.** A stored copy linked to an organizer takes the message, but only when the message names the link the copy holds, never just its address, so a co-attendee can't hijack it. A REQUEST for one occurrence attaches as an override, since a full update would collapse the series.
 2. **Adopt.** A stored master nobody linked is claimed when its own organizer address equals the verified sender. `X-EIGEN-IMPORTED-ORGANIZER` wins over the `ORGANIZER` line here. The resource keeps its row ids and gains the link and the message's guest list.
 3. **Create** in the default calendar, only when the body's `ORGANIZER` is the sender. A REQUEST for one occurrence of a series this Home doesn't hold files as a standalone event that keeps its `RECURRENCE-ID`, the only record of which occurrence it answers for.
 

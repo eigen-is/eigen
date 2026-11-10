@@ -48,7 +48,6 @@ export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient, 
         case SSEventType.CALENDAR_INVITE_RECEIVED:
         case SSEventType.CALENDAR_INVITE_UPDATED:
         case SSEventType.CALENDAR_INVITE_CANCELLED:
-        case SSEventType.CALENDAR_INVITE_RSVP:
             invalidateEventsSoon(queryClient, userId);
             break;
     }
