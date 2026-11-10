@@ -41,7 +41,10 @@ export function linkMenuSections(editor: Editor, link: LinkAtPointer, onEdit: ()
                 <DropdownMenuItem onClick={onEdit}>
                     <Pencil className="h-4 w-4" /> Edit link
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().setTextSelection(link).unsetLink().run()}>
+                <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => editor.chain().focus().setTextSelection(link).unsetLink().run()}
+                >
                     <Unlink className="h-4 w-4" /> Remove link
                 </DropdownMenuItem>
             </>
