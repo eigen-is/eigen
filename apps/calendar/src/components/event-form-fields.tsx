@@ -186,6 +186,7 @@ export function EventFormFields({
                             value={rruleString}
                             onChange={setRruleString}
                             startDate={recurrenceStartDate}
+                            timezone={timezone}
                             disabled={detailsDisabled}
                         />
                         {!allDay && (
