@@ -332,7 +332,7 @@ export function restampResource(
     for (const vevent of storedVEvents) {
         const uid = uidOf(vevent);
         const key = recurrenceKeyOf(vevent, storedStarts);
-        storedByKey.set(`${uid}|${key ?? ''}`, {
+        storedByKey.set(occurrenceMatchKey(uid, key), {
             eventId: readStamp(vevent, EIGEN.eventId),
             createByUserId: readStamp(vevent, EIGEN.createdBy),
             organizerEventId: readStamp(vevent, EIGEN.organizerEvent),
@@ -341,7 +341,8 @@ export function restampResource(
             importedOrganizer: readStamp(vevent, EIGEN.importedOrganizer),
             guestCut: readStamp(vevent, EIGEN.guestCut),
         });
-        for (const [exKey, stamp] of readExclusionStamps(vevent)) storedStamps.set(`${uid}|${exKey}`, stamp);
+        for (const [exKey, stamp] of readExclusionStamps(vevent))
+            storedStamps.set(occurrenceMatchKey(uid, exKey), stamp);
     }
 
     // One stored id belongs to one row, so a second claimant of the same stored VEVENT gets a fresh id.
@@ -356,7 +357,7 @@ export function restampResource(
     const incomingStarts = seriesStarts(incomingVEvents);
     for (const vevent of incomingVEvents) {
         const uid = uidOf(vevent);
-        const match = storedByKey.get(`${uid}|${recurrenceKeyOf(vevent, incomingStarts) ?? ''}`);
+        const match = storedByKey.get(occurrenceMatchKey(uid, recurrenceKeyOf(vevent, incomingStarts)));
 
         addStamp(vevent, EIGEN.eventId, claim(match?.eventId));
         addStamp(vevent, EIGEN.createdBy, trusted.createByUserId ?? match?.createByUserId);
@@ -369,7 +370,7 @@ export function restampResource(
         // Read once: the scan for SEQUENCE lengthens with every stamp this loop adds.
         const sequence = sequenceOf(vevent);
         for (const key of exdateKeys(vevent)) {
-            const prior = storedStamps.get(`${uid}|${key}`);
+            const prior = storedStamps.get(occurrenceMatchKey(uid, key));
             vevent.addProperty(
                 exclusionStamp(key, claim(prior?.id), prior?.sequence ?? sequence, prior?.dtstamp ?? null),
             );
@@ -394,6 +395,11 @@ export function keepSubcomponents(comp: ICAL.Component, keep: (sub: ICAL.Compone
     const kept = comp.getAllSubcomponents().filter(keep);
     comp.removeAllSubcomponents();
     for (const sub of kept) comp.addSubcomponent(sub);
+}
+
+// One occurrence across two versions of a file, such as the stored resource and a PUT that replaces it.
+export function occurrenceMatchKey(uid: string, recurrenceKey: string | null): string {
+    return `${uid}|${recurrenceKey ?? ''}`;
 }
 
 function buildVEvent(event: EventToBuild, options: BuildOptions = {}): ICAL.Component {

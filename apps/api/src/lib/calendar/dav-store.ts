@@ -8,7 +8,7 @@ import { and, eq, gt, inArray, or } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
 import { ApiError, failsPreconditions, normalizeResourceUri } from '../core';
-import { keepSubcomponents, parseResource, restampResource, stripEigenStamps } from '../ical';
+import { keepSubcomponents, occurrenceMatchKey, parseResource, restampResource, stripEigenStamps } from '../ical';
 import { EIGEN, readStamp, recurrenceKeyOf, seriesStarts, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import {
@@ -300,11 +300,13 @@ function isLinkedCopy(stored: ICAL.Component): boolean {
 function adoptAlarms(stored: ICAL.Component, incoming: ICAL.Component): void {
     const incomingVEvents = incoming.getAllSubcomponents('vevent');
     const incomingStarts = seriesStarts(incomingVEvents);
-    const byKey = new Map(incomingVEvents.map((v) => [`${uidOf(v)}|${recurrenceKeyOf(v, incomingStarts) ?? ''}`, v]));
+    const byKey = new Map(
+        incomingVEvents.map((v) => [occurrenceMatchKey(uidOf(v), recurrenceKeyOf(v, incomingStarts)), v]),
+    );
     const storedVEvents = stored.getAllSubcomponents('vevent');
     const storedStarts = seriesStarts(storedVEvents);
     for (const vevent of storedVEvents) {
-        const match = byKey.get(`${uidOf(vevent)}|${recurrenceKeyOf(vevent, storedStarts) ?? ''}`);
+        const match = byKey.get(occurrenceMatchKey(uidOf(vevent), recurrenceKeyOf(vevent, storedStarts)));
         if (!match) continue;
         keepSubcomponents(vevent, (sub) => sub.name !== 'valarm');
         const alarms = match.getAllSubcomponents('valarm');

@@ -8,6 +8,7 @@ export {
     keepProperties,
     keepSubcomponents,
     newVCalendar,
+    occurrenceMatchKey,
     PRODID,
     patchEvent,
     removeExclusion,
