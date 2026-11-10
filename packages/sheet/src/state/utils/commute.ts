@@ -2,6 +2,7 @@
 // them. A host such as the sheets editor asks this when such a late batch arrives. When the batches commute, the tab
 // applies the late ones directly and keeps its undo. When they don't, it applies the log again from an earlier state.
 
+import { isPatchOp } from '@workspace/lib/sheets';
 import type { Op } from '../types';
 
 // Whether the fresh batches, applied after the overtaken ones, still give the workbook the log's order gives. They do
@@ -53,7 +54,7 @@ function batchKeys(ops: Op[]): string[][] | null {
 // The key of the path an op writes, its sheet first, then the key of each path above it. An add or remove at an array
 // index moves the entries after it, so it writes the whole array. Null for an op on sheets, rows or columns.
 function pathKeys(op: Op): string[] | null {
-    if (op.op !== 'add' && op.op !== 'remove' && op.op !== 'replace') return null;
+    if (!isPatchOp(op)) return null;
     const last = op.path.at(-1);
     const wholeArray = (op.op !== 'replace' && typeof last === 'number') || last === 'length';
     const path = [op.id, ...(wholeArray ? op.path.slice(0, -1) : op.path)].map(String);

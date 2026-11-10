@@ -70,7 +70,12 @@ export type Op = {
 // A batch with a row or column op, or a sheet's add, delete or rename. Such an op ships no values, so every reader's
 // replay rewrites the formulas it moves or renames and recomputes what it can affect, which a cell edit never costs.
 export function isStructuralBatch(batch: readonly Op[]): boolean {
-    return batch.some(({ op }) => op !== 'add' && op !== 'remove' && op !== 'replace');
+    return batch.some((op) => !isPatchOp(op));
+}
+
+// A cell or field write, which every reader applies as an immer patch, where a row, column or sheet op runs its own code.
+export function isPatchOp(op: Op): op is Op & { op: 'add' | 'remove' | 'replace' } {
+    return op.op === 'add' || op.op === 'remove' || op.op === 'replace';
 }
 
 // Single rectangular range in row/column coordinates. Used both as a CF rule's
@@ -227,7 +232,7 @@ export type Sheet = {
     order?: number;
     // 1 hides the tab (View > Hidden sheets shows it again); the editor opens on a sheet it shows.
     hide?: number;
-    // The tab's colour, a CSS colour.
+    // The tab's color, a CSS color.
     color?: string;
     // The CSS pixels of a column or row with no stored size, read through sheetDefaultColWidth/RowHeight.
     defaultColWidth?: number;

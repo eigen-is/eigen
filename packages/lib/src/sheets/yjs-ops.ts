@@ -7,6 +7,7 @@ import type { Patch } from 'immer';
 import { isRecord } from '../core/guards';
 import { floatingWriteFilter } from './floating';
 import type { Op, Sheet } from './types';
+import { isPatchOp } from './types';
 import { isSheetValidation, isSheetValidations, MAX_VALIDATIONS } from './validations';
 
 // The patches, and the sheet and row ops left for the caller to apply.
@@ -16,8 +17,7 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
     const applies = floatingWriteFilter(sheets);
     const ruleIds = validationIds(sheets);
     for (const op of ops) {
-        const { op: kind } = op;
-        if (kind !== 'add' && kind !== 'remove' && kind !== 'replace') {
+        if (!isPatchOp(op)) {
             specialOps.push(op);
             continue;
         }
@@ -30,13 +30,13 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
         if (op.path.length === 0 || op.path[0] === 'celldata') continue;
         // Every reader walks a sheet's matrix and its rows, so a write that would leave either no array is dropped.
         const writesMatrixOrRow = op.path.length === 1 || (op.path.length === 2 && typeof op.path[1] === 'number');
-        if (op.path[0] === 'data' && kind !== 'remove' && writesMatrixOrRow && !Array.isArray(op.value)) continue;
+        if (op.path[0] === 'data' && op.op !== 'remove' && writesMatrixOrRow && !Array.isArray(op.value)) continue;
         if (op.path[0] === 'dataValidations' && !isValidationWrite(op)) continue;
         if (op.path[0] === 'data' && !isCellWrite(op)) continue;
         const i = sheets.findIndex((s) => s.id === op.id);
         if (i === -1) continue;
         if (op.path[0] === 'dataValidations' && !ruleIds(i, op)) continue;
-        const patch: Patch = { op: kind, value: op.value, path: [i, ...op.path] };
+        const patch: Patch = { op: op.op, value: op.value, path: [i, ...op.path] };
         if (applies(patch)) patches.push(patch);
     }
     return [patches, specialOps];
