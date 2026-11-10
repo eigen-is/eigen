@@ -22,7 +22,7 @@ import {
     storedOrganizerAddress,
     storedRevisions,
 } from '../ical';
-import type { EventPatch, Revision, VEventEdit, WriteContext } from '../ical/ical-component';
+import type { EventPatch, Revision, VEventEdit } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
 import { computeOccurrenceTimes, parseRecurrenceKey, recurrenceKey, utcToLocal } from '../ical/wall-clock';
 import { sendMail } from '../mailer/mailer';
@@ -297,17 +297,15 @@ async function decideInboundRequest(
         const edit = requestedEdit(calendar, series, held.get(key), parsed, key, revisions.get(key) ?? null);
         if (edit) edits.set(key, edit);
     }
+    const changed = applyEdits(component, edits, held.get(null));
     if (claim) {
-        // A claim stands whatever the message's revision, so the organizer joins the master's own patch, if it has one.
+        // A claim stands whatever the message's revision, and the occurrences just added take the link too.
         stampInvitationLink(component, link);
-        const own = edits.get(null);
-        const { patch, ctx }: { patch: EventPatch; ctx: WriteContext } =
-            own?.kind === 'patch' ? own : { patch: {}, ctx: events.writeContext(false) };
-        edits.set(null, { kind: 'patch', patch: { ...patch, data: { ...patch.data, organizer: claim } }, ctx });
+        patchEvent(component, null, { data: { organizer: claim } }, events.writeContext(false));
+    } else if (!changed) {
+        // A redelivery changes nothing, so it bumps no ctag and sends no second notice.
+        return { kind: 'dropped', reason: 'nothing newer to apply' };
     }
-    // A redelivery changes nothing, so it bumps no ctag and sends no second notice.
-    const changed = applyEdits(component, edits, held.get(null)) || !!claim;
-    if (!changed) return { kind: 'dropped', reason: 'nothing newer to apply' };
     await events.writeComponent(calendar, resource, component);
     return { kind: 'updated', calendarId: series.calendarId };
 }

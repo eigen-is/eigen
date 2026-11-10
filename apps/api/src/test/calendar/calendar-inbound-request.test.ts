@@ -81,6 +81,42 @@ describe('inbound iMIP REQUEST', () => {
         expect(rows[0].sequence).toBe(2);
     });
 
+    // An override the copy lacked is built from the row before the claim, and still has to carry the link.
+    test('an adoption links the occurrences it adds', async () => {
+        const weekly = ['RRULE:FREQ=WEEKLY;COUNT=4'];
+        const { calendar } = await harnessWith(stored(ORG).replace('DTSTAMP', `${weekly[0]}\r\nDTSTAMP`));
+        const moved = [
+            'BEGIN:VEVENT',
+            `UID:${UID}`,
+            'SUMMARY:Quarterly review moved',
+            'RECURRENCE-ID:20260508T090000Z',
+            'DTSTART:20260508T110000Z',
+            'DTEND:20260508T120000Z',
+            'SEQUENCE:2',
+            `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+            'ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:owner@test.local',
+            'DTSTAMP:20260101T000000Z',
+            'END:VEVENT',
+        ];
+
+        await calendar.receiveRequest(
+            parseIcs(request(weekly).replace('END:VCALENDAR', `${moved.join('\r\n')}\r\nEND:VCALENDAR`)).events,
+            {
+                organizerEmail: ORG,
+                organizerEventId: UID,
+                organizerUserId: `external_${ORG}`,
+                createByUserId: `external_${ORG}`,
+            },
+        );
+
+        const rows = await calendar.getEventsByUid(UID);
+        expect(rows).toHaveLength(2);
+        for (const row of rows) {
+            expect(row.data?.organizerEventId).toBe(UID);
+            expect(row.data?.organizer?.userId).toBe(`external_${ORG}`);
+        }
+    });
+
     test('the address an imported event was filed under adopts it too', async () => {
         const harness = await makeCalendar();
         const id = (await harness.instance.getCalendars())[0].id;
