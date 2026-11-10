@@ -685,6 +685,27 @@ describe('CollabDocument compacts a workbook at close', () => {
         }
     });
 
+    test('a close folds a log of exactly twenty structural batches whole', async () => {
+        const stub = stubRunner();
+        const log = structuralLog(20);
+        const sheet = await openLingeringSheet('compaction-bound-edge', log, true);
+        try {
+            const whole = liveSheets(sheet.doc.doc);
+            const closed = sheet.nextClose();
+            lingerOut(sheet.doc);
+            jest.useRealTimers();
+            succeed(stub.runs[0]);
+            await closed;
+            expect(sheet.ops.length).toBe(0);
+            expect(liveSheets(sheet.doc.doc)).toEqual(whole);
+            expect(sheet.closes()).toBe(1);
+        } finally {
+            stub.restore();
+            sheet.restore();
+            sheet.doc.destruct();
+        }
+    });
+
     test('destruct during the run aborts it, and nothing is swapped or closed', async () => {
         const stub = stubRunner();
         const sheet = await openLingeringSheet('compaction-destruct', [edit(0, 0, 1)]);

@@ -44,9 +44,14 @@ export async function compactSheets(
 ): Promise<{ snapshot: string; folded: readonly Op[][] } | null> {
     // Read from the live doc in one step, as data.db can lag behind.
     const log = sheetsOpLog(doc).toArray();
+    let end = 0;
     let structural = 0;
-    const end = log.findIndex((batch) => isStructuralBatch(batch) && ++structural > MAX_STRUCTURAL_BATCHES);
-    const folded = end === -1 ? log : log.slice(0, end);
+    for (const batch of log) {
+        if (isStructuralBatch(batch)) structural++;
+        if (structural > MAX_STRUCTURAL_BATCHES) break;
+        end++;
+    }
+    const folded = log.slice(0, end);
     try {
         const budget = AbortSignal.any([signal, AbortSignal.timeout(COMPACTION_BUDGET_MS)]);
         const { snapshot, dropped } = await runSheetsCompaction(readSheetsSnapshotJson(doc) ?? null, folded, budget);
