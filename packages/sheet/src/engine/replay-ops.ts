@@ -1,8 +1,8 @@
-// Replays the stored op batches onto a workbook's stored sheets, for a reader that was not there live, such as a
-// browser that opens the workbook or the server's export. It also owns the shape check a sheet or row op passes before
-// it applies, and says what a batch's ops can affect, which every reader computes again after the batch. A live
-// client's applyOpBatch calls the same checks, so a peer, a joiner and the server skip the same ops and end with the
-// same sheets.
+// Applies op batches to a workbook's plain sheets. replaySheetsOps replays the stored log for a reader that was not
+// there live, such as a browser that opens the workbook or the server's export, and the editor applies each batch it
+// takes through the same applySheetsBatch, so a peer, a joiner and the server skip the same ops and end with the same
+// sheets. It also owns the shape check a sheet or row op passes before it applies, and says what a batch's ops can
+// affect, which every reader computes again after the batch.
 
 import { isRecord } from '@workspace/lib/guards';
 import type { Op, Sheet } from '@workspace/lib/sheets';
@@ -54,70 +54,91 @@ export function replaySheetsOps(
     // Built at the first batch that recomputes, and kept until a batch renames, adds or deletes a sheet, or a step on
     // it passes a budget, which may leave it short.
     let graph: FormulaGraph | null = null;
+    for (const batch of opBatches) {
+        // One bad batch must never make the whole workbook unreadable. It rolls back and the replay goes on with the
+        // next batch. The same batch is skipped on every replay.
+        try {
+            const applied = applySheetsBatch(result, batch, graph, budgets);
+            result = applied.sheets;
+            graph = applied.graph;
+            if (applied.skipped) onDropped(new SkippedRecompute(applied.skipped.message, { cause: applied.skipped }));
+        } catch (e) {
+            onDropped(e);
+            graph = null;
+        }
+    }
+    return result.map(withSyncedCelldataIfData);
+}
+
+// A row or column op a batch applied, with the sheets as they were before it.
+type AppliedRowColOp = { op: InsertRowColOp | DeleteRowColOp; sheets: Sheet[] };
+
+// One batch on plain sheets, as every reader applies it: the sheet, row and column ops first, then the cell and field
+// patches, then the recompute those ops ask for, with `graph` following each step. It throws when an op fails, and
+// the caller keeps the sheets it had and drops the graph, which may have followed part of the batch. A recompute past
+// `budgets` leaves the batch's values as they were and comes back as `skipped`.
+export function applySheetsBatch(
+    sheets: Sheet[],
+    batch: Op[],
+    graph: FormulaGraph | null,
+    budgets: RecalcBudgets,
+): { sheets: Sheet[]; graph: FormulaGraph | null; moved: AppliedRowColOp[]; skipped: RangeError | null } {
+    let result = sheets;
+    let held = graph;
+    const moved: AppliedRowColOp[] = [];
     const withinBudget = (step: () => void): RangeError | null => {
         try {
             step();
             return null;
         } catch (e) {
             if (!(e instanceof RangeError)) throw e;
-            graph = null;
+            held = null;
             return e;
         }
     };
-    for (const batch of opBatches) {
-        // One bad batch must never make the whole workbook unreadable. It rolls back and the replay goes on with the
-        // next batch. The same batch is skipped on every replay.
-        const preBatch = result;
-        try {
-            const dataOpIds = collectDataOpSheetIds(batch);
-            if (dataOpIds) {
-                result = result.map((s) => (dataOpIds.has(s.id) ? withMaterializedData(s) : s));
+    const dataOpIds = collectDataOpSheetIds(batch);
+    if (dataOpIds) result = result.map((s) => (dataOpIds.has(s.id) ? withMaterializedData(s) : s));
+    // opToPatchOnSheets finds a sheet by its place in the array, so the sheet and row ops settle the array before the
+    // patches resolve.
+    for (const op of batch) {
+        if (op.op === 'addSheet') {
+            if (!isNewSheet(op.value, result)) {
+                console.warn('[sheets] addSheet op has malformed value or a taken id', op.value);
+                continue;
             }
-            // opToPatchOnSheets finds a sheet by its place in the array, so the sheet and row ops settle the array
-            // before the patches resolve.
-            for (const op of batch) {
-                if (op.op === 'addSheet') {
-                    if (!isNewSheet(op.value, result)) {
-                        console.warn('[sheets] addSheet op has malformed value or a taken id', op.value);
-                        continue;
-                    }
-                    const added = withNormalizedSheet(op.value);
-                    result = [...result, dataOpIds?.has(op.value.id) ? withMaterializedData(added) : added];
-                    graph = null;
-                } else if (op.op === 'deleteSheet' && op.id) {
-                    result = applySheetDelete(result, op.id);
-                    graph = null;
-                } else if (isRowColOp(op)) {
-                    const move = rowColOf(op);
-                    result = applyRowColOp(result, op);
-                    withinBudget(() => graph?.shift(result, move));
-                } else if (op.op === 'renameSheet') {
-                    result = applySheetRename(result, renameSheetOf(op));
-                    graph = null;
-                }
-            }
-            const normalOps = batch.filter(isPatchOp);
-            const [patches] = opToPatchOnSheets(result, normalOps);
-            result = immer.applyPatches(result, patches);
-            if (patches.length > 0) withinBudget(() => graph?.followPatches(result, patches));
-            const seeds = seedsOf(batch);
-            if (seeds) {
-                const materialized = result.map(withMaterializedData);
-                result = materialized;
-                const engine = new FormulaEngine({ maxCellsRead: budgets.maxCellsRead });
-                const passed = withinBudget(() => {
-                    graph ??= new FormulaGraph(materialized, budgets);
-                    result = recomputeAfter(materialized, seeds, graph, engine);
-                });
-                if (passed) onDropped(new SkippedRecompute(passed.message, { cause: passed }));
-            }
-        } catch (e) {
-            onDropped(e);
-            result = preBatch;
-            graph = null;
+            const added = withNormalizedSheet(op.value);
+            result = [...result, dataOpIds?.has(op.value.id) ? withMaterializedData(added) : added];
+            held = null;
+        } else if (op.op === 'deleteSheet' && op.id) {
+            result = applySheetDelete(result, op.id);
+            held = null;
+        } else if (isRowColOp(op)) {
+            const move = rowColOf(op);
+            moved.push({ op: move, sheets: result });
+            result = applyRowColOp(result, op);
+            withinBudget(() => held?.shift(result, move));
+        } else if (op.op === 'renameSheet') {
+            result = applySheetRename(result, renameSheetOf(op));
+            held = null;
         }
     }
-    return result.map(withSyncedCelldataIfData);
+    const normalOps = batch.filter(isPatchOp);
+    const [patches] = opToPatchOnSheets(result, normalOps);
+    result = immer.applyPatches(result, patches);
+    if (patches.length > 0) withinBudget(() => held?.followPatches(result, patches));
+    const seeds = seedsOf(batch);
+    let skipped: RangeError | null = null;
+    if (seeds) {
+        const materialized = result.map(withMaterializedData);
+        result = materialized;
+        const engine = new FormulaEngine({ maxCellsRead: budgets.maxCellsRead });
+        skipped = withinBudget(() => {
+            const built = held ?? new FormulaGraph(materialized, budgets);
+            held = built;
+            result = recomputeAfter(materialized, seeds, built, engine);
+        });
+    }
+    return { sheets: result, graph: held, moved, skipped };
 }
 
 // What a batch's sheet, row and column ops can affect, or null when it holds none, since an edit carries its own
@@ -178,13 +199,13 @@ export function withMaterializedData(s: Sheet): Sheet {
 
 // The insert a row op names. An op's value is untyped and a hostile client may send any shape, so a bad one throws and
 // the op's whole batch rolls back, since its other ops were written for the rows the op would have moved.
-export function insertRowColOf(op: Op): InsertRowColOp {
+function insertRowColOf(op: Op): InsertRowColOp {
     const value = asInsertValue(op.value);
     if (!value || !op.id) throw new Error('insertRowCol op has a malformed value');
     return { ...value, id: op.id };
 }
 
-export function deleteRowColOf(op: Op): DeleteRowColOp {
+function deleteRowColOf(op: Op): DeleteRowColOp {
     const value = asDeleteValue(op.value);
     if (!value || !op.id) throw new Error('deleteRowCol op has a malformed value');
     return { ...value, id: op.id };
@@ -192,7 +213,7 @@ export function deleteRowColOf(op: Op): DeleteRowColOp {
 
 // A rename writes its name into every formula naming the tab, so a long one would run the reader out of memory, which
 // applySheetRename refuses.
-export function renameSheetOf(op: Op): RenameSheetOp {
+function renameSheetOf(op: Op): RenameSheetOp {
     const { name } = isRecord(op.value) ? op.value : { name: undefined };
     if (typeof name !== 'string' || !op.id) throw new Error('renameSheet op has a malformed value');
     return { id: op.id, name };

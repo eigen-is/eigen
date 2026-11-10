@@ -3,6 +3,7 @@ import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/li
 import { hideSheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { firstVisibleSheetId } from '../../../state/context';
+import { applyOpBatch } from '../../../state/modules/apply-ops';
 import { changeSheet, deleteSheet, settleCurrentSheet } from '../../../state/modules/sheet';
 import { contextFactory } from '../factories/context';
 
@@ -165,7 +166,7 @@ describe('leaving a sheet that goes away', () => {
         ctx.allowEdit = false;
         deleteSheet(ctx, 'a');
         expect(ctx.sheets.map((sheet) => sheet.id)).toContain('a');
-        deleteSheet(ctx, 'a', true);
-        expect(ctx.sheets.map((sheet) => sheet.id)).not.toContain('a');
+        const applied = applyOpBatch(ctx, [{ op: 'deleteSheet', id: 'a', path: [], value: { id: 'a' } }]);
+        expect(applied?.ctx.sheets.map((sheet) => sheet.id)).not.toContain('a');
     });
 });
