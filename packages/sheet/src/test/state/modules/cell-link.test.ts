@@ -71,7 +71,7 @@ describe('the writers of a cell', () => {
             mergeCells(ctx, 'id_1', [{ row: [0, 1], column: [0, 0] }], 'merge-all');
             showLinkCard(ctx, 0, 0);
         });
-        expect(next.linkCard?.position.cellBottom).toBe(next.visibledatarow[1]);
+        expect(next.linkCard?.position.bottom).toBe(next.visibledatarow[1]);
     });
 
     test('an unmerge leaves the link on the first cell alone', () => {

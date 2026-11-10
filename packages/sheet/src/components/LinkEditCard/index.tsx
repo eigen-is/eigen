@@ -4,7 +4,7 @@
 // dialog in the sheet's dialog slot in its own place. The card hides while the range picker is open or a drag is on,
 // and once its cell has lost the link.
 
-import { Popover, PopoverAnchor, PopoverContent } from '@workspace/ui/components/popover';
+import { Popover, PopoverContent } from '@workspace/ui/components/popover';
 import type { LucideIcon } from 'lucide-react';
 import { Copy, Pencil, Unlink } from 'lucide-react';
 import type React from 'react';
@@ -13,6 +13,7 @@ import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import type { LinkCardProps } from '../../state';
 import { getCellHyperlink, goToLink, removeHyperlink } from '../../state';
+import { CellAnchor } from '../SheetOverlay/cell-anchor';
 import { LinkEditDialog } from './LinkEditDialog';
 
 // The fill handle reaches 5 px past the cell's bottom edge, and the card starts just below it.
@@ -74,16 +75,7 @@ export function LinkEditCard(link: LinkCardProps) {
                 })
             }
         >
-            <PopoverAnchor asChild>
-                <div
-                    className="absolute"
-                    style={{
-                        left: position.cellLeft + 20,
-                        top: position.cellTop,
-                        height: position.cellBottom - position.cellTop,
-                    }}
-                />
-            </PopoverAnchor>
+            <CellAnchor {...position} />
             <PopoverContent
                 {...STOP_GRID_EVENTS}
                 onMouseEnter={() => {

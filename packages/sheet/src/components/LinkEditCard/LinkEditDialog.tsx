@@ -63,8 +63,8 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
         const regions = computeOverlayRegions(freeze, context.cellmainWidth, context.cellmainHeight);
         const { fixedLeft, fixedTop } = overlayRegionForCell(regions, freeze, r, c);
         return overlayAnchorToViewport(
-            link.position.cellLeft,
-            link.position.cellBottom + RANGE_PICKER_GAP,
+            link.position.left,
+            link.position.bottom + RANGE_PICKER_GAP,
             areaLeft,
             areaTop,
             fixedLeft,

@@ -167,7 +167,7 @@ describe('no comment', () => {
             originText: 'Site',
             originType: 'webpage',
             originAddress: 'https://example.com',
-            position: { cellLeft: 0, cellTop: 0, cellBottom: ROW },
+            position: { left: 0, top: 0, right: 74, bottom: ROW },
             isEditing: false,
         };
         expect(hoverAt(ctx, 5, 5)).toBeNull();

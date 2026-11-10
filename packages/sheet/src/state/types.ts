@@ -112,6 +112,14 @@ export type SearchHighlight = {
     c: number;
 };
 
+// A cell's edges in content pixels, a merged cell's whole, for what hangs off it.
+export type CellRect = {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+};
+
 export type LinkCardProps = {
     sheetId: string;
     r: number;
@@ -120,7 +128,7 @@ export type LinkCardProps = {
     originText: string;
     originType: string;
     originAddress: string;
-    position: { cellLeft: number; cellTop: number; cellBottom: number };
+    position: CellRect;
     isEditing: boolean;
 };
 
