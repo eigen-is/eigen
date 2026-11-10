@@ -5,11 +5,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { SQL } from 'drizzle-orm';
 import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { folderIn, withFreeName } from '../drive/naming';
-import { renameThenWriteRow, rethrowPathWriteError } from './helpers';
+import { descendantIds, renameThenWriteRow, rethrowPathWriteError } from './helpers';
 import type { Mount } from './mount';
 import { trashStorageKey } from './names';
 import { paths } from './schema';
@@ -215,25 +214,14 @@ export async function moveAside(
     await rename(key, aside);
 }
 
-// Every descendant of parentId. sql.raw writes a bare column name. An interpolated ${paths.parentId}
-// comes out table-qualified, which is invalid behind the `p.` alias and in a SET clause.
-function descendantsOf(parentId: string): SQL {
-    return sql`
-        WITH RECURSIVE descendants AS (
-            SELECT id FROM ${paths} WHERE ${paths.parentId} = ${parentId}
-            UNION ALL
-            SELECT p.id FROM ${paths} p JOIN descendants d ON p.${sql.raw('parentId')} = d.id
-        )
-    `;
-}
-
+// sql.raw writes a bare column name. An interpolated ${paths.trashedAt} comes out table-qualified, which a SET
+// clause refuses.
 function trashDescendants(mount: Mount, parentId: string, now: Date): void {
     const epoch = Math.floor(now.getTime() / 1000);
     mount.db.run(sql`
-        ${descendantsOf(parentId)}
         UPDATE ${paths}
         SET ${sql.raw('trashedAt')} = ${epoch}, ${sql.raw('updatedAt')} = ${epoch}
-        WHERE id IN (SELECT id FROM descendants) AND ${paths.trashedAt} IS NULL
+        WHERE id IN (${descendantIds(parentId)}) AND ${paths.trashedAt} IS NULL
     `);
 }
 
@@ -241,10 +229,9 @@ function trashDescendants(mount: Mount, parentId: string, now: Date): void {
 function restoreDescendants(mount: Mount, parentId: string, now: Date): void {
     const epoch = Math.floor(now.getTime() / 1000);
     mount.db.run(sql`
-        ${descendantsOf(parentId)}
         UPDATE ${paths}
         SET ${sql.raw('trashedAt')} = NULL, ${sql.raw('updatedAt')} = ${epoch}
-        WHERE id IN (SELECT id FROM descendants)
+        WHERE id IN (${descendantIds(parentId)})
         AND ${paths.trashedAt} IS NOT NULL
         AND ${paths.trashedFrom} IS NULL
     `);
@@ -302,13 +289,11 @@ export async function listTrashRootsInside(mount: Mount, folderId: string): Prom
 }
 
 // The trash roots whose original folder is the path or lies under it, which could never go back once the path is
-// deleted. One subquery, not a variable per descendant: SQLite caps a statement's variables.
+// deleted.
 function trashRootsFrom(mount: Mount, pathId: string): (typeof paths.$inferSelect)[] {
     return mount.db
         .select()
         .from(paths)
-        .where(
-            sql`${paths.trashedFrom} = ${pathId} OR ${paths.trashedFrom} IN (${descendantsOf(pathId)} SELECT id FROM descendants)`,
-        )
+        .where(sql`${paths.trashedFrom} = ${pathId} OR ${paths.trashedFrom} IN (${descendantIds(pathId)})`)
         .all();
 }

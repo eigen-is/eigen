@@ -39,6 +39,7 @@ import {
     ancestorIds,
     buildUploadDestinationKey,
     createMountStorage,
+    descendantIds,
     docContainerDescendantIds,
     nameTakenError,
     renameThenWriteRow,
@@ -398,17 +399,9 @@ export class Mount {
         }
     }
 
+    // Each one after its folder, so a walk closes a document before the databases inside it.
     public collectDescendantIds(parentId: string): string[] {
-        const ids: string[] = [];
-        const collect = (pid: string) => {
-            const children = this.db.select({ id: paths.id }).from(paths).where(eq(paths.parentId, pid)).all();
-            for (const child of children) {
-                ids.push(child.id);
-                collect(child.id);
-            }
-        };
-        collect(parentId);
-        return ids;
+        return this.db.all<{ id: string }>(descendantIds(parentId)).map((row) => row.id);
     }
 
     public async getBreadcrumb(pathId: string): Promise<DrivePath[]> {

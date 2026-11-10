@@ -16,7 +16,7 @@ The item is re-parented to the mount root, so its row no longer names the folder
 
 Listings, name lookups, shared views and mime queries add `trashedAt IS NULL`, and the unique name index covers untrashed rows only. So a trashed item disappears everywhere and its name is free again. Content access (download, embed, copy, watch, a collab socket) goes through `Mount.getActivePath`, which answers 404 "File is in trash".
 
-`getPath` still returns a trashed row, because restore and breadcrumbs need it. `getTotalSize` counts it, so trash counts toward the quota. The recursive walks (collab close, sharing, descendant collection) use `listFolderAll`, which includes trashed children.
+`getPath` still returns a trashed row, because restore and breadcrumbs need it. `getTotalSize` counts it, so trash counts toward the quota. The walks below a path include trashed children: the sharing push walks `listFolderAll`, and the trash's close reads `collectDescendantIds`, one recursive query.
 
 ## Only `local` moves bytes into `.trash/`
 
