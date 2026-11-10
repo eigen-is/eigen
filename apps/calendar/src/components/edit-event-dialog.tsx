@@ -131,7 +131,19 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     const write = async (action: RecurringAction) => {
         const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
 
-        const data = { ...event.data, attendees: attendees.length > 0 ? attendees : undefined };
+        const seriesGuests = (own: readonly Attendee[]) => {
+            const emails = (guests: readonly Attendee[]) => new Set(guests.map((guest) => guest.email.toLowerCase()));
+            const shown = emails(serverAttendees);
+            const listed = emails(attendees);
+            const owned = emails(own);
+            const kept = own.filter(({ email }) => !shown.has(email.toLowerCase()) || listed.has(email.toLowerCase()));
+            const joined = attendees.filter(
+                ({ email }) => !shown.has(email.toLowerCase()) && !owned.has(email.toLowerCase()),
+            );
+            return [...kept, ...joined];
+        };
+        // "This event" keeps the list a date already holds, and gives one to a date only when the user changed it.
+        const dateGuests = typed.attendees ? attendees : isOverride ? (event.data?.attendees ?? []) : [];
         const timezone = allDay ? null : (event.timezone ?? viewerTimeZone());
         const edited = {
             title: title.trim(),
@@ -145,15 +157,16 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
             ...edited,
             rrule: isOverride ? undefined : rruleString,
             timezone,
-            data: Object.values(data).some((v) => v !== undefined) ? data : null,
+            data: { ...event.data, attendees },
         };
         // The master is saved with what the user changed, never with the clicked occurrence's own times: taking
-        // those would drag the series' start onto that date and drop every occurrence before it.
+        // those would drag the series' start onto that date and drop every occurrence before it. Its guests are its
+        // own list with the guests added or removed here, so a guest the date leaves out stays on the series.
         const seriesUpdates = master
             ? {
                   rrule: updates.rrule,
                   timezone,
-                  data: updates.data,
+                  ...(typed.attendees && { data: { attendees: seriesGuests(master.data?.attendees ?? []) } }),
                   ...seriesEditFromOccurrence(event, master, edited),
               }
             : updates;
@@ -198,6 +211,8 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 calendarId: event.calendarId,
                 ...updates,
                 rrule: null,
+                // An empty list hands the date back to the series' guests.
+                data: { ...event.data, attendees: dateGuests },
                 parentEventId: targetId,
                 recurrenceDate: event.occurrenceDate,
                 etag: heldEtag,

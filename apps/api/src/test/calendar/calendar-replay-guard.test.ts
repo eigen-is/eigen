@@ -281,8 +281,8 @@ describe('inbound message ordering', () => {
         expect((await masterOf(calendar)).title).toBe('Title B');
     });
 
-    // An occurrence the attendee dropped keeps a stamp with the sequence a fresh exclusion carries and no
-    // DTSTAMP at all, so the organizer's own message for it has nothing to lose an ordering to.
+    // An occurrence the attendee dropped keeps the revision the copy held for it, the series', so the organizer's next
+    // message for it outranks the removal and a stale one does not.
     test("an organizer's occurrence message reaches an occurrence the attendee removed locally", async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
@@ -296,7 +296,9 @@ describe('inbound message ordering', () => {
         });
         expect((await exceptionOf(calendar))?.status).toBe('cancelled');
 
-        await receiveMailed(calendar, parsedOf(occurrence('Back on', 0, '20260401T120000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(occurrence('Too old', 2, '20260401T090000Z')), ORG);
+        expect((await exceptionOf(calendar))?.status).toBe('cancelled');
+        await receiveMailed(calendar, parsedOf(occurrence('Back on', 2, '20260401T120000Z')), ORG);
 
         expect((await exceptionOf(calendar))?.status).toBe('confirmed');
         expect((await exceptionOf(calendar))?.title).toBe('Back on');
@@ -464,6 +466,66 @@ describe("the guest's own answer", () => {
 
         await receiveMailed(calendar, moved('Moved again', 3, '20260401T130000Z'), ORG);
 
+        expect(mine(await exceptionOf(calendar))).toBe('pending');
+    });
+
+    test('is never set to another answer by the organizer, even at a higher SEQUENCE', async () => {
+        const { calendar, me, mine } = await answered();
+        await receiveMailed(calendar, parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
+        await calendar.rsvp((await masterOf(calendar)).id, me, { status: 'accepted' });
+
+        for (const [partstat, sequence] of [
+            ['DECLINED', 3],
+            ['TENTATIVE', 4],
+        ] as const) {
+            const update = request('Rescheduled', sequence, '20260401T130000Z', [], me.email);
+            await receiveMailed(
+                calendar,
+                parsedOf(update.replace('PARTSTAT=NEEDS-ACTION', `PARTSTAT=${partstat}`)),
+                ORG,
+            );
+            expect(mine(await masterOf(calendar))).toBe('accepted');
+        }
+    });
+
+    // The organizer records a cut as a decline of the whole series, and a date it moves before the cut carries that.
+    test("reaches a date the organizer moves after the guest's cut", async () => {
+        const { calendar, me, mine } = await answered();
+        await receiveMailed(calendar, parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
+        const master = await masterOf(calendar);
+        await calendar.rsvp(master.id, me, { status: 'accepted' });
+        await calendar.rsvp(master.id, me, {
+            status: 'declined',
+            scope: 'this-and-following',
+            recurrenceDate: '2026-05-04',
+            remove: true,
+        });
+
+        const declined = occurrence('Moved after the cut', 3, '20260401T130000Z')
+            .replace(`mailto:${GUEST}`, `mailto:${me.email}`)
+            .replace('PARTSTAT=NEEDS-ACTION', 'PARTSTAT=DECLINED');
+        await receiveMailed(calendar, parsedOf(declined), ORG);
+
+        expect((await exceptionOf(calendar))?.title).toBe('Moved after the cut');
+        expect(mine(await exceptionOf(calendar))).toBe('accepted');
+    });
+
+    // A date the copy holds no answer for takes the guest's answer for the series, whatever its SEQUENCE.
+    // A date the copy holds no VEVENT for is held at the series' revision, so only a higher one asks again.
+    test('reaches a date the organizer moves after the guest answered the series', async () => {
+        const { calendar, me, mine } = await answered();
+        await receiveMailed(calendar, parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
+        await calendar.rsvp((await masterOf(calendar)).id, me, { status: 'tentative' });
+
+        const moved = occurrence('Moved', 2, '20260401T130000Z').replace(`mailto:${GUEST}`, `mailto:${me.email}`);
+        await receiveMailed(calendar, parsedOf(moved), ORG);
+        expect(mine(await exceptionOf(calendar))).toBe('tentative');
+
+        const rescheduled = occurrence('Moved again', 3, '20260401T140000Z').replace(
+            `mailto:${GUEST}`,
+            `mailto:${me.email}`,
+        );
+        await receiveMailed(calendar, parsedOf(rescheduled), ORG);
         expect(mine(await exceptionOf(calendar))).toBe('pending');
     });
 });

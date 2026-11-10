@@ -211,8 +211,11 @@ export async function processInboundImip(
         return;
     }
 
+    // A series' answer is its sender's answer on every date, so the master goes first and a date's own answer after it.
+    const ordered =
+        method === 'REPLY' ? acted.toSorted((a, b) => Number(!!a.recurrenceDate) - Number(!!b.recurrenceDate)) : acted;
     let replyDates = 0;
-    for (const parsed of acted) {
+    for (const parsed of ordered) {
         const { recurrenceDate } = parsed;
         if (method === 'CANCEL') {
             const organizerEmail = parsed.data?.organizer?.email;

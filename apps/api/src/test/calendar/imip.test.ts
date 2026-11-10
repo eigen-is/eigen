@@ -1178,6 +1178,45 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
         expect(answered.sort()).toEqual(['2026-05-10', '2026-05-11', '2026-05-12', '2026-05-13', '2026-05-14']);
     });
 
+    // The series' answer is the sender's answer on every date, so it goes first and a date's own answer stands.
+    test("a REPLY's answer for one date stands whichever of its events the file lists first", async () => {
+        const home = await getHome(ctx.bob.user.id);
+        const event = await home.calendar.createEvent(bobCalendarId, {
+            title: 'Answer Order',
+            startTime: new Date('2026-05-04T10:00:00Z'),
+            endTime: new Date('2026-05-04T11:00:00Z'),
+            allDay: false,
+            rrule: 'FREQ=DAILY;COUNT=5',
+            data: { attendees: [{ email: 'order@external.com', status: 'pending', role: 'required' }] },
+        });
+        const answer = (partstat: string, recurrenceId: string[]) => [
+            'BEGIN:VEVENT',
+            `UID:${event.uid}`,
+            ...recurrenceId,
+            'DTSTART:20260505T100000Z',
+            `ATTENDEE;PARTSTAT=${partstat}:mailto:order@external.com`,
+            'END:VEVENT',
+        ];
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REPLY',
+            ...answer('DECLINED', ['RECURRENCE-ID:20260505T100000Z']),
+            ...answer('ACCEPTED', []),
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        await processInboundImip(home, calendarMail(ics, 'order@external.com'), {
+            verified: true,
+            reason: 'dkim pass',
+        });
+
+        const rows = await home.calendar.getEventsByUid(event.uid);
+        const statusOn = (date: string | null) =>
+            rows.find((row) => row.recurrenceDate === date)?.data?.attendees?.[0]?.status;
+        expect([statusOn(null), statusOn('2026-05-05')]).toEqual(['accepted', 'declined']);
+    });
+
     test('a verified sender with a part past the mail size limit writes nothing', async () => {
         const home = await getHome(ctx.bob.user.id);
         const ics = [
