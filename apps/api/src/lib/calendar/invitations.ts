@@ -15,6 +15,7 @@ import { ApiError } from '../core';
 import {
     buildResource,
     isNewerRevision,
+    overridesByKey,
     patchEvent,
     stampInvitationLink,
     storedOrganizerAddress,
@@ -277,9 +278,10 @@ async function decideInboundRequest(
         return fileNewInvitation(calendar, requested, link, { copy: series, resource, component });
     }
     const exceptions = new Map(stored.filter((e) => e.parentEventId === series.id).map((e) => [e.recurrenceDate, e]));
+    const overrides = overridesByKey(component);
     let changed = adopting;
     for (const parsed of requested) {
-        changed = applyRequestedEvent(calendar, component, series, exceptions, parsed) || changed;
+        changed = applyRequestedEvent(calendar, component, overrides, series, exceptions, parsed) || changed;
     }
     // A redelivery changes nothing, so it bumps no ctag and sends no second notice.
     if (!changed) return { kind: 'dropped', reason: 'nothing newer to apply' };
@@ -292,6 +294,7 @@ async function decideInboundRequest(
 function applyRequestedEvent(
     calendar: Calendar,
     component: ICAL.Component,
+    overrides: ReadonlyMap<string, ICAL.Component>,
     series: CalendarEvent,
     exceptions: ReadonlyMap<string | null, CalendarEvent>,
     parsed: ParsedEvent,
@@ -301,7 +304,7 @@ function applyRequestedEvent(
         : null;
     // A copy that is one occurrence of a series this Home does not hold is keyed by its RECURRENCE-ID.
     const existing = key === series.recurrenceDate ? series : exceptions.get(key);
-    const stored = storedRevision(component, key);
+    const stored = storedRevision(component, key, overrides);
     if (!isNewerRevision(parsed, stored)) return false;
 
     const held = heldAttendees(existing, series);
@@ -316,7 +319,7 @@ function applyRequestedEvent(
         // Never extend the rule past what the guest has: they may have shortened it on purpose.
         const rrule = isSeries ? constrainRRule(parsed.rrule, series.rrule) : null;
         const patch = invitationPatch(existing, { ...parsed, timezone }, attendees, rrule);
-        return patchEvent(component, key, patch, events.writeContext(false, parsed.dtstamp));
+        return patchEvent(component, key, patch, events.writeContext(false, parsed.dtstamp), overrides);
     }
     // A copy of one occurrence has no series to exclude another date from.
     if (cancelled && series.recurrenceDate) return false;

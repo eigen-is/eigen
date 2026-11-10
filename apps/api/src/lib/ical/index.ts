@@ -6,6 +6,7 @@ export {
     keepProperties,
     keepSubcomponents,
     newVCalendar,
+    overridesByKey,
     PRODID,
     patchEvent,
     putOverride,

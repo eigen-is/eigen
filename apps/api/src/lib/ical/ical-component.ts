@@ -112,8 +112,8 @@ export function serializeResource(resource: ICAL.Component): string {
     return `${resource.toString()}\r\n`;
 }
 
-// `series` is the master of the one occurrence `event` is, because only it knows the ORIGINAL instant of a moved override.
-// A master travels with its `exceptions`, or the guest renders a moved occurrence at its old slot and a deleted one at all.
+// `series` is the master of the one occurrence `event` is, since only it knows a moved override's ORIGINAL instant. A
+// master travels with its `exceptions`, or the guest draws a moved occurrence at its old slot and a deleted one at all.
 export function serializeEventForImip(
     event: CalendarEvent,
     method: ImipMethod,
@@ -148,8 +148,9 @@ export function patchEvent(
     recurrenceKey: string | null,
     patch: EventPatch,
     ctx: WriteContext,
+    overrides?: ReadonlyMap<string, ICAL.Component>,
 ): boolean {
-    const vevent = findVEvent(resource, recurrenceKey);
+    const vevent = findVEvent(resource, recurrenceKey, overrides);
     if (!vevent) throw new Error(`patchEvent: the resource holds no VEVENT for ${recurrenceKey ?? 'the master'}`);
 
     const storedTz = propTzid(vevent.getFirstProperty('dtstart'));
@@ -275,8 +276,8 @@ export function removeExclusion(resource: ICAL.Component, recurrenceKey: string,
     if (dropExclusion(vevent, recurrenceKey) || override) touch(vevent, ctx, true);
 }
 
-// RFC 5546 § 2.1.5 orders on SEQUENCE then DTSTAMP. A one-second DTSTAMP cannot separate two revisions, so an equal stamp
-// is applied as the redelivery it is and only a strictly lower SEQUENCE loses.
+// RFC 5546 § 2.1.5 orders on SEQUENCE then DTSTAMP. A one-second DTSTAMP cannot separate two revisions, so an equal
+// stamp is applied as the redelivery it is and only a strictly lower SEQUENCE loses.
 export function isNewerRevision(incoming: Revision, stored: Revision | null): boolean {
     if (!stored) return true;
     if (incoming.sequence !== stored.sequence) return incoming.sequence > stored.sequence;
@@ -286,14 +287,31 @@ export function isNewerRevision(incoming: Revision, stored: Revision | null): bo
 
 // A cancelled occurrence keeps no VEVENT, so its revision is the stamp beside its EXDATE, or the series' own number
 // when a client wrote that EXDATE itself.
-export function storedRevision(resource: ICAL.Component, recurrenceKey: string | null): Revision | null {
-    const vevent = findVEvent(resource, recurrenceKey);
+export function storedRevision(
+    resource: ICAL.Component,
+    recurrenceKey: string | null,
+    overrides?: ReadonlyMap<string, ICAL.Component>,
+): Revision | null {
+    const vevent = findVEvent(resource, recurrenceKey, overrides);
     if (vevent) return { sequence: sequenceOf(vevent), dtstamp: readTimestamp(vevent, 'dtstamp') };
     if (recurrenceKey === null) return null;
     const master = masterVEvent(resource);
     if (!master || !exdateKeys(master, propTzid(master.getFirstProperty('dtstart'))).has(recurrenceKey)) return null;
     const stamp = readExclusionStamps(master).get(recurrenceKey);
     return { sequence: stamp?.sequence ?? sequenceOf(master), dtstamp: stamp?.dtstamp ?? null };
+}
+
+// Each override by the occurrence key its RECURRENCE-ID names in the series' zone. Keying reads every VEVENT, so a
+// caller that looks up many occurrences of one resource keys them once.
+export function overridesByKey(resource: ICAL.Component): Map<string, ICAL.Component> {
+    const vevents = resource.getAllSubcomponents('vevent');
+    const zones = seriesTimezones(vevents);
+    const overrides = new Map<string, ICAL.Component>();
+    for (const vevent of vevents) {
+        const key = recurrenceKeyOf(vevent, zones.get(uidOf(vevent)) ?? null);
+        if (key !== null && !overrides.has(key)) overrides.set(key, vevent);
+    }
+    return overrides;
 }
 
 // The inbound-REQUEST rule matches a verified sender against this, so the imported address wins over the ORGANIZER the
@@ -332,8 +350,8 @@ export function stripEigenStamps(comp: ICAL.Component): void {
     for (const sub of comp.getAllSubcomponents()) stripEigenStamps(sub);
 }
 
-// An incoming body is untrusted, so Eigen's lines come back from the stored resource, matched by UID and recurrence key:
-// clients rewrite RECURRENCE-ID and EXDATE between TZID, UTC and comma-joined forms.
+// An incoming body is untrusted, so Eigen's lines come back from the stored resource, matched by UID and recurrence
+// key: clients rewrite RECURRENCE-ID and EXDATE between TZID, UTC and comma-joined forms.
 export function restampResource(
     incoming: ICAL.Component,
     stored: ICAL.Component | null,
@@ -435,8 +453,8 @@ function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Com
     const exclusions = options.exclusions ?? [];
     for (const { key } of exclusions) vevent.addProperty(exdateProperty(event, key, tzid));
 
-    // RECURRENCE-ID names the ORIGINAL occurrence in the master's DTSTART form, value type included (RFC 5545 §3.8.4.4).
-    // A moved startTime or the override's own all-day toggle would match no occurrence.
+    // RECURRENCE-ID names the ORIGINAL occurrence in the master's DTSTART form, value type included (RFC 5545
+    // §3.8.4.4). A moved startTime or the override's own all-day toggle would match no occurrence.
     if (event.recurrenceDate) {
         const master = options.master ?? event;
         const when = occurrenceInstant(master, event.recurrenceDate);
@@ -469,8 +487,8 @@ function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Com
     return vevent;
 }
 
-// A referenced VTIMEZONE is the client's own and stays; an unreferenced one goes. A referenced IANA zone the file leaves
-// undefined gets Eigen's, or strict parsers, ical.js included, read the wall times as floating (RFC 5545 §3.6.5).
+// A referenced VTIMEZONE is the client's own and stays; an unreferenced one goes. A referenced IANA zone the file
+// leaves undefined gets Eigen's, or strict parsers such as ical.js read its wall times as floating (RFC 5545 §3.6.5).
 function syncVTimezones(resource: ICAL.Component): void {
     const vevents = resource.getAllSubcomponents('vevent');
     const referenced = new Set<string>();
@@ -496,8 +514,8 @@ function syncVTimezones(resource: ICAL.Component): void {
     const added = [...referenced].filter((tzid) => normalizeTimezone(tzid) === tzid);
     if (!years.length || !added.length) return;
 
-    // Only irregular zones need the horizon, as regular ones compress to open-ended RRULE observances. The span cap keeps
-    // a far-future event from stalling the transition scan.
+    // Only irregular zones need the horizon, as regular ones compress to open-ended RRULE observances. The span cap
+    // keeps a far-future event from stalling the transition scan.
     const minYear = Math.min(...years);
     const stated = Math.max(...years);
     const horizon = hasRrule ? Math.max(stated, new Date().getUTCFullYear() + 5) : stated;
@@ -528,8 +546,8 @@ function shapeForImip(vevent: ICAL.Component, method: ImipMethod): void {
     );
 }
 
-// A series-wide edit reaches an override whose value equals the master's BEFORE the edit; one that set its own keeps it.
-// Times never follow. It has to run before the master is patched.
+// A series-wide edit reaches an override whose value equals the master's BEFORE the edit; one that set its own keeps
+// it. Times never follow. It has to run before the master is patched.
 function followMaster(resource: ICAL.Component, master: ICAL.Component, patch: EventPatch): boolean {
     const fields: Array<[string, string, string]> = [];
     for (const [name, value] of [
@@ -615,11 +633,13 @@ function masterVEvent(resource: ICAL.Component): ICAL.Component | null {
     return resource.getAllSubcomponents('vevent').find((v) => !v.getFirstProperty('recurrence-id')) ?? null;
 }
 
-function findVEvent(resource: ICAL.Component, recurrenceKey: string | null): ICAL.Component | null {
+function findVEvent(
+    resource: ICAL.Component,
+    recurrenceKey: string | null,
+    overrides?: ReadonlyMap<string, ICAL.Component>,
+): ICAL.Component | null {
     if (recurrenceKey === null) return masterVEvent(resource);
-    const vevents = resource.getAllSubcomponents('vevent');
-    const zones = seriesTimezones(vevents);
-    return vevents.find((v) => recurrenceKeyOf(v, zones.get(uidOf(v)) ?? null) === recurrenceKey) ?? null;
+    return (overrides ?? overridesByKey(resource)).get(recurrenceKey) ?? null;
 }
 
 function setProperty(comp: ICAL.Component, prop: ICAL.Property): boolean {
