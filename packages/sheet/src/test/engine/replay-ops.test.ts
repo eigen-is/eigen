@@ -248,13 +248,13 @@ describe('replaySheetsOps', () => {
         const ops: Op[][] = [
             [
                 { op: 'replace', id: 's2', path: ['data', 0, 0, 'v'], value: 'b1*' },
-                { op: 'replace', id: 's1', path: ['name'], value: 'A*' },
+                { op: 'replace', id: 's1', path: ['color'], value: 'red' },
             ],
         ];
         const [r1, r2] = replaySheetsOps([s1, s2], ops);
-        expect(r1.name).toBe('A*');
+        expect(r1.color).toBe('red');
         expect(r1.data![0][0]?.v).toBe('a1');
-        expect(r2.name).toBe('B');
+        expect(r2.color).toBeUndefined();
         expect(r2.data![0][0]?.v).toBe('b1*');
     });
 
@@ -265,13 +265,13 @@ describe('replaySheetsOps', () => {
         const ops: Op[][] = [
             [
                 { op: 'addSheet', path: [], value: newSheet },
-                { op: 'replace', id: 's2', path: ['name'], value: 'B*' },
+                { op: 'replace', id: 's2', path: ['color'], value: 'red' },
             ],
         ];
         const result = replaySheetsOps([s1], ops);
         expect(result).toHaveLength(2);
         expect(result[1].id).toBe('s2');
-        expect(result[1].name).toBe('B*');
+        expect(result[1].color).toBe('red');
     });
 
     test('patch on a sheet that was deleted in the same batch is dropped', () => {
@@ -285,7 +285,7 @@ describe('replaySheetsOps', () => {
         const ops: Op[][] = [
             [
                 { op: 'deleteSheet', id: 's2', path: [] },
-                { op: 'replace', id: 's2', path: ['name'], value: 'orphan' },
+                { op: 'replace', id: 's2', path: ['color'], value: 'red' },
             ],
         ];
         const result = replaySheetsOps([s1, s2], ops);
@@ -376,12 +376,12 @@ describe('replaySheetsOps', () => {
             // data is already materialized at 1×1, so row 5 can't resolve —
             // applyPatches throws and the batch must be skipped, not the doc.
             [{ op: 'replace', id: 's1', path: ['data', 5, 0, 'v'], value: 'poison' }],
-            [{ op: 'replace', id: 's1', path: ['name'], value: 'after' }],
+            [{ op: 'replace', id: 's1', path: ['color'], value: 'red' }],
         ];
         const result = replaySheetsOps([sheet], ops);
         expect(result[0].data!.length).toBe(1);
         expect(result[0].data![0][0]?.v).toBe('first');
-        expect(result[0].name).toBe('after');
+        expect(result[0].color).toBe('red');
     });
 
     test('addSheet with a config that is no map adds nothing, as the tab adds nothing', () => {
@@ -562,24 +562,34 @@ describe('a batch with two row ops', () => {
     });
 });
 
-describe('a batch that writes a sheet id', () => {
-    test("the held graph finds the sheet's formulas under the new id", () => {
-        const n = (v: number) => ({ v, m: `${v}`, ct: { fa: 'General', t: 'n' } });
-        const data = [
-            [n(1), null],
-            [n(2), { f: '=SUM(A1:A2)', v: 3 }],
+describe("a write to a sheet's own id or name", () => {
+    const n = (v: number) => ({ v, m: `${v}`, ct: { fa: 'General', t: 'n' } });
+    const sheets = (): Sheet[] => [
+        { id: 's1', name: 'One', order: 0, data: [[n(1)]], config: {} },
+        { id: 's2', name: 'Two', order: 1, data: [[{ f: '=One!A1*2', v: 2, m: '2' }]], config: {} },
+    ];
+
+    test('a forged id is dropped, so no two sheets share one', () => {
+        const forged: Op[] = [{ op: 'replace', id: 's2', path: ['id'], value: 's1' }];
+        const replayed = replaySheetsOps(sheets(), [forged]);
+        expect(replayed.map((sheet) => sheet.id)).toEqual(['s1', 's2']);
+    });
+
+    test('a forged name is dropped, and later row ops still apply', () => {
+        const forged: Op[] = [{ op: 'replace', id: 's2', path: ['name'], value: 7 }];
+        const insert: Op[] = [
+            {
+                op: 'insertRowCol',
+                id: 's1',
+                path: [],
+                value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
+            },
         ];
-        const sheet: Sheet = { id: 's1', name: 'One', order: 0, data, config: {} };
-        const insertLast: Op = {
-            op: 'insertRowCol',
-            id: 's1',
-            path: [],
-            value: { type: 'row', index: 1, count: 1, direction: 'rightbottom' },
-        };
-        const deleteFirst: Op = { op: 'deleteRowCol', id: 's9', path: [], value: { type: 'row', start: 0, end: 0 } };
-        const batches: Op[][] = [[insertLast], [{ op: 'replace', id: 's1', path: ['id'], value: 's9' }], [deleteFirst]];
-        const [replayed] = replaySheetsOps([sheet], batches);
-        expect(replayed.data?.[0]?.[1]).toMatchObject({ f: '=SUM(A1)', v: 2 });
+        const dropped: unknown[] = [];
+        const replayed = replaySheetsOps(sheets(), [forged, insert], (e) => dropped.push(e));
+        expect(dropped).toEqual([]);
+        expect(replayed.map((sheet) => sheet.name)).toEqual(['One', 'Two']);
+        expect(replayed[1].data?.[0]?.[0]).toMatchObject({ f: '=One!A2*2', v: 2 });
     });
 });
 
