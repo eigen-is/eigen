@@ -6,16 +6,17 @@
 import { freezesColumns, freezesRows, SHEET_COLUMN_HEADER_HEIGHT, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import { cloneDeep, isNil } from 'es-toolkit/compat';
 import type { Context } from '../context';
-import { cancelPaintModel, onCellsMove, onCellsMoveEnd, onFormulaRangeDragEnd, rangeDrag } from '../modules';
 import { mergeMoveMain } from '../modules/cell';
 import { cellGlyphAt } from '../modules/cell-glyph';
 import { onDropCellSelect, onDropCellSelectEnd } from '../modules/drop-cell';
 import { getFilterButtonAtPosition } from '../modules/filter';
 import { handleFormulaInput } from '../modules/formula-editor';
-import { rangeDragColumn, rangeDragRow } from '../modules/formula-range';
+import { onFormulaRangeDragEnd, rangeDrag, rangeDragColumn, rangeDragRow } from '../modules/formula-range';
 import { freezeOf, getFrozenHandleLeft, getFrozenHandleTop, scrollToFrozenRowCol } from '../modules/freeze';
 import { colLocation, rowLocation, sheetPoint } from '../modules/location';
+import { onCellsMove, onCellsMoveEnd } from '../modules/move-cells';
 import { pasteHandlerOfPaintModel } from '../modules/selection';
+import { cancelPaintModel } from '../modules/toolbar';
 import type { GlobalCache } from '../types';
 import { getSheetIndex } from '../utils';
 
@@ -157,12 +158,12 @@ export function handleOverlayMouseUp(
 
     if (ctx.colsFreezeDragging) {
         ctx.colsFreezeDragging = false;
-        dropColumnFreeze(ctx, x, container);
+        dropFreeze(ctx, 'column', x, container);
     }
 
     if (ctx.rowsFreezeDragging) {
         ctx.rowsFreezeDragging = false;
-        dropRowFreeze(ctx, y, container);
+        dropFreeze(ctx, 'row', y, container);
     }
 
     if (ctx.cellSelectExtending) {
@@ -171,66 +172,36 @@ export function handleOverlayMouseUp(
 }
 
 // A freeze line dropped on the grid freezes up to it, and dropped on the header edge stops freezing that axis.
-function dropColumnFreeze(ctx: Context, x: number, container: HTMLDivElement) {
-    const [col_pre, col_curr, col_index_curr] = colLocation(x, ctx.visibledatacolumn);
-    const col_index = x > (col_curr + col_pre) / 2 ? col_index_curr : col_index_curr - 1;
+function dropFreeze(ctx: Context, axis: 'row' | 'column', at: number, container: HTMLDivElement) {
+    const columns = axis === 'column';
+    const [start, end, hit] = columns ? colLocation(at, ctx.visibledatacolumn) : rowLocation(at, ctx.visibledatarow);
+    const index = at > (start + end) / 2 ? hit : hit - 1;
     const idx = getSheetIndex(ctx, ctx.currentSheetId);
     if (idx == null) return;
     const sheet = ctx.sheets[idx];
     const { frozen } = sheet;
-    if (col_index < 0) {
-        if (frozen && freezesColumns(frozen)) {
-            if (freezesRows(frozen)) frozen.type = 'rangeRow';
+    const freezesAxis = columns ? freezesColumns : freezesRows;
+    const freezesOther = columns ? freezesRows : freezesColumns;
+    if (index < 0) {
+        if (frozen && freezesAxis(frozen)) {
+            if (freezesOther(frozen)) frozen.type = columns ? 'rangeRow' : 'rangeColumn';
             else delete sheet.frozen;
         }
-    } else if (!frozen) {
-        sheet.frozen = {
-            type: 'rangeColumn',
-            range: { column_focus: col_index, row_focus: 0 },
-        };
     } else {
-        if (!frozen.range) {
-            frozen.range = { column_focus: col_index, row_focus: 0 };
+        const range = frozen?.range ?? { column_focus: 0, row_focus: 0 };
+        if (columns) range.column_focus = index;
+        else range.row_focus = index;
+        if (!frozen) {
+            sheet.frozen = { type: columns ? 'rangeColumn' : 'rangeRow', range };
         } else {
-            frozen.range.column_focus = col_index;
+            frozen.range = range;
+            if (freezesOther(frozen) && !freezesAxis(frozen)) frozen.type = 'rangeBoth';
         }
-        if (freezesRows(frozen) && !freezesColumns(frozen)) frozen.type = 'rangeBoth';
     }
-    const freezeHandle = container.querySelector('.sheet-cols-freeze-handle');
-    if (freezeHandle instanceof HTMLElement) {
-        freezeHandle.style.left = `${getFrozenHandleLeft(ctx)}px`;
-    }
-}
-
-function dropRowFreeze(ctx: Context, y: number, container: HTMLDivElement) {
-    const [row_pre, row_curr, row_index_curr] = rowLocation(y, ctx.visibledatarow);
-    const row_index = y > (row_curr + row_pre) / 2 ? row_index_curr : row_index_curr - 1;
-    const idx = getSheetIndex(ctx, ctx.currentSheetId);
-    if (idx == null) return;
-    const sheet = ctx.sheets[idx];
-    const { frozen } = sheet;
-    if (row_index < 0) {
-        if (frozen && freezesRows(frozen)) {
-            if (freezesColumns(frozen)) frozen.type = 'rangeColumn';
-            else delete sheet.frozen;
-        }
-    } else if (!frozen) {
-        sheet.frozen = {
-            type: 'rangeRow',
-            range: { column_focus: 0, row_focus: row_index },
-        };
-    } else {
-        if (!frozen.range) {
-            frozen.range = { column_focus: 0, row_focus: row_index };
-        } else {
-            frozen.range.row_focus = row_index;
-        }
-        if (freezesColumns(frozen) && !freezesRows(frozen)) frozen.type = 'rangeBoth';
-    }
-    const freezeHandle = container.querySelector('.sheet-rows-freeze-handle');
-    if (freezeHandle instanceof HTMLElement) {
-        freezeHandle.style.top = `${getFrozenHandleTop(ctx)}px`;
-    }
+    const handle = container.querySelector(columns ? '.sheet-cols-freeze-handle' : '.sheet-rows-freeze-handle');
+    if (!(handle instanceof HTMLElement)) return;
+    if (columns) handle.style.left = `${getFrozenHandleLeft(ctx)}px`;
+    else handle.style.top = `${getFrozenHandleTop(ctx)}px`;
 }
 
 // Writes only on a change, so a mouse move that changes nothing redraws nothing. Over a glyph the drag handles drop
@@ -286,8 +257,8 @@ function mouseRender(
 
 function renderCellSelection(ctx: Context, e: MouseEvent, cellArea: HTMLDivElement) {
     const { x, y } = sheetPoint(ctx, e, cellArea);
-    const [row_pre, row, row_index] = rowLocation(y, ctx.visibledatarow);
-    const [col_pre, col, col_index] = colLocation(x, ctx.visibledatacolumn);
+    const [rowStart, rowEnd, row] = rowLocation(y, ctx.visibledatarow);
+    const [colStart, colEnd, col] = colLocation(x, ctx.visibledatacolumn);
 
     const { selections } = ctx;
     const anchor = selections?.[selections.length - 1];
@@ -307,7 +278,7 @@ function renderCellSelection(ctx: Context, e: MouseEvent, cellArea: HTMLDivEleme
         return;
     }
 
-    const rowGeom = extendSelectionGeometry(last.top, last.height, last.row, last.row_focus, row_pre, row, row_index);
+    const rowGeom = extendSelectionGeometry(last.top, last.height, last.row, last.row_focus, rowStart, rowEnd, row);
     let top = rowGeom.start;
     let height = rowGeom.span;
     let rowSelected = rowGeom.selected;
@@ -317,17 +288,17 @@ function renderCellSelection(ctx: Context, e: MouseEvent, cellArea: HTMLDivEleme
         last.width,
         last.column,
         last.column_focus,
-        col_pre,
+        colStart,
+        colEnd,
         col,
-        col_index,
     );
     let left = colGeom.start;
     let width = colGeom.span;
     let columnSelected = colGeom.selected;
 
-    const changeparam = mergeMoveMain(ctx, columnSelected, rowSelected, top, height, left, width);
-    if (changeparam != null) {
-        [columnSelected, rowSelected, top, height, left, width] = changeparam;
+    const merged = mergeMoveMain(ctx, columnSelected, rowSelected, top, height, left, width);
+    if (merged != null) {
+        [columnSelected, rowSelected, top, height, left, width] = merged;
     }
 
     last.row = rowSelected;
@@ -426,9 +397,8 @@ function renderRowResize(ctx: Context, e: MouseEvent, cellArea: HTMLDivElement, 
 function renderColFreezeDrag(ctx: Context, e: MouseEvent, cellArea: HTMLDivElement, container: HTMLDivElement) {
     const { viewX, width } = sheetPoint(ctx, e, cellArea);
     const x = viewX + cellArea.scrollLeft;
-    const [col_pre, col_curr] = colLocation(x, ctx.visibledatacolumn);
-
-    const col = x > (col_pre + col_curr) / 2 ? col_curr : col_pre;
+    const [colStart, colEnd] = colLocation(x, ctx.visibledatacolumn);
+    const col = x > (colStart + colEnd) / 2 ? colEnd : colStart;
 
     if (viewX < width - LINE_RIGHT_MARGIN) {
         const freezeLine = container.querySelector('.sheet-freeze-drag-line');
@@ -449,9 +419,8 @@ function renderColFreezeDrag(ctx: Context, e: MouseEvent, cellArea: HTMLDivEleme
 function renderRowFreezeDrag(ctx: Context, e: MouseEvent, cellArea: HTMLDivElement, container: HTMLDivElement) {
     const { viewY, height } = sheetPoint(ctx, e, cellArea);
     const y = viewY + cellArea.scrollTop;
-    const [row_pre, row_curr] = rowLocation(y, ctx.visibledatarow);
-
-    const row = y > (row_curr + row_pre) / 2 ? row_curr : row_pre;
+    const [rowStart, rowEnd] = rowLocation(y, ctx.visibledatarow);
+    const row = y > (rowStart + rowEnd) / 2 ? rowEnd : rowStart;
 
     if (viewY < height) {
         const freezeLine = container.querySelector('.sheet-freeze-drag-line');
