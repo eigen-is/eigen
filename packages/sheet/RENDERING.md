@@ -4,7 +4,7 @@
 
 These are the rendering notes of `packages/sheet`, Eigen's fork of fortune-sheet. Read them before you change how cells paint, where an overlay lines up with the canvas, or how the grid scrolls. The sections start with the component tree and the technology each layer uses, then walk the layers from the canvas up, and end with scrolling, the z-index stack and the patterns that keep a redraw cheap.
 
-The fork's class and id prefix is `sheet-`. One engine-private class keeps a bare name, `header-arrow` (`ColumnHeader`), and so do the engine's bare ids: `link-text`/`-type`/`-address`/`-cell`/`-sheet`, `searchFormulaListInput`, `checkTextColor`, `checkCellColor`, and the screen-reader nodes `sr-selection`, `sr-sheetFocus`, `shortcut-list`, `shortcuts-heading`. So grepping `sheet-` does not list the whole DOM contract. `sheet-copy-action-table` is a different kind of exception: a clipboard wire format rather than a style hook, and it lives in one constant (`COPY_ACTION_TABLE_MARKER`).
+The fork's class and id prefix is `sheet-`. One engine-private class keeps a bare name, `header-arrow` (`ColumnHeader`), and so do the engine's bare ids: `link-type`/`-cell`/`-sheet` (beside `link-text` and `link-address`, which the shared link fields set), `searchFormulaListInput`, `checkTextColor`, `checkCellColor`, and the screen-reader nodes `sr-selection`, `sr-sheetFocus`, `shortcut-list`, `shortcuts-heading`. So grepping `sheet-` does not list the whole DOM contract. `sheet-copy-action-table` is a different kind of exception: a clipboard wire format rather than a style hook, and it lives in one constant (`COPY_ACTION_TABLE_MARKER`).
 
 ## Component Tree
 

@@ -12,6 +12,7 @@ export * from './components/info-block';
 export * from './components/layout/app';
 export * from './components/layout/sidebar';
 export * from './components/layout/toolbar';
+export * from './components/link-fields';
 export * from './components/search-bar/search-bar';
 export * from './components/shadow-content';
 export * from './components/sort-header';

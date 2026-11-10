@@ -6,6 +6,7 @@ import { FieldError } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { LinkAddressField, LinkTextField } from '@workspace/ui/components/link-fields';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { cn } from '@workspace/ui/lib/utils';
 import { Grid3x3 } from 'lucide-react';
@@ -47,11 +48,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
     const [linkAddress, setLinkAddress] = useState(draft?.address ?? link.originAddress);
     const { r, c } = link;
     const validity = isLinkValid(linkType, linkAddress);
-    const invalidBorder = linkAddress && !validity.isValid && 'border-destructive';
     const refusalId = useId();
-    const describedBy = validity.tooltip ? refusalId : undefined;
-
-    const refusal = validity.tooltip && <FieldError id={refusalId}>{validity.tooltip}</FieldError>;
 
     // The position is in sheet-content coordinates, where the cell's overlay region applies the pane's scroll. The
     // picker is portaled and fixed, so it is converted here off the same pane the region would use.
@@ -99,16 +96,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                 onSubmit={() => setContext((ctx) => saveHyperlink(ctx, r, c, linkText, linkType, linkAddress))}
             >
                 <div className="space-y-3">
-                    <div className="space-y-1.5">
-                        <Label htmlFor="link-text">Display text</Label>
-                        <Input
-                            id="link-text"
-                            spellCheck="false"
-                            autoFocus
-                            value={linkText}
-                            onChange={(e) => setLinkText(e.target.value)}
-                        />
-                    </div>
+                    <LinkTextField value={linkText} onValueChange={setLinkText} autoFocus />
                     <div className="space-y-1.5">
                         <Label htmlFor="link-type">Link type</Label>
                         <Select
@@ -139,28 +127,15 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                             </SelectContent>
                         </Select>
                     </div>
-                    {linkType === 'webpage' && (
-                        <div className="space-y-1.5">
-                            <Label htmlFor="link-address">Link address</Label>
-                            <Input
-                                id="link-address"
-                                aria-describedby={describedBy}
-                                className={cn(invalidBorder)}
-                                spellCheck="false"
-                                value={linkAddress}
-                                onChange={(e) => setLinkAddress(e.target.value)}
-                            />
-                            {refusal}
-                        </div>
-                    )}
+                    {linkType === 'webpage' && <LinkAddressField value={linkAddress} onValueChange={setLinkAddress} />}
                     {linkType === 'cellrange' && (
                         <div className="space-y-1.5">
                             <Label htmlFor="link-cell">Cell range</Label>
                             <div className="relative">
                                 <Input
                                     id="link-cell"
-                                    aria-describedby={describedBy}
-                                    className={cn('pr-9', invalidBorder)}
+                                    aria-describedby={validity.tooltip ? refusalId : undefined}
+                                    className={cn('pr-9', validity.tooltip && 'border-destructive')}
                                     spellCheck="false"
                                     value={linkAddress}
                                     onChange={(e) => setLinkAddress(e.target.value)}
@@ -174,7 +149,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                                     <Grid3x3 className="size-4" aria-hidden="true" />
                                 </button>
                             </div>
-                            {refusal}
+                            {validity.tooltip && <FieldError id={refusalId}>{validity.tooltip}</FieldError>}
                         </div>
                     )}
                     {linkType === 'sheet' && (
@@ -198,7 +173,6 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                                     ))}
                                 </SelectContent>
                             </Select>
-                            {refusal}
                         </div>
                     )}
                 </div>
