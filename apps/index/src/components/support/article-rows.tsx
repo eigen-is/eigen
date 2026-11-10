@@ -15,7 +15,7 @@ export function ArticleRows({ articles }: { articles: ArticleMeta[] }) {
                         key={article.slug}
                         to="/support/$section/$article"
                         params={{ section, article: file }}
-                        className="eigen-list-item -mx-4 block px-4 py-3"
+                        className="eigen-list-item -mx-(--app-gutter-x) block px-(--app-gutter-x) py-3"
                     >
                         <span className="block font-medium">{article.title}</span>
                         <span className="block text-sm text-muted-foreground">{article.description}</span>

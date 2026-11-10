@@ -54,7 +54,7 @@ function BlogOverviewComponent() {
                         <Link
                             to="/blog/$id"
                             params={{ id: post.slug }}
-                            className="eigen-list-item -mx-4 block px-4 py-3.5"
+                            className="eigen-list-item -mx-(--app-gutter-x) block px-(--app-gutter-x) py-3.5"
                         >
                             <PostText post={post} className="text-[1.375rem]" />
                         </Link>

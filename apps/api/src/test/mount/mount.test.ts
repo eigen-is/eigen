@@ -7,6 +7,7 @@ import { eq, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../../lib/core';
 import { ApiError, eventLoopTurn, storageGone } from '../../lib/core';
+import { captureCollabSource } from '../../lib/document/transform/collab-source';
 import { getUniqueFileName } from '../../lib/drive/naming';
 import type { ContentExtractor } from '../../lib/mount/content-reindex-queue';
 import { CONTENT_REINDEX_CAP_SECONDS, ContentReindexQueue } from '../../lib/mount/content-reindex-queue';
@@ -2588,11 +2589,12 @@ describe('trash/restore content reindex', () => {
         await mount.reindexQueue?.drain();
         expect(mount.searchPaths({ q: 'grendelone', limit: 20 }).some((h) => h.id === containerId)).toBe(true);
 
-        // Dirty it again (the trash-time close syncs it, re-marking the container; the 2-min cap
-        // defers that drain), then trash. Age the index stamp so a restore-time drain is due now.
+        // Dirty it again, then trash and close it as Drive's trash does (the close syncs it, re-marking the
+        // container; the 2-min cap defers that drain). Age the index stamp so a restore-time drain is due now.
         body = 'grendeltwo';
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
         await mount.trashPath(containerId);
+        await mount.closeDatabase(dataDbId, { skipFinalSnapshot: true });
         mount.db.run(sql`UPDATE paths SET contentIndexedAt = 0 WHERE id = ${containerId}`);
 
         const extracted = new Promise<void>((resolve) => {
@@ -2673,5 +2675,32 @@ describe('content reindex failure handling', () => {
         await queue.close();
         expect(mount.getContentDirtyPaths(-1, 100).map((p) => p.id)).not.toContain(txt);
         expect(mount.searchPaths({ q: 'quorblegone', limit: 20 }).some((h) => h.id === txt)).toBe(false);
+    });
+
+    // A document trashed after the batch read has no live data.db by its capture. That is no failure to
+    // log, and the row stays dirty for the drain its restore kicks.
+    test('a container trashed between the batch read and its capture logs nothing and stays dirty', async () => {
+        const containerId = await mount.createFolder(rootId, 'reindex-trashed', 'doc');
+        await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+        mount.markContentDirty(containerId);
+        const queue = new ContentReindexQueue({
+            mount,
+            label: 'trashed-test',
+            extract: async (m, path) => {
+                await m.trashPath(path.id);
+                await captureCollabSource(m, path);
+                return '';
+            },
+        });
+        const errors = spyOn(console, 'error');
+        try {
+            await queue.drain();
+            await queue.close();
+            expect(errors.mock.calls).toEqual([]);
+        } finally {
+            errors.mockRestore();
+        }
+        await mount.restorePath(containerId);
+        expect(mount.getContentDirtyPaths(-1, 100).map((p) => p.id)).toContain(containerId);
     });
 });

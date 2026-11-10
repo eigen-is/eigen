@@ -47,6 +47,19 @@ export function ancestorIds(...pathIds: string[]): SQL {
     `;
 }
 
+// Every path below parentId, trashed or not. A query adds it as `id IN (…)`, so
+// one statement reaches a whole subtree, and SQLite's cap on a statement's variables never applies.
+export function descendantIds(parentId: string): SQL {
+    return sql`
+        WITH RECURSIVE descendants AS (
+            SELECT id FROM paths WHERE parentId = ${parentId}
+            UNION ALL
+            SELECT p.id FROM paths p JOIN descendants d ON p.parentId = d.id
+        )
+        SELECT id FROM descendants
+    `;
+}
+
 // The 409 of a create, rename, move or restore whose name a live sibling has already.
 export function nameTakenError(name: string): ApiError {
     return new ApiError(409, `A file or folder named "${name}" already exists in this directory`);

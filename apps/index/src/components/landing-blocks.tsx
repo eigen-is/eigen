@@ -1,9 +1,7 @@
 // What Eigen stands for, as three short blocks across the landing page, and under them, when the server's admin
 // turned it on, the one line that installs Eigen with a button to copy it.
 
-import { copyToClipboard } from '@workspace/lib/clipboard';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
-import { Copy } from 'lucide-react';
+import { CopyInput } from '@workspace/ui';
 
 const INSTALL_COMMAND = 'curl -fsSL https://eigen.is/install | sh';
 
@@ -49,17 +47,7 @@ export function LandingBlocks({ showInstall }: LandingBlocksProps) {
                             Eigen is pre-1.0. Expect rough edges, and breaking changes until 1.0.
                         </p>
                     </div>
-                    <div className="flex min-w-0 items-center justify-between gap-3 rounded-md border bg-background py-2.5 pr-2.5 pl-4">
-                        <code className="min-w-0 overflow-x-auto font-mono text-sm whitespace-nowrap">
-                            {INSTALL_COMMAND}
-                        </code>
-                        <TooltipButton
-                            icon={Copy}
-                            tooltipText="Copy to clipboard"
-                            className="shrink-0"
-                            onClick={() => copyToClipboard(INSTALL_COMMAND)}
-                        />
-                    </div>
+                    <CopyInput value={INSTALL_COMMAND} />
                 </div>
             )}
         </div>

@@ -12,7 +12,7 @@ export function SiteFooter() {
     const { data: config } = usePublicConfig();
 
     return (
-        <footer className="app-gutter-x flex min-h-[42px] shrink-0 flex-wrap items-center gap-x-8 gap-y-1 border-t py-2 text-[0.8125rem] text-muted-foreground">
+        <footer className="app-gutter-x flex min-h-[42px] shrink-0 flex-wrap items-center gap-x-8 gap-y-1 py-2 text-[0.8125rem] text-muted-foreground">
             {config && (
                 <Link to="/changelog" className={cn('tabular-nums', LINK)}>
                     <VersionLabel />

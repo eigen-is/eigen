@@ -26,18 +26,15 @@ export async function propagateAssignment(
     const assigneeUser = await getUserByEmail(assignee);
     const { guestOnAssign, userOnAssign } = getServerSettings().notifications.email;
     const toGuest = !assigneeUser || isGuest(assigneeUser);
-    if (toGuest ? guestOnAssign : userOnAssign) {
-        const mail = composeAssignedEmail(path, assignee, actor, chatName, card);
-        const key = `${assignee}:${path.ownerId}:${path.mountId}:${path.id}`;
-        // Sent before the notification, so a home that refuses it can't stop the mail, and not awaited, so a slow
-        // mail relay can't hold the route.
-        if (assignMailWindow.take(key)) {
-            sendMail(mail)
-                .then((sent) => {
-                    if (!sent) assignMailWindow.release(key);
-                })
-                .catch((err) => console.error('Failed to send assignment email:', err));
-        }
+    const key = `${assignee}:${path.ownerId}:${path.mountId}:${path.id}`;
+    // Sent before the notification, so a home that refuses it can't stop the mail, and not awaited, so a slow mail
+    // relay can't hold the route.
+    if ((toGuest ? guestOnAssign : userOnAssign) && assignMailWindow.take(key)) {
+        sendMail(composeAssignedEmail(path, assignee, actor, chatName, card))
+            .then((sent) => {
+                if (!sent) assignMailWindow.release(key);
+            })
+            .catch((err) => console.error('Failed to send assignment email:', err));
     }
 
     if (!assigneeUser) return;
@@ -46,7 +43,7 @@ export async function propagateAssignment(
         notification: {
             type: 'assigned',
             actorEmail: actor.email,
-            title: `${actor.name || actor.email} assigned you a comment on "${stripEigenExtension(path.name)}"`,
+            title: `${actor.name || actor.email} assigned you a task on "${stripEigenExtension(path.name)}"`,
             tag: commentAssignedTag({ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id, chatName }),
             details: { pathType: path.type },
         },

@@ -1,4 +1,4 @@
-// A visitor who is signed out sees a Login button in the top bar, which becomes Enter demo on a demo server. It waits for
+// A visitor who is signed out sees a login icon in the top bar, named Enter demo on a demo server. It waits for
 // the session check, so a signed-in visitor never sees it flash, and an empty app name gives the bare "eigen" wordmark.
 
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -68,25 +68,26 @@ beforeEach(() => {
     demoMode = false;
 });
 
-// The bar's button, found by its words.
+// The bar's icon link, found by its accessible name.
 function loginLink(bar: HTMLElement): HTMLAnchorElement | undefined {
     return [...bar.querySelectorAll('header a')].find(
         (link): link is HTMLAnchorElement =>
-            link instanceof HTMLAnchorElement && ['Login', 'Enter demo'].includes(link.textContent ?? ''),
+            link instanceof HTMLAnchorElement &&
+            ['Login', 'Enter demo'].includes(link.getAttribute('aria-label') ?? ''),
     );
 }
 
 describe('the signed-out top bar', () => {
-    test('shows a Login button that goes to Space', async () => {
+    test('shows a login icon that goes to Space', async () => {
         const link = loginLink(await renderBar());
-        expect(link?.textContent).toBe('Login');
+        expect(link?.getAttribute('aria-label')).toBe('Login');
         expect(link?.getAttribute('href')).toBe(getSpaceAppUrl());
     });
 
     test('shows Enter demo, which goes to the demo entry, on a demo server', async () => {
         demoMode = true;
         const link = loginLink(await renderBar());
-        expect(link?.textContent).toBe('Enter demo');
+        expect(link?.getAttribute('aria-label')).toBe('Enter demo');
         expect(link?.getAttribute('href')).toBe(getDemoEnterUrl());
     });
 

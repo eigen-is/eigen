@@ -6,7 +6,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Added
 
-- **Login in the top bar** — a signed-out visitor sees a **Login** button on every page, the sign-in pages included. On a demo server it reads **Enter demo**
+- **Login in the top bar** — a signed-out visitor sees a login icon at the top right of every page, the sign-in pages included. On a demo server it enters the demo
 - **Install line on the landing page** — the owner can show the one-line install command, with a copy button, from **Show install section** under **Landing page** in Admin's server settings. It is off until turned on
 - **Covers on the blog** — a blog post can have a cover image, shown big on the post and on the newest post in the blog overview
 - **Delete history** — in Docs, Sheets, Slides, Vector and Stickies, File › Version history › **Delete history…** deletes every earlier version of a document, and the images and comments deleted from it, to free space. It keeps what was added or replied to in the last three days. Only an owner of the drive sees it
@@ -15,9 +15,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Changed
 
+- **Trashing an open document** — it no longer adds a version to its history first. The document keeps every edit, and a restore brings them back
 - **Deleting a chat message** — the files attached to a deleted message are deleted for good with it, instead of landing in Drive's Trash
 - **Storage limit for mail, contacts and calendar (breaking)** — the limit per user, and a team's override of it, goes back to its default of 100 MB. Set it again under **Storage quotas** in Admin's server settings and **Quota overrides** on the team's page
-- **A new look for the public site** — the landing page, Support, the blog and the changelog share one layout, with a footer that shows the version. The apps named on the landing page link to their Support sections
+- **A new look for the public site** — the landing page, Support, the blog and the changelog share one layout, with a footer that shows the version.
 - **Tile titles** — on the Space home page and the help center's front page, an app's title is in the normal text color. The icon and the stripe keep the app's color
 - **Table of contents in the changelog** — a Versions list beside the changelog jumps to a release, and each entry starts with its bold title
 - **Moving a formula in Sheets** — a formula cut to another tab keeps reading the cells it read, as in Excel: `=A1*2` cut from One to Two becomes `=One!A1*2`, and a cell that moved along with it is still followed

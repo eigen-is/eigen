@@ -3,8 +3,8 @@
     --app-current-color-soft: var(--app-space-color-soft);
 
     /* The one grid of the public site: a reading column between two gutters, and the wide container the landing
-       blocks and the Support grid sit in. Below 76rem (the wide container plus its 1.5rem padding) the gutters go
-       and the column stands alone. */
+       blocks and the Support grid sit in. Both pad with the shell's gutter, so the content shares the top bar's
+       edge. Below 76rem (the wide container plus that padding) the gutters go and the column stands alone. */
     --site-col: 44rem;
     --site-gutter: 12rem;
     --site-gap: 2.5rem;
@@ -21,16 +21,16 @@
 
 .site-wide {
     width: 100%;
-    max-width: calc(var(--site-wide) + 3rem);
+    max-width: calc(var(--site-wide) + 2 * var(--app-gutter-x));
     margin-inline: auto;
-    padding-inline: 1.5rem;
+    padding-inline: var(--app-gutter-x);
 }
 
 .site-reading {
     display: grid;
     grid-template-columns: minmax(0, var(--site-col));
     justify-content: center;
-    padding-inline: 1.5rem;
+    padding-inline: var(--app-gutter-x);
 }
 
 .site-reading-aside {

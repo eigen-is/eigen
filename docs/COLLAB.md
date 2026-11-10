@@ -93,13 +93,13 @@ A workbook with batches in its op log ends its linger with a compaction: the ser
 
 So a server-side writer opens the document right before it writes, with no await in between. The document can close during any await, such as a transform that outlasts the linger or a version while a compaction ends. A write into a closed document's Y.Doc throws nothing and is neither saved nor broadcast. An import reads what it needs early as a value and opens the document again for the commit, after its version, its pictures and its write check (`importIntoDocument`).
 
-## A drive, mount or trash that is closing refuses a new open
+## A drive or mount that is closing refuses a new open
 
 Once `Drive.destruct` starts its sweep of the open documents, the registry (`apps/api/src/lib/drive/collab-registry.ts`) answers every open with a 503. A document that registered after that sweep would never be destructed, and the mount teardown that follows would close its database under it.
 
 One mount closes the same way. When a team mount gets new storage or is turned off, `Drive.removeMount` destructs that mount's open documents before it closes the mount's databases, so each document saves its last edits. The registry then answers an open on the old `Mount` with a 503. The closed sockets carry no code, so each tab reconnects to the new `Mount` quickly and silently, and the handshake syncs the edits a tab made in between. `apps/api/src/test/drive/collab-registry.test.ts` pins it.
 
-A trash closes the documents under a path, then the databases, and only then marks the path trashed. A document opened in between would save its edits into a closed `data.db`. So while `Drive.deletePath` runs, the registry answers an open of the path or of anything under it with a 503 ([SOFT-DELETE.md](SOFT-DELETE.md#trash-closes-what-is-open-under-the-item-first)). The registry collects those ids before the trash starts. A move into the folder or anything under it meanwhile is refused, but a document created in the folder or restored into it is not. Its database closes with the rest, so the trash closes every document still open under the path right after `Mount.trashPath` returns.
+A trash refuses nothing of its own. It marks the path trashed before it closes anything, so from then on an open of the path or of anything under it is a 404, and the documents still open there close after the mark and save their last edits into the trash ([SOFT-DELETE.md](SOFT-DELETE.md#trash-marks-the-item-first-then-closes-what-is-open-under-it)).
 
 ## An open waits for data.db and never makes one
 

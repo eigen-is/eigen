@@ -1,7 +1,7 @@
 // The bar across the top of every app: the app switcher and the app's logo on the left, the command palette
 // in the middle, and the notification bell and the account menu on the right. The account menu links to
 // Space's pages, picks the theme and logs out; a guest gets a shorter one. A visitor who is signed out gets the
-// logo and a Login button instead, which goes to the demo on a demo server.
+// logo and a quiet login icon instead, which goes to the demo on a demo server.
 
 import { useRouter } from '@tanstack/react-router';
 import { useIsAdmin } from '@workspace/lib/admin';
@@ -19,7 +19,7 @@ import { useEnabledApps, usePublicConfig } from '@workspace/lib/public';
 import { useTheme } from '@workspace/lib/space';
 import { THEMES } from '@workspace/lib/types/settings';
 import { cn } from '@workspace/ui/lib/utils';
-import { Grip, LifeBuoy, LogOut, Palette, Settings, Shield, UserRound } from 'lucide-react';
+import { Grip, LifeBuoy, LogIn, LogOut, Palette, Settings, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { EigenLogo } from '../../braket/eigen-logo';
 import { Button } from '../../button';
@@ -33,6 +33,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '../../dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../tooltip';
 import { UserAvatar } from '../../user/user-avatar';
 import { UserItem } from '../../user/user-item';
 import { AboutDialog } from './about-dialog';
@@ -277,10 +278,24 @@ function LoginButton() {
     const { data: config } = usePublicConfig();
     const demoMode = config?.demoMode ?? false;
 
+    const label = demoMode ? 'Enter demo' : 'Login';
+
     return (
-        <Button size="sm" asChild>
-            <a href={demoMode ? getDemoEnterUrl() : getSpaceAppUrl()}>{demoMode ? 'Enter demo' : 'Login'}</a>
-        </Button>
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    asChild
+                    className="h-8 w-8 text-[var(--topbar-icon)] hover:bg-[var(--topbar-icon-hover-bg)] hover:text-[var(--topbar-icon-hover-fg)]"
+                >
+                    <a href={demoMode ? getDemoEnterUrl() : getSpaceAppUrl()} aria-label={label}>
+                        <LogIn className="h-4 w-4" />
+                    </a>
+                </Button>
+            </TooltipTrigger>
+            <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
     );
 }
 

@@ -1,11 +1,12 @@
-// The public site's landing page: what Eigen is, the apps it has, three things it stands for, and the buttons the
-// server's admin turned on, such as the waitlist form. A signed-in visitor goes straight on to the app.
+// The public site's landing page: the cycling eigen|app> wordmark, what Eigen is and the apps it has, the buttons the
+// server's admin turned on, such as the waitlist form, and three things it stands for. A signed-in visitor goes
+// straight on to the app.
 
 import { createFileRoute } from '@tanstack/react-router';
 import { getDemoEnterUrl, getSpaceAppUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useJoinWaitlist, usePublicConfig } from '@workspace/lib/public';
-import { AppShell } from '@workspace/ui';
+import { AppShell, EigenCyclingLogo } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
@@ -14,7 +15,6 @@ import { Textarea } from '@workspace/ui/components/textarea';
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
 import { LandingBlocks } from '../components/landing-blocks';
-import { LandingHero } from '../components/landing-hero';
 import { SitePage } from '../components/site-page';
 
 export const Route = createFileRoute('/')({
@@ -59,10 +59,30 @@ function HomeComponent() {
     return (
         <AppShell appName="" rootRoute={Route}>
             <SitePage>
-                <section className="flex flex-1 flex-col items-center justify-center px-6 py-14 text-center">
-                    <LandingHero demoMode={demoMode} />
+                <section className="flex flex-1 flex-col items-center justify-center app-gutter-x py-14 text-center">
+                    <EigenCyclingLogo className="text-5xl mb-8" />
+                    <div className="text-lg mb-8 max-w-xl">
+                        <p className="mb-4">A self-hosted alternative to Google Workspace.</p>
+                        <div className="text-sm text-muted-foreground text-balance">
+                            {demoMode ? (
+                                <p>
+                                    Explore a shared workspace of a small fictional crew organizing the Tuimel Festival.
+                                    It resets every hour.
+                                </p>
+                            ) : (
+                                <>
+                                    <p>
+                                        Mail, drive, docs, sheets, slides, drawings, stickies, calendar, contacts and
+                                        chat.
+                                    </p>
+                                    <p>Syncs with your own apps over IMAP, SMTP, CalDAV, CardDAV and WebDAV.</p>
+                                    <p>Opens and saves Word, Excel and PowerPoint files.</p>
+                                </>
+                            )}
+                        </div>
+                    </div>
                     {!showWaitlistForm ? (
-                        <div className="mt-8 flex flex-wrap justify-center gap-4">
+                        <div className="flex flex-wrap justify-center gap-4">
                             <Button className="px-8 py-2 font-medium flex-3" onClick={handleLogin}>
                                 {demoMode ? 'Enter demo' : 'Login'}
                             </Button>
@@ -89,7 +109,7 @@ function HomeComponent() {
                             ))}
                         </div>
                     ) : (
-                        <Card className="mt-8 w-full max-w-md text-left">
+                        <Card className="w-full max-w-md text-left">
                             <CardHeader>
                                 <CardTitle>
                                     Join the waitlist <small>(exclusive access only)</small>

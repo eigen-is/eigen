@@ -104,6 +104,8 @@ export class ContentReindexQueue {
                     this.mount.markContentDirty(path.id);
                     // An aborted read says nothing about the body: leave the row due.
                     if (this.stopped) return;
+                    // A row trashed since the batch read has no live data.db. Its restore drains it again.
+                    if ((await this.mount.getPath(path.id))?.trashedAt) continue;
                     // The index can always be built again, so one bad body only logs and never stops the loop.
                     console.error(`[content-reindex] extract failed for ${path.id}:`, err);
                 }

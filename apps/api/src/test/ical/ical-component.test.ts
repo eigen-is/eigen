@@ -952,6 +952,48 @@ describe('round trip build → serialize → project', () => {
     });
 });
 
+describe('a RECURRENCE-ID from its occurrence key', () => {
+    const series = (rrule: string, startTime: Date): CalendarEvent => ({
+        ...MASTER,
+        rrule,
+        startTime,
+        endTime: new Date(startTime.getTime() + 3600_000),
+    });
+    const override = (key: string): CalendarEvent => ({ ...OVERRIDE, id: `o-${key}`, recurrenceDate: key });
+
+    test('a rule that states its hour keys each day to that hour, either side of a DST change', () => {
+        // DTSTART is 09:00 in Amsterdam, and the clocks go forward on 29 March.
+        const master = series('FREQ=DAILY;BYHOUR=17', new Date('2026-03-23T08:00:00Z'));
+        const ics = serializeResource(buildResource([master, override('2026-03-27'), override('2026-03-30')]));
+
+        expect(ics).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20260327T170000');
+        expect(ics).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20260330T170000');
+    });
+
+    test("a midnight series keys a day off its rule to that day's midnight, not the next one's", () => {
+        // Mondays at 00:00 in Amsterdam, and 19 April is the Sunday before one.
+        const master = series('FREQ=WEEKLY;BYDAY=MO', new Date('2026-04-12T22:00:00Z'));
+        const ics = serializeResource(buildResource([master, override('2026-04-19')]));
+
+        expect(ics).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20260419T000000');
+    });
+
+    test('a daily series with a thousand exceptions builds at little cost', () => {
+        const keys = Array.from({ length: 1000 }, (_, i) =>
+            new Date(Date.UTC(2026, 3, 16 + i)).toISOString().slice(0, 10),
+        );
+        const exceptions = keys.map((key, i) =>
+            i % 3 === 2 ? { ...EXCLUSION, id: `x-${key}`, recurrenceDate: key } : override(key),
+        );
+
+        const cpuMs = cpuClock();
+        const resource = buildResource([series('FREQ=DAILY', MASTER.startTime), ...exceptions]);
+        expect(cpuMs()).toBeLessThan(1000);
+
+        expect(overridesOf(resource)).toHaveLength(667);
+    });
+});
+
 describe('timezone fidelity', () => {
     const zoned = (start: string, end: string) => [
         'BEGIN:VEVENT',
