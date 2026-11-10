@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2143 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2144 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -555,7 +555,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (448)
+## Types (449)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -741,6 +741,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `NotificationPath` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
 | `NotificationPersistInput` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
 | `NotificationType` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
+| `Organizer` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `OrgMember` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `OrgRole` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `OrgTeam` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |

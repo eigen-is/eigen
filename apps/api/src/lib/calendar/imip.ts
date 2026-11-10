@@ -5,7 +5,7 @@
 
 import { formatEventWhen, isInvitationFromOthers, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import { escapeHtml } from '@workspace/lib/html';
-import type { Attendee, CalendarEvent, EventData, ImipMethod } from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEvent, ImipMethod, Organizer } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment, CalendarInvite } from '@workspace/lib/types/mail';
 import { isCalendarPart } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
@@ -14,8 +14,6 @@ import { parseIcs, serializeEventForImip } from '../ical';
 import { computeOccurrenceTimes } from '../ical/wall-clock';
 import { EMAIL_MUTED, EMAIL_TEXT, renderEigenEmail } from '../mailer/mail-template';
 import type { OutboundICalEvent, OutboundMail } from '../mailer/mailer';
-
-export type Organizer = NonNullable<EventData['organizer']>;
 
 // Above this a body is a mailed calendar export, not a scheduling message.
 const IMIP_MAX_EVENTS = 50;

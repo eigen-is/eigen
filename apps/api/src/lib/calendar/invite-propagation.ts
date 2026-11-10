@@ -5,7 +5,7 @@
 // commit, such as a save or a delete, and a guest's answer to an organizer on this server goes back the same way.
 
 import { heldAttendees } from '@workspace/lib/calendar/calendar-utils';
-import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
 import { isNull } from 'drizzle-orm';
 import { getServerSettings } from '../config/server-settings';
 import type { Home } from '../home';
@@ -17,7 +17,6 @@ import { addRegistryEntry } from '../share';
 import type { User } from '../user';
 import { getUserByEmail, isGuest } from '../user';
 import type { Calendar } from './calendar';
-import type { Organizer } from './imip';
 import { composeCancelEmail, composeInviteEmail, composeInviteRequest } from './imip';
 import { toEvent } from './mappers';
 import * as schema from './schema';
@@ -78,7 +77,7 @@ export async function propagateInvitation(
                 type: 'calendar:invitation-removal',
                 orgEventId: series?.id ?? event.id,
                 orgUserId: organizerHome.user.id,
-                occurrence: occurrenceRevision(event, series ? event.recurrenceDate : null),
+                occurrence: occurrenceRevision(event, series),
             });
         } catch (error) {
             console.error('Failed to cancel invitation:', error);
@@ -110,7 +109,7 @@ export async function propagateCancellation(
     attendees: readonly Attendee[],
     series?: CalendarEvent,
 ): Promise<void> {
-    const occurrence = occurrenceRevision(event, series ? event.recurrenceDate : null);
+    const occurrence = occurrenceRevision(event, series);
     const organizer = organizerOf(organizerHome, user);
     for (const attendee of attendees) {
         try {
@@ -227,7 +226,8 @@ function organizerOf(organizerHome: Home, user: User | undefined): Organizer {
 // The revision its receiver orders the removal against; undefined for a message about the whole series.
 function occurrenceRevision(
     event: CalendarEvent,
-    recurrenceDate: string | null,
+    series: CalendarEvent | undefined,
 ): { recurrenceDate: string; sequence: number; dtstamp: Date } | undefined {
+    const recurrenceDate = series && event.recurrenceDate;
     return recurrenceDate ? { recurrenceDate, sequence: event.sequence, dtstamp: event.updatedAt } : undefined;
 }
