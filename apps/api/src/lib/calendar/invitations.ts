@@ -43,8 +43,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // What the decision on an inbound REQUEST did. The announcement and the notice run after the write lock is released.
 type InboundRequestOutcome = { kind: 'dropped'; reason: string } | { kind: 'created' | 'updated'; calendarId: string };
 
-const REFUSED: InboundRequestOutcome = { kind: 'dropped', reason: 'the store would not keep it' };
-
 // One UID's events, relayed from another Home or mailed by a verified sender: a master and its exceptions, or one
 // occurrence alone. They take one decision, write the copy at most once and tell the guest once.
 export async function receiveRequest(
@@ -63,7 +61,7 @@ export async function receiveRequest(
     const outcome = await unlessRefused(
         lead.uid,
         () => calendar.writeLock.run(() => decideInboundRequest(calendar, ordered, link)),
-        REFUSED,
+        { kind: 'dropped', reason: 'the store would not keep it' },
     );
     if (outcome.kind === 'dropped') {
         console.info(`calendar: dropped a REQUEST for ${lead.uid} from ${link.organizerUserId} — ${outcome.reason}`);
@@ -543,14 +541,15 @@ async function updateAttendeeStatus(
         if (!resource) return null;
 
         const attendees = withAttendeeStatus(event.data.attendees, email, status);
-        await events.patchResource(
+        const patch = { data: { ...event.data, attendees } };
+        const changed = await events.patchResource(
             calendar,
             resource,
             event.recurrenceDate,
-            { data: { ...event.data, attendees } },
+            patch,
             events.writeContext(false),
         );
-        return event.calendarId;
+        return changed ? event.calendarId : null;
     });
     if (calendarId) calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
 }
@@ -589,14 +588,9 @@ async function rsvpForOccurrence(
         if (existing && existing.status !== 'cancelled') {
             const resource = events.resourceOf(calendar, existing.id);
             if (!resource) return null;
-            await events.patchResource(
-                calendar,
-                resource,
-                key,
-                { data: { ...data, attendees } },
-                events.writeContext(false),
-            );
-            return parent.calendarId;
+            const patch = { data: { ...data, attendees } };
+            const changed = await events.patchResource(calendar, resource, key, patch, events.writeContext(false));
+            return changed ? parent.calendarId : null;
         }
 
         // A zone moves an occurrence at most a day off its key's date. A date the rule doesn't yield is no occurrence, and

@@ -204,16 +204,18 @@ export async function writeEvent(
     return requireEvent(calendar, event.id);
 }
 
-// Caller holds the write lock and has already resolved the resource this patch means.
+// Caller holds the write lock and has already resolved the resource this patch means. Answers whether it wrote.
 export async function patchResource(
     calendar: Calendar,
     resource: StoredResource,
     recurrenceKey: string | null,
     patch: EventPatch,
     context: WriteContext,
-): Promise<void> {
+): Promise<boolean> {
     const component = storedComponent(calendar, resource);
-    if (patchEvent(component, recurrenceKey, patch, context)) await writeComponent(calendar, resource, component);
+    const changed = patchEvent(component, recurrenceKey, patch, context);
+    if (changed) await writeComponent(calendar, resource, component);
+    return changed;
 }
 
 // The stored component of a resource: the bytes are the truth, so every path that parses them reads them itself.

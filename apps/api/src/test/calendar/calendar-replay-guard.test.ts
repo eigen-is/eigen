@@ -479,7 +479,7 @@ describe('an answer that names a date', () => {
         const answer = (date: string) =>
             calendar.receiveRsvpForOccurrence(event.id, GUEST, 'accepted', date, null, false);
         const overrides = () => calendar.getEventsByUid(event.uid).then((all) => all.filter((e) => e.parentEventId));
-        return { calendar, calendarId, event, answer, overrides };
+        return { calendar, calendarId, event, answer, overrides, broadcasts: harness.broadcasts };
     };
     const MONDAYS = {
         rrule: 'FREQ=WEEKLY;BYDAY=MO',
@@ -497,6 +497,18 @@ describe('an answer that names a date', () => {
         expect((await calendar.getEventsByUid(event.uid))[0].etag).toBe(event.etag);
         const days = await calendar.getEventsInRange(new Date('2027-02-08'), new Date('2027-02-14'), calendarId);
         expect(days.map((e) => e.occurrenceDate)).toEqual(['2027-02-08']);
+    });
+
+    test('repeated, for the series or for one date, announces nothing the second time', async () => {
+        const { calendar, event, answer, broadcasts } = await stored(MONDAYS);
+        await calendar.receiveAttendeeStatus(event.id, GUEST, 'accepted');
+        await answer('2027-02-08');
+        const announced = broadcasts.length;
+
+        await calendar.receiveAttendeeStatus(event.id, GUEST, 'accepted');
+        await answer('2027-02-08');
+
+        expect(broadcasts).toHaveLength(announced);
     });
 
     test('adds no occurrence to a single event', async () => {
