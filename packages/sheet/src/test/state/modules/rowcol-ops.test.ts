@@ -14,6 +14,7 @@ import { freezeOf } from '../../../state/modules/freeze';
 import { undoEntry } from '../../../state/modules/history';
 import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
+import { renameSheet } from '../../../state/modules/sheet';
 import type { Op } from '../../../state/types';
 import type { PatchOptions } from '../../../state/utils/patch';
 import { filterPatch, patchToOp } from '../../../state/utils/patch';
@@ -98,9 +99,14 @@ function run(ctx: Context, { insertRowColOp, deleteRowColOp }: PatchOptions) {
 
 // The sheet on the author's tab, the peer's tab and a joiner, where the log holds the peer's batch first. The author's
 // tab then applies the log again in that order.
-function race(peer: (ctx: Context) => void, options: PatchOptions, base = richContext()) {
+function race(
+    peer: (ctx: Context) => void,
+    options: PatchOptions,
+    base = richContext(),
+    peerOptions: PatchOptions = {},
+) {
     const op = author(base, (ctx) => run(ctx, options), options);
-    const fromPeer = author(base, peer);
+    const fromPeer = author(base, peer, peerOptions);
     const onAuthor = receive(receive(base, fromPeer.ops), op.ops).sheets[0];
     const onPeer = receive(fromPeer.next, op.ops).sheets[0];
     const [joined] = join(base, [fromPeer.ops, op.ops]).map(withMaterializedData);
@@ -589,10 +595,9 @@ describe("a row or column op after a peer's edit of the sheet", () => {
     ] as const;
 
     test.each(ops)("%s keeps the peer's rename", (_, options) => {
-        const rename = (ctx: Context) => {
-            ctx.sheets[0].name = 'Renamed';
-        };
-        for (const sheet of race(rename, options)) expect(sheet.name).toBe('Renamed');
+        const rename = (ctx: Context) => renameSheet(ctx, { id: 'id_1', name: 'Renamed' });
+        const renamed = race(rename, options, richContext(), { renameSheetOp: { id: 'id_1' } });
+        for (const sheet of renamed) expect(sheet.name).toBe('Renamed');
     });
 
     // A sheet with a colour already, so a batch that wrote its fields whole would overwrite the peer's.
