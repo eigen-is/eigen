@@ -498,7 +498,7 @@ function patchVEvent(
     const storedStart = dtstart?.getFirstValue();
     const allDay = patch.allDay ?? (storedStart instanceof ICAL.Time && storedStart.isDate);
 
-    let changed = isMaster && followMaster(resource, vevent, patch);
+    let changed = isMaster && followMaster(resource, vevent, patch, ctx);
     let scheduling = false;
 
     changed = setOptional(vevent, 'summary', patch.title) || changed;
@@ -623,8 +623,8 @@ function shapeForImip(vevent: ICAL.Component, method: ImipMethod): void {
 
 // A series-wide edit reaches an override whose value equals the master's BEFORE the edit; one that set its own keeps
 // it. Times never follow. A guest the edit adds to or drops from the series joins or leaves every override that holds
-// its own list. It has to run before the master is patched.
-function followMaster(resource: ICAL.Component, master: ICAL.Component, patch: EventPatch): boolean {
+// its own list. Each override it changes is a new revision of that date. It has to run before the master is patched.
+function followMaster(resource: ICAL.Component, master: ICAL.Component, patch: EventPatch, ctx: WriteContext): boolean {
     const fields: Array<[string, string, string]> = [];
     for (const [name, value] of [
         ['summary', patch.title],
@@ -643,18 +643,26 @@ function followMaster(resource: ICAL.Component, master: ICAL.Component, patch: E
     let changed = false;
     for (const vevent of resource.getAllSubcomponents('vevent')) {
         if (vevent === master || uidOf(vevent) !== uid || !vevent.getFirstProperty('recurrence-id')) continue;
+        let followed = false;
         for (const [name, before, after] of fields) {
             if (String(vevent.getFirstPropertyValue(name) ?? '') !== before) continue;
-            changed = setOptional(vevent, name, after) || changed;
+            followed = setOptional(vevent, name, after) || followed;
         }
         const listed = vevent.getAllProperties('attendee');
-        if (!guests || !listed.length) continue;
-        const own = new Set(listed.map(addressOf));
-        const kept = listed.filter((prop) => !wasGuest.has(addressOf(prop)) || isGuest.has(addressOf(prop)));
-        const joined = guests.filter(
-            ({ email }) => !wasGuest.has(email.toLowerCase()) && !own.has(email.toLowerCase()),
-        );
-        changed = patchAttendees(vevent, [...kept.map(projectAttendee), ...joined]).changed || changed;
+        let membersChanged = false;
+        if (guests && listed.length) {
+            const own = new Set(listed.map(addressOf));
+            const kept = listed.filter((prop) => !wasGuest.has(addressOf(prop)) || isGuest.has(addressOf(prop)));
+            const joined = guests.filter(
+                ({ email }) => !wasGuest.has(email.toLowerCase()) && !own.has(email.toLowerCase()),
+            );
+            const attendees = patchAttendees(vevent, [...kept.map(projectAttendee), ...joined]);
+            followed = attendees.changed || followed;
+            membersChanged = attendees.membersChanged;
+        }
+        if (!followed) continue;
+        touch(vevent, ctx, membersChanged);
+        changed = true;
     }
     return changed;
 }

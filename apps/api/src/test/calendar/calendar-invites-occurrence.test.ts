@@ -3,11 +3,12 @@
 // same for a second edit, a cancellation and a guest's RSVP. A date that holds its own guest list follows the
 // series' guests and each guest's answer for the whole series. Driven through the routes the calendar app calls
 // (docs/CALENDAR.md § An occurrence message names the series).
-import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { beforeAll, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, EventData } from '@workspace/lib/types/calendar';
 import { processInboundImip } from '../../lib/calendar/imip';
 import { getHome } from '../../lib/home';
 import { parseIcs } from '../../lib/ical';
+import { utcStampString } from '../../lib/ical/ical-parse';
 import { davRequest } from '../dav-test-helpers';
 import { vcal } from '../ics-test-helpers';
 import { assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
@@ -727,6 +728,39 @@ describe('Occurrence edits of an invited series', () => {
         expect(own.data?.attendees?.map((a) => a.email)).toEqual([charlie.email, ctx.bob.user.email]);
     });
 
+    // A date's own list that takes a series guest change is a new revision of that date, for the organizer, in the mail
+    // and on the guest's copy, where the date's own event in the same message still applies.
+    test('a date whose own list follows a series guest change gets a new revision', async () => {
+        const CAROL = 'carol.follow-revision@example.org';
+        const ERIN = 'erin.follow-revision@outside.test';
+        const { series, target, attendees } = await seededWithExternal('Weekly Follow Revision', CAROL);
+        const before = await moveOccurrence(series, target, 'Follow Revision Moved', { attendees });
+
+        const erin = { email: ERIN, name: 'Erin', status: 'pending', role: 'required' };
+        const mail = await catchMail();
+        // A revision's stamps have one-second resolution.
+        setSystemTime(new Date(Date.now() + 5000));
+        try {
+            expect((await putEvent(series.id, { data: { attendees: [...attendees, erin] } })).status).toBe(200);
+            const vevents = unfolded(await mail.to(CAROL, 'Updated invitation')).split('BEGIN:VEVENT');
+            const date = findOrFail(vevents, (vevent) => vevent.includes('RECURRENCE-ID'));
+            expect(date).toContain(`:mailto:${ERIN}\r\n`);
+            expect(sequenceIn(date)).toBeGreaterThan(before.sequence);
+            expect(date).not.toContain(`DTSTAMP:${utcStampString(new Date(before.updatedAt))}`);
+        } finally {
+            mail.restore();
+            setSystemTime();
+        }
+        const after = findOrFail(await aliceOccurrences(series.uid), (e) => e.occurrenceDate === target);
+        expect(after.sequence).toBeGreaterThan(before.sequence);
+
+        const { overrides } = await eventually(async () => {
+            const stored = await bobStored(series.uid);
+            return stored.overrides[0]?.sequence === after.sequence ? stored : undefined;
+        }, "the date's new revision to reach Bob");
+        expect(overrides[0].data?.attendees?.map((a) => a.email)).toContain(ERIN);
+    });
+
     // Anna moves one date, Carol declines another by mail, and Anna adds Erin and later drops Carol: every date that
     // holds its own list takes the same change, and the mail Erin gets lists her on each of its VEVENTs.
     test("the series' guest changes reach every date that holds its own list, in each copy and each mail", async () => {
@@ -739,6 +773,8 @@ describe('Occurrence edits of an invited series', () => {
 
         const erin = { email: ERIN, name: 'Erin', status: 'pending', role: 'required' };
         const mail = await catchMail();
+        // A revision's stamps have one-second resolution.
+        setSystemTime(new Date(Date.now() + 5000));
         try {
             expect((await putEvent(series.id, { data: { attendees: [...attendees, erin] } })).status).toBe(200);
             const vevents = unfolded(await mail.to(ERIN, 'Invitation'))
