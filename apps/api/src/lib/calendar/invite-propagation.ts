@@ -1,6 +1,6 @@
 // The sending side of an invitation. When the organizer of an event invites, changes or cancels, this tells each
 // guest: a guest on this server gets the change in their own Home, a REQUEST taking the decision a mailed one takes,
-// and an external guest gets an email. A guest added to a repeating event also gets its moved and removed
+// and an external guest gets an email. Every message about a repeating event carries its moved and removed
 // occurrences, and an account that appears later is sent what it was invited to. The event writes call it once they
 // commit, such as a save or a delete, and a guest's answer to an organizer on this server goes back the same way.
 
@@ -21,10 +21,10 @@ import type { Organizer } from './imip';
 import { composeCancelEmail, composeInviteEmail, composeInviteRequest } from './imip';
 import { toEvent } from './mappers';
 import * as schema from './schema';
-import type { InvitationLink, InvitationRequest } from './types';
+import type { InvitationRequest } from './types';
 
-// `series` set means `event` is one occurrence, and the messages name the series id plus the occurrence key.
-// The series' `exceptions` go to every added guest and every external update, or a guest's copy shows them unmoved.
+// `series` set means `event` is one occurrence, and the messages name the series id plus the occurrence key. Every
+// message about a series carries its `exceptions`, so a guest's copy never shows a moved or deleted date at its old slot.
 export async function propagateInvitation(
     organizerHome: Home,
     event: CalendarEvent,
@@ -34,34 +34,21 @@ export async function propagateInvitation(
     series?: CalendarEvent,
     exceptions: readonly CalendarEvent[] = [],
 ): Promise<void> {
-    const organizerEventId = series?.id ?? event.id;
-    const recurrenceDate = series ? event.recurrenceDate : null;
     const oldEmails = new Set(oldAttendees.map((a) => a.email.toLowerCase()));
     const newEmails = new Set(newAttendees.map((a) => a.email.toLowerCase()));
-
     const selves = new Set([user.email.toLowerCase(), organizerHome.user.email.toLowerCase()]);
     const notSelf = (a: Attendee) => !selves.has(a.email.toLowerCase());
-    const added = newAttendees.filter((a) => notSelf(a) && !oldEmails.has(a.email.toLowerCase()));
-    const removed = oldAttendees.filter((a) => notSelf(a) && !newEmails.has(a.email.toLowerCase()));
-    const existing = newAttendees.filter((a) => notSelf(a) && oldEmails.has(a.email.toLowerCase()));
-
     const organizer = organizerOf(organizerHome, user);
-    const link: InvitationLink = {
-        organizerEmail: organizer.email.toLowerCase(),
-        organizerEventId,
-        organizerUserId: organizer.userId,
-        createByUserId: user.id,
-    };
-    const requested = requestedEvent(event, recurrenceDate, organizer, newAttendees);
     let request: OutboundICalEvent | undefined;
 
-    for (const attendee of added) {
+    for (const attendee of newAttendees.filter(notSelf)) {
+        const updated = oldEmails.has(attendee.email.toLowerCase());
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || isGuest(targetUser)) {
-                await addRegistryEntry(organizerHome.user.id, attendee.email);
+                if (!updated) await addRegistryEntry(organizerHome.user.id, attendee.email);
                 request ??= composeInviteRequest(event, organizer, series, exceptions);
-                const mail = composeInviteEmail(event, organizer, [attendee], request);
+                const mail = composeInviteEmail(event, organizer, [attendee], request, updated);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP invite:', err));
                 continue;
             }
@@ -69,7 +56,7 @@ export async function propagateInvitation(
                 type: 'calendar:request',
                 ...invitationRequest(organizer, user.id, attendee.email, event, series, exceptions),
             });
-            if (getServerSettings().notifications.email.userOnCalendarInvite) {
+            if (!updated && getServerSettings().notifications.email.userOnCalendarInvite) {
                 // A local recipient has the event from sendToHome, so an iMIP attachment would update it twice.
                 const mail = composeInviteEmail(event, organizer, [attendee]);
                 sendMail(mail).catch((err) => console.error('Failed to send Eigen invite email:', err));
@@ -79,7 +66,7 @@ export async function propagateInvitation(
         }
     }
 
-    for (const attendee of removed) {
+    for (const attendee of oldAttendees.filter((a) => notSelf(a) && !newEmails.has(a.email.toLowerCase()))) {
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || isGuest(targetUser)) {
@@ -89,28 +76,12 @@ export async function propagateInvitation(
             }
             await sendToHome(targetUser.id, {
                 type: 'calendar:invitation-removal',
-                orgEventId: organizerEventId,
+                orgEventId: series?.id ?? event.id,
                 orgUserId: organizerHome.user.id,
-                occurrence: occurrenceRevision(event, recurrenceDate),
+                occurrence: occurrenceRevision(event, series ? event.recurrenceDate : null),
             });
         } catch (error) {
             console.error('Failed to cancel invitation:', error);
-        }
-    }
-
-    for (const attendee of existing) {
-        try {
-            const targetUser = await getUserByEmail(attendee.email);
-            if (!targetUser || isGuest(targetUser)) {
-                request ??= composeInviteRequest(event, organizer, series, exceptions);
-                const mail = composeInviteEmail(event, organizer, [attendee], request, true);
-                sendMail(mail).catch((err) => console.error('Failed to send iMIP update:', err));
-                continue;
-            }
-            // The guest's copy moves its own overrides along with the series, so an update sends the master alone.
-            await sendToHome(targetUser.id, { type: 'calendar:request', events: [requested], link });
-        } catch (error) {
-            console.error('Failed to update invitation:', error);
         }
     }
 }

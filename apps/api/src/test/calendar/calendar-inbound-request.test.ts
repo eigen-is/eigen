@@ -412,6 +412,24 @@ describe('one REQUEST, one write', () => {
         expect(harness.broadcasts).toHaveLength(broadcasts);
     });
 
+    // The organizer kept the occurrence's own title, which was the series' old one, and the file lists it first.
+    test('a rename reaches the overrides before their own events patch them, and its redelivery writes nothing', async () => {
+        const { harness, calendar, id } = await harnessWith();
+        const [master, moved] = seriesRequest(harness.user.email, 1);
+        const kept = { ...moved, title: 'Standup' };
+        await calendar.receiveRequest([master, kept], LINK);
+        const renamed = [kept, { ...master, title: 'Standup v2' }];
+
+        await calendar.receiveRequest(renamed, LINK);
+        const before = await ctagOf(calendar, id);
+        await calendar.receiveRequest(renamed, LINK);
+
+        const rows = storedEvents(calendar, id);
+        expect(rows.find((e) => !e.parentEventId)?.title).toBe('Standup v2');
+        expect(rows.find((e) => e.parentEventId)?.title).toBe('Standup');
+        expect(await ctagOf(calendar, id)).toBe(before);
+    });
+
     test('a master the store refuses files nothing, its occurrences included', async () => {
         const { harness, calendar, id } = await harnessWith();
         const [master, ...exceptions] = seriesRequest(harness.user.email, 3);

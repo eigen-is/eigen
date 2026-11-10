@@ -307,7 +307,7 @@ function applyRequestedEvent(
     if (!isNewerRevision(parsed, stored)) return false;
 
     const held = heldAttendees(existing, series);
-    const attendees = keepOwnAnswer(calendar, parsed, held, stored);
+    const attendees = keepOwnAnswer(calendar, parsed, existing, held, stored);
     const cancelled = parsed.status === 'cancelled';
     const timezone = key ? (parsed.timezone ?? series.timezone) : parsed.timezone;
     if (existing && (existing.status === 'cancelled') === cancelled) {
@@ -372,7 +372,7 @@ async function fileNewInvitation(
                     organizer: { ...organizer, userId: link.organizerUserId },
                     organizerEventId: link.organizerEventId,
                     attendees: own
-                        ? keepOwnAnswer(calendar, parsed, own.data?.attendees ?? [], answer)
+                        ? keepOwnAnswer(calendar, parsed, own, own.data?.attendees ?? [], answer)
                         : parsed.data?.attendees,
                     // A linked copy lets the guest keep their own reminders and color.
                     reminders: copy?.data?.reminders ?? parsed.data?.reminders,
@@ -404,18 +404,20 @@ function recurrenceKeyForSeries(
 }
 
 // The guest's own answer stands until the organizer reschedules, which raises the SEQUENCE. An organizer's list can
-// still say NEEDS-ACTION for a reply it hasn't read yet.
+// still say NEEDS-ACTION for a reply it hasn't read yet, and a date the guest removed holds no list but a decline.
 function keepOwnAnswer(
     calendar: Calendar,
     parsed: ParsedEvent,
+    existing: CalendarEvent | undefined,
     held: readonly Attendee[],
     stored: Revision | null,
 ): Attendee[] | undefined {
     const incoming = parsed.data?.attendees;
     const email = calendar.home.user.email.toLowerCase();
-    const own = held.find((a) => a.email.toLowerCase() === email);
+    const own =
+        existing?.status === 'cancelled' ? 'declined' : held.find((a) => a.email.toLowerCase() === email)?.status;
     if (!incoming || !own || !stored || parsed.sequence > stored.sequence) return incoming;
-    return withAttendeeStatus(incoming, email, own.status);
+    return withAttendeeStatus(incoming, email, own);
 }
 
 // An organizer's client repeats the times in every message. Only a time that differs from the stored row is patched.
