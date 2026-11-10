@@ -1,8 +1,8 @@
-// Replays the stored op batches onto a workbook's stored sheets, for a reader that was not there live, such as a
-// browser that opens the workbook or the server's export. It also owns the shape check a sheet or row op passes before
-// it applies, and says what a batch's ops can affect, which every reader computes again after the batch. A live
-// client's applyOpBatch calls the same checks, so a peer, a joiner and the server skip the same ops and end with the
-// same sheets.
+// Applies op batches to a workbook's plain sheets. replaySheetsOps replays the stored log for a reader that was not
+// there live, such as a browser that opens the workbook or the server's export, and the editor applies each batch it
+// takes through the same applySheetsBatch, so a peer, a joiner and the server skip the same ops and end with the same
+// sheets. It also owns the shape check a sheet or row op passes before it applies, and says what a batch's ops can
+// affect, which every reader computes again after the batch.
 
 import { isRecord } from '@workspace/lib/guards';
 import type { Op, Sheet } from '@workspace/lib/sheets';
@@ -71,7 +71,7 @@ export function replaySheetsOps(
 }
 
 // A row or column op a batch applied, with the sheets as they were before it.
-export type AppliedRowColOp = { op: InsertRowColOp | DeleteRowColOp; sheets: Sheet[] };
+type AppliedRowColOp = { op: InsertRowColOp | DeleteRowColOp; sheets: Sheet[] };
 
 // One batch on plain sheets, as every reader applies it: the sheet, row and column ops first, then the cell and field
 // patches, then the recompute those ops ask for, with `graph` following each step. It throws when an op fails, and
@@ -204,13 +204,13 @@ export function withMaterializedData(s: Sheet): Sheet {
 
 // The insert a row op names. An op's value is untyped and a hostile client may send any shape, so a bad one throws and
 // the op's whole batch rolls back, since its other ops were written for the rows the op would have moved.
-export function insertRowColOf(op: Op): InsertRowColOp {
+function insertRowColOf(op: Op): InsertRowColOp {
     const value = asInsertValue(op.value);
     if (!value || !op.id) throw new Error('insertRowCol op has a malformed value');
     return { ...value, id: op.id };
 }
 
-export function deleteRowColOf(op: Op): DeleteRowColOp {
+function deleteRowColOf(op: Op): DeleteRowColOp {
     const value = asDeleteValue(op.value);
     if (!value || !op.id) throw new Error('deleteRowCol op has a malformed value');
     return { ...value, id: op.id };
@@ -218,7 +218,7 @@ export function deleteRowColOf(op: Op): DeleteRowColOp {
 
 // A rename writes its name into every formula naming the tab, so a long one would run the reader out of memory, which
 // applySheetRename refuses.
-export function renameSheetOf(op: Op): RenameSheetOp {
+function renameSheetOf(op: Op): RenameSheetOp {
     const { name } = isRecord(op.value) ? op.value : { name: undefined };
     if (typeof name !== 'string' || !op.id) throw new Error('renameSheet op has a malformed value');
     return { id: op.id, name };

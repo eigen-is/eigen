@@ -1,6 +1,7 @@
 // The workbook's sheet list in the editor: adding, renaming, deleting and switching sheets, giving a sheet its cell
-// matrix, and the per-sheet view the grid paints. Menus and the sheet tabs call these inside an edit's recipe, and so
-// does a peer's batch through applyOpBatch. The Workbook runs deriveView on every context it commits.
+// matrix, and the per-sheet view the grid paints. Menus and the sheet tabs call these inside an edit's recipe. An add,
+// a delete or a rename applies as its op through applyBatch, as a peer's does. The Workbook runs deriveView on every
+// context it commits.
 
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
 import { produce } from 'immer';
@@ -77,8 +78,8 @@ export function applySheetView(ctx: Context) {
 // row counts too: a column's width depends on whether its first cell is set, and its length is the column count.
 const GEOMETRY_MAPS = ['rowlen', 'columnlen', 'rowhidden', 'colhidden', 'merge'] as const;
 
-// Immer gives a changed map a new identity, so a cell edit and a drag frame cost a few comparisons here. A write outside
-// sheets stays off the wire and out of the undo entry, which are built from the commit's own patches.
+// Immer gives a changed map a new identity, so a cell edit and a drag frame cost a few comparisons here. A write
+// outside sheets stays off the wire and out of the undo entry, which are built from the commit's own patches.
 export function deriveView(base: Context, next: Context): Context {
     if (next.currentSheetId !== base.currentSheetId) return next;
     const before = base.sheets.find(({ id }) => id === base.currentSheetId);

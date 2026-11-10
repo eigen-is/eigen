@@ -1,11 +1,10 @@
-// Applies one op batch to the editor's context through applySheetsBatch, the function replaySheetsOps applies a
-// joiner's batches with, on the plain sheets outside immer, and then writes the result into the context in one recipe.
-// Every sheet, row and column change of the open workbook comes through here: a peer's batch, a log replay, an undo
-// step and the author's own row op or sheet add, so every tab ends the same. It reports the ops that moved rows,
-// which the undo stacks follow, and a batch new to the tab moves its view too.
+// Applies one op batch to the editor's context. applySheetsBatch, which the replay applies a joiner's batches with,
+// runs on the plain sheets outside immer, and one recipe writes what changed into the context. Every sheet, row or
+// column change of the open workbook comes through here, such as a peer's batch, an undo step or the author's own row
+// op, so every tab ends the same. It reports the ops that moved rows, which the undo stacks follow, and a batch new to
+// the tab moves its view too.
 
 import { isRecord } from '@workspace/lib/guards';
-import { cloneDeep } from 'es-toolkit/compat';
 import { produce } from 'immer';
 import { applySheetsBatch } from '../../engine/replay-ops';
 import type { Context } from '../context';
@@ -27,12 +26,10 @@ export function applyOpBatch(
     ops: Op[],
     moveView = true,
 ): { ctx: Context; moved: AppliedRowCol[] } | null {
-    // An added sheet is the op's own value, which must never end up in the frozen context.
-    const owned = ops.map((op) => (op.op === 'addSheet' ? { ...op, value: cloneDeep(op.value) } : op));
     let moved: AppliedRowCol[] = [];
     try {
         const next = produce(ctx, (draft: Context) => {
-            moved = applyBatch(draft, owned, moveView);
+            moved = applyBatch(draft, ops, moveView);
         });
         return { ctx: next, moved };
     } catch (e) {
