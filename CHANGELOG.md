@@ -42,6 +42,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Deleted invitations in Calendar** — an invitation from someone on your server that you deleted comes back, faded as declined and with its moved and cancelled dates, when its organizer changes the event. So does a date you removed
 - **Large invites in Mail** — a calendar invite over 1 MiB shows "This calendar invitation could not be read" instead of a preview, and no longer changes your calendar by itself
 - **Unusual repeat rules in Calendar** — an event whose repeat rule would take the server too long to work out shows on its first date only, and calendar apps still get the whole rule. An invite whose rule names no frequency arrives as one event instead of getting lost
+- **Invitation emails in Calendar** — an invitation or cancellation names the time zone of a timed event, and says how a repeating event repeats, such as "Every week on Wednesday"
+- **End dates of repeating events** — the event card, the Repeat menu and invitation emails write a series' end as "until 15 December 2026", on its last day in the event's own time zone
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
 
 ### Fixed
@@ -104,6 +106,12 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Invitations to repeating events in Calendar** — an invitation to a repeating event with moved or cancelled dates notifies you once, and one that arrives twice notifies you no more. A date the organizer took you off shows as cancelled
 - **Invitations from before you joined** — an invitation to a repeating event sent before you had an account arrives with its moved and cancelled dates, and one to a single date of it arrives as that date
 - **Mailed invitations in Calendar** — an invitation by mail that lists a moved date before its repeating event keeps the moved date
+- **Guests of repeating events in Calendar** — a guest added to a repeating event gets every date, moved or answered ones included, and a guest removed leaves them all. A guest's answer for the whole series counts on every date
+- **Ending an invitation early in Calendar** — after you remove **This and following events** from an invitation, the dates you kept keep your answer when the organizer changes the event
+- **Removing the last guest in Calendar** — removing the only guest of an event that doesn't repeat saves, instead of keeping the guest
+- **Cancelled dates in Calendar** — cancelling one date of a repeating event or deleting the whole series, and changing a date after that, reach guests whose calendar app skips messages that look old
+- **Dates across time zones in Calendar** — a date an organizer in another time zone moves, or invites you to alone, shows once on its own day, and their later updates and your answer reach that same date
+- **Answering one date by mail** — when you answer one date of a repeating event from someone outside your server, the email they get shows that date, not the first one
 - **A refused Save** — in Calendar, Contacts and Personal info in Space, a Save refused because the item changed elsewhere keeps what you typed and takes the other fields from the server
 - **Removing someone with a document open** — removing someone from a team or an organization, or deleting their account, cuts them off within 15 seconds from the documents they can no longer read. A password reset does too
 - **Losing access to an open document** — in Docs, Sheets, Slides, Vector and Stickies, the page switches to "You need access" within 15 seconds, or to sign-in if your account was deleted, instead of leaving an editor where typing goes nowhere
