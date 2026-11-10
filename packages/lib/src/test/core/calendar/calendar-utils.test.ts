@@ -11,7 +11,7 @@ import {
     viewerTimeZone,
 } from '../../../core/calendar/calendar-utils';
 import { WINDOWS_ZONES } from '../../../core/calendar/windows-zones';
-import type { CalendarEventOccurrence, EventData } from '../../../types/calendar';
+import type { CalendarEventOccurrence, Organizer } from '../../../types/calendar';
 
 function occurrence(occurrenceDate: string, startTime: Date, endTime: Date): CalendarEventOccurrence {
     return {
@@ -102,7 +102,7 @@ describe('isSeriesOccurrence', () => {
 });
 
 describe('isInvitationFromOthers', () => {
-    const withOrganizer = (organizer: NonNullable<EventData['organizer']>) => ({ data: { organizer } });
+    const withOrganizer = (organizer: Organizer) => ({ data: { organizer } });
 
     test('an organizer with the owner address is the owner, whatever its case', () => {
         const event = withOrganizer({ userId: '', email: 'Alice@Example.com', name: 'Alice' });

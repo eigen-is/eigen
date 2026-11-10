@@ -45,13 +45,13 @@ describe('parseIcs over a multi-series file', () => {
         }
     });
 
-    test('a series whose only VEVENT is an override still keys through its own DTSTART zone', () => {
+    test('a series whose only VEVENT is an override keys on the date its RECURRENCE-ID is written in', () => {
         const { events } = parseIcs(
             vcal([
                 ...AUCKLAND,
                 'BEGIN:VEVENT',
                 'UID:orphan@eigen',
-                'RECURRENCE-ID:20260309T160000Z',
+                'RECURRENCE-ID:20260310T020000Z',
                 'DTSTART;TZID=America/Los_Angeles:20260309T140000',
                 'DTEND;TZID=America/Los_Angeles:20260309T150000',
                 'SUMMARY:Orphaned override',
@@ -59,42 +59,7 @@ describe('parseIcs over a multi-series file', () => {
             ]),
         );
 
-        expect(events.find((event) => event.uid === 'orphan@eigen')?.recurrenceDate).toBe('2026-03-09');
-    });
-});
-
-// A UID is required, and an override carries its master's — but exporters skip it, and then the pair no
-// longer groups. A weekly series at 09:00 Auckland whose second occurrence is moved: the UTC-Z
-// RECURRENCE-ID is 2 January in UTC and 3 January in Auckland, so a file the two VEVENTs of which no
-// longer find each other keys the override a day early.
-describe('parseIcs over a file whose UIDs do not line up', () => {
-    const shape = (masterUid: string[], overrideUid: string[]) =>
-        vcal([
-            'BEGIN:VEVENT',
-            ...masterUid,
-            'DTSTART;TZID=Pacific/Auckland:20250101T090000',
-            'DTEND;TZID=Pacific/Auckland:20250101T100000',
-            'RRULE:FREQ=WEEKLY',
-            'SUMMARY:Standup',
-            'END:VEVENT',
-            'BEGIN:VEVENT',
-            ...overrideUid,
-            'RECURRENCE-ID:20250102T200000Z',
-            'DTSTART:20250102T220000Z',
-            'DTEND:20250102T230000Z',
-            'SUMMARY:Standup moved',
-            'END:VEVENT',
-        ]);
-
-    const overrideKey = (text: string) =>
-        parseIcs(text).events.find((event) => event.recurrenceDate !== null)?.recurrenceDate;
-
-    test('an override keys through the file master zone when its master carries no UID', () => {
-        expect(overrideKey(shape([], ['UID:series@eigen']))).toBe('2025-01-03');
-    });
-
-    test('an override with no UID of its own keys through the file master zone', () => {
-        expect(overrideKey(shape(['UID:series@eigen'], []))).toBe('2025-01-03');
+        expect(events.find((event) => event.uid === 'orphan@eigen')?.recurrenceDate).toBe('2026-03-10');
     });
 });
 
@@ -227,6 +192,28 @@ describe('parseIcs over a year that is not four digits', () => {
 
         expect(events).toHaveLength(1);
         expect(skipped).toBe(1);
+    });
+});
+
+describe('parseIcs over an all-day series with a timed EXDATE', () => {
+    test('the cancelled row is all day, on the date the EXDATE is written on', () => {
+        const { events } = parseIcs(
+            vcal([
+                'BEGIN:VEVENT',
+                'UID:all-day',
+                'DTSTART;VALUE=DATE:20260504',
+                'DTEND;VALUE=DATE:20260505',
+                'RRULE:FREQ=DAILY;COUNT=4',
+                'EXDATE;TZID=Pacific/Auckland:20260505T000000',
+                'SUMMARY:Holiday',
+                'END:VEVENT',
+            ]),
+        );
+        const cancelled = events.find((e) => e.status === 'cancelled');
+
+        expect(
+            cancelled && [cancelled.recurrenceDate, cancelled.allDay, cancelled.startTime, cancelled.endTime],
+        ).toEqual(['2026-05-05', true, new Date('2026-05-05T00:00:00Z'), new Date('2026-05-06T00:00:00Z')]);
     });
 });
 

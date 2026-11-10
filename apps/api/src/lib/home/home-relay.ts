@@ -22,7 +22,7 @@ import { settlesWithin } from '../../utils/timing';
 import { captureBytes, snapshotHome } from '../backup/snapshot-home';
 import type { Calendar } from '../calendar/calendar';
 import { readCalendarTotalSize } from '../calendar/resource-store';
-import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/types';
+import type { CreateEventArgs, InvitationRequest } from '../calendar/types';
 import {
     getAvatarsDir,
     getDataRoot,
@@ -59,8 +59,7 @@ export type HomeMessage =
           actorEmail?: string;
           actorName?: string;
       }
-    | { type: 'calendar:invitation'; payload: ReceiveInvitationPayload }
-    | { type: 'calendar:invitation-update'; orgEventId: string; orgUserId: string; payload: InvitationUpdatePayload }
+    | ({ type: 'calendar:request' } & InvitationRequest)
     | {
           type: 'calendar:invitation-removal';
           orgEventId: string;
@@ -130,44 +129,25 @@ async function deliver(targetId: string, message: DeliveredMessage): Promise<voi
                 );
             }
             break;
-        case 'calendar:invitation': {
-            const received = await home.calendar.receiveInvitation(message.payload);
-            // The organizer's home believes this home holds a copy, so a refused invitation is logged.
-            if (!received) {
-                console.info(
-                    `home-relay: ${targetId} dropped the invitation ${message.payload.uid} from ${message.payload.organizerUserId}`,
-                );
-            }
-            break;
-        }
-        case 'calendar:invitation-update':
-            await home.calendar.receiveInvitationUpdate(message.orgEventId, message.orgUserId, message.payload);
+        case 'calendar:request':
+            await home.calendar.receiveRequest(message.events, message.link);
             break;
         case 'calendar:invitation-removal':
             if (message.occurrence) {
-                await home.calendar.cancelInvitationOccurrence(
-                    message.orgEventId,
-                    message.orgUserId,
-                    message.occurrence.recurrenceDate,
-                    null,
-                    message.occurrence,
-                );
+                await home.calendar.cancelInvitationOccurrence(message.orgEventId, message.orgUserId, {
+                    ...message.occurrence,
+                    recurrenceId: null,
+                });
             } else {
                 await home.calendar.removeInvitation(message.orgEventId, message.orgUserId);
             }
             break;
         case 'calendar:rsvp':
             if (message.recurrenceDate) {
-                // An answer from an attendee only sets their status. It never brings back an occurrence
-                // that the organizer deleted.
-                await home.calendar.receiveRsvpForOccurrence(
-                    message.eventId,
-                    message.attendeeEmail,
-                    message.status,
-                    message.recurrenceDate,
-                    null,
-                    false,
-                );
+                await home.calendar.receiveRsvpForOccurrence(message.eventId, message.attendeeEmail, message.status, {
+                    recurrenceDate: message.recurrenceDate,
+                    recurrenceId: null,
+                });
             } else {
                 await home.calendar.receiveAttendeeStatus(message.eventId, message.attendeeEmail, message.status);
             }
@@ -347,8 +327,8 @@ export async function pullEventById(
     return home.calendar.getEventById(calendarId, eventId);
 }
 
-export async function pullPendingInvitations(ownerId: string, attendeeEmail: string): Promise<CalendarEvent[]> {
-    return (await calendarOf(ownerId))?.getEventsWithAttendee(attendeeEmail) ?? [];
+export async function pullPendingInvitations(ownerId: string, attendeeEmail: string): Promise<InvitationRequest[]> {
+    return (await calendarOf(ownerId))?.pendingInvitations(attendeeEmail) ?? [];
 }
 
 // In the event writes, `user` is the person who makes the change, not the owner of the calendar.

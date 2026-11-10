@@ -1,14 +1,17 @@
+// One event as it reads when nobody is editing it, such as a stored occurrence in the calendar's detail dialog or an
+// event an .ics file holds in its quick look. It is data alone: the surface around it owns answering, editing and
+// deleting.
+
 import { formatEventWhen, rruleToText, viewerTimeZone } from '@workspace/lib/calendar';
 import { remainingLine } from '@workspace/lib/transfer';
-import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
 import { AlignLeft, Clock, MapPin, Repeat, UsersRound } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Badge } from '../badge';
 import { AttendeeList } from './attendee-list';
 
-// `title` is omitted by a caller that heads its own surface with it (the detail dialog's DialogTitle);
-// the bounds are instants, so a payload carrying strings converts once, where they enter; and
-// `remainingAttendees` is the guests the payload capped away.
+// `title` is left out where the surface heads itself with it. `remainingAttendees` counts the guests a payload capped
+// away.
 export type EventDetailCardProps = {
     title?: string;
     status?: CalendarEvent['status'] | null;
@@ -19,15 +22,12 @@ export type EventDetailCardProps = {
     rrule?: string | null;
     location?: string | null;
     description?: string | null;
-    organizer?: EventData['organizer'] | null;
+    organizer?: Organizer | null;
     attendees?: Attendee[];
     remainingAttendees?: number;
     className?: string;
 };
 
-// One event as it reads when nobody is editing it: a stored occurrence in the calendar app's detail
-// dialog, and an event an .ics file holds in its quick look. Data alone — the surface around it owns
-// RSVP, edit and delete.
 export function EventDetailCard({
     title,
     status,

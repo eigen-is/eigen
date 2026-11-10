@@ -1,66 +1,32 @@
-import type { Attendee, CalendarEvent, CreateEventInput, EventData } from '@workspace/lib/types/calendar';
+// Types the calendar store's own modules share, such as the arguments of an event write, and the link the home relay
+// and inbound mail vouch for when a REQUEST arrives. The types the web app reads live with the shared calendar types.
 
-// Sender's SEQUENCE plus the instant it stamped: together they order two messages the way RFC 5546 § 2.1.5 does.
-type MessageRevision = {
-    sequence: number;
-    dtstamp?: Date | null;
-};
+import type { CreateEventInput } from '@workspace/lib/types/calendar';
+import type { ParsedEvent, RecurrenceId } from '../ical/ical-parse';
 
-export type ReceiveInvitationPayload = MessageRevision & {
-    uid: string;
-    // Set when the message addresses ONE occurrence: its RECURRENCE-ID key, so the receiver attaches an exception instead of replacing the series.
-    recurrenceDate?: string | null;
-    title: string;
-    description: string | null;
-    location: string | null;
-    startTime: Date;
-    endTime: Date;
-    allDay: boolean;
-    rrule: string | null;
-    timezone: string | null;
-    status: CalendarEvent['status'];
-    data: EventData;
-    createByUserId: string;
+// What the transport vouches for about an inbound REQUEST: the relay envelope, or a verified mail sender. None of it
+// comes from the message body.
+export type InvitationLink = {
+    organizerEmail: string;
     organizerEventId: string;
     organizerUserId: string;
+    createByUserId: string;
 };
 
-export type InvitationUpdatePayload = MessageRevision & {
-    // Same rule as ReceiveInvitationPayload: an update naming an occurrence moves that instance only.
-    recurrenceDate?: string | null;
-    title: string;
-    description: string | null;
-    location: string | null;
-    startTime: Date;
-    endTime: Date;
-    allDay: boolean;
-    rrule: string | null;
-    timezone?: string | null;
-    status: CalendarEvent['status'];
-    attendees?: Attendee[];
-};
+// A REQUEST from one Home to another: one series' events, or one occurrence's, and the link its envelope vouches for.
+export type InvitationRequest = { events: readonly ParsedEvent[]; link: InvitationLink };
 
-// Inbound iMIP REQUEST/CANCEL naming one occurrence: attaches as an exception on the linked series.
-export type InvitationExceptionPayload = MessageRevision & {
-    recurrenceDate: string;
-    // Absolute instant of a UTC-Z RECURRENCE-ID: lets the receiver re-key against the series timezone when the ICS carried none usable.
-    recurrenceInstant?: Date | null;
-    title: string;
-    description: string | null;
-    location: string | null;
-    startTime: Date;
-    endTime: Date;
-    allDay: boolean;
-    timezone: string | null;
-    status: CalendarEvent['status'];
-    attendees?: Attendee[];
-};
+// One occurrence a message names: its sender's key, and the RECURRENCE-ID a mailed message states, null from the relay,
+// which the receiver keys again in the series it holds.
+export type OccurrenceRef = { recurrenceDate: string; recurrenceId: RecurrenceId | null };
 
-// The wire shape minus the positional calendarId, plus the internal CalDAV fields the FE must never set.
+// The wire shape minus the positional calendarId, plus the fields only the server sets, which the web app never sends.
 export type CreateEventArgs = Omit<CreateEventInput, 'calendarId'> & {
     sequence?: number;
-    // Set only by an invitation receiver: the organizer's stamp replaces the local clock so the next message can be ordered against it.
+    // Set only by an invitation receiver. The organizer's stamp replaces the local clock, so the next message can be
+    // ordered against it, and a copy of one date keeps the organizer's RECURRENCE-ID.
     dtstamp?: Date | null;
+    recurrenceId?: RecurrenceId | null;
     createByUserId?: string | null;
     uid?: string | null;
 };

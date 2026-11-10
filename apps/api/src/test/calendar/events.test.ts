@@ -202,6 +202,93 @@ describe("the first web save of a client's event", () => {
     });
 });
 
+// A client may store one occurrence of a series alone. Its UTC RECURRENCE-ID keys on its UTC date, so the row and every
+// edit of the file name one date, here 12 January.
+describe('a lone occurrence a client wrote', () => {
+    const stored = async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const calendar = harness.instance;
+        const body = vcal([
+            'BEGIN:VEVENT',
+            'UID:lone',
+            'DTSTAMP:20260101T000000Z',
+            'RECURRENCE-ID:20260112T233000Z',
+            'DTSTART;TZID=Europe/Amsterdam:20260113T013000',
+            'DTEND;TZID=Europe/Amsterdam:20260113T023000',
+            'SUMMARY:Lone',
+            'END:VEVENT',
+        ]);
+        await putResource(calendar, calendarId, 'lone.ics', body);
+        const event = storedEvents(calendar, calendarId)[0];
+        expect(event.recurrenceDate).toBe('2026-01-12');
+        return { calendar, calendarId, event };
+    };
+
+    test('a web save renames it', async () => {
+        const { calendar, calendarId, event } = await stored();
+
+        await calendar.updateEvent(calendarId, event.id, { title: 'Renamed' });
+
+        expect(storedEvents(calendar, calendarId).map((e) => e.title)).toEqual(['Renamed']);
+    });
+
+    test('deleting it takes the file with it', async () => {
+        const { calendar, calendarId, event } = await stored();
+
+        await calendar.deleteEvent(calendarId, event.id);
+
+        expect(await calendar.listResources(calendarId)).toHaveLength(0);
+    });
+});
+
+// An all-day series has no clock, so a timed EXDATE or RECURRENCE-ID names the date it is written on, here in Auckland,
+// where midnight is the day before in UTC.
+describe('an all-day series a client wrote with timed exceptions', () => {
+    test('each exception names the date it is written on', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const calendar = harness.instance;
+        const body = vcal(
+            [
+                'BEGIN:VEVENT',
+                'UID:all-day',
+                'DTSTAMP:20260101T000000Z',
+                'DTSTART;VALUE=DATE:20260504',
+                'DTEND;VALUE=DATE:20260505',
+                'RRULE:FREQ=DAILY;COUNT=4',
+                'EXDATE;TZID=Pacific/Auckland:20260505T000000',
+                'SUMMARY:Holiday',
+                'END:VEVENT',
+            ],
+            [
+                'BEGIN:VEVENT',
+                'UID:all-day',
+                'DTSTAMP:20260101T000000Z',
+                'RECURRENCE-ID;TZID=Pacific/Auckland:20260506T000000',
+                'DTSTART;VALUE=DATE:20260506',
+                'DTEND;VALUE=DATE:20260507',
+                'SUMMARY:Moved',
+                'END:VEVENT',
+            ],
+        );
+        await putResource(calendar, calendarId, 'all-day.ics', body);
+
+        const keys = storedEvents(calendar, calendarId).map((e) => [e.recurrenceDate, e.status]);
+        expect(keys.toSorted()).toEqual([
+            [null, 'confirmed'],
+            ['2026-05-05', 'cancelled'],
+            ['2026-05-06', 'confirmed'],
+        ]);
+        const range = await calendar.getEventsInRange(new Date('2026-05-01'), new Date('2026-06-01'));
+        expect(range.map((o) => [o.occurrenceDate, o.title])).toEqual([
+            ['2026-05-04', 'Holiday'],
+            ['2026-05-06', 'Moved'],
+            ['2026-05-07', 'Holiday'],
+        ]);
+    });
+});
+
 describe('moveEvent', () => {
     const seriesOf = async (harness: TestHome<Calendar>, calendarId: string, uid: string, uri: string) => {
         await putResource(harness.instance, calendarId, uri, vcal(vevent(uid, 'Movable')));

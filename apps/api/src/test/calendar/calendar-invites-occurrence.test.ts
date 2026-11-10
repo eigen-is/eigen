@@ -37,7 +37,7 @@ describe('Occurrence edits of an invited series', () => {
 
     const guests = () => [{ email: ctx.bob.user.email, name: 'Bob', status: 'pending' as const, role: 'required' }];
 
-    async function createSeries(title: string): Promise<CalendarEvent> {
+    async function createSeries(title: string, attendees: object[] = guests()): Promise<CalendarEvent> {
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
             `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
@@ -51,7 +51,7 @@ describe('Occurrence edits of an invited series', () => {
                     allDay: false,
                     rrule: 'FREQ=WEEKLY;COUNT=4',
                     timezone: TZ,
-                    data: { attendees: guests() },
+                    data: { attendees },
                 }),
             },
         );
@@ -527,6 +527,89 @@ describe('Occurrence edits of an invited series', () => {
             expect(ics).not.toContain('X-EIGEN');
             expect(ics).not.toContain('BEGIN:VALARM');
         }
+    });
+
+    test('a guest added to a series gets an occurrence they are not on as cancelled', async () => {
+        const charlie = { email: ctx.charlie.user.email, name: 'Charlie', status: 'pending', role: 'required' };
+        const series = await createSeries('Weekly Not On One', [charlie]);
+        const target = '2027-02-16';
+        await editOccurrence(series.id, target, { title: 'Charlie Only', data: { attendees: [charlie] } });
+
+        expect((await putEvent(series.id, { data: { attendees: [charlie, ...guests()] } })).status).toBe(200);
+
+        const reached = await untilBob(series.uid, (occ) => occ.length >= 3);
+        expect(reached.map((e) => e.occurrenceDate)).not.toContain(target);
+        expect(reached).toHaveLength(3);
+    });
+
+    const bobStatus = (event: CalendarEventOccurrence) =>
+        event.data?.attendees?.find((a) => a.email === ctx.bob.user.email)?.status;
+
+    const rsvpAsBob = (eventId: string, body: Record<string, unknown>) =>
+        authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events/${eventId}/rsvp`,
+            { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+        );
+
+    test("a guest who deleted their copy gets it back faded, with the series' moved and cancelled dates", async () => {
+        const series = await createSeries('Weekly Deleted Copy');
+        const [, moved, cancelled] = (await untilBob(series.uid, (occ) => occ.length === 4)).map(
+            (e) => e.occurrenceDate,
+        );
+        const movedStart = new Date(Date.parse(`${moved}T09:00:00Z`) + HOUR);
+        await editOccurrence(series.id, moved, {
+            title: 'Deleted Copy Moved',
+            startTime: movedStart,
+            endTime: new Date(movedStart.getTime() + HOUR),
+            data: { attendees: [] },
+        });
+        await editOccurrence(series.id, cancelled, {
+            title: series.title,
+            status: 'cancelled',
+            data: { attendees: [] },
+        });
+        const held = await untilBob(
+            series.uid,
+            (occ) => occ.length === 3 && occ.some((e) => e.title === 'Deleted Copy Moved'),
+        );
+        const bobMaster = findOrFail(held, (e) => !e.parentEventId);
+        expect((await rsvpAsBob(bobMaster.id, { status: 'declined', remove: true })).status).toBe(200);
+        await eventually(async () => {
+            const master = findOrFail(await aliceOccurrences(series.uid), (e) => !e.parentEventId);
+            return bobStatus(master) === 'declined' ? master : undefined;
+        }, "Bob's decline to reach Alice");
+
+        expect((await putEvent(series.id, { title: 'Weekly Deleted Copy Renamed' })).status).toBe(200);
+
+        const back = await untilBob(series.uid, (occ) => occ.length === 3);
+        expect(back.map((e) => e.title).sort()).toEqual([
+            'Deleted Copy Moved',
+            'Weekly Deleted Copy Renamed',
+            'Weekly Deleted Copy Renamed',
+        ]);
+        expect(back.map((e) => e.occurrenceDate)).not.toContain(cancelled);
+        expect(back.map(bobStatus)).toEqual(['declined', 'declined', 'declined']);
+    });
+
+    test('a date the guest removed comes back faded as declined on the next update', async () => {
+        const series = await createSeries('Weekly Removed Date');
+        const reached = await untilBob(series.uid, (occ) => occ.length === 4);
+        const target = reached[1].occurrenceDate;
+        const bobMaster = findOrFail(reached, (e) => !e.parentEventId);
+        expect((await rsvpAsBob(bobMaster.id, { status: 'accepted' })).status).toBe(200);
+        const removal = { status: 'declined', scope: 'this', recurrenceDate: target, remove: true };
+        expect((await rsvpAsBob(bobMaster.id, removal)).status).toBe(200);
+        await eventually(async () => {
+            const one = (await aliceOccurrences(series.uid)).find((e) => e.occurrenceDate === target);
+            return one && bobStatus(one) === 'declined' ? one : undefined;
+        }, "Bob's removal to reach Alice as a decline");
+
+        expect((await putEvent(series.id, { title: 'Weekly Removed Date Renamed' })).status).toBe(200);
+
+        const back = await untilBob(series.uid, (occ) => occ.length === 4);
+        expect(bobStatus(findOrFail(back, (e) => e.occurrenceDate === target))).toBe('declined');
+        for (const other of back.filter((e) => e.occurrenceDate !== target)) expect(bobStatus(other)).toBe('accepted');
     });
 
     test('the guest is told an invitation changed, not that they were invited to a new series', async () => {

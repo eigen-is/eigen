@@ -201,7 +201,7 @@ them. Per key:
   `data.color` and `data.reminders`, which keep their stored values (local overrides; feed VALARMs
   only seed `data.reminders` on first insert). SEQUENCE is stored but not used for conflict logic —
   a feed is a full snapshot, so snapshot-wins is correct; SEQUENCE ordering matters only for
-  incremental iMIP messaging (`receiveInvitationUpdate`), which this path never touches.
+  incremental iMIP messaging (`receiveRequest`), which this path never touches.
 - **In local, not remote** → delete the row + write the tombstone. Deleting a master cascades its
   exceptions (`events.parentEventId` FK is `ON DELETE CASCADE`).
 - Events with `STATUS:CANCELLED` in the feed are stored as-is (`parseIcs` maps status); canceled

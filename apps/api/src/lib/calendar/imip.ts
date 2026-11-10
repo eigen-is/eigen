@@ -5,29 +5,29 @@
 
 import { formatEventWhen, isInvitationFromOthers, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import { escapeHtml } from '@workspace/lib/html';
-import type { Attendee, CalendarEvent, EventData, ImipMethod } from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEvent, ImipMethod, Organizer } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment, CalendarInvite } from '@workspace/lib/types/mail';
 import { isCalendarPart } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
 import type { Home } from '../home';
 import { parseIcs, serializeEventForImip } from '../ical';
+import type { EventToBuild } from '../ical/ical-component';
 import { computeOccurrenceTimes } from '../ical/wall-clock';
 import { EMAIL_MUTED, EMAIL_TEXT, renderEigenEmail } from '../mailer/mail-template';
 import type { OutboundICalEvent, OutboundMail } from '../mailer/mailer';
 
-type Organizer = NonNullable<EventData['organizer']>;
-
-// Above this a body is a mailed calendar export, not a scheduling message, and it does not get to write a Home once per VEVENT.
+// Above this a body is a mailed calendar export, not a scheduling message.
 const IMIP_MAX_EVENTS = 50;
 
-// An answer for one date of a series walks the series from its start to that date, so a REPLY answers this many.
+// A REPLY's date counts only when the rule yields it, and checking that expands the series from its start to that
+// date, so a REPLY answers this many.
 const IMIP_MAX_REPLY_DATES = 5;
 
 // A scheduling message is small, far below what a saved event may hold.
 const IMIP_MAX_BYTES = 1_048_576;
 
-// The calendar file of one save's invitation mails. Nothing in it differs per guest, and its size is guests × exceptions,
-// so a save builds it once.
+// The calendar file of one save's invitation mails. Nothing in it differs per guest, and its size is guests ×
+// exceptions, so a save builds it once.
 export function composeInviteRequest(
     event: CalendarEvent,
     organizer: Organizer,
@@ -73,7 +73,8 @@ export function composeCancelEmail(
         subject: `Canceled: ${event.title}`,
         text: `This event has been canceled:\n\n${buildEventSummary(event)}`,
         html: buildEventHtml(event, footer, 'This event has been canceled'),
-        // RFC 5546 § 3.2.5: a CANCEL lists the attendees it cancels, and neither a cancelled occurrence nor a removal holds them.
+        // RFC 5546 § 3.2.5: a CANCEL lists the attendees it cancels, and neither a cancelled occurrence nor a removal
+        // holds them.
         icalEvent: icalEvent(
             { ...event, status: 'cancelled', data: { ...event.data, organizer, attendees } },
             'CANCEL',
@@ -89,8 +90,9 @@ const STATUS_LABELS: Record<Attendee['status'], string> = {
     pending: 'Pending',
 };
 
+// `event` names its occurrence by the instant its stored file holds, which a copy of one date can't compute.
 export function composeRsvpReply(
-    event: CalendarEvent,
+    event: EventToBuild,
     attendeeEmail: string,
     attendeeName: string,
     status: Attendee['status'],
@@ -99,7 +101,7 @@ export function composeRsvpReply(
     const organizer = event.data?.organizer;
     if (!organizer) throw new Error('Event has no organizer');
 
-    const replyEvent: CalendarEvent = {
+    const replyEvent: EventToBuild = {
         ...event,
         data: {
             ...event.data,
@@ -107,7 +109,8 @@ export function composeRsvpReply(
         },
     };
 
-    // A scope:'this' RSVP carries a RECURRENCE-ID (RFC 5546) so the organizer applies the PARTSTAT to that instance alone.
+    // A scope:'this' RSVP carries a RECURRENCE-ID (RFC 5546), so the organizer applies the PARTSTAT to that instance
+    // alone.
     if (recurrenceDate) {
         const { startTime, endTime } = computeOccurrenceTimes(event, recurrenceDate);
         replyEvent.rrule = null;
@@ -129,19 +132,6 @@ export function composeRsvpReply(
         ),
         icalEvent: icalEvent(replyEvent, 'REPLY'),
     };
-}
-
-// A part past the limit is no invitation, and the mail goes on without one.
-function extractCalendarAttachment(mail: { attachments: readonly Attachment[] }): {
-    ics: string;
-    method?: ImipMethod;
-} | null {
-    const attachment = mail.attachments.find(
-        (part) => isCalendarPart(part) && part.content.byteLength <= IMIP_MAX_BYTES,
-    );
-    if (!attachment) return null;
-
-    return { ics: Buffer.from(attachment.content).toString(), method: attachment.calendarMethod };
 }
 
 // Null for a part nobody can read, too large or unparseable: the mail widget renders that as an explicit error state.
@@ -188,7 +178,8 @@ export async function processInboundImip(
     const method = parsedMethod ?? calAttachment.method;
     if (!method || events.length === 0) return;
 
-    // The user's own mail coming back: acting on it would seize their own event as somebody else's copy, reducing every CalDAV PUT to alarms.
+    // The user's own mail coming back. Acting on it would make their own event somebody else's copy, so every CalDAV
+    // PUT could change only its alarms.
     if (method !== 'REPLY' && sender === home.user.email.toLowerCase()) {
         console.info(`iMIP: not acting on a ${method} the recipient sent themselves (${sender})`);
         return;
@@ -201,29 +192,39 @@ export async function processInboundImip(
     if (events.length > IMIP_MAX_EVENTS) {
         console.info(`iMIP: acting on the first ${IMIP_MAX_EVENTS} of ${events.length} events from ${sender}`);
     }
+    const acted = events.slice(0, IMIP_MAX_EVENTS);
+    for (const parsed of acted) {
+        if (parsed.endTime < parsed.startTime) parsed.endTime = parsed.startTime;
+    }
+
+    if (method === 'REQUEST') {
+        // A mail may carry several series, and each is one REQUEST: its master and occurrences take one decision.
+        const organizerUserId = externalOwnerId(sender);
+        for (const [uid, requested] of Map.groupBy(acted, (parsed) => parsed.uid)) {
+            await calendar.receiveRequest(requested, {
+                organizerEmail: sender,
+                organizerEventId: uid,
+                organizerUserId,
+                createByUserId: organizerUserId,
+            });
+        }
+        return;
+    }
 
     let replyDates = 0;
-    for (const parsed of events.slice(0, IMIP_MAX_EVENTS)) {
-        if (parsed.endTime < parsed.startTime) parsed.endTime = parsed.startTime;
-
-        if (method === 'REQUEST') {
-            await calendar.receiveImipRequest(parsed, sender);
-        } else if (method === 'CANCEL') {
+    for (const parsed of acted) {
+        const { recurrenceDate } = parsed;
+        if (method === 'CANCEL') {
             const organizerEmail = parsed.data?.organizer?.email;
             if (!sentBy(organizerEmail)) continue;
-            if (parsed.recurrenceDate) {
-                await calendar.cancelInvitationOccurrence(
-                    parsed.uid,
-                    externalOwnerId(organizerEmail),
-                    parsed.recurrenceDate,
-                    parsed.recurrenceInstant,
-                    parsed,
-                );
+            const organizerUserId = externalOwnerId(organizerEmail);
+            if (recurrenceDate) {
+                await calendar.cancelInvitationOccurrence(parsed.uid, organizerUserId, { ...parsed, recurrenceDate });
             } else {
-                await calendar.removeInvitation(parsed.uid, externalOwnerId(organizerEmail));
+                await calendar.removeInvitation(parsed.uid, organizerUserId);
             }
         } else if (method === 'REPLY') {
-            if (parsed.recurrenceDate && ++replyDates > IMIP_MAX_REPLY_DATES) continue;
+            if (recurrenceDate && ++replyDates > IMIP_MAX_REPLY_DATES) continue;
             // A sender answers for themselves alone, once: a later listing of the same address says nothing more.
             const attendee = parsed.data?.attendees?.find((a) => sentBy(a.email));
             if (!attendee) continue;
@@ -232,16 +233,11 @@ export async function processInboundImip(
                 (e) => !isInvitationFromOthers(e, home.user.email) && !e.parentEventId,
             );
             if (!ownerEvent) continue;
-            if (parsed.recurrenceDate) {
-                // False: an answer never brings back an occurrence the organizer deleted.
-                await calendar.receiveRsvpForOccurrence(
-                    ownerEvent.id,
-                    attendee.email,
-                    attendee.status,
-                    parsed.recurrenceDate,
-                    parsed.recurrenceInstant,
-                    false,
-                );
+            if (recurrenceDate) {
+                await calendar.receiveRsvpForOccurrence(ownerEvent.id, attendee.email, attendee.status, {
+                    ...parsed,
+                    recurrenceDate,
+                });
             } else if (ownerEvent.data?.attendees?.some((a) => a.email.toLowerCase() === sender)) {
                 await calendar.receiveAttendeeStatus(ownerEvent.id, attendee.email, attendee.status);
             }
@@ -253,9 +249,10 @@ function withOrganizer(event: CalendarEvent, organizer: Organizer): CalendarEven
     return { ...event, data: { ...event.data, organizer } };
 }
 
-// `series` lets the body name the occurrence it replaces (RECURRENCE-ID) instead of reading as a message about the whole series; a master's `exceptions` ride beside it.
+// `series` makes the body name its occurrence with a RECURRENCE-ID, or it would read as a message about the whole
+// series. A master's `exceptions` ride beside it.
 function icalEvent(
-    event: CalendarEvent,
+    event: EventToBuild,
     method: 'REQUEST' | 'REPLY' | 'CANCEL',
     series?: CalendarEvent,
     exceptions?: readonly CalendarEvent[],
@@ -273,7 +270,8 @@ function buildEventSummary(event: CalendarEvent): string {
     return lines.join('\n');
 }
 
-// Invitation mail has no viewer, so an event with no stored zone renders in UTC and says so instead of borrowing the server's.
+// Invitation mail has no viewer, so an event with no stored zone renders in UTC and says so, instead of borrowing the
+// server's.
 function buildEventWhen(event: CalendarEvent): string {
     const timezone = normalizeTimezone(event.timezone);
     const when = formatEventWhen(event.startTime, event.endTime, event.allDay, timezone, 'UTC');
@@ -303,4 +301,17 @@ function buildSection(label: string, value: string): string {
       <div style="font-weight:600;font-size:13px;color:${EMAIL_MUTED};margin-bottom:4px">${label}</div>
       <div style="font-size:14px;color:${EMAIL_TEXT}">${value}</div>
     </div>`;
+}
+
+// A part past the limit is no invitation, and the mail goes on without one.
+function extractCalendarAttachment(mail: { attachments: readonly Attachment[] }): {
+    ics: string;
+    method?: ImipMethod;
+} | null {
+    const attachment = mail.attachments.find(
+        (part) => isCalendarPart(part) && part.content.byteLength <= IMIP_MAX_BYTES,
+    );
+    if (!attachment) return null;
+
+    return { ics: Buffer.from(attachment.content).toString(), method: attachment.calendarMethod };
 }

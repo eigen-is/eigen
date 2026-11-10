@@ -1,6 +1,6 @@
-// Pure calendar helpers the Calendar app and its cards share: the month and week ranges, the events of one day, time
-// zones, how an event's time and recurrence read, and invitations. It also turns an edit of one occurrence into the
-// change saved on the whole series.
+// Pure calendar helpers the Calendar app, its cards and the API share: the month and week ranges, the events of one
+// day, time zones and an instant's wall time in one, how an event's time and recurrence read, and invitations. It also
+// turns an edit of one occurrence into the change saved on the whole series, and cuts a series at a date.
 
 import { RRule } from 'rrule';
 import { DEFAULT_CALENDAR_COLOR } from '../../constants/calendar';
@@ -98,28 +98,71 @@ export function viewerTimeZone(): string {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-// Intl knows no Windows zone name, and dropping one expands an Outlook series in UTC, breaking its wall time at the next
-// DST change. Intl reads a zone in any case, so one spelling per zone leaves here and a server's formatters stop at the
-// zone count.
-const ZONE_ANSWERS = new Map<string, string | null>();
-const MAX_ZONE_ANSWERS = 64;
-
+// Intl knows no Windows zone name, and dropping one expands an Outlook series in UTC, breaking its wall time at the
+// next DST change. Intl reads a zone in any case, so one spelling per zone leaves here and a server's formatters stop
+// at the zone count.
 export function normalizeTimezone(timezone: string | null | undefined): string | null {
     if (!timezone) return null;
-
-    const remembered = ZONE_ANSWERS.get(timezone);
-    if (remembered !== undefined) return remembered;
-
-    let answer: string | null;
     try {
-        answer = dateFormatter({ timeZone: WINDOWS_ZONES.get(timezone) ?? timezone }).resolvedOptions().timeZone;
+        return dateFormatter({ timeZone: WINDOWS_ZONES.get(timezone) ?? timezone }).resolvedOptions().timeZone;
     } catch {
-        answer = null;
+        return null;
+    }
+}
+
+type LocalComponents = { year: number; month: number; day: number; hour: number; minute: number; second: number };
+
+export function utcToLocal(date: Date, tz: string): LocalComponents {
+    const parts = dateFormatter({
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    }).formatToParts(date);
+    const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value);
+    return {
+        year: get('year'),
+        month: get('month'),
+        day: get('day'),
+        hour: get('hour') % 24,
+        minute: get('minute'),
+        second: get('second'),
+    };
+}
+
+export function localToUtc(
+    tz: string,
+    year: number,
+    month: number,
+    day: number,
+    hour: number,
+    minute: number,
+    second: number,
+): Date {
+    const targetMs = Date.UTC(year, month - 1, day, hour, minute, second);
+    const offsetAt = (ms: number): number => {
+        const local = utcToLocal(new Date(ms), tz);
+        return Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second) - ms;
+    };
+
+    let resolved = targetMs - offsetAt(targetMs);
+    if (resolved + offsetAt(resolved) !== targetMs) {
+        // The first guess landed the other side of a transition: solve again with the offset in effect there.
+        const corrected = targetMs - offsetAt(resolved);
+        // A wall time the spring-forward gap skips resolves with the pre-transition offset — the later instant.
+        if (corrected + offsetAt(corrected) !== targetMs) return new Date(Math.max(resolved, corrected));
+        resolved = corrected;
     }
 
-    if (ZONE_ANSWERS.size >= MAX_ZONE_ANSWERS) ZONE_ANSWERS.clear();
-    ZONE_ANSWERS.set(timezone, answer);
-    return answer;
+    // RFC 5545 resolves an ambiguous fall-back time to the earlier occurrence. The step back is the day's own shift,
+    // because Lord Howe moves 30 minutes.
+    const shift = offsetAt(resolved - 86400_000) - offsetAt(resolved + 86400_000);
+    const earlier = resolved - shift;
+    return new Date(shift > 0 && earlier + offsetAt(earlier) === targetMs ? earlier : resolved);
 }
 
 // fallbackTimeZone is explicit because the server's own zone is a lie, so mail written there passes 'UTC'.
@@ -213,10 +256,6 @@ export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: stri
 
 export const WEEKDAY_HEADERS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
-export function parseOccurrenceDate(value: string): Date {
-    return new Date(`${value}T00:00:00Z`);
-}
-
 export function occurrenceDateToString(value: Date): string {
     const pad = (n: number, width: number) => String(n).padStart(width, '0');
     return `${pad(value.getUTCFullYear(), 4)}-${pad(value.getUTCMonth() + 1, 2)}-${pad(value.getUTCDate(), 2)}`;
@@ -277,7 +316,7 @@ export function seriesEditFromOccurrence(
 
     const startDelta = edited.startTime.getTime() - occurrence.startTime.getTime();
     const endDelta = edited.endTime.getTime() - occurrence.endTime.getTime();
-    // A timed series turning all-day restates both bounds, because midnight-UTC bounds mean nothing beside the old ones.
+    // A timed series turning all-day restates both bounds: midnight-UTC bounds mean nothing beside the old ones.
     const allDayChanged = edited.allDay !== occurrence.allDay;
     if (allDayChanged) patch.allDay = edited.allDay;
     if (startDelta !== 0 || allDayChanged) patch.startTime = new Date(master.startTime.getTime() + startDelta);
@@ -285,12 +324,19 @@ export function seriesEditFromOccurrence(
     return patch;
 }
 
-export function truncateRRule(rruleStr: string, beforeDate: Date): string {
-    const options = RRule.parseString(rruleStr);
-    const until = new Date(beforeDate);
-    until.setUTCDate(until.getUTCDate() - 1);
-    until.setUTCHours(23, 59, 59, 0);
-    options.until = until;
+// A timed series' UNTIL is an instant every client reads alike: the last second before the cut day starts in its zone,
+// else in UTC. Beside an all-day DTSTART, RFC 5545 §3.3.10 makes it the day before the cut as a DATE.
+export function truncateRRule(
+    rrule: string,
+    cutDate: string,
+    series: { timezone: string | null; allDay: boolean },
+): string {
+    const options = RRule.parseString(rrule);
+    const day = new Date(`${cutDate}T00:00:00Z`);
+    const tz = series.allDay ? null : series.timezone;
+    const start = tz ? localToUtc(tz, day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), 0, 0, 0) : day;
+    options.until = new Date(start.getTime() - 1000);
     delete options.count;
-    return new RRule(options).toString().replace(/^RRULE:/, '');
+    const text = new RRule(options).toString().replace(/^RRULE:/, '');
+    return series.allDay ? text.replace(/(UNTIL=\d{8})T\d{6}Z/, '$1') : text;
 }

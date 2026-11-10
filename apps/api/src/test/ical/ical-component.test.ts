@@ -7,23 +7,31 @@ import { describe, expect, test } from 'bun:test';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import type ICAL from 'ical.js';
 import {
-    addExclusion,
+    applyEdits,
     buildResource,
     parseIcs,
     parseResource,
     patchEvent,
     projectResource,
-    putOverride,
     removeExclusion,
     restampResource,
     serializeEventForImip,
     serializeResource,
+    storedRecurrenceIds,
     stripEigenStamps,
 } from '../../lib/ical';
 import { cpuClock } from '../cpu-time';
 import { vcal } from '../ics-test-helpers';
 
 const CTX = { now: new Date('2026-06-01T10:00:00Z'), actorIsOrganizer: true };
+
+// One override edit, the way the store adds an occurrence it did not hold.
+const putOverride = (resource: ICAL.Component, override: CalendarEvent): boolean =>
+    applyEdits(resource, new Map([[override.recurrenceDate, { kind: 'override', event: override }]]));
+
+// One exclusion edit, the way the store cancels an occurrence.
+const exclude = (resource: ICAL.Component, exclusion: CalendarEvent): boolean =>
+    applyEdits(resource, new Map([[exclusion.recurrenceDate, { kind: 'exclusion', event: exclusion, ctx: CTX }]]));
 
 const masterOf = (resource: ICAL.Component): ICAL.Component =>
     resource.getAllSubcomponents('vevent').find((v) => !v.getFirstProperty('recurrence-id'))!;
@@ -952,6 +960,89 @@ describe('round trip build → serialize → project', () => {
     });
 });
 
+describe('storedRecurrenceIds', () => {
+    const date = (recurrenceId: string, start: string) => [
+        'BEGIN:VEVENT',
+        'UID:lone',
+        'DTSTAMP:20260101T000000Z',
+        `RECURRENCE-ID${recurrenceId}`,
+        `DTSTART${start}`,
+        'SUMMARY:One date',
+        'END:VEVENT',
+    ];
+
+    test('reads every occurrence of a file under its key, its RECURRENCE-ID as the organizer wrote it', () => {
+        const resource = parseResource(
+            vcal(
+                date(';TZID=America/New_York:20260505T170000', ';TZID=Europe/Amsterdam:20260505T230000'),
+                date(':20260507T090000Z', ';TZID=Pacific/Auckland:20260507T210000'),
+                date(':20260509T090000', ':20260509T090000'),
+            ),
+        );
+
+        expect(storedRecurrenceIds(resource)).toEqual(
+            new Map([
+                ['2026-05-05', { instant: new Date('2026-05-05T21:00:00Z'), timezone: 'America/New_York' }],
+                ['2026-05-07', { instant: new Date('2026-05-07T09:00:00Z'), timezone: null }],
+                ['2026-05-09', null],
+            ]),
+        );
+    });
+
+    test('a series holds its master under null, which names no occurrence', () => {
+        const resource = buildResource([MASTER, OVERRIDE]);
+
+        expect(storedRecurrenceIds(resource)).toEqual(
+            new Map([
+                [null, null],
+                ['2026-04-22', { instant: new Date('2026-04-22T10:00:00Z'), timezone: 'Europe/Amsterdam' }],
+            ]),
+        );
+    });
+});
+
+describe('a RECURRENCE-ID from its occurrence key', () => {
+    const series = (rrule: string, startTime: Date): CalendarEvent => ({
+        ...MASTER,
+        rrule,
+        startTime,
+        endTime: new Date(startTime.getTime() + 3600_000),
+    });
+    const override = (key: string): CalendarEvent => ({ ...OVERRIDE, id: `o-${key}`, recurrenceDate: key });
+
+    test('a rule that states its hour keys each day to that hour, either side of a DST change', () => {
+        // DTSTART is 09:00 in Amsterdam, and the clocks go forward on 29 March.
+        const master = series('FREQ=DAILY;BYHOUR=17', new Date('2026-03-23T08:00:00Z'));
+        const ics = serializeResource(buildResource([master, override('2026-03-27'), override('2026-03-30')]));
+
+        expect(ics).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20260327T170000');
+        expect(ics).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20260330T170000');
+    });
+
+    test("a midnight series keys a day off its rule to that day's midnight, not the next one's", () => {
+        // Mondays at 00:00 in Amsterdam, and 19 April is the Sunday before one.
+        const master = series('FREQ=WEEKLY;BYDAY=MO', new Date('2026-04-12T22:00:00Z'));
+        const ics = serializeResource(buildResource([master, override('2026-04-19')]));
+
+        expect(ics).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20260419T000000');
+    });
+
+    test('a daily series with a thousand exceptions builds at little cost', () => {
+        const keys = Array.from({ length: 1000 }, (_, i) =>
+            new Date(Date.UTC(2026, 3, 16 + i)).toISOString().slice(0, 10),
+        );
+        const exceptions = keys.map((key, i) =>
+            i % 3 === 2 ? { ...EXCLUSION, id: `x-${key}`, recurrenceDate: key } : override(key),
+        );
+
+        const cpuMs = cpuClock();
+        const resource = buildResource([series('FREQ=DAILY', MASTER.startTime), ...exceptions]);
+        expect(cpuMs()).toBeLessThan(1000);
+
+        expect(overridesOf(resource)).toHaveLength(667);
+    });
+});
+
 describe('timezone fidelity', () => {
     const zoned = (start: string, end: string) => [
         'BEGIN:VEVENT',
@@ -1081,7 +1172,7 @@ describe('timezone fidelity', () => {
         const resource = parseResource(vcal(VTZ_AMS, clientSeries()));
         const before = resource.getAllSubcomponents('vtimezone')[0].toJSON();
 
-        putOverride(resource, MASTER, { ...OVERRIDE, timezone: 'America/New_York' });
+        putOverride(resource, { ...OVERRIDE, timezone: 'America/New_York' });
 
         expect(tzidsOf(resource).sort()).toEqual(['America/New_York', 'Europe/Amsterdam']);
         const kept = resource
@@ -1090,13 +1181,13 @@ describe('timezone fidelity', () => {
         expect(kept.toJSON()).toEqual(before);
     });
 
-    test('an EXDATE in a zone the file does not define brings its VTIMEZONE', () => {
-        const resource = parseResource(vcal(VTZ_AMS, clientSeries()));
-        const master = { ...MASTER, timezone: 'America/New_York' };
+    test("an EXDATE names the master's own zone, and brings the VTIMEZONE the file lacks", () => {
+        const resource = parseResource(vcal(clientSeries()));
 
-        addExclusion(resource, master, { ...EXCLUSION, recurrenceDate: '2026-04-22' }, CTX);
+        exclude(resource, { ...EXCLUSION, recurrenceDate: '2026-04-22' });
 
-        expect(tzidsOf(resource).sort()).toEqual(['America/New_York', 'Europe/Amsterdam']);
+        expect(serializeResource(resource)).toContain('EXDATE;TZID=Europe/Amsterdam:20260422T120000\r\n');
+        expect(tzidsOf(resource)).toEqual(['Europe/Amsterdam']);
     });
 });
 
@@ -1150,11 +1241,11 @@ describe('the outbound iMIP body', () => {
 });
 
 describe('structural edits', () => {
-    test('addExclusion writes an EXDATE with its stamp and drops the override of that key', () => {
+    test('an exclusion writes an EXDATE with its stamp and drops the override of that key', () => {
         const resource = buildResource([MASTER, OVERRIDE]);
         expect(overridesOf(resource)).toHaveLength(1);
 
-        addExclusion(resource, MASTER, { ...EXCLUSION, id: 'evt-cancel', recurrenceDate: '2026-04-22' }, CTX);
+        exclude(resource, { ...EXCLUSION, id: 'evt-cancel', recurrenceDate: '2026-04-22' });
 
         expect(overridesOf(resource)).toHaveLength(0);
         const stamp = masterOf(resource).getAllProperties('x-eigen-exdate')[0];
@@ -1165,8 +1256,8 @@ describe('structural edits', () => {
 
     test('cancelling one occurrence twice leaves one EXDATE and one stamp', () => {
         const resource = buildResource([MASTER]);
-        addExclusion(resource, MASTER, { ...EXCLUSION, id: 'evt-cancel-1', recurrenceDate: '2026-04-22' }, CTX);
-        addExclusion(resource, MASTER, { ...EXCLUSION, id: 'evt-cancel-2', recurrenceDate: '2026-04-22' }, CTX);
+        exclude(resource, { ...EXCLUSION, id: 'evt-cancel-1', recurrenceDate: '2026-04-22' });
+        exclude(resource, { ...EXCLUSION, id: 'evt-cancel-2', recurrenceDate: '2026-04-22' });
 
         const master = masterOf(resource);
         expect(master.getAllProperties('exdate').flatMap((p) => p.getValues())).toHaveLength(1);
@@ -1187,7 +1278,7 @@ describe('structural edits', () => {
     // occurrence excluded and project a second, cancelled row for the same key.
     test('putOverride drops the exclusion of the key it overrides', () => {
         const resource = buildResource([MASTER, EXCLUSION]);
-        putOverride(resource, MASTER, { ...OVERRIDE, recurrenceDate: EXCLUSION.recurrenceDate });
+        putOverride(resource, { ...OVERRIDE, recurrenceDate: EXCLUSION.recurrenceDate });
 
         const master = masterOf(resource);
         expect(master.getAllProperties('exdate')).toHaveLength(0);
@@ -1197,9 +1288,16 @@ describe('structural edits', () => {
         ).toHaveLength(1);
     });
 
+    // A copy of single dates has no master to carry an EXDATE: the excluded date's VEVENT goes and nothing else.
+    test('an exclusion on a resource with no master VEVENT drops that date alone', () => {
+        const resource = parseResource(serializeResource(buildResource([OVERRIDE])));
+        exclude(resource, OVERRIDE);
+        expect(resource.getAllSubcomponents('vevent')).toHaveLength(0);
+    });
+
     test('putOverride replaces an existing override of the same key', () => {
         const resource = buildResource([MASTER, OVERRIDE]);
-        putOverride(resource, MASTER, { ...OVERRIDE, id: 'evt-override-2', title: 'Second take' });
+        putOverride(resource, { ...OVERRIDE, id: 'evt-override-2', title: 'Second take' });
 
         const overrides = overridesOf(resource);
         expect(overrides).toHaveLength(1);
@@ -1222,15 +1320,11 @@ describe('refusals', () => {
     });
 
     test('putOverride refuses an override that names no occurrence', () => {
-        expect(() => putOverride(buildResource([MASTER]), MASTER, unkeyed)).toThrow('names no occurrence');
+        expect(() => putOverride(buildResource([MASTER]), unkeyed)).toThrow('names no occurrence');
     });
 
-    test('addExclusion refuses an exclusion that names no occurrence', () => {
-        expect(() => addExclusion(buildResource([MASTER]), MASTER, unkeyed, CTX)).toThrow('names no occurrence');
-    });
-
-    test('addExclusion refuses a resource with no master VEVENT', () => {
-        expect(() => addExclusion(overrideOnly(), MASTER, EXCLUSION, CTX)).toThrow('holds no master VEVENT');
+    test('an exclusion refuses an exclusion that names no occurrence', () => {
+        expect(() => exclude(buildResource([MASTER]), unkeyed)).toThrow('names no occurrence');
     });
 
     test('removeExclusion refuses a resource with no master VEVENT', () => {

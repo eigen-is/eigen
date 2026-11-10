@@ -1,79 +1,14 @@
-// Calendar time in a zone's wall clock: converting between an instant and local time, expanding an RRULE in
-// local time, and the `YYYY-MM-DD` key an override, an exclusion or an RSVP names an occurrence by. Callers
-// such as the iCalendar parser, the builder and the calendar store share it. It sits on the format side of
-// the one-way edge, so `calendar` imports `ical`, never the reverse.
+// Calendar time in a zone's wall clock: an RRULE read and expanded in local time, an occurrence's start from its
+// key, and the `YYYY-MM-DD` key an override, an exclusion or an RSVP names an occurrence by. Callers such as the
+// iCalendar parser, the builder and the calendar store share it. It sits on the format side of the one-way edge,
+// so `calendar` imports `ical`, never the reverse.
 
 // Deep import (not the @workspace/lib/calendar barrel) to keep React out of the API module graph.
-import { occurrenceDateToString } from '@workspace/lib/calendar/calendar-utils';
+import { localToUtc, occurrenceDateToString, utcToLocal } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
+import type { Options } from 'rrule';
 import { RRule } from 'rrule';
 import { MAX_OCCURRENCES, MAX_RECURRENCE_START } from './recurrence-limits';
-
-type LocalComponents = { year: number; month: number; day: number; hour: number; minute: number; second: number };
-
-const intlCache = new Map<string, Intl.DateTimeFormat>();
-
-function getIntlFormatter(tz: string): Intl.DateTimeFormat {
-    let fmt = intlCache.get(tz);
-    if (!fmt) {
-        fmt = new Intl.DateTimeFormat('en-GB', {
-            timeZone: tz,
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false,
-        });
-        intlCache.set(tz, fmt);
-    }
-    return fmt;
-}
-
-export function utcToLocal(date: Date, tz: string): LocalComponents {
-    const fmt = getIntlFormatter(tz);
-    const parts = fmt.formatToParts(date);
-    const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value);
-    return {
-        year: get('year'),
-        month: get('month'),
-        day: get('day'),
-        hour: get('hour') % 24,
-        minute: get('minute'),
-        second: get('second'),
-    };
-}
-
-export function localToUtc(
-    tz: string,
-    year: number,
-    month: number,
-    day: number,
-    hour: number,
-    minute: number,
-    second: number,
-): Date {
-    const targetMs = Date.UTC(year, month - 1, day, hour, minute, second);
-    const offsetAt = (ms: number): number => {
-        const local = utcToLocal(new Date(ms), tz);
-        return Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second) - ms;
-    };
-
-    let resolved = targetMs - offsetAt(targetMs);
-    if (resolved + offsetAt(resolved) !== targetMs) {
-        // The first guess landed the other side of a transition: solve again with the offset in effect there.
-        const corrected = targetMs - offsetAt(resolved);
-        // A wall time the spring-forward gap skips resolves with the pre-transition offset — the later instant.
-        if (corrected + offsetAt(corrected) !== targetMs) return new Date(Math.max(resolved, corrected));
-        resolved = corrected;
-    }
-
-    // RFC 5545 resolves an ambiguous fall-back time to the earlier occurrence; the step back is the day's own shift, and Lord Howe moves 30 minutes.
-    const shift = offsetAt(resolved - 86400_000) - offsetAt(resolved + 86400_000);
-    const earlier = resolved - shift;
-    return new Date(shift > 0 && earlier + offsetAt(earlier) === targetMs ? earlier : resolved);
-}
 
 // rrule's own tzid handling is broken, so expansion runs in this wall-clock space instead.
 export function wallClockDate(date: Date, tz: string): Date {
@@ -88,6 +23,13 @@ export function recurrenceKey(year: number, month: number, day: number): string 
     return `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}`;
 }
 
+// The key of the day an instant falls on in a zone's wall clock, or in UTC without one.
+export function recurrenceKeyIn(instant: Date, tz: string | null): string {
+    if (!tz) return recurrenceKey(instant.getUTCFullYear(), instant.getUTCMonth() + 1, instant.getUTCDate());
+    const { year, month, day } = utcToLocal(instant, tz);
+    return recurrenceKey(year, month, day);
+}
+
 // `Date.parse` reads 30 February as 2 March, so only a date that comes back unchanged is a key.
 export function parseRecurrenceKey(value: string): string | null {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
@@ -95,7 +37,8 @@ export function parseRecurrenceKey(value: string): string | null {
     return recurrenceKey(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()) === value ? value : null;
 }
 
-// A zoned rule iterates in wall-clock space and each hit converts back; the window stays in whatever space the caller asked in.
+// A zoned rule iterates in wall-clock space and each hit converts back. The window stays in whatever space the caller
+// asked in.
 export function expandWallClock(
     rrule: string,
     dtstart: Date,
@@ -107,26 +50,24 @@ export function expandWallClock(
     if (from.getTime() > MAX_RECURRENCE_START) return [];
 
     const rule = new RRule({
-        ...RRule.parseString(rrule),
+        ...wallClockRule(rrule, tz),
         dtstart: tz ? wallClockDate(dtstart, tz) : dtstart,
     });
 
     return rule
         .between(from, to, true, (_d, len) => len < MAX_OCCURRENCES)
         .map((date) => ({
-            startTime: tz
-                ? localToUtc(
-                      tz,
-                      date.getUTCFullYear(),
-                      date.getUTCMonth() + 1,
-                      date.getUTCDate(),
-                      date.getUTCHours(),
-                      date.getUTCMinutes(),
-                      date.getUTCSeconds(),
-                  )
-                : date,
+            startTime: tz ? fromWallClock(date, tz) : date,
             occurrenceDate: occurrenceDateToString(date),
         }));
+}
+
+// RFC 5545 makes a UTC UNTIL beside a zoned start an instant, so it moves into the wall clock the rule steps in. A
+// date-only or floating UNTIL names wall-clock time already, and rrule parses all three alike.
+export function wallClockRule(rrule: string, tz: string | null): Partial<Options> {
+    const options = RRule.parseString(rrule);
+    if (tz && options.until && /UNTIL=\d{8}T\d{6}Z/i.test(rrule)) options.until = wallClockDate(options.until, tz);
+    return options;
 }
 
 export function computeOccurrenceTimes(
@@ -134,38 +75,33 @@ export function computeOccurrenceTimes(
     recurrenceDate: string,
 ): { startTime: Date; endTime: Date } {
     const durationMs = parent.endTime.getTime() - parent.startTime.getTime();
-    const tz = parent.timezone;
-    const occDate = new Date(`${recurrenceDate}T00:00:00Z`);
-
-    if (parent.rrule) {
-        const dayEnd = new Date(occDate);
-        dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
-        const matches = expandWallClock(parent.rrule, parent.startTime, tz, occDate, dayEnd);
-        if (matches.length > 0) {
-            const startTime = matches[0].startTime;
-            return { startTime, endTime: new Date(startTime.getTime() + durationMs) };
-        }
-    }
-
-    if (tz) {
-        const local = utcToLocal(parent.startTime, tz);
-        const startTime = localToUtc(
-            tz,
-            occDate.getUTCFullYear(),
-            occDate.getUTCMonth() + 1,
-            occDate.getUTCDate(),
-            local.hour,
-            local.minute,
-            local.second,
-        );
-        return { startTime, endTime: new Date(startTime.getTime() + durationMs) };
-    }
-
-    const startTime = new Date(
-        occDate.getTime() +
-            parent.startTime.getUTCHours() * 3600_000 +
-            parent.startTime.getUTCMinutes() * 60_000 +
-            parent.startTime.getUTCSeconds() * 1000,
-    );
+    const startTime = occurrenceStart(parent.startTime, parent.timezone, parent.rrule, recurrenceDate);
     return { startTime, endTime: new Date(startTime.getTime() + durationMs) };
+}
+
+// A key names a day in the series' wall clock, and only BYHOUR, BYMINUTE and BYSECOND move its time from DTSTART's, so
+// the start follows from the key with no walk of the rule. A rule with several times a day keys to the earliest.
+export function occurrenceStart(dtstart: Date, tz: string | null, rrule: string | null, recurrenceDate: string): Date {
+    const stated = tz ? wallClockDate(dtstart, tz) : dtstart;
+    const rule = rrule ? RRule.parseString(rrule) : {};
+    const earliest = (listed: number | number[] | null | undefined, own: number) => Math.min(...[listed ?? own].flat());
+    const wall = new Date(`${recurrenceDate}T00:00:00Z`);
+    wall.setUTCHours(
+        earliest(rule.byhour, stated.getUTCHours()),
+        earliest(rule.byminute, stated.getUTCMinutes()),
+        earliest(rule.bysecond, stated.getUTCSeconds()),
+    );
+    return tz ? fromWallClock(wall, tz) : wall;
+}
+
+function fromWallClock(date: Date, tz: string): Date {
+    return localToUtc(
+        tz,
+        date.getUTCFullYear(),
+        date.getUTCMonth() + 1,
+        date.getUTCDate(),
+        date.getUTCHours(),
+        date.getUTCMinutes(),
+        date.getUTCSeconds(),
+    );
 }

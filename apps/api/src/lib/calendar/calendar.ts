@@ -14,7 +14,7 @@ import type {
 } from '@workspace/lib/types/calendar';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
-import { and, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
+import { and, eq, getTableColumns, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
 import { enforceHomeDataQuota } from '../config/enforcement';
@@ -31,6 +31,7 @@ import * as davStore from './dav-store';
 import { CALENDAR_DB_CONFIG } from './db-config';
 import * as events from './events';
 import * as invitations from './invitations';
+import { pendingInvitations } from './invite-propagation';
 import { dbCalendarToCalendarItem, toEvent } from './mappers';
 import * as occurrences from './occurrences';
 import type { CalendarCollection, PreparedResource, PurgedResource, Tx } from './resource-store';
@@ -40,7 +41,7 @@ import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propa
 import * as shares from './shares';
 import { buildCalendarEvent } from './sse-events';
 import { exportEvents, importEvents } from './transfer';
-import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from './types';
+import type { CreateEventArgs, InvitationLink, InvitationRequest, OccurrenceRef } from './types';
 
 export class Calendar {
     private managedDb!: ManagedDatabase<typeof schema>;
@@ -405,14 +406,6 @@ export class Calendar {
         return occurrences.getEventsInRange(this, from, to, calendarId);
     }
 
-    public async getEventsWithAttendee(email: string): Promise<CalendarEvent[]> {
-        return this.joinedEvents()
-            .where(isNull(schema.events.organizerEventId))
-            .all()
-            .map(toEvent)
-            .filter((e) => e.data?.attendees?.some((a) => a.email.toLowerCase() === email.toLowerCase()));
-    }
-
     // --- Announcements ---
 
     // An announcement reaches the owner's own tabs and every Home the calendar is shared with.
@@ -529,37 +522,16 @@ export class Calendar {
 
     // --- Invitations ---
 
-    public async receiveInvitation(payload: ReceiveInvitationPayload): Promise<string | null> {
-        return invitations.receiveInvitation(this, payload);
-    }
-
-    public async receiveInvitationUpdate(
-        orgEventId: string,
-        orgUserId: string,
-        payload: InvitationUpdatePayload,
-    ): Promise<void> {
-        return invitations.receiveInvitationUpdate(this, orgEventId, orgUserId, payload);
-    }
-
-    public async receiveImipRequest(parsed: ParsedEvent, sender: string): Promise<void> {
-        return invitations.receiveImipRequest(this, parsed, sender);
+    public async receiveRequest(requested: readonly ParsedEvent[], link: InvitationLink): Promise<void> {
+        return invitations.receiveRequest(this, requested, link);
     }
 
     public async cancelInvitationOccurrence(
         orgEventId: string,
         orgUserId: string,
-        recurrenceDate: string,
-        recurrenceInstant: Date | null | undefined,
-        revision: Revision,
+        occurrence: OccurrenceRef & Revision,
     ): Promise<void> {
-        return invitations.cancelInvitationOccurrence(
-            this,
-            orgEventId,
-            orgUserId,
-            recurrenceDate,
-            recurrenceInstant,
-            revision,
-        );
+        return invitations.cancelInvitationOccurrence(this, orgEventId, orgUserId, occurrence);
     }
 
     public async removeInvitation(orgEventId: string, orgUserId: string): Promise<void> {
@@ -574,19 +546,13 @@ export class Calendar {
         eventId: string,
         email: string,
         status: Attendee['status'],
-        recurrenceDate: string,
-        recurrenceInstant?: Date | null,
-        restoreCancelled = true,
+        occurrence: OccurrenceRef,
     ): Promise<void> {
-        return invitations.receiveRsvpForOccurrence(
-            this,
-            eventId,
-            email,
-            status,
-            recurrenceDate,
-            recurrenceInstant,
-            restoreCancelled,
-        );
+        return invitations.receiveRsvpForOccurrence(this, eventId, email, status, occurrence);
+    }
+
+    public async pendingInvitations(email: string): Promise<InvitationRequest[]> {
+        return pendingInvitations(this, email);
     }
 
     public async rsvp(

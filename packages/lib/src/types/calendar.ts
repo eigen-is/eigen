@@ -16,10 +16,12 @@ export type Attendee = {
     role: 'required' | 'optional';
 };
 
+export type Organizer = { userId: string; email: string; name?: string };
+
 export type EventData = {
     reminders?: Reminder[];
     attendees?: Attendee[];
-    organizer?: { userId: string; email: string; name?: string };
+    organizer?: Organizer;
     organizerEventId?: string;
     url?: string;
     color?: string;

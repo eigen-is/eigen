@@ -1,24 +1,28 @@
 // The sending side of an invitation. When the organizer of an event invites, changes or cancels, this tells each
-// guest: a guest on this server gets the change in their own Home, and an external guest gets an email. A repeating
-// event also sends its changed or removed occurrences. A guest's answer to an organizer on this server goes back
-// the same way. The event writes call it once they commit, such as a save, a delete or an RSVP.
+// guest: a guest on this server gets the change in their own Home, a REQUEST taking the decision a mailed one takes,
+// and an external guest gets an email. Every message about a repeating event carries its moved and removed
+// occurrences, and an account that appears later is sent what it was invited to. The event writes call it once they
+// commit, such as a save or a delete, and a guest's answer to an organizer on this server goes back the same way.
 
-import { heldAttendees } from '@workspace/lib/calendar/calendar-utils';
-import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
-import { SSEventType } from '@workspace/lib/types/sse';
+import { heldAttendees, isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
+import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
 import { getServerSettings } from '../config/server-settings';
 import type { Home } from '../home';
 import { sendToHome } from '../home/home-relay';
+import type { ParsedEvent, RecurrenceId } from '../ical/ical-parse';
+import { computeOccurrenceTimes } from '../ical/wall-clock';
 import type { OutboundICalEvent } from '../mailer/mailer';
 import { sendMail } from '../mailer/mailer';
 import { addRegistryEntry } from '../share';
 import type { User } from '../user';
 import { getUserByEmail, isGuest } from '../user';
+import type { Calendar } from './calendar';
 import { composeCancelEmail, composeInviteEmail, composeInviteRequest } from './imip';
-import { buildCalendarEvent } from './sse-events';
+import { toEvent } from './mappers';
+import type { InvitationRequest } from './types';
 
-// `series` set means `event` is one occurrence, and the messages name the series id plus the occurrence key.
-// The series' `exceptions` go to every added guest and every external update, or a guest's copy shows them unmoved.
+// `series` set means `event` is one occurrence, and the messages name the series id plus its key. Every message about
+// a series carries its `exceptions`, so a guest's copy never shows a moved or deleted date at its old slot.
 export async function propagateInvitation(
     organizerHome: Home,
     event: CalendarEvent,
@@ -28,62 +32,29 @@ export async function propagateInvitation(
     series?: CalendarEvent,
     exceptions: readonly CalendarEvent[] = [],
 ): Promise<void> {
-    const organizerEventId = series?.id ?? event.id;
-    const recurrenceDate = series ? event.recurrenceDate : null;
     const oldEmails = new Set(oldAttendees.map((a) => a.email.toLowerCase()));
     const newEmails = new Set(newAttendees.map((a) => a.email.toLowerCase()));
-
     const selves = new Set([user.email.toLowerCase(), organizerHome.user.email.toLowerCase()]);
     const notSelf = (a: Attendee) => !selves.has(a.email.toLowerCase());
-    const added = newAttendees.filter((a) => notSelf(a) && !oldEmails.has(a.email.toLowerCase()));
-    const removed = oldAttendees.filter((a) => notSelf(a) && !newEmails.has(a.email.toLowerCase()));
-    const existing = newAttendees.filter((a) => notSelf(a) && oldEmails.has(a.email.toLowerCase()));
-
-    const organizer = { userId: user.id, email: user.email, name: user.name };
-    const eventFields = {
-        recurrenceDate,
-        title: event.title,
-        description: event.description,
-        location: event.location,
-        startTime: event.startTime,
-        endTime: event.endTime,
-        allDay: event.allDay,
-        rrule: event.rrule,
-        timezone: event.timezone,
-        status: event.status,
-        sequence: event.sequence,
-        // The organizer's own revision, so the attendee can order this message against the next: the fan-out is unordered.
-        dtstamp: event.updatedAt,
-    };
+    const organizer = organizerOf(organizerHome, user);
     let request: OutboundICalEvent | undefined;
 
-    for (const attendee of added) {
+    for (const attendee of newAttendees.filter(notSelf)) {
+        const updated = oldEmails.has(attendee.email.toLowerCase());
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || isGuest(targetUser)) {
-                await addRegistryEntry(organizerHome.user.id, attendee.email);
+                if (!updated) await addRegistryEntry(organizerHome.user.id, attendee.email);
                 request ??= composeInviteRequest(event, organizer, series, exceptions);
-                const mail = composeInviteEmail(event, organizer, [attendee], request);
+                const mail = composeInviteEmail(event, organizer, [attendee], request, updated);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP invite:', err));
                 continue;
             }
             await sendToHome(targetUser.id, {
-                type: 'calendar:invitation',
-                payload: {
-                    ...eventFields,
-                    uid: event.uid,
-                    data: {
-                        organizer: { userId: organizerHome.user.id, email: user.email, name: user.name },
-                        organizerEventId,
-                        attendees: newAttendees,
-                    },
-                    createByUserId: user.id,
-                    organizerEventId,
-                    organizerUserId: organizerHome.user.id,
-                },
+                type: 'calendar:request',
+                ...invitationRequest(organizer, user.id, attendee.email, event, series, exceptions),
             });
-            await sendSeriesExceptions(targetUser.id, organizerHome, organizerEventId, exceptions, event);
-            if (getServerSettings().notifications.email.userOnCalendarInvite) {
+            if (!updated && getServerSettings().notifications.email.userOnCalendarInvite) {
                 // A local recipient has the event from sendToHome, so an iMIP attachment would update it twice.
                 const mail = composeInviteEmail(event, organizer, [attendee]);
                 sendMail(mail).catch((err) => console.error('Failed to send Eigen invite email:', err));
@@ -93,7 +64,7 @@ export async function propagateInvitation(
         }
     }
 
-    for (const attendee of removed) {
+    for (const attendee of oldAttendees.filter((a) => notSelf(a) && !newEmails.has(a.email.toLowerCase()))) {
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || isGuest(targetUser)) {
@@ -103,32 +74,12 @@ export async function propagateInvitation(
             }
             await sendToHome(targetUser.id, {
                 type: 'calendar:invitation-removal',
-                orgEventId: organizerEventId,
+                orgEventId: series?.id ?? event.id,
                 orgUserId: organizerHome.user.id,
-                occurrence: occurrenceRevision(event, recurrenceDate),
+                occurrence: occurrenceRevision(event, series),
             });
         } catch (error) {
             console.error('Failed to cancel invitation:', error);
-        }
-    }
-
-    for (const attendee of existing) {
-        try {
-            const targetUser = await getUserByEmail(attendee.email);
-            if (!targetUser || isGuest(targetUser)) {
-                request ??= composeInviteRequest(event, organizer, series, exceptions);
-                const mail = composeInviteEmail(event, organizer, [attendee], request, true);
-                sendMail(mail).catch((err) => console.error('Failed to send iMIP update:', err));
-                continue;
-            }
-            await sendToHome(targetUser.id, {
-                type: 'calendar:invitation-update',
-                orgEventId: organizerEventId,
-                orgUserId: organizerHome.user.id,
-                payload: { ...eventFields, attendees: newAttendees },
-            });
-        } catch (error) {
-            console.error('Failed to update invitation:', error);
         }
     }
 }
@@ -147,33 +98,26 @@ export async function propagateRsvp(
         status: newStatus,
         recurrenceDate,
     });
-    await sendToHome(organizerUserId, {
-        type: 'broadcast',
-        event: buildCalendarEvent(SSEventType.CALENDAR_INVITE_RSVP, organizerUserId),
-    });
 }
 
 // `attendees` is who held the event, because a cancelled occurrence is an EXDATE with no guest list of its own.
 export async function propagateCancellation(
     organizerHome: Home,
+    user: User | undefined,
     event: CalendarEvent,
     attendees: readonly Attendee[],
     series?: CalendarEvent,
 ): Promise<void> {
-    const occurrence = occurrenceRevision(event, series ? event.recurrenceDate : null);
+    const occurrence = occurrenceRevision(event, series);
+    const organizer = organizerOf(organizerHome, user);
     for (const attendee of attendees) {
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || isGuest(targetUser)) {
-                if (!organizerHome.user.email) {
+                if (!organizer.email) {
                     console.warn(`Skipped the iMIP cancel to ${attendee.email}: the organizer has no address`);
                     continue;
                 }
-                const organizer = {
-                    userId: organizerHome.user.id,
-                    email: organizerHome.user.email,
-                    name: organizerHome.user.name,
-                };
                 const mail = composeCancelEmail(event, organizer, [attendee], series);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
                 continue;
@@ -190,61 +134,106 @@ export async function propagateCancellation(
     }
 }
 
+// What a newcomer to the server is owed when their account appears: each series that lists them, and each occurrence
+// that lists them while its series doesn't. An event somebody else organizes is not this Home's to send, linked or not.
+export function pendingInvitations(calendar: Calendar, email: string): InvitationRequest[] {
+    const address = email.toLowerCase();
+    const lists = (event: CalendarEvent | undefined) =>
+        !!event?.data?.attendees?.some((a) => a.email.toLowerCase() === address);
+    const all = calendar.joinedEvents().all().map(toEvent);
+    const byId = new Map(all.map((event) => [event.id, event]));
+    const exceptionsOf = Map.groupBy(all, (event) => event.parentEventId);
+    const organizer = organizerOf(calendar.home, undefined);
+    return all.flatMap((event) => {
+        const series = event.parentEventId ? byId.get(event.parentEventId) : undefined;
+        if (!lists(event) || lists(series)) return [];
+        if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return [];
+        const exceptions = series ? [] : (exceptionsOf.get(event.id) ?? []);
+        return [invitationRequest(organizer, calendar.home.user.id, email, event, series, exceptions)];
+    });
+}
+
+// The REQUEST one guest on this server gets. A series carries its master and every exception, and an occurrence the
+// guest isn't on travels as cancelled. One occurrence names its series' id and key, so the guest's series takes it.
+function invitationRequest(
+    organizer: Organizer,
+    createByUserId: string,
+    email: string,
+    event: CalendarEvent,
+    series: CalendarEvent | undefined,
+    exceptions: readonly CalendarEvent[],
+): InvitationRequest {
+    const link = {
+        organizerEmail: organizer.email.toLowerCase(),
+        organizerEventId: series?.id ?? event.id,
+        organizerUserId: organizer.userId,
+        createByUserId,
+    };
+    if (series) {
+        // A guest without the series can name the occurrence only as the series does: its original slot, in its zone.
+        const key = event.recurrenceDate;
+        const recurrenceId =
+            key && !series.allDay
+                ? { instant: computeOccurrenceTimes(series, key).startTime, timezone: series.timezone }
+                : null;
+        return { link, events: [requestedEvent(event, key, organizer, heldAttendees(event, series), recurrenceId)] };
+    }
+    const address = email.toLowerCase();
+    const isOn = (e: CalendarEvent) => heldAttendees(e, event).some((a) => a.email.toLowerCase() === address);
+    const requested = exceptions.map((e) => {
+        const sent = isOn(e) ? e : { ...e, status: 'cancelled' as const };
+        return requestedEvent(sent, e.recurrenceDate, organizer, heldAttendees(e, event));
+    });
+    return { link, events: [requestedEvent(event, null, organizer, heldAttendees(event, null)), ...requested] };
+}
+
+// The REQUEST a guest on this server files, through the same decision as a mailed one. It names no Eigen stamp and no
+// reminder, and lists the guests alone, as the organizer's own list has them.
+function requestedEvent(
+    event: CalendarEvent,
+    recurrenceDate: string | null,
+    organizer: Organizer,
+    attendees: readonly Attendee[],
+    recurrenceId: RecurrenceId | null = null,
+): ParsedEvent {
+    return {
+        uid: event.uid,
+        title: event.title,
+        description: event.description,
+        location: event.location,
+        startTime: event.startTime,
+        endTime: event.endTime,
+        allDay: event.allDay,
+        rrule: event.rrule,
+        timezone: event.timezone,
+        status: event.status,
+        sequence: event.sequence,
+        // The organizer's own revision, so the guest can order this message against the next: the fan-out is unordered.
+        dtstamp: event.updatedAt,
+        recurrenceDate,
+        recurrenceId,
+        data: { organizer, attendees: [...attendees] },
+    };
+}
+
 // Set only for a copy that is one occurrence of a series the guest does not hold. An exception answers through the
 // master it hangs on.
 export function answeredOccurrence(event: CalendarEvent): string | undefined {
     return event.parentEventId ? undefined : (event.recurrenceDate ?? undefined);
 }
 
-// Runs right after the invitation that files the series. Each exception is its own message, so the guest's ordering
-// guard judges it against its own occurrence, of which their fresh copy holds no revision.
-async function sendSeriesExceptions(
-    targetUserId: string,
-    organizerHome: Home,
-    organizerEventId: string,
-    exceptions: readonly CalendarEvent[],
-    series: CalendarEvent,
-): Promise<void> {
-    for (const exception of exceptions) {
-        if (!exception.recurrenceDate) continue;
-        const occurrence = occurrenceRevision(exception, exception.recurrenceDate);
-        if (exception.status === 'cancelled') {
-            await sendToHome(targetUserId, {
-                type: 'calendar:invitation-removal',
-                orgEventId: organizerEventId,
-                orgUserId: organizerHome.user.id,
-                occurrence,
-            });
-            continue;
-        }
-        await sendToHome(targetUserId, {
-            type: 'calendar:invitation-update',
-            orgEventId: organizerEventId,
-            orgUserId: organizerHome.user.id,
-            payload: {
-                recurrenceDate: exception.recurrenceDate,
-                title: exception.title,
-                description: exception.description,
-                location: exception.location,
-                startTime: exception.startTime,
-                endTime: exception.endTime,
-                allDay: exception.allDay,
-                rrule: null,
-                timezone: exception.timezone,
-                status: exception.status,
-                sequence: exception.sequence,
-                dtstamp: exception.updatedAt,
-                // The organizer's list for that occurrence, so an answer the guest already gave to it stands.
-                attendees: heldAttendees(exception, series),
-            },
-        });
-    }
+// A guest answers the ORGANIZER, and only the calendar's own Home holds the event, so its user is named whoever saved.
+// A team has no address, so a team event names the member who saved it.
+function organizerOf(organizerHome: Home, user: User | undefined): Organizer {
+    const named = organizerHome.user.email ? organizerHome.user : user;
+    return { userId: organizerHome.user.id, email: named?.email ?? '', name: named?.name };
 }
 
 // The revision its receiver orders the removal against; undefined for a message about the whole series.
 function occurrenceRevision(
     event: CalendarEvent,
-    recurrenceDate: string | null,
+    series: CalendarEvent | undefined,
 ): { recurrenceDate: string; sequence: number; dtstamp: Date } | undefined {
+    const recurrenceDate = series && event.recurrenceDate;
     return recurrenceDate ? { recurrenceDate, sequence: event.sequence, dtstamp: event.updatedAt } : undefined;
 }

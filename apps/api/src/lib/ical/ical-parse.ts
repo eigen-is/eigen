@@ -4,13 +4,13 @@
 // row id has nowhere to land. Only projectResource, which the calendar store runs on a resource it wrote, reads
 // Eigen's own lines.
 
-import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
-import type { Attendee, EventData, ImipMethod, Reminder } from '@workspace/lib/types/calendar';
+import { localToUtc, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
+import type { Attendee, EventData, ImipMethod, Organizer, Reminder } from '@workspace/lib/types/calendar';
 import { IMIP_METHODS } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
 import { isExpandableRrule, isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
 import { vtimezoneOffset } from './vtimezone';
-import { localToUtc, recurrenceKey, utcToLocal, wallClockDate } from './wall-clock';
+import { recurrenceKey, recurrenceKeyIn, wallClockDate } from './wall-clock';
 
 // Lowercase, because ical.js lowercases every name it reads.
 export const EIGEN = {
@@ -23,6 +23,7 @@ export const EIGEN = {
     sequence: 'x-eigen-seq',
     dtstamp: 'x-eigen-dtstamp',
     importedOrganizer: 'x-eigen-imported-organizer',
+    guestCut: 'x-eigen-guest-cut',
 } as const;
 
 type EigenName = (typeof EIGEN)[keyof typeof EIGEN];
@@ -141,40 +142,52 @@ function startOfDay(t: ICAL.Time): Date {
     return new Date(Date.UTC(t.year, t.month - 1, t.day));
 }
 
-// Expansion keys in wall-clock space, so an exception keys to the same wall-clock date to attach to its occurrence.
-// Only the UTC form needs the series' zone.
-export function icalTimeToRecurrenceKey(t: ICAL.Time, seriesTz: string | null): string {
-    // RFC 5545 states a RECURRENCE-ID in the master DTSTART's zone, so converting a TZID value would mis-key a move
-    // across zones.
-    if (t.isDate || t.zone !== ICAL.Timezone.utcTimezone) return recurrenceKey(t.year, t.month, t.day);
-    // A timed series crossing midnight UTC has a UTC day one off, so this form keys through the series' zone.
-    const instant = t.toJSDate();
-    if (seriesTz) {
-        const { year, month, day } = utcToLocal(instant, seriesTz);
-        return recurrenceKey(year, month, day);
-    }
-    return recurrenceKey(instant.getUTCFullYear(), instant.getUTCMonth() + 1, instant.getUTCDate());
+// A timed RECURRENCE-ID or EXDATE names an instant (RFC 5545), keyed on its day in the zone of the series' DTSTART. An
+// all-day series has no clock, so a value on it keys on the date it is written on.
+export function icalTimeToRecurrenceKey(t: ICAL.Time, tzid: string | null, seriesStart: ICAL.Property | null): string {
+    const start = seriesStart?.getFirstValue();
+    if (t.isDate || !(start instanceof ICAL.Time) || start.isDate) return recurrenceKey(t.year, t.month, t.day);
+    const seriesTz = propTzid(seriesStart);
+    return recurrenceKeyIn(icalTimeToInstant(t, tzid, seriesTz), seriesTz);
 }
 
-// Keyed by UID because a previewed or imported file holds every series a calendar has, each in its author's own zone.
-export function seriesTimezones(vevents: readonly ICAL.Component[]): Map<string, string | null> {
-    const zones = new Map<string, string | null>();
+// Each series' DTSTART, keyed by UID because a previewed or imported file holds every series a calendar has, each in
+// its author's own zone.
+export function seriesStarts(vevents: readonly ICAL.Component[]): Map<string, ICAL.Property | null> {
+    const starts = new Map<string, ICAL.Property | null>();
     for (const vevent of vevents) {
         if (vevent.getFirstProperty('recurrence-id')) continue;
         const uid = uidOf(vevent);
-        if (!zones.has(uid)) zones.set(uid, propTzid(vevent.getFirstProperty('dtstart')));
+        if (!starts.has(uid)) starts.set(uid, vevent.getFirstProperty('dtstart'));
     }
-    return zones;
+    return starts;
 }
 
 export function uidOf(vevent: ICAL.Component): string {
     return String(vevent.getFirstPropertyValue('uid') ?? '');
 }
 
-// The occurrence key a VEVENT's RECURRENCE-ID names; null for a master.
-export function recurrenceKeyOf(vevent: ICAL.Component, seriesTz: string | null): string | null {
-    const rid = vevent.getFirstProperty('recurrence-id')?.getFirstValue();
-    return rid instanceof ICAL.Time ? icalTimeToRecurrenceKey(rid, seriesTz) : null;
+// The occurrence key a VEVENT's RECURRENCE-ID names, null for a master, through `starts` from seriesStarts. Held
+// without its master, an occurrence knows no zone but the one its RECURRENCE-ID is written in, UTC included.
+export function recurrenceKeyOf(
+    vevent: ICAL.Component,
+    starts: ReadonlyMap<string, ICAL.Property | null>,
+): string | null {
+    const prop = vevent.getFirstProperty('recurrence-id');
+    const value = prop?.getFirstValue();
+    if (!(value instanceof ICAL.Time)) return null;
+    return icalTimeToRecurrenceKey(value, propTzid(prop), starts.get(uidOf(vevent)) ?? prop);
+}
+
+// A copy of one date holds no master to name its occurrence through, so it keeps the organizer's line to write back.
+// A floating value names no instant, only the date it keys on.
+export function readRecurrenceId(vevent: ICAL.Component): RecurrenceId | null {
+    const prop = vevent.getFirstProperty('recurrence-id');
+    const value = prop?.getFirstValue();
+    if (!(value instanceof ICAL.Time) || value.isDate) return null;
+    if (value.zone !== ICAL.Timezone.utcTimezone && !prop?.getParameter('tzid')) return null;
+    const timezone = propTzid(prop);
+    return { instant: icalTimeToInstant(value, timezone, null), timezone };
 }
 
 // A non-numeric SEQUENCE reads as 0: NaN slips past the RFC 5546 replay guard's `<=`, false for every comparison.
@@ -256,6 +269,9 @@ export function readExclusionStamps(vevent: ICAL.Component): Map<string, Exclusi
     return stamps;
 }
 
+// A RECURRENCE-ID that names an instant, and the zone it is written in, null for UTC or a zone no IANA name resolves.
+export type RecurrenceId = { instant: Date; timezone: string | null };
+
 export type ParsedEvent = {
     uid: string;
     title: string;
@@ -271,20 +287,13 @@ export type ParsedEvent = {
     // RFC 5546 § 2.1.5 breaks a SEQUENCE tie with it, so a receiver can order two messages sent without a bump.
     dtstamp: Date | null;
     recurrenceDate: string | null;
-    // A UTC RECURRENCE-ID, kept because a mailed lone occurrence has no master to name the series' zone: the caller
-    // re-keys it against the linked event's.
-    recurrenceInstant: Date | null;
+    recurrenceId: RecurrenceId | null;
     data: EventData | null;
 };
 
 // A row of a STORED resource: what any reader gets, plus the facts only a file Eigen wrote can state.
-type StoredEvent = ParsedEvent & {
-    eventId: string | null;
-    createByUserId: string | null;
-    importedOrganizer: string | null;
-    createdAt: Date | null;
-    updatedAt: Date | null;
-};
+type StoredEvent = ParsedEvent &
+    Pick<EventStamps, 'eventId' | 'createByUserId' | 'importedOrganizer' | 'createdAt' | 'updatedAt'>;
 
 export type IcsParseResult = {
     method?: ImipMethod;
@@ -371,10 +380,7 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
     const method = parseImipMethod(resource.getFirstPropertyValue('method'));
     const vevents = resource.getAllSubcomponents('vevent');
 
-    // A UTC RECURRENCE-ID or EXDATE keys in the series' zone, so an override with no master falls back to its own
-    // DTSTART's zone and then to the file's first master's.
-    const seriesTzByUid = seriesTimezones(vevents);
-    const fileTz = seriesTzByUid.values().next().value ?? null;
+    const starts = seriesStarts(vevents);
 
     const results: ReadEvent[] = [];
     let skipped = 0;
@@ -396,10 +402,11 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
             const locationRaw = vevent.getFirstPropertyValue('location');
             const location = typeof locationRaw === 'string' ? locationRaw : null;
 
+            const dtstart = vevent.getFirstProperty('dtstart');
             const dtend = vevent.getFirstProperty('dtend');
             const start = event.startDate;
             const allDay = start.isDate;
-            const tzid = propTzid(vevent.getFirstProperty('dtstart'));
+            const tzid = propTzid(dtstart);
             const startTime = allDay ? startOfDay(start) : icalTimeToInstant(start, tzid, null);
 
             // Never ICAL.Event.endDate: ical.js adds a DURATION month by month, so that read costs as much as it says.
@@ -420,8 +427,7 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
             if (!(endTime.getUTCFullYear() <= 9999)) throw new Error('Event end out of range');
 
             // An override is one occurrence, whatever it says about repeats.
-            const recurrenceId = vevent.getFirstProperty('recurrence-id');
-            const rule = recurrenceId ? null : vevent.getFirstPropertyValue('rrule');
+            const rule = vevent.hasProperty('recurrence-id') ? null : vevent.getFirstPropertyValue('rrule');
             const rruleRaw = rule ? rule.toString() : null;
             // A rule too costly to expand, or with no frequency to expand by, degrades to a single event rather than
             // costing the whole invite or PUT.
@@ -442,30 +448,18 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
             const sequence = sequenceOf(vevent);
             const dtstamp = readTimestamp(vevent, 'dtstamp');
 
-            let recurrenceDate: string | null = null;
-            let recurrenceInstant: Date | null = null;
-            if (recurrenceId) {
-                const rid = recurrenceId.getFirstValue();
-                if (rid instanceof ICAL.Time) {
-                    // A master that named no TZID keeps its series in UTC; only a UID with no master falls back.
-                    const seriesTz = seriesTzByUid.has(uid) ? (seriesTzByUid.get(uid) ?? null) : (tzid ?? fileTz);
-                    recurrenceDate = icalTimeToRecurrenceKey(rid, seriesTz);
-                    if (!rid.isDate && rid.zone === ICAL.Timezone.utcTimezone) {
-                        recurrenceInstant = rid.toJSDate();
-                    }
-                }
-            }
+            const recurrenceDate = recurrenceKeyOf(vevent, starts);
 
             const attendees = vevent.getAllProperties('attendee').map(projectAttendee);
             const reminders = projectReminders(vevent);
 
             const organizerProp = vevent.getFirstProperty('organizer');
-            let organizer: EventData['organizer'] | undefined;
+            let organizer: Organizer | undefined;
             if (organizerProp) {
-                const orgEmail = calAddress(organizerProp.getFirstValue());
-                const orgCn = organizerProp.getFirstParameter('cn') || orgEmail;
+                const email = calAddress(organizerProp.getFirstValue());
+                const cn = organizerProp.getFirstParameter('cn') || email;
                 // The invitation link is a stamp, so it is empty here and filled by the trusted projection.
-                organizer = { userId: '', email: orgEmail, name: orgCn !== orgEmail ? orgCn : undefined };
+                organizer = { userId: '', email, name: cn !== email ? cn : undefined };
             }
 
             const data: EventData | null =
@@ -492,7 +486,7 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
                     sequence,
                     dtstamp,
                     recurrenceDate,
-                    recurrenceInstant,
+                    recurrenceId: readRecurrenceId(vevent),
                     data,
                 },
                 stamps: {
@@ -516,22 +510,22 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
                 // key names the occurrence.
                 const excluded = new Set<string>();
                 for (const exdateProp of vevent.getAllProperties('exdate')) {
-                    const exTzid = propTzid(exdateProp);
-                    for (const exVal of exdateProp.getValues()) {
-                        if (!(exVal instanceof ICAL.Time)) continue;
-                        const isDateOnly = exVal.isDate;
-                        const exDateStr = icalTimeToRecurrenceKey(exVal, tzid);
-                        if (excluded.has(exDateStr)) continue;
-                        excluded.add(exDateStr);
-                        const stamp = stamps.get(exDateStr);
+                    const exdateTzid = propTzid(exdateProp);
+                    for (const value of exdateProp.getValues()) {
+                        if (!(value instanceof ICAL.Time)) continue;
+                        const exAllDay = allDay || value.isDate;
+                        const key = icalTimeToRecurrenceKey(value, exdateTzid, dtstart);
+                        if (excluded.has(key)) continue;
+                        excluded.add(key);
+                        const stamp = stamps.get(key);
 
                         let exStartTime: Date;
                         let exEndTime: Date;
-                        if (isDateOnly) {
-                            exStartTime = startOfDay(exVal);
+                        if (exAllDay) {
+                            exStartTime = startOfDay(value);
                             exEndTime = new Date(exStartTime.getTime() + 86400_000);
                         } else {
-                            exStartTime = icalTimeToInstant(exVal, exTzid, tzid);
+                            exStartTime = icalTimeToInstant(value, exdateTzid, tzid);
                             exEndTime = new Date(exStartTime.getTime() + (endTime.getTime() - startTime.getTime()));
                         }
 
@@ -543,14 +537,14 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
                                 location: null,
                                 startTime: exStartTime,
                                 endTime: exEndTime,
-                                allDay: isDateOnly,
+                                allDay: exAllDay,
                                 rrule: null,
                                 timezone: tzid,
                                 status: 'cancelled',
                                 sequence,
                                 dtstamp,
-                                recurrenceDate: exDateStr,
-                                recurrenceInstant: null,
+                                recurrenceDate: key,
+                                recurrenceId: null,
                                 data: null,
                             },
                             stamps: {

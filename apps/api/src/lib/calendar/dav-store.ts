@@ -8,8 +8,8 @@ import { and, eq, gt, inArray, or } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
 import { ApiError, failsPreconditions, normalizeResourceUri } from '../core';
-import { keepSubcomponents, parseResource, restampResource, stripEigenStamps } from '../ical';
-import { EIGEN, readStamp, recurrenceKeyOf, seriesTimezones, uidOf } from '../ical/ical-parse';
+import { adoptAlarms, parseResource, restampResource } from '../ical';
+import { EIGEN, readStamp, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import {
     EVENT_MAX_BYTES,
@@ -77,7 +77,8 @@ export async function getResourcesByUris(
         .all();
 }
 
-// A resource the index cannot expand (stripped rule, RDATE) may still have occurrences in range, so it joins every match.
+// A resource the index cannot expand (stripped rule, RDATE) may still have occurrences in range, so it joins every
+// match.
 export async function getResourcesInRange(
     calendar: Calendar,
     calendarId: string,
@@ -166,7 +167,8 @@ export async function putResource(
     if (Buffer.byteLength(body) > EVENT_MAX_BYTES) return { ok: false, error: 'too-large' };
 
     return calendar.writeLock.run(async (): Promise<PutResourceResult> => {
-        // Sanitizing an id is not knowing it exists, and a write would otherwise file a resource under nobody's calendar.
+        // Sanitizing an id is not knowing it exists, and a write would otherwise file a resource under nobody's
+        // calendar.
         if (!calendar.calendarRow(calendarId)) return { ok: false, error: 'no-collection' };
 
         const existing = calendar.db
@@ -185,7 +187,8 @@ export async function putResource(
         // The stored resource decides the linked-copy rule and the stamps to carry over.
         const stored = existing ? parseResource(new TextDecoder().decode(existing.ics)) : null;
 
-        // Keying the body's RECURRENCE-ID or EXDATE throws on a date no key can name, so the parse and the re-stamp share one refusal.
+        // Keying the body's RECURRENCE-ID or EXDATE throws on a date no key can name, so the parse and the re-stamp
+        // share one refusal.
         let incoming: ICAL.Component;
         let resource: ICAL.Component;
         try {
@@ -229,11 +232,13 @@ export async function putResource(
 
         // Prepared once here: the write below lands exactly the rows, bytes and hash these refusals judged.
         const prepared = prepareResource(calendarId, resource, existing?.id ?? null);
-        // A PUT is all-or-nothing: one unreadable VEVENT makes the payload malformed, where an import drops that member and keeps going.
+        // A PUT is all-or-nothing: one unreadable VEVENT makes the payload malformed, where an import drops that member
+        // and keeps going.
         if (prepared.skipped || prepared.duplicateMaster) {
             return { ok: false, error: 'invalid', reason: 'object', message: 'invalid iCalendar data' };
         }
-        // A zero-length event is legal (RFC 5545 §3.6.1); one that ends before it starts is refused here as on the REST write.
+        // A zero-length event is legal (RFC 5545 §3.6.1); one that ends before it starts is refused here as on the REST
+        // write.
         if (prepared.rows.some((row) => row.endTime < row.startTime)) {
             return { ok: false, error: 'invalid', reason: 'data', message: 'event ends before it starts' };
         }
@@ -241,12 +246,14 @@ export async function putResource(
         // A client whose bytes are not what got stored has nothing to attach a validator to (RFC 4791 § 5.3.4).
         const validator = prepared.text === body ? prepared.etag : null;
 
-        // Judged on the bytes by their hash: rewriting an unchanged resource bumps the ctag and resyncs every client for nothing.
+        // Judged on the bytes by their hash: rewriting an unchanged resource bumps the ctag and resyncs every client
+        // for nothing.
         if (existing && prepared.etag === existing.etag) {
             return { ok: true, id: prepared.id, etag: validator, created: false, unchanged: true };
         }
 
-        // Size and quota are only known once the stamps and stored alarms decided the bytes, so both map to protocol errors here, not a 500.
+        // Size and quota are only known once the stamps and stored alarms decided the bytes, so both map to protocol
+        // errors here, not a 500.
         try {
             // sanitizeEventUri already accepted this spelling, so the stored uri is the NFC one.
             await calendar.writeResource({ calendarId, uri, prepared, creditBytes: existing?.size ?? 0 });
@@ -284,31 +291,8 @@ function isStorableUid(uid: string): boolean {
     return uid.length <= MAX_UID_LENGTH && !CONTROL_CHARS.test(uid);
 }
 
-// A copy of somebody else's event: the server's own organizer stamp says so, where the ORGANIZER address is the client's to spell.
+// A copy of somebody else's event: the server's own organizer stamp says so, where the ORGANIZER address is the
+// client's to spell.
 function isLinkedCopy(stored: ICAL.Component): boolean {
     return stored.getAllSubcomponents('vevent').some((vevent) => readStamp(vevent, EIGEN.organizerEvent) !== null);
-}
-
-function adoptAlarms(stored: ICAL.Component, incoming: ICAL.Component): void {
-    const incomingVEvents = incoming.getAllSubcomponents('vevent');
-    const zones = seriesTimezones(incomingVEvents);
-    const byKey = new Map(
-        incomingVEvents.map((v) => [`${uidOf(v)}|${recurrenceKeyOf(v, zones.get(uidOf(v)) ?? null) ?? ''}`, v]),
-    );
-    const storedVEvents = stored.getAllSubcomponents('vevent');
-    const storedZones = seriesTimezones(storedVEvents);
-    for (const vevent of storedVEvents) {
-        const uid = uidOf(vevent);
-        const match = byKey.get(`${uid}|${recurrenceKeyOf(vevent, storedZones.get(uid) ?? null) ?? ''}`);
-        if (!match) continue;
-        keepSubcomponents(vevent, (sub) => sub.name !== 'valarm');
-        const alarms = match.getAllSubcomponents('valarm');
-        // Detached all at once, because adding a component to a new parent removes it from the old one per item.
-        keepSubcomponents(match, (sub) => sub.name !== 'valarm');
-        for (const alarm of alarms) {
-            // The one write path that keeps a client's own subcomponents: its Eigen lines are still untrusted.
-            stripEigenStamps(alarm);
-            vevent.addSubcomponent(alarm);
-        }
-    }
 }

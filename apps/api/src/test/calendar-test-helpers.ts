@@ -1,9 +1,11 @@
 import { join } from 'node:path';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
+import { externalOwnerId } from '@workspace/lib/types/owner';
 import { and, eq, sql } from 'drizzle-orm';
 import { Calendar } from '../lib/calendar/calendar';
 import { toEvent } from '../lib/calendar/mappers';
 import * as schema from '../lib/calendar/schema';
+import type { ParsedEvent } from '../lib/ical/ical-parse';
 import type { TestHome } from './home-test-helpers';
 import { makeTestHome } from './home-test-helpers';
 
@@ -59,3 +61,12 @@ export const storedBytes = (calendar: Calendar): number =>
         .select({ total: sql<number>`COALESCE(SUM(length(${schema.resources.ics})), 0)` })
         .from(schema.resources)
         .get()!.total;
+
+// A REQUEST as inbound mail hands it over: one event, linked by its verified sender and its UID alone.
+export const receiveMailed = (calendar: Calendar, parsed: ParsedEvent, sender: string): Promise<void> =>
+    calendar.receiveRequest([parsed], {
+        organizerEmail: sender,
+        organizerEventId: parsed.uid,
+        organizerUserId: externalOwnerId(sender),
+        createByUserId: externalOwnerId(sender),
+    });

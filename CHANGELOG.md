@@ -39,6 +39,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pasting edited cells in Sheets** — if you edit cells after copying them, a paste in the same tab brings them as they are now
 - **Validation limits in Sheets** — an edit that would push a validation rule past its limit goes through, and the cells past it get no rule
 - **Speed in Sheets** — editing a cell in a workbook of 100,000 formulas takes milliseconds, where it took over a tenth of a second, and a cell that 100,000 formulas read no longer stalls a sheet for a minute
+- **Deleted invitations in Calendar** — an invitation from someone on your server that you deleted comes back, faded as declined and with its moved and cancelled dates, when its organizer changes the event. So does a date you removed
 - **Large invites in Mail** — a calendar invite over 1 MiB shows "This calendar invitation could not be read" instead of a preview, and no longer changes your calendar by itself
 - **Unusual repeat rules in Calendar** — an event whose repeat rule would take the server too long to work out shows on its first date only, and calendar apps still get the whole rule. An invite whose rule names no frequency arrives as one event instead of getting lost
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
@@ -86,11 +87,23 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Calendar files from others** — a calendar file someone else made, in a mail invite, from a calendar app or in an import, no longer freezes the server
 - **Guest emails in Calendar** — changing only an event's color or reminder, or moving a one-off event to another time zone without changing when it happens, no longer emails its guests. Neither does a save that changes nothing
 - **Events from other calendar apps** — the first save in Calendar of an event made in another calendar app no longer rewrites what you didn't change, or emails its guests
+- **Repeating events that end in Calendar** — a repeating event from Apple Calendar or another app ends on the date it names, and one you end with **This and following events** ends on the same day in other calendar apps, all-day ones included
 - **Guest replies in Calendar** — a guest's answer for a date a repeating event doesn't have no longer adds that date to it
 - **Long date ranges in Calendar** — a repeating event lasting several days shows when it began before the days in view, in Calendar and in calendar apps. A calendar app asking for more than five years at once gets the events past the first five
 - **Time zones in calendar files** — an export keeps each event's time when two custom time zones share a name, and so does an import of a file holding several calendars. An event a calendar app saved in UTC shows as UTC, not GMT, and stays UTC when moved
 - **Importing a file that isn't a calendar** — Calendar says it is not a calendar file instead of showing an internal error
 - **Share notices in Calendar** — changing who a calendar is shared with, in Calendar or in a team's settings in Admin, no longer notifies people whose access stayed the same, so a notice they read stays read
+- **Mailed replies in Calendar** — a guest's answer that arrives by mail shows in your open Calendar tabs without a reload
+- **Guest replies on shared calendars** — an outside guest's reply to an event someone saved on another person's calendar reaches that calendar. The invitation names the calendar's owner as organizer
+- **Cancelling team events** — deleting a team event with outside guests sends them a cancellation from you
+- **Declining one date in Calendar** — declining or answering one date of an invitation that doesn't repeat no longer fails or goes unrecorded
+- **Your answer in Calendar** — your answer to an invitation no longer resets when the organizer makes a small edit, such as a new title
+- **Several dates of one event in Calendar** — when you're invited to several dates of a repeating event, cancelling or deleting one of them no longer removes the others
+- **Answering one moved date in Calendar** — when someone outside your server invites you to one moved date of a repeating event, your answer or decline reaches that date in their calendar
+- **Shortened and lengthened series in Calendar** — an organizer who lengthens a repeating event reaches its guests. A guest who ended it with **This and following events** keeps that end, unless the organizer sets an earlier end date
+- **Invitations to repeating events in Calendar** — an invitation to a repeating event with moved or cancelled dates notifies you once, and one that arrives twice notifies you no more. A date the organizer took you off shows as cancelled
+- **Invitations from before you joined** — an invitation to a repeating event sent before you had an account arrives with its moved and cancelled dates, and one to a single date of it arrives as that date
+- **Mailed invitations in Calendar** — an invitation by mail that lists a moved date before its repeating event keeps the moved date
 - **A refused Save** — in Calendar, Contacts and Personal info in Space, a Save refused because the item changed elsewhere keeps what you typed and takes the other fields from the server
 - **Removing someone with a document open** — removing someone from a team or an organization, or deleting their account, cuts them off within 15 seconds from the documents they can no longer read. A password reset does too
 - **Losing access to an open document** — in Docs, Sheets, Slides, Vector and Stickies, the page switches to "You need access" within 15 seconds, or to sign-in if your account was deleted, instead of leaving an editor where typing goes nowhere
