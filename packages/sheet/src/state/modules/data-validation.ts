@@ -22,7 +22,6 @@ import {
     isRealNull,
     isRealNum,
     jfrefreshgrid,
-    mergeBorder,
     normalizedAttr,
     normalizedCellAttr,
     setCellValue,
@@ -30,6 +29,7 @@ import {
 import { getSheet } from '../api/common';
 import type { DataValidationDraft, Rect } from '../types';
 import { clipToUsedExtent, replaceHtml } from '../utils';
+import { cellRectAt } from './location';
 import { addValidation, validationAt } from './validation-rules';
 
 // The words a hint sentence puts in for its rule type and its condition. The keys are loose strings because a rule's
@@ -426,23 +426,6 @@ export function describeValidationRule(item: DataValidationRule, kind: Validatio
         condition: conditionPhrase(item),
         value: item.value1,
     });
-}
-
-// The cell's rectangle in content pixels, the whole of a merged cell included. The card hangs off its bottom-left
-// corner, and the hidden list anchor sits in it.
-function cellRectAt(ctx: Context, d: CellMatrix, r: number, c: number) {
-    const rect = {
-        top: r === 0 ? 0 : ctx.visibledatarow[r - 1],
-        bottom: ctx.visibledatarow[r],
-        left: c === 0 ? 0 : ctx.visibledatacolumn[c - 1],
-        right: ctx.visibledatacolumn[c],
-    };
-    const merge = mergeBorder(ctx, d, r, c);
-    if (merge) {
-        [rect.top, rect.bottom] = merge.row;
-        [rect.left, rect.right] = merge.column;
-    }
-    return rect;
 }
 
 // What the card says and where, worked out from the focus cell on every render.
