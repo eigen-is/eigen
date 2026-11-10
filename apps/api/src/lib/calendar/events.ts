@@ -302,12 +302,11 @@ export async function editResource(
 export function exceptionEdit(parent: CalendarEvent, input: CreateEventArgs, ctx: WriteContext): VEventEdit {
     const id = crypto.randomUUID();
     if (input.status === 'cancelled') return { kind: 'exclusion', id, ctx };
-    const exception = { ...input, rrule: null, dtstamp: ctx.dtstamp };
     const event = eventForResource({
         id,
         calendarId: parent.calendarId,
         uid: parent.uid,
-        input: exception,
+        input: { ...input, rrule: null },
         now: ctx.now,
     });
     return { kind: 'override', event, ctx };
