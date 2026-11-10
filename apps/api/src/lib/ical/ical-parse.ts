@@ -171,10 +171,15 @@ export function uidOf(vevent: ICAL.Component): string {
     return String(vevent.getFirstPropertyValue('uid') ?? '');
 }
 
-// The occurrence key a VEVENT's RECURRENCE-ID names; null for a master.
-export function recurrenceKeyOf(vevent: ICAL.Component, seriesTz: string | null): string | null {
+// The occurrence key a VEVENT's RECURRENCE-ID names, null for a master; `zones` is seriesTimezones of its file. An
+// occurrence without its master keys through its own DTSTART's zone, else the file's first master's: exporters drop UIDs.
+export function recurrenceKeyOf(vevent: ICAL.Component, zones: ReadonlyMap<string, string | null>): string | null {
     const value = vevent.getFirstProperty('recurrence-id')?.getFirstValue();
-    return value instanceof ICAL.Time ? icalTimeToRecurrenceKey(value, seriesTz) : null;
+    if (!(value instanceof ICAL.Time)) return null;
+    const uid = uidOf(vevent);
+    const ownTz = propTzid(vevent.getFirstProperty('dtstart'));
+    const seriesTz = zones.has(uid) ? (zones.get(uid) ?? null) : (ownTz ?? zones.values().next().value ?? null);
+    return icalTimeToRecurrenceKey(value, seriesTz);
 }
 
 // A non-numeric SEQUENCE reads as 0: NaN slips past the RFC 5546 replay guard's `<=`, false for every comparison.
@@ -366,10 +371,7 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
     const method = parseImipMethod(resource.getFirstPropertyValue('method'));
     const vevents = resource.getAllSubcomponents('vevent');
 
-    // A UTC RECURRENCE-ID or EXDATE keys in the series' zone, so an override with no master falls back to its own
-    // DTSTART's zone and then to the file's first master's.
-    const seriesTzByUid = seriesTimezones(vevents);
-    const fileTz = seriesTzByUid.values().next().value ?? null;
+    const zones = seriesTimezones(vevents);
 
     const results: ReadEvent[] = [];
     let skipped = 0;
@@ -437,19 +439,14 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
             const sequence = sequenceOf(vevent);
             const dtstamp = readTimestamp(vevent, 'dtstamp');
 
-            let recurrenceDate: string | null = null;
-            let recurrenceInstant: Date | null = null;
-            if (recurrenceId) {
-                const value = recurrenceId.getFirstValue();
-                if (value instanceof ICAL.Time) {
-                    // A master that named no TZID keeps its series in UTC; only a UID with no master falls back.
-                    const seriesTz = seriesTzByUid.has(uid) ? (seriesTzByUid.get(uid) ?? null) : (tzid ?? fileTz);
-                    recurrenceDate = icalTimeToRecurrenceKey(value, seriesTz);
-                    if (!value.isDate && value.zone === ICAL.Timezone.utcTimezone) {
-                        recurrenceInstant = value.toJSDate();
-                    }
-                }
-            }
+            const recurrenceDate = recurrenceKeyOf(vevent, zones);
+            const recurrenceValue = recurrenceId?.getFirstValue();
+            const recurrenceInstant =
+                recurrenceValue instanceof ICAL.Time &&
+                !recurrenceValue.isDate &&
+                recurrenceValue.zone === ICAL.Timezone.utcTimezone
+                    ? recurrenceValue.toJSDate()
+                    : null;
 
             const attendees = vevent.getAllProperties('attendee').map(projectAttendee);
             const reminders = projectReminders(vevent);

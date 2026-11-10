@@ -202,6 +202,46 @@ describe("the first web save of a client's event", () => {
     });
 });
 
+// A client may store one occurrence of a series alone. Its UTC RECURRENCE-ID keys through its own DTSTART's zone, so
+// the row and every edit of the file name one date, here 13 January.
+describe('a lone occurrence a client wrote', () => {
+    const stored = async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const calendar = harness.instance;
+        const body = vcal([
+            'BEGIN:VEVENT',
+            'UID:lone',
+            'DTSTAMP:20260101T000000Z',
+            'RECURRENCE-ID:20260112T233000Z',
+            'DTSTART;TZID=Europe/Amsterdam:20260113T013000',
+            'DTEND;TZID=Europe/Amsterdam:20260113T023000',
+            'SUMMARY:Lone',
+            'END:VEVENT',
+        ]);
+        await putResource(calendar, calendarId, 'lone.ics', body);
+        const event = storedEvents(calendar, calendarId)[0];
+        expect(event.recurrenceDate).toBe('2026-01-13');
+        return { calendar, calendarId, event };
+    };
+
+    test('a web save renames it', async () => {
+        const { calendar, calendarId, event } = await stored();
+
+        await calendar.updateEvent(calendarId, event.id, { title: 'Renamed' });
+
+        expect(storedEvents(calendar, calendarId).map((e) => e.title)).toEqual(['Renamed']);
+    });
+
+    test('deleting it takes the file with it', async () => {
+        const { calendar, calendarId, event } = await stored();
+
+        await calendar.deleteEvent(calendarId, event.id);
+
+        expect(await calendar.listResources(calendarId)).toHaveLength(0);
+    });
+});
+
 describe('moveEvent', () => {
     const seriesOf = async (harness: TestHome<Calendar>, calendarId: string, uid: string, uri: string) => {
         await putResource(harness.instance, calendarId, uri, vcal(vevent(uid, 'Movable')));

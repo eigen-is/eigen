@@ -313,7 +313,7 @@ export function restampResource(
     const storedStamps = new Map<string, ExclusionStamp>();
     for (const vevent of storedVEvents) {
         const uid = uidOf(vevent);
-        const key = recurrenceKeyOf(vevent, storedZones.get(uid) ?? null);
+        const key = recurrenceKeyOf(vevent, storedZones);
         storedByKey.set(`${uid}|${key ?? ''}`, {
             eventId: readStamp(vevent, EIGEN.eventId),
             createByUserId: readStamp(vevent, EIGEN.createdBy),
@@ -337,8 +337,7 @@ export function restampResource(
     const incomingZones = seriesTimezones(incomingVEvents);
     for (const vevent of incomingVEvents) {
         const uid = uidOf(vevent);
-        const seriesTz = incomingZones.get(uid) ?? null;
-        const match = storedByKey.get(`${uid}|${recurrenceKeyOf(vevent, seriesTz) ?? ''}`);
+        const match = storedByKey.get(`${uid}|${recurrenceKeyOf(vevent, incomingZones) ?? ''}`);
 
         addStamp(vevent, EIGEN.eventId, claim(match?.eventId));
         addStamp(vevent, EIGEN.createdBy, trusted.createByUserId ?? match?.createByUserId);
@@ -349,7 +348,7 @@ export function restampResource(
 
         // Read once: the scan for SEQUENCE lengthens with every stamp this loop adds.
         const sequence = sequenceOf(vevent);
-        for (const key of exdateKeys(vevent, seriesTz)) {
+        for (const key of exdateKeys(vevent, incomingZones.get(uid) ?? null)) {
             const prior = storedStamps.get(`${uid}|${key}`);
             vevent.addProperty(
                 exclusionStamp(key, claim(prior?.id), prior?.sequence ?? sequence, prior?.dtstamp ?? null),
@@ -660,7 +659,7 @@ function keyVEvents(resource: ICAL.Component): Map<string | null, ICAL.Component
     const zones = seriesTimezones(vevents);
     const keyed = new Map<string | null, ICAL.Component>();
     for (const vevent of vevents) {
-        const key = recurrenceKeyOf(vevent, zones.get(uidOf(vevent)) ?? null);
+        const key = recurrenceKeyOf(vevent, zones);
         if (!keyed.has(key)) keyed.set(key, vevent);
     }
     return keyed;
