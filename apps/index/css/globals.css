@@ -155,12 +155,6 @@
     }
 }
 
-/* The first paragraph of a blog post reads larger. */
-.site-lead > div:first-child > p:first-child {
-    font-size: 1.125rem;
-    line-height: 1.6;
-}
-
 /* The changelog: a release is a section with a thin rule above it, its h3 a small label and its entries a bold lead
    on a line of their own. */
 .site-prose.changelog {

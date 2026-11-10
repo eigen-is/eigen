@@ -1,5 +1,5 @@
-// A blog post's cover image, a 16:9 frame cropped from the top of the picture. The overview shows the newest post's
-// with its teaser, and the post page shows it under the title.
+// A blog post's cover image, a 16:9 frame cropped from the top of the picture, which the post page shows under the
+// title.
 
 import { cn } from '@workspace/ui/lib/utils';
 

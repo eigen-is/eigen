@@ -1,6 +1,5 @@
-// A blog post page: the date under a link back to the blog, the title, the cover, the body with a larger first
-// paragraph, and a pager to the older and the newer post. It sits in the site's reading column with the table
-// of contents in the gutter.
+// A blog post page: the title with its date, the cover, the body and a pager to the older and the newer post, under
+// a breadcrumb back to the blog. It sits in the site's reading column with the table of contents in the gutter.
 
 import { Link } from '@tanstack/react-router';
 import { formatDateOnly } from '@workspace/lib/date';
@@ -29,7 +28,7 @@ export function BlogPost({ post, body, older, newer }: BlogPostProps) {
                     <h1 className="site-title">{post.title}</h1>
                     {post.date && <p className="mt-2 text-sm text-muted-foreground">{formatDateOnly(post.date)}</p>}
                     {post.cover && <BlogCover src={post.cover} className="mt-7" />}
-                    <ArticleContent body={body} className="site-lead mt-8" />
+                    <ArticleContent body={body} className="mt-8" />
                 </article>
                 <nav className="mt-14 grid grid-cols-2 gap-6 border-t pt-6">
                     {older ? <PagerLink label="Older" post={older} /> : <span />}

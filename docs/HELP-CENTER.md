@@ -107,7 +107,7 @@ The table of contents (`components/article-toc.tsx`, `ArticleToc`) fills the lef
 
 ## The blog overview and covers
 
-The overview lists the posts newest first from the build-time manifest, so every row is in the prerendered HTML. The newest is larger and carries its cover, the others are list rows, and each date hangs in the left gutter. A post may set `cover` in its frontmatter, a path under `public/` such as `/data/blog/media/<folder>/<image>.webp`. `BlogCover` crops it to a 16:9 frame from the top, on the overview for the newest post and under the title on the post page. A post without `cover` shows none. A post page ends with a pager to the older and the newer post.
+The overview lists the posts newest first from the build-time manifest, so every row is in the prerendered HTML. Every post is the same list row, with a line between rows, and each date hangs in the left gutter. A post may set `cover` in its frontmatter, a path under `public/` such as `/data/blog/media/<folder>/<image>.webp`. `BlogCover` crops it to a 16:9 frame from the top, under the title on the post page. A post without `cover` shows none. A post page ends with a pager to the older and the newer post.
 
 ## The landing page
 
