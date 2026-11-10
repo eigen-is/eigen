@@ -1,6 +1,6 @@
 // The table of contents in the left gutter of a reading page, such as "On this page" beside an article or "Versions"
-// beside the changelog. It sticks at the top of the page's padding, so it does not move while the page scrolls,
-// and marks the entry whose heading last passed the top third of the screen. It draws nothing for fewer than two entries.
+// beside the changelog. It sticks at the top of the page's padding, so it does not move while the page scrolls, and
+// marks the entry whose heading last passed the top third of the screen. It draws nothing for fewer than two entries.
 
 import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useMemo, useState } from 'react';
@@ -13,41 +13,27 @@ type ArticleTocProps = {
     label?: string;
 };
 
-// The nearest ancestor that scrolls, or the document when none does.
-function scrollerOf(el: HTMLElement): Element {
-    for (let parent = el.parentElement; parent; parent = parent.parentElement) {
-        if (/auto|scroll/.test(getComputedStyle(parent).overflowY)) return parent;
-    }
-    return document.scrollingElement ?? document.documentElement;
-}
-
 export function ArticleToc({ toc, label = 'On this page' }: ArticleTocProps) {
     const [activeId, setActiveId] = useState('');
     const entries = useMemo(() => toc.filter((entry) => entry.level !== 3), [toc]);
 
+    // The observer reports a heading crossing the line a third down the screen, in whichever element scrolls, and once
+    // as it starts, so a page opened at a `#section` marks its row. The entry is then the last heading above the line.
     useEffect(() => {
         const headings = entries
             .map((entry) => document.getElementById(entry.id))
             .filter((el): el is HTMLElement => el !== null);
-        if (headings.length === 0) return;
-
-        // Scroll events do not bubble, so the capture phase on the document hears whichever div scrolls. The active
-        // entry is the last heading above the top third of the screen, or the last entry at the end of the scroller,
-        // which a short page never lets a heading reach the top third. It also runs once on mount, so a page opened
-        // at a `#section` marks its row before any scroll.
-        const update = (scroller: Element) => {
-            if (!scroller.contains(headings[0])) return;
-            const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
-            const line = window.innerHeight / 3;
-            const above = headings.filter((heading) => heading.getBoundingClientRect().top <= line);
-            const active = atBottom ? headings[headings.length - 1] : above[above.length - 1];
-            if (active) setActiveId(active.id);
-        };
-        const onScroll = (event: Event) =>
-            update(event.target instanceof Element ? event.target : scrollerOf(headings[0]));
-        update(scrollerOf(headings[0]));
-        document.addEventListener('scroll', onScroll, true);
-        return () => document.removeEventListener('scroll', onScroll, true);
+        const observer = new IntersectionObserver(
+            () => {
+                const above = headings.filter(
+                    (heading) => heading.getBoundingClientRect().top <= window.innerHeight / 3,
+                );
+                setActiveId(above.at(-1)?.id ?? '');
+            },
+            { rootMargin: '0px 0px -67% 0px' },
+        );
+        for (const heading of headings) observer.observe(heading);
+        return () => observer.disconnect();
     }, [entries]);
 
     if (entries.length < 2) return null;
