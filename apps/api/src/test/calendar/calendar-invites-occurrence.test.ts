@@ -740,6 +740,32 @@ describe('Occurrence edits of an invited series', () => {
         for (const other of back.filter((e) => e.occurrenceDate !== target)) expect(bobStatus(other)).toBe('accepted');
     });
 
+    // The cut tells the organizer "declined" for the series, and a rescheduling brings that list back to Bob, but the
+    // dates Bob kept keep the answer he gave them.
+    test("a guest's cut keeps their answer on the dates they kept through a rescheduling", async () => {
+        const { series, target } = await seeded('Weekly Cut Answer');
+        await moveOccurrence(series, target, 'Cut Answer Moved');
+        const bobMaster = findOrFail(await bobOccurrences(series.uid), (e) => !e.parentEventId);
+        expect((await rsvpAsBob(bobMaster.id, { status: 'accepted' })).status).toBe(200);
+        const cut = { status: 'declined', scope: 'this-and-following', recurrenceDate: '2027-02-16', remove: true };
+        expect((await rsvpAsBob(bobMaster.id, cut)).status).toBe(200);
+        await eventually(async () => {
+            const mine = await aliceOccurrences(series.uid);
+            return mine.every((e) => bobStatus(e) === 'declined') ? mine : undefined;
+        }, "Bob's cut to reach Alice as a decline");
+
+        const later = new Date(Date.parse(SERIES_START) + HOUR / 2);
+        expect(
+            (await putEvent(series.id, { startTime: later, endTime: new Date(later.getTime() + HOUR) })).status,
+        ).toBe(200);
+
+        const kept = await untilBob(series.uid, (occ) => occ.some((e) => !e.parentEventId && e.sequence > 0));
+        expect(kept.map((e) => [e.occurrenceDate, bobStatus(e)])).toEqual([
+            ['2027-02-02', 'accepted'],
+            [target, 'accepted'],
+        ]);
+    });
+
     test('the guest is told an invitation changed, not that they were invited to a new series', async () => {
         const { series, target } = await seeded('Weekly Occurrence Notice');
         const bobHome = await getHome(ctx.bob.user.id);
