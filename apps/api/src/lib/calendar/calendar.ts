@@ -41,7 +41,7 @@ import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propa
 import * as shares from './shares';
 import { buildCalendarEvent } from './sse-events';
 import { exportEvents, importEvents } from './transfer';
-import type { CreateEventArgs, InvitationLink, InvitationRequest } from './types';
+import type { CreateEventArgs, InvitationLink, InvitationRequest, OccurrenceRef } from './types';
 
 export class Calendar {
     private managedDb!: ManagedDatabase<typeof schema>;
@@ -529,18 +529,9 @@ export class Calendar {
     public async cancelInvitationOccurrence(
         orgEventId: string,
         orgUserId: string,
-        recurrenceDate: string,
-        recurrenceUtc: Date | null,
-        revision: Revision,
+        occurrence: OccurrenceRef & Revision,
     ): Promise<void> {
-        return invitations.cancelInvitationOccurrence(
-            this,
-            orgEventId,
-            orgUserId,
-            recurrenceDate,
-            recurrenceUtc,
-            revision,
-        );
+        return invitations.cancelInvitationOccurrence(this, orgEventId, orgUserId, occurrence);
     }
 
     public async removeInvitation(orgEventId: string, orgUserId: string): Promise<void> {
@@ -555,10 +546,9 @@ export class Calendar {
         eventId: string,
         email: string,
         status: Attendee['status'],
-        recurrenceDate: string,
-        recurrenceUtc: Date | null,
+        occurrence: OccurrenceRef,
     ): Promise<void> {
-        return invitations.receiveRsvpForOccurrence(this, eventId, email, status, recurrenceDate, recurrenceUtc);
+        return invitations.receiveRsvpForOccurrence(this, eventId, email, status, occurrence);
     }
 
     public async pendingInvitations(email: string): Promise<InvitationRequest[]> {

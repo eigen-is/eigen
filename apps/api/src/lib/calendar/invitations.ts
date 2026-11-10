@@ -19,13 +19,13 @@ import {
     guestCutOf,
     isNewerRevision,
     patchEvent,
-    recurrenceInstantOf,
+    recurrenceIdOf,
     stampInvitationLink,
     storedOrganizerAddress,
     storedRevisions,
 } from '../ical';
 import type { EventPatch, Revision, VEventEdit } from '../ical/ical-component';
-import type { ParsedEvent } from '../ical/ical-parse';
+import type { ParsedEvent, RecurrenceId } from '../ical/ical-parse';
 import { computeOccurrenceTimes, parseRecurrenceKey, recurrenceKeyIn } from '../ical/wall-clock';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
@@ -40,7 +40,7 @@ import { constrainRRule, expandRecurrence } from './recurrence';
 import { prepareResource } from './resource-store';
 import * as schema from './schema';
 import { buildCalendarEvent } from './sse-events';
-import type { InvitationLink } from './types';
+import type { InvitationLink, OccurrenceRef } from './types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -85,9 +85,7 @@ export async function cancelInvitationOccurrence(
     calendar: Calendar,
     organizerEventId: string,
     organizerUserId: string,
-    recurrenceDate: string,
-    recurrenceUtc: Date | null,
-    revision: Revision,
+    occurrence: OccurrenceRef & Revision,
 ): Promise<void> {
     // The write returns the occurrence's start, so the notice after the lock names the occurrence that went.
     const cancelled = await unlessRefused(
@@ -100,8 +98,8 @@ export async function cancelInvitationOccurrence(
                 const resource = events.resourceOf(calendar, linked.id);
                 if (!resource) return null;
                 const component = events.storedComponent(calendar, resource);
-                const key = recurrenceUtc ? recurrenceKeyIn(recurrenceUtc, linked.timezone) : recurrenceDate;
-                if (!isNewerRevision(revision, storedRevisions(component).get(key) ?? null)) return null;
+                const key = occurrenceKey(occurrence, linked);
+                if (!isNewerRevision(occurrence, storedRevisions(component).get(key) ?? null)) return null;
                 // A copy of single dates has no series to remove one from, so the date goes, the copy with its last.
                 if (linked.recurrenceDate) {
                     const date = copies.find((e) => e.recurrenceDate === key);
@@ -109,7 +107,7 @@ export async function cancelInvitationOccurrence(
                     await events.eraseStoredEvent(calendar, date.calendarId, date.id);
                     return { linked: date, startTime: date.startTime };
                 }
-                await removeOccurrence(calendar, linked.id, key, revision);
+                await removeOccurrence(calendar, linked.id, key, occurrence);
                 return { linked, startTime: computeOccurrenceTimes(linked, key).startTime };
             }),
         null,
@@ -153,12 +151,11 @@ export function receiveRsvpForOccurrence(
     eventId: string,
     email: string,
     status: Attendee['status'],
-    recurrenceDate: string,
-    recurrenceUtc: Date | null,
+    occurrence: OccurrenceRef,
 ): Promise<void> {
     return unlessRefused(
         eventId,
-        () => rsvpForOccurrence(calendar, eventId, email, status, recurrenceDate, recurrenceUtc, false),
+        () => rsvpForOccurrence(calendar, eventId, email, status, occurrence, false),
         undefined,
     );
 }
@@ -196,8 +193,8 @@ export async function rsvp(
         // Only the stored file names the occurrence as the organizer did: a copy of one date has no series to ask.
         const key = recurrenceDate ?? event.recurrenceDate;
         const resource = events.resourceOf(calendar, eventId);
-        const stored = key && resource ? recurrenceInstantOf(events.storedComponent(calendar, resource), key) : null;
-        const answered = { ...event, recurrenceInstant: stored };
+        const stored = key && resource ? recurrenceIdOf(events.storedComponent(calendar, resource), key) : null;
+        const answered = { ...event, recurrenceId: stored };
         const mail = composeRsvpReply(answered, user.email, user.name ?? user.email, status, recurrenceDate);
         sendMail(mail).catch(console.error);
     };
@@ -215,7 +212,7 @@ export async function rsvp(
             await calendar.writeLock.run(() => removeOccurrence(calendar, eventId, recurrenceDate));
             calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, event.calendarId);
         } else {
-            await rsvpForOccurrence(calendar, eventId, user.email, input.status, recurrenceDate, null, true);
+            await rsvpForOccurrence(calendar, eventId, user.email, input.status, { recurrenceDate }, true);
         }
         if (isExternalOrganizer) sendRsvpReply(status, recurrenceDate);
         else relayRsvp(status, recurrenceDate);
@@ -244,6 +241,17 @@ async function unlessRefused<T>(uid: string, apply: () => Promise<T>, dropped: T
         console.info(`calendar: dropped a message for ${uid} — ${e.message}`);
         return dropped;
     }
+}
+
+// A RECURRENCE-ID names an instant, and its occurrence is the day the series' wall clock shows then. A lone
+// occurrence's file may not state the series' zone, so a copy holding the master keys the instant in that master's
+// zone. A copy of single dates knows none but the zone the RECURRENCE-ID is written in, which the parser keyed on.
+function occurrenceKey<Key extends string | null>(
+    occurrence: { recurrenceDate: Key; recurrenceId?: RecurrenceId | null },
+    held: CalendarEvent,
+): Key | string {
+    const stated = occurrence.recurrenceId;
+    return stated && !held.recurrenceDate ? recurrenceKeyIn(stated.instant, held.timezone) : occurrence.recurrenceDate;
 }
 
 // The caller holds the write lock, so two deliveries at once never file two masters for one UID. The copy's revisions
@@ -285,12 +293,11 @@ async function decideInboundRequest(
         return fileNewInvitation(calendar, requested, link, { copies: [...held.values()], resource, component });
     }
 
-    // A RECURRENCE-ID the message repeats keeps its newest event.
+    // A RECURRENCE-ID the message repeats keeps its newest event. A message that carries its master was keyed in that
+    // master's zone, the series' own.
     const latest = new Map<string | null, ParsedEvent>();
     for (const parsed of requested) {
-        const key = parsed.recurrenceUtc
-            ? recurrenceKeyIn(parsed.recurrenceUtc, series.timezone)
-            : parsed.recurrenceDate;
+        const key = master ? parsed.recurrenceDate : occurrenceKey(parsed, series);
         const prior = latest.get(key);
         if (!prior || isNewerRevision(parsed, prior)) latest.set(key, parsed);
     }
@@ -586,8 +593,7 @@ async function rsvpForOccurrence(
     eventId: string,
     email: string,
     status: Attendee['status'],
-    recurrenceDate: string,
-    recurrenceUtc: Date | null,
+    occurrence: OccurrenceRef,
     restoreCancelled: boolean,
 ): Promise<void> {
     const calendarId = await calendar.writeLock.run(async () => {
@@ -595,7 +601,7 @@ async function rsvpForOccurrence(
         const parent = events.eventById(calendar, eventId);
         if (!parent) return null;
 
-        const key = recurrenceUtc ? recurrenceKeyIn(recurrenceUtc, parent.timezone) : recurrenceDate;
+        const key = occurrenceKey(occurrence, parent);
         const existing = events.exceptionOf(calendar, eventId, key);
         // A deleted occurrence is an EXDATE, which carries no attendee list to record a PARTSTAT in.
         if (existing?.status === 'cancelled' && !restoreCancelled) return null;
@@ -617,18 +623,18 @@ async function rsvpForOccurrence(
         // A zone moves an occurrence at most a day off its key's date. A date the rule doesn't yield is no occurrence,
         // and an answer doesn't make it one.
         const day = Date.parse(`${key}T00:00:00Z`);
-        const occurrence =
+        const slot =
             existing ??
             expandRecurrence(parent, new Date(day - DAY_MS), new Date(day + 2 * DAY_MS)).find(
                 (candidate) => candidate.occurrenceDate === key,
             );
-        if (!occurrence) return null;
+        if (!slot) return null;
         await events.writeEvent(calendar, parent.calendarId, {
-            title: occurrence.title,
+            title: slot.title,
             description: parent.description,
             location: parent.location,
-            startTime: occurrence.startTime,
-            endTime: occurrence.endTime,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
             allDay: parent.allDay,
             timezone: parent.timezone,
             parentEventId: eventId,

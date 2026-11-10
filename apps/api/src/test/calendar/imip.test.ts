@@ -341,7 +341,7 @@ describe('iMIP Outbound Email Composition', () => {
         const standalone = {
             ...MOVED_OCCURRENCE,
             parentEventId: null,
-            recurrenceInstant: new Date('2026-04-08T14:00:00Z'),
+            recurrenceId: { instant: new Date('2026-04-08T14:00:00Z'), timezone: 'America/New_York' },
         };
         const ics = unfold(composeRsvpReply(standalone, 'bob@external.com', 'Bob', 'accepted'));
         expect(ics).toContain(ORIGINAL_SLOT);
@@ -1006,8 +1006,7 @@ describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
                 sequence: 0,
                 dtstamp: null,
                 recurrenceDate: null,
-                recurrenceInstant: null,
-                recurrenceUtc: null,
+                recurrenceId: null,
                 data: { organizer: { userId: '', email: 'outlook@external.com', name: 'Outlook' } },
             },
             'outlook@external.com',
@@ -2350,8 +2349,7 @@ describe('iMIP inbound self-addressed messages', () => {
                 sequence: 0,
                 dtstamp: null,
                 recurrenceDate: null,
-                recurrenceInstant: null,
-                recurrenceUtc: null,
+                recurrenceId: null,
                 data: { organizer: { userId: '', email: ctx.charlie.user.email, name: 'Charlie' } },
             },
             ctx.charlie.user.email,

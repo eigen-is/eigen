@@ -10,7 +10,7 @@ import { and, eq } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import { RRule } from 'rrule';
 import { ApiError } from '../core';
-import { applyEdits, buildResource, parseResource, patchEvent, recurrenceInstantOf, removeExclusion } from '../ical';
+import { applyEdits, buildResource, parseResource, patchEvent, recurrenceIdOf, removeExclusion } from '../ical';
 import type { EventPatch, EventToBuild, VEventEdit, WriteContext } from '../ical/ical-component';
 import { serializeEventForImip } from '../ical/ical-component';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
@@ -429,7 +429,7 @@ export async function eraseStoredEvent(
     // dates has no master: it loses one date at a time, and goes whole with its last.
     const parent = existing.parentEventId ? requireEvent(calendar, existing.parentEventId) : undefined;
     const component = storedComponent(calendar, resource);
-    const erased = { ...existing, recurrenceInstant: recurrenceInstantOf(component, existing.recurrenceDate) };
+    const erased = { ...existing, recurrenceId: recurrenceIdOf(component, existing.recurrenceDate) };
     const ctx = writeContext(actorIsOrganizer(parent ?? existing));
     const exclusion: VEventEdit = { kind: 'exclusion', event: existing, ctx };
     // A cancelled row is the exclusion itself, so deleting it puts the occurrence back.

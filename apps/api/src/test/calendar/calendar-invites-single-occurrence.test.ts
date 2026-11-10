@@ -187,6 +187,56 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         expect(await res.text()).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20280313T100000\r\n');
     });
 
+    test('a copy of a date moved into another zone keeps the series zone, its answer and its updates', async () => {
+        // 00:30 on Mondays in Amsterdam, which is Sunday evening in New York.
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Near Midnight',
+                    startTime: '2028-03-05T23:30:00Z',
+                    endTime: '2028-03-06T00:30:00Z',
+                    allDay: false,
+                    rrule: 'FREQ=WEEKLY;COUNT=4',
+                    timezone: TZ,
+                }),
+            },
+        );
+        const series = await assertJson<CalendarEvent>(res);
+        const inNewYork = { startTime: '2028-03-14T14:00:00Z', endTime: '2028-03-14T15:00:00Z' };
+        await editOccurrence(series.id, TARGET, {
+            title: 'Moved To New York',
+            timezone: 'America/New_York',
+            ...inNewYork,
+        });
+        const copy = await untilBob(series.uid, (occ) => occ.length === 1);
+
+        const home = await getHome(ctx.bob.user.id);
+        const resource = findOrFail(await home.calendar.listResources(bobCalendarId), (r) => r.uid === series.uid);
+        const stored = await davRequest('GET', `/dav/calendars/${ctx.bob.user.id}/${bobCalendarId}/${resource.uri}`, {
+            email: ctx.bob.user.email,
+        });
+        expect(await stored.text()).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20280313T003000\r\n');
+
+        await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events/${copy[0].id}/rsvp`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'accepted' }),
+            },
+        );
+        await untilAlice(series.uid, (e) => e.data?.attendees?.[0]?.status === 'accepted');
+
+        await editOccurrence(series.id, TARGET, { title: 'Renamed', timezone: 'America/New_York', ...inNewYork });
+        const renamed = await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Renamed'));
+        expect(renamed.map((e) => e.title)).toEqual(['Renamed']);
+    });
+
     test("the organizer's cancellation of that occurrence takes the guest's copy away", async () => {
         const series = await createSeries('Single Occurrence Cancel');
         await editOccurrence(series.id, TARGET, { title: 'Doomed' });
@@ -420,7 +470,7 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         await receiveMailed(calendar, imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
 
         const cancelled = imipOccurrence('Another Date', 1, '20280302T100000Z', ['STATUS:CANCELLED']);
-        const elsewhere = { ...cancelled, recurrenceDate: '2028-03-20', recurrenceInstant: null, recurrenceUtc: null };
+        const elsewhere = { ...cancelled, recurrenceDate: '2028-03-20', recurrenceId: null };
         await receiveMailed(calendar, elsewhere, IMIP_ORG);
 
         const stored = await calendar.getEventsByUid(IMIP_UID);
@@ -530,8 +580,7 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         const requested = (title: string, sequence: number, dtstamp: string, recurrenceDate: string | null) => ({
             uid: IMIP_UID,
             recurrenceDate,
-            recurrenceInstant: null,
-            recurrenceUtc: null,
+            recurrenceId: null,
             title,
             description: null,
             location: null,
@@ -634,8 +683,8 @@ describe('An invitation to several single dates of one series', () => {
         expect(rowOf('2028-03-13').data?.attendees?.[0]).toMatchObject({ email: guest, status: 'accepted' });
         expect(rowOf('2028-03-20').data?.attendees?.[0]).toMatchObject({ email: guest, status: 'pending' });
 
-        const revision = { sequence: 1, dtstamp: new Date('2028-03-02T10:00:00Z') };
-        await calendar.cancelInvitationOccurrence(UID, LINK.organizerUserId, '2028-03-13', null, revision);
+        const occurrence = { recurrenceDate: '2028-03-13', sequence: 1, dtstamp: new Date('2028-03-02T10:00:00Z') };
+        await calendar.cancelInvitationOccurrence(UID, LINK.organizerUserId, occurrence);
         expect((await calendar.getEventsByUid(UID)).map((e) => e.recurrenceDate)).toEqual(['2028-03-20']);
 
         const cancelled = date(guest, '0320', 'Second date', 1, ['STATUS:CANCELLED']);

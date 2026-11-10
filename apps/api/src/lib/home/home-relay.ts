@@ -137,8 +137,6 @@ async function deliver(targetId: string, message: DeliveredMessage): Promise<voi
                 await home.calendar.cancelInvitationOccurrence(
                     message.orgEventId,
                     message.orgUserId,
-                    message.occurrence.recurrenceDate,
-                    null,
                     message.occurrence,
                 );
             } else {
@@ -147,13 +145,9 @@ async function deliver(targetId: string, message: DeliveredMessage): Promise<voi
             break;
         case 'calendar:rsvp':
             if (message.recurrenceDate) {
-                await home.calendar.receiveRsvpForOccurrence(
-                    message.eventId,
-                    message.attendeeEmail,
-                    message.status,
-                    message.recurrenceDate,
-                    null,
-                );
+                await home.calendar.receiveRsvpForOccurrence(message.eventId, message.attendeeEmail, message.status, {
+                    recurrenceDate: message.recurrenceDate,
+                });
             } else {
                 await home.calendar.receiveAttendeeStatus(message.eventId, message.attendeeEmail, message.status);
             }

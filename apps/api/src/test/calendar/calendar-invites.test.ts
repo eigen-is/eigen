@@ -237,13 +237,12 @@ describe('Calendar Invites', () => {
 
         const sse = await collectSSE(ctx.charlie.user.id);
         try {
-            await home.calendar.cancelInvitationOccurrence(
-                orgEventId,
-                orgUserId,
-                '2026-07-13',
-                new Date('2026-07-13T09:00:00Z'),
-                { sequence: 1, dtstamp: new Date() },
-            );
+            await home.calendar.cancelInvitationOccurrence(orgEventId, orgUserId, {
+                recurrenceDate: '2026-07-13',
+                recurrenceId: { instant: new Date('2026-07-13T09:00:00Z'), timezone: null },
+                sequence: 1,
+                dtstamp: new Date(),
+            });
 
             await eventually(
                 async () => (sse.events.some((e) => e.type === SSEventType.CALENDAR_EVENT_UPDATED) ? true : undefined),
@@ -271,8 +270,7 @@ describe('Calendar Invites', () => {
             sequence,
             dtstamp: null,
             recurrenceDate: null,
-            recurrenceInstant: null,
-            recurrenceUtc: null,
+            recurrenceId: null,
             data: { organizer: { userId: ctx.alice.user.id, email: organizerEmail, name: 'Alice' } },
         });
         const linkOf = (organizerEventId: string, organizerUserId = ctx.alice.user.id) => ({

@@ -54,7 +54,7 @@ export function eventForResource(args: {
         timezone: normalizeTimezone(input.timezone),
         parentEventId: input.parentEventId ?? null,
         recurrenceDate: input.recurrenceDate ?? null,
-        recurrenceInstant: input.recurrenceInstant,
+        recurrenceId: input.recurrenceId,
         status: input.status ?? 'confirmed',
         sequence: input.sequence ?? 0,
         etag: '',

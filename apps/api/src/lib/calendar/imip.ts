@@ -213,22 +213,18 @@ export async function processInboundImip(
 
     let replyDates = 0;
     for (const parsed of acted) {
+        const { recurrenceDate } = parsed;
         if (method === 'CANCEL') {
             const organizerEmail = parsed.data?.organizer?.email;
             if (!sentBy(organizerEmail)) continue;
-            if (parsed.recurrenceDate) {
-                await calendar.cancelInvitationOccurrence(
-                    parsed.uid,
-                    externalOwnerId(organizerEmail),
-                    parsed.recurrenceDate,
-                    parsed.recurrenceUtc,
-                    parsed,
-                );
+            const organizerUserId = externalOwnerId(organizerEmail);
+            if (recurrenceDate) {
+                await calendar.cancelInvitationOccurrence(parsed.uid, organizerUserId, { ...parsed, recurrenceDate });
             } else {
-                await calendar.removeInvitation(parsed.uid, externalOwnerId(organizerEmail));
+                await calendar.removeInvitation(parsed.uid, organizerUserId);
             }
         } else if (method === 'REPLY') {
-            if (parsed.recurrenceDate && ++replyDates > IMIP_MAX_REPLY_DATES) continue;
+            if (recurrenceDate && ++replyDates > IMIP_MAX_REPLY_DATES) continue;
             // A sender answers for themselves alone, once: a later listing of the same address says nothing more.
             const attendee = parsed.data?.attendees?.find((a) => sentBy(a.email));
             if (!attendee) continue;
@@ -237,14 +233,11 @@ export async function processInboundImip(
                 (e) => !isInvitationFromOthers(e, home.user.email) && !e.parentEventId,
             );
             if (!ownerEvent) continue;
-            if (parsed.recurrenceDate) {
-                await calendar.receiveRsvpForOccurrence(
-                    ownerEvent.id,
-                    attendee.email,
-                    attendee.status,
-                    parsed.recurrenceDate,
-                    parsed.recurrenceUtc,
-                );
+            if (recurrenceDate) {
+                await calendar.receiveRsvpForOccurrence(ownerEvent.id, attendee.email, attendee.status, {
+                    ...parsed,
+                    recurrenceDate,
+                });
             } else if (ownerEvent.data?.attendees?.some((a) => a.email.toLowerCase() === sender)) {
                 await calendar.receiveAttendeeStatus(ownerEvent.id, attendee.email, attendee.status);
             }

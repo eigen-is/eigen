@@ -248,8 +248,7 @@ describe('relayed invitation', () => {
         sequence,
         dtstamp: new Date('2026-01-01T00:00:00Z'),
         recurrenceDate: null,
-        recurrenceInstant: null,
-        recurrenceUtc: null,
+        recurrenceId: null,
         data: {
             organizer: { userId: ORG_HOME, email, name: 'Ext Org' },
             attendees: [{ email: 'owner@test.local', status: 'pending', role: 'required' }],
@@ -415,8 +414,7 @@ describe('one REQUEST, one write', () => {
             timezone: 'Europe/Amsterdam',
             sequence: 0,
             dtstamp: new Date('2026-04-01T10:00:00Z'),
-            recurrenceInstant: null,
-            recurrenceUtc: null,
+            recurrenceId: null,
             data: {
                 organizer: { userId: LINK.organizerUserId, email: ORG, name: 'Ext Org' },
                 attendees: [{ email: guest, status, role: 'required' as const }],
@@ -723,7 +721,7 @@ describe('a guest who removes this and following', () => {
     });
 });
 
-// RFC 5545 states a RECURRENCE-ID in the master's zone, so a TZID value keys on its own wall date wherever it lands.
+// A RECURRENCE-ID names an instant (RFC 5545), and its occurrence is the one the series' wall clock shows at it.
 describe('a lone occurrence named in another zone', () => {
     const SERIES = 'date-line@external.com';
     const link = {
@@ -742,7 +740,7 @@ describe('a lone occurrence named in another zone', () => {
         'END:VEVENT',
     ];
 
-    test('keys on its own wall date, not the date in the series zone', async () => {
+    test('replaces the occurrence the series has at that instant', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
         const guest = harness.user.email;
@@ -765,7 +763,77 @@ describe('a lone occurrence named in another zone', () => {
         await calendar.receiveRequest(parseIcs(vcal(vevent(guest, lone))).events, link);
 
         const override = findOrFail(await calendar.getEventsByUid(SERIES), (e) => !!e.parentEventId);
-        expect(override.recurrenceDate).toBe('2026-05-05');
+        expect(override.recurrenceDate).toBe('2026-05-06');
+        const resource = findOrFail(await calendar.listResources(override.calendarId), (r) => r.uid === SERIES);
+        const text = await resourceTextOf(calendar, override.calendarId, resource.uri);
+        expect(text).toContain('RECURRENCE-ID;TZID=Pacific/Auckland:20260506T090000\r\n');
+        const range = await calendar.getEventsInRange(new Date('2026-05-01'), new Date('2026-06-01'));
+        expect(range).toHaveLength(10);
+    });
+});
+
+// A copy of single dates holds no master, so the zone its RECURRENCE-ID is written in is the only series zone it knows.
+describe('a copy of one date named in another zone than its start', () => {
+    const DATE = 'one-date-two-zones@external.com';
+    const occurrence = (guest: string, lines: string[]): ParsedEvent[] =>
+        parseIcs(
+            vcal([
+                'BEGIN:VEVENT',
+                `UID:${DATE}`,
+                'RECURRENCE-ID;TZID=Europe/Amsterdam:20260510T003000',
+                `ORGANIZER:mailto:${ORG}`,
+                `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${guest}`,
+                ...lines,
+                'END:VEVENT',
+            ]),
+        ).events;
+    const link = {
+        organizerEmail: ORG,
+        organizerEventId: DATE,
+        organizerUserId: `external_${ORG}`,
+        createByUserId: `external_${ORG}`,
+    };
+
+    async function stored(calendar: Calendar) {
+        const events = await calendar.getEventsByUid(DATE);
+        const { calendarId } = events[0];
+        const resource = findOrFail(await calendar.listResources(calendarId), (r) => r.uid === DATE);
+        return { events, text: await resourceTextOf(calendar, calendarId, resource.uri) };
+    }
+
+    test('keeps its RECURRENCE-ID and its date through an update', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const guest = harness.user.email;
+        const inNewYork = (title: string, sequence: number) => [
+            `SUMMARY:${title}`,
+            'DTSTART;TZID=America/New_York:20260509T183000',
+            'DTEND;TZID=America/New_York:20260509T193000',
+            `SEQUENCE:${sequence}`,
+            `DTSTAMP:2026010${sequence + 1}T000000Z`,
+        ];
+        await calendar.receiveRequest(occurrence(guest, inNewYork('Late call', 0)), link);
+        await calendar.receiveRequest(occurrence(guest, inNewYork('Late call renamed', 1)), link);
+
+        const { events, text } = await stored(calendar);
+        expect(events.map((e) => [e.title, e.recurrenceDate])).toEqual([['Late call renamed', '2026-05-10']]);
+        expect(text).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20260510T003000\r\n');
+    });
+
+    test('made all day, still names the timed occurrence', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const allDay = [
+            'SUMMARY:Day off',
+            'DTSTART;VALUE=DATE:20260510',
+            'DTEND;VALUE=DATE:20260511',
+            'DTSTAMP:20260101T000000Z',
+        ];
+        await calendar.receiveRequest(occurrence(harness.user.email, allDay), link);
+
+        const { events, text } = await stored(calendar);
+        expect(events.map((e) => e.recurrenceDate)).toEqual(['2026-05-10']);
+        expect(text).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20260510T003000\r\n');
     });
 });
 

@@ -283,8 +283,7 @@ describe('CalDAV client sync on web-created events', () => {
             sequence,
             dtstamp: null,
             recurrenceDate: null,
-            recurrenceInstant: null,
-            recurrenceUtc: null,
+            recurrenceId: null,
             data: {
                 organizer: { userId: '', email: ORGANIZER, name: 'Org' },
                 attendees: [{ email: ctx.alice.user.email, status: 'pending', role: 'required' }],
@@ -340,16 +339,14 @@ describe('CalDAV client sync on web-created events', () => {
             const { uri, eventId } = await seedInvitation(uid, 'FREQ=WEEKLY;COUNT=5');
             const home = await getHome(userId);
             // The first RSVP writes the exception; the second moves the PARTSTAT on the one that exists.
-            await home.calendar.receiveRsvpForOccurrence(eventId, ctx.alice.user.email, 'accepted', '2026-05-11', null);
+            await home.calendar.receiveRsvpForOccurrence(eventId, ctx.alice.user.email, 'accepted', {
+                recurrenceDate: '2026-05-11',
+            });
             const before = await syncToken();
 
-            await home.calendar.receiveRsvpForOccurrence(
-                eventId,
-                ctx.alice.user.email,
-                'tentative',
-                '2026-05-11',
-                null,
-            );
+            await home.calendar.receiveRsvpForOccurrence(eventId, ctx.alice.user.email, 'tentative', {
+                recurrenceDate: '2026-05-11',
+            });
 
             expect(await delta(before)).toContain(uri);
             expect((await davGet(uri)).ics).toContain('PARTSTAT=TENTATIVE');
@@ -384,7 +381,9 @@ describe('CalDAV client sync on web-created events', () => {
             const uid = `l43-cancel-${Date.now()}@external.com`;
             const { uri, eventId } = await seedInvitation(uid, 'FREQ=WEEKLY;COUNT=5');
             const home = await getHome(userId);
-            await home.calendar.receiveRsvpForOccurrence(eventId, ctx.alice.user.email, 'accepted', '2026-05-11', null);
+            await home.calendar.receiveRsvpForOccurrence(eventId, ctx.alice.user.email, 'accepted', {
+                recurrenceDate: '2026-05-11',
+            });
             const before = await syncToken();
 
             await home.calendar.removeInvitation(uid, `external_${ORGANIZER}`);

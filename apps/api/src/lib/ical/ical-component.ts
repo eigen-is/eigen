@@ -7,7 +7,7 @@ import { heldAttendees, localToUtc, normalizeTimezone, utcToLocal } from '@works
 import { stripControlChars, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Attendee, CalendarEvent, ImipMethod, Reminder, UpdateEventInput } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
-import type { ExclusionStamp } from './ical-parse';
+import type { ExclusionStamp, RecurrenceId } from './ical-parse';
 import {
     calAddress,
     EIGEN,
@@ -19,6 +19,7 @@ import {
     projectReminders,
     propTzid,
     readExclusionStamps,
+    readRecurrenceId,
     readStamp,
     readTimestamp,
     recurrenceKeyOf,
@@ -69,9 +70,9 @@ type BuildOptions = { master?: ICAL.Component; exclusions?: Exclusion[] };
 
 export type Revision = { sequence: number; dtstamp?: Date | null };
 
-// A row about to be written. An occurrence without its master carries the instant its RECURRENCE-ID names when a
-// message or the stored file stated it, since it holds no master to compute that from.
-export type EventToBuild = CalendarEvent & { recurrenceInstant?: Date | null };
+// A row about to be written. An occurrence without its master carries the RECURRENCE-ID a message or the stored file
+// stated, since it holds no master to name its occurrence through.
+export type EventToBuild = CalendarEvent & { recurrenceId?: RecurrenceId | null };
 
 export function buildResource(events: readonly EventToBuild[]): ICAL.Component {
     const vcalendar = newVCalendar();
@@ -271,10 +272,10 @@ export function storedRevisions(resource: ICAL.Component): Map<string | null, Re
     return revisions;
 }
 
-// The instant the stored VEVENT of one occurrence names in its RECURRENCE-ID, as the organizer wrote it.
-export function recurrenceInstantOf(resource: ICAL.Component, recurrenceKey: string): Date | null {
+// The RECURRENCE-ID the stored VEVENT of one occurrence names, as the organizer wrote it.
+export function recurrenceIdOf(resource: ICAL.Component, recurrenceKey: string): RecurrenceId | null {
     const vevent = keyVEvents(resource).get(recurrenceKey);
-    return vevent ? instantOf(vevent, 'recurrence-id', propTzid(vevent.getFirstProperty('dtstart'))) : null;
+    return vevent ? readRecurrenceId(vevent) : null;
 }
 
 // The inbound-REQUEST rule matches a verified sender against this, so the imported address wins over the ORGANIZER the
@@ -420,11 +421,13 @@ function buildVEvent(event: EventToBuild, options: BuildOptions = {}): ICAL.Comp
     const exclusions = options.exclusions ?? [];
     for (const { key } of exclusions) vevent.addProperty(occurrenceProperty('exdate', vevent, key));
 
+    // Without its master, an occurrence writes the organizer's RECURRENCE-ID back in the zone it was written in, so the
+    // key it is read back under stays the one it was filed under.
     if (event.recurrenceDate) {
-        const stated = options.master ? null : event.recurrenceInstant;
+        const stated = options.master ? null : event.recurrenceId;
         vevent.addProperty(
             stated
-                ? timeProperty('recurrence-id', stated, tzid, event.allDay)
+                ? timeProperty('recurrence-id', stated.instant, stated.timezone, false)
                 : occurrenceProperty('recurrence-id', options.master ?? vevent, event.recurrenceDate),
         );
     }
@@ -736,7 +739,10 @@ function dropExclusions(vevent: ICAL.Component, drops: (recurrenceKey: string) =
     let removed = gone.size > 0;
     for (const prop of vevent.getAllProperties('exdate')) {
         const values = prop.getValues();
-        const kept = values.filter((v) => !(v instanceof ICAL.Time) || !drops(icalTimeToRecurrenceKey(v, seriesTz)));
+        const tzid = propTzid(prop);
+        const kept = values.filter(
+            (v) => !(v instanceof ICAL.Time) || !drops(icalTimeToRecurrenceKey(v, tzid, seriesTz)),
+        );
         if (kept.length === values.length) continue;
         removed = true;
         if (kept.length) prop.setValues(kept);
@@ -751,8 +757,9 @@ function dropExclusions(vevent: ICAL.Component, drops: (recurrenceKey: string) =
 function exdateKeys(vevent: ICAL.Component, seriesTz: string | null): Set<string> {
     const keys = new Set<string>();
     for (const prop of vevent.getAllProperties('exdate')) {
+        const tzid = propTzid(prop);
         for (const value of prop.getValues()) {
-            if (value instanceof ICAL.Time) keys.add(icalTimeToRecurrenceKey(value, seriesTz));
+            if (value instanceof ICAL.Time) keys.add(icalTimeToRecurrenceKey(value, tzid, seriesTz));
         }
     }
     return keys;

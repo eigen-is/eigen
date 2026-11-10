@@ -103,8 +103,7 @@ const relayed = (title: string, sequence: number, dtstamp: string): ParsedEvent 
     sequence,
     dtstamp: new Date(dtstamp),
     recurrenceDate: null,
-    recurrenceInstant: null,
-    recurrenceUtc: null,
+    recurrenceId: null,
     data: {
         organizer: { userId: 'organizer-home', email: ORG, name: 'Ext Org' },
         attendees: [{ email: GUEST, status: 'pending', role: 'required' }],
@@ -346,7 +345,9 @@ describe('inbound message ordering', () => {
         const { calendar } = await seeded();
 
         await receiveMailed(calendar, parsedOf(occurrence('Moved once', 2, '20260401T100000Z')), ORG);
-        await calendar.cancelInvitationOccurrence(UID, ORG_USER, '2026-05-02', new Date('2026-05-02T09:00:00Z'), {
+        await calendar.cancelInvitationOccurrence(UID, ORG_USER, {
+            recurrenceDate: '2026-05-02',
+            recurrenceId: { instant: new Date('2026-05-02T09:00:00Z'), timezone: null },
             sequence: 2,
             dtstamp: new Date('2026-04-01T11:00:00Z'),
         });
@@ -363,7 +364,9 @@ describe('inbound message ordering', () => {
     test('a CANCEL redelivered behind the REQUEST that reinstated the occurrence does not re-cancel it', async () => {
         const { calendar } = await seeded();
 
-        await calendar.cancelInvitationOccurrence(UID, ORG_USER, '2026-05-02', new Date('2026-05-02T09:00:00Z'), {
+        await calendar.cancelInvitationOccurrence(UID, ORG_USER, {
+            recurrenceDate: '2026-05-02',
+            recurrenceId: { instant: new Date('2026-05-02T09:00:00Z'), timezone: null },
             sequence: 2,
             dtstamp: new Date('2026-04-01T11:00:00Z'),
         });
@@ -373,7 +376,9 @@ describe('inbound message ordering', () => {
         await receiveMailed(calendar, parsedOf(occurrence('Back on', 2, '20260401T120000Z')), ORG);
         expect((await exceptionOf(calendar))?.status).toBe('confirmed');
 
-        await calendar.cancelInvitationOccurrence(UID, ORG_USER, '2026-05-02', new Date('2026-05-02T09:00:00Z'), {
+        await calendar.cancelInvitationOccurrence(UID, ORG_USER, {
+            recurrenceDate: '2026-05-02',
+            recurrenceId: { instant: new Date('2026-05-02T09:00:00Z'), timezone: null },
             sequence: 2,
             dtstamp: new Date('2026-04-01T11:00:00Z'),
         });
@@ -477,7 +482,8 @@ describe('an answer that names a date', () => {
             allDay: false,
             data: { attendees: GUESTS },
         });
-        const answer = (date: string) => calendar.receiveRsvpForOccurrence(event.id, GUEST, 'accepted', date, null);
+        const answer = (date: string) =>
+            calendar.receiveRsvpForOccurrence(event.id, GUEST, 'accepted', { recurrenceDate: date });
         const overrides = () => calendar.getEventsByUid(event.uid).then((all) => all.filter((e) => e.parentEventId));
         return { calendar, calendarId, event, answer, overrides, broadcasts: harness.broadcasts };
     };

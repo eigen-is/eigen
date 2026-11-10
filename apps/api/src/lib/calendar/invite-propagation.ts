@@ -9,7 +9,7 @@ import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/ca
 import { getServerSettings } from '../config/server-settings';
 import type { Home } from '../home';
 import { sendToHome } from '../home/home-relay';
-import type { ParsedEvent } from '../ical/ical-parse';
+import type { ParsedEvent, RecurrenceId } from '../ical/ical-parse';
 import { computeOccurrenceTimes } from '../ical/wall-clock';
 import type { OutboundICalEvent } from '../mailer/mailer';
 import { sendMail } from '../mailer/mailer';
@@ -170,11 +170,13 @@ function invitationRequest(
         createByUserId,
     };
     if (series) {
+        // A guest without the series can name the occurrence only as the series does: its original slot, in its zone.
         const key = event.recurrenceDate;
-        // A moved occurrence's RECURRENCE-ID names its original slot, which only the series knows.
-        const recurrenceInstant = key && !series.allDay ? computeOccurrenceTimes(series, key).startTime : null;
-        const requested = requestedEvent(event, key, organizer, heldAttendees(event, series));
-        return { link, events: [{ ...requested, recurrenceInstant }] };
+        const recurrenceId =
+            key && !series.allDay
+                ? { instant: computeOccurrenceTimes(series, key).startTime, timezone: series.timezone }
+                : null;
+        return { link, events: [requestedEvent(event, key, organizer, heldAttendees(event, series), recurrenceId)] };
     }
     const address = email.toLowerCase();
     const isOn = (e: CalendarEvent) => heldAttendees(e, event).some((a) => a.email.toLowerCase() === address);
@@ -192,6 +194,7 @@ function requestedEvent(
     recurrenceDate: string | null,
     organizer: Organizer,
     attendees: readonly Attendee[],
+    recurrenceId: RecurrenceId | null = null,
 ): ParsedEvent {
     return {
         uid: event.uid,
@@ -208,8 +211,7 @@ function requestedEvent(
         // The organizer's own revision, so the guest can order this message against the next: the fan-out is unordered.
         dtstamp: event.updatedAt,
         recurrenceDate,
-        recurrenceInstant: null,
-        recurrenceUtc: null,
+        recurrenceId,
         data: { organizer, attendees: [...attendees] },
     };
 }
