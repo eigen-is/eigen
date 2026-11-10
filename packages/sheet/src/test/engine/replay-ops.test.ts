@@ -582,3 +582,24 @@ describe('a batch that writes a sheet id', () => {
         expect(replayed.data?.[0]?.[1]).toMatchObject({ f: '=SUM(A1)', v: 2 });
     });
 });
+
+describe("a delete of a sheet's last lines", () => {
+    const n = (v: number) => ({ v, m: `${v}`, ct: { fa: 'General', t: 'n' } });
+    const remove = (type: 'row' | 'column', start: number, end: number): Op[] => [
+        { op: 'deleteRowCol', id: 's1', path: [], value: { type, start, end } },
+    ];
+
+    test('recomputes a formula that read only the deleted rows', () => {
+        const one: Sheet = { id: 's1', name: 'One', order: 0, data: [1, 2, 3, 4, 5].map((v) => [n(v)]), config: {} };
+        const two: Sheet = { id: 's2', name: 'Two', order: 1, data: [[{ f: '=SUM(One!A4:A10)', v: 9 }]], config: {} };
+        const [, replayed] = replaySheetsOps([one, two], [remove('row', 3, 4)]);
+        expect(replayed.data?.[0]?.[0]).toMatchObject({ f: '=SUM(One!A4:A8)', v: 0 });
+    });
+
+    test('recomputes a whole-row reader when every column goes', () => {
+        const one: Sheet = { id: 's1', name: 'One', order: 0, data: [[n(1), n(2)]], config: {} };
+        const two: Sheet = { id: 's2', name: 'Two', order: 1, data: [[{ f: '=SUM(One!1:1)', v: 3 }]], config: {} };
+        const [, replayed] = replaySheetsOps([one, two], [remove('column', 0, 1)]);
+        expect(replayed.data?.[0]?.[0]).toMatchObject({ f: '=SUM(One!1:1)', v: 0 });
+    });
+});

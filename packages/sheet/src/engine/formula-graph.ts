@@ -195,15 +195,16 @@ export class FormulaGraph {
     }
 
     // Lists the cells a formula reads, each range cut to its sheet's bounds: only a formula cell is looked up, so
-    // `SUM(A1:XFD1048576)` costs about what the sheet spans, not 16 million blocks.
+    // `SUM(A1:XFD1048576)` costs about what the sheet spans, not 16 million blocks. The cut keeps the line past the
+    // bounds, where a delete of a sheet's last lines seeds the readers of the lines it took.
     private list(node: FormulaCellInfo): void {
         const listed: FormulaDependency[] = [];
         for (const dep of extractDependencies(this.walk, node.formula, node.id)) {
             const cells = cellsOf(dep);
             const extent = cells && this.extents.get(cells.sheetId);
             if (cells == null || extent == null) continue;
-            const r1 = Math.min(extent.rows - 1, cells.r1);
-            const c1 = Math.min(extent.columns - 1, cells.c1);
+            const r1 = Math.min(extent.rows, cells.r1);
+            const c1 = Math.min(extent.columns, cells.c1);
             if (r1 < cells.r1 || c1 < cells.c1) {
                 let cut = this.cut.get(cells.sheetId);
                 if (cut == null) {

@@ -107,7 +107,6 @@ function cellsOnLines(sheets: readonly WorkingSheet[], lines: RecomputeSeeds['li
         const data = sheets.find((sheet) => sheet.id === id)?.data;
         if (!data || line < 0) continue;
         if (type === 'row') {
-            if (line >= data.length) continue;
             const width = matrixWidth(data);
             for (let c = 0; c < width; c += 1) cells.push({ r: line, c, id });
         } else {
