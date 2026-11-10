@@ -3,6 +3,7 @@ import type { Op, Sheet } from '@workspace/lib/sheets';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot, sheetsOpLog, sheetsStateMap } from '@workspace/lib/sheets';
 import * as Y from 'yjs';
 import { compactSheetsSnapshot, readSheetsFromDoc } from '../../lib/document/sheets';
+import { TRANSFORM_LIMITS } from '../../lib/document/transform/runner';
 import { readXlsx } from '../../lib/import/sheets/from-xlsx';
 import { openZip } from '../../lib/ooxml/zip';
 import { exportXlsx } from '../fixtures/xlsx';
@@ -32,6 +33,8 @@ const two: Sheet = {
         { r: 0, c: 1, v: { f: '=A1+1', v: 121, m: '121' } },
     ],
 };
+// The time a compaction's job is killed at, as the runner gives it to the child.
+const jobDeadline = () => Date.now() + TRANSFORM_LIMITS.compact.deadlineMs;
 const rowDelete: Op = { op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row', start: 1, end: 1 } };
 const tabDelete: Op = { op: 'deleteSheet', id: 's1', path: [], value: { id: 's1' } };
 
@@ -56,7 +59,11 @@ test('the export and the preview read a row delete recomputed, on a sheet the ba
 
 test('a compaction stores what the replay computed', () => {
     const snapshot = encodeSheetsSnapshot([one, two], { computed: true });
-    const { snapshot: compacted, dropped } = compactSheetsSnapshot(snapshot, JSON.stringify([[rowDelete]]));
+    const { snapshot: compacted, dropped } = compactSheetsSnapshot(
+        snapshot,
+        JSON.stringify([[rowDelete]]),
+        jobDeadline(),
+    );
     expect(dropped).toBe(0);
     const [, second] = decodeSheetsSnapshot(compacted);
     expect(second.celldata?.find((e) => e.c === 0)?.v).toMatchObject({ v: 80 });

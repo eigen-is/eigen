@@ -1,7 +1,9 @@
 // The formula engine the editor and the server's recalc share. It owns one Parser, answers its cell and range reads
 // from a CellResolver, and turns each result into the value a cell stores. An error a cell holds reads back as an
 // error, so ISERROR and IFERROR see it. Every range read is clamped to the sheet's grid and counted against
-// maxCellsRead. It also says when this build can't evaluate a formula's own text, which a recompute takes as no answer.
+// maxCellsRead, and a pass checks the cells and its deadline between two formulas, the deadline through the check the
+// formula graph runs too. It also says when this build can't evaluate a formula's own text, which a recompute takes as
+// no answer.
 
 import { cellValue } from './format';
 import { inlineNames } from './formula-shift';
@@ -45,9 +47,12 @@ export class FormulaEngine {
     // The cells range reads have cost; a read that would pass `maxCellsRead` fails before it reads.
     private cellsRead = 0;
     private readonly maxCellsRead: number;
+    // The time on performance.now()'s clock past which a pass stops.
+    private readonly deadline: number;
 
-    public constructor({ maxCellsRead = Number.POSITIVE_INFINITY } = {}) {
+    public constructor({ maxCellsRead = Number.POSITIVE_INFINITY, deadline = Number.POSITIVE_INFINITY } = {}) {
         this.maxCellsRead = maxCellsRead;
+        this.deadline = deadline;
         this.parser = new Parser();
     }
 
@@ -69,8 +74,9 @@ export class FormulaEngine {
         return unknown;
     }
 
-    public assertWithinCellBudget(): void {
+    public assertWithinBudget(): void {
         if (this.cellsRead > this.maxCellsRead) throw new RangeError('Formula ranges read past the cell budget');
+        assertBeforeDeadline(this.deadline);
     }
 
     public evaluate(formula: string, sheetId: string, resolver: CellResolver): EvaluationResult {
@@ -182,6 +188,12 @@ export class FormulaEngine {
         }
         return width;
     }
+}
+
+// A recompute's one time bound, which its graph build and walk check too, so a pass past it stops before it
+// evaluates. The deadline is on performance.now()'s clock.
+export function assertBeforeDeadline(deadline = Number.POSITIVE_INFINITY): void {
+    if (performance.now() > deadline) throw new RangeError('The recompute ran past its deadline');
 }
 
 // A cell holds an error as its text and a formula reads it back as formulajs's error object, which its functions

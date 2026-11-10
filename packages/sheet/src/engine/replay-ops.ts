@@ -1,8 +1,8 @@
 // Applies op batches to a workbook's plain sheets. replaySheetsOps replays the stored log for a reader that was not
-// there live, such as a browser that opens the workbook or the server's export, and the editor applies each batch it
-// takes through the same applySheetsBatch, so a peer, a joiner and the server skip the same ops and end with the same
-// sheets. It also owns the shape check a sheet or row op passes before it applies, and says what a batch's ops can
-// affect, which every reader computes again after the batch.
+// there live, such as a browser that opens the workbook or the server's export, replaySheetsSteps the same replay a
+// batch at a time for the server's fold, and the editor applies each batch it takes through the same applySheetsBatch,
+// so a peer, a joiner and the server skip the same ops and end with the same sheets. It also owns the shape check a
+// sheet or row op passes before it applies, and says what a batch's ops can affect, which every reader computes again.
 
 import { isRecord } from '@workspace/lib/guards';
 import type { Op, Sheet } from '@workspace/lib/sheets';
@@ -40,13 +40,29 @@ export class SkippedRecompute extends Error {}
 
 // A batch the replay can't apply goes to `onDropped`, and so does a recompute past `budgets` as a SkippedRecompute,
 // whose batch stands with the values it had. By default each is logged as a warning.
-// The batches come as an iterable, so a caller can stop the replay between two of them.
 export function replaySheetsOps(
     sheets: Sheet[],
-    opBatches: Iterable<Op[]>,
+    opBatches: readonly Op[][],
     onDropped: (dropped: unknown) => void = (e) => console.warn('[sheets] replay skipped a batch or its recompute:', e),
     budgets: RecalcBudgets = {},
 ): Sheet[] {
+    let result: Sheet[] | null = null;
+    for (const step of replaySheetsSteps(sheets, opBatches, budgets)) {
+        if (step.dropped !== null) onDropped(step.dropped);
+        result = step.sheets;
+    }
+    // An empty log still hands every sheet back with its config collections.
+    return (result ?? sheets.map(withNormalizedSheet)).map(withSyncedCelldataIfData);
+}
+
+// The replay one batch at a time: the sheets after each batch, and what it dropped, as replaySheetsOps reports it. A
+// caller can stop between two batches and keep the sheets after any of them, since a batch never changes the sheets it
+// is given. The cells of a sheet holding the dense matrix are in `data`, not yet written back to `celldata`.
+export function* replaySheetsSteps(
+    sheets: Sheet[],
+    opBatches: readonly Op[][],
+    budgets: RecalcBudgets = {},
+): Generator<{ sheets: Sheet[]; dropped: unknown }> {
     // Every base sheet carries its config collections before the first op, so the config patches the editor writes
     // resolve here as they do in the editor.
     let result = sheets.map(withNormalizedSheet);
@@ -56,17 +72,18 @@ export function replaySheetsOps(
     for (const batch of opBatches) {
         // One bad batch must never make the whole workbook unreadable. It rolls back and the replay goes on with the
         // next batch. The same batch is skipped on every replay.
+        let dropped: unknown = null;
         try {
             const applied = applySheetsBatch(result, batch, graph, budgets);
             result = applied.sheets;
             graph = applied.graph;
-            if (applied.skipped) onDropped(new SkippedRecompute(applied.skipped.message, { cause: applied.skipped }));
+            if (applied.skipped) dropped = new SkippedRecompute(applied.skipped.message, { cause: applied.skipped });
         } catch (e) {
-            onDropped(e);
+            dropped = e;
             graph = null;
         }
+        yield { sheets: result, dropped };
     }
-    return result.map(withSyncedCelldataIfData);
 }
 
 // A row or column op a batch applied, with the sheets as they were before it.
@@ -137,7 +154,7 @@ export function applySheetsBatch(
     if (seeds) {
         const materialized = result.map(withMaterializedData);
         result = materialized;
-        const engine = new FormulaEngine({ maxCellsRead: budgets.maxCellsRead });
+        const engine = new FormulaEngine(budgets);
         skipped = withinBudget(() => {
             const built = held ?? new FormulaGraph(materialized, budgets);
             held = built;

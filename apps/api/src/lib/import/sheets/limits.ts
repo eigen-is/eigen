@@ -1,11 +1,10 @@
 // The caps on what one workbook may hold, in cells and in text, and on the work the xlsx reader does to build it. The
-// reader charges a file against them as it reads it in the transform process. An insert into an open workbook weighs
-// the file with the workbook against the first two, on the main thread. So the caps and that weigh live apart from the
-// reader, which the main thread must not load.
+// reader charges a file against them as it reads it in the transform process, and an insert into an open workbook
+// weighs the file with the workbook against the first two before it builds the tabs. So the caps and that weigh live
+// apart from the reader, which an export or a compaction must not load.
 
 import type { Cell, Sheet } from '@workspace/lib/sheets';
 import { ApiError } from '../../core/errors';
-import type { SheetsWeight } from '../../document/transform/protocol';
 import { IMPORT_MESSAGES } from '../messages';
 
 // A cell costs about 480 B in the sheets alone, and recalc and the snapshot copy it: the cells emitted count, merged and
@@ -25,9 +24,12 @@ export const MAX_SHARED_FORMULA_TEXT = 16_000_000;
 // one sheet of a million rows. Four times that recalcs in about a second at 1.4 GB.
 export const MAX_GRID_SLOTS = 110_000_000;
 
-// The transform weighs the file's sheets and the main thread the open workbook's, in one unit. The text is counted in
-// the fields the reader charges per cell, so a file weighs no more here than the reader let through. What else the
-// reader charges, such as borders, merges and the text of links and rules, is left out.
+// A workbook's stored cells and the characters of their text.
+export type SheetsWeight = { cells: number; text: number };
+
+// The file's sheets and the open workbook's weigh in one unit. The text is counted in the fields the reader charges per
+// cell, so a file weighs no more here than the reader let through. What else the reader charges, such as borders,
+// merges and the text of links and rules, is left out.
 export function sheetsWeight(sheets: Sheet[]): SheetsWeight {
     let cells = 0;
     let text = 0;

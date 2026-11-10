@@ -23,7 +23,7 @@ import type {
     PreviewResult,
     ReferencesJob,
     SheetsImportJob,
-    SheetsWorkbookJson,
+    SheetsInsertJob,
     SlidesImportJob,
     SlidesImportTransformResult,
     TransformError,
@@ -209,7 +209,7 @@ export async function runImportToSnapshotJson(
 }
 
 export async function runInsertToSheetsBatch(
-    job: SheetsImportJob & { workbook: SheetsWorkbookJson },
+    job: SheetsInsertJob,
     data: ArrayBuffer,
     opts: TransformOptions,
 ): Promise<SheetsInsertBatch> {
