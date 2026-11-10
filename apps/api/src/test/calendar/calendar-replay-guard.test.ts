@@ -511,15 +511,22 @@ describe("the guest's own answer", () => {
     });
 
     // A date the copy holds no answer for takes the guest's answer for the series, whatever its SEQUENCE.
+    // A date the copy holds no VEVENT for is held at the series' revision, so only a higher one asks again.
     test('reaches a date the organizer moves after the guest answered the series', async () => {
         const { calendar, me, mine } = await answered();
         await receiveMailed(calendar, parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
         await calendar.rsvp((await masterOf(calendar)).id, me, { status: 'tentative' });
 
-        const moved = occurrence('Moved', 3, '20260401T130000Z').replace(`mailto:${GUEST}`, `mailto:${me.email}`);
+        const moved = occurrence('Moved', 2, '20260401T130000Z').replace(`mailto:${GUEST}`, `mailto:${me.email}`);
         await receiveMailed(calendar, parsedOf(moved), ORG);
-
         expect(mine(await exceptionOf(calendar))).toBe('tentative');
+
+        const rescheduled = occurrence('Moved again', 3, '20260401T140000Z').replace(
+            `mailto:${GUEST}`,
+            `mailto:${me.email}`,
+        );
+        await receiveMailed(calendar, parsedOf(rescheduled), ORG);
+        expect(mine(await exceptionOf(calendar))).toBe('pending');
     });
 });
 

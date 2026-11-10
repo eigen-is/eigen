@@ -563,6 +563,86 @@ describe('one REQUEST, one write', () => {
         expect(restored.data?.attendees?.[0]).toMatchObject({ email: harness.user.email, status: 'accepted' });
     });
 
+    const answerOf = (event: { data?: { attendees?: Attendee[] } | null } | undefined, email: string) =>
+        event?.data?.attendees?.find((a) => a.email === email)?.status;
+    const minutesOn = (minutes: number) => new Date(Date.parse('2026-04-01T10:00:00Z') + minutes * 60_000);
+
+    // The guest answered from another client, and the organizer's next message says so.
+    test('a copy with no answer yet takes the answer the message carries', async () => {
+        const { harness, calendar } = await harnessWith();
+        const email = harness.user.email;
+        const [master] = seriesRequest(email, 0);
+        await calendar.receiveRequest([master], LINK);
+
+        const [answered] = seriesRequest(email, 0, 'Standup', 'accepted');
+        await calendar.receiveRequest([{ ...answered, dtstamp: minutesOn(1) }], LINK);
+
+        expect(answerOf((await calendar.getEventsByUid(master.uid))[0], email)).toBe('accepted');
+    });
+
+    test('a needs-action at a higher SEQUENCE asks again on a date the copy held no VEVENT for', async () => {
+        const { harness, calendar } = await harnessWith();
+        const email = harness.user.email;
+        const [master] = seriesRequest(email, 0);
+        await calendar.receiveRequest([master], LINK);
+        const [copy] = await calendar.getEventsByUid(master.uid);
+        await calendar.receiveAttendeeStatus(copy.id, email, 'accepted');
+
+        const [accepted] = seriesRequest(email, 0, 'Standup', 'accepted');
+        const [, moved] = seriesRequest(email, 1);
+        await calendar.receiveRequest(
+            [
+                { ...accepted, dtstamp: minutesOn(1) },
+                { ...moved, sequence: 1, dtstamp: minutesOn(1) },
+            ],
+            LINK,
+        );
+
+        const rows = await calendar.getEventsByUid(master.uid);
+        expect(
+            answerOf(
+                findOrFail(rows, (e) => !e.parentEventId),
+                email,
+            ),
+        ).toBe('accepted');
+        expect(
+            answerOf(
+                findOrFail(rows, (e) => e.recurrenceDate === moved.recurrenceDate),
+                email,
+            ),
+        ).toBe('pending');
+    });
+
+    // A removed date holds no list of the guest's, so their series answer is no answer to it.
+    test('a date the guest removed takes the answer the message carries when it comes back', async () => {
+        const { harness, calendar } = await harnessWith();
+        const email = harness.user.email;
+        const [master] = seriesRequest(email, 0);
+        await calendar.receiveRequest([master], LINK);
+        const [copy] = await calendar.getEventsByUid(master.uid);
+        await calendar.receiveAttendeeStatus(copy.id, email, 'declined');
+        const [, moved] = seriesRequest(email, 1, 'Standup', 'accepted');
+        const removal = { status: 'declined' as const, scope: 'this' as const, remove: true };
+        const me = makeSyntheticUser(harness.user.id, harness.user.name, email);
+        await calendar.rsvp(copy.id, me, { ...removal, recurrenceDate: moved.recurrenceDate ?? '' });
+
+        const [series] = seriesRequest(email, 0, 'Standup', 'declined');
+        await calendar.receiveRequest(
+            [
+                { ...series, dtstamp: minutesOn(1) },
+                { ...moved, sequence: 1, dtstamp: minutesOn(1) },
+            ],
+            LINK,
+        );
+
+        const back = findOrFail(
+            await calendar.getEventsByUid(master.uid),
+            (e) => e.recurrenceDate === moved.recurrenceDate,
+        );
+        expect(back.status).toBe('confirmed');
+        expect(answerOf(back, email)).toBe('accepted');
+    });
+
     test('a master the store refuses files nothing, its occurrences included', async () => {
         const { harness, calendar, id } = await harnessWith();
         const [master, ...exceptions] = seriesRequest(harness.user.email, 3);
@@ -673,6 +753,25 @@ describe('a guest who removes this and following', () => {
 
         const after = await calendar.getEventsByUid(SERIES);
         expect(after.map((event) => event.title)).toEqual(['Standup renamed']);
+    });
+
+    // The organizer heard the cut as a decline of the series, which is no answer to the dates the guest kept.
+    test("a pending answer on the dates kept does not take the organizer's decline", async () => {
+        const { harness, calendar } = await cutCopy();
+        const echoed = series(harness.user.email, 'Standup').map((event) => ({
+            ...event,
+            dtstamp: new Date('2026-01-02T00:00:00Z'),
+            data: {
+                ...event.data,
+                attendees: event.data?.attendees?.map((a) => ({ ...a, status: 'declined' as const })),
+            },
+        }));
+
+        await calendar.receiveRequest(echoed, link);
+
+        for (const event of await calendar.getEventsByUid(SERIES)) {
+            expect(event.data?.attendees?.find((a) => a.email === harness.user.email)?.status).toBe('pending');
+        }
     });
 
     test('keeps the cut through an update that ends later', async () => {
