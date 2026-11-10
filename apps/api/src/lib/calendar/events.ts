@@ -8,7 +8,6 @@ import { isExternalOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { and, eq } from 'drizzle-orm';
 import type ICAL from 'ical.js';
-import { RRule } from 'rrule';
 import { ApiError } from '../core';
 import {
     applyEdits,
@@ -21,7 +20,6 @@ import {
 } from '../ical';
 import type { EventPatch, EventToBuild, Revision, VEventEdit, WriteContext } from '../ical/ical-component';
 import { serializeEventForImip } from '../ical/ical-component';
-import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
 import { parseRecurrenceKey } from '../ical/wall-clock';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
@@ -405,28 +403,13 @@ async function patchStoredEvent(
         input = { data: localData };
     }
 
-    const startTime = input.startTime ?? existing.startTime;
-    const endTime = input.endTime ?? existing.endTime;
-    // Same interval invariant as createEvent, on the resolved (possibly dragged) times.
-    if (endTime < startTime) throw new ApiError(400, 'Event end time cannot be before start time');
-
-    const rruleStr = input.rrule !== undefined ? (input.rrule ?? null) : (existing.rrule ?? null);
-    if (rruleStr && input.rrule !== undefined) {
-        try {
-            RRule.parseString(rruleStr);
-        } catch {
-            throw new ApiError(400, 'Invalid RRULE');
-        }
-        if (isSubDailyRrule(rruleStr)) throw new ApiError(400, 'Sub-daily recurrence is not supported');
-    }
-    // Both directions poison a stored row: a new rrule, or a recurring start moved out of range.
-    if (
-        rruleStr &&
-        (input.rrule !== undefined || input.startTime !== undefined) &&
-        isOutOfRangeRecurrenceStart(startTime)
-    ) {
-        throw new ApiError(400, 'Recurring event start time is out of range');
-    }
+    // The stored rule passed these checks when it was projected, so it is checked again only beside a moved start.
+    const rrule = input.rrule || input.startTime ? (input.rrule ?? existing.rrule) : null;
+    validateEventInput({
+        rrule,
+        startTime: input.startTime ?? existing.startTime,
+        endTime: input.endTime ?? existing.endTime,
+    });
 
     const resource = resourceOf(calendar, id);
     if (!resource) throw new ApiError(404, 'Event not found');
