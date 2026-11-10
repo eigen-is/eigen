@@ -17,6 +17,7 @@ Eigen is a self-hosted Google Workspace alternative: a monorepo of apps sharing 
 ## Working with the owner
 
 - A question ("what is happening?") gets findings, not edits.
+- Every question to the owner opens with a short summary in super simple English: what is asked, why it comes up now (the context, no jargon), what happens with each answer, and your recommendation. The owner should understand it without having read the session.
 - Before multi-file work ask "branch, or the current branch?" and keep the answer; a trivial fix goes on the current branch. Never push or tag without an explicit go. Work lands on `develop`; `main` moves only on the owner's word, as a fast-forward ([TESTING.md](docs/TESTING.md#work-lands-on-develop-and-main-moves-only-for-a-release)).
 - Another session may share the tree: stage by path, never `git commit -a`, `git add -A` or `git stash`; unstage files you didn't change (`git reset -- <path>`) and re-stage them after your commit. While files you never touched are dirty, run no global check.
 - No AI attribution in PRs, issues or upstream posts. Draft for the owner's review, post with `--body-file` (`gh` posts as eigen-is), then grep the posted body for `claude|co-author|generated`.
