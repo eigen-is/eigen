@@ -263,20 +263,15 @@ export function raisedSequence(revisions: ReadonlyMap<string | null, Revision>):
     return highest + 1;
 }
 
-function revisionsOf(vevents: ReadonlyMap<string | null, ICAL.Component>): Map<string | null, Revision> {
-    const revisions = new Map<string | null, Revision>();
-    const master = vevents.get(null);
-    if (master) {
-        const stamps = readExclusionStamps(master);
-        for (const key of exdateKeys(master)) {
-            const stamp = stamps.get(key);
-            revisions.set(key, { sequence: stamp?.sequence ?? sequenceOf(master), dtstamp: stamp?.dtstamp ?? null });
-        }
-    }
-    for (const [key, vevent] of vevents) {
-        revisions.set(key, { sequence: sequenceOf(vevent), dtstamp: readTimestamp(vevent, 'dtstamp') });
-    }
-    return revisions;
+// The one rule for a revision (RFC 5546 § 2.1.4). A receiver mirrors what a message states, since a number of its own
+// would outrank the organizer's next update, and on its copy only a message moves DTSTAMP. The organizer's scheduling
+// change takes `raised`. Any other write keeps what is `held`.
+export function revisionAfter(ctx: WriteContext, raised: number | null, held: Revision, stated?: number): Revision {
+    const stamped = !!ctx.dtstamp || ctx.actorIsOrganizer;
+    return {
+        sequence: stated ?? (ctx.actorIsOrganizer && raised !== null ? raised : held.sequence),
+        dtstamp: stamped ? (clampStamp(ctx.dtstamp, ctx.now) ?? ctx.now) : held.dtstamp,
+    };
 }
 
 // The RECURRENCE-ID each stored occurrence names, as the organizer wrote it, by its key; the master's under null.
@@ -307,17 +302,6 @@ export function stampInvitationLink(
         vevent.addProperty(rawProperty(EIGEN.organizerEvent, link.organizerEventId));
         vevent.addProperty(rawProperty(EIGEN.organizerUser, link.organizerUserId));
     }
-}
-
-function stripEigenStamps(comp: ICAL.Component): void {
-    keepProperties(comp, (prop) => !isEigenName(prop.name));
-    for (const prop of comp.getAllProperties()) {
-        const [, params]: JCalProperty = prop.toJSON();
-        for (const name of Object.keys(params)) {
-            if (isEigenName(name)) prop.removeParameter(name);
-        }
-    }
-    for (const sub of comp.getAllSubcomponents()) stripEigenStamps(sub);
 }
 
 // An incoming body is untrusted, so Eigen's lines come back from the stored resource, matched by UID and recurrence
@@ -599,6 +583,17 @@ function syncVTimezones(resource: ICAL.Component): void {
     for (const vevent of vevents) resource.addSubcomponent(vevent);
 }
 
+function stripEigenStamps(comp: ICAL.Component): void {
+    keepProperties(comp, (prop) => !isEigenName(prop.name));
+    for (const prop of comp.getAllProperties()) {
+        const [, params]: JCalProperty = prop.toJSON();
+        for (const name of Object.keys(params)) {
+            if (isEigenName(name)) prop.removeParameter(name);
+        }
+    }
+    for (const sub of comp.getAllSubcomponents()) stripEigenStamps(sub);
+}
+
 // RFC 5546 shape: the organizer rides as an ACCEPTED attendee and a REQUEST asks for replies. No VALARM ever, or an
 // `email` reminder would mail the organizer from every guest's client.
 function shapeForImip(vevent: ICAL.Component, method: ImipMethod): void {
@@ -615,9 +610,8 @@ function shapeForImip(vevent: ICAL.Component, method: ImipMethod): void {
     );
 }
 
-// A series-wide edit reaches an override whose value equals the master's BEFORE the edit; one that set its own keeps
-// it. Times never follow. A guest the edit adds to or drops from the series joins or leaves every override's list,
-// which reschedules that date. It has to run before the master is patched.
+// A series-wide edit reaches an override whose value equals the master's BEFORE the edit, and a guest it adds or drops
+// joins or leaves every override's list. It has to run before the master is patched.
 function followMaster(
     resource: ICAL.Component,
     master: ICAL.Component,
@@ -665,9 +659,8 @@ function followMaster(
     return changed;
 }
 
-// What a guest's calendar is rescheduled by (RFC 5546 § 2.1.4): when the VEVENT starts, which `start` restates for a
-// master read as one occurrence, how long it runs, whether it is a day, its status and who is on it. Another zone's
-// spelling of the same instants, a title or a color is none of it.
+// What a guest's calendar is rescheduled by (RFC 5546 § 2.1.4), never a title, a color or the same instants in another
+// zone. `start` restates it for a master read as the occurrence an override replaces.
 function scheduleOf(vevent: ICAL.Component, start?: Date | null): string {
     const value = vevent.getFirstPropertyValue('dtstart');
     const begin = instantOf(vevent, 'dtstart', null);
@@ -787,6 +780,22 @@ function setOptional(comp: ICAL.Component, name: string, value?: string | null, 
     return !!comp.getFirstPropertyValue(name) && clearProperty(comp, name);
 }
 
+function revisionsOf(vevents: ReadonlyMap<string | null, ICAL.Component>): Map<string | null, Revision> {
+    const revisions = new Map<string | null, Revision>();
+    const master = vevents.get(null);
+    if (master) {
+        const stamps = readExclusionStamps(master);
+        for (const key of exdateKeys(master)) {
+            const stamp = stamps.get(key);
+            revisions.set(key, { sequence: stamp?.sequence ?? sequenceOf(master), dtstamp: stamp?.dtstamp ?? null });
+        }
+    }
+    for (const [key, vevent] of vevents) {
+        revisions.set(key, { sequence: sequenceOf(vevent), dtstamp: readTimestamp(vevent, 'dtstamp') });
+    }
+    return revisions;
+}
+
 // `raised` is passed for a scheduling change, and `stated` is the number a message gives the item it names.
 function touch(vevent: ICAL.Component, ctx: WriteContext, raised: number | null, stated?: number): void {
     setProperty(vevent, utcStamp('last-modified', ctx.now));
@@ -794,17 +803,6 @@ function touch(vevent: ICAL.Component, ctx: WriteContext, raised: number | null,
     const { sequence, dtstamp } = revisionAfter(ctx, raised, { sequence: held, dtstamp: null }, stated);
     if (dtstamp) setProperty(vevent, utcStamp('dtstamp', dtstamp));
     if (sequence !== held) vevent.updatePropertyWithValue('sequence', sequence);
-}
-
-// The one rule for a revision (RFC 5546 § 2.1.4). A receiver mirrors what a message states, since a number of its own
-// would outrank the organizer's next update, and on its copy only a message moves DTSTAMP. The organizer's scheduling
-// change takes `raised`. Any other write keeps what is `held`.
-export function revisionAfter(ctx: WriteContext, raised: number | null, held: Revision, stated?: number): Revision {
-    const stamped = !!ctx.dtstamp || ctx.actorIsOrganizer;
-    return {
-        sequence: stated ?? (ctx.actorIsOrganizer && raised !== null ? raised : held.sequence),
-        dtstamp: stamped ? (clampStamp(ctx.dtstamp, ctx.now) ?? ctx.now) : held.dtstamp,
-    };
 }
 
 // Drop one occurrence's EXDATE value and the stamp beside it, whatever form the client wrote them in.

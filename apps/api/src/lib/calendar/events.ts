@@ -72,7 +72,7 @@ export async function createEvent(
         if (!calendar.calendarRow(calendarId)) throw new ApiError(404, 'Calendar not found');
         validateEventInput(args);
         if (args.parentEventId) {
-            // Who held the occurrence this write replaces: a cancelled override keeps no guest list of its own.
+            // Who held the date this write replaces, read before the write takes it away.
             const replaced = exceptionOf(calendar, args.parentEventId, recurrenceDate);
             return { created: await writeOverride(calendar, calendarId, args.parentEventId, args, user), replaced };
         }
@@ -80,8 +80,8 @@ export async function createEvent(
         const uri = `${crypto.randomUUID()}.ics`;
         const uid = args.uid || crypto.randomUUID();
         if (uidHolder(calendar, calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
-        const input = { ...args, data: organizedData(calendar, user, args.data) };
-        const event = eventForResource({ id: crypto.randomUUID(), calendarId, uid, input, now: new Date() });
+        const organized = { ...args, data: organizedData(calendar, user, args.data) };
+        const event = eventForResource({ id: crypto.randomUUID(), calendarId, uid, input: organized, now: new Date() });
         const prepared = prepareResource(calendarId, buildResource([event]), null);
         await calendar.writeResource({ calendarId, uri, prepared, creditBytes: 0 });
         return { created: requireEvent(calendar, event.id), replaced: null };
@@ -407,7 +407,7 @@ async function patchStoredEvent(
             localData.color = input.data.color ?? localData.color;
         }
         input = { data: localData };
-    } else if (input.data) {
+    } else {
         input = { ...input, data: organizedData(calendar, user, input.data) };
     }
 

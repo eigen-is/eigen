@@ -153,6 +153,19 @@ export function pendingInvitations(calendar: Calendar, email: string): Invitatio
     });
 }
 
+// Set only for a copy that is one occurrence of a series the guest does not hold. An exception answers through the
+// master it hangs on.
+export function answeredOccurrence(event: CalendarEvent): string | undefined {
+    return event.parentEventId ? undefined : (event.recurrenceDate ?? undefined);
+}
+
+// A guest answers the ORGANIZER, and only the calendar's own Home holds the event, so its user is named whoever saved.
+// A team has no address, so a team event names the member who saved it.
+export function organizerOf(organizerHome: Home, user: User | undefined): Organizer {
+    const named = organizerHome.user.email ? organizerHome.user : user;
+    return { userId: organizerHome.user.id, email: named?.email ?? '', name: named?.name };
+}
+
 // The REQUEST one guest on this server gets. A series carries its master and every exception, and an occurrence the
 // guest isn't on travels as cancelled. One occurrence names its series' id and key, so the guest's series takes it.
 function invitationRequest(
@@ -212,19 +225,6 @@ function requestedEvent(
         recurrenceId,
         data: { organizer, attendees: event.data?.attendees },
     };
-}
-
-// Set only for a copy that is one occurrence of a series the guest does not hold. An exception answers through the
-// master it hangs on.
-export function answeredOccurrence(event: CalendarEvent): string | undefined {
-    return event.parentEventId ? undefined : (event.recurrenceDate ?? undefined);
-}
-
-// A guest answers the ORGANIZER, and only the calendar's own Home holds the event, so its user is named whoever saved.
-// A team has no address, so a team event names the member who saved it.
-export function organizerOf(organizerHome: Home, user: User | undefined): Organizer {
-    const named = organizerHome.user.email ? organizerHome.user : user;
-    return { userId: organizerHome.user.id, email: named?.email ?? '', name: named?.name };
 }
 
 // The revision its receiver orders the removal against; undefined for a message about the whole series.
