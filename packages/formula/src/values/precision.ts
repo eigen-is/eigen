@@ -1,0 +1,67 @@
+// Excel's 15 significant digits on top of plain doubles. Arithmetic keeps every bit; these rules apply where a
+// number is compared, where a sum comes out next to zero and where a rounding function cuts decimals, so that
+// 0.1+0.2 equals 0.3 and ROUND(1.005,2) is 1.01. The evaluator's operators and the function library call them
+// once per cell, so each takes its cheap exit before it reads any decimal digits.
+
+// A sum this small against its larger operand is what binary rounding left of a decimal zero.
+const SNAP_RATIO = 2 ** -48;
+
+// Two numbers further apart than this, relative to the larger, differ within their first 15 digits.
+const CLOSE_RATIO = 2e-14;
+
+// Under a half by less than this, relative to the number, its 15 digit decimal may be the half itself.
+const HALF_RATIO = 6e-15;
+
+const POWERS_OF_TEN = [
+    1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20,
+    1e21, 1e22,
+];
+
+export function round15(n: number): number {
+    return Number(n.toPrecision(15));
+}
+
+export function equal15(a: number, b: number): boolean {
+    return compare15(a, b) === 0;
+}
+
+// Negative, zero or positive, as a sort wants it.
+export function compare15(a: number, b: number): number {
+    if (a === b) return 0;
+    if (Math.abs(a - b) <= CLOSE_RATIO * Math.max(Math.abs(a), Math.abs(b))) {
+        a = round15(a);
+        b = round15(b);
+    }
+    return a < b ? -1 : a > b ? 1 : 0;
+}
+
+// The result of one a + b or a - b, or 0 when it is tiny against its operands.
+export function snapSum(result: number, a: number, b: number): number {
+    return Math.abs(result) < SNAP_RATIO * Math.max(Math.abs(a), Math.abs(b)) ? 0 : result;
+}
+
+// Rounds half away from zero at `digits` decimals; negative digits round left of the decimal point. It rounds the
+// 15 digit decimal Excel shows and not the double under it, which for 1.005 lies just below the half.
+export function roundDecimal(n: number, digits: number): number {
+    const power = POWERS_OF_TEN[Math.abs(digits)];
+    if (power !== undefined) {
+        const scaled = Math.abs(digits < 0 ? n / power : n * power);
+        const whole = Math.floor(scaled + 0.5);
+        if (whole + 0.5 - scaled > HALF_RATIO * scaled) {
+            if (whole === 0) return 0;
+            const rounded = digits < 0 ? whole * power : whole / power;
+            return n < 0 ? -rounded : rounded;
+        }
+    }
+    // The 15 digits as one whole number, cut where the rounding falls, in arithmetic that is exact.
+    const text = Math.abs(n).toExponential(14);
+    const cut = 14 - Number(text.slice(17)) - digits;
+    if (cut <= 0) return round15(n);
+    const unit = POWERS_OF_TEN[cut];
+    if (unit === undefined || unit > 1e15) return 0;
+    const shown = Number(text.charAt(0) + text.slice(2, 16));
+    let kept = Math.floor(shown / unit);
+    if (2 * (shown - kept * unit) >= unit) kept++;
+    if (kept === 0) return 0;
+    return Number(`${n < 0 ? '-' : ''}${kept}e${-digits}`);
+}
