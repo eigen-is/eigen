@@ -21,10 +21,8 @@ type EditMenuProps = {
     canRedo: boolean;
     onUndo: () => void;
     onRedo: () => void;
-    // Host-app edit entries (vector's tool-lock toggle), rendered after Undo/Redo when canEdit.
-    children?: ReactNode;
-    // Host-app selection entries (docs' Cut, Copy, Select all, Delete), a group of their own between Undo and Find, for
-    // viewers too: the host gates each entry.
+    // Host-app entries, such as the clipboard rows or the canvas's tools, between Undo and Find, for viewers too: the
+    // host gates each entry.
     selectionItems?: ReactNode;
     // Classes for the menu content, such as Sheets' width.
     contentClassName?: string;
@@ -38,7 +36,6 @@ export function EditMenu({
     canRedo,
     onUndo,
     onRedo,
-    children,
     selectionItems,
     contentClassName,
     onCloseAutoFocus,
@@ -64,7 +61,6 @@ export function EditMenu({
                         <Redo className="h-4 w-4" /> Redo
                         <DropdownMenuShortcut>{formatForDisplay(REDO_HOTKEY)}</DropdownMenuShortcut>
                     </DropdownMenuItem>
-                    {children}
                 </>
             )}
             <DropdownMenuSeparator />
