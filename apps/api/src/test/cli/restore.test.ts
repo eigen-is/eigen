@@ -58,6 +58,7 @@ import {
 } from '../backup/backup-test-helpers';
 import type { FaultStorage } from '../fault-storage-helpers';
 import { createHomeFaultMount, registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
+import { seedFile } from '../mount-test-helpers';
 import type { TestContext, TestUser } from '../setup';
 import {
     assertJson,
@@ -428,7 +429,7 @@ beforeAll(async () => {
     registerFaultMount(s3Home.drive, s3Mount);
     const s3Root = (await s3Mount.getRootFolder())!.id;
     const bytes = new TextEncoder().encode('in the bucket');
-    const pending = await s3Mount.createFile(s3Root, 'pending.txt', 'text/plain', bytes.byteLength, bytes);
+    const pending = await seedFile(s3Mount, s3Root, 'pending.txt', 'text/plain', bytes.byteLength, bytes);
     await s3Mount.uploadQueue?.drain({ flushNow: true });
     const key = await s3Mount.getStorageKey(pending);
     s3Fault.parkWrites = true;

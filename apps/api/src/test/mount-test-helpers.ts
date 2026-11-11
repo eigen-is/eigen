@@ -1,6 +1,8 @@
 import type { MountConfig } from '@workspace/lib/types';
 import { getS3Config } from '../lib/config/server-settings';
 import type { Drive } from '../lib/drive';
+import type { Mount } from '../lib/mount';
+import { writeTempWithHash } from '../lib/storage';
 
 // A default mount under a per-test id and backend. Production's createDefaultMountConfig only ever
 // builds the real 'default' mount, so the id/storageType knobs the fixtures need live here.
@@ -12,6 +14,25 @@ export function createTestMountConfig(id: string, storageType: MountConfig['stor
         isDefault: true,
         s3Config: storageType === 's3' ? getS3Config() : undefined,
     };
+}
+
+// A new file straight on a mount, made the way an upload makes one: the bytes go to a temp file first.
+// `size` is what the row says, which a test of a size cap sets past the bytes it stores.
+export async function seedFile(
+    mount: Mount,
+    parentId: string,
+    name: string,
+    mimeType: string,
+    size: number,
+    data: Buffer | Uint8Array,
+): Promise<string> {
+    const tempId = crypto.randomUUID();
+    try {
+        const { hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
+        return await mount.createFileFromTemp(parentId, name, mimeType, size, hash, tempId);
+    } finally {
+        await mount.cleanupTemp(tempId);
+    }
 }
 
 // Waits until every mount of the drive has indexed its changed files. The index catches up by itself,

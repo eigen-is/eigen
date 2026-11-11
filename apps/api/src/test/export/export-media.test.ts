@@ -12,7 +12,7 @@ import { MAX_DECOMPRESSED_BYTES } from '../../lib/ooxml/zip';
 import * as previewCache from '../../lib/preview/preview-cache';
 import { SVG_INLINE_MAX_BYTES } from '../../lib/preview/svg-media-inline';
 import * as thumbnails from '../../lib/shared/thumbnails';
-import { createTestMountConfig } from '../mount-test-helpers';
+import { createTestMountConfig, seedFile } from '../mount-test-helpers';
 
 const dir = join(import.meta.dir, `../../../../../data-test/test-export-media-${Date.now()}`);
 
@@ -71,8 +71,9 @@ describe('collectExportMedia', () => {
         if (!root) throw new Error('no root folder');
         containerId = await mount.createFolder(root.id, 'doc.eigendoc');
         const mediaId = await mount.createFolder(containerId, 'media');
+        const chart = await gradient(800, 500).png().toBuffer();
         sources = new Map([
-            ['chart.png', await gradient(800, 500).png().toBuffer()],
+            ['chart.png', chart],
             // A gradient under half alpha, which a JPEG would lose.
             ['overlay.png', await gradient(400, 250).ensureAlpha(0.5).png().toBuffer()],
             // An alpha channel opaque throughout, as a macOS screenshot carries one.
@@ -151,10 +152,10 @@ describe('collectExportMedia', () => {
         };
         for (const [name, bytes] of sources) {
             const mime = mimes[name.split('.').pop() ?? ''] ?? '';
-            await mount.createFile(mediaId, name, mime, bytes.length, bytes);
+            await seedFile(mount, mediaId, name, mime, bytes.length, bytes);
         }
         // A source whose row says it is past the cap, its stored bytes a small PNG: the size is all the prep reads.
-        await mount.createFile(mediaId, 'huge.png', 'image/png', MAX_DECOMPRESSED_BYTES + 1, sources.get('chart.png'));
+        await seedFile(mount, mediaId, 'huge.png', 'image/png', MAX_DECOMPRESSED_BYTES + 1, chart);
     });
 
     afterAll(() => {

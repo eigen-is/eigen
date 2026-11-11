@@ -34,6 +34,7 @@ import { ApiError } from '../../lib/core';
 import { clearHomeDeleting, getHome, markHomeDeleting } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
+import { seedFile } from '../mount-test-helpers';
 import type { TestContext } from '../setup';
 import { countLoopTurns, createTeam, createTestUser, getTestContext } from '../setup';
 import type { RealShapeHome } from './backup-test-helpers';
@@ -257,7 +258,7 @@ describe('Server backup job', () => {
             const [mount] = home.drive.getMounts();
             const rootId = (await mount.getRootFolder())!.id;
             const folderId = await mount.createFolder(rootId, 'Salvaged');
-            await mount.createFile(folderId, 'left.txt', 'text/plain', 4, new TextEncoder().encode('left'));
+            await seedFile(mount, folderId, 'left.txt', 'text/plain', 4, new TextEncoder().encode('left'));
             // What a hand edit leaves: the folder row gone, its child still naming it.
             const db = new Database(join(home.homeDir, PATHS.DRIVE.ROOT, mount.id, PATHS.DRIVE.METADATA_DB));
             db.run('PRAGMA foreign_keys = OFF');

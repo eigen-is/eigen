@@ -19,7 +19,7 @@ import { HOUR_MS } from '../../lib/versioning/retention';
 import type { FakeS3Mount } from '../fault-storage-helpers';
 import { createFakeS3Mount, removeFakeS3Mount } from '../fault-storage-helpers';
 import { buildGoldenDeckScene, seedEigendoc, seedVectorDoc } from '../fixtures/golden-documents';
-import { flushContentReindex } from '../mount-test-helpers';
+import { flushContentReindex, seedFile } from '../mount-test-helpers';
 import { createTestUserOnStorage } from '../setup';
 
 const M = 'default';
@@ -77,7 +77,7 @@ async function addMedia(
     const media = await sweepMount.getChildByName(containerId, 'media');
     if (!media) throw new Error('no media folder');
     const body = Buffer.from(opts.body ?? `bytes of ${name}`);
-    const id = await sweepMount.createFile(media.id, name, opts.mimeType ?? 'image/png', body.length, body);
+    const id = await seedFile(sweepMount, media.id, name, opts.mimeType ?? 'image/png', body.length, body);
     const createdAt = new Date(Date.now() - (opts.ageHours ?? OLD_HOURS) * HOUR_MS);
     sweepMount.db.update(paths).set({ createdAt }).where(eq(paths.id, id)).run();
     return id;

@@ -224,9 +224,9 @@ export class Mount {
 
         const retentionDays = getServerSettings().quotas.trashRetentionDays;
         if (retentionDays > 0) {
-            this.trashPurge = this.purgeTrash(retentionDays).catch((e) =>
-                console.error(`[Mount] Failed to purge expired trash:`, e),
-            );
+            this.trashPurge = trash
+                .purgeTrash(this, retentionDays)
+                .catch((e) => console.error(`[Mount] Failed to purge expired trash:`, e));
         }
         // The prune scans whole tables, so it runs after the mount is ready.
         this.pruneTimer = setTimeout(() => {
@@ -386,19 +386,6 @@ export class Mount {
         return false;
     }
 
-    // The folders above pathId, nearest first. It reads synchronously, so a caller inside a transaction
-    // sees the tree as that transaction does.
-    public collectAncestorIds(pathId: string): string[] {
-        const ids: string[] = [];
-        let current = pathId;
-        for (;;) {
-            const row = this.db.select({ parentId: paths.parentId }).from(paths).where(eq(paths.id, current)).get();
-            if (!row?.parentId) return ids;
-            ids.push(row.parentId);
-            current = row.parentId;
-        }
-    }
-
     public collectDescendantIds(parentId: string): string[] {
         return this.db.all<{ id: string }>(descendantIds(parentId)).map((row) => row.id);
     }
@@ -541,20 +528,6 @@ export class Mount {
         return folderId;
     }
 
-    public async createFile(
-        parentId: string,
-        name: string,
-        mimeType: string,
-        size: number,
-        data: Buffer | Uint8Array | ArrayBuffer | BunFile | undefined,
-    ): Promise<string> {
-        name = validateName(name);
-        const hash = data !== undefined ? await this.computeHash(data) : null;
-        return this.insertFile(parentId, name, mimeType, size, hash, async (storageKey) => {
-            if (data !== undefined) await this.storage.write(storageKey, data);
-        });
-    }
-
     public async createFileFromTemp(
         parentId: string,
         name: string,
@@ -570,7 +543,7 @@ export class Mount {
 
     // An empty file row with no bytes yet, such as the one createDatabase then fills.
     public async touchFile(parentId: string, name: string, mimeType: string): Promise<string> {
-        return this.createFile(parentId, name, mimeType, 0, undefined);
+        return this.insertFile(parentId, validateName(name), mimeType, 0, null, async () => {});
     }
 
     // The name is validated already. writeBytes puts the bytes at the new storage key.
@@ -946,10 +919,6 @@ export class Mount {
 
     public async permanentlyDeleteFromTrash(pathId: string): Promise<boolean> {
         return trash.permanentlyDeleteFromTrash(this, pathId);
-    }
-
-    public async purgeTrash(maxAgeDays: number): Promise<void> {
-        return trash.purgeTrash(this, maxAgeDays);
     }
 
     // ---- Copy ----

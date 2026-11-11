@@ -31,7 +31,7 @@ import type { User } from '../user';
 import { COLLAB_DB_CONFIG } from './db-config';
 import { DbProvider } from './db-provider';
 
-export const MESSAGE_SYNC = 0;
+const MESSAGE_SYNC = 0;
 export const MESSAGE_AWARENESS = 1;
 
 // A tab that reconnects gets a new awareness client id, so a socket may own a few. The cap stops a flood that would
@@ -49,7 +49,7 @@ const COMPRESS_FRAME_MIN_BYTES = 1024;
 const TOUCH_THROTTLE_MS = 60_000;
 // How long a document with no socket stays open. A reload or a y-websocket retry within it
 // reattaches to the loaded document instead of loading it again.
-export const CLOSE_LINGER_MS = 60_000;
+const CLOSE_LINGER_MS = 60_000;
 // A compaction's swap changes what is stored, not what the workbook shows, so it moves no Modified time.
 const COMPACTION_ORIGIN = Symbol('compaction');
 // One 'edited' history row per user per window. The window lives in memory, so a document that closes

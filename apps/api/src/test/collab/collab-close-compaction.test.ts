@@ -15,7 +15,7 @@ import type { ServerWebSocket } from 'elysia/ws/bun';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
-import { CLOSE_LINGER_MS, CollabDocument, MESSAGE_SYNC } from '../../lib/collab/collab-document';
+import { CollabDocument } from '../../lib/collab/collab-document';
 import { readYjsStateFromFile } from '../../lib/collab/yjs-loader';
 import { ApiError } from '../../lib/core/errors';
 import { compactSheetsSnapshot, readSheetsFromDoc } from '../../lib/document/sheets';
@@ -47,6 +47,11 @@ function makeSpyConn(): SpyConn {
     };
     return conn as unknown as SpyConn;
 }
+
+// The y-websocket message type of a sync frame.
+const MESSAGE_SYNC = 0;
+// How long a document with no socket stays open.
+const CLOSE_LINGER_MS = 60_000;
 
 const USER_IDLE_MS = 5 * 60_000;
 

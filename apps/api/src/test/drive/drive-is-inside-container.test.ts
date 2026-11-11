@@ -6,7 +6,7 @@ import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types';
 import type { DatabaseConfig, SchemaType } from '../../lib/core';
 import { ManagedDatabase } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
-import { createTestMountConfig } from '../mount-test-helpers';
+import { createTestMountConfig, seedFile } from '../mount-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-iic-${Date.now()}`);
 const OWNER_ID = 'test-owner-iic';
@@ -55,14 +55,14 @@ describe('Mount.getBreadcrumb (powers Drive.isInsideContainer)', () => {
 
     test('container ancestor: child of an .eigendoc-style folder is marked inside', async () => {
         const docId = await mount.createFolder(rootId, 'My.eigendoc', 'doc');
-        const childId = await mount.createFile(docId, 'data.db', 'application/octet-stream', 0, Buffer.alloc(0));
+        const childId = await seedFile(mount, docId, 'data.db', 'application/octet-stream', 0, Buffer.alloc(0));
         const ancestors = await mount.getBreadcrumb(childId);
         expect(hasNonFolderContainerAncestor(ancestors, childId)).toBe(true);
     });
 
     test('regular folder is NOT a container', async () => {
         const folderId = await mount.createFolder(rootId, 'plain-folder');
-        const childId = await mount.createFile(folderId, 'note.txt', 'text/plain', 4, Buffer.from('test'));
+        const childId = await seedFile(mount, folderId, 'note.txt', 'text/plain', 4, Buffer.from('test'));
         const ancestors = await mount.getBreadcrumb(childId);
         expect(hasNonFolderContainerAncestor(ancestors, childId)).toBe(false);
     });

@@ -10,12 +10,14 @@ import type { FaultStorage, ParkedWrite } from '../fault-storage-helpers';
 import {
     countBackingRows,
     createFaultMount,
+    pendingUploadCount,
     provisionDoc,
     SETTLE_BOUND_MS,
     STALL_BOUND_MS,
     settlesWithin,
     waitFor,
 } from '../fault-storage-helpers';
+import { seedFile } from '../mount-test-helpers';
 
 // Shutdown drain, further edits and direct (non-queued) PUTs while one PUT is parked on the wire.
 
@@ -145,10 +147,10 @@ describe('edits while a PUT is stalled', () => {
     test('later syncs coalesce into one pending row behind the stalled PUT; no parallel PUT starts', async () => {
         const { mount, dataDbId, putsStarted, land } = await editBehindParkedPut('stalled-coalesce');
         expect(putsStarted()).toBe(1);
-        expect(mount.uploadQueue?.pendingCount).toBe(1);
+        expect(pendingUploadCount(mount)).toBe(1);
 
         await land();
-        expect(mount.uploadQueue?.pendingCount).toBe(0);
+        expect(pendingUploadCount(mount)).toBe(0);
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(4);
     });
 
@@ -198,7 +200,7 @@ describe('direct (non-queued) PUTs', () => {
         const { mount, fault } = createS3Mount('direct-overwrite-order');
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
-        const fileId = await mount.createFile(rootId, 'notes.md', 'text/markdown', 2, Buffer.from('v0'));
+        const fileId = await seedFile(mount, rootId, 'notes.md', 'text/markdown', 2, Buffer.from('v0'));
         const key = await mount.getStorageKey(fileId);
 
         fault.parkWrites = true;
@@ -224,7 +226,7 @@ describe('direct (non-queued) PUTs', () => {
         const { mount, fault } = createS3Mount('direct-overwrite-delete');
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
-        const fileId = await mount.createFile(rootId, 'secret.txt', 'text/plain', 2, Buffer.from('v0'));
+        const fileId = await seedFile(mount, rootId, 'secret.txt', 'text/plain', 2, Buffer.from('v0'));
         const key = await mount.getStorageKey(fileId);
 
         fault.parkWrites = true;

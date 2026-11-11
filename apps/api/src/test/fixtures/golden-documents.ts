@@ -31,6 +31,7 @@ import { toTransferableText } from '../../lib/document/transform/protocol';
 import type { OfficeMedia } from '../../lib/export/export-image';
 import type { Mount } from '../../lib/mount';
 import { parseOoxml } from '../../lib/ooxml/ooxml';
+import { seedFile } from '../mount-test-helpers';
 import { sampleChartParts } from './chart-parts';
 
 // Deterministic eigendoc + eigenslides fixtures for the document-transform work
@@ -823,7 +824,7 @@ export async function seedDocumentMedia(
 ): Promise<string> {
     const mediaFolder = await mount.getChildByName(drivePath.id, 'media');
     if (!mediaFolder) throw new Error(`${drivePath.name}: media folder missing`);
-    return mount.createFile(mediaFolder.id, name, mimeType, bytes.byteLength, bytes);
+    return seedFile(mount, mediaFolder.id, name, mimeType, bytes.byteLength, bytes);
 }
 
 // Deterministic eigenvector fixture for the transform work (preview round-trip and

@@ -861,7 +861,8 @@ export class Drive {
     }
 
     // Routes change an ACL only through here, merged onto the ACL as it is now. Two changes to one path run in turn, or
-    // the one that writes last would drop the entries of the other.
+    // the one that writes last would drop the entries of the other. A path in the trash keeps its ACL as it is, because
+    // the restore shares it again with the same people.
     public async updateACLDelta(
         mountId: string,
         pathId: string,
@@ -872,69 +873,41 @@ export class Drive {
         options?: ACLPropagationOptions,
     ): Promise<void> {
         return this.runInOrder(`acl:${mountId}:${pathId}`, async () => {
-            const item = await this.getMount(mountId).getPath(pathId);
-            if (!item) {
-                throw new ApiError(404, 'Path not found');
+            const mount = this.getMount(mountId);
+            const item = await mount.getActivePath(pathId);
+            if (item.parentId === null) {
+                throw new ApiError(403, 'Cannot update ACL for root folder');
             }
-            await this.updateACL(
-                mountId,
-                pathId,
-                mergeACLDelta(item.acl, delta),
-                visibility,
-                sharingRestricted,
-                actor,
-                options,
-            );
-        });
-    }
+            const ancestors = await mount.getBreadcrumb(pathId);
 
-    // Replaces the whole ACL, which no client can, as routes only send changes. A path in the trash keeps its ACL as it
-    // is, because the restore shares it again with the same people.
-    public async updateACL(
-        mountId: string,
-        pathId: string,
-        acl: DriveACL[] | null,
-        visibility?: DriveVisibility,
-        sharingRestricted?: boolean,
-        actor?: User | null,
-        options?: ACLPropagationOptions,
-    ): Promise<void> {
-        const mount = this.getMount(mountId);
-        const item = await mount.getActivePath(pathId);
-        if (item.parentId === null) {
-            throw new ApiError(403, 'Cannot update ACL for root folder');
-        }
-
-        const ancestors = await mount.getBreadcrumb(pathId);
-
-        if (acl && acl.length > 0) {
+            const acl = mergeACLDelta(item.acl, delta);
             const aclError = validateACLEntries(acl);
             if (aclError) throw new ApiError(400, aclError);
-        }
 
-        let normalizedACL = normalizeACL(acl);
-        if (normalizedACL && normalizedACL.length > 0) {
-            const { filtered } = filterRedundantACL(normalizedACL, item, ancestors);
-            normalizedACL = filtered.length > 0 ? filtered : null;
-        }
-
-        const updates: Partial<DrivePath> = { acl: normalizedACL };
-        if (visibility !== undefined) updates.visibility = visibility;
-        if (sharingRestricted !== undefined) updates.sharingRestricted = sharingRestricted;
-        const oldACL = item.acl;
-        const updatedItem = await mount.updatePath(pathId, updates);
-        this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
-        if (actor) {
-            const { added, removed } = diffACLPrincipals(oldACL, normalizedACL);
-            if (added.length || removed.length) {
-                await this.recordFileEvent(mountId, pathId, actor, {
-                    eventType: 'acl-changed',
-                    details: { added, removed },
-                });
+            let normalizedACL = normalizeACL(acl);
+            if (normalizedACL) {
+                const { filtered } = filterRedundantACL(normalizedACL, item, ancestors);
+                normalizedACL = filtered.length > 0 ? filtered : null;
             }
-        }
-        // The copies in the homes of the people it is shared with go last, the same as in renamePath.
-        await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
+
+            const updates: Partial<DrivePath> = { acl: normalizedACL };
+            if (visibility !== undefined) updates.visibility = visibility;
+            if (sharingRestricted !== undefined) updates.sharingRestricted = sharingRestricted;
+            const oldACL = item.acl;
+            const updatedItem = await mount.updatePath(pathId, updates);
+            this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
+            if (actor) {
+                const { added, removed } = diffACLPrincipals(oldACL, normalizedACL);
+                if (added.length || removed.length) {
+                    await this.recordFileEvent(mountId, pathId, actor, {
+                        eventType: 'acl-changed',
+                        details: { added, removed },
+                    });
+                }
+            }
+            // The copies in the homes of the people it is shared with go last, the same as in renamePath.
+            await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
+        });
     }
 
     // Sends a path's sharing to its homes after a change that keeps its ACL, such as a rename. It runs in the path's
