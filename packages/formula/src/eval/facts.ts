@@ -42,6 +42,8 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
             break;
         case NodeKind.Binary:
             if (node.op === Token.Colon || node.op === Token.Comma || node.op === Token.Space) flags |= Fact.Array;
+            // The box around two references holds cells that neither of them names.
+            if (node.op === Token.Colon) flags |= Fact.ReadsUnnamed;
             break;
         case NodeKind.Prefix:
             if (node.op === Token.At) flags &= ~Fact.Array;
