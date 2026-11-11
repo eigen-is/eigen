@@ -10,9 +10,9 @@ import { quotedSheetName, quoteSheetName } from './sheet-name';
 import type { Ends, FormulaNode } from './tree';
 import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from './tree';
 
-// The smallest exponent a number below 1 prints in plain digits with. Excel was seen to do so at 1E-10; that it
-// stops where it does above 1, at 20, is assumed.
-const PLAIN_EXPONENT_MIN = -20;
+// The smallest exponent a number below 1 prints in plain digits with. Files Excel wrote hold plain digits at
+// 1E-12 and E notation at 1.6E-19; where between the two it turns is assumed.
+const PLAIN_EXPONENT_MIN = -18;
 
 export type SheetNames = (id: string) => string | undefined;
 
