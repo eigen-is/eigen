@@ -1,9 +1,11 @@
 // Inserting and deleting rows and columns on plain sheets, without the DOM: the cells, the config with its merges,
-// borders and row heights, conditional formats, validation rules, frozen pane, filter and size of the sheet
-// the op names, and the formula text and chart ranges on every sheet that point at it. It runs wherever such an op
-// applies, for example in the editor's own insert and in the server's replay of the op log. The shifters for one kind
-// of map are exported for code that moves the same maps, such as the undo stacks.
+// borders and row heights, conditional formats, validation rules, frozen pane, filter and size of the sheet the op
+// names, and the formula text and chart ranges on every sheet that point at it. Every index and range but the formula
+// text moves through mapIndex and mapSpan, the formula package's one rule for a line that moved. It runs wherever
+// such an op applies, such as the editor's own insert and the server's replay of the op log.
 
+import type { Edit } from '@workspace/formula/text';
+import { GONE, mapIndex, mapSpan } from '@workspace/formula/text';
 import type { CellMatrix, MergeCell, Sheet, SheetChart } from '@workspace/lib/sheets';
 import {
     cloneSides,
@@ -41,56 +43,52 @@ export type DeleteRowColOp = {
 // An insert past a size limit throws this, and every reader skips its whole batch. Its message is the editor's notice.
 export class RowColError extends Error {}
 
-type InsertLines = Pick<InsertRowColOp, 'index' | 'count' | 'direction'>;
-type DeleteLines = Pick<DeleteRowColOp, 'start' | 'end'>;
+type InsertLines = Pick<InsertRowColOp, 'type' | 'index' | 'count' | 'direction'>;
+type DeleteLines = Pick<DeleteRowColOp, 'type' | 'start' | 'end'>;
 
-// What a row or column op does to the lines on its axis: `at` is the first line it adds or deletes, and `to` says
-// where a line goes, null for one it deletes.
-export type LineMove = { at: number; to: (line: number) => number | null };
+// What a row or column op does to the lines on its axis: `edit` is the op as mapIndex and mapSpan read it, `at` the
+// first line it adds or deletes, and `to` says where a line goes, null for one that is gone.
+export type LineMove = { edit: Edit; at: number; to: (line: number) => number | null };
 
-export function lineMove(op: InsertLines): { at: number; to: (line: number) => number };
-export function lineMove(op: InsertLines | DeleteLines): LineMove;
 export function lineMove(op: InsertLines | DeleteLines): LineMove {
-    if ('index' in op) {
-        const at = op.direction === 'lefttop' ? op.index : op.index + 1;
-        return { at, to: (line) => (line < at ? line : line + op.count) };
-    }
-    const count = op.end - op.start + 1;
-    return { at: op.start, to: (line) => (line < op.start ? line : line > op.end ? line - count : null) };
+    const lines = op.type === 'row' ? REFERENCE_ROW_COUNT : REFERENCE_COLUMN_COUNT;
+    const edit: Edit =
+        'index' in op
+            ? { insert: true, index: op.direction === 'lefttop' ? op.index : op.index + 1, count: op.count, lines }
+            : { insert: false, index: op.start, count: op.end - op.start + 1, lines };
+    const to = (line: number) => {
+        const moved = mapIndex(edit, line);
+        return moved === GONE ? null : moved;
+    };
+    return { edit, at: edit.index, to };
 }
 
 type AxisRange = { row: readonly number[]; column: readonly number[] };
 
 // Excel's rule: an insert at or before a range's first line moves it, one inside grows it, one right after leaves it,
-// and it stops at the grid's last line. A range left as it was comes back as itself, so its owner writes nothing.
-export function shiftRangeForInsert<R extends AxisRange>(
-    range: R,
-    op: Pick<InsertRowColOp, 'type' | 'index' | 'count' | 'direction'>,
-): R {
-    const { at: insertAt } = lineMove(op);
-    const [start, end] = op.type === 'row' ? range.row : range.column;
-    if (insertAt > end) return range;
-    const last = (op.type === 'row' ? REFERENCE_ROW_COUNT : REFERENCE_COLUMN_COUNT) - 1;
-    const moved = (line: number) => Math.min(line + op.count, last);
-    const span: [number, number] = insertAt <= start ? [moved(start), moved(end)] : [start, moved(end)];
-    if (span[0] === start && span[1] === end) return range;
-    return op.type === 'row' ? { ...range, row: span } : { ...range, column: span };
+// and a delete shrinks it to what survives, null when it takes all of it. A range left as it was comes back as itself,
+// so its owner writes nothing.
+function shiftRange<R extends AxisRange>(range: R, type: 'row' | 'column', edit: Edit): R | null {
+    const [start, end] = type === 'row' ? range.row : range.column;
+    const span = { start, end };
+    if (!mapSpan(edit, start, end, span)) {
+        if (!edit.insert) return null;
+        // A range an insert pushes off the grid stays on the last line, where a chart can still read it.
+        span.start = edit.lines - 1;
+        span.end = edit.lines - 1;
+    }
+    if (span.start === start && span.end === end) return range;
+    const moved: [number, number] = [span.start, span.end];
+    return type === 'row' ? { ...range, row: moved } : { ...range, column: moved };
 }
 
-// A delete shrinks a range to what survives; null when it deletes all of it.
-export function shiftRangeForDelete<R extends AxisRange>(
-    range: R,
-    op: Pick<DeleteRowColOp, 'type' | 'start' | 'end'>,
-): R | null {
-    const [start, end] = op.type === 'row' ? range.row : range.column;
-    const removed = op.end - op.start + 1;
-    if (start >= op.start && end <= op.end) return null;
-    if (end < op.start) return range;
-    const span: [number, number] = [
-        start < op.start ? start : start > op.end ? start - removed : op.start,
-        end > op.end ? end - removed : op.start - 1,
-    ];
-    return op.type === 'row' ? { ...range, row: span } : { ...range, column: span };
+// The undo stacks move one range or one merge map at a time, and name the op by its fields.
+export function shiftRangeForInsert<R extends AxisRange>(range: R, op: InsertLines): R | null {
+    return shiftRange(range, op.type, lineMove(op).edit);
+}
+
+export function shiftRangeForDelete<R extends AxisRange>(range: R, op: DeleteLines): R | null {
+    return shiftRange(range, op.type, lineMove(op).edit);
 }
 
 export function shiftMergeForInsert(
@@ -100,17 +98,7 @@ export function shiftMergeForInsert(
     count: number,
     direction: 'lefttop' | 'rightbottom',
 ): Record<string, MergeCell> {
-    const shifted: Record<string, MergeCell> = {};
-    for (const merge of mergesInKeyOrder(cfg)) {
-        const [first, span] = type === 'row' ? [merge.r, merge.rs] : [merge.c, merge.cs];
-        const last = first + span - 1;
-        const above = direction === 'lefttop';
-        if (index < first || (index === first && above)) placeMerge(shifted, merge, type, first + count, span);
-        else if (index === first || index < last || (index === last && above)) {
-            placeMerge(shifted, merge, type, first, span + count);
-        } else placeMerge(shifted, merge, type, first, span);
-    }
-    return shifted;
+    return shiftMerges(cfg, type, lineMove({ type, index, count, direction }).edit);
 }
 
 export function shiftMergeForDelete(
@@ -119,50 +107,40 @@ export function shiftMergeForDelete(
     start: number,
     slen: number,
 ): Record<string, MergeCell> {
-    const end = start + slen - 1;
-    const shifted: Record<string, MergeCell> = {};
-    for (const merge of mergesInKeyOrder(cfg)) {
-        const [first, span] = type === 'row' ? [merge.r, merge.rs] : [merge.c, merge.cs];
-        const last = first + span - 1;
-        if (first > end) placeMerge(shifted, merge, type, first - slen, span);
-        else if (first >= start) {
-            if (last > end) placeMerge(shifted, merge, type, start, last - end);
-        } else if (last < start) placeMerge(shifted, merge, type, first, span);
-        else placeMerge(shifted, merge, type, first, last >= end ? span - slen : start - first);
-    }
-    return shifted;
+    return shiftMerges(cfg, type, lineMove({ type, start, end: start + slen - 1 }).edit);
 }
 
 // Merges that overlap, as two tabs merging at once leave them, land and stamp their cells in turn. The turn is the
 // keys' order, since two readers may hold the same map written in different orders.
-function mergesInKeyOrder({ merge = {} }: ExtendedSheetConfig): MergeCell[] {
-    return Object.keys(merge)
-        .sort()
-        .map((key) => merge[key]);
-}
-
-function placeMerge(
-    merges: Record<string, MergeCell>,
-    merge: MergeCell,
+function shiftMerges(
+    { merge = {} }: ExtendedSheetConfig,
     type: 'row' | 'column',
-    first: number,
-    span: number,
-) {
-    const placed = type === 'row' ? { ...merge, r: first, rs: span } : { ...merge, c: first, cs: span };
-    merges[`${placed.r}_${placed.c}`] = placed;
+    edit: Edit,
+): Record<string, MergeCell> {
+    const shifted: Record<string, MergeCell> = {};
+    const span = { start: 0, end: 0 };
+    for (const key of Object.keys(merge).sort()) {
+        const { r, c, rs, cs } = merge[key];
+        if (!mapSpan(edit, type === 'row' ? r : c, type === 'row' ? r + rs - 1 : c + cs - 1, span)) continue;
+        const size = span.end - span.start + 1;
+        const placed =
+            type === 'row' ? { ...merge[key], r: span.start, rs: size } : { ...merge[key], c: span.start, cs: size };
+        shifted[`${placed.r}_${placed.c}`] = placed;
+    }
+    return shifted;
 }
 
 // Re-keys an "r_c" map, an entry on a line the op deletes dropped.
 export function shiftCellKeyed<T>(
     map: Record<string, T> | undefined,
     axis: 'row' | 'column',
-    { to }: LineMove,
+    { edit }: LineMove,
 ): Record<string, T> {
     const shifted: Record<string, T> = {};
     for (const key in map) {
         const [r, c] = parseCellKey(key);
-        const line = to(axis === 'row' ? r : c);
-        if (line != null) shifted[axis === 'row' ? `${line}_${c}` : `${r}_${line}`] = map[key];
+        const line = mapIndex(edit, axis === 'row' ? r : c);
+        if (line !== GONE) shifted[axis === 'row' ? `${line}_${c}` : `${r}_${line}`] = map[key];
     }
     return shifted;
 }
@@ -205,9 +183,10 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
 function shiftChartsAcrossSheets<S extends Sheet>(
     sheets: S[],
     sheetId: string,
-    shift: (ref: CellRangeRef) => CellRangeRef | null,
+    type: 'row' | 'column',
+    edit: Edit,
 ): S[] {
-    const move = (ref: CellRangeRef) => (ref.sheetId === sheetId ? shift(ref) : ref);
+    const move = (ref: CellRangeRef) => (ref.sheetId === sheetId ? shiftRange(ref, type, edit) : ref);
     return sheets.map((sheet) => {
         let charts: Record<string, SheetChart> | null = null;
         for (const chart of Object.values(sheet.charts ?? {})) {
@@ -227,11 +206,11 @@ export const LINE_MAPS = {
     column: ['colhidden', 'columnlen', 'customWidth'],
 } as const;
 
-export function shiftKeyedMap(map: Record<string, number>, { to }: LineMove): Record<string, number> {
+export function shiftKeyedMap(map: Record<string, number>, { edit }: LineMove): Record<string, number> {
     const shifted: Record<string, number> = {};
     for (const [key, v] of Object.entries(map)) {
-        const line = to(Number.parseInt(key, 10));
-        if (line != null) shifted[line] = v;
+        const line = mapIndex(edit, Number.parseInt(key, 10));
+        if (line !== GONE) shifted[line] = v;
     }
     return shifted;
 }
@@ -268,7 +247,7 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     const move = lineMove(op);
     const insertAt = move.at;
 
-    newCfg.merge = shiftMergeForInsert(cfg, op.type, op.index, count, op.direction);
+    newCfg.merge = shiftMerges(cfg, op.type, move.edit);
     const borderInfo = shiftCellKeyed(cfg.borderInfo, op.type, move);
     // The new lines take the borders of the line they were inserted beside.
     for (const [key, sides] of Object.entries(cfg.borderInfo ?? {})) {
@@ -299,12 +278,12 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     newTarget.config = newCfg;
     setSize(newTarget, newData, op.type);
 
-    const moved = (range: SingleRange) => shiftRangeForInsert(range, op);
+    const moved = (range: SingleRange) => shiftRange(range, op.type, move.edit);
     if (target.conditionalFormats != null) newTarget.conditionalFormats = shiftRules(target.conditionalFormats, moved);
     if (target.dataValidations != null) newTarget.dataValidations = shiftRules(target.dataValidations, moved);
-    const frozen = shiftFrozen(target.frozen, op.type, move);
+    const frozen = shiftFrozen(target.frozen, op.type, move.edit);
     if (frozen !== target.frozen) newTarget.frozen = frozen;
-    shiftFilterForInsert(newTarget, newCfg, op);
+    shiftFilter(newTarget, newCfg, op.type, move);
 
     const shifted = shiftFormulasAcrossSheets(
         [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)],
@@ -315,7 +294,7 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
         count,
         'add',
     );
-    return shiftChartsAcrossSheets(shifted, op.id, (ref) => shiftRangeForInsert(ref, op));
+    return shiftChartsAcrossSheets(shifted, op.id, op.type, move.edit);
 }
 
 export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op: DeleteRowColOp): S[] {
@@ -334,7 +313,7 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
     const removeCount = op.end - op.start + 1;
     const move = lineMove(op);
 
-    newCfg.merge = shiftMergeForDelete(cfg, op.type, op.start, removeCount);
+    newCfg.merge = shiftMerges(cfg, op.type, move.edit);
     newCfg.borderInfo = shiftCellKeyed(cfg.borderInfo, op.type, move);
     shiftLineMaps(cfg, newCfg, op.type, move);
 
@@ -345,7 +324,7 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
     newTarget.config = newCfg;
     setSize(newTarget, newData, op.type);
 
-    const kept = (range: SingleRange) => shiftRangeForDelete(range, op);
+    const kept = (range: SingleRange) => shiftRange(range, op.type, move.edit);
     if (target.conditionalFormats != null) {
         // A formula rule reads from its first range's corner, which moves up or left when the delete is before it.
         newTarget.conditionalFormats = shiftRules(target.conditionalFormats, kept, (rule, ranges) => {
@@ -355,9 +334,9 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
         });
     }
     if (target.dataValidations != null) newTarget.dataValidations = shiftRules(target.dataValidations, kept);
-    const frozen = shiftFrozen(target.frozen, op.type, move);
+    const frozen = shiftFrozen(target.frozen, op.type, move.edit);
     if (frozen !== target.frozen) newTarget.frozen = frozen;
-    shiftFilterForDelete(newTarget, newCfg, op);
+    shiftFilter(newTarget, newCfg, op.type, move);
 
     const shifted = shiftFormulasAcrossSheets(
         [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)],
@@ -368,7 +347,7 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
         removeCount,
         'del',
     );
-    return shiftChartsAcrossSheets(shifted, op.id, (ref) => shiftRangeForDelete(ref, op));
+    return shiftChartsAcrossSheets(shifted, op.id, op.type, move.edit);
 }
 
 function shiftLineMaps(cfg: ExtendedSheetConfig, next: ExtendedSheetConfig, type: 'row' | 'column', move: LineMove) {
@@ -396,47 +375,31 @@ export function shiftRules<R extends { ranges: SingleRange[] }>(
     return shifted ?? rules;
 }
 
-// The frozen pane, moved whole, since a peer's unfreeze removes `frozen` and a write into it would not apply. A delete
-// of the whole band ends that axis's freeze, and the pane goes with its last axis.
-function shiftFrozen(frozen: Sheet['frozen'], type: 'row' | 'column', { at, to }: LineMove): Sheet['frozen'] {
-    if (!frozen?.range || !(type === 'row' ? freezesRows(frozen) : freezesColumns(frozen))) return frozen;
+// The frozen pane, the lines from the first to `row_focus` or `column_focus`, moved whole, since a peer's unfreeze
+// removes `frozen` and a write into it would not apply. A delete of the whole band ends that axis's freeze, and the
+// pane goes with its last axis.
+function shiftFrozen(frozen: Sheet['frozen'], type: 'row' | 'column', edit: Edit): Sheet['frozen'] {
     const axis = type === 'row' ? 'row_focus' : 'column_focus';
-    const focus = to(frozen.range[axis]) ?? at - 1;
-    if (focus === frozen.range[axis]) return frozen;
-    if (focus >= 0) return { ...frozen, range: { ...frozen.range, [axis]: focus } };
+    const focus = frozen?.range?.[axis] ?? -1;
+    if (!frozen?.range || focus < 0 || !(type === 'row' ? freezesRows(frozen) : freezesColumns(frozen))) return frozen;
+    const pane = { start: 0, end: focus };
+    if (mapSpan(edit, 0, focus, pane)) {
+        return pane.end === focus ? frozen : { ...frozen, range: { ...frozen.range, [axis]: pane.end } };
+    }
     if (!(type === 'row' ? freezesColumns(frozen) : freezesRows(frozen))) return undefined;
     return { type: type === 'row' ? 'rangeColumn' : 'rangeRow', range: { ...frozen.range, [axis]: 0 } };
 }
 
 // The filter moves with the rows: its range, the column each entry sits on and the rows each entry hides. An entry is
-// keyed by its column's offset from the filter's first column, so a column op re-keys the entries.
-function shiftFilterForInsert(sheet: ShiftedSheet, cfg: ExtendedSheetConfig, op: InsertRowColOp) {
+// keyed by its column's offset from the filter's first column, so a column op re-keys the entries. Deleting the
+// filter's first row, the header that holds its buttons, removes the filter. A column delete keeps the filter while
+// any of its columns are left, and a delete of every row an entry hides takes the entry.
+function shiftFilter(sheet: ShiftedSheet, cfg: ExtendedSheetConfig, type: 'row' | 'column', move: LineMove) {
     const { filterRange, filter } = sheet;
     if (!filterRange?.row) return;
-    const range = shiftRangeForInsert(filterRange, op);
-    const move = lineMove(op);
-    const shifted: Record<string, FilterEntry> = {};
-    for (const [key, entry] of Object.entries(filter ?? {})) {
-        if (op.type === 'row') {
-            const rowhidden = shiftKeyedMap(entry.rowhidden ?? {}, move);
-            shifted[key] = { ...entry, rowhidden, str: range.row[0], edr: range.row[1] };
-        } else {
-            const cindex = move.to(entry.cindex);
-            shifted[cindex - range.column[0]] = { ...entry, cindex, stc: range.column[0], edc: range.column[1] };
-        }
-    }
-    writeFilter(sheet, cfg, range, filter && shifted);
-}
-
-// Deleting the filter's first row, the header that holds its buttons, removes the filter. A column delete keeps the
-// filter while any of its columns are left.
-function shiftFilterForDelete(sheet: ShiftedSheet, cfg: ExtendedSheetConfig, op: DeleteRowColOp) {
-    const { filterRange, filter } = sheet;
-    if (!filterRange?.row) return;
-    const { type, start, end } = op;
-    const move = lineMove(op);
-    const deletesHeader = type === 'row' && filterRange.row[0] >= start && filterRange.row[0] <= end;
-    const range = deletesHeader ? null : shiftRangeForDelete(filterRange, op);
+    const { edit } = move;
+    const deletesHeader = type === 'row' && !edit.insert && mapIndex(edit, filterRange.row[0]) === GONE;
+    const range = deletesHeader ? null : shiftRange(filterRange, type, edit);
     if (!range) {
         writeFilter(sheet, cfg, undefined, undefined);
         return;
@@ -445,16 +408,17 @@ function shiftFilterForDelete(sheet: ShiftedSheet, cfg: ExtendedSheetConfig, op:
     for (const [key, entry] of Object.entries(filter ?? {})) {
         if (type === 'row') {
             const rowhidden = shiftKeyedMap(entry.rowhidden ?? {}, move);
-            if (Object.keys(rowhidden).length > 0) {
+            if (edit.insert || Object.keys(rowhidden).length > 0) {
                 shifted[key] = { ...entry, rowhidden, str: range.row[0], edr: range.row[1] };
             }
         } else {
-            const cindex = move.to(entry.cindex);
-            if (cindex == null) continue;
+            const cindex = mapIndex(edit, entry.cindex);
+            if (cindex === GONE) continue;
             shifted[cindex - range.column[0]] = { ...entry, cindex, stc: range.column[0], edc: range.column[1] };
         }
     }
-    writeFilter(sheet, cfg, range, Object.keys(shifted).length > 0 ? shifted : undefined);
+    const kept = edit.insert ? filter && shifted : Object.keys(shifted).length > 0 ? shifted : undefined;
+    writeFilter(sheet, cfg, range, kept);
 }
 
 // The rows a filter hides are hidden rows of the sheet too. The sheet and its config are the op's own copies, but
