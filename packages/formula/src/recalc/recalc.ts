@@ -107,8 +107,20 @@ export class Recalc {
             this.index.rebuild(workbook, this.facts);
             this.stale = false;
         }
-        this.index.mark(workbook, this.seeds);
-        this.seeds.length = 0;
+        // A cell written twice is one seed: the spans in sheet, column and row order, those that meet as one.
+        const { seeds } = this;
+        const order = Array.from({ length: seeds.length / 4 }, (_, i) => i * 4);
+        order.sort((a, b) => seeds[a] - seeds[b] || seeds[a + 1] - seeds[b + 1] || seeds[a + 2] - seeds[b + 2]);
+        const spans: number[] = [];
+        for (const at of order) {
+            const last = spans.length - 4;
+            const sameColumn = last >= 0 && spans[last] === seeds[at] && spans[last + 1] === seeds[at + 1];
+            if (sameColumn && spans[last + 3] >= seeds[at + 2] - 1) {
+                spans[last + 3] = Math.max(spans[last + 3], seeds[at + 3]);
+            } else spans.push(seeds[at], seeds[at + 1], seeds[at + 2], seeds[at + 3]);
+        }
+        this.index.mark(workbook, spans);
+        seeds.length = 0;
         this.cost = 0;
         this.stored = false;
         this.cap = cap;
