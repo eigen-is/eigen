@@ -25,8 +25,8 @@ export type RecalcResult = {
     readonly stopped: boolean;
 };
 
-// How deep cells and tree nodes may nest, together, before the calls in progress are dropped: well under half of
-// what the smallest default stack measured holds, since a worker's stack is smaller.
+// How deep cells and tree nodes may nest, together, before the calls in progress are dropped. It has to stay well
+// under what the smallest stack an engine runs on holds, and a worker's stack is smaller than a page's.
 const BUDGET = 400;
 
 const UNWIND = Object.freeze({ reason: 'the evaluation nests too deep' });
@@ -74,16 +74,20 @@ export class Recalc {
         this.workbook = workbook;
         this.functions = functions;
         this.evaluator = new Evaluator(workbook, functions, this);
-        // A formula that came without a value was never computed, which its readers have to hear.
+        // A formula that came without a value was never computed, which the ones that came with a value have to
+        // hear. When none did, every formula is computed anyway and there is nothing to flag.
+        let settled = false;
         for (let s = 0; s < workbook.sheets.length; s += 1) {
             const { columns } = workbook.sheets[s];
             for (let c = 0; c < columns.length; c += 1) {
-                const { kind, length } = columns[c];
-                for (let row = 0; columns[c].pending > 0 && row < length; row += 1) {
+                const { kind, shape, length } = columns[c];
+                for (let row = 0; (columns[c].pending > 0 || !settled) && row < length; row += 1) {
                     if (kind[row] > SETTLED) this.seed(s, c, row);
+                    else if (shape[row] > 0) settled = true;
                 }
             }
         }
+        if (!settled) this.seeds.length = 0;
     }
 
     // To be called before a cell is written, with whether a formula is: the cell is a seed of the next pass.
@@ -138,7 +142,7 @@ export class Recalc {
             for (let i = 0; i < this.size; i += 1) {
                 const column = this.columns[i];
                 const kind = column.kind[this.rows[i]];
-                if (kind & LOOP) column.loops -= 1;
+                column.setLoop(this.rows[i], false);
                 column.kind[this.rows[i]] = (kind & KIND_MASK) | DIRTY;
             }
             this.size = 0;
@@ -208,10 +212,9 @@ export class Recalc {
 
     private enter(sheet: Sheet, column: Column, c: number, row: number): void {
         const at = this.size;
-        const kind = column.kind[row];
         // Whether the cell is on a loop is found out again.
-        if (kind & LOOP) column.loops -= 1;
-        column.kind[row] = (kind & ~LOOP) | RUNNING;
+        column.setLoop(row, false);
+        column.kind[row] |= RUNNING;
         this.sheets[at] = sheet;
         this.columns[at] = column;
         this.places[at] = c;
@@ -247,8 +250,7 @@ export class Recalc {
                 continue;
             }
             if (!known) {
-                joined.kind[this.rows[at]] |= LOOP;
-                joined.loops += 1;
+                joined.setLoop(this.rows[at], true);
                 this.workbook.put(joined, this.rows[at], REF);
                 let rows = this.looped.get(joined);
                 if (rows === undefined) this.looped.set(joined, (rows = new Map()));
