@@ -1,55 +1,40 @@
-// The functions on numbers. SUM and SUMPRODUCT loop over the planes of the columns they are given and copy no
-// range; ABS is the plain case of one number in and one out. SUMIF and SUMIFS add what the criteria module matched.
+// The functions on numbers. ABS and ROUND are the plain case of numbers in and one out, SUM adds what the walk
+// over its arguments hands it, SUMPRODUCT loops over the planes of the columns it is given and copies no range, and
+// SUMIF and SUMIFS add what the criteria module matched.
 
 import type { Evaluator } from '../eval/evaluator';
 import { columnsOf, firstError, toArray } from '../eval/views';
-import { toNumber } from '../values/coerce';
+import type { Walk } from '../eval/walk';
+import { Take } from '../eval/walk';
 import { VALUE } from '../values/errors';
-import { snapSum } from '../values/precision';
-import type { Reference, Value } from '../values/value';
+import { roundDecimal, snapSum } from '../values/precision';
+import type { Value } from '../values/value';
 import { isArray, isError, isReference, OMITTED } from '../values/value';
 import { tally } from './criteria';
-import { define, FunctionFlag, optional, RANGE, SCALAR, scalar1 } from './registry';
+import {
+    aggregate,
+    define,
+    FunctionFlag,
+    INTEGER,
+    NUMBER,
+    optional,
+    RANGE,
+    SCALAR,
+    scalar1,
+    scalar2,
+} from './registry';
 
-// The total is added in argument order, down each column of a reference, and only its last addition can snap to 0.
-// In a reference or an array a 0 is no addition, so a column is summed without looking at what its cells are.
-function sum(args: readonly Value[], ctx: Evaluator): Value {
-    let total = 0;
+// The sum of what a walk hands out, in its order. Only the last addition can snap to 0.
+export function total(walk: Walk): number {
+    let sum = 0;
     let before = 0;
-    for (const arg of args) {
-        if (isReference(arg)) {
-            for (let area: Reference | null = arg; area !== null; area = area.next) {
-                ctx.cells.settleArea(area);
-                const error = firstError(ctx, area);
-                if (error !== null) return error;
-                const { columns } = area.sheet;
-                const right = Math.min(area.right, columns.length - 1);
-                for (let c = area.left; c <= right; c += 1) {
-                    const { num, length } = columns[c];
-                    let end = Math.min(area.bottom + 1, length);
-                    while (end > area.top && num[end - 1] === 0) end -= 1;
-                    if (end <= area.top) continue;
-                    for (let row = area.top; row < end - 1; row += 1) total += num[row];
-                    before = total;
-                    total += num[end - 1];
-                }
-            }
-        } else if (isArray(arg)) {
-            for (let i = 0; i < arg.items.length; i += 1) {
-                const item = arg.items[i];
-                if (isError(item)) return item;
-                if (typeof item !== 'number' || item === 0) continue;
-                before = total;
-                total += item;
-            }
-        } else if (arg !== OMITTED) {
-            const number = toNumber(arg);
-            if (typeof number !== 'number') return number;
-            before = total;
-            total += number;
-        }
+    while (walk.next()) {
+        const { num, to } = walk;
+        for (let i = walk.from; i < to - 1; i += 1) sum += num[i];
+        before = sum;
+        sum += num[to - 1];
     }
-    return snapSum(total, before);
+    return snapSum(sum, before);
 }
 
 // The numbers of one argument, row by row, with 0 for everything that is no number. A reference to one column is
@@ -103,8 +88,9 @@ function sumproduct(args: readonly Value[], ctx: Evaluator): Value {
 }
 
 export const MATH = [
-    scalar1('ABS', toNumber, Math.abs),
-    define('SUM', [RANGE], sum, 0, 1),
+    scalar1('ABS', NUMBER, Math.abs),
+    scalar2('ROUND', NUMBER, INTEGER, roundDecimal),
+    aggregate('SUM', Take.Numbers, total),
     define('SUMPRODUCT', [RANGE], sumproduct, 0, 1),
     define(
         'SUMIF',

@@ -4,13 +4,24 @@
 
 import type { Evaluator } from '../eval/evaluator';
 import { columnsOf, rowsOf } from '../eval/views';
-import { toBoolean, toNumber } from '../values/coerce';
 import type { FormulaError } from '../values/errors';
 import { NA, REF, VALUE } from '../values/errors';
 import type { Reference, Scalar, Value } from '../values/value';
 import { arrayOf, isArray, isError, isReference, OMITTED } from '../values/value';
 import type { FunctionBody } from './registry';
-import { define, FunctionFlag, LAZY, optional, RANGE, REF as REF_PARAM, SCALAR } from './registry';
+import {
+    BOOLEAN,
+    define,
+    FunctionFlag,
+    INTEGER,
+    LAZY,
+    NUMBER,
+    optional,
+    RANGE,
+    REF as REF_PARAM,
+    refusal,
+    SCALAR,
+} from './registry';
 import type { Key, Vector } from './search';
 import { bisect, edgeOf, exact, heightOf, nearest, widthOf } from './search';
 
@@ -27,16 +38,14 @@ function position(reference: Value, own: number, rows: boolean): Value {
 const index: FunctionBody = (args, _ctx, node) => {
     let source = args[0];
     if (isError(source)) return source;
-    const rowNumber = toNumber(args[1]);
-    if (typeof rowNumber !== 'number') return rowNumber;
-    const columnNumber = toNumber(args[2]);
-    if (typeof columnNumber !== 'number') return columnNumber;
-    const areaNumber = toNumber(args[3]);
-    if (typeof areaNumber !== 'number') return areaNumber;
-    let r = Math.trunc(rowNumber);
-    let c = Math.trunc(columnNumber);
+    let r = INTEGER.read(args[1]);
+    if (r === undefined) return refusal(args[1]);
+    let c = INTEGER.read(args[2]);
+    if (c === undefined) return refusal(args[2]);
+    const areaNumber = INTEGER.read(args[3]);
+    if (areaNumber === undefined) return refusal(args[3]);
     if (r < 0 || c < 0 || areaNumber < 1) return VALUE;
-    for (let skip = Math.trunc(areaNumber) - 1; skip > 0; skip -= 1) {
+    for (let skip = areaNumber - 1; skip > 0; skip -= 1) {
         source = isReference(source) ? source.next : null;
         if (source === null) return REF;
     }
@@ -89,8 +98,8 @@ const match: FunctionBody = (args, ctx) => {
     if (isError(key)) return key;
     const range = args[1];
     if (isError(range)) return range;
-    const type = toNumber(args[2]);
-    if (typeof type !== 'number') return type;
+    const type = NUMBER.read(args[2]);
+    if (type === undefined) return refusal(args[2]);
     if (heightOf(range) > 1 && widthOf(range) > 1) return NA;
     const vector = edgeOf(ctx, range, widthOf(range) === 1);
     const at =
@@ -104,11 +113,11 @@ function tableLookup(args: readonly Value[], ctx: Evaluator, down: boolean): Val
     if (isError(key)) return key;
     const table = args[1];
     if (isError(table)) return table;
-    const index = toNumber(args[2]);
-    if (typeof index !== 'number') return index;
-    const sorted = toBoolean(args[3]);
-    if (typeof sorted !== 'boolean') return sorted;
-    const line = Math.trunc(index) - 1;
+    const index = INTEGER.read(args[2]);
+    if (index === undefined) return refusal(args[2]);
+    const sorted = BOOLEAN.read(args[3]);
+    if (sorted === undefined) return refusal(args[3]);
+    const line = index - 1;
     if (line < 0) return VALUE;
     if (line >= (down ? widthOf(table) : heightOf(table))) return REF;
     const vector = edgeOf(ctx, table, down);
@@ -138,10 +147,10 @@ const lookup: FunctionBody = (args, ctx) => {
 // it or the next larger one and 2 for the key as a pattern. `search` is 1 from the first value on, -1 from the last
 // one back, and 2 or -2 for a bisection of ascending or descending values. A blank key finds a blank.
 function seek(vector: Vector, key: Value, match: Value, search: Value): number | FormulaError {
-    const how = toNumber(match);
-    if (typeof how !== 'number') return how;
-    const order = search === null ? 1 : toNumber(search);
-    if (typeof order !== 'number') return order;
+    const how = NUMBER.read(match);
+    if (how === undefined) return refusal(match);
+    const order = search === null ? 1 : NUMBER.read(search);
+    if (order === undefined) return refusal(search);
     if (how !== 0 && how !== -1 && how !== 1 && how !== 2) return VALUE;
     const sought = typeof key === 'number' || typeof key === 'string' || typeof key === 'boolean' ? key : null;
     if (order === 1 || order === -1) {

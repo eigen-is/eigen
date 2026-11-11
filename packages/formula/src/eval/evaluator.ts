@@ -21,6 +21,7 @@ import { arrayOf, isArray, isError, isReference, OMITTED, ValueType } from '../v
 import { call, lift } from './call';
 import { arithmetic, LIFTED_BINARY, LIFTED_NEGATE, LIFTED_PERCENT, negate, operate, percent } from './operators';
 import { toArray } from './views';
+import { Walk } from './walk';
 
 export class Evaluator {
     public readonly workbook: Workbook;
@@ -29,6 +30,7 @@ export class Evaluator {
     // The argument lists of the calls in progress, one per level of nesting, reused from call to call.
     public readonly frames: Value[][] = [];
     public calls = 0;
+    public readonly walk = new Walk(this);
 
     public constructor(workbook: Workbook, functions: Registry, cells: Recalc) {
         this.workbook = workbook;
@@ -181,14 +183,15 @@ export class Evaluator {
     // A long sum is a chain thousands of nodes deep down its left operands, so it runs in a loop from its first
     // operation up, and only a right operand is a call deeper.
     private binary(node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
-        const chain: FormulaNode[] = [];
+        let chain: FormulaNode[] | null = null;
         let first = node;
-        for (; first.children[0].kind === NodeKind.Binary; first = first.children[0]) chain.push(first);
+        for (; first.children[0].kind === NodeKind.Binary; first = first.children[0]) (chain ??= []).push(first);
         const start = first.children[0];
         const left = isReferenceOperator(first.op)
             ? this.evaluate(start, sheet, row, column)
             : this.operand(start, sheet, row, column);
         let value = this.operation(first, left, sheet, row, column);
+        if (chain === null) return value;
         for (let i = chain.length - 1; i >= 0; i -= 1) value = this.operation(chain[i], value, sheet, row, column);
         return value;
     }

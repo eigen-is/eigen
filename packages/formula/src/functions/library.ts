@@ -7,8 +7,11 @@ import { LOOKUP } from './lookup';
 import { MATH } from './math';
 import type { Registry } from './registry';
 import { STATISTICAL } from './statistical';
-import { TEXT } from './text';
+import { TEXT_FUNCTIONS } from './text';
 
 export const FUNCTIONS: Registry = new Map(
-    [...INFORMATION, ...LOGICAL, ...LOOKUP, ...MATH, ...STATISTICAL, ...TEXT].map((entry) => [entry.name, entry]),
+    [...INFORMATION, ...LOGICAL, ...LOOKUP, ...MATH, ...STATISTICAL, ...TEXT_FUNCTIONS].map((entry) => [
+        entry.name,
+        entry,
+    ]),
 );
