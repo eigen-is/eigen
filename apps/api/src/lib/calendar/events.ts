@@ -127,7 +127,7 @@ export async function deleteEvent(
 
     const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
     const invitation = isInvitationFromOthers(series ?? existing, calendar.home.user.email) ? existing.data : null;
-    // A cancelled master answers and cancels nothing: its update already sent the CANCEL.
+    // A cancelled master answers and cancels nothing: the web save that cancelled it told its guests, a PUT nobody.
     const { held, stored } = heldGuests(existing, dates);
     const declining = user && held.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
     if (declining && invitation?.organizer) {
@@ -144,7 +144,7 @@ export async function deleteEvent(
                 answeredOccurrence(existing),
             ).catch(console.error);
         }
-    } else if (!invitation && held.length) {
+    } else if (!invitation) {
         // An event nobody else organizes is this calendar's own, and its organizer's delete cancels it.
         const organizer = organizerOf(calendar.home, user, stored);
         propagateCancellation(calendar.home, organizer, existing, held, series ?? undefined).catch(console.error);
@@ -346,10 +346,8 @@ async function propagateWrite(
     const exceptions = series ? [] : exceptionsOf(calendar, event.id);
     if (event.status === 'cancelled') {
         const { held, stored } = heldGuests(previous, exceptions);
-        if (!held.length) return;
         const organizer = organizerOf(calendar.home, user, stored);
-        await propagateCancellation(calendar.home, organizer, event, held, series ?? undefined);
-        return;
+        return propagateCancellation(calendar.home, organizer, event, held, series ?? undefined);
     }
     // A name missing from the list the guests held cancels that instance.
     const held = previous?.data?.attendees ?? [];
@@ -440,7 +438,8 @@ async function patchStoredEvent(
     };
     await editResource(calendar, resource, (component) => {
         const patched = patchEvent(component, existing.recurrenceDate, patch, ctx);
-        return (organizer && keepOrganizers(component, organizerOf(calendar.home, user), ctx)) || patched;
+        const organized = organizer && keepOrganizers(component, organizerOf(calendar.home, user), ctx);
+        return patched || organized;
     });
 
     return { updated: requireEvent(calendar, id), existing };
@@ -477,7 +476,8 @@ async function writeOverride(
     const edit = exceptionEdit(parent, own, ctx);
     await editResource(calendar, resource, (component) => {
         const edited = applyEdits(component, new Map([[key, edit]]));
-        return (organizer && keepOrganizers(component, organizerOf(calendar.home, user), ctx)) || edited;
+        const organized = organizer && keepOrganizers(component, organizerOf(calendar.home, user), ctx);
+        return edited || organized;
     });
     const created = exceptionOf(calendar, parent.id, key) ?? requireEvent(calendar, parent.id);
     return { created, replaced };
