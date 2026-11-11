@@ -28,6 +28,9 @@ export type Vector = {
     // How many values there are, and how many of them, counted from the first, can be other than blank.
     readonly length: number;
     readonly used: number;
+    // How many of the values are held one by one, from the first. The last of them stands for every value after it,
+    // so a search that visits every value looks at these and no further.
+    readonly stored: number;
 };
 
 export function heightOf(range: Value): number {
@@ -42,22 +45,39 @@ export function widthOf(range: Value): number {
 export function edgeOf(ctx: Evaluator, range: Value, down: boolean): Vector {
     const { workbook } = ctx;
     if (isReference(range) && down) {
-        ctx.cells.settleArea({ ...range, right: range.left, next: null });
+        ctx.recalc.settleArea({ ...range, right: range.left, next: null });
         const column = range.sheet.columns[range.left];
         const length = range.bottom - range.top + 1;
-        const used = column === undefined ? 0 : Math.max(0, Math.min(length, column.length - range.top));
-        return { workbook, column: column ?? null, items: [], start: range.top, step: 1, length, used };
+        // The blanks at the end of the range take no part, whatever cells the column holds below it.
+        let used = column === undefined ? 0 : Math.max(0, Math.min(length, column.length - range.top));
+        while (used > 0 && (column.kind[range.top + used - 1] & KIND_MASK) === CellKind.Empty) used -= 1;
+        return { workbook, column: column ?? null, items: [], start: range.top, step: 1, length, used, stored: used };
     }
     const values = isReference(range) ? toArray(ctx, { ...range, bottom: range.top, next: null }) : ctx.read(range);
-    if (!isArray(values)) return { workbook, column: null, items: [values], start: 0, step: 1, length: 1, used: 1 };
+    if (!isArray(values)) {
+        return { workbook, column: null, items: [values], start: 0, step: 1, length: 1, used: 1, stored: 1 };
+    }
+    const { items } = values;
     const length = down ? values.rows : values.columns;
-    const step = down ? values.columns : 1;
-    return { workbook, column: null, items: values.items, start: 0, step, length, used: length };
+    const stored = down ? values.height : values.width;
+    const step = down ? values.width : 1;
+    // The values past the stored ones are all the last stored one, so they take part unless that is a blank. The
+    // blanks at the end never do, however many are stored.
+    let used = stored === length || items[(stored - 1) * step] !== null ? length : stored;
+    while (used > 0 && used <= stored && items[(used - 1) * step] === null) used -= 1;
+    return { workbook, column: null, items, start: 0, step, length, used, stored };
 }
 
 function valueAt(vector: Vector, at: number): Scalar {
     const { column, start } = vector;
-    return column === null ? vector.items[start + at * vector.step] : vector.workbook.value(column, start + at);
+    if (column !== null) return vector.workbook.value(column, start + at);
+    return vector.items[start + Math.min(at, vector.stored - 1) * vector.step];
+}
+
+// Where a search from the last value back met a value: the last value held stands for the ones after it, so it was
+// met at the last position of all.
+function placeOf(vector: Vector, at: number, reverse: boolean): number {
+    return reverse && at === vector.stored - 1 ? vector.used - 1 : at;
 }
 
 // How the value at a position sorts against the key, and NaN when it is of another kind.
@@ -69,14 +89,15 @@ function against(vector: Vector, at: number, key: Key): number {
 // The first value that equals the key, or the last one when `reverse`. With `wild` a text key is a pattern, and
 // a blank key finds a blank.
 export function exact(vector: Vector, key: Key | null, wild: boolean, reverse: boolean): number {
-    const { column, used, start } = vector;
+    const { column, start } = vector;
+    const used = Math.min(vector.used, vector.stored);
     const step = reverse ? -1 : 1;
     const first = reverse ? used - 1 : 0;
     const end = reverse ? -1 : used;
     if (key === null) {
-        if (reverse && vector.length > used) return vector.length - 1;
+        if (reverse && vector.length > vector.used) return vector.length - 1;
         for (let at = first; at !== end; at += step) if (valueAt(vector, at) === null) return at;
-        return vector.length > used ? used : -1;
+        return vector.length > vector.used ? vector.used : -1;
     }
     let sought = key;
     if (typeof key === 'string') {
@@ -85,14 +106,18 @@ export function exact(vector: Vector, key: Key | null, wild: boolean, reverse: b
         if (pattern !== null && pattern.literal === null) {
             for (let at = first; at !== end; at += step) {
                 const value = valueAt(vector, at);
-                if (typeof value === 'string' && patternMatches(pattern, textKey(value))) return at;
+                if (typeof value === 'string' && patternMatches(pattern, textKey(value))) {
+                    return placeOf(vector, at, reverse);
+                }
             }
             return -1;
         }
         sought = pattern?.literal ?? sought;
     }
     if (column === null) {
-        for (let at = first; at !== end; at += step) if (against(vector, at, sought) === 0) return at;
+        for (let at = first; at !== end; at += step) {
+            if (against(vector, at, sought) === 0) return placeOf(vector, at, reverse);
+        }
         return -1;
     }
     const { strings } = vector.workbook;
@@ -127,15 +152,16 @@ export function exact(vector: Vector, key: Key | null, wild: boolean, reverse: b
 // The value that equals the key, or else the nearest smaller one, or the nearest larger one with `larger`. Every
 // value is looked at, in order, or from the last one back when `reverse`, and of equal candidates the first met wins.
 export function nearest(vector: Vector, key: Key, larger: boolean, reverse: boolean): number {
+    const used = Math.min(vector.used, vector.stored);
     const step = reverse ? -1 : 1;
-    const end = reverse ? -1 : vector.used;
+    const end = reverse ? -1 : used;
     let best = -1;
     let bestValue = key;
-    for (let at = reverse ? vector.used - 1 : 0; at !== end; at += step) {
+    for (let at = reverse ? used - 1 : 0; at !== end; at += step) {
         const value = valueAt(vector, at);
         if (typeof value === 'object' || typeof value !== typeof key) continue;
         const order = compareValues(value, key);
-        if (order === 0) return at;
+        if (order === 0) return placeOf(vector, at, reverse);
         if (order > 0 !== larger) continue;
         const gain = compareValues(value, bestValue);
         if (best < 0 || (larger ? gain < 0 : gain > 0)) {
@@ -143,7 +169,7 @@ export function nearest(vector: Vector, key: Key, larger: boolean, reverse: bool
             bestValue = value;
         }
     }
-    return best;
+    return placeOf(vector, best, reverse);
 }
 
 // Bisection over values taken to be sorted, ascending or `descending`: whatever the halving lands on, as in Excel.

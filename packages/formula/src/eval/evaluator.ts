@@ -9,37 +9,47 @@ import type { Recalc } from '../recalc/recalc';
 import type { Sheet } from '../store/sheet';
 import type { Workbook } from '../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
-import { Token } from '../text/lexer';
-import type { FormulaNode } from '../text/tree';
-import { NodeKind, RefFlag, RefKind, SheetKind } from '../text/tree';
-import { toNumber } from '../values/coerce';
+import { ERROR_LITERALS, Token } from '../text/lexer';
+import type { Ends, FormulaNode } from '../text/tree';
+import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from '../text/tree';
 import type { FormulaError } from '../values/errors';
-import { ERRORS, NAME, NULL, REF, VALUE } from '../values/errors';
-import { snapSum } from '../values/precision';
+import { errorOf, NAME, NULL, REF, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { arrayOf, isArray, isError, isReference, OMITTED, ValueType } from '../values/value';
 import { call, lift } from './call';
-import { arithmetic, LIFTED_BINARY, LIFTED_NEGATE, LIFTED_PERCENT, negate, operate, percent } from './operators';
+import { LIFTED_BINARY, LIFTED_NEGATE, LIFTED_PERCENT, negate, operate, percent } from './operators';
 import { toArray } from './views';
+import { Walk } from './walk';
+
+// The error of each error literal, by its place in the list of literals.
+const LITERAL_ERRORS = ERROR_LITERALS.map(errorOf);
 
 export class Evaluator {
     public readonly workbook: Workbook;
     public readonly functions: Registry;
-    public readonly cells: Recalc;
+    public readonly recalc: Recalc;
     // The argument lists of the calls in progress, one per level of nesting, reused from call to call.
     public readonly frames: Value[][] = [];
     public calls = 0;
+    public readonly walk = new Walk(this);
+    // Where endsAt writes the rows or columns of the reference being read.
+    private readonly ends: Ends = { first: 0, second: 0 };
+    // The value of each array constant met, which is the same for every cell that holds it.
+    private readonly constants = new WeakMap<FormulaNode, Scalar | ArrayValue>();
 
-    public constructor(workbook: Workbook, functions: Registry, cells: Recalc) {
+    public constructor(workbook: Workbook, functions: Registry, recalc: Recalc) {
         this.workbook = workbook;
         this.functions = functions;
-        this.cells = cells;
+        this.recalc = recalc;
     }
 
     // What the cell of a formula stores: one value, the top-left of an array, and 0 for a blank.
     public result(tree: FormulaNode, sheet: Sheet, row: number, column: number): Scalar {
+        // Only the last + or - of a formula snaps a result that is tiny against its left operand to 0.
         const root = tree.kind === NodeKind.Binary && (tree.op === Token.Plus || tree.op === Token.Minus);
-        const value = root ? this.lastSum(tree, sheet, row, column) : this.operand(tree, sheet, row, column);
+        const value = root
+            ? this.read(this.binary(tree, sheet, row, column, true))
+            : this.operand(tree, sheet, row, column);
         const single = isArray(value) ? value.items[0] : value;
         return single === null ? 0 : single;
     }
@@ -53,7 +63,7 @@ export class Evaluator {
             case NodeKind.Boolean:
                 return node.value !== 0;
             case NodeKind.Error:
-                return ERRORS[node.value - 1];
+                return LITERAL_ERRORS[node.value - 1];
             case NodeKind.Empty:
                 return OMITTED;
             case NodeKind.Ref:
@@ -75,11 +85,15 @@ export class Evaluator {
                 return isArray(value) ? lift(this, LIFTED_PERCENT, [value], node, sheet, row, column) : percent(value);
             }
             case NodeKind.Binary:
-                return this.binary(node, sheet, row, column);
+                return this.binary(node, sheet, row, column, false);
             case NodeKind.Paren:
                 return this.evaluate(node.children[0], sheet, row, column);
-            default:
+            case NodeKind.Array:
                 return this.constant(node);
+            default: {
+                const unknown: never = node.kind;
+                return unknown;
+            }
         }
     }
 
@@ -87,10 +101,11 @@ export class Evaluator {
     public operand(node: FormulaNode, sheet: Sheet, row: number, column: number): Scalar | ArrayValue {
         if (node.kind === NodeKind.Ref && node.op === RefKind.Cell) {
             const target = this.sheetOf(node, sheet);
+            // Written out, where a range goes through endsAt: most of what a recalc reads is one cell.
             const r = node.flags & RefFlag.RowAbsolute ? node.row : row + node.row;
             const c = node.flags & RefFlag.ColumnAbsolute ? node.column : column + node.column;
             if (target === undefined || r < 0 || r >= GRID_ROWS || c < 0 || c >= GRID_COLUMNS) return REF;
-            return this.cells.valueOf(target, r, c);
+            return this.recalc.valueOf(target, r, c);
         }
         return this.read(this.evaluate(node, sheet, row, column));
     }
@@ -101,7 +116,7 @@ export class Evaluator {
             case ValueType.Reference:
                 if (value.next !== null) return VALUE;
                 if (value.top === value.bottom && value.left === value.right) {
-                    return this.cells.valueOf(value.sheet, value.top, value.left);
+                    return this.recalc.valueOf(value.sheet, value.top, value.left);
                 }
                 return toArray(this, value);
             case ValueType.Omitted:
@@ -111,23 +126,10 @@ export class Evaluator {
         }
     }
 
-    // A lazy argument, evaluated now unless the wrapper already had to.
+    // A lazy argument, evaluated now unless the wrapper already had to. One left empty is a blank from here on.
     public force(value: Value, node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
-        return value === PENDING ? this.evaluate(node, sheet, row, column) : value;
-    }
-
-    // Only the last + or - of a formula snaps a result that is tiny against its left operand to 0.
-    private lastSum(node: FormulaNode, sheet: Sheet, row: number, column: number): Scalar | ArrayValue {
-        const a = this.operand(node.children[0], sheet, row, column);
-        const b = this.operand(node.children[1], sheet, row, column);
-        if (isArray(a) || isArray(b))
-            return this.read(lift(this, LIFTED_BINARY[node.op], [a, b], node, sheet, row, column));
-        const x = toNumber(a);
-        if (typeof x !== 'number') return x;
-        const y = toNumber(b);
-        if (typeof y !== 'number') return y;
-        const sum = arithmetic(node.op, x, y);
-        return typeof sum === 'number' ? snapSum(sum, x) : sum;
+        if (value !== PENDING) return value;
+        return node.kind === NodeKind.Empty ? null : this.evaluate(node, sheet, row, column);
     }
 
     private sheetOf(node: FormulaNode, host: Sheet): Sheet | undefined {
@@ -138,22 +140,21 @@ export class Evaluator {
     private reference(node: FormulaNode, host: Sheet, row: number, column: number): Reference | FormulaError {
         const sheet = this.sheetOf(node, host);
         if (sheet === undefined) return REF;
-        const { flags, op } = node;
+        const { ends } = this;
         let top = 0;
         let bottom = GRID_ROWS - 1;
         let left = 0;
         let right = GRID_COLUMNS - 1;
-        if (op !== RefKind.Columns) {
-            top = flags & RefFlag.RowAbsolute ? node.row : row + node.row;
-            bottom = op === RefKind.Cell ? top : flags & RefFlag.Row2Absolute ? node.row2 : row + node.row2;
+        if (node.op !== RefKind.Columns) {
+            if (!endsAt(node, true, row, GRID_ROWS, ends)) return REF;
+            top = Math.min(ends.first, ends.second);
+            bottom = Math.max(ends.first, ends.second);
         }
-        if (op !== RefKind.Rows) {
-            left = flags & RefFlag.ColumnAbsolute ? node.column : column + node.column;
-            right = op === RefKind.Cell ? left : flags & RefFlag.Column2Absolute ? node.column2 : column + node.column2;
+        if (node.op !== RefKind.Rows) {
+            if (!endsAt(node, false, column, GRID_COLUMNS, ends)) return REF;
+            left = Math.min(ends.first, ends.second);
+            right = Math.max(ends.first, ends.second);
         }
-        if (top > bottom) [top, bottom] = [bottom, top];
-        if (left > right) [left, right] = [right, left];
-        if (top < 0 || bottom >= GRID_ROWS || left < 0 || right >= GRID_COLUMNS) return REF;
         return { type: ValueType.Reference, sheet, top, left, bottom, right, next: null };
     }
 
@@ -177,22 +178,42 @@ export class Evaluator {
         return VALUE;
     }
 
-    private binary(node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
-        const { op } = node;
-        if (op === Token.Colon || op === Token.Space || op === Token.Comma) {
-            const a = this.evaluate(node.children[0], sheet, row, column);
-            if (isError(a)) return a;
-            const b = this.evaluate(node.children[1], sheet, row, column);
-            if (isError(b)) return b;
-            return isReference(a) && isReference(b) ? combine(op, a, b) : VALUE;
+    // A long sum is a chain thousands of nodes deep down its left operands, so it runs in a loop from its first
+    // operation up, and only a right operand is a call deeper.
+    private binary(node: FormulaNode, sheet: Sheet, row: number, column: number, snap: boolean): Value {
+        let chain: FormulaNode[] | null = null;
+        let first = node;
+        for (; first.children[0].kind === NodeKind.Binary; first = first.children[0]) (chain ??= []).push(first);
+        const start = first.children[0];
+        const left = isReferenceOperator(first.op)
+            ? this.evaluate(start, sheet, row, column)
+            : this.operand(start, sheet, row, column);
+        let value = this.operation(first, left, sheet, row, column, snap && chain === null);
+        if (chain === null) return value;
+        for (let i = chain.length - 1; i >= 0; i -= 1) {
+            value = this.operation(chain[i], value, sheet, row, column, snap && i === 0);
         }
-        const a = this.operand(node.children[0], sheet, row, column);
-        const b = this.operand(node.children[1], sheet, row, column);
-        if (isArray(a) || isArray(b)) return lift(this, LIFTED_BINARY[op], [a, b], node, sheet, row, column);
-        return operate(op, a, b);
+        return value;
     }
 
-    private constant(node: FormulaNode): Value {
+    // One operator, with its left operand already evaluated.
+    private operation(node: FormulaNode, left: Value, sheet: Sheet, row: number, column: number, snap: boolean): Value {
+        const { op } = node;
+        if (isReferenceOperator(op)) {
+            if (isError(left)) return left;
+            const right = this.evaluate(node.children[1], sheet, row, column);
+            if (isError(right)) return right;
+            return isReference(left) && isReference(right) ? combine(op, left, right) : VALUE;
+        }
+        const a = this.read(left);
+        const b = this.operand(node.children[1], sheet, row, column);
+        if (isArray(a) || isArray(b)) return lift(this, LIFTED_BINARY[op], [a, b], node, sheet, row, column);
+        return operate(op, a, b, snap);
+    }
+
+    private constant(node: FormulaNode): Scalar | ArrayValue {
+        let value = this.constants.get(node);
+        if (value !== undefined) return value;
         const items = node.children.map((element): Scalar => {
             switch (element.kind) {
                 case NodeKind.Number:
@@ -202,13 +223,19 @@ export class Evaluator {
                 case NodeKind.Boolean:
                     return element.value !== 0;
                 case NodeKind.Error:
-                    return ERRORS[element.value - 1];
+                    return LITERAL_ERRORS[element.value - 1];
                 default:
                     return element.op === Token.Minus ? 0 - element.children[0].value : element.children[0].value;
             }
         });
-        return arrayOf(items.length / node.op, node.op, items);
+        value = arrayOf(items.length / node.op, node.op, items);
+        this.constants.set(node, value);
+        return value;
     }
+}
+
+function isReferenceOperator(op: number): boolean {
+    return op === Token.Colon || op === Token.Space || op === Token.Comma;
 }
 
 // The three operators on references: the box around two, the cells two share, and one after the other.
@@ -232,6 +259,11 @@ function combine(op: number, a: Reference, b: Reference): Reference | FormulaErr
     return a.sheet !== b.sheet || top > bottom || left > right ? NULL : { ...a, top, left, bottom, right };
 }
 
+// A union can be thousands of areas long, so the areas of `a` are copied in a loop, last one first.
 function union(a: Reference, b: Reference): Reference {
-    return { ...a, next: a.next === null ? b : union(a.next, b) };
+    const areas: Reference[] = [];
+    for (let area: Reference | null = a; area !== null; area = area.next) areas.push(area);
+    let joined = b;
+    for (let i = areas.length - 1; i >= 0; i -= 1) joined = { ...areas[i], next: joined };
+    return joined;
 }

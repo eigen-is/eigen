@@ -1,5 +1,5 @@
 // One column of one sheet: four parallel typed arrays over its rows, holding each cell's value and, for a formula,
-// the id of its shape. A column is as long as its last row, grows by doubling, and counts its errors, its formulas
+// the id of its shape. A column ends at its last cell, grows by doubling, and counts its errors, its formulas
 // still to compute and its cells on a loop, so that a loop over it can skip the per-cell checks. The high bits of
 // `kind` are the recalc's own flags, which move with the cell when rows do.
 
@@ -101,6 +101,7 @@ export class Column {
             plane.fill(0, length, this.length);
         }
         this.length = length;
+        this.trim();
         this.version += 1;
     }
 
@@ -114,7 +115,16 @@ export class Column {
             plane.fill(0, length, this.length);
         }
         this.length = length;
+        this.trim();
         this.version += 1;
+    }
+
+    // Ends the column at its last cell that holds a value or a formula. Whoever empties a cell calls it, so what a
+    // formula reads of a column never depends on what the column held before.
+    public trim(): void {
+        while (this.length > 0 && this.kind[this.length - 1] === 0 && this.shape[this.length - 1] === 0) {
+            this.length -= 1;
+        }
     }
 
     // Takes the rows from `from` up to `to` out of the counts, before they leave the column.

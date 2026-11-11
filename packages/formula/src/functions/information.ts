@@ -2,10 +2,13 @@
 // an answer and not a result.
 
 import { NA } from '../values/errors';
-import { define, SCALAR } from './registry';
+import { isError } from '../values/value';
+import { ANY, define, scalar1 } from './registry';
 
 export const INFORMATION = [
-    define('ISBLANK', [SCALAR], (args) => args[0] === null),
-    define('ISNUMBER', [SCALAR], (args) => typeof args[0] === 'number'),
+    scalar1('ISBLANK', ANY, (value) => value === null),
+    scalar1('ISERROR', ANY, (value) => isError(value)),
+    scalar1('ISNUMBER', ANY, (value) => typeof value === 'number'),
+    scalar1('ISTEXT', ANY, (value) => typeof value === 'string'),
     define('NA', [], () => NA),
 ];

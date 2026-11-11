@@ -44,7 +44,8 @@ function values(engine: Engine): unknown[] {
 }
 
 // Random stored formulas over a small block of two sheets: every mix of absolute and relative ends, ranges whose
-// corners cross, whole columns and rows, other sheets, sheets that do not exist, and the range operator.
+// corners cross, whole columns and rows, also as arrays, other sheets, sheets that do not exist, and the range
+// operator.
 function generator(next: () => number) {
     const pick = (n: number) => Math.floor(next() * n);
     const end = (letter: string, size: number) => {
@@ -55,8 +56,10 @@ function generator(next: () => number) {
     const sheet = () => (pick(4) === 0 ? `[${SHEETS[pick(2)]}]!` : '');
     const cell = () => `${sheet()}${end('R', ROWS)}${end('C', COLUMNS)}`;
     const range = () => `${cell()}:${end('R', ROWS)}${end('C', COLUMNS)}`;
+    const columns = () => `${sheet()}${end('C', COLUMNS)}:${end('C', COLUMNS)}`;
+    const rows = () => `${sheet()}${end('R', ROWS)}:${end('R', ROWS)}`;
     const formula = (): string => {
-        switch (pick(15)) {
+        switch (pick(21)) {
             case 0:
                 return `=${cell()}+${cell()}`;
             case 1:
@@ -66,9 +69,9 @@ function generator(next: () => number) {
             case 3:
                 return `=SUM(${range()},${cell()})`;
             case 4:
-                return `=SUM(${sheet()}${end('C', COLUMNS)}:${end('C', COLUMNS)})`;
+                return `=SUM(${columns()})`;
             case 5:
-                return `=SUM(${sheet()}${end('R', ROWS)}:${end('R', ROWS)})`;
+                return `=SUM(${rows()})`;
             case 6:
                 return `=IF(${cell()}>${pick(9)},${cell()},${cell()}*2)`;
             case 7:
@@ -85,6 +88,18 @@ function generator(next: () => number) {
                 return `='Nope'!R1C1+${cell()}`;
             case 13:
                 return `=SUMIF(${range()},">2",${cell()})`;
+            case 14:
+                return `=SUMPRODUCT(--(${columns()}=${pick(3)}))`;
+            case 15:
+                return `=SUM(${columns()}*${rows()})`;
+            case 16:
+                return `=INDEX(${rows()}&"",1,${1 + pick(9)})`;
+            case 17:
+                return `=COUNT(${columns()}+${cell()})`;
+            case 18:
+                return `=MAX(IF(${columns()}="",${pick(5)},${columns()}))`;
+            case 19:
+                return `=MATCH(${pick(9)},${columns()}*1,0)`;
             default:
                 return `=SUM(${range()} ${range()})+${pick(5)}`;
         }

@@ -3,40 +3,51 @@
 // arguments into one search of a row or a column and pick their result at the position it found.
 
 import type { Evaluator } from '../eval/evaluator';
-import { columnsOf, rowsOf } from '../eval/views';
-import { toBoolean, toNumber } from '../values/coerce';
 import type { FormulaError } from '../values/errors';
 import { NA, REF, VALUE } from '../values/errors';
-import type { Reference, Scalar, Value } from '../values/value';
-import { arrayOf, isArray, isError, isReference, OMITTED } from '../values/value';
+import type { Reference, Value } from '../values/value';
+import { elementAt, isArray, isError, isReference, numbersOf, OMITTED, partOf } from '../values/value';
 import type { FunctionBody } from './registry';
-import { define, FunctionFlag, LAZY, optional, RANGE, REF as REF_PARAM, SCALAR } from './registry';
+import {
+    BOOLEAN,
+    define,
+    FunctionFlag,
+    INTEGER,
+    LAZY,
+    NUMBER,
+    optional,
+    RANGE,
+    REF as REF_PARAM,
+    refusal,
+    SCALAR,
+} from './registry';
 import type { Key, Vector } from './search';
 import { bisect, edgeOf, exact, heightOf, nearest, widthOf } from './search';
 
 // The row or column numbers of a reference, from 1, or the formula's own when there is none.
-function position(reference: Value, own: number, rows: boolean): Value {
+function position(ctx: Evaluator, reference: Value, own: number, rows: boolean): Value {
     if (!isReference(reference)) return own + 1;
     if (reference.next !== null) return VALUE;
-    const count = rows ? rowsOf(reference) : columnsOf(reference);
-    const first = (rows ? reference.top : reference.left) + 1;
-    const items = Array.from({ length: count }, (_, i): Scalar => first + i);
-    return rows ? arrayOf(count, 1, items) : arrayOf(1, count, items);
+    const first = rows ? reference.top : reference.left;
+    const count = (rows ? reference.bottom : reference.right) - first + 1;
+    // Every number is one of its own, so this array is as large as the reference, up to a whole column.
+    ctx.recalc.count(count);
+    const numbers = new Float64Array(count);
+    for (let i = 0; i < count; i += 1) numbers[i] = first + 1 + i;
+    return rows ? numbersOf(count, 1, numbers) : numbersOf(1, count, numbers);
 }
 
 const index: FunctionBody = (args, _ctx, node) => {
     let source = args[0];
     if (isError(source)) return source;
-    const rowNumber = toNumber(args[1]);
-    if (typeof rowNumber !== 'number') return rowNumber;
-    const columnNumber = toNumber(args[2]);
-    if (typeof columnNumber !== 'number') return columnNumber;
-    const areaNumber = toNumber(args[3]);
-    if (typeof areaNumber !== 'number') return areaNumber;
-    let r = Math.trunc(rowNumber);
-    let c = Math.trunc(columnNumber);
+    let r = INTEGER.read(args[1]);
+    if (r === undefined) return refusal(args[1]);
+    let c = INTEGER.read(args[2]);
+    if (c === undefined) return refusal(args[2]);
+    const areaNumber = INTEGER.read(args[3]);
+    if (areaNumber === undefined) return refusal(args[3]);
     if (r < 0 || c < 0 || areaNumber < 1) return VALUE;
-    for (let skip = Math.trunc(areaNumber) - 1; skip > 0; skip -= 1) {
+    for (let skip = areaNumber - 1; skip > 0; skip -= 1) {
         source = isReference(source) ? source.next : null;
         if (source === null) return REF;
     }
@@ -64,12 +75,7 @@ const index: FunctionBody = (args, _ctx, node) => {
             next: null,
         };
     }
-    if (array === null) return source;
-    const items: Scalar[] = [];
-    for (let row = top; row <= bottom; row += 1) {
-        for (let column = left; column <= right; column += 1) items.push(array.items[row * array.columns + column]);
-    }
-    return arrayOf(bottom - top + 1, right - left + 1, items);
+    return array === null ? source : partOf(array, top, left, bottom - top + 1, right - left + 1);
 };
 
 // What a lookup searches for: a blank key is the number 0.
@@ -80,8 +86,8 @@ function keyOf(value: Value): Key | FormulaError {
 
 // One cell of a range or one element of an array, by its row and column from 0.
 function pick(ctx: Evaluator, source: Value, row: number, column: number): Value {
-    if (isReference(source)) return ctx.cells.valueOf(source.sheet, source.top + row, source.left + column);
-    return isArray(source) ? source.items[row * source.columns + column] : source;
+    if (isReference(source)) return ctx.recalc.valueOf(source.sheet, source.top + row, source.left + column);
+    return isArray(source) ? elementAt(source, row, column) : source;
 }
 
 const match: FunctionBody = (args, ctx) => {
@@ -89,8 +95,8 @@ const match: FunctionBody = (args, ctx) => {
     if (isError(key)) return key;
     const range = args[1];
     if (isError(range)) return range;
-    const type = toNumber(args[2]);
-    if (typeof type !== 'number') return type;
+    const type = NUMBER.read(args[2]);
+    if (type === undefined) return refusal(args[2]);
     if (heightOf(range) > 1 && widthOf(range) > 1) return NA;
     const vector = edgeOf(ctx, range, widthOf(range) === 1);
     const at =
@@ -104,11 +110,11 @@ function tableLookup(args: readonly Value[], ctx: Evaluator, down: boolean): Val
     if (isError(key)) return key;
     const table = args[1];
     if (isError(table)) return table;
-    const index = toNumber(args[2]);
-    if (typeof index !== 'number') return index;
-    const sorted = toBoolean(args[3]);
-    if (typeof sorted !== 'boolean') return sorted;
-    const line = Math.trunc(index) - 1;
+    const index = INTEGER.read(args[2]);
+    if (index === undefined) return refusal(args[2]);
+    const sorted = BOOLEAN.read(args[3]);
+    if (sorted === undefined) return refusal(args[3]);
+    const line = index - 1;
     if (line < 0) return VALUE;
     if (line >= (down ? widthOf(table) : heightOf(table))) return REF;
     const vector = edgeOf(ctx, table, down);
@@ -138,10 +144,10 @@ const lookup: FunctionBody = (args, ctx) => {
 // it or the next larger one and 2 for the key as a pattern. `search` is 1 from the first value on, -1 from the last
 // one back, and 2 or -2 for a bisection of ascending or descending values. A blank key finds a blank.
 function seek(vector: Vector, key: Value, match: Value, search: Value): number | FormulaError {
-    const how = toNumber(match);
-    if (typeof how !== 'number') return how;
-    const order = search === null ? 1 : toNumber(search);
-    if (typeof order !== 'number') return order;
+    const how = NUMBER.read(match);
+    if (how === undefined) return refusal(match);
+    const order = search === null ? 1 : NUMBER.read(search);
+    if (order === undefined) return refusal(search);
     if (how !== 0 && how !== -1 && how !== 1 && how !== 2) return VALUE;
     const sought = typeof key === 'number' || typeof key === 'string' || typeof key === 'boolean' ? key : null;
     if (order === 1 || order === -1) {
@@ -177,7 +183,7 @@ const xlookup: FunctionBody = (args, ctx, node, sheet, row, column) => {
     if (typeof at !== 'number') return at;
     if (at < 0) {
         const missing = ctx.force(args[3], node.children[3], sheet, row, column);
-        return missing === OMITTED || missing === null ? NA : missing;
+        return missing === null ? NA : missing;
     }
     if (isReference(source)) {
         return down
@@ -185,26 +191,13 @@ const xlookup: FunctionBody = (args, ctx, node, sheet, row, column) => {
             : { ...source, left: source.left + at, right: source.left + at, next: null };
     }
     if (!isArray(source)) return source;
-    const count = down ? source.columns : source.rows;
-    const items: Scalar[] = [];
-    for (let i = 0; i < count; i += 1) {
-        items.push(source.items[down ? at * source.columns + i : i * source.columns + at]);
-    }
-    return down ? arrayOf(1, count, items) : arrayOf(count, 1, items);
+    return down ? partOf(source, at, 0, 1, source.columns) : partOf(source, 0, at, source.rows, 1);
 };
 
 export const LOOKUP = [
-    define(
-        'ROW',
-        [optional(REF_PARAM, OMITTED)],
-        (args, _ctx, _node, _sheet, row) => position(args[0], row, true),
-        FunctionFlag.Positional,
-    ),
-    define(
-        'COLUMN',
-        [optional(REF_PARAM, OMITTED)],
-        (args, _ctx, _node, _sheet, _row, column) => position(args[0], column, false),
-        FunctionFlag.Positional,
+    define('ROW', [optional(REF_PARAM, OMITTED)], (args, ctx, _node, _sheet, row) => position(ctx, args[0], row, true)),
+    define('COLUMN', [optional(REF_PARAM, OMITTED)], (args, ctx, _node, _sheet, _row, column) =>
+        position(ctx, args[0], column, false),
     ),
     define('INDEX', [RANGE, SCALAR, optional(SCALAR, null), optional(SCALAR, 1)], index, FunctionFlag.ReturnsReference),
     define('MATCH', [SCALAR, RANGE, optional(SCALAR, 1)], match),

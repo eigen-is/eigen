@@ -8,18 +8,18 @@ import { ParamKind, PENDING } from '../functions/registry';
 import type { Sheet } from '../store/sheet';
 import type { FormulaNode } from '../text/tree';
 import type { FormulaError } from '../values/errors';
-import { CALC, NA, NAME, NUM, VALUE } from '../values/errors';
+import { CALC, NA, NAME, VALUE } from '../values/errors';
 import type { ArrayValue, Scalar, Value } from '../values/value';
-import { arrayOf, isArray, isError, isReference, OMITTED } from '../values/value';
+import { arrayOf, elementAt, isArray, isError, isReference, OMITTED } from '../values/value';
 import type { Evaluator } from './evaluator';
+import { held } from './operators';
+
+// The most elements an operation stores to hold the #N/A of an array that is shorter than the one it meets.
+const MOST_FORCED = 2 ** 21;
 
 function paramAt(entry: FunctionEntry, index: number): Param {
     const { params, repeat } = entry;
     return params[index < params.length ? index : params.length - repeat + ((index - params.length) % repeat)];
-}
-
-function finite(result: Value): Value {
-    return typeof result === 'number' && result - result !== 0 ? NUM : result;
 }
 
 export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
@@ -58,19 +58,14 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
             ? refused
             : lifted
               ? lift(ctx, entry, args, node, sheet, row, column)
-              : finite(entry.run(args, ctx, node, sheet, row, column));
+              : held(entry.run(args, ctx, node, sheet, row, column));
     ctx.calls = level;
     return result;
 }
 
-function elementOf(array: ArrayValue, r: number, c: number): Scalar {
-    const row = array.rows === 1 ? 0 : r;
-    const column = array.columns === 1 ? 0 : c;
-    return row < array.rows && column < array.columns ? array.items[row * array.columns + column] : NA;
-}
-
 // Runs the body once per element of the arrays its scalar parameters got. A length of 1 repeats, and a shorter
-// length that is not 1 leaves #N/A. A lazy parameter is evaluated here, so with an array every branch runs.
+// length that is not 1 leaves #N/A. A lazy parameter is evaluated here, so with an array every branch runs. The
+// result stores as many rows and columns as the arrays do, and its last ones stand for the rest as theirs did.
 export function lift(
     ctx: Evaluator,
     entry: FunctionEntry,
@@ -95,16 +90,36 @@ export function lift(
             columns = Math.max(columns, array.columns);
         }
     }
-    const items = new Array<Scalar>(rows * columns);
-    for (let r = 0; r < rows; r += 1) {
-        for (let c = 0; c < columns; c += 1) {
+    // An array shorter than the result is #N/A past its last row or column, which takes storing it up to there and
+    // one more. So that a whole column against a shorter one cannot take the memory of the grid, a result that
+    // would store more than this build allows is #N/A whole.
+    let height = 1;
+    let width = 1;
+    let short = false;
+    for (const array of spread) {
+        if (array === null) continue;
+        const lower = array.rows !== rows && array.rows !== 1;
+        const narrower = array.columns !== columns && array.columns !== 1;
+        height = Math.max(height, lower ? array.rows + 1 : array.height);
+        width = Math.max(width, narrower ? array.columns + 1 : array.width);
+        short ||= lower || narrower;
+    }
+    height = Math.min(height, rows);
+    width = Math.min(width, columns);
+    if (short && height * width > MOST_FORCED) return NA;
+    ctx.recalc.count(height * width);
+    const items = new Array<Scalar>(height * width);
+    for (let r = 0; r < height; r += 1) {
+        for (let c = 0; c < width; c += 1) {
             for (let i = 0; i < spread.length; i += 1) {
                 const array = spread[i];
-                if (array !== null) element[i] = elementOf(array, r, c);
+                if (array === null) continue;
+                const past = (r >= array.rows && array.rows !== 1) || (c >= array.columns && array.columns !== 1);
+                element[i] = past ? NA : elementAt(array, r, c);
             }
-            const result = ctx.read(finite(entry.run(element, ctx, node, sheet, row, column)));
-            items[r * columns + c] = isArray(result) ? CALC : result;
+            const result = ctx.read(held(entry.run(element, ctx, node, sheet, row, column)));
+            items[r * width + c] = isArray(result) ? CALC : result;
         }
     }
-    return arrayOf(rows, columns, items);
+    return arrayOf(rows, columns, items, height, width);
 }

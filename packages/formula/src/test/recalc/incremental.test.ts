@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { Literal } from '../../index';
 import { Engine, REF } from '../../index';
 import type { Cells } from './support';
-import { at, stored, valueAt } from './support';
+import { at, engineOf, stored, valueAt } from './support';
 
 const NO_CAP = Number.POSITIVE_INFINITY;
 const KEPT = 'kept';
@@ -259,6 +259,34 @@ describe('a formula that reads cells its references do not name', () => {
         expect(valueAt(engine, 'A1')).toBe(13);
     });
 
+    test('SUMIF and AVERAGEIF are, only when the range they add up is not as large as the one they test', () => {
+        const { engine, computed, write } = opened({
+            s1: {
+                B1: 1,
+                B2: 1,
+                B3: 1,
+                C1: 1,
+                C2: 2,
+                C3: 3,
+                E1: '=SUMIF(B1:B3,">0",C1:C3)',
+                E2: '=AVERAGEIF($B$1:$B$3,">0",$C$1:$C$3)',
+                E3: '=SUMIF(B:B,">0",C:C)',
+                E4: '=SUMIF(B1:B3,">0")',
+                F1: '=SUMIF(B1:B3,">0",C1:C2)',
+                F2: '=AVERAGEIF(B1:B3,">0",C1)',
+                F3: '=SUMIF(B1:B3,">0",C$1:C3)',
+                F4: '=SUMIF(B1:B3,">0",(C1:C3))',
+                F5: '=SUMIF(B1:B3,">0",C1:D3)',
+            },
+        });
+        write('Z9', 1);
+        expect(computed()).toEqual(['F1', 'F2', 'F3', 'F4', 'F5']);
+        write('C3', 10);
+        expect(computed()).toEqual(['E1', 'E2', 'E3', 'F1', 'F2', 'F3', 'F4', 'F5']);
+        expect(valueAt(engine, 'E1')).toBe(13);
+        expect(valueAt(engine, 'F2')).toBe(13 / 3);
+    });
+
     test('whatever cell was written, and not when none was', () => {
         const { computed, write } = opened({
             s1: { A1: 1, 'E1:F2': '=SUM($A$1:INDEX($C$1:$C$3,3))', G1: '=F2+1', H1: '=A1' },
@@ -338,4 +366,61 @@ describe('the cap of an edit', () => {
         expect(engine.valueOf('s1', 0, 4)).toBe(16);
         expect(engine.recalc(0).stopped).toBe(false);
     });
+
+    test('a formula that costs more than the cap alone is stored by one pass, so stopped passes come to an end', () => {
+        const cells: Record<string, Literal> = {
+            N1: '=SUM(A1:A50*2)',
+            N2: '=N1+SUMPRODUCT(A1:B50,A1:B50)',
+            P1: '=P2+SUM(A1:A50*1)',
+            P2: '=P1',
+            Q1: '=N2+1',
+        };
+        for (let row = 1; row <= 50; row += 1) cells[`A${row}`] = row;
+        for (let cap = 0; cap <= 8; cap += 1) {
+            const engine = engineOf({ s1: cells });
+            let result = engine.recalc(cap);
+            expect(valueAt(engine, 'N1')).toBe(2550);
+            for (let pass = 0; result.stopped && pass < 20; pass += 1) result = engine.recalc(cap);
+            expect(result.stopped).toBe(false);
+            expect(result.loops).toHaveLength(2);
+            expect(valueAt(engine, 'Q1')).toBe(2550 + 42925 + 1);
+            expect(valueAt(engine, 'P2')).toBe(REF);
+        }
+    });
+
+    test('with a cap of 0 every pass still stores one formula, or one whole loop', () => {
+        const engine = engineOf({ s1: { A1: '=1+1', A2: '=A3', A3: '=A2', A4: '=A1+1' } });
+        expect(engine.recalc(0).stopped).toBe(true);
+        expect([valueAt(engine, 'A1'), valueAt(engine, 'A4')]).toEqual([2, null]);
+        expect(engine.recalc(0).stopped).toBe(true);
+        expect([valueAt(engine, 'A2'), valueAt(engine, 'A3'), valueAt(engine, 'A4')]).toEqual([REF, REF, null]);
+        expect(engine.recalc(0)).toMatchObject({ stopped: false });
+        expect(valueAt(engine, 'A4')).toBe(3);
+    });
+
+    test('the elements of a formula that runs again after the nesting got too deep count once', () => {
+        // Each formula makes an array of two elements twice and then reads the one below it, so the first one asked
+        // nests through all of them: 599 formulas of 1 and 4, and the one that asks.
+        const cells: Record<string, Literal> = { A600: 1, Y1: 1 };
+        for (let row = 1; row < 600; row += 1) cells[`A${row}`] = `=SUM((Y1:Z1)*1)+A${row + 1}`;
+        const cost = 599 * 5 + 1;
+        const exact = engineOf({ s1: { ...cells, C1: '=A1' } });
+        expect(exact.recalc(cost).stopped).toBe(false);
+        expect(valueAt(exact, 'C1')).toBe(600);
+        expect(engineOf({ s1: { ...cells, C1: '=A1' } }).recalc(cost - 1).stopped).toBe(true);
+    });
+
+    test.each([[0], [1], [2], [3], [4], [5], [6]])(
+        'stopped passes come to an end on arrays, loops and deep chains: cap %i',
+        (cap) => {
+            const cells: Record<string, Literal> = { A200: 1, C1: '=SUM(A1:A200*2)', D1: '=D2+SUM(A:A)', D2: '=D1' };
+            for (let row = 1; row < 200; row += 1) cells[`A${row}`] = `=SUM((A${row + 1}:B${row + 1})*1)+1`;
+            const engine = engineOf({ s1: cells });
+            let result = engine.recalc(cap);
+            for (let pass = 0; result.stopped && pass < 1000; pass += 1) result = engine.recalc(cap);
+            expect(result.stopped).toBe(false);
+            expect(result.loops).toHaveLength(2);
+            expect(valueAt(engine, 'C1')).toBe(200 * 201);
+        },
+    );
 });

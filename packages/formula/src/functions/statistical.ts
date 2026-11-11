@@ -1,44 +1,21 @@
-// The functions that count and summarise. COUNT and COUNTA count the cells of what they are given, COUNTBLANK the
-// cells that show nothing, and the conditional ones report what the criteria module matched.
+// The functions that count and summarise. AVERAGE, MAX, MIN, COUNT and COUNTA each loop over what the walk over
+// their arguments hands them, COUNTBLANK counts the cells that show nothing, and the conditional ones report what
+// the criteria module matched.
 
-import type { Evaluator } from '../eval/evaluator';
+import type { Walk } from '../eval/walk';
+import { Take } from '../eval/walk';
 import { CellKind, KIND_MASK } from '../store/column';
 import { DIV0, VALUE } from '../values/errors';
-import { parseNumber } from '../values/parse-number';
-import type { Reference, Value } from '../values/value';
-import { isArray, isError, isReference, OMITTED } from '../values/value';
+import type { Reference } from '../values/value';
+import { isError, isReference, OMITTED } from '../values/value';
 import { tally } from './criteria';
+import { total } from './math';
 import type { FunctionBody } from './registry';
-import { define, FunctionFlag, optional, RANGE, SCALAR } from './registry';
+import { aggregate, define, FunctionFlag, optional, RANGE, SCALAR } from './registry';
 
-// COUNTA when `all`, else COUNT. In a reference or an array only numbers count for COUNT; a value typed as an
-// argument also counts when it reads as a number, and an argument left out counts for both.
-function count(args: readonly Value[], ctx: Evaluator, all: boolean): number {
-    let counted = 0;
-    for (const arg of args) {
-        if (isReference(arg)) {
-            for (let area: Reference | null = arg; area !== null; area = area.next) {
-                ctx.cells.settleArea(area);
-                const { columns } = area.sheet;
-                const right = Math.min(area.right, columns.length - 1);
-                for (let c = area.left; c <= right; c += 1) {
-                    const { kind, length } = columns[c];
-                    const end = Math.min(area.bottom + 1, length);
-                    for (let row = area.top; row < end; row += 1) {
-                        const held = kind[row] & KIND_MASK;
-                        if (all ? held !== CellKind.Empty : held === CellKind.Number) counted += 1;
-                    }
-                }
-            }
-        } else if (isArray(arg)) {
-            for (let i = 0; i < arg.items.length; i += 1) {
-                const item = arg.items[i];
-                if (all ? item !== null : typeof item === 'number') counted += 1;
-            }
-        } else if (all || arg === OMITTED || typeof arg === 'number' || typeof arg === 'boolean') counted += 1;
-        else if (typeof arg === 'string' && parseNumber(arg) !== undefined) counted += 1;
-    }
-    return counted;
+function counted(walk: Walk): number {
+    while (walk.next());
+    return walk.count;
 }
 
 // The cells of a range that are blank or hold empty text. The rows and columns past the last used one are all
@@ -48,7 +25,7 @@ const countBlank: FunctionBody = (args, ctx) => {
     if (!isReference(range)) return isError(range) ? range : VALUE;
     let blank = 0;
     for (let area: Reference | null = range; area !== null; area = area.next) {
-        ctx.cells.settleArea(area);
+        ctx.recalc.settleArea(area);
         // Asked once the formulas are computed: the empty text has an id only when a cell holds it.
         const empty = ctx.workbook.strings.find('');
         blank += (area.bottom - area.top + 1) * (area.right - area.left + 1);
@@ -72,8 +49,22 @@ const averageIf: FunctionBody = (args, ctx) => {
 };
 
 export const STATISTICAL = [
-    define('COUNT', [RANGE], (args, ctx) => count(args, ctx, false), 0, 1),
-    define('COUNTA', [RANGE], (args, ctx) => count(args, ctx, true), 0, 1),
+    aggregate('AVERAGE', Take.Numbers, (walk) => {
+        const sum = total(walk);
+        return walk.count === 0 ? DIV0 : sum / walk.count;
+    }),
+    aggregate('MAX', Take.Numbers, (walk) => {
+        let most = Number.NEGATIVE_INFINITY;
+        while (walk.next()) for (let i = walk.from; i < walk.to; i += 1) if (walk.num[i] > most) most = walk.num[i];
+        return walk.count === 0 ? 0 : most;
+    }),
+    aggregate('MIN', Take.Numbers, (walk) => {
+        let least = Number.POSITIVE_INFINITY;
+        while (walk.next()) for (let i = walk.from; i < walk.to; i += 1) if (walk.num[i] < least) least = walk.num[i];
+        return walk.count === 0 ? 0 : least;
+    }),
+    aggregate('COUNT', Take.Counted, counted),
+    aggregate('COUNTA', Take.Filled, counted),
     define('COUNTBLANK', [RANGE], countBlank),
     define('COUNTIF', [RANGE, SCALAR], (args, ctx) => {
         const total = tally(ctx, args, null, false);
@@ -89,7 +80,7 @@ export const STATISTICAL = [
         0,
         2,
     ),
-    define('AVERAGEIF', [RANGE, SCALAR, optional(RANGE, OMITTED)], averageIf, FunctionFlag.ReadsUnnamed),
+    define('AVERAGEIF', [RANGE, SCALAR, optional(RANGE, OMITTED)], averageIf, FunctionFlag.Resizes),
     define(
         'AVERAGEIFS',
         [RANGE, RANGE, SCALAR],

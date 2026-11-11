@@ -1,44 +1,12 @@
-// Reading the cells a reference names without copying them: how large a reference is, where its first error sits,
-// and the array it becomes when an operator needs its elements. A reference to a whole column or row is as long as
-// its sheet is used, so it costs the cells that exist and not the grid.
+// Reading the cells a reference names: where its first error sits, and the array it becomes when an operator needs
+// its elements. A reference to a whole column or row costs the cells that exist and not the grid.
 
-import type { Column } from '../store/column';
 import { CellKind, KIND_MASK } from '../store/column';
-import type { Sheet } from '../store/sheet';
-import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
+import { GRID_ROWS } from '../text/a1';
 import type { FormulaError } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
 import { arrayOf } from '../values/value';
 import type { Evaluator } from './evaluator';
-
-// One past the last row of a column that holds a value or a formula, and at least `floor`.
-function usedEnd(column: Column, floor: number): number {
-    let end = column.length;
-    while (end > floor && column.kind[end - 1] === CellKind.Empty && column.shape[end - 1] === 0) end -= 1;
-    return end;
-}
-
-function usedRows(sheet: Sheet): number {
-    let used = 1;
-    for (const column of sheet.columns) used = Math.max(used, usedEnd(column, used));
-    return used;
-}
-
-function usedColumns(sheet: Sheet): number {
-    let used = sheet.columns.length;
-    while (used > 1 && usedEnd(sheet.columns[used - 1], 0) === 0) used -= 1;
-    return Math.max(used, 1);
-}
-
-export function rowsOf(reference: Reference): number {
-    const rows = reference.bottom - reference.top + 1;
-    return rows === GRID_ROWS ? usedRows(reference.sheet) : rows;
-}
-
-export function columnsOf(reference: Reference): number {
-    const columns = reference.right - reference.left + 1;
-    return columns === GRID_COLUMNS ? usedColumns(reference.sheet) : columns;
-}
 
 // The first error of one area, row by row, once its cells are settled. A cell on a loop still carries its flags.
 export function firstError(ctx: Evaluator, area: Reference): FormulaError | null {
@@ -60,17 +28,35 @@ export function firstError(ctx: Evaluator, area: Reference): FormulaError | null
     return found;
 }
 
+// How many columns and rows of an area are stored when it is read as an array: the ones the sheet holds cells in
+// and one more, which is blank and stands for the rest of the area.
+export function storedColumns(area: Reference): number {
+    const { columns } = area.sheet;
+    let held = Math.max(0, Math.min(area.right + 1, columns.length) - area.left);
+    while (held > 0 && columns[area.left + held - 1].length === 0) held -= 1;
+    return Math.min(area.right - area.left + 1, held + 1);
+}
+
+export function storedRows(area: Reference, width: number): number {
+    let used = 0;
+    for (let c = 0; c < width; c += 1) {
+        used = Math.max(used, (area.sheet.columns[area.left + c]?.length ?? 0) - area.top);
+    }
+    return Math.min(area.bottom - area.top + 1, used + 1);
+}
+
 // The cells of one area as an array, or the cell itself when there is one.
 export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
-    ctx.cells.settleArea(area);
-    const rows = rowsOf(area);
-    const columns = columnsOf(area);
-    const items = new Array<Scalar>(rows * columns);
-    for (let c = 0; c < columns; c += 1) {
+    ctx.recalc.settleArea(area);
+    const width = storedColumns(area);
+    const height = storedRows(area, width);
+    ctx.recalc.count(height * width);
+    const items = new Array<Scalar>(height * width);
+    for (let c = 0; c < width; c += 1) {
         const column = area.sheet.columns[area.left + c];
-        for (let r = 0; r < rows; r += 1) {
-            items[r * columns + c] = column === undefined ? null : ctx.workbook.value(column, area.top + r);
+        for (let r = 0; r < height; r += 1) {
+            items[r * width + c] = column === undefined ? null : ctx.workbook.value(column, area.top + r);
         }
     }
-    return arrayOf(rows, columns, items);
+    return arrayOf(area.bottom - area.top + 1, area.right - area.left + 1, items, height, width);
 }
