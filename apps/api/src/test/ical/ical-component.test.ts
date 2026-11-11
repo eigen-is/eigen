@@ -17,7 +17,6 @@ import {
     serializeEventForImip,
     serializeResource,
     storedRecurrenceIds,
-    stripEigenStamps,
 } from '../../lib/ical';
 import type { WriteContext } from '../../lib/ical/ical-component';
 import { cpuClock } from '../cpu-time';
@@ -365,7 +364,7 @@ describe('SEQUENCE', () => {
         expect(sequenceOf(masterOf(resource))).toBe(3);
     });
 
-    test("an organizer's new date, and a cancelled one, outrank every revision the file holds", () => {
+    test("an organizer's new date that reschedules, and a cancelled one, outrank every revision the file holds", () => {
         const added = highWater();
         putOverride(added, { ...OVERRIDE, id: 'evt-new', recurrenceDate: '2026-05-06', sequence: 0 });
         expect(
@@ -591,9 +590,9 @@ describe('stamp trust', () => {
         restampResource(incoming, stored());
         expect(serializeResource(incoming)).not.toContain('pwned');
 
-        const bare = parseResource(vcal(VTZ_AMS, clientSeries('A.X-EIGEN-EVENT-ID:pwned')));
-        stripEigenStamps(bare);
-        expect(serializeResource(bare)).not.toContain('pwned');
+        const fresh = parseResource(vcal(VTZ_AMS, clientSeries('A.X-EIGEN-EVENT-ID:pwned')));
+        restampResource(fresh, null);
+        expect(serializeResource(fresh)).not.toContain('pwned');
     });
 
     test('the imported organizer rides across a PUT like every other server-owned line', () => {
@@ -731,8 +730,10 @@ describe('stamp trust', () => {
     });
 
     test('a body that stripped every X- line gets its ids and links back', () => {
-        const bare = parseResource(serializeResource(buildResource([MASTER, OVERRIDE, EXCLUSION])));
-        stripEigenStamps(bare);
+        const lines = serializeResource(buildResource([MASTER, OVERRIDE, EXCLUSION]))
+            .replace(/\r\n[ \t]/g, '')
+            .split('\r\n');
+        const bare = parseResource(lines.filter((line) => !line.startsWith('X-EIGEN')).join('\r\n'));
         expect(serializeResource(bare)).not.toContain('X-EIGEN');
 
         restampResource(bare, stored());
@@ -1400,20 +1401,20 @@ describe('stripping', () => {
         expect(masterOf(incoming).getFirstProperty('attendee')?.toJSON()[1]).toEqual({ cn: 'Bob' });
     });
 
-    test('strip leaves no X-EIGEN substring and changes nothing else', () => {
+    test('a restamp drops every Eigen line a body carries and changes nothing else', () => {
         const withStamps = buildResource([MASTER, OVERRIDE, EXCLUSION]);
-        const stripped = parseResource(serializeResource(withStamps));
-        stripEigenStamps(stripped);
-        const ics = serializeResource(stripped);
-        expect(ics).not.toContain('X-EIGEN');
+        const restamped = parseResource(serializeResource(withStamps));
+        restampResource(restamped, null);
+        expect(serializeResource(restamped)).not.toContain('#ff8800');
+        expect(serializeResource(restamped)).not.toContain('evt-master');
 
         // Everything but Eigen's own lines is jCal-equal to the stamped resource.
         const bare = snapshot(masterOf(parseResource(serializeResource(withStamps))));
         for (const name of Object.keys(bare)) {
             if (name.startsWith('x-eigen-')) continue;
-            expect(snapshot(masterOf(stripped))[name]).toEqual(bare[name]);
+            expect(snapshot(masterOf(restamped))[name]).toEqual(bare[name]);
         }
-        expect(masterOf(stripped).getAllProperties('exdate')).toHaveLength(1);
+        expect(masterOf(restamped).getAllProperties('exdate')).toHaveLength(1);
     });
 
     test('the outbound iMIP body carries no X-EIGEN line', () => {

@@ -2,7 +2,7 @@
 // other side: guests hear about an invitation or a cancellation, and the organizer hears about an answer. Calendar
 // hands its event changes to it, so the routes and the invitation code share one path.
 
-import { heldAttendees, isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
+import { isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent, EventData } from '@workspace/lib/types/calendar';
 import { isExternalOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -12,6 +12,7 @@ import { ApiError } from '../core';
 import {
     applyEdits,
     buildResource,
+    keepOrganizers,
     parseResource,
     patchEvent,
     raisedSequence,
@@ -21,14 +22,20 @@ import {
     storedRevisions,
 } from '../ical';
 import type { EventPatch, EventToBuild, Revision, VEventEdit, WriteContext } from '../ical/ical-component';
-import { parseRecurrenceKey } from '../ical/wall-clock';
+import { computeOccurrenceTimes, parseRecurrenceKey } from '../ical/wall-clock';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
 import type { Calendar } from './calendar';
 import * as davStore from './dav-store';
 import { eventForResource, validateEventInput } from './event-input';
 import { composeRsvpReply } from './imip';
-import { answeredOccurrence, propagateCancellation, propagateInvitation, propagateRsvp } from './invite-propagation';
+import {
+    answeredOccurrence,
+    organizerOf,
+    propagateCancellation,
+    propagateInvitation,
+    propagateRsvp,
+} from './invite-propagation';
 import { toEvent } from './mappers';
 import { prepareResource, resourceBytes } from './resource-store';
 import * as schema from './schema';
@@ -65,17 +72,16 @@ export async function createEvent(
         // A resource under a calendar nobody owns any more would dangle on its foreign key.
         if (!calendar.calendarRow(calendarId)) throw new ApiError(404, 'Calendar not found');
         validateEventInput(args);
-        if (args.parentEventId) {
-            // Who held the occurrence this write replaces: a cancelled override keeps no guest list of its own.
-            const replaced = exceptionOf(calendar, args.parentEventId, recurrenceDate);
-            return { created: await writeOverride(calendar, calendarId, args.parentEventId, args), replaced };
-        }
+        if (args.parentEventId) return writeOverride(calendar, calendarId, args.parentEventId, args, user);
         // Eigen mints every name it writes: a UID is its author's string and may carry `/`, `..` or quotes.
         const uri = `${crypto.randomUUID()}.ics`;
         const uid = args.uid || crypto.randomUUID();
         if (uidHolder(calendar, calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
-        const event = eventForResource({ id: crypto.randomUUID(), calendarId, uid, input: args, now: new Date() });
-        const prepared = prepareResource(calendarId, buildResource([event]), null);
+        const ctx = writeContext(true);
+        const event = eventForResource({ id: crypto.randomUUID(), calendarId, uid, input: args, now: ctx.now });
+        const resource = buildResource([event]);
+        keepOrganizers(resource, organizerOf(calendar.home, user), ctx);
+        const prepared = prepareResource(calendarId, resource, null);
         await calendar.writeResource({ calendarId, uri, prepared, creditBytes: 0 });
         return { created: requireEvent(calendar, event.id), replaced: null };
     });
@@ -111,14 +117,18 @@ export async function deleteEvent(
     user?: User,
     expectedEtag?: string,
 ): Promise<void> {
-    const existing = await calendar.writeLock.run(() => eraseStoredEvent(calendar, calendarId, id, expectedEtag));
-    if (!existing) return;
+    const erased = await calendar.writeLock.run(async () => {
+        const dates = exceptionsOf(calendar, id);
+        const existing = await eraseStoredEvent(calendar, calendarId, id, expectedEtag);
+        return existing && { existing, dates };
+    });
+    if (!erased) return;
+    const { existing, dates } = erased;
 
-    // An override without its own list has its series' guests. A cancelled master answers and cancels nothing: its PUT
-    // already fanned out STATUS:CANCELLED.
     const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
     const invitation = isInvitationFromOthers(series ?? existing, calendar.home.user.email) ? existing.data : null;
-    const held = existing.status === 'cancelled' ? [] : heldAttendees(existing, series);
+    // A cancelled master cancels nothing more: the web save that cancelled it already told its guests.
+    const { held, stored } = heldGuests(existing, dates);
     const declining = user && held.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
     if (declining && invitation?.organizer) {
         const orgUserId = invitation.organizer.userId;
@@ -134,9 +144,10 @@ export async function deleteEvent(
                 answeredOccurrence(existing),
             ).catch(console.error);
         }
-    } else if (!invitation && held.length) {
-        // An event with no foreign organizer makes this user its organizer, and an organizer's delete cancels.
-        propagateCancellation(calendar.home, user, existing, held, series ?? undefined).catch(console.error);
+    } else if (!invitation) {
+        // An event nobody else organizes is this calendar's own, and its organizer's delete cancels it.
+        const organizer = organizerOf(calendar.home, user, stored);
+        propagateCancellation(calendar.home, organizer, existing, held, series ?? undefined).catch(console.error);
     }
 
     calendar.announce(SSEventType.CALENDAR_EVENT_DELETED, calendarId);
@@ -198,20 +209,6 @@ export async function moveEvent(
         calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, targetCalendarId);
     }
     return requireEvent(calendar, id);
-}
-
-// Caller holds the write lock and has already resolved the resource this patch means. Answers whether it wrote.
-export async function patchResource(
-    calendar: Calendar,
-    resource: StoredResource,
-    recurrenceKey: string | null,
-    patch: EventPatch,
-    context: WriteContext,
-): Promise<boolean> {
-    const component = storedComponent(calendar, resource);
-    const changed = patchEvent(component, recurrenceKey, patch, context);
-    if (changed) await writeComponent(calendar, resource, component);
-    return changed;
 }
 
 // Caller holds the write lock; the row it answers with is what the decline or cancellation mail is composed from, its
@@ -287,15 +284,16 @@ export function writeComponent(calendar: Calendar, resource: StoredResource, com
     });
 }
 
-// Caller holds the write lock: the bytes it mutates are the bytes the commit overwrites.
+// Caller holds the write lock: the bytes it mutates are the bytes the commit overwrites, and only a change is written.
 export async function editResource(
     calendar: Calendar,
     resource: StoredResource,
-    mutate: (component: ICAL.Component) => void,
-): Promise<void> {
+    mutate: (component: ICAL.Component) => boolean,
+): Promise<boolean> {
     const component = storedComponent(calendar, resource);
-    mutate(component);
-    await writeComponent(calendar, resource, component);
+    const changed = mutate(component);
+    if (changed) await writeComponent(calendar, resource, component);
+    return changed;
 }
 
 // An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp.
@@ -343,28 +341,42 @@ async function propagateWrite(
     previous: CalendarEvent | null,
 ): Promise<void> {
     const series = event.parentEventId ? eventById(calendar, event.parentEventId) : null;
-    // A name missing from the list the guests held cancels that instance.
-    const held = heldAttendees(previous, series);
-    const attendees = heldAttendees(event, series);
-    // A write that names nobody and replaced nobody owes the guests nothing; emptying a non-override's list cancels.
-    if (!attendees.length && !held.length) return;
     if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
-    if (previous && guestView(previous, series) === guestView(event, series)) return;
-    if (series && event.status === 'cancelled') {
-        await propagateCancellation(calendar.home, user, event, held, series);
-        return;
-    }
     // An occurrence write is itself one exception and carries none.
     const exceptions = series ? [] : exceptionsOf(calendar, event.id);
-    await propagateInvitation(calendar.home, event, user, held, attendees, series ?? undefined, exceptions);
+    if (event.status === 'cancelled') {
+        const { held, stored } = heldGuests(previous, exceptions);
+        const organizer = organizerOf(calendar.home, user, stored);
+        return propagateCancellation(calendar.home, organizer, event, held, series ?? undefined);
+    }
+    // A name missing from the list the guests held cancels that instance.
+    const held = previous?.data?.attendees ?? [];
+    const attendees = event.data?.attendees ?? [];
+    if (!attendees.length && !held.length) return;
+    if (previous && guestView(previous, series) === guestView(event, series)) return;
+    // An event that lost its last guests names no organizer any more, so their cancellation names the one they held.
+    const organizer = organizerOf(calendar.home, user, event.data?.organizer ?? previous?.data?.organizer);
+    await propagateInvitation(calendar.home, organizer, event, user, held, attendees, series ?? undefined, exceptions);
 }
 
-// The file a guest would get, minus the revision that changes with every write. An instant reads the same in any zone,
-// unless a rule repeats in that zone's wall clock.
+// Who held an event until now, and the ORGANIZER they were told. Someone can be invited to one date only, so a
+// series' guests are every live date's too.
+function heldGuests(event: CalendarEvent | null, dates: readonly CalendarEvent[]) {
+    const live =
+        !event || event.status === 'cancelled' ? [] : [event, ...dates.filter((d) => d.status !== 'cancelled')];
+    const listed = live.flatMap((e) => e.data?.attendees ?? []);
+    const held = [...new Map(listed.map((a) => [a.email.toLowerCase(), a])).values()];
+    return { held, stored: live.find((e) => e.data?.organizer)?.data?.organizer };
+}
+
+// The file a guest would get, minus what no save changes for them: the revision, which moves with every write, and the
+// ORGANIZER, which stays while the event has guests. An instant reads the same in any zone, unless a rule repeats in
+// that zone's wall clock.
 function guestView(event: CalendarEvent, series: CalendarEvent | null): string {
     const never = new Date(0);
     const timezone = event.rrule ? event.timezone : null;
-    const view = { ...event, timezone, sequence: 0, createdAt: never, updatedAt: never };
+    const data = { ...event.data, organizer: undefined };
+    const view = { ...event, timezone, data, sequence: 0, createdAt: never, updatedAt: never };
     return serializeEventForImip(view, 'REQUEST', series ?? undefined);
 }
 
@@ -383,14 +395,7 @@ async function patchStoredEvent(
 
     const series = existing.parentEventId ? requireEvent(calendar, existing.parentEventId) : existing;
     const organizer = !isInvitationFromOthers(series, calendar.home.user.email);
-    if (!organizer) {
-        const localData: EventData = { ...existing.data };
-        if (input.data) {
-            localData.reminders = input.data.reminders ?? localData.reminders;
-            localData.color = input.data.color ?? localData.color;
-        }
-        input = { data: localData };
-    }
+    if (!organizer) input = { data: guestData(existing.data, input.data) };
 
     // The stored rule passed these checks when it was projected, so it is checked again only beside a moved start.
     const rrule = input.rrule || input.startTime ? (input.rrule ?? existing.rrule) : null;
@@ -406,9 +411,9 @@ async function patchStoredEvent(
 
     if (existing.parentEventId && input.status === 'cancelled') {
         const exclusion: VEventEdit = { kind: 'exclusion', id: existing.id, ctx: writeContext(organizer) };
-        await editResource(calendar, resource, (component) => {
-            applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]));
-        });
+        await editResource(calendar, resource, (component) =>
+            applyEdits(component, new Map([[existing.recurrenceDate, exclusion]])),
+        );
         // The EXDATE row sits at the original slot; the guests last saw the occurrence at its moved one.
         const cancelled = requireEvent(calendar, id);
         return { updated: { ...cancelled, startTime: existing.startTime, endTime: existing.endTime }, existing };
@@ -418,24 +423,24 @@ async function patchStoredEvent(
     const endMoved = input.endTime !== undefined && input.endTime.getTime() !== existing.endTime.getTime();
     const allDayMoved = input.allDay !== undefined && input.allDay !== existing.allDay;
 
-    await patchResource(
-        calendar,
-        resource,
-        existing.recurrenceDate,
-        {
-            title: input.title?.trim(),
-            description: input.description,
-            location: input.location,
-            startTime: startMoved ? input.startTime : undefined,
-            endTime: endMoved ? input.endTime : undefined,
-            allDay: allDayMoved ? input.allDay : undefined,
-            rrule: input.rrule ?? undefined,
-            timezone: input.timezone,
-            status: input.status,
-            data: input.data ?? undefined,
-        },
-        writeContext(!!user && organizer),
-    );
+    const ctx = writeContext(!!user && organizer);
+    const patch = {
+        title: input.title?.trim(),
+        description: input.description,
+        location: input.location,
+        startTime: startMoved ? input.startTime : undefined,
+        endTime: endMoved ? input.endTime : undefined,
+        allDay: allDayMoved ? input.allDay : undefined,
+        rrule: input.rrule ?? undefined,
+        timezone: input.timezone,
+        status: input.status,
+        data: input.data ?? undefined,
+    };
+    await editResource(calendar, resource, (component) => {
+        const patched = patchEvent(component, existing.recurrenceDate, patch, ctx);
+        const organized = organizer && keepOrganizers(component, organizerOf(calendar.home, user), ctx);
+        return patched || organized;
+    });
 
     return { updated: requireEvent(calendar, id), existing };
 }
@@ -445,7 +450,8 @@ async function writeOverride(
     calendarId: string,
     parentEventId: string,
     input: CreateEventArgs,
-): Promise<CalendarEvent> {
+    user: User | undefined,
+): Promise<{ created: CalendarEvent; replaced: CalendarEvent }> {
     const parent = eventById(calendar, parentEventId);
     if (!parent || parent.calendarId !== calendarId || parent.parentEventId) {
         throw new ApiError(404, 'Event not found');
@@ -457,11 +463,29 @@ async function writeOverride(
     const key = input.recurrenceDate;
     if (!key) throw new ApiError(400, 'Invalid occurrence date');
 
+    // What the date held before this write takes it away: its own row, else the occurrence the series yields there.
+    const replaced = exceptionOf(calendar, parent.id, key) ?? {
+        ...parent,
+        ...computeOccurrenceTimes(parent, key),
+        rrule: null,
+        recurrenceDate: key,
+    };
     const organizer = !isInvitationFromOthers(parent, calendar.home.user.email);
-    const edit = exceptionEdit(parent, input, writeContext(organizer));
-    await editResource(calendar, resource, (component) => applyEdits(component, new Map([[key, edit]])));
-    const stored = exceptionOf(calendar, parent.id, key);
-    return stored ?? requireEvent(calendar, parent.id);
+    const own = organizer ? input : { ...replaced, data: guestData(replaced.data, input.data) };
+    const ctx = writeContext(organizer);
+    const edit = exceptionEdit(parent, own, ctx);
+    await editResource(calendar, resource, (component) => {
+        const edited = applyEdits(component, new Map([[key, edit]]));
+        const organized = organizer && keepOrganizers(component, organizerOf(calendar.home, user), ctx);
+        return edited || organized;
+    });
+    const created = exceptionOf(calendar, parent.id, key) ?? requireEvent(calendar, parent.id);
+    return { created, replaced };
+}
+
+// On a linked copy the guest's own reminders and color are theirs to change, and the rest stays the organizer's.
+function guestData(held: EventData | null, edit: EventData | null | undefined): EventData {
+    return { ...held, reminders: edit?.reminders ?? held?.reminders, color: edit?.color ?? held?.color };
 }
 
 // An event a write under the lock just stored or read through its series, so only a delete since then misses it.

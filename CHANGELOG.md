@@ -59,6 +59,9 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Unusual repeat rules in Calendar** — an event whose repeat rule would take the server too long to work out shows on its first date only, and calendar apps still get the whole rule. An invite whose rule names no frequency arrives as one event instead of getting lost
 - **Invitation emails in Calendar** — an invitation or cancellation names the time zone of a timed event, and says how a repeating event repeats, such as "Every week on Wednesday"
 - **End dates of repeating events** — the event card, the Repeat menu and invitation emails write a series' end as "until 15 December 2026", on its last day in the event's own time zone
+- **Guests of moved dates in Calendar** — calendar apps syncing your calendar show each moved date of a repeating event with its guests and you as organizer. Clearing one date's guests cancels it for them. A date moved before this update has no guests until you add them again
+- **Organizer of team events** — the person who first adds guests to a team event stays its organizer, so invitations and replies name them, whoever edits the event later
+- **You in your guest lists in Calendar** — an event of yours with guests lists you first, marked Organizer, as your guests already saw it
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
 
 ### Fixed
@@ -124,8 +127,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Changing room in Chat** — what you were about to send is cleared when you change room, so it can't go to the wrong one
 - **Two people editing in Calendar** — editing, moving or deleting an event someone else just changed is refused instead of overwriting their change
 - **Removing a location in Calendar** — an update that only removes an event's location or description reaches its guests
+- **Deleting a repeating event in Calendar** — deleting or cancelling the whole series cancels it for guests invited to only one of its dates too
+- **Invitations for a new account in Calendar** — someone invited to a repeating event, or to one of its dates, who signs up after it was cancelled no longer finds it in their calendar
 - **Calendar files from others** — a calendar file someone else made, in a mail invite, from a calendar app or in an import, no longer freezes the server
-- **Guest emails in Calendar** — changing only an event's color or reminder, or moving a one-off event to another time zone without changing when it happens, no longer emails its guests. Neither does a save that changes nothing
+- **Guest emails in Calendar** — changing only the color or reminder of an event or of one of its dates, or moving a one-off event to another time zone without changing when it happens, no longer emails its guests. Neither does a save that changes nothing
 - **Events from other calendar apps** — the first save in Calendar of an event made in another calendar app no longer rewrites what you didn't change, or emails its guests
 - **Repeating events that end in Calendar** — a repeating event from Apple Calendar or another app ends on the date it names, and one you end with **This and following events** ends on the same day in other calendar apps, all-day ones included
 - **Guest replies in Calendar** — a guest's answer for a date a repeating event doesn't have no longer adds that date to it

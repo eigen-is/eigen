@@ -4,7 +4,7 @@
 // answer back, and the organizer's Home records it through receiveAttendeeStatus and receiveRsvpForOccurrence.
 // Callers, such as the home relay and inbound mail, use Calendar.
 
-import { heldAttendees, isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
+import { isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import { calendarInviteTag } from '@workspace/lib/notification/tags';
 import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
 import { isExternalOwnerId } from '@workspace/lib/types/owner';
@@ -348,8 +348,7 @@ function requestedEdit(
     const stored = revisions.get(key) ?? null;
     if (!isNewerRevision(parsed, stored)) return null;
     // A removed date holds no list, so the guest's answer for the series is no answer to it.
-    const removed = existing?.parentEventId && existing.status === 'cancelled';
-    const held = removed ? [] : heldAttendees(existing, series);
+    const held = (existing ?? series).data?.attendees ?? [];
     const attendees = keepOwnAnswer(calendar, parsed, held, stored ?? revisions.get(null) ?? null, cut);
     const cancelled = parsed.status === 'cancelled';
     const timezone = key ? (parsed.timezone ?? series.timezone) : parsed.timezone;
@@ -429,7 +428,7 @@ async function fileNewInvitation(
                         : parsed.data?.attendees,
                     // A linked copy lets the guest keep their own reminders and color.
                     reminders: kept?.reminders ?? parsed.data?.reminders,
-                    color: kept?.color ?? parsed.data?.color,
+                    color: kept?.color,
                 },
                 createByUserId: link.createByUserId,
             },
@@ -542,9 +541,9 @@ async function removeOccurrence(
     const resource = events.resourceOf(calendar, eventId);
     if (!resource) throw new ApiError(404, 'Event not found');
     const ctx = events.writeContext(false, revision);
-    await events.editResource(calendar, resource, (component) => {
-        applyEdits(component, new Map([[recurrenceDate, { kind: 'exclusion', id: crypto.randomUUID(), ctx }]]));
-    });
+    await events.editResource(calendar, resource, (component) =>
+        applyEdits(component, new Map([[recurrenceDate, { kind: 'exclusion', id: crypto.randomUUID(), ctx }]])),
+    );
 }
 
 function notifyInvitationCancelled(
@@ -585,10 +584,8 @@ async function updateAttendeeStatus(
             const data = { ...held.data, attendees: withAttendeeStatus(held.data.attendees, email, status) };
             edits.set(held.recurrenceDate, { kind: 'patch', patch: { data }, ctx: events.writeContext(false) });
         }
-        const component = events.storedComponent(calendar, resource);
-        if (!applyEdits(component, edits)) return null;
-        await events.writeComponent(calendar, resource, component);
-        return event.calendarId;
+        const changed = await events.editResource(calendar, resource, (component) => applyEdits(component, edits));
+        return changed ? event.calendarId : null;
     });
     if (calendarId) calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
 }
@@ -614,12 +611,13 @@ async function rsvpForOccurrence(
 
         const key = occurrenceKey(occurrence, parent);
         const existing = events.exceptionOf(calendar, eventId, key);
-        // A deleted occurrence is an EXDATE, which carries no attendee list to record a PARTSTAT in.
+        // A deleted occurrence is an EXDATE, which carries no attendee list to record a PARTSTAT in, so a date the guest
+        // restores starts from the series.
         if (existing?.status === 'cancelled' && !restoreCancelled) return null;
-        const data = existing?.data ?? parent.data ?? {};
+        const { data } = existing?.status === 'cancelled' ? parent : (existing ?? parent);
         // Only a recorded guest may answer. The occurrence's own list counts, because someone can be invited to
         // one occurrence only.
-        const invitees = heldAttendees(existing, parent);
+        const invitees = data?.attendees ?? [];
         if (!invitees.some((a) => a.email.toLowerCase() === email.toLowerCase())) return null;
         const attendees = withAttendeeStatus(invitees, email, status);
 
@@ -628,7 +626,10 @@ async function rsvpForOccurrence(
         const resource = events.resourceOf(calendar, parent.id);
         if (!resource) return null;
         if (existing && existing.status !== 'cancelled') {
-            const changed = await events.patchResource(calendar, resource, key, { data: { ...data, attendees } }, ctx);
+            const patch = { data: { ...data, attendees } };
+            const changed = await events.editResource(calendar, resource, (component) =>
+                patchEvent(component, key, patch, ctx),
+            );
             return changed ? parent.calendarId : null;
         }
 
@@ -675,6 +676,7 @@ async function removeThisAndFuture(calendar: Calendar, eventId: string, recurren
         await events.editResource(calendar, resource, (component) => {
             patchEvent(component, null, { rrule }, events.writeContext(false));
             cutGuestCopy(component, recurrenceDate);
+            return true;
         });
     });
 }
