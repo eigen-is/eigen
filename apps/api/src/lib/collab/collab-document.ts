@@ -49,7 +49,7 @@ const COMPRESS_FRAME_MIN_BYTES = 1024;
 const TOUCH_THROTTLE_MS = 60_000;
 // How long a document with no socket stays open. A reload or a y-websocket retry within it
 // reattaches to the loaded document instead of loading it again.
-const CLOSE_LINGER_MS = 60_000;
+export const CLOSE_LINGER_MS = 60_000;
 // A compaction's swap changes what is stored, not what the workbook shows, so it moves no Modified time.
 const COMPACTION_ORIGIN = Symbol('compaction');
 // One 'edited' history row per user per window. The window lives in memory, so a document that closes
