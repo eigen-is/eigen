@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { Move } from '../../text';
-import { GRID_ROWS, printStored, toA1, transformMove } from '../../text';
+import { GRID_ROWS, parseStored, printStored, toA1, transformMove } from '../../text';
 import { at } from '../text/support';
 import { random, SHEETS, shown, tree } from './support';
 
@@ -39,7 +39,7 @@ function after(text: string, host: string, from: string, to: string): string {
     const before = tree(text, toA1(row, column));
     const result = transformMove(before, edit, sheet, row, column);
     expect(result.tree === before).toBe(printStored(result.tree) === printStored(before));
-    expect(result.recompute).toBe(result.lossy);
+    expect(result.resized).toBe(false);
     const carried =
         sheet === edit.fromSheet &&
         row >= edit.row &&
@@ -48,7 +48,7 @@ function after(text: string, host: string, from: string, to: string): string {
         column < edit.column + edit.columns;
     const place = carried ? toA1(row + edit.toRow - edit.row, column + edit.toColumn - edit.column) : toA1(row, column);
     const name = SHEETS.find((candidate) => candidate.id === (carried ? edit.toSheet : sheet))?.name;
-    return `${name}!${place} ${shown(result.tree, place)}${result.lossy ? ' lossy' : ''}`;
+    return `${name}!${place} ${shown(result.tree, place)}${result.lossy ? ' lossy' : ''}${result.recompute ? ' seed' : ''}`;
 }
 
 describe('a reference to a cell in the moved block follows it', () => {
@@ -67,8 +67,8 @@ describe('a reference to a cell in the moved block follows it', () => {
         );
         expect(after('=Sheet1!A1+A1', 'Sheet2!C3', 'Sheet1!A1', 'Sheet1!B3')).toBe('Sheet2!C3 =Sheet1!B3+A1');
     });
-    test('to another sheet, whose name it gains', () => {
-        expect(after('=A1', 'Sheet1!A2', 'Sheet1!A1', 'Sheet2!B1')).toBe('Sheet1!A2 =Sheet2!B1');
+    test('to another sheet, whose name it gains: lossy, since the move back cannot tell it was not typed', () => {
+        expect(after('=A1', 'Sheet1!A2', 'Sheet1!A1', 'Sheet2!B1')).toBe('Sheet1!A2 =Sheet2!B1 lossy');
         expect(after('=Sheet1!$A$1', 'Sheet3!A2', 'Sheet1!A1', 'Sheet2!B1')).toBe('Sheet3!A2 =Sheet2!$B$1');
     });
     test('onto the sheet of the formula, where a written sheet name stays written', () => {
@@ -83,7 +83,9 @@ describe('a reference to a cell in the moved block follows it', () => {
 describe('a range follows only when all of it is in the block', () => {
     test('all of it', () => {
         expect(after('=SUM(A1:A2)', 'Sheet1!A3', 'Sheet1!A1:A2', 'Sheet1!B1')).toBe('Sheet1!A3 =SUM(B1:B2)');
-        expect(after('=SUM(A2:A$1)', 'Sheet1!A3', 'Sheet1!A1:B2', 'Sheet2!C5')).toBe('Sheet1!A3 =SUM(Sheet2!C$5:C6)');
+        expect(after('=SUM(A2:A$1)', 'Sheet1!A3', 'Sheet1!A1:B2', 'Sheet2!C5')).toBe(
+            'Sheet1!A3 =SUM(Sheet2!C$5:C6) lossy',
+        );
     });
     test('part of it', () => {
         expect(after('=SUM(A1:A2)', 'Sheet1!A3', 'Sheet1!A1', 'Sheet1!B1')).toBe('Sheet1!A3 =SUM(A1:A2)');
@@ -94,23 +96,26 @@ describe('a range follows only when all of it is in the block', () => {
         const columnA = `Sheet1!A1:A${GRID_ROWS}`;
         expect(after('=SUM(A:A)+SUM($A:B)', 'Sheet1!E1', columnA, 'Sheet1!C1')).toBe('Sheet1!E1 =SUM(C:C)+SUM($A:B)');
         expect(after('=SUM(A:A)', 'Sheet1!E1', 'Sheet1!A1:A100', 'Sheet1!C1')).toBe('Sheet1!E1 =SUM(A:A)');
-        expect(after('=SUM(1:1)', 'Sheet1!E5', 'Sheet1!A1:XFD1', 'Sheet2!A3')).toBe('Sheet1!E5 =SUM(Sheet2!3:3)');
+        expect(after('=SUM(1:1)', 'Sheet1!E5', 'Sheet1!A1:XFD1', 'Sheet2!A3')).toBe('Sheet1!E5 =SUM(Sheet2!3:3) lossy');
     });
 });
 
 describe('a reference to a cell the block landed on', () => {
     test('becomes #REF! and is lossy', () => {
-        expect(after('=B1', 'Sheet1!A2', 'Sheet1!A1', 'Sheet1!B1')).toBe('Sheet1!A2 =#REF! lossy');
+        expect(after('=B1', 'Sheet1!A2', 'Sheet1!A1', 'Sheet1!B1')).toBe('Sheet1!A2 =#REF! lossy seed');
         expect(after('=1+ Sheet2!$B$1', 'Sheet1!A2', 'Sheet1!A1', 'Sheet2!B1')).toBe(
-            'Sheet1!A2 =1+ Sheet2!#REF! lossy',
+            'Sheet1!A2 =1+ Sheet2!#REF! lossy seed',
         );
     });
     test('as does a range that is covered whole, and no other', () => {
-        expect(after('=SUM(B1:B2)', 'Sheet1!D1', 'Sheet1!A1:A3', 'Sheet1!B1')).toBe('Sheet1!D1 =SUM(#REF!) lossy');
+        expect(after('=SUM(B1:B2)', 'Sheet1!D1', 'Sheet1!A1:A3', 'Sheet1!B1')).toBe('Sheet1!D1 =SUM(#REF!) lossy seed');
         expect(after('=SUM(B1:B4)', 'Sheet1!D1', 'Sheet1!A1:A3', 'Sheet1!B1')).toBe('Sheet1!D1 =SUM(B1:B4)');
     });
+    test('as does a range the block covers whole where it lands on its own cells, though two of its cells moved', () => {
+        expect(after('=SUM(D5:E6)', 'Sheet1!H1', 'Sheet1!C3:E5', 'Sheet1!C4')).toBe('Sheet1!H1 =SUM(#REF!) lossy seed');
+    });
     test('but a cell of the block that only moves within it follows', () => {
-        expect(after('=A2+A3', 'Sheet1!C1', 'Sheet1!A1:A2', 'Sheet1!A2')).toBe('Sheet1!C1 =A3+#REF! lossy');
+        expect(after('=A2+A3', 'Sheet1!C1', 'Sheet1!A1:A2', 'Sheet1!A2')).toBe('Sheet1!C1 =A3+#REF! lossy seed');
     });
 });
 
@@ -131,10 +136,10 @@ describe('a formula inside the block keeps reading the cells it read', () => {
     ])('%s moved with its target', (text, host, expected) => {
         expect(after(text, host, 'Sheet1!A1:B4', 'Sheet1!B2')).toBe(expected);
     });
-    test('to another sheet, where it names the sheet it left', () => {
-        expect(after('=A1*2', 'Sheet1!C1', 'Sheet1!C1', 'Sheet2!C1')).toBe('Sheet2!C1 =Sheet1!A1*2');
+    test('to another sheet, where it names the sheet it left, which is lossy as well', () => {
+        expect(after('=A1*2', 'Sheet1!C1', 'Sheet1!C1', 'Sheet2!C1')).toBe('Sheet2!C1 =Sheet1!A1*2 lossy');
         expect(after('=SUM(Sheet3!A1:A3,B1)', 'Sheet1!C1', 'Sheet1!C1', 'Sheet2!E5')).toBe(
-            'Sheet2!E5 =SUM(Sheet3!A1:A3,Sheet1!B1)',
+            'Sheet2!E5 =SUM(Sheet3!A1:A3,Sheet1!B1) lossy',
         );
         expect(after('=Sheet2!A1+Later!A1', 'Sheet1!C1', 'Sheet1!C1', 'Sheet2!E5')).toBe(
             'Sheet2!E5 =Sheet2!A1+Later!A1',
@@ -168,36 +173,79 @@ describe('what a move leaves alone', () => {
     });
 });
 
-test('a move and the move back give the stored text back, but for what was overwritten', () => {
-    const pick = random(42);
-    let kept = 0;
-    for (let run = 0; run < 20000; run += 1) {
-        const cell = () => `${pick(2) ? '$' : ''}${'ABCDEF'[pick(6)]}${pick(2) ? '$' : ''}${1 + pick(8)}`;
-        const text = `=${cell()}+SUM(${cell()}:${cell()})`;
-        const [row, column] = [pick(8), pick(6)];
-        const source = { row: pick(5), column: pick(4), rows: 1 + pick(4), columns: 1 + pick(3) };
-        const there: Move = { ...source, fromSheet: 's1', toSheet: 's1', toRow: pick(6), toColumn: pick(5) };
-        const back: Move = {
-            ...there,
-            row: there.toRow,
-            column: there.toColumn,
-            toRow: there.row,
-            toColumn: there.column,
-        };
-        const inside = (edit: Move, r: number, c: number) =>
-            r >= edit.row && r < edit.row + edit.rows && c >= edit.column && c < edit.column + edit.columns;
-        // A formula the block lands on is overwritten and has no afterwards.
-        if (!inside(there, row, column) && inside(back, row, column)) continue;
-        const carried = inside(there, row, column);
-        const before = tree(text, toA1(row, column));
-        const moved = transformMove(before, there, 's1', row, column);
-        if (moved.lossy) continue;
-        const [row2, column2] = carried
-            ? [row + there.toRow - there.row, column + there.toColumn - there.column]
-            : [row, column];
-        const returned = transformMove(moved.tree, back, 's1', row2, column2);
-        expect(`${text} ${printStored(returned.tree)}`).toBe(`${text} ${printStored(before)}`);
-        kept += 1;
-    }
-    expect(kept).toBeGreaterThan(10000);
+describe('a move and the move back', () => {
+    const inside = (edit: Move, sheet: string, row: number, column: number, landed: boolean) =>
+        sheet === (landed ? edit.toSheet : edit.fromSheet) &&
+        row >= (landed ? edit.toRow : edit.row) &&
+        row < (landed ? edit.toRow : edit.row) + edit.rows &&
+        column >= (landed ? edit.toColumn : edit.column) &&
+        column < (landed ? edit.toColumn : edit.column) + edit.columns;
+
+    test('give every formula that is not lossy its stored text back, on one sheet and across two', () => {
+        const pick = random(42);
+        const kept = { same: 0, across: 0, carried: 0, followed: 0 };
+        for (let run = 0; run < 40000; run += 1) {
+            const cell = () => `${pick(2) ? '$' : ''}${'ABCDEF'[pick(6)]}${pick(2) ? '$' : ''}${1 + pick(8)}`;
+            const prefix = () => ['', '', 'Sheet1!', 'Sheet2!', 'Sheet3!', 'Later!'][pick(6)];
+            const text = `=${prefix()}${cell()}+SUM(${prefix()}${cell()}:${cell()})`;
+            const [sheet, row, column] = [['s1', 's2'][pick(2)], pick(8), pick(6)];
+            const there: Move = {
+                fromSheet: ['s1', 's2'][pick(2)],
+                row: pick(5),
+                column: pick(4),
+                rows: 1 + pick(4),
+                columns: 1 + pick(3),
+                toSheet: ['s1', 's2'][pick(2)],
+                toRow: pick(6),
+                toColumn: pick(5),
+            };
+            const back: Move = {
+                ...there,
+                fromSheet: there.toSheet,
+                row: there.toRow,
+                column: there.toColumn,
+                toSheet: there.fromSheet,
+                toRow: there.row,
+                toColumn: there.column,
+            };
+            const carried = inside(there, sheet, row, column, false);
+            // A formula the block lands on is overwritten and has no afterwards.
+            if (!carried && inside(there, sheet, row, column, true)) continue;
+            const before = tree(text, toA1(row, column));
+            const moved = transformMove(before, there, sheet, row, column);
+            const reread = parseStored(printStored(moved.tree));
+            expect('reason' in reread ? reread.reason : printStored(reread)).toBe(printStored(moved.tree));
+            if (moved.lossy) continue;
+            const [sheet2, row2, column2] = carried
+                ? [there.toSheet, row + there.toRow - there.row, column + there.toColumn - there.column]
+                : [sheet, row, column];
+            const returned = transformMove(moved.tree, back, sheet2, row2, column2);
+            const where = `${text} on ${sheet} at ${toA1(row, column)}, ${JSON.stringify(there)}`;
+            expect(`${where}: ${printStored(returned.tree)}`).toBe(`${where}: ${printStored(before)}`);
+            if (there.fromSheet === there.toSheet) kept.same += 1;
+            else if (carried) kept.carried += 1;
+            else if (moved.tree !== before) kept.followed += 1;
+            else kept.across += 1;
+        }
+        expect(kept.same).toBeGreaterThan(10000);
+        expect(kept.across).toBeGreaterThan(5000);
+        expect(kept.carried).toBeGreaterThan(100);
+        expect(kept.followed).toBeGreaterThan(100);
+    });
+
+    // Accepted: undo restores the old text from its entry, and a move by hand there and back leaves a sheet name
+    // that reads the same cell.
+    test('leave a sheet name where a target or a host went to another sheet and came back', () => {
+        const target = move('Sheet1!A1', 'Sheet2!B1');
+        const there = transformMove(tree('=A1', 'A2'), target, 's1', 1, 0);
+        expect([shown(there.tree, 'A2'), there.lossy, there.recompute]).toEqual(['=Sheet2!B1', true, false]);
+        const back = transformMove(there.tree, move('Sheet2!B1', 'Sheet1!A1'), 's1', 1, 0);
+        expect([shown(back.tree, 'A2'), back.lossy, back.recompute]).toEqual(['=Sheet1!A1', false, false]);
+
+        const host = move('Sheet1!C1', 'Sheet2!C1');
+        const away = transformMove(tree('=A1*2', 'C1'), host, 's1', 0, 2);
+        expect([shown(away.tree, 'C1'), away.lossy, away.recompute]).toEqual(['=Sheet1!A1*2', true, false]);
+        const home = transformMove(away.tree, move('Sheet2!C1', 'Sheet1!C1'), 's2', 0, 2);
+        expect([shown(home.tree, 'C1'), home.lossy, home.recompute]).toEqual(['=Sheet1!A1*2', false, false]);
+    });
 });

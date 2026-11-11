@@ -6,7 +6,7 @@
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { FormulaNode } from '../text/tree';
 import { leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from '../text/tree';
-import { mapLeaves } from './leaves';
+import { mapLeaves, sheetOf } from './leaves';
 import type { Transformed } from './transform';
 
 // The block of `rows` by `columns` cells at `row`, `column` goes to `toRow`, `toColumn`. Sheets are ids.
@@ -37,6 +37,7 @@ export function transformMove(
     const rowAfter = carried ? hostRow + rowShift : hostRow;
     const columnAfter = carried ? hostColumn + columnShift : hostColumn;
     let lossy = false;
+    let recompute = false;
     const mapped = mapLeaves(tree, (node) => {
         if (node.kind !== NodeKind.Ref) return node;
         const { op, flags, sheetKind } = node;
@@ -47,9 +48,9 @@ export function transformMove(
         let row2 = op === RefKind.Cell ? row : flags & RefFlag.Row2Absolute ? node.row2 : hostRow + node.row2;
         let column2 =
             op === RefKind.Cell ? column : flags & RefFlag.Column2Absolute ? node.column2 : hostColumn + node.column2;
-        let sheet = sheetKind === SheetKind.Host ? hostSheet : node.sheet;
-        // A sheet that is no sheet of this workbook holds no cell of the block.
-        if (sheetKind <= SheetKind.Id) {
+        const read = sheetOf(node, hostSheet);
+        let sheet = read ?? node.sheet;
+        if (read !== null) {
             const top = rowless ? 0 : Math.min(row, row2);
             const bottom = rowless ? GRID_ROWS - 1 : Math.max(row, row2);
             const left = columnless ? 0 : Math.min(column, column2);
@@ -62,13 +63,16 @@ export function transformMove(
                 sheet = move.toSheet;
             } else if (sheet === move.toSheet && covers(move, move.toRow, move.toColumn, top, left, bottom, right)) {
                 lossy = true;
+                recompute = true;
                 return leaf(NodeKind.Error, 0, '#REF!', node.space, sheetKind, node.sheet);
             }
         }
-        // A sheet that was written stays written; an unwritten one is named once it is no longer the host's.
-        const named = sheetKind === SheetKind.Id || (sheetKind === SheetKind.Host && sheet !== sheetAfter);
-        const nextKind = named ? SheetKind.Id : sheetKind;
-        const nextSheet = named ? sheet : node.sheet;
+        // A sheet that was written stays written. An unwritten one is named once it is no longer the host's, and
+        // the move back cannot tell that name from a written one, so undo needs the old text.
+        const kept = read === null || (sheetKind === SheetKind.Host && sheet === sheetAfter);
+        const nextKind = kept ? sheetKind : SheetKind.Id;
+        const nextSheet = kept ? node.sheet : sheet;
+        if (nextKind !== sheetKind) lossy = true;
         const nextRow = rowless ? 0 : flags & RefFlag.RowAbsolute ? row : row - rowAfter;
         const nextColumn = columnless ? 0 : flags & RefFlag.ColumnAbsolute ? column : column - columnAfter;
         const nextRow2 = rowless || op === RefKind.Cell ? 0 : flags & RefFlag.Row2Absolute ? row2 : row2 - rowAfter;
@@ -86,7 +90,7 @@ export function transformMove(
         }
         return referenceNode(op, node.space, nextKind, nextSheet, nextRow, nextColumn, nextRow2, nextColumn2, flags);
     });
-    return { tree: mapped, lossy, recompute: lossy, resized: false };
+    return { tree: mapped, lossy, recompute, resized: false };
 }
 
 // Whether the block of the move's size at `row`, `column` holds the whole rectangle.
