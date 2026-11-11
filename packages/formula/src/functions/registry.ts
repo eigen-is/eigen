@@ -91,6 +91,9 @@ export const MATCHED: Walked<Numbers> = Object.freeze({ ...REQUIRED, prepare: Pr
 // The cells of a range that show nothing: a blank or empty text.
 export const BLANKS: Param<Matches> = Object.freeze({ ...REQUIRED, prepare: Prepare.Walked, read: Read.Blanks });
 
+// Ranges or arrays of one size, as the product at each place: what is no number counts as 0.
+export const PRODUCTS: Walked<Numbers> = Object.freeze({ ...REQUIRED, prepare: Prepare.Walked, read: Read.Products });
+
 // The argument may be left out at the end, and the body then gets `fallback`. An empty argument is still a blank.
 // Of a lazy argument the fallback is what the call answers when its token comes back.
 // With no fallback the body gets undefined, or a reader of nothing where a reader is what it gets.
@@ -156,15 +159,12 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
     let closed = false;
     for (const param of params) {
         const ambient = param.prepare === Prepare.Ambient;
+        const only = param.read === Read.Matched || param.read === Read.Blanks;
         const own = ambient
             ? []
             : param.read === Read.Where
               ? [ONLY, ANY]
-              : [
-                    param.prepare === Prepare.Walked && param.family === null
-                        ? { ...ONLY, optional: param.optional }
-                        : param,
-                ];
+              : [only ? { ...ONLY, optional: param.optional } : param];
         if (closed && !ambient) throw new Error(`${name}: a parameter after a repeating or an ambient one`);
         if (
             param.optional &&

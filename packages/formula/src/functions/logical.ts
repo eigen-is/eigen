@@ -6,7 +6,7 @@ import { isError } from '../values/value';
 import { ANY, BOOLEAN, fn, LAZY, optional, rest, TRUTHS } from './registry';
 
 export const LOGICAL = [
-    fn('AND', [rest(TRUTHS)], (truths) => (truths.count() === 0 ? VALUE : !truths.list().includes(0))),
+    fn('AND', [rest(TRUTHS)], (truths) => (truths.count() === 0 ? VALUE : !truths.holds(0))),
     fn('OR', [rest(TRUTHS)], (truths) => (truths.count() === 0 ? VALUE : truths.min() !== 0 || truths.max() !== 0)),
     fn('NOT', [BOOLEAN], (truth) => !truth),
     fn('IF', [BOOLEAN, LAZY, optional(LAZY, false)], (test, then, otherwise) => (test ? then : otherwise)),

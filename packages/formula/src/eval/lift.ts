@@ -10,10 +10,10 @@ import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { arrayOf, isArray, isError, isReference, MOST_ELEMENTS } from '../values/value';
 import type { Axis } from './bands';
 import { align } from './bands';
-import { isLazy, picked, read, run, slotOf } from './call';
+import { ends, isLazy, picked, read, run, slotOf } from './call';
 import type { Evaluator } from './evaluator';
 import type { Entry, Held, Lazy, Param } from './signature';
-import { Prepare, Read } from './signature';
+import { Prepare } from './signature';
 
 // `held` are the arguments as prepared, `count` of them written. Each element is read into `held` itself, so what
 // a reader of the call was bound to is the element in progress.
@@ -55,7 +55,7 @@ export function lift(
                     value = param.prepare === Prepare.Reference ? item : single(ctx, item);
                 }
                 value = read(param, value);
-                if (isError(value) && param.read < Read.Any) result = value;
+                if (isError(value) && ends(param)) result = value;
                 held[i] = value;
             }
             result ??= run(ctx, entry, held, count);

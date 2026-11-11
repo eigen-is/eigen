@@ -62,7 +62,7 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
         for (let i = 0; i < size && result === null; i += 1) {
             const param = slotOf(entry, i);
             const value = read(param, held[i]);
-            if (isError(value) && param.read < Read.Any) result = value;
+            if (isError(value) && ends(param)) result = value;
             held[i] = value;
         }
         result ??= run(ctx, entry, held, count);
@@ -92,6 +92,11 @@ export function picked(
     const child = token.index < node.children.length ? node.children[token.index] : null;
     if (child === null || (child.kind === NodeKind.Empty && param.skips)) return param.fallback ?? null;
     return child.kind === NodeKind.Empty ? null : ctx.evaluate(child, sheet, row, column);
+}
+
+// Whether an error at a parameter ends the call: every reading but the ones that take an error as a value.
+export function ends(param: Param<unknown>): boolean {
+    return param.read < Read.Any || param.read === Read.Products;
 }
 
 // What the argument at a place is read as.
@@ -131,6 +136,8 @@ export function read(param: Param<unknown>, value: Held): Held {
         case Read.Matched:
         case Read.Blanks:
             return value;
+        case Read.Products:
+            return isReference(value) && value.next !== null ? VALUE : value;
         default: {
             const unknown: never = param.read;
             return unknown;

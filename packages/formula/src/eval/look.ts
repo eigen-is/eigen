@@ -4,14 +4,16 @@
 
 import type { FormulaError } from '../values/errors';
 import { VALUE } from '../values/errors';
-import type { Reference } from '../values/value';
+import type { Reference, Value } from '../values/value';
 import { arrayOf, isArray, isError, isReference } from '../values/value';
 import { isLazy } from './call';
 import { tally } from './criteria';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Errors, Families } from './families';
+import { productsOf } from './products';
 import type { Frame } from './readers';
+import { heightOf, widthOf } from './search';
 import type { Entry, Held, Param } from './signature';
 import { Prepare, Read } from './signature';
 import { firstError } from './views';
@@ -21,10 +23,8 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
     const { params } = entry;
     const { held, args } = frame;
     frame.failed = null;
-    if (entry.sized !== -2) {
-        const error = weigh(ctx, entry, frame, count);
-        if (error !== null) return error;
-    }
+    const unmatched = weigh(ctx, entry, frame, count);
+    if (unmatched !== null) return unmatched;
     let at = 0;
     for (let p = 0; p < params.length; p += 1) {
         const param = params[p];
@@ -36,7 +36,11 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
             args[p] = value === undefined || isLazy(value) ? undefined : frame.table(p).over(value);
         } else if (param.prepare !== Prepare.Walked) args[p] = param.rest ? held.slice(at, count) : value;
         else if (param.read === Read.Matched) args[p] = frame.numbers(p).bind(at, to, Families.Numbers, false);
-        else if (family === null) args[p] = frame.matches;
+        else if (param.read === Read.Products) {
+            const error = multiply(ctx, held, at, to);
+            if (error !== null) return error;
+            args[p] = frame.numbers(p).bind(at, at + 1, Families.Numbers, false);
+        } else if (family === null) args[p] = frame.matches;
         else {
             for (let i = at; i < to; i += 1) settle(ctx, held[i], family);
             for (let i = at; family.errors === Errors.Result && i < to; i += 1) {
@@ -74,6 +78,28 @@ function errorIn(ctx: Evaluator, value: Held, family: Family): FormulaError | nu
         if (isError(item)) return item;
     }
     return null;
+}
+
+// The arguments `from` up to `to` as their products, left in the place of the first: any argument's first error
+// comes before a difference in size, which is #VALUE!.
+function multiply(ctx: Evaluator, held: Held[], from: number, to: number): FormulaError | null {
+    const factors: Value[] = [];
+    for (let i = from; i < to; i += 1) {
+        const value = held[i];
+        if (value === undefined || isLazy(value)) continue;
+        settle(ctx, value, Families.Counted);
+        factors.push(value);
+    }
+    let sized = true;
+    for (const factor of factors) {
+        const error = errorIn(ctx, factor, Families.Counted);
+        if (error !== null) return error;
+        sized &&= heightOf(factor) === heightOf(factors[0]) && widthOf(factor) === widthOf(factors[0]);
+    }
+    if (!sized) return VALUE;
+    const made = productsOf(ctx, factors);
+    held[from] = made;
+    return isError(made) ? made : null;
 }
 
 // The criteria of a call, walked: the count for its Matches, and the numbers beside the matching cells in the

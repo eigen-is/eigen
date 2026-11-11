@@ -107,6 +107,15 @@ export class Numbers {
         return most;
     }
 
+    // Whether `value` is one of the numbers.
+    public holds(value: number): boolean {
+        const { walk } = this.start();
+        let found = false;
+        while (walk.next()) for (let i = walk.from; i < walk.to; i += 1) found ||= walk.num[i] === value;
+        this.done();
+        return found;
+    }
+
     // Every number once per written cell, in written order: a copy that is the body's own.
     public list(): Float64Array {
         const { walk } = this.start();

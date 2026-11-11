@@ -47,6 +47,8 @@ export const Read = {
     Where: 12,
     Matched: 13,
     Blanks: 14,
+    // Ranges of one size, multiplied place by place: the products.
+    Products: 15,
 } as const;
 
 export type Read = (typeof Read)[keyof typeof Read];
