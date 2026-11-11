@@ -8,6 +8,18 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import {
+    ChartColumn,
+    CheckSquare,
+    Columns3,
+    ImagePlus,
+    Link,
+    MessageSquare,
+    MessageSquarePlus,
+    Rows3,
+    Sheet,
+    Sigma,
+} from 'lucide-react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { CHART_RANGE_REFUSALS } from '../../engine/chart-range';
@@ -65,7 +77,9 @@ export function InsertMenu() {
     return (
         <>
             <DropdownMenuSub>
-                <DropdownMenuSubTrigger>Row</DropdownMenuSubTrigger>
+                <DropdownMenuSubTrigger>
+                    <Rows3 className="h-4 w-4" /> Row
+                </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="sheet-mousedown-cancel">
                     <DropdownMenuItem disabled={rowFocus == null} onClick={() => insertHandler('row', 'lefttop')}>
                         Insert 1 row above
@@ -77,7 +91,9 @@ export function InsertMenu() {
             </DropdownMenuSub>
 
             <DropdownMenuSub>
-                <DropdownMenuSubTrigger>Column</DropdownMenuSubTrigger>
+                <DropdownMenuSubTrigger>
+                    <Columns3 className="h-4 w-4" /> Column
+                </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="sheet-mousedown-cancel">
                     <DropdownMenuItem disabled={columnFocus == null} onClick={() => insertHandler('column', 'lefttop')}>
                         Insert 1 column left
@@ -91,23 +107,14 @@ export function InsertMenu() {
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
 
-            <DropdownMenuItem
-                onClick={() => {
-                    setContext(
-                        (draftCtx) => {
-                            addSheet(draftCtx);
-                        },
-                        { addSheetOp: true },
-                    );
-                }}
-            >
-                Sheet
+            <DropdownMenuItem onClick={() => setContext((draftCtx) => addSheet(draftCtx), { addSheetOp: true })}>
+                <Sheet className="h-4 w-4" /> Sheet
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
 
             <DropdownMenuItem
-                disabled={selection == null || context.allowEdit === false}
+                disabled={selection == null}
                 onClick={() =>
                     setContext((draftCtx) => {
                         const refusal = insertChartFromSelection(draftCtx, crypto.randomUUID());
@@ -115,22 +122,19 @@ export function InsertMenu() {
                     })
                 }
             >
-                Chart
+                <ChartColumn className="h-4 w-4" /> Chart
             </DropdownMenuItem>
 
-            <DropdownMenuItem
-                disabled={!hooks.onInsertImage}
-                onClick={() => {
-                    hooks.onInsertImage?.();
-                }}
-            >
-                Insert image
+            <DropdownMenuItem disabled={!hooks.onInsertImage} onClick={() => hooks.onInsertImage?.()}>
+                <ImagePlus className="h-4 w-4" /> Image
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
 
             <DropdownMenuSub>
-                <DropdownMenuSubTrigger>Auto SUM</DropdownMenuSubTrigger>
+                <DropdownMenuSubTrigger>
+                    <Sigma className="h-4 w-4" /> Auto SUM
+                </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="sheet-mousedown-cancel">
                     {AUTO_SUM_FUNCTIONS.map(({ formula, label }) => (
                         <DropdownMenuItem
@@ -153,25 +157,12 @@ export function InsertMenu() {
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
 
-            <DropdownMenuItem
-                onClick={() => {
-                    setContext((draftCtx) => {
-                        handleLink(draftCtx);
-                    });
-                }}
-            >
-                Insert link
+            <DropdownMenuItem onClick={() => setContext(handleLink)}>
+                <Link className="h-4 w-4" /> Link
             </DropdownMenuItem>
 
-            <DropdownMenuItem
-                disabled={selection == null}
-                onClick={() => {
-                    setContext((draftCtx) => {
-                        insertCheckbox(draftCtx);
-                    });
-                }}
-            >
-                Tick box
+            <DropdownMenuItem disabled={selection == null} onClick={() => setContext(insertCheckbox)}>
+                <CheckSquare className="h-4 w-4" /> Tick box
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
@@ -184,16 +175,14 @@ export function InsertMenu() {
                         if (card) hooks.commentLifecycle?.setOpenCardId(card.id);
                     }}
                 >
-                    View comment
+                    <MessageSquare className="h-4 w-4" /> View comment
                 </DropdownMenuItem>
             ) : (
                 <DropdownMenuItem
                     disabled={!hooks.onAddComment}
-                    onClick={() => {
-                        hooks.onAddComment?.(commentRow, commentCol);
-                    }}
+                    onClick={() => hooks.onAddComment?.(commentRow, commentCol)}
                 >
-                    Comment
+                    <MessageSquarePlus className="h-4 w-4" /> Comment
                 </DropdownMenuItem>
             )}
         </>
