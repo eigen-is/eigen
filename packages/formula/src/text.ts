@@ -1,3 +1,5 @@
+export type { Edit, Span } from './edit/map';
+export { GONE, mapIndex, mapSpan } from './edit/map';
 export { columnIndex, columnLabel, GRID_COLUMNS, GRID_ROWS, rangeToA1, toA1 } from './text/a1';
 export { Token } from './text/lexer';
 export type { A1Range, ParseFailure, SheetFinder } from './text/parser';

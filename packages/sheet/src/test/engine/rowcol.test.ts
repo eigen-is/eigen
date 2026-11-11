@@ -297,6 +297,44 @@ describe('applySheetsInsertRowCol/Delete — a merge above the op stays as it wa
     });
 });
 
+// A merge, a row height and a rule's range move by one rule, so they agree at its edges: a new line right after a
+// range is not part of it, and nothing is left past the grid's last line.
+describe('applySheetsInsertRowCol — merges and sizes at the edges of the one rule', () => {
+    const last = REFERENCE_ROW_COUNT - 1;
+    const sheetWith = (config: TestSheet['config']) => [
+        makeSheet(
+            's1',
+            'Sheet1',
+            [
+                [cell('a'), null],
+                [cell('b'), null],
+            ],
+            { config },
+        ),
+    ];
+    const insertRow = (sheets: TestSheet[], direction: 'lefttop' | 'rightbottom') =>
+        applySheetsInsertRowCol(sheets, { type: 'row', index: 0, count: 1, direction, id: 's1' })[0];
+
+    test('a row inserted right below a one-row merge leaves it one row', () => {
+        const sheet = insertRow(sheetWith({ merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 2 } } }), 'rightbottom');
+        expect(sheet.config?.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 1, cs: 2 } });
+        expect(sheet.data?.[1]).toEqual([null, null]);
+    });
+
+    test('a row height pushed past the last row of the grid goes', () => {
+        const sheet = insertRow(sheetWith({ rowlen: { 0: 20, [last]: 30 } }), 'lefttop');
+        expect(sheet.config?.rowlen).toEqual({ 1: 20 });
+    });
+
+    test('a merge pushed past the last row of the grid ends on it', () => {
+        const sheet = insertRow(
+            sheetWith({ merge: { [`${last - 1}_0`]: { r: last - 1, c: 0, rs: 2, cs: 1 } } }),
+            'lefttop',
+        );
+        expect(sheet.config?.merge).toEqual({ [`${last}_0`]: { r: last, c: 0, rs: 1, cs: 1 } });
+    });
+});
+
 // A merge can reach past the grid, such as one a peer made before another peer's column delete. Stamping its cells
 // out there would leave the rows uneven, and a joiner reading the stored cells would show a column more.
 describe('applySheetsInsertRowCol/Delete — a merge past the last column', () => {
