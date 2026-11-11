@@ -149,7 +149,8 @@ type Gesture = { pointerId: number } & (
 );
 
 // The imperative surface the canvas publishes for its host: the toolbar's Insert entries, which need the live viewport
-// to place, and a reveal, such as for ⌘F or a comment card, which pans the element to the center at the current zoom.
+// to place, its Edit rows, which act on the selection as the object menu's do, and a reveal, such as for ⌘F or a
+// comment card, which pans the element to the center at the current zoom.
 export type CanvasHandle = {
     insertFiles: (files: File[]) => void;
     insertDrivePaths: (paths: DrivePath[]) => Promise<void>;
@@ -157,6 +158,11 @@ export type CanvasHandle = {
     centerOn: (el: VectorElement) => void;
     // Every element the canvas shows, on its background, as the SVG the browser draws, such as for File › Download.
     downloadDrawing: () => void;
+    cut: () => void;
+    copy: () => void;
+    paste: () => void;
+    duplicate: () => void;
+    delete: () => void;
 };
 
 type CanvasEditorProps = {
@@ -843,6 +849,11 @@ export function CanvasEditor({
         uploadFile: uploadFile.mutateAsync,
     });
 
+    // The menus act on the whole selection through the same writes as ⌘[, ⌘], ⌘D and Delete, so the menus and the keys
+    // behave as one, each in one undo step.
+    const onMenuDuplicate = () => duplicateSelection(selectedIds, duplicateElements, setSelectedIds, undoManager);
+    const onMenuDelete = () => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
+
     // Publishes the handle for the host. It is cleared on unmount, so a stale canvas never places or pans.
     useEffect(() => {
         if (!canvasRef) return;
@@ -855,6 +866,11 @@ export function CanvasEditor({
                 centerOn(box.x + box.width / 2, box.y + box.height / 2);
             },
             downloadDrawing: () => downloadImage(imageName, ordered, meta.background),
+            cut: onMenuCut,
+            copy: onMenuCopy,
+            paste: onMenuPaste,
+            duplicate: onMenuDuplicate,
+            delete: onMenuDelete,
         };
         return () => {
             canvasRef.current = null;
@@ -870,6 +886,11 @@ export function CanvasEditor({
         imageName,
         ordered,
         meta.background,
+        onMenuCut,
+        onMenuCopy,
+        onMenuPaste,
+        onMenuDuplicate,
+        onMenuDelete,
     ]);
 
     // In frame mode the backdrop around the page is not the canvas: the frame clips what overhangs it, so an element
@@ -961,11 +982,7 @@ export function CanvasEditor({
         objectContextMenu.handleContextMenu(e, hitId);
     };
 
-    // The menu acts on the whole selection through the same writes as ⌘[, ⌘], ⌘D and Delete, so the menu and the keys
-    // behave as one, each in one undo step.
     const onMenuArrange = (op: ZOp) => applyZOrder(op, visibleElements, selectedIds, reorderElements, undoManager);
-    const onMenuDuplicate = () => duplicateSelection(selectedIds, duplicateElements, setSelectedIds, undoManager);
-    const onMenuDelete = () => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
     // A comment is raised on the right-clicked element, not on the selection: a card anchors to one element.
     const menuItemId = objectContextMenu.item;
     const menuElement = menuItemId ? committedById.get(menuItemId) : undefined;

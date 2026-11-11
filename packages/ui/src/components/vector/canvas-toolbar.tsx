@@ -1,7 +1,8 @@
 // The toolbar a canvas app mounts, such as Vector's or Slides': the File and Edit menus, the Insert menu, the
-// shape tools, and the share, comments and activity buttons. The apps differ only in their File menu, such as
-// its export formats and its New row, and in the deck's extra actions, which arrive as slots. So the tools, the
-// undo wiring and the compact layout's breakpoint cannot drift apart between them.
+// shape tools, and the share, comments and activity buttons. Its rows act on the canvas through the canvas's handle.
+// The apps differ only in their File menu, such as its export formats and its New row, and in the deck's extra
+// actions, which arrive as slots. So the tools, the undo wiring and the compact layout's breakpoint cannot drift
+// apart between them.
 
 import { useYjsUndoState } from '@workspace/lib/collab';
 import { useIsCompactToolbar } from '@workspace/lib/media';
@@ -10,10 +11,12 @@ import type { LucideIcon } from 'lucide-react';
 import { ImagePlus } from 'lucide-react';
 import type { ReactNode, RefObject } from 'react';
 import { CHART_TYPE_OPTIONS } from '../charts';
+import { ClipboardMenuItems } from '../context-menu';
 import { ExportProgressDialog, useDocumentExport } from '../drive/use-document-export';
 import {
     DropdownMenuCheckboxItem,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuShortcut,
     DropdownMenuSub,
     DropdownMenuSubContent,
@@ -44,12 +47,14 @@ type CanvasToolbarProps = {
     undoManager: Parameters<typeof useYjsUndoState>[0];
     tool: VectorTool;
     setTool: (tool: VectorTool) => void;
+    // Greys the Edit rows that act on the selection.
+    selectionEmpty: boolean;
     // Tool lock (Q): keeps the selected tool active for repeated placement — a toggle in the Edit menu.
     toolLocked: boolean;
     setToolLocked: (locked: boolean) => void;
     // Present when the container has a media/ folder — opens the host's image picker.
     onInsertImage?: () => void;
-    // The canvas the Insert menu places into (Insert → Chart).
+    // The canvas the Insert menu places into (Insert → Chart) and the Edit menu's clipboard rows act on.
     canvasRef: RefObject<CanvasHandle | null>;
     onAccessDialogOpen: () => void;
     // Document-level comments + activity. Always offered: desktop draws the side panel, mobile the Column.
@@ -81,6 +86,7 @@ export function CanvasToolbar({
     undoManager,
     tool,
     setTool,
+    selectionEmpty,
     toolLocked,
     setToolLocked,
     onInsertImage,
@@ -128,13 +134,38 @@ export function CanvasToolbar({
                         </FileMenu>
                         {/* Unconditional: EditMenu drops its edit section itself, and its Find entries
                             are the read-only viewer's only menu route to the find bar. */}
-                        <EditMenu canEdit={canEdit} canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo}>
-                            <ToolMenuItems tools={EDIT_TOOLS} setTool={setTool} />
-                            <DropdownMenuCheckboxItem checked={toolLocked} onCheckedChange={setToolLocked}>
-                                Keep selected tool
-                                <DropdownMenuShortcut>{TOOL_LOCK_KEY}</DropdownMenuShortcut>
-                            </DropdownMenuCheckboxItem>
-                        </EditMenu>
+                        <EditMenu
+                            canEdit={canEdit}
+                            canUndo={canUndo}
+                            canRedo={canRedo}
+                            onUndo={undo}
+                            onRedo={redo}
+                            selectionItems={
+                                <>
+                                    <ClipboardMenuItems
+                                        onCut={canEdit ? () => canvasRef.current?.cut() : undefined}
+                                        onCopy={() => canvasRef.current?.copy()}
+                                        onPaste={canEdit ? () => canvasRef.current?.paste() : undefined}
+                                        onDuplicate={canEdit ? () => canvasRef.current?.duplicate() : undefined}
+                                        onDelete={canEdit ? () => canvasRef.current?.delete() : undefined}
+                                        selectionEmpty={selectionEmpty}
+                                    />
+                                    {canEdit && (
+                                        <>
+                                            <DropdownMenuSeparator />
+                                            <ToolMenuItems tools={EDIT_TOOLS} setTool={setTool} />
+                                            <DropdownMenuCheckboxItem
+                                                checked={toolLocked}
+                                                onCheckedChange={setToolLocked}
+                                            >
+                                                Keep selected tool
+                                                <DropdownMenuShortcut>{TOOL_LOCK_KEY}</DropdownMenuShortcut>
+                                            </DropdownMenuCheckboxItem>
+                                        </>
+                                    )}
+                                </>
+                            }
+                        />
                         {canEdit && (
                             <AppBarMenu label="Insert">
                                 {insertItems}
