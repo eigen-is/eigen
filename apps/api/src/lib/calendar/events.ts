@@ -211,20 +211,6 @@ export async function moveEvent(
     return requireEvent(calendar, id);
 }
 
-// Caller holds the write lock and has already resolved the resource this patch means. Answers whether it wrote.
-export async function patchResource(
-    calendar: Calendar,
-    resource: StoredResource,
-    recurrenceKey: string | null,
-    patch: EventPatch,
-    context: WriteContext,
-): Promise<boolean> {
-    const component = storedComponent(calendar, resource);
-    const changed = patchEvent(component, recurrenceKey, patch, context);
-    if (changed) await writeComponent(calendar, resource, component);
-    return changed;
-}
-
 // Caller holds the write lock; the row it answers with is what the decline or cancellation mail is composed from, its
 // occurrence named as the bytes it erases named it.
 export async function eraseStoredEvent(
@@ -298,15 +284,16 @@ export function writeComponent(calendar: Calendar, resource: StoredResource, com
     });
 }
 
-// Caller holds the write lock: the bytes it mutates are the bytes the commit overwrites.
+// Caller holds the write lock: the bytes it mutates are the bytes the commit overwrites, and only a change is written.
 export async function editResource(
     calendar: Calendar,
     resource: StoredResource,
-    mutate: (component: ICAL.Component) => void,
-): Promise<void> {
+    mutate: (component: ICAL.Component) => boolean,
+): Promise<boolean> {
     const component = storedComponent(calendar, resource);
-    mutate(component);
-    await writeComponent(calendar, resource, component);
+    const changed = mutate(component);
+    if (changed) await writeComponent(calendar, resource, component);
+    return changed;
 }
 
 // An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp.
@@ -426,9 +413,9 @@ async function patchStoredEvent(
 
     if (existing.parentEventId && input.status === 'cancelled') {
         const exclusion: VEventEdit = { kind: 'exclusion', id: existing.id, ctx: writeContext(organizer) };
-        await editResource(calendar, resource, (component) => {
-            applyEdits(component, new Map([[existing.recurrenceDate, exclusion]]));
-        });
+        await editResource(calendar, resource, (component) =>
+            applyEdits(component, new Map([[existing.recurrenceDate, exclusion]])),
+        );
         // The EXDATE row sits at the original slot; the guests last saw the occurrence at its moved one.
         const cancelled = requireEvent(calendar, id);
         return { updated: { ...cancelled, startTime: existing.startTime, endTime: existing.endTime }, existing };
@@ -439,26 +426,22 @@ async function patchStoredEvent(
     const allDayMoved = input.allDay !== undefined && input.allDay !== existing.allDay;
 
     const ctx = writeContext(!!user && organizer);
-    const component = storedComponent(calendar, resource);
-    const patched = patchEvent(
-        component,
-        existing.recurrenceDate,
-        {
-            title: input.title?.trim(),
-            description: input.description,
-            location: input.location,
-            startTime: startMoved ? input.startTime : undefined,
-            endTime: endMoved ? input.endTime : undefined,
-            allDay: allDayMoved ? input.allDay : undefined,
-            rrule: input.rrule ?? undefined,
-            timezone: input.timezone,
-            status: input.status,
-            data: input.data ?? undefined,
-        },
-        ctx,
-    );
-    const organized = organizer && keepOrganizers(component, organizerOf(calendar.home, user), ctx);
-    if (patched || organized) await writeComponent(calendar, resource, component);
+    const patch = {
+        title: input.title?.trim(),
+        description: input.description,
+        location: input.location,
+        startTime: startMoved ? input.startTime : undefined,
+        endTime: endMoved ? input.endTime : undefined,
+        allDay: allDayMoved ? input.allDay : undefined,
+        rrule: input.rrule ?? undefined,
+        timezone: input.timezone,
+        status: input.status,
+        data: input.data ?? undefined,
+    };
+    await editResource(calendar, resource, (component) => {
+        const patched = patchEvent(component, existing.recurrenceDate, patch, ctx);
+        return (organizer && keepOrganizers(component, organizerOf(calendar.home, user), ctx)) || patched;
+    });
 
     return { updated: requireEvent(calendar, id), existing };
 }
@@ -493,8 +476,8 @@ async function writeOverride(
     const ctx = writeContext(organizer);
     const edit = exceptionEdit(parent, own, ctx);
     await editResource(calendar, resource, (component) => {
-        applyEdits(component, new Map([[key, edit]]));
-        if (organizer) keepOrganizers(component, organizerOf(calendar.home, user), ctx);
+        const edited = applyEdits(component, new Map([[key, edit]]));
+        return (organizer && keepOrganizers(component, organizerOf(calendar.home, user), ctx)) || edited;
     });
     const created = exceptionOf(calendar, parent.id, key) ?? requireEvent(calendar, parent.id);
     return { created, replaced };

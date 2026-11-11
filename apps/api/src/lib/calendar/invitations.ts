@@ -541,9 +541,9 @@ async function removeOccurrence(
     const resource = events.resourceOf(calendar, eventId);
     if (!resource) throw new ApiError(404, 'Event not found');
     const ctx = events.writeContext(false, revision);
-    await events.editResource(calendar, resource, (component) => {
-        applyEdits(component, new Map([[recurrenceDate, { kind: 'exclusion', id: crypto.randomUUID(), ctx }]]));
-    });
+    await events.editResource(calendar, resource, (component) =>
+        applyEdits(component, new Map([[recurrenceDate, { kind: 'exclusion', id: crypto.randomUUID(), ctx }]])),
+    );
 }
 
 function notifyInvitationCancelled(
@@ -584,10 +584,8 @@ async function updateAttendeeStatus(
             const data = { ...held.data, attendees: withAttendeeStatus(held.data.attendees, email, status) };
             edits.set(held.recurrenceDate, { kind: 'patch', patch: { data }, ctx: events.writeContext(false) });
         }
-        const component = events.storedComponent(calendar, resource);
-        if (!applyEdits(component, edits)) return null;
-        await events.writeComponent(calendar, resource, component);
-        return event.calendarId;
+        const changed = await events.editResource(calendar, resource, (component) => applyEdits(component, edits));
+        return changed ? event.calendarId : null;
     });
     if (calendarId) calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
 }
@@ -628,7 +626,10 @@ async function rsvpForOccurrence(
         const resource = events.resourceOf(calendar, parent.id);
         if (!resource) return null;
         if (existing && existing.status !== 'cancelled') {
-            const changed = await events.patchResource(calendar, resource, key, { data: { ...data, attendees } }, ctx);
+            const patch = { data: { ...data, attendees } };
+            const changed = await events.editResource(calendar, resource, (component) =>
+                patchEvent(component, key, patch, ctx),
+            );
             return changed ? parent.calendarId : null;
         }
 
@@ -675,6 +676,7 @@ async function removeThisAndFuture(calendar: Calendar, eventId: string, recurren
         await events.editResource(calendar, resource, (component) => {
             patchEvent(component, null, { rrule }, events.writeContext(false));
             cutGuestCopy(component, recurrenceDate);
+            return true;
         });
     });
 }
