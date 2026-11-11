@@ -174,7 +174,7 @@ The chevron is canvas paint; where it is drawn and why is in [SHEETS.md § A lis
 
 ### 12. WorkbookMenuBar (React + shadcn)
 
-**Files**: `MenuBar/index.tsx`, `MenuBar/sheet-edit-menu.tsx`, `MenuBar/view-menu.tsx`, `MenuBar/insert-menu.tsx`, `MenuBar/format-menu.tsx`, `MenuBar/format-toolbar.tsx`, `MenuBar/data-menu.tsx`, `MenuBar/CustomBorder.tsx`
+**Files**: `MenuBar/index.tsx`, `MenuBar/view-menu.tsx`, `MenuBar/insert-menu.tsx`, `MenuBar/format-menu.tsx`, `MenuBar/format-toolbar.tsx`, `MenuBar/data-menu.tsx`, `MenuBar/CustomBorder.tsx`
 
 Plain React UI with no overlays: the shared `CenteredToolbar` with a menu bar in Google Sheets' style (Edit, View, Insert, Format, Data) on the left, one `AppBarMenu` per menu, and the format icon row in the middle, which folds into the Format menu as the bar narrows. `CustomBorder` is the border style picker. The workbook's keydown handler leaves the bar's keys to the bar, so Enter on a menu button opens the menu and not the cell editor.
 
