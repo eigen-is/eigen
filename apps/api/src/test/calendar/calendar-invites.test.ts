@@ -1291,6 +1291,55 @@ describe('A save only its owner sees', () => {
         mail.mockRestore();
     });
 
+    // An older build stored an organizer's event with guests and no ORGANIZER line, and its next save writes one. Every
+    // message names the organizer itself, so the line is no news to a guest.
+    test.each([
+        ['a reminder', { reminders: [{ type: 'notification', minutes: 10 }] }],
+        ['a color', { color: '#2563eb' }],
+    ])('the ORGANIZER line %s save adds to an event stored without one mails nobody', async (_change, data) => {
+        const ctx = await getTestContext();
+        const owner = ctx.alice.user;
+        const { calendar } = await getHome(owner.id);
+        const calendarId = findOrFail(await calendar.getCalendars(), (c) => c.isDefault).id;
+        const uid = crypto.randomUUID();
+        const GUEST = `bare-${uid}@external.com`;
+        const body = vcal([
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            'DTSTART:20271201T090000Z',
+            'DTEND:20271201T100000Z',
+            'SUMMARY:Stored bare',
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${GUEST}`,
+            'END:VEVENT',
+        ]);
+        expect(
+            (await calendar.putResource(calendarId, `${uid}.ics`, body, { ifMatch: null, ifNoneMatch: null })).ok,
+        ).toBe(true);
+        const event = findOrFail(await calendar.getEventsByUid(uid), () => true);
+        const save = (changes: object) =>
+            authedRequest(owner.sessionToken, `/calendar/${owner.id}/calendars/${calendarId}/events/${event.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(changes),
+            });
+        const mailer = await import('../../lib/mailer/mailer');
+        const mail = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        mail.mockClear();
+        try {
+            const saved = await assertJson<CalendarEvent>(await save({ data: { ...event.data, ...data } }));
+            expect(saved.data?.organizer?.email).toBe(owner.email);
+            expect(saved.sequence).toBe(event.sequence);
+
+            // Absence only counts behind what IS expected: a rename, made second, takes the path the first save must not.
+            expect((await save({ title: 'Stored bare renamed' })).status).toBe(200);
+            const toGuest = () => mail.mock.calls.filter(([sent]) => sent.to.some((to) => to.address === GUEST));
+            await eventually(async () => toGuest().length || undefined, 'the rename to reach the guest');
+            expect(toGuest().map(([sent]) => sent.subject)).toEqual(['Updated invitation: Stored bare renamed']);
+        } finally {
+            mail.mockRestore();
+        }
+    });
+
     test('a repeating event in another zone moves its later occurrences, so the guests hear it', async () => {
         const { save, mail, mailed, event } = await setup('Weekly zone', { rrule: 'FREQ=WEEKLY' });
 

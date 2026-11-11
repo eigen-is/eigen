@@ -363,12 +363,14 @@ async function propagateWrite(
     await propagateInvitation(calendar.home, organizer, event, user, held, attendees, series ?? undefined, exceptions);
 }
 
-// The file a guest would get, minus the revision that changes with every write. An instant reads the same in any zone,
-// unless a rule repeats in that zone's wall clock.
+// The file a guest would get, minus what no save changes for them: the revision, which moves with every write, and the
+// ORGANIZER, which stays while the event has guests. An instant reads the same in any zone, unless a rule repeats in
+// that zone's wall clock.
 function guestView(event: CalendarEvent, series: CalendarEvent | null): string {
     const never = new Date(0);
     const timezone = event.rrule ? event.timezone : null;
-    const view = { ...event, timezone, sequence: 0, createdAt: never, updatedAt: never };
+    const data = { ...event.data, organizer: undefined };
+    const view = { ...event, timezone, data, sequence: 0, createdAt: never, updatedAt: never };
     return serializeEventForImip(view, 'REQUEST', series ?? undefined);
 }
 
