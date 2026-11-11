@@ -55,7 +55,8 @@ function drawCommentIndicator(pass: RenderPass, cardId: string, startY: number, 
 function drawTickBox(renderCtx: CanvasRenderingContext2D, rect: CellGlyphRect, checked: boolean) {
     renderCtx.lineWidth = 1;
     renderCtx.strokeStyle = CHECKBOX_STROKE;
-    renderCtx.strokeRect(rect.x + HALF_PIXEL, rect.y + HALF_PIXEL, rect.size, rect.size);
+    // The stroke stays inside the rect, so the box is drawn on the very pixels that take its press.
+    renderCtx.strokeRect(rect.x + HALF_PIXEL, rect.y + HALF_PIXEL, rect.size - 1, rect.size - 1);
     if (!checked) return;
 
     renderCtx.beginPath();

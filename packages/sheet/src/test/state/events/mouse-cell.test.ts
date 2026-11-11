@@ -44,9 +44,10 @@ function tickBoxContext(): Context {
     return ctx;
 }
 
-// A2's painted tick box. A2 spans x 0..74, y 20..40; an unaligned box is centred, and the vt an empty style yields is
-// NaN, the painter's middle default.
-const PAINTED_BOX = checkboxRect(cellTextBox(0, 20, 74, 40), checkboxAlign(null), Number.NaN);
+// A2's painted tick box in sheet pixels, where a press is measured. A2 spans x 0..74, y 20..40, and the painter's
+// text box for it lies a pixel right of those edges and reaches a pixel lower. An unaligned box is centred, and the vt
+// an empty style yields is NaN, the painter's middle default.
+const PAINTED_BOX = checkboxRect(cellTextBox(1, 20, 75, 41), checkboxAlign(null), Number.NaN);
 
 function quietCache(state: Partial<GlobalCache> = {}): GlobalCache {
     return {
@@ -85,17 +86,19 @@ describe('handleCellAreaMouseDown — tick box', () => {
         expect(ctx.sheets[0].data![1][0]).toEqual({ v: true, m: 'TRUE', ct: { fa: 'General', t: 'b' } });
     });
 
-    test('answers a click on the painted box edge, not one a pixel above it', () => {
-        // The hit test used to rebuild the cell's text box without the painter's
-        // 1px top inset, so the box was drawn one pixel below the box that
-        // answered a click: its bottom edge was dead and the row above it live.
+    test("answers a click on the painted box's last pixel, not one a pixel past it or above it", () => {
         const ctx = tickBoxContext();
-        mouseDownAt(ctx, PAINTED_BOX.x + PAINTED_BOX.size, PAINTED_BOX.y + PAINTED_BOX.size);
+        mouseDownAt(ctx, PAINTED_BOX.x + PAINTED_BOX.size - 1, PAINTED_BOX.y + PAINTED_BOX.size - 1);
         expect(ctx.sheets[0].data![1][0]).toEqual({ v: true, m: 'TRUE', ct: { fa: 'General', t: 'b' } });
 
-        const above = tickBoxContext();
-        mouseDownAt(above, PAINTED_BOX.x, PAINTED_BOX.y - 1);
-        expect(above.sheets[0].data![1][0]).toEqual({ v: false, m: 'FALSE', ct: { fa: 'General', t: 'b' } });
+        for (const [x, y] of [
+            [PAINTED_BOX.x + PAINTED_BOX.size, PAINTED_BOX.y],
+            [PAINTED_BOX.x, PAINTED_BOX.y - 1],
+        ]) {
+            const beside = tickBoxContext();
+            mouseDownAt(beside, x, y);
+            expect(beside.sheets[0].data![1][0]).toEqual({ v: false, m: 'FALSE', ct: { fa: 'General', t: 'b' } });
+        }
     });
 
     test('leaves the box alone while a formula is being composed, and still takes the reference', () => {
