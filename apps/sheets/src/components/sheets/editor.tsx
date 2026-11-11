@@ -85,7 +85,6 @@ export function SheetEditor({
 
     const {
         initialData,
-        snapshotVersion,
         loadFailed,
         synced,
         offline,
@@ -99,7 +98,7 @@ export function SheetEditor({
     } = useSheet(ownerId, path.mountId, path.id, workbookRef);
 
     const auth = useAuth();
-    const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);
+    const publishSelection = usePresence(provider, workbookRef, auth.user, synced);
     const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, path.mountId);
     const uploadFile = useUploadFile(ownerId, path.mountId);
     const { resolveMediaUrlByPath, startUpload } = useMediaResolver();
@@ -359,8 +358,6 @@ export function SheetEditor({
         ],
     );
 
-    // A WS blip keeps the Workbook mounted, and it catches up through the op log. A new snapshot remounts it through
-    // snapshotVersion, unless it is a compaction of what the tab already holds.
     return (
         <CollabDocumentGate collab={{ loaded, storageUnavailable, storageGone }} path={path} canWrite={canWrite}>
             <UnsyncedEditsGuard active={unsyncedEdits} />
@@ -401,7 +398,6 @@ export function SheetEditor({
                                 {/* Set by the same sync that latches `loaded`; the check only narrows the type. */}
                                 {initialData && (
                                     <Workbook
-                                        key={snapshotVersion}
                                         ref={workbookRef}
                                         data={initialData}
                                         onChange={handleWorkbookChange}

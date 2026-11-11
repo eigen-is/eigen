@@ -3,7 +3,6 @@ import type { Op, Sheet } from '@workspace/lib/sheets';
 import {
     decodeSheetsWorkbook,
     encodeSheetsSnapshot,
-    readSheetsBase,
     readSheetsSnapshotJson,
     sheetsOpLog,
     sheetsStateMap,
@@ -323,9 +322,6 @@ describe('CollabDocument compacts a workbook at close', () => {
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         const sheet = await openLingeringSheet('compaction-stores', [edit(0, 0, 7), POISON, edit(0, 1, 'x'), POISON]);
         try {
-            // The open stamped a base, which the compaction names as the one it folded.
-            const opened = readSheetsBase(sheet.doc.doc);
-            expect(opened).toEqual({ id: expect.any(String), compactedFrom: null });
             const closed = sheet.nextClose();
             lingerOut(sheet.doc);
             jest.useRealTimers();
@@ -347,18 +343,6 @@ describe('CollabDocument compacts a workbook at close', () => {
                 .map((args) => String(args[0]))
                 .filter((line) => line.startsWith('[sheets]'));
             expect(sheetsLines).toEqual([`[sheets] compaction dropped 2 op batches path=${sheet.id}`]);
-            const base = readSheetsBase(sheet.doc.doc);
-            expect(base).toEqual({ id: expect.any(String), compactedFrom: opened?.id ?? 'missing' });
-
-            // The next compaction names the base it folded into.
-            sheet.ops.push([edit(1, 0, 3)]);
-            const closedAgain = sheet.nextClose();
-            jest.useFakeTimers();
-            lingerOut(sheet.doc);
-            jest.useRealTimers();
-            await closedAgain;
-            expect(sheet.ops.length).toBe(0);
-            expect(readSheetsBase(sheet.doc.doc)?.compactedFrom).toBe(base?.id ?? 'missing');
         } finally {
             warn.mockRestore();
             sheet.restore();
@@ -1002,7 +986,7 @@ describe('CollabDocument compacts a workbook at close', () => {
     }, 30_000);
 });
 
-describe('a snapshot writer starts a fresh base', () => {
+describe('a version restore on an open workbook', () => {
     let home: Home;
     let mountId: string;
     let rootId: string;
@@ -1015,33 +999,11 @@ describe('a snapshot writer starts a fresh base', () => {
         home = await getHome(ctx.alice.user.id);
     });
 
-    test('a workbook opened without a base gets one, saved, and its Modified time stays', async () => {
-        const created = await home.drive.create(mountId, rootId, 'open-stamps-base', 'sheets', home.user);
-        let touches = 0;
-        const originalTouch = home.drive.touchUpdatedAt;
-        home.drive.touchUpdatedAt = async () => {
-            touches++;
-        };
-        try {
-            const collab = await home.drive.getCollabDocument(mountId, created.id);
-            const base = readSheetsBase(collab.doc);
-            expect(base).toEqual({ id: expect.any(String), compactedFrom: null });
-            await home.drive.closeCollabDocument(mountId, created.id);
-            expect(touches).toBe(0);
-
-            const reopened = await home.drive.getCollabDocument(mountId, created.id);
-            expect(readSheetsBase(reopened.doc)).toEqual(base);
-            await home.drive.closeCollabDocument(mountId, created.id);
-        } finally {
-            home.drive.touchUpdatedAt = originalTouch;
-        }
-    });
-
-    test('a version restore stamps a fresh base without compactedFrom, in the same transaction', async () => {
-        const created = await home.drive.create(mountId, rootId, 'restore-stamps-base', 'sheets', home.user);
+    test('a version restore puts back the snapshot and the log in one update', async () => {
+        const created = await home.drive.create(mountId, rootId, 'restore-one-update', 'sheets', home.user);
         const collab = await home.drive.getCollabDocument(mountId, created.id);
-        writeSheetsSnapshot(collab.doc, encodeSheetsSnapshot(SHEETS, { computed: true }), null);
-        const saved = readSheetsBase(collab.doc);
+        const stored = encodeSheetsSnapshot(SHEETS, { computed: true });
+        writeSheetsSnapshot(collab.doc, stored, null);
         const version = await home.drive.saveVersion(mountId, created.id);
         sheetsOpLog(collab.doc).push([edit(0, 0, 1)]);
 
@@ -1052,9 +1014,8 @@ describe('a snapshot writer starts a fresh base', () => {
         collab.doc.off('update', count);
 
         expect(updates).toBe(1);
-        const base = readSheetsBase(collab.doc);
-        expect(base).toEqual({ id: expect.any(String), compactedFrom: null });
-        expect(base?.id).not.toBe(saved?.id);
+        expect(readSheetsSnapshotJson(collab.doc)).toBe(stored);
+        expect(sheetsOpLog(collab.doc).length).toBe(0);
         await home.drive.closeCollabDocument(mountId, created.id);
     });
 });
