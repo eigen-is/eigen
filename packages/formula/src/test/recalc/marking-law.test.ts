@@ -12,9 +12,11 @@ import { cellKey, closure, factsOf, pendingOf, readersOf } from './closure';
 
 // The law of marking: the formulas a marking flags are exactly those the definition reaches from its seeds, no
 // fewer and no more, whatever was pending before it: a marking right after another, after a pass that stopped at
-// its cap, after single formulas were computed, and after a rebuild of the index with flags standing.
+// its cap, after single formulas were computed, and after a rebuild of the index with flags standing. The same law
+// holds for what a recalc computes after writes, where a cell can be written twice and cells come in any order.
 
 const SHEETS = ['a', 'b', 'c'];
+const KEPT = 'kept';
 const ROWS = 40;
 const COLUMNS = 10;
 
@@ -225,6 +227,75 @@ function run(seed: number, books: number): { markings: number; flagged: number; 
     return { markings, flagged, stops };
 }
 
+// Recalcs of workbooks whose formulas came with the text 'kept' or were never computed: a formula that shows
+// anything else was computed. The cells are written in runs down or up a column, some of them again from the same
+// row, from a row inside the run or from the row after it.
+function written(seed: number, books: number): { passes: number; computed: number } {
+    let passes = 0;
+    let computed = 0;
+    for (let book = 0; book < books; book += 1) {
+        const { pick, formula, tall } = generator(random(seed * 100019 + book));
+        const sources = cellsOf(pick, formula, tall).map((cells, s) =>
+            source(
+                SHEETS[s],
+                cells.map(
+                    ([row, column, value, text]): TestCell =>
+                        text === undefined ? [row, column, value] : [row, column, value === null ? null : KEPT, text],
+                ),
+            ),
+        );
+        const workbook = new Workbook(sources);
+        const recalc = new Recalc(workbook, FUNCTIONS);
+        // A formula that was never computed is a seed of the first recalc.
+        const seeds: number[] = [];
+        for (const key of pendingOf(workbook)) {
+            const row = key % GRID_ROWS;
+            const column = Math.floor(key / GRID_ROWS) % GRID_COLUMNS;
+            seeds.push(Math.floor(key / GRID_ROWS / GRID_COLUMNS), column, row, row);
+        }
+        for (let pass = 0; pass < 8; pass += 1) {
+            const runs = pick(6);
+            for (let run = 0; run < runs; run += 1) {
+                const s = pick(3);
+                const column = pick(COLUMNS);
+                const length = 1 + pick(6);
+                const up = pick(2) === 0;
+                const times = 1 + pick(3);
+                let from = pick(ROWS);
+                for (let time = 0; time < times; time += 1) {
+                    for (let i = 0; i < length; i += 1) {
+                        const row = up ? from + length - 1 - i : from + i;
+                        seeds.push(s, column, row, row);
+                        recalc.touch(workbook.sheets[s], row, column, false);
+                        workbook.setValue(workbook.sheets[s], row, column, pick(9));
+                    }
+                    from += pick(length + 1);
+                }
+            }
+            const expected = pendingOf(workbook);
+            for (const key of closure(workbook, readersOf(workbook, factsOf(workbook)), seeds)) expected.add(key);
+            recalc.pass(Number.POSITIVE_INFINITY);
+            const shown = new Set<number>();
+            workbook.sheets.forEach((sheet, s) => {
+                sheet.columns.forEach((cells, column) => {
+                    for (let row = 0; row < cells.length; row += 1) {
+                        if (cells.shape[row] === 0) continue;
+                        if (workbook.value(cells, row) !== KEPT) shown.add(cellKey(s, column, row));
+                        workbook.put(cells, row, KEPT);
+                    }
+                });
+            });
+            const missed = [...expected].filter((key) => !shown.has(key));
+            const extra = [...shown].filter((key) => !expected.has(key));
+            expect({ seed, book, pass, missed, extra }).toEqual({ seed, book, pass, missed: [], extra: [] });
+            passes += 1;
+            computed += shown.size;
+            seeds.length = 0;
+        }
+    }
+    return { passes, computed };
+}
+
 describe('a marking flags what the definition reaches, no less and no more', () => {
     test('the generator writes formulas that parse', () => {
         const { formula, tall } = generator(random(1));
@@ -270,6 +341,16 @@ describe('a marking flags what the definition reaches, no less and no more', () 
             expect(markings).toBe(2100);
             expect(flagged).toBeGreaterThan(8000);
             expect(stops).toBeGreaterThan(20);
+        },
+        120000,
+    );
+
+    test.each([[1], [2], [3], [4]])(
+        'random workbooks and writes, a cell more than once and in any order: seed %i',
+        (seed) => {
+            const { passes, computed } = written(seed, 150);
+            expect(passes).toBe(1200);
+            expect(computed).toBeGreaterThan(8000);
         },
         120000,
     );
