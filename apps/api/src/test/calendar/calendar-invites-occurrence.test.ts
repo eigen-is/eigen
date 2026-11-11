@@ -392,6 +392,41 @@ describe('Occurrence edits of an invited series', () => {
         await untilBob(series.uid, (occ) => occ.length === 0);
     });
 
+    test('deleting a cancelled series tells its guests nothing more', async () => {
+        const CAROL = 'carol.cancelled-delete@example.org';
+        const carol = { email: CAROL, name: 'Carol', status: 'pending' as const, role: 'required' as const };
+        const series = await createSeries('Weekly Cancelled Then Deleted');
+        await editOccurrence(series.id, '2027-02-09', {
+            title: series.title,
+            data: { attendees: [...guests(), carol] },
+        });
+        await cancelMailTo(CAROL, () => putEvent(series.id, { status: 'cancelled' }));
+        await untilBob(series.uid, (occ) => occ.length === 0);
+
+        const relay = await import('../../lib/home/home-relay');
+        const relayed = spyOn(relay, 'sendToHome');
+        const mail = await catchMail();
+        try {
+            relayed.mockClear();
+            const deleted = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${series.id}`,
+                { method: 'DELETE' },
+            );
+            expect(deleted.status).toBe(200);
+
+            // Absence only counts behind what IS expected: a later invitation reaches both guests the path a CANCEL takes.
+            await createSeries('Weekly After The Delete', [...guests(), carol]);
+            await mail.to(CAROL, 'Invitation: Weekly After The Delete');
+            await eventually(async () => relayed.mock.calls.length > 0 || undefined, 'the invitation to reach Bob');
+            expect(mail.sent(CAROL)).toHaveLength(1);
+            expect(relayed.mock.calls.map(([, message]) => message.type)).toEqual(['calendar:request']);
+        } finally {
+            mail.restore();
+            relayed.mockRestore();
+        }
+    });
+
     // RFC 5546 § 2.1.4: each CANCEL raises the SEQUENCE. Eigen raises the series', which a guest who never got the date
     // on its own holds it at, so a CANCEL naming the date's older number could be dropped as stale.
     test("a cancelled date's CANCEL carries the series' SEQUENCE", async () => {
