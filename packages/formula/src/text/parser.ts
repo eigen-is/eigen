@@ -381,7 +381,7 @@ class Parser {
                 return this.word(space);
             case Token.Quote:
             case Token.Bracket:
-                return this.prefixed(space, this.sheetPrefix(pos));
+                return this.prefixed(space, this.sheetPrefix(pos, kind, end));
             default:
                 return this.fail();
         }
@@ -393,7 +393,7 @@ class Parser {
         const { text, pos, end } = this;
         const after = text.charCodeAt(end);
         if (after === OPEN) return this.call(space);
-        if (after === BANG) return this.prefixed(space, this.sheetPrefix(pos));
+        if (after === BANG) return this.prefixed(space, this.sheetPrefix(pos, Token.Word, end));
         const reference = this.reference(space, SheetKind.Host, '');
         if (reference) return reference;
         if (callsSpaced(text, pos, end)) return this.call(space);
@@ -405,7 +405,7 @@ class Parser {
             }
         }
         if (after === COLON) {
-            const bang = this.sheetPrefix(pos);
+            const bang = this.sheetPrefix(pos, Token.Word, end);
             if (bang !== -1) return this.prefixed(space, bang);
         }
         return this.name(space, SheetKind.Host, '');
@@ -496,14 +496,12 @@ class Parser {
         return branch(NodeKind.Array, columns, '', elements, space, '', spaceEnd);
     }
 
-    // The sheet prefix that starts at `pos`, into the prefix fields: a quoted name, a stored id, or one bare name or
-    // the two of a 3-D reference, which typed text may write behind another workbook's index. Returns where its !
-    // is, or -1 when no prefix starts there.
-    private sheetPrefix(pos: number): number {
+    // The sheet prefix that starts at `pos` with a token of this kind and end, into the prefix fields: a quoted
+    // name, a stored id, or one bare name or the two of a 3-D reference, which typed text may write behind another
+    // workbook's index. Returns where its ! is, or -1 when no prefix starts there.
+    private sheetPrefix(pos: number, kind: number, end: number): number {
         const { text } = this;
-        const first = lexAt(text, pos);
-        const kind = tokenKind(first);
-        let bang = tokenEnd(first);
+        let bang = end;
         let name = '';
         if (kind === Token.Quote) {
             const quoted = text.slice(pos + 1, bang - 1);
@@ -555,13 +553,15 @@ class Parser {
             this.next();
             return leaf(NodeKind.Error, REF_ERROR, '', space, sheetKind, sheet);
         }
-        // Another workbook's name may be quoted, and one right before ( is a function whatever it reads as.
-        const { text, pos, end } = this;
-        const functionName = this.kind === Token.Word && text.charCodeAt(end) === OPEN;
-        if (sheetKind === SheetKind.External && (this.kind === Token.Quote || functionName)) {
-            const name = functionName ? text.slice(pos, end) : text.slice(pos + 1, end - 1).replaceAll("''", "'");
-            this.next();
-            return leaf(NodeKind.Name, 0, name, space, sheetKind, sheet);
+        if (sheetKind === SheetKind.External) {
+            // Another workbook's name may be quoted, and one right before ( is a function whatever it reads as.
+            const { text, pos, end } = this;
+            const functionName = this.kind === Token.Word && text.charCodeAt(end) === OPEN;
+            if (this.kind === Token.Quote || functionName) {
+                const name = functionName ? text.slice(pos, end) : text.slice(pos + 1, end - 1).replaceAll("''", "'");
+                this.next();
+                return leaf(NodeKind.Name, 0, name, space, sheetKind, sheet);
+            }
         }
         if (this.kind !== Token.Word && this.kind !== Token.Number) return this.fail();
         const reference = this.reference(space, sheetKind, sheet);
@@ -583,7 +583,8 @@ class Parser {
             let second = end + 1;
             if (sheetKind !== SheetKind.Host) {
                 // The second end may repeat the sheet of the first, as in HR!B9:HR!M9.
-                const bang = this.sheetPrefix(second);
+                const repeat = lexAt(text, second);
+                const bang = this.sheetPrefix(second, tokenKind(repeat), tokenEnd(repeat));
                 if (bang !== -1 && this.prefixKind === sheetKind && this.prefixSheet === sheet) second = bang + 1;
             }
             const legEnd = this.leg(second);

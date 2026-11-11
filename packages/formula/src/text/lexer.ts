@@ -161,7 +161,8 @@ export function lexAt(text: string, pos: number): number {
         const width = wideWidth(text, pos, LETTER);
         if (width !== 0) return (wordEnd(text, pos + width) << 6) | Token.Word;
         // A character no formula holds is one bad token, both halves of it when it is a pair.
-        return ((text.codePointAt(pos) ?? 0) > 0xffff ? (end + 1) << 6 : end << 6) | Token.Bad;
+        if ((text.codePointAt(pos) ?? 0) > 0xffff) end += 1;
+        return (end << 6) | Token.Bad;
     }
     switch (CLASS[code]) {
         case SPACE:
