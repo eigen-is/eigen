@@ -5,6 +5,7 @@
 import { align } from '../eval/bands';
 import type { Evaluator } from '../eval/evaluator';
 import { Families } from '../eval/families';
+import { heightOf, widthOf } from '../eval/search';
 import { firstError } from '../eval/views';
 import type { FormulaError } from '../values/errors';
 import { CALC, VALUE } from '../values/errors';
@@ -15,7 +16,6 @@ import { tally } from './criteria';
 import type { FunctionBody } from './legacy';
 import { define, FunctionFlag, optional, RANGE, SCALAR } from './legacy';
 import { fn, INTEGER, NUMBER, NUMBERS, rest } from './registry';
-import { heightOf, widthOf } from './search';
 
 // The first error among the values of one argument, row by row, once the formulas in it are computed.
 function errorIn(ctx: Evaluator, arg: Value): FormulaError | null {

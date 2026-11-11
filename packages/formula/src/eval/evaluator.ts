@@ -3,7 +3,6 @@
 // something needs its value, and reading a cell goes through the recalc, which computes a formula that is still
 // to be computed first. So the order of a recalc comes from these reads.
 
-import { PENDING } from '../functions/legacy';
 import type { Registry } from '../functions/registry';
 import type { Recalc } from '../recalc/recalc';
 import type { Sheet } from '../store/sheet';
@@ -20,6 +19,7 @@ import { call } from './call';
 import { lift } from './lift';
 import { LIFTED_BINARY, LIFTED_NEGATE, LIFTED_PERCENT, negate, operate, percent } from './operators';
 import type { Frame } from './readers';
+import { Room } from './readers';
 import { toArray } from './views';
 import { Walk } from './walk';
 
@@ -35,6 +35,7 @@ export class Evaluator {
     public readonly oldFrames: Value[][] = [];
     public calls = 0;
     public readonly walk = new Walk(this);
+    public readonly room = new Room(this);
     // Where endsAt writes the rows or columns of the reference being read.
     private readonly ends: Ends = { first: 0, second: 0 };
     // Where a reference that is read as an array marks its rows and its columns that hold a cell.
@@ -59,8 +60,8 @@ export class Evaluator {
             ? this.read(this.binary(tree, sheet, row, column, true))
             : this.operand(tree, sheet, row, column);
         if (!isArray(value)) return value === null ? 0 : value;
-        const first = value.items[0];
-        return isReference(first) ? VALUE : first === null ? 0 : first;
+        const first = this.first(value.items[0]);
+        return first === null ? 0 : first;
     }
 
     public evaluate(node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
@@ -137,6 +138,12 @@ export class Evaluator {
         }
     }
 
+    // The cell a formula is in, as a reference.
+    public here(sheet: Sheet, row: number, column: number): Reference {
+        const at = { top: row, left: column, bottom: row, right: column };
+        return { type: ValueType.Reference, sheet: this.place(sheet), ...at, next: null };
+    }
+
     // An element of an array as a value: of a reference its first cell.
     public first(item: Scalar | Reference): Scalar {
         if (!isReference(item)) return item;
@@ -151,12 +158,6 @@ export class Evaluator {
         if (rows) this.rowMarks = marks;
         else this.columnMarks = marks;
         return marks;
-    }
-
-    // A lazy argument, evaluated now unless the wrapper already had to. One left empty is a blank from here on.
-    public force(value: Value, node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
-        if (value !== PENDING) return value;
-        return node.kind === NodeKind.Empty ? null : this.evaluate(node, sheet, row, column);
     }
 
     // The place of a sheet in the workbook. Most formulas name their own sheet, so the last answer is kept.

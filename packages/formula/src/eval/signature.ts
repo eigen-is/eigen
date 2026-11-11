@@ -6,6 +6,7 @@ import type { FormulaError } from '../values/errors';
 import type { ArrayValue, Scalar, Value } from '../values/value';
 import { ValueType } from '../values/value';
 import type { Family } from './families';
+import type { Table } from './readers';
 
 export const MAX_ARGUMENTS = 255;
 
@@ -16,12 +17,30 @@ export const Prepare = {
     Walked: 1,
     // Not evaluated: the slot holds a token, and the argument is evaluated when the body answers with it.
     Lazy: 2,
+    // Kept as it is and handed over whole, as a table: never lifted, and nothing in it is read yet.
+    Whole: 3,
+    // A reference that is never read. An array of references runs the call once per reference.
+    Reference: 4,
+    // No argument: something of the engine that the body is handed.
+    Ambient: 5,
 } as const;
 
 export type Prepare = (typeof Prepare)[keyof typeof Prepare];
 
 // How a prepared argument becomes what the body gets. An error ends the call for every reading before Any.
-export const Read = { Number: 0, Integer: 1, Text: 2, Boolean: 3, Walked: 4, Any: 5, Lazy: 6 } as const;
+export const Read = {
+    Number: 0,
+    Integer: 1,
+    Text: 2,
+    Boolean: 3,
+    Plain: 4,
+    Walked: 5,
+    Table: 6,
+    Here: 7,
+    Any: 8,
+    Lazy: 9,
+    Room: 10,
+} as const;
 
 export type Read = (typeof Read)[keyof typeof Read];
 
@@ -35,6 +54,8 @@ export type Param<T> = {
     // Whether the argument may be left out at the end, and what the body then gets.
     readonly optional: boolean;
     readonly fallback: Scalar | undefined;
+    // Whether an argument left empty is left out too. Else it is a blank, and read as one.
+    readonly skips: boolean;
     // Whether the parameter takes every argument from its own to the last.
     readonly rest: boolean;
     // What a union of areas answers. Null takes every area.
@@ -56,11 +77,23 @@ export const TOKENS: readonly Lazy[] = Array.from({ length: MAX_ARGUMENTS }, (_,
 // What a slot of a call holds: an argument as prepared and, once read, what the body gets for it.
 export type Held = Value | Lazy | undefined;
 
-export type Result = Scalar | ArrayValue | Lazy;
+// How a search of a row or a column takes its key: the key itself, or among values taken to be sorted the last
+// one at most the key, or at least it.
+export const Find = { Exact: 0, AtMost: 1, AtLeast: 2 } as const;
+
+export type Find = (typeof Find)[keyof typeof Find];
+
+// The mark of a row whose body may answer with a part of a range it was given.
+export const PART = 1;
+
+export type Returns = 0 | typeof PART;
+
+export type Result = Scalar | ArrayValue | Lazy | Table;
 
 export type Entry = {
     readonly name: string;
     readonly params: readonly Param<unknown>[];
+    readonly returns: Returns;
     readonly min: number;
     readonly max: number;
     // How many arguments come before the ones that repeat, and how many repeat together.

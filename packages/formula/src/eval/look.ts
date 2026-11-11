@@ -4,11 +4,13 @@
 
 import type { FormulaError } from '../values/errors';
 import { isArray, isError, isReference } from '../values/value';
+import { isLazy } from './call';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Errors } from './families';
 import type { Frame } from './readers';
 import type { Entry, Held } from './signature';
+import { Prepare } from './signature';
 import { firstError } from './views';
 
 // The error that ends the call, or null with `frame.args` ready for the body. `count` arguments were written.
@@ -19,7 +21,10 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
     for (let p = 0; p < params.length; p += 1) {
         const { family, rest } = params[p];
         if (family === null) {
-            args[p] = rest ? held.slice(p, count) : held[p];
+            const value = held[p];
+            if (params[p].prepare === Prepare.Ambient) args[p] = ctx.room;
+            else if (params[p].prepare !== Prepare.Whole) args[p] = rest ? held.slice(p, count) : value;
+            else args[p] = value === undefined || isLazy(value) ? undefined : frame.table(p).over(value);
             continue;
         }
         const to = rest ? count : p + 1;

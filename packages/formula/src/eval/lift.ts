@@ -12,7 +12,7 @@ import type { Axis } from './bands';
 import { align } from './bands';
 import { isLazy, picked, read, run, slotOf } from './call';
 import type { Evaluator } from './evaluator';
-import type { Entry, Held, Lazy, Result } from './signature';
+import type { Entry, Held, Lazy, Param } from './signature';
 import { Prepare, Read } from './signature';
 
 // `held` are the arguments as prepared, `count` of them written. Each element is read into `held` itself, so what
@@ -31,7 +31,7 @@ export function lift(
     const arrays: ArrayValue[] = [];
     // Per argument, which of the arrays it is, or -1.
     const lifting = prepared.map((value, i) =>
-        isArray(value) && slotOf(entry, i).prepare === Prepare.Scalar ? arrays.push(value) - 1 : -1,
+        isArray(value) && lifts(slotOf(entry, i), value) ? arrays.push(value) - 1 : -1,
     );
     const lined = lineUp(ctx, arrays);
     if (lined === null) return CALC;
@@ -40,9 +40,10 @@ export function lift(
     const items = new Array<Scalar | Reference>(down.count * width);
     // Per element, the lazy argument it picked, or undefined for an element that has its value.
     const picks: (Lazy | undefined)[] = [];
+    let references = false;
     for (let r = 0; r < down.count; r += 1) {
         for (let c = 0; c < width; c += 1) {
-            let result: Result | null = null;
+            let result: Value | Lazy | null = null;
             // An element is read as the argument of a call of its own is, and its failure stays in the element.
             for (let i = 0; i < prepared.length && result === null; i += 1) {
                 const param = slotOf(entry, i);
@@ -50,7 +51,8 @@ export function lift(
                 let value = prepared[i];
                 if (k >= 0) {
                     const from = placeAt(arrays[k], down, across, k, r, c);
-                    value = from < 0 ? NA : single(ctx, arrays[k].items[from]);
+                    const item = from < 0 ? NA : arrays[k].items[from];
+                    value = param.prepare === Prepare.Reference ? item : single(ctx, item);
                 }
                 value = read(param, value);
                 if (isError(value) && param.read < Read.Any) result = value;
@@ -58,11 +60,21 @@ export function lift(
             }
             result ??= run(ctx, entry, held, count);
             if (isLazy(result)) picks[r * width + c] = result;
-            else items[r * width + c] = isArray(result) ? CALC : result;
+            else if (isArray(result) || (!isReference(result) && !isScalar(result))) items[r * width + c] = CALC;
+            else {
+                items[r * width + c] = result;
+                references ||= isReference(result);
+            }
         }
     }
-    const made = arrayOf(lined.rows, lined.columns, items, down.ends, across.ends);
+    const made = arrayOf(lined.rows, lined.columns, items, down.ends, across.ends, references);
     return picks.length === 0 || !isArray(made) ? made : fill(ctx, entry, made, picks, node, sheet, row, column);
+}
+
+// Whether an array at a parameter runs the call once per element: where one value is read, and an array of
+// references where only a reference is taken.
+function lifts(param: Param<unknown>, array: ArrayValue): boolean {
+    return param.prepare === Prepare.Scalar || (param.prepare === Prepare.Reference && array.references);
 }
 
 type Lined = { readonly rows: number; readonly columns: number; readonly down: Axis; readonly across: Axis };
@@ -79,6 +91,10 @@ function lineUp(ctx: Evaluator, arrays: readonly ArrayValue[]): Lined | null {
     const down = align(arrays, rows, true);
     const across = align(arrays, columns, false);
     return ctx.recalc.room(down.count * across.count, MOST_ELEMENTS) ? { rows, columns, down, across } : null;
+}
+
+function isScalar(value: Value): value is Scalar {
+    return typeof value !== 'object' || value === null || isError(value);
 }
 
 // Where array `k` stores its element for a run of rows and a run of columns, or -1 past its end.
@@ -137,5 +153,5 @@ function fill(
             items[r * width + c] = item;
         }
     }
-    return arrayOf(lined.rows, lined.columns, items, down.ends, across.ends);
+    return arrayOf(lined.rows, lined.columns, items, down.ends, across.ends, made.references);
 }

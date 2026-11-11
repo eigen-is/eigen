@@ -21,7 +21,7 @@ const ROWS: Entry[] = [];
 for (const entry of FUNCTIONS.values()) if (!('flags' in entry)) ROWS.push(entry);
 
 // A row for which no call from the pools answers a value names one here.
-const BASES: Readonly<Record<string, readonly string[]>> = {};
+const BASES: Readonly<Record<string, readonly string[]>> = { XMATCH: ['20', 'A1:A5', '0', '1'] };
 // The one row whose answer is an error by definition.
 const ERRORS = new Set(['NA']);
 
@@ -37,6 +37,12 @@ function pool(param: Param<unknown>): readonly string[] {
             return ['TRUE', 'FALSE'];
         case Read.Walked:
             return ['A1:A5', 'C1:C3', '1'];
+        case Read.Plain:
+            return ['20', '10', '"b"'];
+        case Read.Table:
+            return ['A1:B5', 'A1:A5', 'A1:E1'];
+        case Read.Here:
+            return ['A2', 'C1:C3'];
         default:
             return ['1', '"abc"', 'TRUE'];
     }
@@ -63,10 +69,11 @@ function isFailure(value: unknown): value is FormulaError {
 
 // The first argument list from the pools, or from BASES, whose call answers a value.
 function baseOf(entry: Entry): readonly string[] | undefined {
+    const taken = entry.params.filter((param) => param.prepare !== Prepare.Ambient);
     const tries: (readonly string[])[] = [];
     if (BASES[entry.name] !== undefined) tries.push(BASES[entry.name]);
     for (let k = 0; k < 4; k += 1) {
-        tries.push(entry.params.map((param, at) => pool(param)[(k + at * k) % pool(param).length]));
+        tries.push(taken.map((param, at) => pool(param)[(k + at * k) % pool(param).length]));
     }
     const values = evaluateAll(tries.map((args) => written(entry, args)));
     return tries[values.findIndex((value) => !isFailure(value) || ERRORS.has(entry.name))];
@@ -80,10 +87,13 @@ function withArg(args: readonly string[], at: number, put: string): string[] {
 
 describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, entry) => {
     const base = BASE.get(entry.name) ?? [];
-    const { params } = entry;
+    const params = entry.params.filter((param) => param.prepare !== Prepare.Ambient);
     const scalars = params.map((param, at) => (param.prepare === Prepare.Scalar ? at : -1)).filter((at) => at >= 0);
-    // The parameters whose reading an error ends.
-    const failing = scalars.filter((at) => params[at].read < Read.Any);
+    // The parameters whose reading an error ends, and those read as a number or a truth value.
+    const ends = (param: Param<unknown>) =>
+        param.read < Read.Any && (param.family === null || param.family.errors === Errors.Result);
+    const failing = params.map((param, at) => (ends(param) ? at : -1)).filter((at) => at >= 0);
+    const coerced = scalars.filter((at) => params[at].read <= Read.Boolean && params[at].read !== Read.Text);
 
     test('has a call that answers a value', () => {
         expect(BASE.get(entry.name)).toBeDefined();
@@ -99,9 +109,8 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
     });
 
     test('a text that is no value of the reading is #VALUE!, one that is reads as the value', () => {
-        for (const at of failing) {
+        for (const at of coerced) {
             const { read } = params[at];
-            if (read === Read.Text) continue;
             const good = read === Read.Boolean ? ['"true"', 'TRUE'] : ['"2"', '2'];
             const [bad, text, plain] = evaluateAll(
                 ['"x y"', ...good].map((put) => written(entry, withArg(base, at, put))),
@@ -127,7 +136,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         const formulas: string[] = [];
         for (const first of failing) {
             formulas.push(written(entry, withArg(base, first, '1/0')));
-            for (const second of scalars) {
+            for (const second of failing) {
                 if (second > first) formulas.push(written(entry, withArg(withArg(base, first, '1/0'), second, 'NA()')));
             }
         }
@@ -169,8 +178,15 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             ]);
             if (at < entry.min - 1 || (at >= entry.min && at < params.length - 1 && !params[at + 1].optional)) continue;
             // One empty argument alone is a call of no arguments.
-            if (at > 0) expect(empty).toEqual(blank);
             expect(cell).toEqual(blank);
+            if (param.skips) {
+                const [skipped, left] = evaluateAll([written(entry, [...upTo, '', '']), written(entry, upTo)]);
+                if (at === params.length - 1) expect(empty).toEqual(left);
+                else
+                    expect(skipped).toEqual(
+                        evaluateAll([written(entry, [...upTo, param.fallback === 1 ? '1' : 'NA()', ''])])[0],
+                    );
+            } else if (at > 0) expect(empty).toEqual(blank);
             if (!param.optional || param.fallback === undefined || at !== params.length - 1) continue;
             const fallback =
                 typeof param.fallback === 'string' ? `"${param.fallback}"` : String(param.fallback).toUpperCase();
@@ -257,5 +273,32 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         const whole = written(entry, [...base, '{1,2,3}']).slice(1);
         expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);
         same('(A1:A3,C1:C3)', 'A1:A3,C1:C3');
+    });
+
+    test('a union of areas answers what the parameter says', () => {
+        const formulas: string[] = [];
+        const expected: FormulaError[] = [];
+        params.forEach((param, at) => {
+            if (param.union === null || param.family !== null) return;
+            formulas.push(written(entry, withArg(base, at, '(A1:A3,C1:C3)')));
+            expected.push(param.union);
+        });
+        expect(evaluateAll(formulas)).toEqual(expected);
+    });
+
+    test('where only a reference is taken, an array of references gives one answer per reference', () => {
+        for (const at of params.map((param, i) => (param.prepare === Prepare.Reference ? i : -1))) {
+            if (at < 0) continue;
+            const lifted = written(entry, withArg(base, at, 'INDEX(A1:A5,{2,4})')).slice(1);
+            const values = evaluateAll([
+                `=INDEX(${lifted},1,1)`,
+                `=INDEX(${lifted},1,2)`,
+                written(entry, withArg(base, at, 'A2')),
+                written(entry, withArg(base, at, 'A4')),
+                written(entry, withArg(base, at, '{1,2}')),
+            ]);
+            expect(values.slice(0, 2)).toEqual(values.slice(2, 4));
+            expect(values[4]).toBe(VALUE);
+        }
     });
 });

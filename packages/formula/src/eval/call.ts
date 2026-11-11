@@ -11,7 +11,7 @@ import { toBoolean, toNumber, toText } from '../values/coerce';
 import { NAME, VALUE } from '../values/errors';
 import { parseNumber } from '../values/parse-number';
 import type { Value } from '../values/value';
-import { isArray, isError, ValueType } from '../values/value';
+import { isArray, isError, isReference, ValueType } from '../values/value';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Errors, TypedText } from './families';
@@ -19,7 +19,7 @@ import { legacyCall } from './legacy';
 import { lift } from './lift';
 import { look } from './look';
 import { real } from './operators';
-import { Frame } from './readers';
+import { Frame, Table } from './readers';
 import type { Entry, Held, Lazy, Param, Result } from './signature';
 import { Prepare, Read, TOKENS } from './signature';
 
@@ -41,15 +41,18 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
     let lifted = false;
     for (let i = 0; i < size; i += 1) {
         let value: Held;
-        const { prepare } = slotOf(entry, i);
-        if (prepare === Prepare.Lazy) value = TOKENS[i];
-        else if (i >= count) value = undefined;
-        // An argument left empty is a blank, and is read as one.
-        else if (given[i].kind === NodeKind.Empty) value = null;
-        else if (prepare === Prepare.Scalar) {
+        const slot = slotOf(entry, i);
+        if (slot.prepare === Prepare.Lazy) value = TOKENS[i];
+        else if (i >= count) value = slot.read === Read.Here ? ctx.here(sheet, row, column) : undefined;
+        // An argument left empty is a blank, and is read as one, unless the parameter takes it for left out.
+        else if (given[i].kind === NodeKind.Empty) value = slot.skips ? undefined : null;
+        else if (slot.prepare === Prepare.Scalar) {
             value = ctx.operand(given[i], sheet, row, column);
             if (isArray(value)) lifted = true;
-        } else value = ctx.evaluate(given[i], sheet, row, column);
+        } else {
+            value = ctx.evaluate(given[i], sheet, row, column);
+            if (slot.prepare === Prepare.Reference && isArray(value) && value.references) lifted = true;
+        }
         held[i] = value;
     }
     let result: Value | Lazy | null = null;
@@ -85,8 +88,8 @@ export function picked(
     const param = slotOf(entry, token.index);
     if (token !== TOKENS[token.index] || param.prepare !== Prepare.Lazy)
         throw new Error(`${entry.name}: a foreign token`);
-    if (token.index >= node.children.length) return param.fallback ?? null;
-    const child = node.children[token.index];
+    const child = token.index < node.children.length ? node.children[token.index] : null;
+    if (child === null || (child.kind === NodeKind.Empty && param.skips)) return param.fallback ?? null;
     return child.kind === NodeKind.Empty ? null : ctx.evaluate(child, sheet, row, column);
 }
 
@@ -113,8 +116,15 @@ export function read(param: Param<unknown>, value: Held): Held {
             return toBoolean(value);
         case Read.Walked:
             return param.family === null ? value : collected(param.family, value);
+        case Read.Table:
+            return isReference(value) && value.next !== null && param.union !== null ? param.union : value;
+        case Read.Here:
+            if (!isReference(value)) return isError(value) ? value : VALUE;
+            return value.next !== null && param.union !== null ? param.union : value;
+        case Read.Plain:
         case Read.Any:
         case Read.Lazy:
+        case Read.Room:
             return value;
         default: {
             const unknown: never = param.read;
@@ -145,7 +155,7 @@ function collected(family: Family, value: Value): Held {
 
 // The body on arguments that are read, and its answer as a cell can hold it: a number that is no number is #NUM!,
 // and a text has at most 32,767 characters. `held` are the slots of the call in progress.
-export function run(ctx: Evaluator, entry: Entry, held: readonly Held[], count: number): Result {
+export function run(ctx: Evaluator, entry: Entry, held: readonly Held[], count: number): Value | Lazy {
     let args: readonly unknown[] = held;
     const frame = entry.plain ? null : ctx.frames[ctx.calls - 1];
     if (frame !== null) {
@@ -172,5 +182,6 @@ export function run(ctx: Evaluator, entry: Entry, held: readonly Held[], count: 
     }
     if (frame !== null && frame.failed !== null) return frame.failed;
     if (typeof result === 'number') return real(result);
-    return typeof result === 'string' && result.length > LONGEST_TEXT ? VALUE : result;
+    if (typeof result === 'string') return result.length > LONGEST_TEXT ? VALUE : result;
+    return result instanceof Table ? Table.held(result) : result;
 }

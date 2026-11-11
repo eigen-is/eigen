@@ -178,7 +178,7 @@ describe('ROW and COLUMN', () => {
         ['=ROW(B5:B9)', 'C7', 5],
         ['=INDEX(ROW(B5:B9),3)', 'C7', 7],
         ['=INDEX(COLUMN(B5:D5),1,3)', 'C7', 4],
-        ['=ROW((A1,B2))', 'C7', VALUE],
+        ['=ROW((A1,B2))', 'C7', REF],
         ['=ROW(C7)', 'C7', 7],
     ])('%s at %s is %p', (formula, host, expected) => {
         expect(evaluate(formula, {}, host)).toBe(expected);
