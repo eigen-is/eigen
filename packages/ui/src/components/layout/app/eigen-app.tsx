@@ -1,11 +1,12 @@
 // EigenApp is the root every Eigen app renders around its router: the hotkeys, the query client, auth, theme,
 // the server event stream, uploads, previews and the command palette. It also keeps a file dropped
-// outside a drop target from navigating the tab away, and binds Mod+P to print the open document.
+// outside a drop target from navigating the tab away, and binds the print key to print the open document.
 
 import type { HotkeysProviderOptions } from '@tanstack/react-hotkeys';
 import { HotkeysProvider, useHotkey } from '@tanstack/react-hotkeys';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@workspace/lib/auth';
+import { PRINT_HOTKEY } from '@workspace/lib/constants/hotkeys';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type React from 'react';
 import { useEffect, useState } from 'react';
@@ -28,7 +29,7 @@ type EigenAppProps = {
 };
 
 function GlobalHotkeys() {
-    useHotkey('Mod+P', (e) => {
+    useHotkey(PRINT_HOTKEY, (e) => {
         e.preventDefault();
         printDocument();
     });

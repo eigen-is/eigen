@@ -1,12 +1,10 @@
-// Every canvas keyboard command except the layered Escape (that one lives in the canvas because it
-// reads live gesture state to cancel an in-progress create/marquee/move) and the z-order brackets
-// (shared `useZOrderHotkeys`, which owns the manual event.code listener). Bindings go through
-// @tanstack/react-hotkeys mirroring the slides editor's useHotkey +
-// enabled-gating discipline, so shortcuts keep working while focus sits off-canvas and auto-ignore
-// text inputs.
+// The canvas's keys, such as the tools, nudges, Delete, ⌘A and ⌘D, Enter and undo. The canvas mounts it and turns it
+// off while a text editor, a dialog or a menu owns the keys. Escape stays in the canvas, because it cancels the live
+// gesture. The bindings sit on the document, so they work while focus is off the canvas, and skip text inputs.
 
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
+import { DUPLICATE_HOTKEY, SELECT_ALL_HOTKEY } from '@workspace/lib/constants/hotkeys';
 import type { VectorElement, VectorElementPatch, ZOp } from '@workspace/lib/vector';
 import { NUDGE_STEP, NUDGE_STEP_LARGE } from '@workspace/lib/vector';
 import { holdCapture } from '@workspace/ui/components/properties-panel';
@@ -14,7 +12,7 @@ import type { RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type * as Y from 'yjs';
 import { useZOrderHotkeys } from '../../properties-panel/z-order';
-import { applyZOrder, deleteSelection, duplicateSelection } from './selection-ops';
+import { applyZOrder, deleteSelection, duplicateSelection, selectAllElements } from './selection-ops';
 import type { VectorTool } from './use-tool';
 import { VECTOR_TOOLS } from './use-tool';
 
@@ -22,7 +20,7 @@ type CanvasKeyboardParams = {
     enabled: boolean;
     // An open menu owns the arrows, Delete, letters and Escape. The Edit menu lists ⌘Z and ⇧⌘Z, so undo stays on.
     menuOpen: boolean;
-    elements: VectorElement[];
+    elements: readonly VectorElement[];
     selectedIds: string[];
     setTool: (t: VectorTool) => void;
     toolLocked: boolean;
@@ -37,7 +35,7 @@ type CanvasKeyboardParams = {
     // The canvas element: Enter edits only when focus is on it or on the page itself, so a focused button,
     // link or rail thumbnail keeps its own Enter.
     containerRef: RefObject<HTMLElement | null>;
-    // What a double-click on the sole selected element does (the canvas' editElement), and whether it did anything.
+    // What a double-click on the sole selected element does, and whether it did anything.
     onEdit: (el: VectorElement) => boolean;
 };
 
@@ -45,66 +43,21 @@ type CanvasKeyboardParams = {
 export const INSERT_IMAGE_KEY = '9';
 export const TOOL_LOCK_KEY = 'Q';
 
-// The tools that actually carry keys. A creatable kind the registry gave no shortcut binds nothing
-// rather than doubling up on Select's V/1; resolved at module eval, so the hook count and order below
-// are fixed across renders.
-const KEYED_TOOLS = VECTOR_TOOLS.flatMap(({ tool, shortcut, digit }) =>
-    shortcut && digit ? [{ tool, shortcut, digit }] : [],
-);
-
-// The nudge bindings in one table, so the eight handlers are built — and memoized — in one place.
-const NUDGES = [
-    ['ArrowLeft', -NUDGE_STEP, 0],
-    ['ArrowRight', NUDGE_STEP, 0],
-    ['ArrowUp', 0, -NUDGE_STEP],
-    ['ArrowDown', 0, NUDGE_STEP],
-    ['Shift+ArrowLeft', -NUDGE_STEP_LARGE, 0],
-    ['Shift+ArrowRight', NUDGE_STEP_LARGE, 0],
-    ['Shift+ArrowUp', 0, -NUDGE_STEP_LARGE],
-    ['Shift+ArrowDown', 0, NUDGE_STEP_LARGE],
-] as const;
-
-// The keys a run of nudges is allowed to contain: the four arrows and the modifiers that qualify them.
-const BURST_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Shift', 'Meta', 'Control', 'Alt']);
-
-export const endsNudgeBurst = (key: string): boolean => !BURST_KEYS.has(key);
-
-// A RUN of nudges is one undo step, and leaving the writes unsealed cannot deliver that: Y.UndoManager
-// only merges changes landing within `captureTimeout` of each other, and a tap re-renders the whole
-// canvas, so two of them routinely land further apart than the 500 ms window and split into a step
-// each. The run is a gesture, so it holds the window open like one (the Opacity slider's
-// `holdCapture` idiom) — sealed from the op before it when it begins, sealed from whatever follows
-// when it ends. `end` is idempotent, so the run can be ended by the input that closes it AND by the
-// canvas unmounting under it.
-export function createNudgeBurst(undoManager: Y.UndoManager | null): { begin: () => void; end: () => void } {
-    let release: (() => void) | null = null;
-    return {
-        begin: () => {
-            release ??= holdCapture(undoManager);
-        },
-        end: () => {
-            release?.();
-            release = null;
-        },
-    };
-}
-
 export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     const { elements, selectedIds, undoManager } = params;
     const enabled = params.enabled && !params.menuOpen;
     const hasSelection = selectedIds.length > 0;
 
-    // Every handler below reads the live params through this ref, so every registration keeps ONE
-    // identity for the canvas' lifetime: a render (a drag preview, a selection change) allocates no
-    // callbacks and rebuilds no registration. Only `enabled` may change, in the memoized options.
+    // Every handler reads the live params through this ref, so a render, such as a drag preview, rebuilds no
+    // registration. Only `enabled` changes, in the memoized options.
     const live = useRef(params);
     live.current = params;
 
-    // Undo/redo through the doc's own UndoManager (⌘Z / ⌘⇧Z / ⌘Y).
     useYjsUndoHotkeys(undoManager, params.enabled);
 
     const on = useMemo(() => ({ enabled }), [enabled]);
     const onSelection = useMemo(() => ({ enabled: enabled && hasSelection }), [enabled, hasSelection]);
+    // A Mod key skips no input by default, so these opt in: ⌘A in a field selects the field's text.
     const onSelectionMod = useMemo(
         () => ({ enabled: enabled && hasSelection, ignoreInputs: true }),
         [enabled, hasSelection],
@@ -114,9 +67,6 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
         [enabled, elements.length],
     );
 
-    // Tools — single keys, so the lib's ignoreInputs default keeps them off while typing elsewhere. The
-    // letter and the digit come from VECTOR_TOOLS, the one table the toolbar reads, so a new tool binds
-    // itself. A module constant, so the hook count and order are fixed across renders.
     const toolHandlers = useMemo(
         () =>
             KEYED_TOOLS.map(
@@ -131,7 +81,6 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
         useHotkey(digit, toolHandlers[i], on);
     }
 
-    // Tool lock — keeps the selected tool active after a placement (Excalidraw's Q padlock).
     const toggleLock = useCallback(() => live.current.setToolLocked(!live.current.toolLocked), []);
     useHotkey(TOOL_LOCK_KEY, toggleLock, on);
 
@@ -140,11 +89,8 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     const onImage = useMemo(() => ({ enabled: enabled && canInsertImage }), [enabled, canInsertImage]);
     useHotkey(INSERT_IMAGE_KEY, insertImage, onImage);
 
-    // A run of nudges holds the undo capture window open (createNudgeBurst) so the whole run is one
-    // step. It ends on the first input that is not another nudge — a different key, a pointer press,
-    // the window losing focus — and on unmount, so the hold can never outlive this canvas. The
-    // listeners sit in the capture phase, ahead of the hotkey handlers, so the op that ends the run
-    // is already sealed off from it by the time it writes.
+    // The listeners sit in the capture phase, ahead of the hotkey handlers, so the op that ends a run is sealed off
+    // from it by the time it writes.
     const burst = useMemo(() => createNudgeBurst(undoManager), [undoManager]);
     const burstRef = useRef(burst);
     burstRef.current = burst;
@@ -163,8 +109,6 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
         };
     }, [burst]);
 
-    // Discrete ops go through `sealed` (see deleteSelection/duplicateSelection), so a nudge run that
-    // is still open when one fires can't merge into it either way.
     const del = useCallback(() => {
         const p = live.current;
         deleteSelection(p.selectedIds, p.deleteElements, p.setSelection, p.undoManager);
@@ -172,22 +116,18 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     useHotkey('Delete', del, onSelection);
     useHotkey('Backspace', del, onSelection);
 
-    // Mod combos default ignoreInputs off, so opt in — ⌘A must not hijack select-all in an input.
     const selectAll = useCallback((e: KeyboardEvent) => {
         e.preventDefault();
-        const p = live.current;
-        p.setSelection(p.elements.map((el) => el.id));
+        selectAllElements(live.current.elements, live.current.setSelection);
     }, []);
-    useHotkey('Mod+A', selectAll, onElementsMod);
+    useHotkey(SELECT_ALL_HOTKEY, selectAll, onElementsMod);
     const duplicate = useCallback((e: KeyboardEvent) => {
         e.preventDefault();
         const p = live.current;
         duplicateSelection(p.selectedIds, p.duplicateElements, p.setSelection, p.undoManager);
     }, []);
-    useHotkey('Mod+D', duplicate, onSelectionMod);
+    useHotkey(DUPLICATE_HOTKEY, duplicate, onSelectionMod);
 
-    // Enter does what a double-click on the selected element does. It acts, and takes the key, only for a
-    // sole selection and only when focus rests on the canvas or the page, never on a control that owns Enter.
     const edit = useCallback((e: KeyboardEvent) => {
         const p = live.current;
         if (e.target !== document.body && e.target !== p.containerRef.current) return;
@@ -203,7 +143,6 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     );
     useHotkey('Enter', edit, onEnter);
 
-    // Nudge — 1px, Shift 5px (scene units). One transact per press, all of them inside the run's hold.
     const nudge = useCallback((dx: number, dy: number) => {
         const p = live.current;
         const byId = new Map(p.elements.map((el) => [el.id, el]));
@@ -225,11 +164,44 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     );
     for (const [i, [key]] of NUDGES.entries()) useHotkey(key, nudgeHandlers[i], onSelection);
 
-    // Z-order: ⌘[/⌘] step, ⌘⇧[/⌘⇧] to back/front — shared hook owns the manual event.code listener,
-    // fed vector's fractional-index write.
     const arrange = useCallback((op: ZOp) => {
         const p = live.current;
         applyZOrder(op, p.elements, p.selectedIds, p.reorderElements, p.undoManager);
     }, []);
     useZOrderHotkeys(enabled && hasSelection, arrange);
+}
+
+// A module constant, so the hook binds the same keys in the same order on every render.
+const KEYED_TOOLS = VECTOR_TOOLS.flatMap(({ tool, shortcut, digit }) =>
+    shortcut && digit ? [{ tool, shortcut, digit }] : [],
+);
+
+const NUDGES = [
+    ['ArrowLeft', -NUDGE_STEP, 0],
+    ['ArrowRight', NUDGE_STEP, 0],
+    ['ArrowUp', 0, -NUDGE_STEP],
+    ['ArrowDown', 0, NUDGE_STEP],
+    ['Shift+ArrowLeft', -NUDGE_STEP_LARGE, 0],
+    ['Shift+ArrowRight', NUDGE_STEP_LARGE, 0],
+    ['Shift+ArrowUp', 0, -NUDGE_STEP_LARGE],
+    ['Shift+ArrowDown', 0, NUDGE_STEP_LARGE],
+] as const;
+
+const BURST_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Shift', 'Meta', 'Control', 'Alt']);
+
+export const endsNudgeBurst = (key: string): boolean => !BURST_KEYS.has(key);
+
+// A run of nudges is one undo step. Two taps often land further apart than the undo manager's 500 ms window, so the
+// run holds the window open as a gesture does. `end` may run twice: the input that ends the run and an unmount.
+export function createNudgeBurst(undoManager: Y.UndoManager | null): { begin: () => void; end: () => void } {
+    let release: (() => void) | null = null;
+    return {
+        begin: () => {
+            release ??= holdCapture(undoManager);
+        },
+        end: () => {
+            release?.();
+            release = null;
+        },
+    };
 }

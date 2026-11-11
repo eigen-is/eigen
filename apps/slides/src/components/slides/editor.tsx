@@ -76,6 +76,8 @@ export function SlideEditor({
     });
     const { tool, setTool, toolLocked, setToolLocked } = useTool();
     const { selectedIds, setSelectedIds, toggle } = useSelection();
+    // The canvas reports an open text editor, so the toolbar's Edit rows stand down as the canvas's keys do.
+    const [textEditing, setTextEditing] = useState(false);
     const { user } = useAuth();
     // Presence carries the frame, so a peer's cursor shows only on the slide they are on.
     const publishCursor = useCanvasPresence(doc.provider, user, selectedIds, frameId);
@@ -331,6 +333,7 @@ export function SlideEditor({
                     tool={tool}
                     setTool={setTool}
                     selectedIds={selectedIds}
+                    textEditing={textEditing}
                     toolLocked={toolLocked}
                     setToolLocked={setToolLocked}
                     onInsertImage={insertImage}
@@ -437,6 +440,7 @@ export function SlideEditor({
                             aspectLocked={aspectLocked}
                             publishCursor={publishCursor}
                             canvasRef={canvasRef}
+                            onTextEditingChange={setTextEditing}
                             onOpenCard={comments.openCard}
                             commentCards={comments.lifecycle.cards}
                             onAddComment={addComment}

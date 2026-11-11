@@ -1,14 +1,16 @@
-// The selection-level write passes every canvas surface shares — the keyboard, the object context menu,
-// the properties panel's Arrange row and the clipboard's cut. Each is one sealed undo step over the
-// doc writers the host passes in, the way element-writes.ts is plain functions over the doc itself.
+// The selection-level passes every canvas surface shares, such as the keyboard, the menus and the properties panel's
+// Arrange row, so a key and its menu row do the same thing. Each write is one sealed undo step over the doc writers the
+// host passes in.
 
 import type { NewVectorElement, VectorElement, ZOp } from '@workspace/lib/vector';
 import { convertToShapes, DUPLICATE_OFFSET } from '@workspace/lib/vector';
 import { sealed } from '@workspace/ui/components/properties-panel';
 import type * as Y from 'yjs';
 
-// Duplicate the selection (⌘D and the object context menu share this) — offsets each copy by +10,+10,
-// one sealed undo step, and reselects the new copies.
+export function selectAllElements(elements: readonly VectorElement[], setSelection: (ids: string[]) => void): void {
+    setSelection(elements.map((el) => el.id));
+}
+
 export function duplicateSelection(
     selectedIds: string[],
     duplicateElements: (ids: string[], dx: number, dy: number) => string[],
@@ -19,8 +21,6 @@ export function duplicateSelection(
     if (ids.length) setSelection(ids);
 }
 
-// Delete the selection (Delete/Backspace and the object context menu share this) — one sealed undo
-// step, then clears the selection.
 export function deleteSelection(
     selectedIds: string[],
     deleteElements: (ids: string[]) => void,
@@ -31,15 +31,12 @@ export function deleteSelection(
     setSelection([]);
 }
 
-// What Convert to shapes writes for the selection: offered only for exactly one element that unpacks, a
-// chart that draws; [] for anything else.
-export function selectionShapes(selectedIds: string[], byId: Map<string, VectorElement>): VectorElement[] {
+// What Convert to shapes writes: offered only for one element that unpacks, such as a chart that draws.
+export function selectionShapes(selectedIds: string[], byId: ReadonlyMap<string, VectorElement>): VectorElement[] {
     const only = selectedIds.length === 1 ? byId.get(selectedIds[0]) : undefined;
     return only ? convertToShapes(only) : [];
 }
 
-// Convert to shapes (the object menu; the chart panel's button): one sealed undo step, and the new elements
-// stay selected, as the one object was (T4-R3).
 export function convertElementToShapes(
     id: string,
     shapes: NewVectorElement[],
@@ -51,11 +48,10 @@ export function convertElementToShapes(
     if (ids.length) setSelection(ids);
 }
 
-// The z-order write, shared by the keyboard brackets, the object menu and the properties panel's Arrange
-// buttons: the doc's reorder within the canvas' `elements`, one sealed undo step.
+// The doc's reorder within the canvas's `elements`.
 export function applyZOrder(
     op: ZOp,
-    elements: VectorElement[],
+    elements: readonly VectorElement[],
     selectedIds: string[],
     reorderElements: (ids: string[], selectedIds: string[], op: ZOp) => void,
     undoManager: Y.UndoManager | null,

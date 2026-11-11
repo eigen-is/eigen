@@ -11,6 +11,7 @@ import { ReplaceAroundStep, ReplaceStep } from '@tiptap/pm/transform';
 import type { DecorationSource, NodeView } from '@tiptap/pm/view';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { FootnoteNode, footnoteNumbers, insertFootnote } from '@workspace/lib/docs/eigendoc';
+import { proseMirrorKey } from './prosemirror-key';
 import { registerStoryView } from './story';
 
 // Google's ⌘⌥F.
@@ -135,8 +136,7 @@ export const Footnote = FootnoteNode.extend<FootnoteOptions>({
 
     addKeyboardShortcuts() {
         return {
-            // ProseMirror spells a key with dashes and a letter in lower case, which a capital would read as Shift.
-            [INSERT_FOOTNOTE_HOTKEY.replaceAll('+', '-').toLowerCase()]: () => this.options.onInsert(),
+            [proseMirrorKey(INSERT_FOOTNOTE_HOTKEY)]: () => this.options.onInsert(),
         };
     },
 

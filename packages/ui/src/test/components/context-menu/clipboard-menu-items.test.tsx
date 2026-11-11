@@ -1,6 +1,6 @@
 // The clipboard rows read as every Edit menu reads them: Cut, Copy and Paste, then Select all, Duplicate and a red
 // Delete last. A host draws only the rows it passes, and with nothing selected the rows that act on a selection grey
-// out while Paste and Select all stay.
+// out while Paste and Select all stay. A locked selection greys Select all as well.
 import { afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { menuRows, renderOpenMenu } from '@workspace/ui/test/menu-rows';
@@ -55,6 +55,19 @@ test('nothing selected greys the rows that act on a selection, Paste and Select 
         selectionEmpty: true,
     });
     expect(disabledRows()).toEqual(['Cut', 'Copy', 'Duplicate', 'Delete']);
+});
+
+test('a locked selection greys Select all too, and Paste stays', async () => {
+    await render({
+        onCut: noop,
+        onCopy: noop,
+        onPaste: noop,
+        onSelectAll: noop,
+        onDuplicate: noop,
+        onDelete: noop,
+        selectionLocked: true,
+    });
+    expect(disabledRows()).toEqual(['Cut', 'Copy', 'Select all', 'Duplicate', 'Delete']);
 });
 
 test('a pick runs its row', async () => {

@@ -23,6 +23,7 @@ import {
 } from '@workspace/lib/docs/eigendoc';
 import type { CommentHover } from '@workspace/lib/types/comments';
 import type React from 'react';
+import { proseMirrorKey } from './prosemirror-key';
 import { textOutsideStories } from './story';
 
 type CommentMarkOptions = {
@@ -191,8 +192,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions, CommentP
 
     addKeyboardShortcuts() {
         return {
-            // ProseMirror spells a key with dashes and a letter in lower case, which a capital would read as Shift.
-            [ADD_COMMENT_HOTKEY.replaceAll('+', '-').toLowerCase()]: () => {
+            [proseMirrorKey(ADD_COMMENT_HOTKEY)]: () => {
                 if (canAnchorComment(this.editor.state) && this.options.onAddComment) {
                     this.options.onAddComment();
                     return true;
