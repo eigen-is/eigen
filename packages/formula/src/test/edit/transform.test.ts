@@ -198,64 +198,6 @@ describe('the three flags', () => {
     });
 });
 
-describe('a range built with the : operator is a seed when the edit reaches a reference under it', () => {
-    const SEED = { lossy: false, recompute: true, resized: false };
-    test('corners in parentheses with a row deleted between them', () => {
-        expect(after('=SUM((A1):(A10))', 'C1', deleteRows(5))).toEqual({
-            text: '=SUM((A1):(A9))',
-            changed: true,
-            ...SEED,
-        });
-    });
-    test('a range and a cell with a row inserted or deleted between them', () => {
-        expect(after('=ROWS(A1:A5:A10)', 'C1', insertRows(7))).toEqual({
-            text: '=ROWS(A1:A5:A11)',
-            changed: true,
-            ...SEED,
-        });
-        expect(after('=SUM(A1:A3:A10)', 'C1', deleteRows(5))).toEqual({
-            text: '=SUM(A1:A3:A9)',
-            changed: true,
-            ...SEED,
-        });
-    });
-    test('a corner that a function returns, with a row inserted above', () => {
-        expect(after('=SUM(A1:INDEX(B:B,3))', 'C5', insertRows(1))).toEqual({
-            text: '=SUM(A2:INDEX(B:B,3))',
-            changed: false,
-            ...SEED,
-        });
-        expect(after('=SUM(A1:INDEX(B1:B9,3))', 'C5', insertRows(1))).toEqual({
-            text: '=SUM(A2:INDEX(B2:B10,3))',
-            changed: false,
-            ...SEED,
-        });
-    });
-    test('corners that moved with their host, whose stored text stays', () => {
-        expect(after('=SUM((A9):(A10))', 'C9', insertColumns('A'))).toEqual({
-            text: '=SUM((B9):(B10))',
-            changed: false,
-            ...SEED,
-        });
-    });
-    test('a line past every reference under it is no seed, whatever the rest of the formula reads', () => {
-        expect(after('=SUM((A1):(A3))+A10', 'C1', insertRows(7))).toEqual({
-            text: '=SUM((A1):(A3))+A11',
-            changed: true,
-            ...QUIET,
-        });
-        expect(after('=SUM((A1):(A3))', 'C1', deleteRows(4))).toMatchObject(QUIET);
-        expect(after('=(A1):(A3)+A10+A11', 'C1', insertRows(7))).toMatchObject(QUIET);
-        expect(after('=A10+(A1):(A3)', 'C1', insertRows(7))).toMatchObject(QUIET);
-    });
-    test('operands on another sheet than the edit are no seed', () => {
-        expect(after('=SUM((Sheet2!A1):(Sheet2!A10))', 'C1', deleteRows(5))).toMatchObject(QUIET);
-        expect(after('=SUM((Sheet2!A1):(Sheet2!A10))', 'C7', deleteRows(5))).toMatchObject(QUIET);
-        expect(after('=SUM((A1):(A10))', 'C1', deleteRows(5), 's2')).toMatchObject(QUIET);
-        expect(after('=SUM((Sheet2!A1):(Sheet2!A10))', 'C1', deleteRows(5, 5, 's2'))).toMatchObject(SEED);
-    });
-});
-
 describe('what the transform leaves alone', () => {
     test('a reference off the grid at its host stays off the grid when the host moves', () => {
         const copied = tree('=A1+SUM(A1:A3)', 'B2');

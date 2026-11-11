@@ -18,9 +18,8 @@ export type Transformed = {
     readonly tree: FormulaNode;
     // The old text cannot be derived back from the new: undo must keep it.
     readonly lossy: boolean;
-    // A cell the formula read is gone, or lines shifted inside a whole column or row it reads or under a reference
-    // the `:` operator joins into a range: the value can change whatever the formula computes, so it is a seed of
-    // the recompute.
+    // A cell a reference named is gone, or lines shifted inside a whole column or row one names: the value can
+    // change whatever the formula computes, so it is a seed of the recompute.
     readonly recompute: boolean;
     // A range that is still a range spans another number of lines at this host than it did. Every cell it reads kept
     // its value, so the formula is a seed only when its shape depends on the size of a range, as ROWS, MATCH and
@@ -94,7 +93,7 @@ function shift(tree: FormulaNode, edit: LineEdit, hostSheet: string, host: numbe
     let recompute = false;
     let resized = false;
     let perHost = false;
-    const mapped = mapLeaves(tree, (node, inRange) => {
+    const mapped = mapLeaves(tree, (node) => {
         if (node.kind !== NodeKind.Ref) return node;
         const { op, flags, sheetKind } = node;
         const onSheet = sheetOf(node, hostSheet) === edit.sheet;
@@ -132,9 +131,6 @@ function shift(tree: FormulaNode, edit: LineEdit, hostSheet: string, host: numbe
             } else if (!edit.insert && index > low && index < high) {
                 recompute = true;
             }
-            // A range the `:` operator builds has an extent no leaf holds, so whether it lost or gained a line is
-            // not asked: an operand the edit reaches makes a seed.
-            if (inRange && high >= index) recompute = true;
             if (span.end - span.start !== high - low) resized = true;
             moved = inOrder ? span.start : span.end;
             moved2 = inOrder ? span.end : span.start;

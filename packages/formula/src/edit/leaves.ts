@@ -4,33 +4,22 @@
 // the questions they ask of a reference leaf, such as which sheet it reads and whether it fell off the grid.
 
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
-import { REF_ERROR, Token } from '../text/lexer';
+import { REF_ERROR } from '../text/lexer';
 import type { Ends, FormulaNode } from '../text/tree';
 import { branch, endsAt, leaf, NodeKind, SheetKind } from '../text/tree';
 
-// `inRange` says the leaf is an operand of a `:` operator, or sits somewhere under one.
-export function mapLeaves(
-    node: FormulaNode,
-    map: (leaf: FormulaNode, inRange: boolean) => FormulaNode,
-    inRange = false,
-): FormulaNode {
+export function mapLeaves(node: FormulaNode, map: (leaf: FormulaNode) => FormulaNode): FormulaNode {
     const { children } = node;
-    if (children.length === 0) return map(node, inRange);
+    if (children.length === 0) return map(node);
     if (node.kind === NodeKind.Binary) {
         // A long sum is a chain too deep to recurse down its left operands, so it is rebuilt from its far end up.
         const chain: FormulaNode[] = [];
         let first = node;
-        // The `:` operators from the top of the chain down to the link at hand, each of which holds that link.
-        let colons = inRange ? 1 : 0;
-        for (; first.kind === NodeKind.Binary; first = first.children[0]) {
-            chain.push(first);
-            if (first.op === Token.Colon) colons += 1;
-        }
-        let left = mapLeaves(first, map, colons > 0);
+        for (; first.kind === NodeKind.Binary; first = first.children[0]) chain.push(first);
+        let left = mapLeaves(first, map);
         for (let i = chain.length - 1; i >= 0; i -= 1) {
             const link = chain[i];
-            const right = mapLeaves(link.children[1], map, colons > 0);
-            if (link.op === Token.Colon) colons -= 1;
+            const right = mapLeaves(link.children[1], map);
             const same = left === link.children[0] && right === link.children[1];
             left = same
                 ? link
@@ -40,7 +29,7 @@ export function mapLeaves(
     }
     let mapped: FormulaNode[] | null = null;
     for (let i = 0; i < children.length; i += 1) {
-        const child = mapLeaves(children[i], map, inRange);
+        const child = mapLeaves(children[i], map);
         if (child === children[i]) continue;
         mapped ??= children.slice();
         mapped[i] = child;

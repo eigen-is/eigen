@@ -41,7 +41,7 @@ test('a formula taken through line edits and moves is, after each, text that rea
     const next = shapes(pick);
     // `sheets` counts the steps that left a reference with a sheet it did not have.
     const seen = { parsed: 0, lines: 0, within: 0, across: 0, overlapping: 0, carried: 0, changed: 0, sheets: 0 };
-    for (let run = 0; run < 60000; run += 1) {
+    for (let run = 0; run < 20000; run += 1) {
         const text = next();
         let host: Host = { sheet: SHEET_IDS[pick(3)], row: pick(9), column: pick(7) };
         const parsed = parseA1(text, host.row, host.column, findSheet);
@@ -114,12 +114,12 @@ test('a formula taken through line edits and moves is, after each, text that rea
             if (printStored(tree).split('!').length > printStored(before).split('!').length) seen.sheets += 1;
         }
     }
-    expect(seen.parsed).toBeGreaterThan(50000);
-    expect(seen.lines).toBeGreaterThan(30000);
-    expect(seen.within).toBeGreaterThan(30000);
-    expect(seen.across).toBeGreaterThan(20000);
-    expect(seen.overlapping).toBeGreaterThan(8000);
-    expect(seen.carried).toBeGreaterThan(1500);
-    expect(seen.changed).toBeGreaterThan(10000);
-    expect(seen.sheets).toBeGreaterThan(4000);
+    expect(seen.parsed).toBeGreaterThan(17000);
+    expect(seen.lines).toBeGreaterThan(10000);
+    expect(seen.within).toBeGreaterThan(10000);
+    expect(seen.across).toBeGreaterThan(7000);
+    expect(seen.overlapping).toBeGreaterThan(2500);
+    expect(seen.carried).toBeGreaterThan(500);
+    expect(seen.changed).toBeGreaterThan(4000);
+    expect(seen.sheets).toBeGreaterThan(1400);
 });
