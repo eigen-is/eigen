@@ -197,6 +197,11 @@ export function tally(ctx: Evaluator, pairs: readonly Value[], counted: Value | 
 
     total.error = null;
     const open = !blanks.includes(false);
+    // The columns are walked one by one, and a sum is added row by row: of a range of several columns the numbers
+    // are kept with their rows, and so is the row of the first error.
+    const kept: number[] = [];
+    const keptRows: number[] = [];
+    let errorRow = rows;
     const columns: (Column | undefined)[] = [];
     const used: number[] = [];
     for (let across = 0; across < width; across += 1) {
@@ -247,15 +252,22 @@ export function tally(ctx: Evaluator, pairs: readonly Value[], counted: Value | 
             if (kind === CellKind.Number) {
                 const number = value.num[row];
                 total.numbers += 1;
-                total.sum += number;
+                if (width === 1) total.sum += number;
+                else {
+                    kept.push(number);
+                    keptRows.push(offset);
+                }
                 if (number < total.min) total.min = number;
                 if (number > total.max) total.max = number;
-            } else if (kind === CellKind.Error) {
+            } else if (kind === CellKind.Error && offset < errorRow) {
                 total.error = ctx.workbook.error(value.ref[row]);
-                return total;
+                errorRow = offset;
+                if (width === 1) return total;
             }
         }
         if (open) total.matched += rows - Math.max(stop, 0);
     }
+    const order = keptRows.map((_, at) => at).sort((a, b) => keptRows[a] - keptRows[b]);
+    for (const at of order) total.sum += kept[at];
     return total;
 }

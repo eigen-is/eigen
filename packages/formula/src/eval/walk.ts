@@ -10,7 +10,6 @@ import { parseNumber } from '../values/parse-number';
 import type { ArrayValue, Reference, Value } from '../values/value';
 import { isArray, isError, isReference, OMITTED } from '../values/value';
 import type { Evaluator } from './evaluator';
-import { firstError } from './views';
 
 // Which cells an aggregate takes. A value typed as an argument is coerced where a cell would be skipped: for
 // Numbers a text is read as a number and a boolean is 1 or 0, for Truths a number is TRUE unless it is 0.
@@ -39,20 +38,23 @@ export class Walk {
     public count = 0;
     public error: FormulaError | null = null;
     private readonly ctx: Evaluator;
-    private readonly one = new Float64Array(1);
+    // Where a value that lies in no plane is put to be handed out: one typed value, or the cells of one row.
+    private span = new Float64Array(8);
     private args: readonly Value[] = [];
     private take = 0;
     private arg = 0;
-    // The reference in progress, with the column and row to go on from, or the array, with the element.
+    // The reference in progress, with its last column, the row to go on from and the row to stop at, or the array
+    // in progress, with the element to go on from.
     private area: Reference | null = null;
-    private column = 0;
+    private right = 0;
     private row = 0;
+    private end = 0;
     private array: ArrayValue | null = null;
     private item = 0;
 
     public constructor(ctx: Evaluator) {
         this.ctx = ctx;
-        this.num = this.one;
+        this.num = this.span;
     }
 
     public start(args: readonly Value[], take: number): void {
@@ -85,7 +87,10 @@ export class Walk {
     }
 
     private argument(value: Value): boolean {
-        if (isReference(value)) return this.enter(value);
+        if (isReference(value)) {
+            const one = value.top === value.bottom && value.left === value.right && value.next === null;
+            return one ? this.cell(value) : this.enter(value);
+        }
         if (isArray(value)) {
             this.array = value;
             this.item = 0;
@@ -109,39 +114,78 @@ export class Walk {
         }
     }
 
+    private cell(at: Reference): boolean {
+        const held = at.sheet.columns[at.left];
+        if (held === undefined || at.top >= held.length) return false;
+        const kind = held.kind[at.top] & KIND_MASK;
+        if ((KINDS[this.take] >> kind) & 1) {
+            return this.single(kind === CellKind.Boolean ? held.ref[at.top] : held.num[at.top]);
+        }
+        const strict = kind === CellKind.Error && this.take <= Take.Truths;
+        return strict && this.fail(this.ctx.workbook.error(held.ref[at.top]));
+    }
+
     private enter(area: Reference | null): boolean {
         this.area = area;
         if (area === null) return false;
-        this.column = area.left;
+        const { columns } = area.sheet;
+        this.right = Math.min(area.right, columns.length - 1);
         this.row = area.top;
-        const error = this.take <= Take.Truths ? firstError(this.ctx, area) : null;
-        return error !== null && this.fail(error);
+        this.end = 0;
+        for (let c = area.left; c <= this.right; c += 1) {
+            this.end = Math.max(this.end, Math.min(area.bottom + 1, columns[c].length));
+        }
+        if (this.span.length <= this.right - area.left) this.span = new Float64Array(this.right - area.left + 1);
+        return false;
     }
 
-    // The next stretch of cells of one kind that counts, down each column of the area in turn.
+    // The cells of the area that count, row by row: of one column a stretch of its own plane, and of several the
+    // cells of one row, gathered.
     private cells(area: Reference): boolean {
+        const { take, right, end, span } = this;
         const { columns } = area.sheet;
-        const right = Math.min(area.right, columns.length - 1);
-        const kinds = KINDS[this.take];
-        for (; this.column <= right; this.column += 1, this.row = area.top) {
-            const held = columns[this.column];
+        const kinds = KINDS[take];
+        const strict = take <= Take.Truths;
+        if (this.row < end && area.left === right) {
+            const held = columns[right];
             const { kind } = held;
-            const end = Math.min(area.bottom + 1, held.length);
             let row = this.row;
-            while (row < end && ((kinds >> (kind[row] & KIND_MASK)) & 1) === 0) row += 1;
-            if (row >= end) continue;
+            for (; row < end; row += 1) {
+                const at = kind[row] & KIND_MASK;
+                if ((kinds >> at) & 1) break;
+                if (at === CellKind.Error && strict) return this.fail(this.ctx.workbook.error(held.ref[row]));
+            }
             const first = kind[row] & KIND_MASK;
-            if (first === CellKind.Boolean && this.take === Take.Truths) {
+            if (row < end && first === CellKind.Boolean && take === Take.Truths) {
                 this.row = row + 1;
                 return this.single(held.ref[row]);
             }
-            let stop = row + 1;
-            while (stop < end && (kind[stop] & KIND_MASK) === first) stop += 1;
-            this.row = stop;
-            this.num = held.num;
-            this.from = row;
-            this.to = stop;
-            this.count += stop - row;
+            if (row < end) {
+                let stop = row + 1;
+                while (stop < end && (kind[stop] & KIND_MASK) === first) stop += 1;
+                this.row = stop;
+                this.num = held.num;
+                this.from = row;
+                this.to = stop;
+                this.count += stop - row;
+                return true;
+            }
+        }
+        for (let row = this.row; row < end && area.left < right; row += 1) {
+            let found = 0;
+            for (let c = area.left; c <= right; c += 1) {
+                const held = columns[c];
+                if (row >= held.length) continue;
+                const at = held.kind[row] & KIND_MASK;
+                if ((kinds >> at) & 1) span[found++] = at === CellKind.Boolean ? held.ref[row] : held.num[row];
+                else if (at === CellKind.Error && strict) return this.fail(this.ctx.workbook.error(held.ref[row]));
+            }
+            if (found === 0) continue;
+            this.row = row + 1;
+            this.num = span;
+            this.from = 0;
+            this.to = found;
+            this.count += found;
             return true;
         }
         return this.enter(area.next);
@@ -170,8 +214,8 @@ export class Walk {
     }
 
     private single(value: number): boolean {
-        this.one[0] = value;
-        this.num = this.one;
+        this.span[0] = value;
+        this.num = this.span;
         this.from = 0;
         this.to = 1;
         this.count += 1;

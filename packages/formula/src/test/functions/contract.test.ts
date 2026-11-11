@@ -150,3 +150,51 @@ describe('the last addition of SUM', () => {
         expect(evaluate(formula, cells)).toBe(expected);
     });
 });
+
+// Excel's answers, second batch: a range is added row by row, and the arguments in their order.
+describe('the order of a sum', () => {
+    const cells: Cells = { A1: 1e16, B1: 1, A2: -1e16, B2: 1, A11: 1e16, A12: 1, B11: -1e16, B12: 1 };
+
+    test.each([
+        ['=SUM(A1:B2)', 1],
+        ['=A1+B1+A2+B2', 1],
+        ['=A1+A2+B1+B2', 2],
+        ['=SUMPRODUCT(A1:B2)', 1],
+        ['=SUM(A1:B1,A2:B2)', 1],
+        ['=SUM(A1:A2,B1:B2)', 2],
+        ['=AVERAGE(A1:B2)*4', 1],
+        ['=SUM(A11:B12)', 2],
+        ['=A11+B11+A12+B12', 2],
+        ['=SUMPRODUCT(A11:B12)', 2],
+        ['=SUM(A11:B11,A12:B12)', 2],
+        ['=SUM(A11:A12,B11:B12)', 1],
+        ['=AVERAGE(A11:B12)*4', 2],
+        ['=SUMIF(A1:B2,"<>x")', 1],
+        ['=SUMIF(A11:B12,"<>x")', 2],
+        ['=SUMIFS(A1:B2,A1:B2,"<>x")', 1],
+        ['=SUM(A1:M2)', 1],
+        ['=SUM(A1:B9)', 1],
+    ])('%s is %p', (formula, expected) => {
+        expect(evaluate(formula, cells)).toBe(expected);
+    });
+
+    test('the first error of a range is the first row by row', () => {
+        const errors: Cells = { A1: 1, B1: DIV0, A2: NA, B2: 2 };
+        for (const name of ['SUM', 'AVERAGE', 'MAX', 'MIN', 'AND', 'OR', 'SUMPRODUCT']) {
+            expect(evaluate(`=${name}(A1:B2)`, errors)).toBe(DIV0);
+            expect(evaluate(`=${name}(A2:B2)`, errors)).toBe(NA);
+        }
+        expect(evaluate('=SUMIF(A1:B2,"<>x")', errors)).toBe(DIV0);
+        expect(evaluate('=AVERAGEIFS(A1:B2,D1:E2,"")', errors)).toBe(DIV0);
+        expect(evaluate('=COUNT(A1:B2)', errors)).toBe(2);
+        expect(evaluate('=COUNTA(A1:B2)', errors)).toBe(4);
+    });
+
+    test('a range of booleans and numbers is read row by row too', () => {
+        const mixed: Cells = { A1: true, B1: 0, A2: 'x', B2: true, C2: 3 };
+        expect(evaluate('=AND(A1:C2)', mixed)).toBe(false);
+        expect(evaluate('=OR(A1:A2,C1:C2)', mixed)).toBe(true);
+        expect(evaluate('=COUNTA(A1:C2)', mixed)).toBe(5);
+        expect(evaluate('=MAX(A1:C2)', mixed)).toBe(3);
+    });
+});
