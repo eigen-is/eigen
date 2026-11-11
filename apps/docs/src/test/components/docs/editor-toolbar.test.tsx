@@ -1,5 +1,5 @@
-// A writer always has the Format and Insert menus; the icon row beside them folds from its right end as the window narrows.
-// View and Tools reach everyone, viewers included.
+// A writer always has the Insert and Format menus; the icon row beside them folds from its right end as the window narrows.
+// Tools reaches everyone, viewers included.
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
@@ -180,15 +180,16 @@ const MIDDLE_ROW = [...SHORT_ROW, 'Text color', 'Highlight color', 'Add link', '
 const CLEAR_FORMATTING = `Clear formatting${formatForDisplay('Mod+\\')}`;
 const FULL_ROW = [...MIDDLE_ROW, 'Align', 'Bulleted list', 'Numbered list', 'Checklist', 'Clear formatting'];
 
-test.each([1920, 1300, 1000])('a writer gets the File, Edit, Format, Insert and Tools menus at %ipx', async (width) => {
+// Google Docs' order: Insert before Format.
+test.each([1920, 1300, 1000])('a writer gets the File, Edit, Insert, Format and Tools menus at %ipx', async (width) => {
     await render(width, true);
-    expect(menus().slice(0, 5)).toEqual(['File', 'Edit', 'Format', 'Insert', 'Tools']);
+    expect(menus().slice(0, 5)).toEqual(['File', 'Edit', 'Insert', 'Format', 'Tools']);
 });
 
 // Five menus and the offline badge overflow a 360px phone, so Tools folds into the kebab there.
-test('a writer on a phone gets File, Edit, Format and Insert, and no Tools', async () => {
+test('a writer on a phone gets File, Edit, Insert and Format, and no Tools', async () => {
     await render(390, true);
-    expect(menus().slice(0, 4)).toEqual(['File', 'Edit', 'Format', 'Insert']);
+    expect(menus().slice(0, 4)).toEqual(['File', 'Edit', 'Insert', 'Format']);
     expect(menus()).not.toContain('Tools');
 });
 
@@ -1073,7 +1074,7 @@ test.each([
 });
 
 // Radix would hand focus back to the trigger, where the next keystrokes and ⌘Z reach nothing.
-test.each(['File', 'Edit', 'Format', 'Insert', 'Tools'])(
+test.each(['File', 'Edit', 'Insert', 'Format', 'Tools'])(
     '%s closed with Esc gives focus back to the editor',
     async (menu) => {
         await render(1920, true);
@@ -1474,7 +1475,7 @@ test('Mod+Shift+C opens the word count, for a viewer too', async () => {
     expect(wordCountRows()[0]).toEqual(['Words', '4']);
 });
 
-// Google Docs' Edit menu, Paste aside: Cut and Copy, then Select all and Delete, each group set apart.
+// Google Docs' Edit menu: Cut, Copy and Paste, then Select all and Delete, each group set apart.
 const editEntries = async () => {
     await openMenu('Edit');
     const items = [...document.querySelectorAll('[role="menu"]')]
@@ -1491,7 +1492,7 @@ const editEntries = async () => {
 
 const TWO_WORDS = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello world' }] }] };
 
-test("Edit lists Cut, Copy, Select all and Delete in Google Docs' order and groups", async () => {
+test("Edit lists Cut, Copy, Paste, Select all and Delete in Google Docs' order and groups", async () => {
     editor.commands.setContent(TWO_WORDS);
     editor.commands.setTextSelection({ from: 1, to: 6 });
     await render(1920, true);
@@ -1501,13 +1502,14 @@ test("Edit lists Cut, Copy, Select all and Delete in Google Docs' order and grou
         '—',
         `Cut${formatForDisplay('Mod+X')}`,
         `Copy${formatForDisplay('Mod+C')}`,
+        `Paste${formatForDisplay('Mod+V')}`,
         '—',
         `Select all${formatForDisplay('Mod+A')}`,
         'Delete',
     ]);
 });
 
-test('with only a caret Cut, Copy and Delete are disabled, and Select all is not', async () => {
+test('with only a caret Cut, Copy and Delete are disabled, and Paste and Select all are not', async () => {
     editor.commands.setContent(TWO_WORDS);
     editor.commands.setTextSelection(1);
     await render(1920, true);
@@ -1515,23 +1517,58 @@ test('with only a caret Cut, Copy and Delete are disabled, and Select all is not
         expect.arrayContaining([
             `Cut${formatForDisplay('Mod+X')} (disabled)`,
             `Copy${formatForDisplay('Mod+C')} (disabled)`,
+            `Paste${formatForDisplay('Mod+V')}`,
             `Select all${formatForDisplay('Mod+A')}`,
             'Delete (disabled)',
         ]),
     );
 });
 
-test('a viewer can Copy and Select all, but not Cut or Delete', async () => {
+test('a viewer gets Copy and Select all, and no Cut, Paste or Delete', async () => {
     editor.commands.setContent(TWO_WORDS);
     editor.commands.setTextSelection({ from: 1, to: 6 });
     await render(1920, false);
     expect(await editEntries()).toEqual([
-        `Cut${formatForDisplay('Mod+X')} (disabled)`,
         `Copy${formatForDisplay('Mod+C')}`,
         '—',
         `Select all${formatForDisplay('Mod+A')}`,
-        'Delete (disabled)',
     ]);
+});
+
+// A menu row has no paste event, so Paste reads the clipboard, which the browser may refuse, as the table menu's does.
+describe('Edit › Paste', () => {
+    const readClipboard = mock(
+        async (): Promise<{ types: string[]; getType: (type: string) => Promise<Blob> }[]> => [
+            { types: ['text/plain'], getType: async () => new Blob(['pasted ']) },
+        ],
+    );
+    beforeEach(() => {
+        readClipboard.mockClear();
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { read: readClipboard } });
+    });
+
+    test('puts the clipboard at the caret, focus back in the editor', async () => {
+        editor.commands.setContent(TWO_WORDS);
+        editor.commands.setTextSelection(1);
+        await render(1920, true);
+        await openMenu('Edit');
+        await withBrowserFrames(() => clickItem(`Paste${formatForDisplay('Mod+V')}`));
+        expect(editor.getText()).toBe('pasted Hello world');
+        expect(document.activeElement === editor.view.dom).toBe(true);
+    });
+
+    test('pastes nothing when the browser refuses to read the clipboard', async () => {
+        readClipboard.mockImplementationOnce(async () => {
+            throw new DOMException('Read permission denied.', 'NotAllowedError');
+        });
+        editor.commands.setContent(TWO_WORDS);
+        editor.commands.setTextSelection(1);
+        await render(1920, true);
+        await openMenu('Edit');
+        await withBrowserFrames(() => clickItem(`Paste${formatForDisplay('Mod+V')}`));
+        expect(readClipboard).toHaveBeenCalledTimes(1);
+        expect(editor.getText()).toBe('Hello world');
+    });
 });
 
 test('Edit › Select all selects the whole doc and Edit › Delete removes it, focus back in the editor', async () => {
@@ -1670,6 +1707,7 @@ test('Insert › Table of contents is greyed out in a table cell', async () => {
 
 // Print is the server's PDF in a tab of its own, so the headers and footers print; browser print is the fallback.
 describe('Print', () => {
+    const PRINT = `Print${formatForDisplay('Mod+P')}`;
     const opened: string[] = [];
     const browserPrint = mock(() => {});
     const pressModP = () =>
@@ -1698,10 +1736,11 @@ describe('Print', () => {
         Object.assign(window, { print: browserPrint });
     });
 
-    test('File › Print opens the PDF tab', async () => {
+    // The row shows the key that prints, as Google's does.
+    test('File › Print shows ⌘P and opens the PDF tab', async () => {
         await render(1920, false);
         await openMenu('File');
-        await clickItem('Print');
+        await clickItem(PRINT);
         expect(opened).toEqual(['']);
         expect(browserPrint).not.toHaveBeenCalled();
     });
@@ -1712,7 +1751,7 @@ describe('Print', () => {
     ])('%s, File › Print is browser print', async (_, sync) => {
         await render(1920, true, { sync });
         await openMenu('File');
-        await clickItem('Print');
+        await clickItem(PRINT);
         expect(opened).toEqual([]);
         expect(browserPrint).toHaveBeenCalledTimes(1);
     });
