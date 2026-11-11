@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    ERROR_LITERALS,
     MAX_ARGUMENTS,
     MAX_FORMULA_LENGTH,
     MAX_NESTING,
@@ -164,8 +165,39 @@ describe('literals and names (parsing.md 2.3)', () => {
         expect(treeA1('=1.5e-3')).toMatchObject({ kind: NodeKind.Number, value: 0.0015 });
         expect(treeA1('="a""b"')).toMatchObject({ kind: NodeKind.String, text: 'a"b' });
         expect(treeA1('=true')).toMatchObject({ kind: NodeKind.Boolean, value: 1 });
-        expect(treeA1('=#n/a')).toMatchObject({ kind: NodeKind.Error, text: '#N/A' });
+        expect(treeA1('=#n/a')).toMatchObject({ kind: NodeKind.Error, value: 7, text: '' });
     });
+
+    test('an error leaf holds the place of its literal in the list, from 1', () => {
+        expect(ERROR_LITERALS.slice(0, 10)).toEqual([
+            '#NULL!',
+            '#DIV/0!',
+            '#VALUE!',
+            '#REF!',
+            '#NAME?',
+            '#NUM!',
+            '#N/A',
+            '#SPILL!',
+            '#CALC!',
+            '#ERROR!',
+        ]);
+        for (const [index, literal] of ERROR_LITERALS.entries()) {
+            const tree = treeA1(`=${literal.toLowerCase()}`);
+            expect(tree).toMatchObject({ kind: NodeKind.Error, value: index + 1, text: '' });
+            expect(printStored(tree)).toBe(`=${literal}`);
+            expect(treeStored(`=${literal}`)).toEqual(tree);
+            expect(shown(`=IFERROR(${literal},1)`)).toBe(`=IFERROR(${literal},1)`);
+        }
+        expect(ERROR_LITERALS).toHaveLength(19);
+    });
+
+    test.each(['=#FOO!', '=#REF?', '=#NAME!', '=#N/B', '=#REF', '=#DIV/1!', '=#A1!', '=#!', '=#\uFB01ELD!'])(
+        'only a known error literal is one: %s does not parse',
+        (text) => {
+            expect(failure(text)).toBe('syntax');
+            expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
+        },
+    );
 
     test('TRUE() stays a call, apart from the literal', () => {
         expect(treeA1('=TRUE()')).toMatchObject({ kind: NodeKind.Call, text: 'TRUE', children: [] });

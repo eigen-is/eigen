@@ -45,6 +45,30 @@ export const Token = {
 
 export type TokenKind = (typeof Token)[keyof typeof Token];
 
+// The error literals a formula may hold. An error leaf holds the place of its literal here, from 1, and the first
+// ten are the errors the engine computes, in the order of their codes.
+export const ERROR_LITERALS = [
+    '#NULL!',
+    '#DIV/0!',
+    '#VALUE!',
+    '#REF!',
+    '#NAME?',
+    '#NUM!',
+    '#N/A',
+    '#SPILL!',
+    '#CALC!',
+    '#ERROR!',
+    '#GETTING_DATA',
+    '#FIELD!',
+    '#BLOCKED!',
+    '#CONNECT!',
+    '#UNKNOWN!',
+    '#BUSY!',
+    '#PYTHON!',
+    '#TIMEOUT!',
+    '#EXTERNAL!',
+] as const;
+
 const OTHER = 0;
 const SPACE = 1;
 const DIGIT = 2;
@@ -133,8 +157,13 @@ export function lexAt(text: string, pos: number): number {
             const close = text.indexOf(']', end);
             return close === -1 ? (length << 6) | Token.Bad : ((close + 1) << 6) | Token.Bracket;
         }
-        case 35: // #
-            return errorEnd(text, pos);
+        case 35: {
+            // Any # that starts no error literal is the spill operator, so A1#/Sheet2!B1 divides.
+            const error = errorCode(text, pos);
+            return error === 0
+                ? (end << 6) | Token.Hash
+                : ((pos + ERROR_LITERALS[error - 1].length) << 6) | Token.Error;
+        }
         case 60: {
             const next = text.charCodeAt(end);
             if (next === 61) return ((end + 1) << 6) | Token.LessEqual;
@@ -194,22 +223,16 @@ function quotedEnd(text: string, pos: number, quote: string, kind: number): numb
     return close === -1 ? (text.length << 6) | Token.Bad : ((close + 1) << 6) | kind;
 }
 
-// An error literal is one of the two that end in a letter, or a letter and more up to a ! or ?. Any other # is the
-// spill operator, so A1#/Sheet2!B1 divides.
-function errorEnd(text: string, pos: number): number {
-    for (const literal of ['#N/A', '#GETTING_DATA']) {
-        const end = pos + literal.length;
-        if (text.slice(pos, end).toUpperCase() === literal) return (end << 6) | Token.Error;
+// The code of the error literal at `pos`, in any letter case, or 0 when the # there starts none.
+export function errorCode(text: string, pos: number): number {
+    for (let index = 0; index < ERROR_LITERALS.length; index += 1) {
+        const literal = ERROR_LITERALS[index];
+        let i = 1;
+        for (; i < literal.length; i += 1) {
+            const code = text.charCodeAt(pos + i);
+            if ((code >= 97 && code <= 122 ? code - 32 : code) !== literal.charCodeAt(i)) break;
+        }
+        if (i === literal.length) return index + 1;
     }
-    let end = pos + 1;
-    for (;;) {
-        const code = text.charCodeAt(end);
-        const letter = (code | 32) >= 97 && (code | 32) <= 122;
-        if (!letter && (end === pos + 1 || (classOf(code) !== DIGIT && code !== 47 && code !== 95))) break;
-        end += 1;
-    }
-    const code = text.charCodeAt(end);
-    return end > pos + 1 && (code === 33 || code === 63)
-        ? ((end + 1) << 6) | Token.Error
-        : ((pos + 1) << 6) | Token.Hash;
+    return 0;
 }

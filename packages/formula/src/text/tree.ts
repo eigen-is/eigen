@@ -4,8 +4,6 @@
 // of a range stay as typed. The parser builds it through the three constructors here, the one place a node is made,
 // and the printers, the shape table and the evaluator read it.
 
-import type { TokenKind } from './lexer';
-
 export const NodeKind = {
     Number: 0,
     String: 1,
@@ -44,9 +42,10 @@ export const RefFlag = { RowAbsolute: 1, ColumnAbsolute: 2, Row2Absolute: 4, Col
 export type FormulaNode = {
     readonly kind: (typeof NodeKind)[keyof typeof NodeKind];
     // The operator of a prefix, postfix or binary node, the RefKind of a reference, the column count of an array.
-    readonly op: TokenKind | number;
+    readonly op: number;
+    // A number, 1 for TRUE, or the place of an error in ERROR_LITERALS, from 1.
     readonly value: number;
-    // A string's content, an error, a name, a function name.
+    // A string's content, a name, a function name.
     readonly text: string;
     readonly children: readonly FormulaNode[];
     // The whitespace before the node's own token, which for a binary or postfix node is its operator.

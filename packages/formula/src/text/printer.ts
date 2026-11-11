@@ -4,7 +4,7 @@
 // #REF! for a reference that falls off the grid there or names a sheet that is gone.
 
 import { columnLabel, GRID_COLUMNS, GRID_ROWS } from './a1';
-import { Token } from './lexer';
+import { ERROR_LITERALS, Token } from './lexer';
 import { quotedSheetName, quoteSheetName } from './sheet-name';
 import type { FormulaNode } from './tree';
 import { NodeKind, RefFlag, RefKind, SheetKind } from './tree';
@@ -62,7 +62,8 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
         case NodeKind.Error:
         case NodeKind.Name: {
             const prefix = sheetPrefix(node, stored, sheetName);
-            return space + (prefix === null ? '#REF!' : prefix + node.text);
+            if (prefix === null) return `${space}#REF!`;
+            return space + prefix + (node.kind === NodeKind.Name ? node.text : ERROR_LITERALS[node.value - 1]);
         }
         case NodeKind.Ref:
             return space + reference(node, stored, row, column, sheetName);

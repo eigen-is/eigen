@@ -4,7 +4,7 @@
 // Text that does not parse is a result, never a throw, and the limits on length, nesting and arguments are kept here.
 
 import { GRID_COLUMNS, GRID_ROWS } from './a1';
-import { continuesWord, lexAt, Token, tokenEnd, tokenKind } from './lexer';
+import { continuesWord, errorCode, lexAt, Token, tokenEnd, tokenKind } from './lexer';
 import type { FormulaNode } from './tree';
 import { branch, EMPTY, leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from './tree';
 
@@ -264,7 +264,7 @@ class Parser {
             }
             case Token.Error:
                 this.next();
-                return leaf(NodeKind.Error, 0, text.slice(pos, end).toUpperCase(), space, SheetKind.Host, '');
+                return leaf(NodeKind.Error, errorCode(text, pos), '', space, SheetKind.Host, '');
             case Token.Plus:
             case Token.Minus:
             case Token.At: {
@@ -444,9 +444,9 @@ class Parser {
         this.next();
         if (this.space !== '') return this.fail();
         if (this.kind === Token.Error) {
-            const error = this.text.slice(this.pos, this.end).toUpperCase();
+            const error = errorCode(this.text, this.pos);
             this.next();
-            return leaf(NodeKind.Error, 0, error, space, sheetKind, sheet);
+            return leaf(NodeKind.Error, error, '', space, sheetKind, sheet);
         }
         if (this.kind !== Token.Word && this.kind !== Token.Number) return this.fail();
         const reference = this.reference(space, sheetKind, sheet);
