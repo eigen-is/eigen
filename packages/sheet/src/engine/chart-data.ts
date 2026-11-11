@@ -1,6 +1,5 @@
 // A sheet chart's range data: reading its cells, drawing it, inlining it for a copy, and moving its refs through a row
-// op or a copied sheet. The writers apply a change onto the spec as stored, so a key this build doesn't know survives,
-// and write a keyed part an entry at a time.
+// op or a copied sheet. The writers apply a change onto the spec as stored, so a key this build doesn't know survives.
 
 import {
     chartColor,
@@ -10,12 +9,9 @@ import {
     chartSpecWrites,
     exceedsChartSpecBytes,
     isCellRangeShape,
-    isChartSpecKey,
     MAX_CHART_POINTS,
-    newSheetChartSpecParts,
     readChartLook,
     readChartSpec,
-    sheetChartSpecWrites,
 } from '@workspace/lib/charts';
 import { isRecord } from '@workspace/lib/guards';
 import type { SheetChart } from '@workspace/lib/sheets';
@@ -29,8 +25,6 @@ import type {
     ChartSpecTexts,
     RangeChartData,
     RangeChartSeries,
-    SheetChartSpecParts,
-    SheetChartSpecWrite,
 } from '@workspace/lib/types/chart';
 import { renderChartSpecSvg } from '@workspace/lib/vector';
 import { cellDisplay } from './format';
@@ -102,12 +96,8 @@ export function renderSheetChartSvg(chart: SheetChart, resolver: CellResolver): 
     });
 }
 
-// The chart as a copy carries it to a host with no cells, its parts as text: its ranges read into inline data, and the
-// source cells' tick format written on the axis. An automatic color stays automatic unless a deleted series before
-// it would shift its index, which writes the color it draws in. Every part the copy doesn't touch is the text it
-// stores, a keyed part its entries joined, and a newer build's part goes too. A ref this build doesn't know is left
-// out, as it would name cells the host doesn't have. Null for a chart that draws #REF!, too much data or nothing, or
-// whose numbers pass the spec's size limit.
+// The chart as a copy carries it to a host with no cells: its parts as text, its ranges read into inline data. Null for
+// a chart that draws #REF!, too much data or nothing, or whose numbers pass the spec's size limit.
 export function inlineChartSpec(chart: SheetChart, resolver: CellResolver): ChartSpecTexts | null {
     const { stored, spec } = readChartSpec(chart);
     const texts = chartSpecTexts(chart);
@@ -133,10 +123,8 @@ export function inlineChartSpec(chart: SheetChart, resolver: CellResolver): Char
     return exceedsChartSpecBytes(inline) ? null : inline;
 }
 
-// Rewrites a range chart's refs through `map`, and returns the chart itself when no ref changed or its
-// stored data is not range data. Every ref on the data or a series moves, under any key, so a ref this build
-// doesn't know moves too, even in a chart it can't draw. A null empties a ref, and a name ref leaves the series
-// unnamed.
+// Rewrites a range chart's refs through `map`, under any key, so a ref this build doesn't know moves too. A null
+// empties a ref, and a name ref leaves the series unnamed. The chart itself when no ref changed.
 export function mapChartRefs(chart: SheetChart, map: (ref: CellRangeRef) => CellRangeRef | null): SheetChart {
     const { stored } = readChartSpec(chart);
     const before = stored['data'];
@@ -147,32 +135,7 @@ export function mapChartRefs(chart: SheetChart, map: (ref: CellRangeRef) => Cell
         if (next !== ref) moved = true;
         return next ?? (key === 'name' ? '' : null);
     });
-    if (!moved) return chart;
-    const next = { ...chart };
-    writeSheetChartSpec(next, sheetChartSpecWrites(stored, [{ op: 'set', path: ['data'], value: data }]));
-    return next;
-}
-
-// Sheets writes applied onto a chart in place, so a recipe's draft ships each entry as its own patch. An entry under a
-// field that isn't a record is skipped: no build stores one, and every reader skips the write.
-export function writeSheetChartSpec(chart: SheetChartSpecParts, writes: SheetChartSpecWrite[]): void {
-    for (const write of writes) {
-        if (!('entry' in write)) chart[write.key] = write.value;
-        else if (isRecord(chart[write.key])) {
-            if (write.value === null) delete chart[write.key][write.entry];
-            else chart[write.key][write.entry] = write.value;
-        }
-    }
-}
-
-// A chart's spec fields for a copy of it in this workbook: every prefixed key, a newer build's too, each record one of
-// its own, so the copy shares none with the chart. A part it lacks is empty, a keyed one an empty record.
-export function copySheetChartSpec(chart: SheetChart): SheetChartSpecParts {
-    const copy = newSheetChartSpecParts({});
-    for (const [key, value] of Object.entries(chart)) {
-        if (isChartSpecKey(key)) Object.assign(copy, { [key]: isRecord(value) ? { ...value } : value });
-    }
-    return copy;
+    return moved ? { ...chart, ...chartSpecWrites(stored, [{ op: 'set', path: ['data'], value: data }]) } : chart;
 }
 
 // The value axis's own format, or for a range chart the first value cell's.

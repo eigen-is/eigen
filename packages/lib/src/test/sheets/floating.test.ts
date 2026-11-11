@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { CHART_MAX_SIDE, MAX_CHART_SPEC_ENTRIES, newSheetChartSpecParts, sampleChartSpec } from '../../charts';
+import { CHART_MAX_SIDE, newChartSpecParts, sampleChartSpec } from '../../charts';
 import {
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
     SHEET_DEFAULT_COL_WIDTH,
     SHEET_DEFAULT_ROW_HEIGHT,
 } from '../../sheets/defaults';
-import { chartsWithinEntryCap, floatingItems, nextFloatingIndex, sheetFloatingBox } from '../../sheets/floating';
+import { floatingItems, nextFloatingIndex, sheetFloatingBox } from '../../sheets/floating';
 import type { Sheet, SheetChart, SheetImage } from '../../sheets/types';
 
 const BOX = { x: 10, y: 20, width: 40, height: 30 };
@@ -15,7 +15,7 @@ const chart = (id: string, index: string): SheetChart => ({
     id,
     index,
     ...BOX,
-    ...newSheetChartSpecParts(sampleChartSpec('column')),
+    ...newChartSpecParts(sampleChartSpec('column')),
 });
 
 describe('sheetFloatingBox', () => {
@@ -128,15 +128,5 @@ describe('nextFloatingIndex', () => {
         expect(repaired > 'a0').toBe(true);
         expect(index > repaired).toBe(true);
         expect(sheet.images?.i1.index).toBe('a0');
-    });
-});
-
-describe('chartsWithinEntryCap', () => {
-    test('a snapshot or a whole sheet keeps the charts within the cap', () => {
-        const charts = { c1: chart('c1', 'a1') };
-        expect(chartsWithinEntryCap(charts)).toBe(charts);
-        const points = Object.fromEntries(Array.from({ length: MAX_CHART_SPEC_ENTRIES }, (_, i) => [`s-1/${i}`, '{}']));
-        const forged = { ...chart('c2', 'a2'), specPoints: points };
-        expect(Object.keys(chartsWithinEntryCap({ ...charts, c2: forged }))).toEqual(['c1']);
     });
 });

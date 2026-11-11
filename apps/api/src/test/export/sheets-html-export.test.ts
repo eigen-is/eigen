@@ -1,10 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    CHART_MAX_SIDE,
-    DEFAULT_CHART_SERIES_STYLE,
-    newSheetChartSpecParts,
-    sampleChartSpec,
-} from '@workspace/lib/charts';
+import { CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { escapeHtml } from '@workspace/lib/html';
 import type {
@@ -146,7 +141,7 @@ describe('Sheets HTML export — fonts', () => {
             y: 0,
             width: 400,
             height: 300,
-            ...newSheetChartSpecParts(sampleChartSpec('column', 'Excalifont')),
+            ...newChartSpecParts(sampleChartSpec('column', 'Excalifont')),
         };
         expect(embedded([{ ...makeSheet([]), charts: { c1: chart } }])).toEqual(['Inter', 'Excalifont']);
     });
@@ -1573,7 +1568,7 @@ describe('Sheets HTML export — charts', () => {
             id: 'c1',
             index: 'a0',
             ...box,
-            ...newSheetChartSpecParts({
+            ...newChartSpecParts({
                 ...spec,
                 title: { text: 'Points scored' },
                 series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#2a78d6' } },

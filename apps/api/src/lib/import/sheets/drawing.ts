@@ -2,7 +2,7 @@
 // a SheetChart or a SheetImage. Shapes are not read. A chart's refs may name any sheet, so the drawings are placed once
 // every sheet has its id.
 
-import { newSheetChartSpecParts } from '@workspace/lib/charts';
+import { newChartSpecParts } from '@workspace/lib/charts';
 import type { Sheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
 import {
     REFERENCE_COLUMN_COUNT,
@@ -11,8 +11,7 @@ import {
     sheetFloatingBox,
     sheetRowsHeight,
 } from '@workspace/lib/sheets';
-import type { ChartSpec, SheetChartSpecParts } from '@workspace/lib/types/chart';
-import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
+import type { ChartSpec } from '@workspace/lib/types/chart';
 import { generateKeyBetween, normalizeAngle } from '@workspace/lib/vector';
 import { sheetNameKey } from '@workspace/sheet/engine';
 import type { XmlElement } from '../../core/xml';
@@ -137,8 +136,11 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
                 context.lost('charts-dropped');
                 continue;
             }
-            const parts = newSheetChartSpecParts(spec);
-            context.charge(0, partsText(parts));
+            const parts = newChartSpecParts(spec);
+            context.charge(
+                0,
+                Object.values(parts).reduce((sum, text) => sum + text.length, 0),
+            );
             const look = readChartPartLook(root, { theme: context.theme, emuPerPx: EMU_PER_PX, host: 'xlsx' });
             const chart: SheetChart = { id: `chart-${placed++}`, index: paint(), ...box, ...look, ...parts };
             (sheet.charts ??= {})[chart.id] = chart;
@@ -155,17 +157,6 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
         specs.set(root, spec);
         return spec;
     }
-}
-
-// The text a chart's parts spell out in the snapshot: each part's, and each entry's key and text.
-export function partsText(parts: SheetChartSpecParts): number {
-    let length = 0;
-    for (const key of CHART_SPEC_PART_KEYS) {
-        const part = parts[key];
-        if (typeof part === 'string') length += part.length;
-        else for (const [entry, text] of Object.entries(part)) length += entry.length + text.length;
-    }
-    return length;
 }
 
 // A picture over its box, turned by its a:xfrm's rot as Eigen turns it, clockwise. Excel and LibreOffice anchor a

@@ -5,8 +5,9 @@
 
 import * as fs from 'node:fs';
 import path from 'node:path';
-import { isChartSpecKey, readChartSpec } from '@workspace/lib/charts';
+import { readChartSpec } from '@workspace/lib/charts';
 import type { ChartSpec } from '@workspace/lib/types/chart';
+import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
 import { peakRss } from '../lib/document/transform/peak-rss';
 import type { ExportMedia, TransformWarning } from '../lib/document/transform/protocol';
 import { toTransferableBuffer } from '../lib/document/transform/protocol';
@@ -146,10 +147,12 @@ export function seriesIdsByPlace(spec: ChartSpec): ChartSpec {
     };
 }
 
+const PART_KEYS: ReadonlySet<string> = new Set(CHART_SPEC_PART_KEYS);
+
 // A chart's stored fields with its spec's parts compared as one spec, its series ids by place.
 export function chartFields(chart: Record<string, unknown>): Record<string, unknown> {
     const { stored, spec } = readChartSpec(chart);
-    const rest = Object.entries(chart).filter(([key]) => !isChartSpecKey(key));
+    const rest = Object.entries(chart).filter(([key]) => !PART_KEYS.has(key));
     return { ...Object.fromEntries(rest), spec: spec ? seriesIdsByPlace(spec) : stored };
 }
 

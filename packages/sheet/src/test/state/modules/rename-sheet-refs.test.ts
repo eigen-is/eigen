@@ -172,10 +172,10 @@ describe('a tab rename rewrites the text that names the tab', () => {
             specTitle: '{}',
             specLegend: '{}',
             specData: '{"values":{"sheetId":"id_1","row":[0,1],"column":[0,0]}}',
-            specAxes: {},
-            specPlots: {},
-            specSeries: {},
-            specPoints: {},
+            specAxes: '{}',
+            specPlots: '{}',
+            specSeries: '{}',
+            specPoints: '{}',
         };
         const t = workbookTab(
             {},

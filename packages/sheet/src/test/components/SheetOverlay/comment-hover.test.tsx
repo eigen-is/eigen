@@ -2,7 +2,7 @@
 // The pointer counts as on a cell over the grid's own surface and the selection's handles, which straddle a selected
 // cell's edges. Anything else in the cell area covers the cell, and the page around the grid is not the grid at all.
 import { afterEach, expect, test } from 'bun:test';
-import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
 import type { CommentHoverTarget } from '@workspace/lib/types/comments';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -23,7 +23,7 @@ const chart: SheetChart = {
     y: 25,
     width: 60,
     height: 10,
-    ...newSheetChartSpecParts({
+    ...newChartSpecParts({
         ...sampleChartSpec('column'),
         data: { source: 'inline', categories: ['A'], series: [{ id: 's-1', name: 'S', values: [1] }] },
     }),

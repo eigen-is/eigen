@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { DEFAULT_CHART_SERIES_STYLE, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { DEFAULT_CHART_SERIES_STYLE, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -326,7 +326,7 @@ describe('eigensheets preview (charts)', () => {
                     y: 0,
                     width: 400,
                     height: 300,
-                    ...newSheetChartSpecParts({
+                    ...newChartSpecParts({
                         ...sampleChartSpec('column'),
                         title: { text: 'Scores' },
                         series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#2a78d6' } },
@@ -372,7 +372,7 @@ describe('eigensheets preview (charts)', () => {
                 y,
                 width: 400,
                 height: 300,
-                ...newSheetChartSpecParts(sampleChartSpec('column')),
+                ...newChartSpecParts(sampleChartSpec('column')),
             },
         },
     });
@@ -402,7 +402,7 @@ describe('eigensheets preview (charts)', () => {
                 y: 0,
                 width: 200,
                 height: 100,
-                ...newSheetChartSpecParts({
+                ...newChartSpecParts({
                     ...spec,
                     data: {
                         source: 'range',

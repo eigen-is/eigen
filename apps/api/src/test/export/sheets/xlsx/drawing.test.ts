@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
     FLAT_CHART_LOOK,
     MAX_CHART_POINTS,
-    newSheetChartSpecParts,
+    newChartSpecParts,
     readChartSpec,
     sampleChartSpec,
 } from '@workspace/lib/charts';
@@ -37,7 +37,7 @@ const DIGIT = 7;
 const range = (row: [number, number], column: [number, number]) => ({ sheetId: 'sheet-1', row, column });
 
 // Sales by region in My Data: names down A2:A4, numbers in B2:B4 under B1.
-const RANGE_SPEC = newSheetChartSpecParts({
+const RANGE_SPEC = newChartSpecParts({
     ...sampleChartSpec('column'),
     title: { text: 'Sales' },
     data: {
@@ -57,7 +57,7 @@ const INLINE: SheetChart = {
     y: 0,
     width: 300,
     height: 200,
-    ...newSheetChartSpecParts(sampleChartSpec('line')),
+    ...newChartSpecParts(sampleChartSpec('line')),
 };
 
 const text = (value: string): Cell => ({ v: value, m: value });
@@ -161,7 +161,7 @@ describe('drawingOf', () => {
             's-1',
         ]);
         const { sheets, lost } = roundTrip([
-            { ...SUMMARY, charts: byId({ ...RANGED, ...newSheetChartSpecParts(labelled) }) },
+            { ...SUMMARY, charts: byId({ ...RANGED, ...newChartSpecParts(labelled) }) },
             MY_DATA,
         ]);
         expect(lost).toEqual([]);
@@ -260,7 +260,7 @@ describe('drawingOf', () => {
         ['an area', range([1, 3], [0, 1]), 0],
         ['one point too many', range([0, MAX_CHART_POINTS], [1, 1]), 0],
     ])('a pie over %s writes a slice per point its cells resolve to', (_, values, slices) => {
-        const spec = newSheetChartSpecParts({
+        const spec = newChartSpecParts({
             ...sampleChartSpec('pie'),
             data: {
                 source: 'range',

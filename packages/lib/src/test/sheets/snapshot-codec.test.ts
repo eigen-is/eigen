@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { newSheetChartSpecParts, sampleChartSpec } from '../../charts';
+import { newChartSpecParts, sampleChartSpec } from '../../charts';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot, isCurrentSheetsSnapshot } from '../../sheets/snapshot-codec';
 import type { Cell, CellWithRowAndCol, Sheet } from '../../sheets/types';
 
@@ -267,7 +267,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
                 y: 40,
                 width: 480,
                 height: 300,
-                ...newSheetChartSpecParts(sampleChartSpec('column')),
+                ...newChartSpecParts(sampleChartSpec('column')),
             },
         };
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], charts }];

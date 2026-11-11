@@ -11,7 +11,8 @@ const { act, createElement, useState } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
 const { AttrStep } = await import('@tiptap/pm/transform');
 const { default: Collaboration } = await import('@tiptap/extension-collaboration');
-const { chartSeriesStyle, mapChartSpecParts, readChartSpec, sampleChartSpec } = await import('@workspace/lib/charts');
+const { chartSeriesStyle, readChartSpec, sampleChartSpec } = await import('@workspace/lib/charts');
+const { CHART_SPEC_PART_KEY, CHART_SPEC_PARTS } = await import('@workspace/lib/types/chart');
 const { parseFill } = await import('@workspace/lib/vector');
 const { getFontFamily } = await import('@workspace/lib/constants/fonts');
 const { getDocExtensions, mmToPx } = await import('@workspace/lib/docs/eigendoc');
@@ -67,7 +68,14 @@ async function mount(doc = new Y.Doc()) {
     const spec = () => readChartSpec(attrs()).spec;
     // Another tab's write of the node's parts, as the panel and the dialog see it arrive.
     const store = (raw: Record<string, unknown>) =>
-        act(async () => void editor.commands.updateChart(mapChartSpecParts((part) => JSON.stringify(raw[part]))));
+        act(
+            async () =>
+                void editor.commands.updateChart(
+                    Object.fromEntries(
+                        CHART_SPEC_PARTS.map((part) => [CHART_SPEC_PART_KEY[part], JSON.stringify(raw[part])]),
+                    ),
+                ),
+        );
     return { doc, editor, undoManager, container: rendered.container, attrs, spec, stored, store };
 }
 

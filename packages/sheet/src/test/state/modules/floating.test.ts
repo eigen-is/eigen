@@ -3,7 +3,7 @@
 // Workbook's applyOp and a joiner through replaySheetsOps.
 
 import { describe, expect, test } from 'bun:test';
-import { CHART_MAX_SIDE, MAX_CHART_SPEC_ENTRIES, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { CHART_MAX_SIDE, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet as LibSheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
 import { floatingItems } from '@workspace/lib/sheets';
 import { applyPatches, produce } from 'immer';
@@ -13,6 +13,7 @@ import { insertChart } from '../../../state/modules/chart';
 import {
     deleteActiveObject,
     deleteFloatingObject,
+    duplicateFloatingObject,
     reorderFloatingObject,
     selectFloatingObject,
     updateFloatingBox,
@@ -38,7 +39,7 @@ const chart = (id: string, index: string): SheetChart => ({
     id,
     index,
     ...BOX,
-    ...newSheetChartSpecParts(sampleChartSpec('column')),
+    ...newChartSpecParts(sampleChartSpec('column')),
 });
 
 // S holds image i1 above chart c1; T holds image t1, whose upload is still pending.
@@ -173,21 +174,32 @@ describe('floating writers', () => {
         });
     }
 
-    // No build stores a keyed part as anything but a record, nor a chart past the entry cap: a peer's batch that does
-    // costs those writes, and its other writes apply on every client and the joiner.
-    test("a forged chart's writes are dropped and the rest of their batch applies, everywhere", () => {
+    test('a duplicate of a chart is one add that carries its parts and its look as stored', () => {
+        const specAxes = '{"y":{"logBase":10}}';
+        const base = produce(workbook(), (ctx: Context) => {
+            Object.assign(ctx.sheets[0].charts!.c1, newChartSpecParts(sampleChartSpec('pie')), { specAxes, seed: 7 });
+        });
+        const original = base.sheets[0].charts!.c1;
+        const { next, ops } = author(base, (ctx) => duplicateFloatingObject(ctx, { kind: 'chart', id: 'c1' }));
+        const copy = next.sheets[0].charts![next.activeObject?.id ?? ''];
+        expect(ops).toEqual([{ op: 'add', id: S, path: ['charts', copy.id], value: copy }]);
+        expect({ ...copy, id: 'c1', index: original.index, x: original.x, y: original.y }).toEqual({
+            ...original,
+            angle: 0,
+        });
+        expect(copy.specAxes).toBe(specAxes);
+    });
+
+    // No writer writes below a chart's field: a peer's batch that does costs that write, and its other writes apply
+    // on every client and the joiner.
+    test("a write below a chart's field is dropped and the rest of its batch applies, everywhere", () => {
         const base = workbook();
-        const points = Object.fromEntries(Array.from({ length: MAX_CHART_SPEC_ENTRIES }, (_, i) => [`s-1/${i}`, '{}']));
         const batch: Op[] = [
-            { op: 'replace', id: S, path: ['charts', 'c1', 'specPoints'], value: 'forged' },
             { op: 'add', id: S, path: ['charts', 'c1', 'specPoints', 's-1/0'], value: '{"color":"#ff0000"}' },
-            { op: 'add', id: S, path: ['charts', 'c2'], value: { ...chart('c2', 'a3'), specPoints: points } },
             { op: 'replace', id: S, path: ['charts', 'c1', 'x'], value: 300 },
         ];
         const peer = receive(base, batch);
-        expect(peer.sheets[0].charts!.c1).toMatchObject({ x: 300 });
-        expect(peer.sheets[0].charts!.c1.specPoints).toEqual({ 's-1/0': '{"color":"#ff0000"}' });
-        expect(peer.sheets[0].charts!.c2).toBeUndefined();
+        expect(peer.sheets[0].charts!.c1).toEqual({ ...base.sheets[0].charts!.c1, x: 300 });
         expect(objects(join(base, [batch]))).toEqual(objects(peer.sheets));
     });
 

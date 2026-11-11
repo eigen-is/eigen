@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_CHART_SPEC_ENTRIES, newSheetChartSpecParts, sampleChartSpec } from '../../charts';
-import { isRecord } from '../../core/guards';
+import { newChartSpecParts, sampleChartSpec } from '../../charts';
 import type { Op, Sheet, SheetChart, SheetImage } from '../../sheets/types';
 import { MAX_VALIDATIONS } from '../../sheets/validations';
 import { applySheetWrites, opToPatchOnSheets } from '../../sheets/yjs-ops';
@@ -103,7 +102,7 @@ describe('applySheetWrites', () => {
         id,
         index,
         ...BOX,
-        ...newSheetChartSpecParts(sampleChartSpec('column')),
+        ...newChartSpecParts(sampleChartSpec('column')),
     });
     const cell = (v: string) => ({ v, m: v });
     const sheets = (): Sheet[] => [
@@ -203,87 +202,21 @@ describe('applySheetWrites', () => {
         ).toEqual(['charts/c2', 'charts/c2/x', 'charts/c1/x', 'charts/c1', 'images', 'images/i1/x']);
     });
 
-    // A keyed part is a record from the chart's creation on, so only a forged chart has another value there: an entry
-    // write below it is skipped, not the batch, and so is a write that would leave the part no record. A write below
-    // an entry is skipped whatever the entry holds: under a forged record entry, an add and its remove would each
-    // lower the chart's count by one, and take the chart past its cap.
-    test('an entry write lands on a record field only, and a keyed part stays a record', () => {
-        const forged = { ...chart('c2', 'a2'), specPoints: '{}' };
-        expect(
-            paths([
-                write('add', ['charts', 'c1', 'specPoints', 'forged'], { k: 1 }),
-                write('add', ['charts', 'c1', 'specPoints', 'forged', 'k2'], 1),
-                write('remove', ['charts', 'c1', 'specPoints', 'forged', 'k2']),
-                write('remove', ['charts', 'c1', 'specPoints', 'forged', 'k']),
-                write('remove', ['charts', 'c1', 'specPoints', 'forged']),
-                write('add', ['charts', 'c2'], forged),
-                write('add', ['charts', 'c2', 'specPoints', 's-1/3'], '{"color":"#ff0000"}'),
-                write('add', ['charts', 'c1', 'specPoints', 's-1/3'], '{"color":"#ff0000"}'),
-                write('add', ['charts', 'c1', 'specTitle', 'text'], 'Goals'),
-                write('add', ['charts', 'c1', 'specSeries', 's-1', 'color'], '#ff0000'),
-                write('replace', ['charts', 'c1', 'specPoints'], 'gone'),
-                write('remove', ['charts', 'c1', 'specSeries']),
-                write('add', ['charts', 'c1', 'specPoints', 's-1/4'], '{}'),
-                write('add', ['charts', 'c1', 'specSeries', 's-1'], '{}'),
-                write('replace', ['charts', 'c1', 'specTitle'], '{"text":"Goals"}'),
-                write('replace', ['charts', 'c2', 'specPoints'], {}),
-                write('add', ['charts', 'c2', 'specPoints', 's-1/4'], '{}'),
-            ]),
-        ).toEqual([
-            'charts/c1/specPoints/forged',
-            'charts/c1/specPoints/forged',
-            'charts/c2',
-            'charts/c1/specPoints/s-1/3',
-            'charts/c1/specPoints/s-1/4',
-            'charts/c1/specSeries/s-1',
-            'charts/c1/specTitle',
-            'charts/c2/specPoints',
-            'charts/c2/specPoints/s-1/4',
+    // A chart's fields are plain values, a part one string, so nothing is written below one.
+    test("a chart's part is written whole, and a write below any field of a chart is dropped", () => {
+        const series = '{"s-1":{"color":"#ff0000"}}';
+        const written = landed(sheets(), [
+            write('replace', ['charts', 'c1', 'specSeries'], series),
+            write('add', ['charts', 'c1', 'specPoints', 's-1/3'], '{"color":"#ff0000"}'),
+            write('add', ['charts', 'c1', 'specTitle', 'text'], 'Goals'),
+            write('add', ['charts', 'c1', 'future', 'a'], 1),
+            write('replace', ['charts', 'c1', 'x'], 99),
         ]);
-    });
-
-    // Every read lists a chart's entries, so a forged one of a million would cost every peer that walk on every draw.
-    test('a chart past the entry cap is skipped, whole or an entry at a time', () => {
-        const entries = (count: number) =>
-            Object.fromEntries(Array.from({ length: count }, (_, i) => [`s-1/${i}`, '{}']));
-        const fields = Object.values(chart('c1', 'a1'));
-        const held = fields.reduce(
-            (sum: number, value) => sum + 1 + (isRecord(value) ? Object.keys(value).length : 0),
-            0,
-        );
-        const full = MAX_CHART_SPEC_ENTRIES - held;
-        const forged = { ...chart('c2', 'a2'), specPoints: entries(full + 1) };
-        const keys = Object.fromEntries(Array.from({ length: full + 1 }, (_, i) => [`specFuture${i}`, '']));
-        expect(
-            paths([
-                write('add', ['charts', 'c2'], forged),
-                write('add', ['charts', 'c3'], { ...chart('c3', 'a3'), ...keys }),
-                write('replace', ['charts'], { c1: chart('c1', 'a1'), c2: forged }),
-                write('replace', ['charts', 'c1', 'specPoints'], entries(full + 1)),
-                write('replace', ['charts', 'c1', 'specPoints'], entries(full)),
-                write('add', ['charts', 'c1', 'specPoints', 's-1/0'], '{"color":"#ff0000"}'),
-                write('add', ['charts', 'c1', 'specPoints', `s-1/${full}`], '{}'),
-                write('remove', ['charts', 'c1', 'specPoints', 's-1/0']),
-                write('add', ['charts', 'c1', 'specPoints', `s-1/${full}`], '{}'),
-                write('add', ['charts', 'c1', 'specPoints', 's-1/0'], '{}'),
-                write('replace', ['charts', 'c1'], chart('c1', 'a1')),
-                write('add', ['charts', 'c1', 'specPoints', 's-1/0'], '{}'),
-                write('replace', ['charts', 'c1', 'specPoints'], entries(full)),
-                write('add', ['charts', 'c1', 'specPoints', `s-1/${full}`], '{}'),
-                write('replace', ['charts'], { c1: chart('c1', 'a1') }),
-                write('add', ['charts', 'c1', 'specPoints', 's-1/0'], '{}'),
-            ]).map((path) => path.split('/').slice(0, 4).join('/')),
-        ).toEqual([
-            'charts/c1/specPoints',
-            'charts/c1/specPoints/s-1',
-            'charts/c1/specPoints/s-1',
-            'charts/c1/specPoints/s-1',
-            'charts/c1',
-            'charts/c1/specPoints/s-1',
-            'charts/c1/specPoints',
-            'charts',
-            'charts/c1/specPoints/s-1',
+        expect(written.applied.map(({ path }) => path.slice(1).join('/'))).toEqual([
+            'charts/c1/specSeries',
+            'charts/c1/x',
         ]);
+        expect(written.sheets[0].charts?.c1).toEqual({ ...chart('c1', 'a1'), specSeries: series, x: 99 });
     });
 
     // A whole-entry write over a rule a peer deleted would bring the rule back. Immer writes `add` for an id its base

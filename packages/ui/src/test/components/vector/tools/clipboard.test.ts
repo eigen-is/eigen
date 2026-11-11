@@ -271,11 +271,13 @@ describe('buildSelectionData', () => {
         expect(readElementsClipboardItem(data.items)?.elements).toEqual([el]);
     });
 
-    // The parts as stored text, so a newer build's part and one that doesn't parse reach the other app as they are here.
-    test('a chart item carries a part a newer build added and a part that does not parse', () => {
+    // The parts as stored text, so one that doesn't parse reaches the other app as it is here.
+    test('a chart item carries a part that does not parse, and no key that is no part', () => {
         const el = Object.assign(chart('c1', 'a0', { specTitle: '{"text":' }), { specFuture: '{"later":true}' });
         const { data } = buildSelectionData([el], ['c1'], meta, '', () => undefined);
-        expect(data.items[1]).toMatchObject({ parts: { specTitle: '{"text":', specFuture: '{"later":true}' } });
+        const [, item] = data.items;
+        expect(item).toMatchObject({ parts: { specTitle: '{"text":' } });
+        expect(item?.type === 'chart' && Object.keys(item.parts)).not.toContain('specFuture');
     });
 
     test('a chart-only selection ships NO svg, so docs and sheets paste a live chart and not a picture', () => {

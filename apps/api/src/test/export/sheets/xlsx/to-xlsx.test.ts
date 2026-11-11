@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
 import type { TransformWarning } from '../../../../lib/document/transform/protocol';
@@ -444,7 +444,7 @@ describe('the export keeps what a plain writer loses', () => {
                         y: 40,
                         width: 300,
                         height: 200,
-                        ...newSheetChartSpecParts(sampleChartSpec('column')),
+                        ...newChartSpecParts(sampleChartSpec('column')),
                     },
                 },
             },

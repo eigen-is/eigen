@@ -5,13 +5,12 @@
 // clipboard listeners and the imperative API a host reaches through its ref.
 
 import { formatWithLabels, matchesKeyboardEvent } from '@tanstack/react-hotkeys';
-import { isSketchCapped, newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
+import { chartSpecTexts, isSketchCapped, newChartSpecParts, readChartSpec } from '@workspace/lib/charts';
 import {
     buildImageClipboardItem,
     buildTextClipboardItem,
     classifyPaste,
     clipboardTextItemHasContent,
-    pastedChartFields,
     svgToImageFile,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
@@ -31,7 +30,7 @@ import type { SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
 import { createArrayResolver } from '../../engine/cell-resolver';
-import { copySheetChartSpec, resolveRangeChartData, seriesName } from '../../engine/chart-data';
+import { resolveRangeChartData, seriesName } from '../../engine/chart-data';
 import type {
     ChartPanelState,
     Context,
@@ -381,10 +380,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             setContextWithProduce((draftCtx) => {
                                 for (const { parts, width, height, look } of chartItems) {
                                     const own = copied && isEqual(copied.inline, parts);
-                                    const fields = own
-                                        ? copySheetChartSpec(copied.chart)
-                                        : pastedChartFields(parts, newSheetChartSpecParts);
-                                    if (!fields) continue;
+                                    const texts = (own && chartSpecTexts(copied.chart)) || parts;
+                                    const fields = newChartSpecParts(texts);
                                     pasteChart(draftCtx, crypto.randomUUID(), fields, { width, height }, look);
                                 }
                             });

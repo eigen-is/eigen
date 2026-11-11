@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { ConditionalFormatRule, DataValidationRule, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { replaySheetsOps } from '@workspace/sheet/engine';
@@ -1458,7 +1458,7 @@ describe('an xlsx export carries the sheets’ images', () => {
                     gone: { id: 'gone', index: 'a3', ...box, mediaName: 'gone.png' },
                 },
                 charts: {
-                    chart: { id: 'chart', index: 'a1', ...box, ...newSheetChartSpecParts(sampleChartSpec('pie')) },
+                    chart: { id: 'chart', index: 'a1', ...box, ...newChartSpecParts(sampleChartSpec('pie')) },
                 },
             },
             {

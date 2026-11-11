@@ -4,7 +4,7 @@
 // clipboard from the keys, the object's menu and Edit. Both kinds draw in one paint order.
 import { afterEach, describe, expect, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { readEigenClipboard } from '@workspace/lib/clipboard';
 import { driveKeys, MediaResolverProvider } from '@workspace/lib/drive';
 import type { SheetChart, SheetFloatingItem, SheetImage } from '@workspace/lib/sheets';
@@ -29,7 +29,7 @@ const chart: SheetChart = {
     y: 30,
     width: 300,
     height: 200,
-    ...newSheetChartSpecParts({
+    ...newChartSpecParts({
         ...sampleChartSpec('column'),
         data: {
             source: 'inline',
@@ -405,18 +405,16 @@ describe.each(KINDS)('a floating $kind', ({ rows, download, ...item }) => {
     });
 });
 
-// A record shared with the original would be one object in two charts, which a later in-place write would change in both.
-test('Duplicate gives a chart’s copy records of its own', async () => {
+test('Duplicate gives a chart’s copy its parts and its look', async () => {
     const { content, order, record } = await mount();
     await rightClick(content(chart.id));
     await pick('Duplicate');
     const copy = record(order().at(-1) ?? '');
     const original = record(chart.id);
-    if (!copy || !original || !('specSeries' in copy) || !('specSeries' in original)) throw new Error('no copy');
-    for (const key of ['specAxes', 'specPlots', 'specSeries', 'specPoints'] as const) {
-        expect(copy[key]).toEqual(original[key]);
-        expect(copy[key]).not.toBe(original[key]);
-    }
+    if (!copy || !original) throw new Error('no copy');
+    const { id, index, x, y, ...carried } = original;
+    expect(copy).toMatchObject(carried);
+    expect(copy.id).not.toBe(id);
 });
 
 test('images and charts draw in one paint order, by index', async () => {

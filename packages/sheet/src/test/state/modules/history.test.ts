@@ -3,8 +3,9 @@
 // every batch. The three must always agree.
 
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import { DEFAULT_CHART_SERIES_STYLE, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { DEFAULT_CHART_SERIES_STYLE, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet as LibSheet } from '@workspace/lib/sheets';
+import type { ChartSpecChange } from '@workspace/lib/types/chart';
 import type { Patch } from 'immer';
 import { produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
@@ -15,6 +16,7 @@ import type { Cell, ShiftedSheet } from '../../../engine/types';
 import { copySheet, hideSheet, showSheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { getFlowdata } from '../../../state/context';
+import { setChartSpec } from '../../../state/modules/chart';
 import { applyDataValidation } from '../../../state/modules/data-validation';
 import type { RowColMove } from '../../../state/modules/history-shift';
 import { deleteMove, insertMove, shiftEntries } from '../../../state/modules/history-shift';
@@ -103,7 +105,7 @@ function expectAgree(s: ReturnType<typeof session>) {
 
 // A chart on any sheet that reads B3:B6 of One.
 const chartReading = (id: string) => ({
-    ...newSheetChartSpecParts({
+    ...newChartSpecParts({
         ...sampleChartSpec('column'),
         series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#2a78d6' } },
         data: {
@@ -334,6 +336,21 @@ describe("undo after a peer's row op keeps a field its entry wrote", () => {
         s.undo(s.a);
         expect(cellLinks(s.a.ctx.sheets[0])).toEqual({});
         expectAgree(s);
+    });
+
+    // A point's style keeps its index through a row op, so the entry still holds what the recolour replaced.
+    test("a chart's slice colour stays undoable after a peer's row insert in its rows", () => {
+        const base = produce(workbook({}), (ctx: Context) => {
+            ctx.sheets[0].charts = { c1: chartReading('c1') };
+        });
+        const s = session(base);
+        const points = (sheets: LibSheet[]) => sheets[0].charts?.c1.specPoints;
+        const recolor: ChartSpecChange = [{ op: 'set', path: ['points', 's-1', '1', 'color'], value: '#ff0000' }];
+        s.edit(s.a, (ctx) => setChartSpec(ctx, 'c1', recolor));
+        expect(points(s.b.ctx.sheets)).toBe('{"s-1":{"1":{"color":"#ff0000"}}}');
+        s.edit(s.b, ...insertRows(4, 2));
+        s.undo(s.a);
+        expect([s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()].map(points)).toEqual(['{}', '{}', '{}']);
     });
 });
 
@@ -646,6 +663,22 @@ describe('undo skips a cell a peer changed since, by what was written into it', 
         expect(s.a.ctx.sheets[0].config?.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 2 } });
         expect(cellAt(s.a, 'B2')?.mc).toEqual({ r: 0, c: 0 });
         expectAgree(s);
+    });
+
+    // A part is one string, so a peer's later edit of it holds the peer's whole part and the undo leaves it.
+    test("a chart's style edit is not undone once a peer has edited the same part", () => {
+        const base = produce(workbook({}), (ctx: Context) => {
+            ctx.sheets[0].charts = { c1: chartReading('c1') };
+        });
+        const s = session(base);
+        const series = (sheets: LibSheet[]) => JSON.parse(sheets[0].charts?.c1.specSeries ?? '{}')['s-1'];
+        const set = (path: string[], value: unknown): ChartSpecChange => [{ op: 'set', path, value }];
+        s.edit(s.a, (ctx) => setChartSpec(ctx, 'c1', set(['series', 's-1', 'color'], '#ff0000')));
+        s.edit(s.b, (ctx) => setChartSpec(ctx, 'c1', set(['series', 's-1', 'line', 'smooth'], true)));
+        s.undo(s.a);
+        for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
+            expect(series(sheets)).toMatchObject({ color: '#ff0000', line: { smooth: true } });
+        }
     });
 });
 
@@ -1325,6 +1358,12 @@ describe('shiftEntries', () => {
             rows(2, 2),
             replace(['sheets', TWO, 'charts', 'c2', 'specData'], '{}'),
             null,
+        ],
+        [
+            "a chart's slice colours stay, since a point keeps its index",
+            rows(2, 2),
+            replace(at('charts', 'c1', 'specPoints'), '{"s-1":{"0":{"color":"#ff0000"}}}'),
+            replace(at('charts', 'c1', 'specPoints'), '{"s-1":{"0":{"color":"#ff0000"}}}'),
         ],
         ["a chart's box stays", rows(2, 2), replace(at('charts', 'c1', 'x'), 5), replace(at('charts', 'c1', 'x'), 5)],
         ['the name stays', rows(2, 2), replace(at('name'), 'Uno'), replace(at('name'), 'Uno')],

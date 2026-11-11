@@ -3,12 +3,7 @@
 // elements, another app's items and plain text. The clipboard hook decides which one a paste is and writes the plan.
 
 import { newChartSpecParts } from '@workspace/lib/charts';
-import {
-    clipboardTextItemHasContent,
-    needsReUpload,
-    pastedChartFields,
-    readClipboardBox,
-} from '@workspace/lib/clipboard';
+import { clipboardTextItemHasContent, needsReUpload, readClipboardBox } from '@workspace/lib/clipboard';
 import { PENDING_PREFIX } from '@workspace/lib/drive';
 import { textToParagraphHtml } from '@workspace/lib/html';
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
@@ -111,11 +106,8 @@ export function planForeignPaste(
             if (crossMount) plan.crossMount.push({ index, item });
             continue;
         }
-        // A chart keeps its parts as they came, a newer build's and its font included, and its look as the element's
-        // own fields.
+        // A chart keeps its parts as they came, its font included, and its look as the element's own fields.
         if (item.type === 'chart') {
-            const parts = pastedChartFields(item.parts, newChartSpecParts);
-            if (!parts) continue;
             const { width, height } = box;
             plan.partials.push({
                 type: 'chart',
@@ -123,7 +115,7 @@ export function planForeignPaste(
                 width,
                 height,
                 angle,
-                ...parts,
+                ...newChartSpecParts(item.parts),
                 ...item.look,
             });
             continue;

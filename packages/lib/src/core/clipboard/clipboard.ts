@@ -3,10 +3,11 @@
 // build and read every item through these helpers, and a paste drops any item that doesn't match its own shape.
 
 import { toast } from 'sonner';
-import { exceedsChartSpecBytes, exceedsChartSpecDepth, isChartSpecKey } from '../../charts/limits';
+import { exceedsChartSpecDepth } from '../../charts/limits';
 import { readChartLook } from '../../charts/look';
 import { chartSpecTexts, readChartSpec } from '../../charts/spec';
 import type { ChartSpecTexts } from '../../types/chart';
+import { CHART_SPEC_PART_KEYS } from '../../types/chart';
 import type {
     EigenClipboardChartItem,
     EigenClipboardData,
@@ -80,13 +81,14 @@ export function buildTextClipboardItem(args: {
     };
 }
 
-// A key that names a part, under its text.
+const PART_KEYS: ReadonlySet<string> = new Set(CHART_SPEC_PART_KEYS);
+
+// One of the eight parts' keys, under its text.
 const isPartText = (entry: [string, unknown]): entry is [string, string] =>
-    isChartSpecKey(entry[0]) && typeof entry[1] === 'string';
+    PART_KEYS.has(entry[0]) && typeof entry[1] === 'string';
 
 // The one test of a chart item's parts, the builder's and the reader's: a text under each key and every key a part's,
-// within the spec's byte and depth limits as the item carries them, and inline data that reads. What a host stores can
-// be larger, so a paste counts that again (pastedChartFields).
+// within the spec's byte and depth limits, and inline data that reads. A paste stores them as they came.
 function isInlineChartParts(parts: unknown): parts is ChartSpecTexts {
     if (!isRecord(parts)) return false;
     const texts = Object.entries(parts);
@@ -97,7 +99,7 @@ function isInlineChartParts(parts: unknown): parts is ChartSpecTexts {
 }
 
 // A chart item, or null for parts no consumer could draw (range data, unreadable, over a limit). The parts ride as
-// their holder stores them, never re-serialized, so one that doesn't parse and a newer build's arrive as they left.
+// their holder stores them, never re-serialized, so one that doesn't parse arrives as it left.
 // The parts and the look are read off their holder (a canvas element, a doc's chart node, a sheet chart's inline
 // copy), and a missing look field copies flat.
 export function buildChartClipboardItem(args: {
@@ -109,17 +111,6 @@ export function buildChartClipboardItem(args: {
     if (!isInlineChartParts(parts)) return null;
     const look = readChartLook(args.look);
     return { type: 'chart', parts, width: args.box.width, height: args.box.height, look };
-}
-
-// The fields a paste stores for a chart item's parts, as its host makes them, or null past the byte limit: Sheets
-// repeats a series id in each entry's key, and a canvas adds every part the item lacks, so an item within the limit can
-// land past it, as a chart every peer reads as the placeholder.
-export function pastedChartFields<Fields extends Readonly<Record<string, unknown>>>(
-    parts: ChartSpecTexts,
-    make: (parts: ChartSpecTexts) => Fields,
-): Fields | null {
-    const fields = make(parts);
-    return exceedsChartSpecBytes(fields) ? null : fields;
 }
 
 // Read the typed geometry off any item. Consumers size/rotate from this — there is no `meta` sniff

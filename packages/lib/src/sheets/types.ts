@@ -2,7 +2,7 @@
 // The sheet engine, the editor and the API all use them. They live in lib because the sheet package depends on lib,
 // not the other way around, so the backend can import them without React.
 
-import type { ChartLook, SheetChartSpecParts } from '../types/chart';
+import type { ChartLook, ChartSpecPartKey } from '../types/chart';
 
 export type CellStyle = {
     bl?: number;
@@ -148,7 +148,7 @@ export type SheetImage = SheetFloatingObject & { mediaName: string };
 
 // The spec is stored a field per part and read only through readChartSpec, its range refs naming sheets by id. The
 // look is a canvas chart's own fields, each written apart and read through readChartLook.
-export type SheetChart = SheetFloatingObject & Partial<ChartLook> & SheetChartSpecParts;
+export type SheetChart = SheetFloatingObject & Partial<ChartLook> & Record<ChartSpecPartKey, string>;
 
 // A data-validation rule, such as a list or a number check, which a sheet holds over its ranges. `type` and `type2` are
 // plain strings because the dialog sets them from a Select's string value.

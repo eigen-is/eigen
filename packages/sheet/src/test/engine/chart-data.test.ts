@@ -7,7 +7,6 @@ import {
     MAX_CHART_LABEL_LENGTH,
     MAX_CHART_POINTS,
     newChartSpecParts,
-    newSheetChartSpecParts,
     readChartSpec,
     sampleChartSpec,
 } from '@workspace/lib/charts';
@@ -186,7 +185,7 @@ describe('renderSheetChartSvg', () => {
             y: 0,
             width: 400,
             height: 300,
-            ...newSheetChartSpecParts({
+            ...newChartSpecParts({
                 ...spec,
                 axes: { ...spec.axes, y: { ...spec.axes.y, labels: { format } } },
                 data: data(ref([0, 1], [0, 0]), series(ref([0, 1], [1, 1]), 'Share')),
@@ -209,8 +208,8 @@ describe('renderSheetChartSvg', () => {
 
     test("a series' data labels read in the first value cell's format", () => {
         const plain = chart(null);
-        const series = JSON.stringify({ ...DEFAULT_CHART_SERIES_STYLE, labels: { visible: true } });
-        const labelled = { ...plain, specSeries: { ...plain.specSeries, 's-0': series } };
+        const series = { 's-0': { ...DEFAULT_CHART_SERIES_STYLE, labels: { visible: true } } };
+        const labelled = { ...plain, specSeries: JSON.stringify(series) };
         const count = (svg: string) => svg.split('>25%<').length - 1;
         expect(count(renderSheetChartSvg(labelled, shares))).toBe(count(renderSheetChartSvg(plain, shares)) + 1);
     });
@@ -249,7 +248,7 @@ describe('renderSheetChartSvg', () => {
         const svg = renderSheetChartSvg(
             {
                 ...chart(null),
-                ...newSheetChartSpecParts({
+                ...newChartSpecParts({
                     ...spec,
                     series: {},
                     data: data(null, series(ref([0, 1], [1, 1])), series(null), series(ref([0, 1], [1, 1]))),
@@ -277,7 +276,7 @@ describe('inlineChartSpec', () => {
         y: 0,
         width: 400,
         height: 300,
-        ...newSheetChartSpecParts(spec),
+        ...newChartSpecParts(spec),
     });
     // Every series automatic unless styles names it.
     const rangeChart = (list: RangeChartSeries[], styles: ChartSpec['series'] = {}) =>
@@ -348,11 +347,11 @@ describe('inlineChartSpec', () => {
         expect(formatOf(inlineChartSpec(withFormat('0.00'), shares))).toBe('0.00');
     });
 
-    // The text each part stores, so one that doesn't parse and a newer build's travel as they are.
-    test('an inline chart copies its parts as stored, a keyed part its entries joined', () => {
+    // The text each part stores, so one that doesn't parse travels as it is, and a key that is no part stays behind.
+    test('an inline chart copies its eight parts as stored', () => {
         const pie = sampleChartSpec('pie');
-        const kept = { specData: JSON.stringify({ ...pie.data, future: 1 }), specTitle: '{"text":', specFuture: '[1]' };
-        expect(inlineChartSpec({ ...sheetChart(pie), ...kept }, resolver)).toEqual({
+        const kept = { specData: JSON.stringify({ ...pie.data, future: 1 }), specTitle: '{"text":' };
+        expect(inlineChartSpec({ ...sheetChart(pie), ...kept, ...{ specFuture: '[1]' } }, resolver)).toEqual({
             ...newChartSpecParts(pie),
             ...kept,
         });

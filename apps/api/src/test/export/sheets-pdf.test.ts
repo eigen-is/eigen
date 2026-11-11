@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
 import { htmlToPdf } from '../../lib/export/weasyprint';
@@ -150,7 +150,7 @@ suite('sheets PDF — a rotated chart', () => {
         const sheet: Sheet = {
             name: 'Chart',
             id: 's1',
-            charts: { c1: { ...chart, ...newSheetChartSpecParts(sampleChartSpec('column')) } },
+            charts: { c1: { ...chart, ...newChartSpecParts(sampleChartSpec('column')) } },
         };
         const html = sheetsHtmlDocument({
             title: 'Chart',

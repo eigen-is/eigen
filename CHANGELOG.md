@@ -43,6 +43,9 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Large spreadsheets after row edits** — opening, exporting and searching a large workbook after many row or column inserts and deletes takes about half as long as before
 - **Formula text in Sheets** — inserting or deleting a row or column changes only the references it moves, so a formula keeps its line breaks and spaces, on every tab
 - **Links in Sheets (breaking)** — an existing spreadsheet opens without its cell links, and their text keeps its blue underline. Add them again, or import the Excel file again. A link now moves with its cell through a sort or a fill
+- **Charts in Sheets (breaking)** — a chart in an existing spreadsheet keeps its type, title, legend, data and look, and loses its axis titles and settings, its stacking, and its series and slice colors and styles. Set them again in the chart's panel
+- **Slice colors in Sheets** — a pie slice's own color stays at its place when rows are inserted or deleted inside the chart's data, as in Google Sheets
+- **Editing a chart together in Sheets** — when two people change the same kind of setting on one chart at once, such as two series' colors, the later change stays. Undo skips a chart setting someone else has changed since
 - **Deleting a tab in Sheets** — formulas that name the tab show `#REF!`, as after deleting a row, and dropdown lists and links that name it stop working. A new tab with that name doesn't bring them back. Undo does, until someone else edits
 - **Sorting in Sheets** — a sort moves a cell's contents, formatting and link, and leaves borders, data validation and conditional formatting where they are. Hidden rows stay put, whether you hid them or a filter did
 - **Pasting and filling rules in Sheets** — a paste or fill from a cell with no rule takes the rule off the cell it lands on, so a rule can get a gap. A fill also copies links and replaces the data validation it lands on

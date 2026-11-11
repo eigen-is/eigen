@@ -12,7 +12,7 @@ installHappyDom();
 stubCanvasMeasure(() => 40);
 
 const { createElement } = await import('react');
-const { MAX_CHART_SPEC_BYTES, newChartSpecParts, sampleChartSpec } = await import('@workspace/lib/charts');
+const { newChartSpecParts, sampleChartSpec } = await import('@workspace/lib/charts');
 const { writeEigenClipboard } = await import('@workspace/lib/clipboard');
 const {
     buildElementsClipboardItem,
@@ -168,31 +168,12 @@ describe("⌘V of another app's items", () => {
         ]);
     });
 
-    // Each part as the text it came as: a newer build's part is kept, one that doesn't parse stays as it is, and a keyed
-    // part the item lacks is the empty record a new chart holds.
-    test("another app's chart keeps every part it carries, and a keyed part it lacks lands empty", async () => {
+    // Each part as the text it came as: one that doesn't parse stays as it is, and one the item lacks lands empty.
+    test("another app's chart keeps every part it carries, and a part it lacks lands empty", async () => {
         const { specPoints, ...rest } = parts;
-        const carried = { ...rest, specTitle: '{"text":', specFuture: '{"later":true}' };
+        const carried = { ...rest, specTitle: '{"text":' };
         const added = await pasteOnCanvas([{ type: 'chart', parts: carried, width: 600, height: 371, look }]);
-        expect(added).toEqual([expect.objectContaining({ ...carried, specPoints: '{}' })]);
-        expect(specPoints).toBe('{}');
-    });
-
-    // At the limit as the item carries it, past it once the canvas adds the specPoints it lacks.
-    test("another app's chart that would land past the byte limit pastes nothing", async () => {
-        const { specPoints: _, ...lacking } = parts;
-        const bytes = (texts: Record<string, string>) =>
-            Object.entries(texts).reduce((sum, [key, text]) => sum + new TextEncoder().encode(key + text).length, 0);
-        const padded = (pad: string) => ({
-            ...lacking,
-            specChart: JSON.stringify({ ...JSON.parse(lacking.specChart), pad }),
-        });
-        const atLimit = padded('x'.repeat(MAX_CHART_SPEC_BYTES - bytes(padded(''))));
-        const added = await pasteOnCanvas([
-            { type: 'chart', parts: atLimit, width: 600, height: 371, look },
-            { type: 'chart', parts, width: 600, height: 371, look },
-        ]);
-        expect(added).toEqual([expect.objectContaining(parts)]);
+        expect(added).toEqual([expect.objectContaining({ ...carried, specPoints: '' })]);
     });
 
     // A 10 pt cell copied from Sheets: the wire's size is pt, so it lands in a drawing as 10 pt at 96 dpi, not as 10 px.

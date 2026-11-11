@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
-import { defaultChartSpec, newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
+import { defaultChartSpec, newChartSpecParts, readChartSpec } from '@workspace/lib/charts';
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import {
     decodeSheetsSnapshot,
@@ -800,7 +800,7 @@ describe('document/sheets — addSheetsBatch', () => {
                 },
             },
             charts: {
-                c1: { id: 'c1', index: 'a0', x: 0, y: 0, width: 300, height: 200, ...newSheetChartSpecParts(spec) },
+                c1: { id: 'c1', index: 'a0', x: 0, y: 0, width: 300, height: 200, ...newChartSpecParts(spec) },
             },
         },
     ];

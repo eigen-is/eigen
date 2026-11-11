@@ -16,7 +16,7 @@ import { ELEMENT_FIELDS, ELEMENT_KINDS, SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFA
 import { svgTextLine } from '../../../vector/kinds/render-utils';
 import { readElementFromFields } from '../../../vector/read-vector';
 import type { VectorChartElement, VectorElement } from '../../../vector/types';
-import { DEFAULT_ELEMENT_PROPS, prop } from '../../../vector/types';
+import { DEFAULT_ELEMENT_PROPS } from '../../../vector/types';
 import { chart, elementSvg, textBox } from '../element-factories';
 
 const specOf = (over: Partial<ChartSpec> = {}, type: ChartType = 'column'): ChartSpec => ({
@@ -99,39 +99,31 @@ describe('chart read', () => {
         expect(readChart({ ...parts(), specTitle: title }).specTitle).toBe(title);
     });
 
-    test("a newer build's part is kept as stored; one that is no string, and any other unknown key, is not", () => {
+    test('the element holds the eight parts only: a ninth prefixed key is not read, whatever it holds', () => {
         const el = readChart({ ...parts(), specFuture: '{"a":1}', specOther: 42, future: '1' });
-        expect(prop(el, 'specFuture')).toBe('{"a":1}');
-        expect('specOther' in el).toBe(false);
-        expect('future' in el).toBe(false);
+        expect(Object.keys(el).filter((key) => /^spec|future/.test(key))).toEqual([...CHART_SPEC_PART_KEYS]);
+        const padded = readChart({ ...parts(), specFuture: ' '.repeat(MAX_CHART_SPEC_BYTES) });
+        expect(CHART_SPEC_PART_KEYS.map((key) => padded[key])).toEqual(Object.values(parts()));
     });
 
-    test('past the byte limit every part reads as empty and no newer part is kept', () => {
-        const el = readChart({ ...parts(), specFuture: ' '.repeat(MAX_CHART_SPEC_BYTES) });
+    test('past the byte limit every part reads as empty, and so does a part that is no string', () => {
+        const el = readChart({ ...parts(), specTitle: ' '.repeat(MAX_CHART_SPEC_BYTES) });
         expect(CHART_SPEC_PART_KEYS.map((key) => el[key])).toEqual(CHART_SPEC_PART_KEYS.map(() => ''));
-        expect('specFuture' in el).toBe(false);
         expect(readChart({ ...parts(), specChart: 42 }).specChart).toBe('');
     });
 
-    test('a forged million keys stop the read at the byte limit, and the chart reads as empty', () => {
+    test("the read never lists the element's keys, so a forged million cost nothing", () => {
         const fields = new Map<string, unknown>(Object.entries({ id: 'c1', type: 'chart', ...parts() }));
-        let visited = 0;
+        let listed = 0;
         const el = readElementFromFields({
-            get: (key: string) => fields.get(key) ?? (key.startsWith('specX') ? 'x' : undefined),
+            get: (key: string) => fields.get(key),
             *keys() {
+                listed += 1;
                 yield* fields.keys();
-                for (let i = 0; i < 1_000_000; i++) {
-                    visited += 1;
-                    yield `specX${i}`;
-                }
             },
         });
-        // Each forged key costs its name and a byte of text, 'specX0' and up.
-        expect(visited).toBeLessThan(MAX_CHART_SPEC_BYTES / 'specX0x'.length);
-        expect(el?.type === 'chart' && CHART_SPEC_PART_KEYS.map((key) => el[key])).toEqual(
-            CHART_SPEC_PART_KEYS.map(() => ''),
-        );
-        expect(Object.keys(el ?? {}).some((key) => key.startsWith('specX'))).toBe(false);
+        expect(listed).toBe(0);
+        expect(el?.type === 'chart' && CHART_SPEC_PART_KEYS.map((key) => el[key])).toEqual(Object.values(parts()));
     });
 
     test('color and background go through the shared field readers; the font is the spec’s, not a field', () => {
