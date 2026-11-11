@@ -249,9 +249,20 @@ class Parser {
                     const rows = this.reference(space, SheetKind.Host, '');
                     if (rows) return rows;
                 }
-                let value = Number(text.slice(pos, end));
-                // A literal keeps 15 digits, as Excel stores it.
-                if (end - pos > 15) value = Number(value.toPrecision(15));
+                let literal = text.slice(pos, end);
+                if (end - pos > 15) {
+                    // A literal keeps its first 15 significant digits and the rest count as zeros, as Excel reads it.
+                    let significant = 0;
+                    let at = pos;
+                    literal = '';
+                    for (; at < end && (text.charCodeAt(at) | 32) !== 101; at += 1) {
+                        const code = text.charCodeAt(at);
+                        if (code !== 46 && (significant > 0 || code !== 48)) significant += 1;
+                        literal += significant > 15 && code !== 46 ? '0' : text.charAt(at);
+                    }
+                    literal += text.slice(at, end);
+                }
+                const value = Number(literal);
                 if (value === Infinity) return this.fail();
                 this.next();
                 return leaf(NodeKind.Number, value, '', space, SheetKind.Host, '');
