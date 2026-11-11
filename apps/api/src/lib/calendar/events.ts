@@ -127,7 +127,7 @@ export async function deleteEvent(
 
     const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
     const invitation = isInvitationFromOthers(series ?? existing, calendar.home.user.email) ? existing.data : null;
-    // A cancelled master answers and cancels nothing: the web save that cancelled it told its guests, a PUT nobody.
+    // A cancelled master cancels nothing more: the web save that cancelled it already told its guests.
     const { held, stored } = heldGuests(existing, dates);
     const declining = user && held.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
     if (declining && invitation?.organizer) {
