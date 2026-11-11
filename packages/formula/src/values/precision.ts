@@ -13,7 +13,8 @@ const CLOSE_RATIO = 2e-14;
 // Under a half by less than this, relative to the number, its 15 digit decimal may be the half itself.
 const HALF_RATIO = 6e-15;
 
-const POWERS_OF_TEN = [
+// The powers a double holds exactly, so that scaling by one rounds once.
+export const POWERS_OF_TEN: readonly number[] = [
     1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20,
     1e21, 1e22,
 ];
