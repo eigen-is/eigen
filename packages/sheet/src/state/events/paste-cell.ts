@@ -3,9 +3,10 @@
 
 import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fonts';
 import { SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
-import { includes, isEmpty, trim } from 'es-toolkit/compat';
+import { includes, isEmpty } from 'es-toolkit/compat';
 import { parseCellInput } from '../../engine/format';
 import type { Cell } from '../../engine/types';
+import { HORIZONTAL_ALIGNS, VERTICAL_ALIGNS } from '../modules/toolbar';
 
 // Reads a pasted <style> block into each rule's declarations, keyed by selector. Office writes properties a browser's
 // own CSS parser drops, such as mso-rotate, so the paste reads the text itself.
@@ -35,12 +36,12 @@ export function pastedCell(
     tableVerticalAlign: string | undefined,
 ): Cell {
     const cell: Cell = {};
-    const txt = td.innerText || td.innerHTML;
-    if (trim(txt).length === 0) {
+    const text = td.innerText || td.innerHTML;
+    if (!text.trim()) {
         cell.v = undefined;
         cell.m = '';
     } else {
-        [cell.m, cell.ct, cell.v] = parseCellInput(txt);
+        [cell.m, cell.ct, cell.v] = parseCellInput(text);
     }
     let bg: string | undefined = td.style.backgroundColor || styles.background;
     if (bg === 'rgba(0, 0, 0, 0)' || isEmpty(bg)) bg = undefined;
@@ -79,15 +80,14 @@ export function pastedCell(
     cell.fc = td.style.color || styles.color;
 
     // A cell without one is left to its value, so a number lands on the right.
-    const ht = td.style.textAlign || styles['text-align'];
-    if (ht === 'center') cell.ht = 0;
-    else if (ht === 'right') cell.ht = 2;
-    else if (ht === 'left') cell.ht = 1;
+    const textAlign = td.style.textAlign || styles['text-align'];
+    const ht = HORIZONTAL_ALIGNS.findIndex((align) => align === textAlign);
+    if (ht >= 0) cell.ht = ht;
 
-    const vt = td.style.verticalAlign || styles['vertical-align'] || tableVerticalAlign || 'top';
-    if (vt === 'middle') cell.vt = 0;
-    else if (vt === 'top' || vt === 'text-top') cell.vt = 1;
-    else cell.vt = 2;
+    // An alignment the sheet has no name for, such as baseline, lands at the bottom.
+    const verticalAlign = td.style.verticalAlign || styles['vertical-align'] || tableVerticalAlign || 'top';
+    const vt = VERTICAL_ALIGNS.findIndex((align) => align === (verticalAlign === 'text-top' ? 'top' : verticalAlign));
+    cell.vt = vt >= 0 ? vt : VERTICAL_ALIGNS.indexOf('bottom');
 
     if ('mso-rotate' in styles) cell.rt = parseFloat(styles['mso-rotate']);
     return cell;
