@@ -118,6 +118,7 @@ class Parser {
     public formula(): FormulaNode | ParseFailure {
         const limit = this.stored ? MAX_STORED_LENGTH : MAX_FORMULA_LENGTH;
         if (this.text.length > limit) return { reason: 'too-long', at: limit };
+        if (isUnparsed(this.text)) return { reason: 'syntax', at: 1 };
         if (this.text.charCodeAt(0) === 61) {
             this.end = 1;
             this.next();
@@ -611,6 +612,12 @@ class Parser {
         this.index = digits > 0 ? value - 1 : 0;
         return at;
     }
+}
+
+// Whether stored text is typed text that did not parse, kept behind a second =. No printed shape starts with two,
+// so the mark alone says the text is no formula, whatever the stored grammar would make of the rest.
+export function isUnparsed(stored: string): boolean {
+    return stored.charCodeAt(0) === 61 && stored.charCodeAt(1) === 61;
 }
 
 // A formula as typed at a cell, such as =SUM(A1:B2)*Sheet2!$C$1, with the row and column from 0.

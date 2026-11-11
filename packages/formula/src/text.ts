@@ -12,6 +12,7 @@ export {
     parseA1Range,
     parseStored,
 } from './text/parser';
+export type { SheetNames } from './text/printer';
 export { printA1, printStored } from './text/printer';
 export type { Shape } from './text/shapes';
 export { ShapeTable } from './text/shapes';
@@ -20,3 +21,4 @@ export type { FormulaToken } from './text/tokens';
 export { tokens } from './text/tokens';
 export type { FormulaNode } from './text/tree';
 export { NodeKind, RefFlag, RefKind, SheetKind } from './text/tree';
+export { storedText, typedText } from './text/typed';

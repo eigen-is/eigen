@@ -9,7 +9,7 @@ import { quotedSheetName, quoteSheetName } from './sheet-name';
 import type { FormulaNode } from './tree';
 import { NodeKind, RefFlag, RefKind, SheetKind } from './tree';
 
-type SheetNames = (id: string) => string | undefined;
+export type SheetNames = (id: string) => string | undefined;
 
 // An intersection has no symbol: its whitespace is the operator.
 const SYMBOLS: Record<number, string> = {
