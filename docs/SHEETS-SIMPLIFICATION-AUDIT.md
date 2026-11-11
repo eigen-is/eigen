@@ -161,7 +161,7 @@ Judged essential: `scrollFrame`/`planScroll` with its shared-pixel and edge-band
 
 ## Floating objects, charts and range rules
 
-Answers to questions the audit asked itself: a chart's Setup block is not a second copy, since `chartRangeOf` derives it from the refs on every read (`f7662c628`). Conditional formats, validation and chart refs already share `shiftRangeForInsert`/`Delete`, and borders and links share `shiftCellKeyedFor*`. The chart redraw cache is one earned `WeakMap` (`4749f1c5e`, `8955f236f`).
+Answers to questions the audit asked itself: a chart's Setup block is not a second copy, since `chartRangeOf` derives it from the refs on every read (`f7662c628`). Conditional formats, validation and chart refs already share `shiftRange`, and borders and links share `shiftCellKeyedFor*`. The chart redraw cache is one earned `WeakMap` (`4749f1c5e`, `8955f236f`).
 
 F6 (dropping what chart code keeps for a newer build's keys) is ruled out. The stored chart format is future proof on purpose, chosen after studying the big chart libraries ([CHARTS.md](CHARTS.md)), and the owner keeps it. The no-compatibility ruling looks backward only, and it doesn't reach this.
 
