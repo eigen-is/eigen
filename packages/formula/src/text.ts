@@ -4,11 +4,10 @@ export { GONE, mapIndex, mapSpan } from './edit/map';
 export type { Move } from './edit/move';
 export { transformMove } from './edit/move';
 export { bindSheet, remapSheets } from './edit/sheets';
-export type { HostClass, LineEdit, Transformed } from './edit/transform';
+export type { LineEdit } from './edit/transform';
 export { hostClasses, transformLines } from './edit/transform';
 export { columnIndex, columnLabel, GRID_COLUMNS, GRID_ROWS, rangeToA1, toA1 } from './text/a1';
 export { ERROR_LITERALS, Token } from './text/lexer';
-export type { A1Range, ParseFailure, SheetFinder } from './text/parser';
 export {
     MAX_ARGUMENTS,
     MAX_FORMULA_LENGTH,
@@ -18,12 +17,9 @@ export {
     parseA1Range,
     parseStored,
 } from './text/parser';
-export type { SheetNames } from './text/printer';
 export { printA1, printStored } from './text/printer';
-export type { Shape } from './text/shapes';
 export { ShapeTable } from './text/shapes';
 export { findSheetByName, quoteSheetName, sheetFinder, sheetNameKey } from './text/sheet-name';
-export type { FormulaToken } from './text/tokens';
 export { tokens } from './text/tokens';
 export type { FormulaNode } from './text/tree';
 export { NodeKind, RefFlag, RefKind, SheetKind } from './text/tree';

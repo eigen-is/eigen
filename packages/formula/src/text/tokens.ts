@@ -1,8 +1,8 @@
-// tokens() cuts typed formula text into the lexer's own tokens with their spans, for the editor: F4 finds the
-// reference under the caret, highlighting colours each kind, and the bracket check counts what is outside strings.
-// It reads text that may not parse, as it does while someone types. A word comes out as what the parser would take
-// it for, and a whole reference, sheet prefix and both corners, is one token.
+// tokens() cuts typed formula text into the lexer's own tokens with their spans, for an editor that works on text
+// which may not parse yet, such as finding the reference under the caret. A word comes out as what the parser would
+// take it for, and a whole reference, sheet prefix and both corners, is one token.
 
+import { OPEN } from './chars';
 import type { TokenKind } from './lexer';
 import { lexAt, Token, tokenEnd, tokenKind } from './lexer';
 import { callsSpaced, referenceAt } from './parser';
@@ -23,7 +23,7 @@ export function tokens(text: string): FormulaToken[] {
         const token = lexAt(text, start);
         let kind = KINDS[tokenKind(token)];
         let end = tokenEnd(token);
-        if (kind === Token.Word && text.charCodeAt(end) === 40) {
+        if (kind === Token.Word && text.charCodeAt(end) === OPEN) {
             kind = Token.Function;
         } else if (kind === Token.Word || kind === Token.Number || kind === Token.Quote || kind === Token.Bracket) {
             const reference = referenceAt(text, start);

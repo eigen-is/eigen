@@ -571,19 +571,51 @@ describe('references and sheets (parsing.md 2.4)', () => {
         '=A1:A1Sheet!B2',
         '=Sheet2!A1:NoSuch!B2',
         "=NoSuch!A1:'No Such'!B2",
-        '=Sheet2!A1:Sheet1!Rate',
-        '=SUM(A1):Sheet2!A1',
         '=Sheet2!A1:B2!C1',
-    ])('a range ends on one sheet: %s does not parse', (text) => {
+        '=A1:Sheet2!B2:C3',
+        '=A1:Sheet2!B2#',
+        '=(A2):A1:Sheet2!B2',
+    ])('two cells around a colon are one range on one sheet: %s does not parse', (text) => {
         expect(failure(text)).toBe('syntax');
     });
 
-    test.each(['=RC:[s2]!RC', "=RC:'x'!RC", '=[s1]!RC:[s2]!RC', "='x'!RC:[s2]!RC", '=R1C1:RC!RC'])(
-        'a range ends on one sheet in stored text too: %s does not parse',
-        (text) => {
-            expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
-        },
-    );
+    test.each([
+        '=RC:[s2]!RC',
+        "=RC:'x'!RC",
+        '=[s1]!RC:[s2]!RC',
+        "='x'!RC:[s2]!RC",
+        '=R1C1:RC!RC',
+        '=RC:[s1]!RC:R[1]C',
+        '=RC:[s2]!RC#',
+    ])('two cells around a colon are one range on one sheet in stored text too: %s does not parse', (text) => {
+        expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
+    });
+
+    test.each([
+        ['=SUM(A1):Sheet2!A1', '=SUM(RC[-13]):[s2]!RC[-13]'],
+        ['=(A1):Sheet2!B2', '=(RC[-13]):[s2]!R[1]C[-12]'],
+        ['=A1:A2:Sheet2!B2', '=RC[-13]:R[1]C[-13]:[s2]!R[1]C[-12]'],
+        ['=Sheet1!A1:A2:Sheet2!B2', '=[s1]!RC[-13]:R[1]C[-13]:[s2]!R[1]C[-12]'],
+        ['=A1 :Sheet2!B2', '=RC[-13] :[s2]!R[1]C[-12]'],
+        ['=A1: Sheet2!B2', '=RC[-13]: [s2]!R[1]C[-12]'],
+        ['=A1:Sheet2!B:C', '=RC[-13]:[s2]!C[-12]:C[-11]'],
+        ['=A1:Sheet2!Rate', '=RC[-13]:[s2]!Rate'],
+        ['=Sheet2!A1:Sheet1!Rate', '=[s2]!RC[-13]:[s1]!Rate'],
+        ['=INDEX(A:A,1):NoSuch!B2', "=INDEX(C[-13]:C[-13],1):'NoSuch'!R[1]C[-12]"],
+    ])('any other operand of the : operator may name a sheet of its own: %s is stored as %s', (text, kept) => {
+        expect(stored(text)).toBe(kept);
+        expect(treeStored(kept)).toEqual(treeA1(text));
+        expect(shown(text)).toBe(text);
+    });
+
+    test('a sheet behind a name and a colon shows in quotes, as bare it reads as a 3-D reference', () => {
+        expect(stored("=Rate:'Sheet2'!B2")).toBe('=Rate:[s2]!R[1]C[-12]');
+        expect(shown("=Rate:'Sheet2'!B2")).toBe("=Rate:'Sheet2'!B2");
+        expect(shown("=A1:Rate:'NoSuch'!B2#")).toBe("=A1:Rate:'NoSuch'!B2#");
+        expect(treeA1('=Rate:Sheet2!B2')).toMatchObject({ sheetKind: SheetKind.Span, sheet: 'Rate:Sheet2' });
+        expect(shown('=Rate :Sheet2!B2')).toBe('=Rate :Sheet2!B2');
+        expect(shown('=Sheet1!Rate:Sheet2!B2')).toBe('=Sheet1!Rate:Sheet2!B2');
+    });
 
     test.each([
         ['=NoSuch!A1:NoSuch!B2', "='NoSuch'!RC[-13]:R[1]C[-12]", '=NoSuch!A1:B2'],

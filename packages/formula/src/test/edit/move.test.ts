@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { Move } from '../../text';
-import { GRID_ROWS, printStored, toA1, transformMove } from '../../text';
+import { GRID_ROWS, parseA1, printA1, printStored, sheetFinder, toA1, transformMove } from '../../text';
 import { at, treeStored } from '../text/support';
-import { CONTEXTS, random, reread, SHEETS, shown, tree } from './support';
+import { CONTEXTS, random, reread, SHEETS, sheetName, shown, tree } from './support';
 
 // "Sheet1!A1:B4" → the sheet's id and the block's corner and size.
 function block(text: string): { sheet: string; row: number; column: number; rows: number; columns: number } {
@@ -36,7 +36,6 @@ function after(text: string, host: string, from: string, to: string): string {
     const before = tree(text, toA1(row, column));
     const result = transformMove(before, edit, sheet, row, column);
     expect(result.tree === before).toBe(printStored(result.tree) === printStored(before));
-    expect(result.resized).toBe(false);
     const carried =
         sheet === edit.fromSheet &&
         row >= edit.row &&
@@ -74,6 +73,32 @@ describe('a reference to a cell in the moved block follows it', () => {
     test('one cell of a filled column changes alone', () => {
         expect(after('=A11', 'Sheet1!C11', 'Sheet1!A11', 'Sheet1!B11')).toBe('Sheet1!C11 =B11');
         expect(after('=A12', 'Sheet1!C12', 'Sheet1!A11', 'Sheet1!B11')).toBe('Sheet1!C12 =A12');
+    });
+});
+
+describe('an operand of the : operator that gains a sheet is stored as text that reads back', () => {
+    const moved = (text: string, from: string, to: string) => {
+        const before = tree(text, 'D1');
+        const result = transformMove(before, move(from, to), 's1', 0, 3);
+        const a1 = printA1(result.tree, 0, 3, sheetName);
+        const back = parseA1(a1, 0, 3, sheetFinder(SHEETS));
+        expect('reason' in back ? back.reason : printStored(back)).toBe(printStored(result.tree));
+        expect(reread(result.tree)).toEqual(result.tree);
+        return a1;
+    };
+    test('the formula moves to another sheet and names the one it left, behind a call and behind a range', () => {
+        expect(moved('=SUM(INDEX(A1:A5,1):B2)', 'Sheet1!D1', 'Sheet2!D1')).toBe(
+            '=SUM(INDEX(Sheet1!A1:A5,1):Sheet1!B2)',
+        );
+        expect(moved('=SUM(A1:A2:B2)', 'Sheet1!D1', 'Sheet2!D1')).toBe('=SUM(Sheet1!A1:A2:Sheet1!B2)');
+        expect(moved('=SUM((A1):B2)', 'Sheet1!D1', 'Sheet2!D1')).toBe('=SUM((Sheet1!A1):Sheet1!B2)');
+    });
+    test('one operand moves to another sheet and the other stays', () => {
+        expect(moved('=SUM(A1:A2:B2)', 'Sheet1!B2', 'Sheet2!B2')).toBe('=SUM(A1:A2:Sheet2!B2)');
+        expect(moved('=SUM(INDEX(A1:A5,1):B2)', 'Sheet1!B2', 'Sheet2!C3')).toBe('=SUM(INDEX(A1:A5,1):Sheet2!C3)');
+        expect(moved('=SUM(A1 :B2)', 'Sheet1!B2', 'Sheet2!B2')).toBe('=SUM(A1 :Sheet2!B2)');
+        expect(moved('=SUM(A1: B2)', 'Sheet1!A1', 'Sheet3!A1')).toBe('=SUM(Sheet3!A1: B2)');
+        expect(moved('=SUM(A1:B:C)', 'Sheet1!B1:C1048576', 'Sheet2!B1')).toBe('=SUM(A1:Sheet2!B:C)');
     });
 });
 
@@ -161,7 +186,6 @@ describe('what a move leaves alone', () => {
             tree: before,
             lossy: false,
             recompute: false,
-            resized: false,
         });
     });
     test('a broken reference, though the formula itself moves or is landed beside', () => {

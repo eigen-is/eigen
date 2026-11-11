@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { FormulaNode, LineEdit, Move, Span } from '../../text';
+import type { FormulaNode, Move, Span } from '../../text';
 import {
     GONE,
     GRID_COLUMNS,
@@ -102,7 +102,7 @@ function apply(subject: Subject, step: Step, read: string | null): [Subject, boo
     switch (step.kind) {
         case 'lines': {
             const lines = step.rows ? GRID_ROWS : GRID_COLUMNS;
-            const edit: LineEdit = { ...step, sheet: sheetId(sheets, step.sheet), lines };
+            const edit = { ...step, sheet: sheetId(sheets, step.sheet), lines };
             const onSheet = sheet === edit.sheet;
             let next = { ...subject };
             let lossy = false;
