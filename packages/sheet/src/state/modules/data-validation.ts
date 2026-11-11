@@ -178,9 +178,9 @@ const CHECKBOX_PADDING = 2;
 // pixels and the hit test in sheet pixels, and the glyph sits at the same offset from the box in both.
 export type CellGlyphRect = { x: number; y: number; size: number };
 
-// The box a cell lays its text out in, from the cell's bounds. It leaves out the grid lines: one pixel at the top, and
-// two off the width and the height. The painter and the hit test both use it, so a click lands where the glyph is
-// painted, in the top row too.
+// The box a cell lays its text out in, from the painter's edges of the cell. It leaves out the grid lines: one pixel
+// at the top, and two off the width and the height. A hit test passes the same edges in sheet pixels, so a click
+// lands where the glyph is painted.
 export function cellTextBox(left: number, top: number, right: number, bottom: number): Rect {
     return { left, top: top + 1, width: right - left - 2, height: bottom - top - 2 };
 }
@@ -231,7 +231,7 @@ export function isCheckboxClick(ctx: Context, r: number, c: number, box: Rect, x
     const d = getFlowdata(ctx);
     if (!d || !cellPassesRule(ctx, rule, d[r]?.[c])) return false;
     const rect = checkboxRect(box, checkboxAlign(d[r]?.[c]), Number(normalizedAttr(d, r, c, 'vt')));
-    return x >= rect.x && x <= rect.x + rect.size && y >= rect.y && y <= rect.y + rect.size;
+    return x >= rect.x && x < rect.x + rect.size && y >= rect.y && y < rect.y + rect.size;
 }
 
 // Returns whether the cell toggled. When it did not, the mouse and keyboard callers go on with their normal handling.

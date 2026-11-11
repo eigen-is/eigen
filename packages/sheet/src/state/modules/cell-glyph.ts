@@ -24,7 +24,9 @@ export function cellGlyphAt(ctx: Context, x: number, y: number): CellGlyph | und
         [rowPre, row, r] = merged.row;
         [colPre, col, c] = merged.column;
     }
-    const box = cellTextBox(colPre, rowPre, col, row);
+    // The painter's edges of the cell, in sheet pixels. It takes a column's edges as they are and a row's top a pixel
+    // higher, and the canvas shows a sheet pixel one to the left and one up.
+    const box = cellTextBox(colPre + 1, rowPre, col + 1, row + 1);
     if (isDropdownChevronClick(ctx, r, c, box, x, y)) return 'dropdown';
     if (isCheckboxClick(ctx, r, c, box, x, y)) return 'checkbox';
     return undefined;

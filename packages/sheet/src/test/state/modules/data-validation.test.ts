@@ -441,32 +441,14 @@ describe('insertCheckbox', () => {
     });
 });
 
-// Cell A1 spans x 0..74, y 0..20 (contextFactory's visibledata*). The painter
-// and the hit test used to build its text box three different ways, so the box
-// was drawn one pixel below the box that answered a click.
 describe('cellTextBox', () => {
     test('insets the cell by the grid lines it must not paint over', () => {
         expect(cellTextBox(0, 0, 74, 20)).toEqual({ left: 0, top: 1, width: 72, height: 18 });
     });
-
-    test('painter and hit test describe the same box for the same cell', () => {
-        // The painter works in canvas space (the row/column headers already added
-        // in), the mousedown hit test in freeze-corrected sheet space. Take the
-        // offset back out and the two must be the same box, to the pixel.
-        const offsetLeft = 60;
-        const offsetTop = 20;
-        const painted = cellTextBox(0 + offsetLeft, 0 + offsetTop, 74 + offsetLeft, 20 + offsetTop);
-        const clickable = cellTextBox(0, 0, 74, 20);
-
-        expect(painted.left - offsetLeft).toBe(clickable.left);
-        expect(painted.top - offsetTop).toBe(clickable.top);
-        expect(painted.width).toBe(clickable.width);
-        expect(painted.height).toBe(clickable.height);
-    });
 });
 
 describe('isCheckboxClick', () => {
-    // A cell without its own alignment centres the 10px box, at x 31..41, y 5..15.
+    // A cell without its own alignment centres the 10px box, at x 31..40, y 5..14.
     const box = cellTextBox(0, 0, 74, 20);
 
     const YES_NO: DataValidationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
@@ -512,12 +494,12 @@ describe('isCheckboxClick', () => {
         ]);
         expect(isCheckboxClick(ctx, 0, 0, box, 36, 9)).toBe(true);
         // Just outside the box on each axis, and out in the empty rest of the cell.
-        expect(isCheckboxClick(ctx, 0, 0, box, 42, 9)).toBe(false);
-        expect(isCheckboxClick(ctx, 0, 0, box, 36, 16)).toBe(false);
+        expect(isCheckboxClick(ctx, 0, 0, box, 41, 9)).toBe(false);
+        expect(isCheckboxClick(ctx, 0, 0, box, 36, 15)).toBe(false);
         expect(isCheckboxClick(ctx, 0, 0, box, 7, 9)).toBe(false);
     });
 
-    test('every pixel of the painted box answers a click, its top row included', () => {
+    test('every corner pixel of the box answers a click, and no pixel around it', () => {
         const ctx = tickBoxContext([
             [{ v: false, m: 'FALSE', ct: { fa: 'General', t: 'b' } }, null, null, null],
             [null, null, null, null],
@@ -525,16 +507,23 @@ describe('isCheckboxClick', () => {
             [null, null, null, null],
         ]);
         const rect = checkboxRect(box, 0, 0);
+        const last = rect.size - 1;
         for (const [x, y] of [
             [rect.x, rect.y],
-            [rect.x + rect.size, rect.y],
-            [rect.x, rect.y + rect.size],
-            [rect.x + rect.size, rect.y + rect.size],
+            [rect.x + last, rect.y],
+            [rect.x, rect.y + last],
+            [rect.x + last, rect.y + last],
         ]) {
             expect(isCheckboxClick(ctx, 0, 0, box, x, y)).toBe(true);
         }
-        // The row above the box is the cell, not the box.
-        expect(isCheckboxClick(ctx, 0, 0, box, rect.x, rect.y - 1)).toBe(false);
+        for (const [x, y] of [
+            [rect.x, rect.y - 1],
+            [rect.x - 1, rect.y],
+            [rect.x + rect.size, rect.y + last],
+            [rect.x + last, rect.y + rect.size],
+        ]) {
+            expect(isCheckboxClick(ctx, 0, 0, box, x, y)).toBe(false);
+        }
     });
 
     test('ignores cells without a tick box rule', () => {
