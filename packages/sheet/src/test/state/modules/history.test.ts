@@ -1,7 +1,3 @@
-// Undo and redo with a peer at work. Each case runs two tabs on one workbook, A and B, through the real record, applyOp
-// and undo steps, and checks what a user sees: the cell the undo lands in, on A, on B and for a joiner who replays
-// every batch. The three must always agree.
-
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { DEFAULT_CHART_SERIES_STYLE, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet as LibSheet } from '@workspace/lib/sheets';

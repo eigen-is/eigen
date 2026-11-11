@@ -1,6 +1,3 @@
-// A number as text, the way & and text parameters see it: the oracle's Excel answers, the cases the research found
-// for where plain digits give way to scientific notation, and a round trip through the reading of typed numbers.
-
 import { describe, expect, test } from 'bun:test';
 import { numberToText } from '../../values/number-text';
 import { parseNumber } from '../../values/parse-number';

@@ -1,6 +1,3 @@
-// Numbers at 15 significant digits: Excel's answers from the oracle for comparison, the zero snap and ROUND, and
-// roundDecimal held to a slow version that rounds the 15 digit decimal text with whole-number arithmetic.
-
 import { describe, expect, test } from 'bun:test';
 import { compare15, equal15, round15, roundDecimal, snapSum } from '../../values/precision';
 

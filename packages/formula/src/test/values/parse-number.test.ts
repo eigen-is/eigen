@@ -1,6 +1,3 @@
-// Text read as a number the way a person could type it into a cell: every form taken and every form refused, each
-// from the oracle's Excel answers or from Excel's own results as the research read them.
-
 import { describe, expect, test } from 'bun:test';
 import { parseNumber } from '../../values/parse-number';
 

@@ -1,10 +1,3 @@
-// One tab through a random run of its own edits and a peer's batches: row and column ops, sheet adds, copies,
-// deletes and renames, cell edits, undo and redo, failing and multi-op batches, writes to charts, merges, row
-// heights and rules, and a replay of the log. After every step the tab's sheets must be the replay of every batch it
-// took or sent, and an undo followed by a redo must give back the sheets it had. A joiner after the server folded any
-// head of that log must hold the same sheets, and so for logs with formulas that read themselves. What a peer's batch
-// does to the view, and the author's own structural edits, have tests of their own.
-
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { DEFAULT_CHART_SERIES_STYLE, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { isRecord } from '@workspace/lib/guards';

@@ -1,8 +1,3 @@
-// A seeded random workbook of formulas over three sheets, and random batches on it as peers and undo steps send them:
-// cell edits with their author's values, row and column ops, sheet adds, deletes and renames, and malformed batches.
-// nextLoopBatch gives the batches that put formulas on a loop, which the others never do. For property tests that
-// apply many batches and compare readers.
-
 import { isRecord } from '@workspace/lib/guards';
 import type { Cell, Op, Sheet } from '@workspace/lib/sheets';
 import { FormulaEngine } from '../../../engine/formula-engine';

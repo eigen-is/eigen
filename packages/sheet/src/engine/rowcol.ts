@@ -109,7 +109,7 @@ export function shiftCellKeyed<T>(
 // An op on one sheet moves only the refs that resolve to it: unqualified ones on it and `Sheet!`-qualified ones
 // anywhere, a conditional format's formula rule among them.
 function shiftFormulasAcrossSheets<S extends Sheet>(
-    sheets: S[],
+    sheets: readonly S[],
     targetIndex: number,
     type: 'row' | 'column',
     direction: 'lefttop' | 'rightbottom' | null,
@@ -353,9 +353,7 @@ function shiftFrozen(frozen: Sheet['frozen'], type: 'row' | 'column', edit: Edit
 }
 
 // An entry is keyed by its column's offset from the filter's first column, so a column op re-keys the entries.
-// Deleting the filter's first row, the header that holds its buttons, removes the filter. The rows a filter hides are
-// hidden rows of the sheet too, so the rows of an entry the op removes show again and the rows of one it keeps stay
-// hidden. The hidden-row map may still be the one the sheet had before the op, so the write is on a copy.
+// The hidden-row map may still be the one the sheet had before the op, so the write is on a copy.
 function shiftFilter(sheet: ShiftedSheet, cfg: ExtendedSheetConfig, type: 'row' | 'column', edit: Edit) {
     const { filterRange, filter } = sheet;
     if (!filterRange?.row) return;
@@ -385,7 +383,7 @@ function shiftFilter(sheet: ShiftedSheet, cfg: ExtendedSheetConfig, type: 'row' 
 }
 
 // Shows again, in the map given, the rows these filter entries hide. A row hidden by hand is in no entry.
-export function showFilterRows(rowhidden: Record<string, number>, entries: FilterEntry[]) {
+export function showFilterRows(rowhidden: Record<string, number>, entries: readonly FilterEntry[]) {
     for (const entry of entries) {
         for (const row of Object.keys(entry.rowhidden ?? {})) delete rowhidden[row];
     }
@@ -396,7 +394,7 @@ export function showFilterRows(rowhidden: Record<string, number>, entries: Filte
 function stampMerges(
     data: CellMatrix,
     merges: Record<string, MergeCell>,
-    unmerged: MergeCell[],
+    unmerged: readonly MergeCell[],
     type: 'row' | 'column',
     from: number,
 ) {

@@ -74,12 +74,19 @@ export class Column {
         this.pending += 1;
     }
 
+    // Says whether the cell is on a circular reference, and keeps the count of those cells.
+    public setLoop(row: number, loop: boolean): void {
+        const kind = this.kind[row];
+        if (((kind & LOOP) !== 0) === loop) return;
+        this.kind[row] = kind ^ LOOP;
+        this.loops += loop ? 1 : -1;
+    }
+
     // The cell holds no formula any more.
     public settle(row: number): void {
-        const kind = this.kind[row];
-        if (kind > SETTLED) this.pending -= 1;
-        if (kind & LOOP) this.loops -= 1;
-        this.kind[row] = kind & KIND_MASK;
+        this.setLoop(row, false);
+        if (this.kind[row] > SETTLED) this.pending -= 1;
+        this.kind[row] &= KIND_MASK;
     }
 
     // The formula of the cell was computed. Whether it is on a loop stays.

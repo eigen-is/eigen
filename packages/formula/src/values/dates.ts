@@ -1,7 +1,7 @@
 // Dates as Excel counts them: a serial number is the days since the last day of 1899, in a calendar that is the
 // real one except that 1900 has a 29 February, serial 60. So serial 0 reads as day 0 of January 1900 and weekdays
-// before March 1900 are a day off, as in Excel. The time of day is the serial's fraction. The date functions and
-// the reading of typed dates do all their arithmetic here, on whole numbers and without the host's Date.
+// before March 1900 are a day off, as in Excel. The time of day is the serial's fraction. Whoever reads a date,
+// such as the reading of a typed one, does its arithmetic here, on whole numbers and without the host's Date.
 
 // 31 December 9999, the last date Excel has.
 export const LAST_SERIAL = 2958465;
@@ -17,7 +17,7 @@ export function isLeapYear(year: number): boolean {
 
 // `month` is 1 to 12.
 export function daysInMonth(year: number, month: number): number {
-    return month === 2 && isLeapYear(year) ? 29 : (DAYS_BEFORE_MONTH[month] ?? 0) - (DAYS_BEFORE_MONTH[month - 1] ?? 0);
+    return month === 2 && isLeapYear(year) ? 29 : DAYS_BEFORE_MONTH[month] - DAYS_BEFORE_MONTH[month - 1];
 }
 
 // The serial of a year, month and day as DATE reads them: a month outside 1 to 12 moves the year, and a day outside
@@ -26,7 +26,7 @@ export function dateSerial(year: number, month: number, day: number): number {
     const monthIndex = (((month - 1) % 12) + 12) % 12;
     const inYear = year + Math.floor((month - 1) / 12);
     const leapDay = monthIndex > 1 && isLeapYear(inYear) ? 1 : 0;
-    return firstSerial(inYear) + (DAYS_BEFORE_MONTH[monthIndex] ?? 0) + leapDay + day - 1;
+    return firstSerial(inYear) + DAYS_BEFORE_MONTH[monthIndex] + leapDay + day - 1;
 }
 
 // The year by the mean length of one, which names the right year or the one after it.
@@ -41,7 +41,7 @@ export function serialMonth(serial: number): number {
     const leap = isLeapYear(year);
     const dayOfYear = serial - firstSerial(year);
     let month = 1;
-    while (month < 12 && dayOfYear >= (DAYS_BEFORE_MONTH[month] ?? 0) + (leap && month > 1 ? 1 : 0)) month++;
+    while (month < 12 && dayOfYear >= DAYS_BEFORE_MONTH[month] + (leap && month > 1 ? 1 : 0)) month += 1;
     return month;
 }
 

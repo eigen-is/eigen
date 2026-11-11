@@ -1,6 +1,6 @@
 // Text read as a number, the way a person could type one into a cell: a plain or decorated number, a fraction, a
 // date or a time, in one fixed notation (a point for decimals, a comma between thousands, the month before the
-// day). Operators, numeric parameters, VALUE and criteria all coerce text through parseNumber, so what coerces is
+// day). Whatever coerces text, such as an operator or a criterion, does it through parseNumber, so what coerces is
 // what could have been typed. It reads character codes and never asks the host: no Number(text), no Date, no clock.
 
 import { dateSerial, daysInMonth, timeSerial } from './dates';
@@ -50,9 +50,9 @@ const MONTHS = [
 // The number, or undefined for text that is none, the empty string included.
 export function parseNumber(text: string): number | undefined {
     let end = text.length;
-    while (end > 0 && text.charCodeAt(end - 1) === SPACE) end--;
+    while (end > 0 && text.charCodeAt(end - 1) === SPACE) end -= 1;
     let start = 0;
-    while (start < end && text.charCodeAt(start) === SPACE) start++;
+    while (start < end && text.charCodeAt(start) === SPACE) start += 1;
     if (start === end) return undefined;
     return readDecorated(text, start, end) ?? readFraction(text, start, end) ?? readDateTime(text, start, end);
 }
@@ -62,17 +62,18 @@ export function parseNumber(text: string): number | undefined {
 function readDecorated(text: string, start: number, end: number): number | undefined {
     let at = start;
     const bracketed = text.charCodeAt(at) === OPEN;
-    if (bracketed) at++;
+    if (bracketed) at += 1;
     let negative = bracketed;
     let signed = bracketed;
     let currency = false;
-    for (let code = text.charCodeAt(at); at < end; code = text.charCodeAt(++at)) {
+    for (; at < end; at += 1) {
+        const code = text.charCodeAt(at);
         if (!signed && (code === MINUS || code === PLUS)) {
             signed = true;
             negative = code === MINUS;
         } else if (!currency && (code === DOLLAR || code === EURO)) {
             currency = true;
-            while (text.charCodeAt(at + 1) === SPACE) at++;
+            while (text.charCodeAt(at + 1) === SPACE) at += 1;
         } else break;
     }
 
@@ -81,31 +82,31 @@ function readDecorated(text: string, start: number, end: number): number | undef
     let scale = 0;
     let digits = 0;
     let group = -1;
-    for (; at < end; at++) {
+    for (; at < end; at += 1) {
         const code = text.charCodeAt(at);
         if (code === COMMA) {
             if (digits === 0 || (group < 0 ? digits > 3 : group !== 3)) return undefined;
             group = 0;
         } else if (code >= ZERO && code <= NINE) {
-            digits++;
-            if (group >= 0) group++;
-            if (kept === DIGITS_KEPT) scale++;
+            digits += 1;
+            if (group >= 0) group += 1;
+            if (kept === DIGITS_KEPT) scale += 1;
             else {
                 mantissa = mantissa * 10 + code - ZERO;
-                if (mantissa > 0) kept++;
+                if (mantissa > 0) kept += 1;
             }
         } else break;
     }
     if (group >= 0 && group !== 3) return undefined;
     if (text.charCodeAt(at) === POINT) {
-        for (at++; at < end; at++) {
+        for (at += 1; at < end; at += 1) {
             const code = text.charCodeAt(at);
             if (code < ZERO || code > NINE) break;
-            digits++;
+            digits += 1;
             if (kept === DIGITS_KEPT) continue;
             mantissa = mantissa * 10 + code - ZERO;
-            if (mantissa > 0) kept++;
-            scale--;
+            if (mantissa > 0) kept += 1;
+            scale -= 1;
         }
     }
     if (digits === 0) return undefined;
@@ -120,13 +121,16 @@ function readDecorated(text: string, start: number, end: number): number | undef
         at = to;
     }
     let percentAt = at;
-    while (text.charCodeAt(percentAt) === SPACE) percentAt++;
+    while (text.charCodeAt(percentAt) === SPACE) percentAt += 1;
     if (percentAt < end && text.charCodeAt(percentAt) === PERCENT) {
         scale -= 2;
         at = percentAt + 1;
     }
-    if (!currency && at < end && (text.charCodeAt(at) === DOLLAR || text.charCodeAt(at) === EURO)) at++;
-    if (bracketed && text.charCodeAt(at++) !== CLOSE) return undefined;
+    if (!currency && at < end && (text.charCodeAt(at) === DOLLAR || text.charCodeAt(at) === EURO)) at += 1;
+    if (bracketed) {
+        if (text.charCodeAt(at) !== CLOSE) return undefined;
+        at += 1;
+    }
     if (at !== end) return undefined;
 
     const power = POWERS_OF_TEN[Math.abs(scale)];
@@ -142,7 +146,7 @@ function readFraction(text: string, start: number, end: number): number | undefi
     const wholeAt = negative ? start + 1 : start;
     const wholeEnd = digitsEnd(text, wholeAt, end);
     let topAt = wholeEnd;
-    while (text.charCodeAt(topAt) === SPACE) topAt++;
+    while (text.charCodeAt(topAt) === SPACE) topAt += 1;
     const topEnd = digitsEnd(text, topAt, end);
     const bottomEnd = digitsEnd(text, topEnd + 1, end);
     if (wholeEnd === wholeAt || topEnd === topAt || text.charCodeAt(topEnd) !== SLASH) return undefined;
@@ -163,19 +167,19 @@ function readDateTime(text: string, start: number, end: number): number | undefi
     if (markAt > start && (mark === LOWER_A || mark === LOWER_P) && text.charCodeAt(markAt - 1) === SPACE) {
         half = mark === LOWER_A ? 1 : 2;
         timeEnd = markAt;
-        while (text.charCodeAt(timeEnd - 1) === SPACE) timeEnd--;
+        while (text.charCodeAt(timeEnd - 1) === SPACE) timeEnd -= 1;
     }
     const colon = text.indexOf(':', start);
     const timed = colon >= 0 && colon < timeEnd;
     if (!timed && half === 0) return readDate(text, start, end);
 
     let timeAt = timed ? colon : timeEnd;
-    while (timed && text.charCodeAt(timeAt - 1) === SPACE) timeAt--;
-    while (timeAt > start && isDigit(text.charCodeAt(timeAt - 1))) timeAt--;
+    while (timed && text.charCodeAt(timeAt - 1) === SPACE) timeAt -= 1;
+    while (timeAt > start && isDigit(text.charCodeAt(timeAt - 1))) timeAt -= 1;
     const time = readTime(text, timeAt, timeEnd, half);
     if (time === undefined || timeAt === start) return time;
     let dateEnd = timeAt;
-    while (text.charCodeAt(dateEnd - 1) === SPACE) dateEnd--;
+    while (text.charCodeAt(dateEnd - 1) === SPACE) dateEnd -= 1;
     const date = readDate(text, start, dateEnd);
     return date === undefined ? undefined : date + time;
 }
@@ -191,10 +195,10 @@ function readDate(text: string, from: number, to: number): number | undefined {
     if (firstEnd === from) {
         const nameEnd = lettersEnd(text, from, to);
         let dayAt = nameEnd;
-        while (text.charCodeAt(dayAt) === SPACE) dayAt++;
+        while (text.charCodeAt(dayAt) === SPACE) dayAt += 1;
         const dayEnd = digitsEnd(text, dayAt, to);
         let yearAt = text.charCodeAt(dayEnd) === COMMA ? dayEnd + 1 : dayEnd;
-        while (text.charCodeAt(yearAt) === SPACE) yearAt++;
+        while (text.charCodeAt(yearAt) === SPACE) yearAt += 1;
         if (dayAt === nameEnd || dayEnd === dayAt || yearAt === dayEnd || digitsEnd(text, yearAt, to) !== to) {
             return undefined;
         }
@@ -250,9 +254,9 @@ function readTime(text: string, from: number, to: number, half: number): number 
     if (hoursEnd < to) {
         // Spaces may stand around the colon after the hours, as in 4 : 35.
         let colon = hoursEnd;
-        while (text.charCodeAt(colon) === SPACE) colon++;
+        while (text.charCodeAt(colon) === SPACE) colon += 1;
         let minutesAt = colon + 1;
-        while (text.charCodeAt(minutesAt) === SPACE) minutesAt++;
+        while (text.charCodeAt(minutesAt) === SPACE) minutesAt += 1;
         const minutesEnd = digitsEnd(text, minutesAt, to);
         if (text.charCodeAt(colon) !== COLON || minutesEnd === minutesAt) return undefined;
         minutes = toWhole(text, minutesAt, minutesEnd);
@@ -279,12 +283,13 @@ function readTime(text: string, from: number, to: number, half: number): number 
 
 // 1 to 12 for a month's full name or its first three letters, in any case, and 0 for anything else.
 function monthNamed(text: string, from: number, to: number): number {
-    for (let month = 0; month < 12; month++) {
-        const name = MONTHS[month] ?? '';
+    let month = 0;
+    for (const name of MONTHS) {
+        month += 1;
         if (to - from !== 3 && to - from !== name.length) continue;
         let at = from;
-        while (at < to && (text.charCodeAt(at) | 32) === name.charCodeAt(at - from)) at++;
-        if (at === to) return month + 1;
+        while (at < to && (text.charCodeAt(at) | 32) === name.charCodeAt(at - from)) at += 1;
+        if (at === to) return month;
     }
     return 0;
 }
@@ -295,18 +300,18 @@ function isDigit(code: number): boolean {
 
 function digitsEnd(text: string, from: number, to: number): number {
     let at = from;
-    while (at < to && isDigit(text.charCodeAt(at))) at++;
+    while (at < to && isDigit(text.charCodeAt(at))) at += 1;
     return at;
 }
 
 function lettersEnd(text: string, from: number, to: number): number {
     let at = from;
-    while (at < to && (text.charCodeAt(at) | 32) >= LOWER_A && (text.charCodeAt(at) | 32) <= LOWER_Z) at++;
+    while (at < to && (text.charCodeAt(at) | 32) >= LOWER_A && (text.charCodeAt(at) | 32) <= LOWER_Z) at += 1;
     return at;
 }
 
 function toWhole(text: string, from: number, to: number): number {
     let value = 0;
-    for (let at = from; at < to; at++) value = value * 10 + text.charCodeAt(at) - ZERO;
+    for (let at = from; at < to; at += 1) value = value * 10 + text.charCodeAt(at) - ZERO;
     return value;
 }
