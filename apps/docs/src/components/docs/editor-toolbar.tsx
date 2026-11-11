@@ -21,6 +21,7 @@ import {
     TooltipButton,
 } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { ClipboardMenuItems } from '@workspace/ui/components/context-menu';
 import { DocumentImportPicker, DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
 import {
@@ -28,7 +29,6 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuShortcut,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
@@ -42,7 +42,6 @@ import {
     Bold,
     CheckSquare,
     ChevronDown,
-    Copy,
     FileSliders,
     Highlighter,
     ImagePlus,
@@ -53,13 +52,10 @@ import {
     ListOrdered,
     Printer,
     RemoveFormatting,
-    Scissors,
-    TextSelect,
-    Trash2,
     Underline,
 } from 'lucide-react';
 import { useState } from 'react';
-import { runClipboardCommand } from './clipboard';
+import { pasteFromClipboard, runClipboardCommand } from './clipboard';
 import { CustomSpacingDialog } from './custom-spacing-dialog';
 import { ALIGNMENT_LOOK, FORMAT_HOTKEYS, FormatMenu, lookOption } from './format-menu';
 import { useToolbarState } from './hooks/use-toolbar-state';
@@ -71,6 +67,8 @@ import { RestartNumberingDialog } from './restart-numbering-dialog';
 import { StylePicker } from './style-picker';
 import { ShowOutlineItem, ToolsMenu, WORD_COUNT_HOTKEY, WordCountItem } from './tools-menu';
 import { WordCountDialog } from './word-count-dialog';
+
+const PRINT_HOTKEY = 'Mod+P';
 
 // After a pick or Esc, a closing menu hands the focus to the editor the caret is in. Its trigger would swallow the next
 // keystrokes. A pick's own command focuses the editor a frame later. Whatever took the focus as the menu closed keeps
@@ -200,7 +198,7 @@ export const EditorToolbar = ({
     // On <html>, which the key reaches before the document. This handler stops it there, so EigenApp's ⌘P, which is
     // browser print for every other app, never sees it.
     useHotkey(
-        'Mod+P',
+        PRINT_HOTKEY,
         (e) => {
             e.preventDefault();
             print();
@@ -255,6 +253,7 @@ export const EditorToolbar = ({
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={print}>
                                 <Printer className="h-4 w-4" /> Print
+                                <DropdownMenuShortcut>{formatForDisplay(PRINT_HOTKEY)}</DropdownMenuShortcut>
                             </DropdownMenuItem>
                         </FileMenu>
 
@@ -266,39 +265,41 @@ export const EditorToolbar = ({
                             onRedo={() => editor.chain().focus().redo().run()}
                             onCloseAutoFocus={keepActiveEditorFocus}
                             selectionItems={
-                                <>
-                                    <DropdownMenuItem
-                                        disabled={!canWrite || active.selectionEmpty}
-                                        onClick={() => runClipboardCommand(editor, 'cut')}
-                                    >
-                                        <Scissors className="h-4 w-4" /> Cut
-                                        <DropdownMenuShortcut>{formatForDisplay('Mod+X')}</DropdownMenuShortcut>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        disabled={active.selectionEmpty}
-                                        onClick={() => runClipboardCommand(editor, 'copy')}
-                                    >
-                                        <Copy className="h-4 w-4" /> Copy
-                                        <DropdownMenuShortcut>{formatForDisplay('Mod+C')}</DropdownMenuShortcut>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().selectAll().run()}>
-                                        <TextSelect className="h-4 w-4" /> Select all
-                                        <DropdownMenuShortcut>{formatForDisplay('Mod+A')}</DropdownMenuShortcut>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        variant="destructive"
-                                        disabled={!canWrite || active.selectionEmpty}
-                                        onClick={() => editor.chain().focus().deleteSelection().run()}
-                                    >
-                                        <Trash2 className="h-4 w-4" /> Delete
-                                    </DropdownMenuItem>
-                                </>
+                                <ClipboardMenuItems
+                                    onCut={canWrite ? () => runClipboardCommand(editor, 'cut') : undefined}
+                                    onCopy={() => runClipboardCommand(editor, 'copy')}
+                                    onPaste={
+                                        canWrite ? () => void pasteFromClipboard(editor).catch(() => {}) : undefined
+                                    }
+                                    onSelectAll={() => editor.chain().focus().selectAll().run()}
+                                    onDelete={
+                                        canWrite ? () => editor.chain().focus().deleteSelection().run() : undefined
+                                    }
+                                    selectionEmpty={active.selectionEmpty}
+                                />
                             }
                         />
 
                         {canWrite && (
                             <>
+                                <InsertMenu
+                                    editor={editor}
+                                    active={active}
+                                    keepEditorFocus={keepActiveEditorFocus}
+                                    closePanels={isMobile ? undefined : closePanels}
+                                    onLink={onLink}
+                                    onInsertImage={onImageUpload ? () => setImagePickerOpen(true) : undefined}
+                                    onAddComment={onAddComment}
+                                    onInsertEquation={onInsertEquation}
+                                    onInsertFootnote={onInsertFootnote}
+                                    onInsertTextBox={onInsertTextBox}
+                                    inStory={inStory}
+                                    held={editor !== body}
+                                    pageless={pageSetup.pageless}
+                                    onEnterBand={onEnterBand}
+                                    onPageNumbers={onPageNumbers}
+                                />
+
                                 <FormatMenu
                                     editor={editor}
                                     active={active}
@@ -318,24 +319,6 @@ export const EditorToolbar = ({
                                     onSwitchFormat={() =>
                                         onPageSetupChange(pageSetup, { ...pageSetup, pageless: !pageSetup.pageless })
                                     }
-                                />
-
-                                <InsertMenu
-                                    editor={editor}
-                                    active={active}
-                                    keepEditorFocus={keepActiveEditorFocus}
-                                    closePanels={isMobile ? undefined : closePanels}
-                                    onLink={onLink}
-                                    onInsertImage={onImageUpload ? () => setImagePickerOpen(true) : undefined}
-                                    onAddComment={onAddComment}
-                                    onInsertEquation={onInsertEquation}
-                                    onInsertFootnote={onInsertFootnote}
-                                    onInsertTextBox={onInsertTextBox}
-                                    inStory={inStory}
-                                    held={editor !== body}
-                                    pageless={pageSetup.pageless}
-                                    onEnterBand={onEnterBand}
-                                    onPageNumbers={onPageNumbers}
                                 />
                             </>
                         )}
