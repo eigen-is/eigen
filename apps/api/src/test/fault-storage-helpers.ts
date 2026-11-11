@@ -8,6 +8,7 @@ import { ManagedDatabase, storageUnavailable } from '../lib/core';
 import type { Drive } from '../lib/drive/drive';
 import type { Home } from '../lib/home';
 import { Mount } from '../lib/mount/mount';
+import { pendingUploads } from '../lib/mount/schema';
 import { UPLOAD_PUT_TIMEOUT_MS } from '../lib/mount/upload-queue';
 import type { StorageBackend, StorageFile } from '../lib/storage';
 import { LocalStorage } from '../lib/storage/local-storage';
@@ -291,6 +292,11 @@ export async function settleContainer(mount: Mount, containerId: string): Promis
         if (child) await mount.closeDatabase(child.id);
     }
     await mount.uploadQueue?.drain({ flushNow: true });
+}
+
+// The uploads the mount's queue still owes its bucket, read from the table the queue keeps them in.
+export function pendingUploadCount(mount: Mount): number {
+    return mount.db.select().from(pendingUploads).all().length;
 }
 
 export async function provisionDoc(mount: Mount): Promise<{ containerId: string; dataDbId: string }> {

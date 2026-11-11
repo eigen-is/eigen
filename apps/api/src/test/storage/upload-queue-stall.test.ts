@@ -10,6 +10,7 @@ import type { FaultStorage, ParkedWrite } from '../fault-storage-helpers';
 import {
     countBackingRows,
     createFaultMount,
+    pendingUploadCount,
     provisionDoc,
     SETTLE_BOUND_MS,
     STALL_BOUND_MS,
@@ -145,10 +146,10 @@ describe('edits while a PUT is stalled', () => {
     test('later syncs coalesce into one pending row behind the stalled PUT; no parallel PUT starts', async () => {
         const { mount, dataDbId, putsStarted, land } = await editBehindParkedPut('stalled-coalesce');
         expect(putsStarted()).toBe(1);
-        expect(mount.uploadQueue?.pendingCount).toBe(1);
+        expect(pendingUploadCount(mount)).toBe(1);
 
         await land();
-        expect(mount.uploadQueue?.pendingCount).toBe(0);
+        expect(pendingUploadCount(mount)).toBe(0);
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(4);
     });
 

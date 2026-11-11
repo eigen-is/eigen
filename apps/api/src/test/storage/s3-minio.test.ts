@@ -16,6 +16,7 @@ import {
     signedS3Request,
 } from '../../lib/storage/s3-storage';
 import { FakeS3Server } from '../fake-s3-server';
+import { pendingUploadCount } from '../fault-storage-helpers';
 
 // Live-S3 suite (audit test-gap 1): pins the network-touching S3Storage surface and the S3-mount
 // trash lifecycle against a real S3 — the scripts/s3-local MinIO harness. Opt-in: set
@@ -571,7 +572,7 @@ describe.skipIf(!live)('Mount (s3 storage, MinIO)', () => {
         await mount.closeDatabase(dataDbId);
 
         await mount.uploadQueue?.drain({ flushNow: true });
-        expect(mount.uploadQueue?.pendingCount).toBe(0);
+        expect(pendingUploadCount(mount)).toBe(0);
         expect(await mount.storage.exists(storageKey)).toBe(true);
     });
 });

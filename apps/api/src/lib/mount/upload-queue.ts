@@ -5,7 +5,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { and, asc, count, eq, lte } from 'drizzle-orm';
+import { and, asc, eq, lte } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { settlesWithin } from '../../utils/timing';
 import type { StorageBackend } from '../storage';
@@ -24,7 +24,7 @@ type OrphanState = { count: number; canceled: boolean; isDatabase: boolean; last
 // would stop every mount sharing it. Long enough that a slow PUT completes.
 export const UPLOAD_PUT_TIMEOUT_MS = 120_000;
 
-export type UploadQueueDeps = {
+type UploadQueueDeps = {
     // The mount's metadata.db, which holds the pending_uploads table.
     db: Db;
     storage: StorageBackend;
@@ -76,12 +76,6 @@ export class UploadQueue {
         this.destinationKey = deps.destinationKey;
         this.label = deps.label;
         this.hold = deps.hold;
-    }
-
-    // How many uploads wait, for the logs and the status checks.
-    public get pendingCount(): number {
-        const row = this.db.select({ c: count() }).from(pendingUploads).get();
-        return row?.c ?? 0;
     }
 
     // Deletes the staged copies no row points to, which a crash before the row insert leaves.
