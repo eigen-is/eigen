@@ -425,7 +425,7 @@ describe('Backup of a disabled mount enabled while it is captured', () => {
                 const enabled = await ownerHome.settings.set({ mounts: { [MOUNT_ID]: on.mounts![MOUNT_ID] } });
                 await ownerHome.drive.updateMount(createMountConfig(MOUNT_ID, enabled.mounts![MOUNT_ID]), true);
                 const live = ownerHome.drive.getMounts().find((mount) => mount.id === MOUNT_ID)!;
-                overwrite = live.writeFile(file.id, new TextEncoder().encode('written during the backup'));
+                overwrite = live.writeFile(file.id, Buffer.from('written during the backup'));
                 overwroteDuringCopy = await Promise.race([
                     overwrite.then(() => true),
                     Bun.sleep(200).then(() => false),

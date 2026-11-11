@@ -427,7 +427,7 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
             if (key === bigKey && !overwritten) {
                 const { promise, resolve } = Promise.withResolvers<unknown>();
                 overwritten = promise;
-                setImmediate(() => resolve(mount.writeFile(big.id, new Uint8Array(size).fill(1))));
+                setImmediate(() => resolve(mount.writeFile(big.id, Buffer.alloc(size, 1))));
             }
             return readKey.call(this, key);
         });

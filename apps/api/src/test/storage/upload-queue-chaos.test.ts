@@ -7,14 +7,7 @@ import type { DatabaseConfig } from '../../lib/core';
 import type { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import type { FaultStorage, ParkedWrite } from '../fault-storage-helpers';
-import {
-    createFaultMount,
-    pendingUploadCount,
-    provisionDoc,
-    restorePutTimeout,
-    shrinkPutTimeout,
-    waitFor,
-} from '../fault-storage-helpers';
+import { createFaultMount, passPutDeadline, pendingUploadCount, provisionDoc, waitFor } from '../fault-storage-helpers';
 
 // Chaos verification for the "orphaned PUT lands after a newer PUT and regresses the object" class
 // (performUpload's Promise.race timeout; repaired in-process via trackOrphan). A PUT that stalls
@@ -112,15 +105,15 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
 
         // Write {2}: its PUT parks (body captured, like a request on the wire) and stalls past the
-        // shrunk client-side timeout → the queue treats it as failed and backs off, but the request
+        // client-side timeout → the queue treats it as failed and backs off, but the request
         // is still live server-side. This is the orphan.
-        shrinkPutTimeout(mount, 50);
         fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
-        await managed.flush();
-        await parkedWithRows(fault, 2);
-        restorePutTimeout(mount); // the parked PUT keeps its armed 50ms deadline; later PUTs get the real one
-        await Bun.sleep(120); // let the 50ms PUT deadline fire → timeout, inFlight cleared, row backed off
+        await passPutDeadline(
+            () => managed.flush(),
+            () => fault.parkedCount === 1,
+        );
+        await mount.uploadQueue?.drain(); // returns once the row backed off
 
         // Write {3}: a newer sync supersedes the row. Land its PUT → it acks, the row is cleared, the queue believes everything is synced.
         managed.db.insert(docSchema.items).values({ id: 3, data: 'c' }).run();
@@ -157,14 +150,15 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         await mount.init();
         const { dataDbId } = await provisionDoc(mount);
 
-        shrinkPutTimeout(mount, 50);
-        fault.parkWrites = true;
         const managed = await mount.createDatabase(docConfig, dataDbId);
+        await mount.uploadQueue?.drain({ flushNow: true }); // ack the create-time schema PUT
+        fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
-        await managed.flush();
-        await parkedWithRows(fault, 1);
-        restorePutTimeout(mount);
-        await Bun.sleep(120); // orphan the PUT
+        await passPutDeadline(
+            () => managed.flush(),
+            () => fault.parkedCount === 1,
+        );
+        await mount.uploadQueue?.drain(); // returns once the row backed off
 
         // Retry with a healthy backend: same staged bytes re-PUT and ack.
         fault.parkWrites = false;
@@ -188,13 +182,15 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         const { containerId, dataDbId } = await provisionDoc(mount);
         const key = buildStorageKey(dataDbId, 'data.db');
 
-        shrinkPutTimeout(mount, 50);
-        fault.parkWrites = true;
         const managed = await mount.createDatabase(docConfig, dataDbId);
+        await mount.uploadQueue?.drain({ flushNow: true }); // ack the create-time schema PUT
+        fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
-        await managed.flush();
-        await parkedWithRows(fault, 1);
-        await Bun.sleep(120); // orphan the PUT (timeout fired, inFlight cleared)
+        await passPutDeadline(
+            () => managed.flush(),
+            () => fault.parkedCount === 1,
+        );
+        await mount.uploadQueue?.drain(); // returns once the timeout fired and inFlight cleared
 
         // Permanent delete: cancel() removes the row + staged copy, and the mount deletes the object.
         // The existing cancel-mid-PUT resurrection guard (performUpload's post-PUT re-check) cannot
@@ -226,12 +222,12 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
 
         // Write {2}: its PUT parks and stalls past the ceiling — the orphan.
-        shrinkPutTimeout(mount, 150);
         fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
-        await managed.flush();
-        await parkedWithRows(fault, 2);
-        restorePutTimeout(mount); // {3}'s PUT below parks mid-flight and must not time out
+        await passPutDeadline(
+            () => managed.flush(),
+            () => fault.parkedCount === 1,
+        );
         await mount.uploadQueue?.drain(); // returns once the ceiling fired and the row backed off
 
         // Write {3}: supersedes the row; its PUT parks mid-flight.

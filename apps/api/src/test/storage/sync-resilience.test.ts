@@ -30,6 +30,7 @@ import {
     createS3MountConfig,
     FaultMount,
     FaultStorage,
+    passPutDeadline,
     pendingUploadCount,
     provisionDoc,
     STALL_BOUND_MS,
@@ -932,20 +933,24 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         await mount.init();
         const { dataDbId } = await provisionDoc(mount);
 
-        // Bound the race deterministically: the injected write never resolves, so only the timeout can
-        // settle it. 50ms keeps the test fast; production uses UPLOAD_PUT_TIMEOUT_MS (120s).
-        (mount.uploadQueue as unknown as { putTimeoutMs: number }).putTimeoutMs = 50;
-        fault.hangWrites = true;
-
         const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        await mount.uploadQueue?.drain({ flushNow: true }); // ack the create-time schema PUT
+        const writesBefore = fault.writeCount;
+
+        // The injected write never resolves, so only the PUT deadline can settle it.
+        fault.hangWrites = true;
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
-        await mount.closeDatabase(dataDbId); // enqueues the upload
+        const { started: closed } = await passPutDeadline(
+            () => mount.closeDatabase(dataDbId), // enqueues the upload
+            () => fault.writeCount > writesBefore,
+        );
+        await closed;
 
         // Pre-fix: storage.write never resolves → this drain never returns (the test times out).
         // Post-fix: the PUT deadline fires, performUpload treats it as a failure and backs off.
-        await mount.uploadQueue?.drain({ flushNow: true });
+        await mount.uploadQueue?.drain();
 
-        expect(fault.writeCount).toBeGreaterThan(0); // the PUT was attempted…
+        expect(fault.writeCount).toBeGreaterThan(writesBefore); // the PUT was attempted…
         expect(pendingUploadCount(mount)).toBeGreaterThan(0); // …and left queued (backed off), not hung/cleared
 
         fault.releaseHungWrites(); // settle the orphaned PUT so nothing lingers

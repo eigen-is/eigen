@@ -1,17 +1,11 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, jest, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-    RETRY_WAITS_MS,
-    readStorageFile,
-    STORAGE_TIMEOUT_MS,
-    setRetryWaitsMs,
-    streamStorageFile,
-} from '../../lib/storage/deadline';
+import { readStorageFile, STORAGE_TIMEOUT_MS, streamStorageFile } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { S3Storage } from '../../lib/storage/s3-storage';
 import { FakeS3Server } from '../fake-s3-server';
-import { passStorageDeadline, SHRUNK_RETRY_WAITS_MS, STALL_BOUND_MS, waitFor } from '../fault-storage-helpers';
+import { passStorageDeadline, STALL_BOUND_MS, waitFor } from '../fault-storage-helpers';
 
 // The real S3Storage against a fake S3 that answers 503 SlowDown, as Hetzner does under load. Bun's S3Client never
 // retries a read itself.
@@ -100,19 +94,18 @@ describe('S3 reads do not retry a definite answer', () => {
     });
 });
 
-// Real waits: these pin where a wait falls against the deadline and the signal.
 describe('a retry stays inside the storage deadline', () => {
-    beforeEach(() => setRetryWaitsMs(RETRY_WAITS_MS));
-    afterEach(() => setRetryWaitsMs(SHRUNK_RETRY_WAITS_MS));
-
     test('a HEAD stops retrying when the deadline fires during its wait', async () => {
         fake.slowDowns.set(key, 3);
-        jest.useFakeTimers();
-        const probe = storage.exists('image.png').catch((error: unknown) => error);
-        // Short of the deadline by less than the first wait, which is at least 200 ms.
-        jest.advanceTimersByTime(STORAGE_TIMEOUT_MS - 100);
-        // Two timers: the deadline's and, once the first HEAD is refused, the wait's.
-        await passStorageDeadline(() => jest.getTimerCount() === 2);
+        const { started: probe } = await passStorageDeadline(
+            () => {
+                const exists = storage.exists('image.png').catch((error: unknown) => error);
+                // Short of the deadline by less than the first wait, which is at least 200 ms.
+                jest.advanceTimersByTime(STORAGE_TIMEOUT_MS - 100);
+                return exists;
+            },
+            () => fake.heads.get(key) === 1,
+        );
         expect(await probe).toMatchObject({ status: 503 });
         // A wait the deadline did not stop has run out by now, and its HEAD has arrived.
         await Bun.sleep(STALL_BOUND_MS);

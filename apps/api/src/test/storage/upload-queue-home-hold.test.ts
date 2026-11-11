@@ -13,12 +13,12 @@ import {
     countBackingRows,
     countRowsInFile,
     createHomeFaultMount,
+    holdUploadRetries,
+    passPutDeadline,
     registerFaultMount,
     SETTLE_BOUND_MS,
     STALL_BOUND_MS,
     settlesWithin,
-    shrinkPutTimeout,
-    shrinkRetryBackoff,
 } from '../fault-storage-helpers';
 import { createTestUser, getTestContext, TEST_DATA_DIR } from '../setup';
 
@@ -130,7 +130,7 @@ describe('an upload on its way holds its Home', () => {
             const managed = await mount.createDatabase(docConfig, dataDbId);
             await mount.uploadQueue?.drain({ flushNow: true });
 
-            shrinkRetryBackoff(mount, 10);
+            holdUploadRetries(10);
             fault.failNextWrites = 1_000_000;
             managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
             await mount.closeDatabase(dataDbId);
@@ -144,6 +144,7 @@ describe('an upload on its way holds its Home', () => {
             expect(Date.now() - requestedAt).toBeGreaterThanOrEqual(idleMs - 20);
             expect(fault.writeCount - writesAtRequest).toBeGreaterThan(5);
         } finally {
+            holdUploadRetries();
             await home.close();
             rmSync(home.homeDir, { recursive: true, force: true });
         }
@@ -186,10 +187,13 @@ describe('an upload on its way holds its Home', () => {
         await mount.closeDatabase(dataDbId);
         await fault.waitForParked(() => true);
 
-        // The close waits one PUT timeout at most; the PUT on the wire keeps the timeout it started with.
-        shrinkPutTimeout(mount, STALL_BOUND_MS);
+        // The close waits one PUT timeout at most.
         try {
-            expect(await settlesWithin([evictHome(user.id)], SETTLE_BOUND_MS)).toBe(true);
+            const { started: evicting } = await passPutDeadline(
+                () => evictHome(user.id),
+                () => jest.getTimerCount() > 0,
+            );
+            expect(await settlesWithin([evicting], SETTLE_BOUND_MS)).toBe(true);
         } finally {
             await fault.landAllRemaining();
         }
