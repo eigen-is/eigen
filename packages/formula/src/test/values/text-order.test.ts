@@ -1,6 +1,3 @@
-// The engine's own order of text: Excel's answers on equality from the oracle, an accented letter beside its base
-// letter, and on a seeded random sample an order that is total, transitive and stable under a second sort.
-
 import { describe, expect, test } from 'bun:test';
 import { compareText, textKey } from '../../values/text-order';
 

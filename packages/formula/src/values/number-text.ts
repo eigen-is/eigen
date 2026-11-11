@@ -12,7 +12,7 @@ export function numberToText(n: number): string {
     // One digit, a point, 14 digits, e, a sign and the exponent.
     const text = Math.abs(n).toExponential(14);
     let last = 15;
-    while (text.charCodeAt(last) === ZERO) last--;
+    while (text.charCodeAt(last) === ZERO) last -= 1;
     const digits = last === 1 ? text.charAt(0) : text.charAt(0) + text.slice(2, last + 1);
     const exponent = Number(text.slice(17));
     const sign = n < 0 ? '-' : '';

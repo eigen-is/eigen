@@ -7,34 +7,40 @@ import { Column } from './column';
 
 export class Sheet {
     public readonly id: string;
-    public readonly columns: Column[] = [];
+    private readonly held: Column[];
 
-    public constructor(id: string) {
+    // One column per length, as a load measured them.
+    public constructor(id: string, lengths: readonly number[]) {
         this.id = id;
+        this.held = lengths.map((length) => new Column(length));
+    }
+
+    public get columns(): readonly Column[] {
+        return this.held;
     }
 
     // The column to write into, made with the empty ones before it when the sheet did not reach that far.
     public column(index: number): Column {
-        while (this.columns.length <= index) this.columns.push(new Column(0));
-        return this.columns[index];
+        while (this.held.length <= index) this.held.push(new Column(0));
+        return this.held[index];
     }
 
     public insertRows(index: number, count: number): void {
-        for (const column of this.columns) column.insertRows(index, count);
+        for (const column of this.held) column.insertRows(index, count);
     }
 
     public deleteRows(index: number, count: number): void {
-        for (const column of this.columns) column.deleteRows(index, count);
+        for (const column of this.held) column.deleteRows(index, count);
     }
 
     public insertColumns(index: number, count: number): void {
-        if (index >= this.columns.length) return;
+        if (index >= this.held.length) return;
         const blank = Array.from({ length: count }, () => new Column(0));
-        this.columns.splice(index, 0, ...blank);
-        if (this.columns.length > GRID_COLUMNS) this.columns.length = GRID_COLUMNS;
+        this.held.splice(index, 0, ...blank);
+        if (this.held.length > GRID_COLUMNS) this.held.length = GRID_COLUMNS;
     }
 
     public deleteColumns(index: number, count: number): void {
-        this.columns.splice(index, count);
+        this.held.splice(index, count);
     }
 }

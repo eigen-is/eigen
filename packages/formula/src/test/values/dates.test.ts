@@ -1,6 +1,3 @@
-// Serial numbers and civil dates in Excel's 1900 system: the oracle's answers, and every day from 1 January 1900 to
-// 31 December 9999 held to a slow count that walks the calendar one day at a time from serial 1.
-
 import { describe, expect, test } from 'bun:test';
 import {
     dateSerial,

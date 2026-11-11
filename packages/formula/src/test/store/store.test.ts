@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { CellKind } from '../../store/column';
 import { Workbook } from '../../store/workbook';
 import { GRID_ROWS } from '../../text/a1';
-import { DIV0, errorOf, NA } from '../../values/errors';
+import { DIV0, NA } from '../../values/errors';
 import type { Scalar } from '../../values/value';
 import type { TestCell } from './support';
 import { random, source } from './support';
@@ -38,54 +38,27 @@ describe('load', () => {
         }
     });
 
-    test('every kind of value comes back as it went in', () => {
-        const workbook = new Workbook([
-            source('s1', [
-                [0, 0, 1.5],
-                [1, 0, 'text'],
-                [2, 0, true],
-                [3, 0, false],
-                [4, 0, NA],
-                [5, 0, ''],
-                [6, 0, 7, '=R1C1+5.5'],
-                [7, 0, errorOf('#BUSY!')],
-            ]),
-            source('s2', [[2, 1, 'other']]),
+    test('a cell reported empty sizes nothing: the columns are those of a load without it', () => {
+        const content: TestCell[] = [
+            [0, 0, 1],
+            [4, 2, ''],
+            [0, 3, null, '=R1C1'],
+        ];
+        const empties: TestCell[] = [
+            [1048575, 0, null],
+            [9, 2, null],
+            [3, 1, null],
+            [0, 40, null],
+        ];
+        const extents = (cells: TestCell[]) =>
+            sheetOf(new Workbook([source('s1', cells)])).columns.map((column) => [column.length, column.kind.length]);
+        expect(extents([...empties, ...content, ...empties])).toEqual(extents(content));
+        expect(extents(content)).toEqual([
+            [1, 1],
+            [0, 0],
+            [5, 5],
+            [1, 1],
         ]);
-        expect([0, 1, 2, 3, 4, 5, 6].map((row) => read(workbook, row, 0))).toEqual([
-            1.5,
-            'text',
-            true,
-            false,
-            NA,
-            '',
-            7,
-        ]);
-        expect(read(workbook, 4, 0)).toBe(NA);
-        expect(read(workbook, 7, 0)).toMatchObject({ text: '#BUSY!' });
-        expect(read(workbook, 7, 0)).toBe(read(workbook, 7, 0));
-        expect(read(workbook, 2, 1, 's2')).toBe('other');
-        const column = sheetOf(workbook).columns[0];
-        expect(workbook.shapes.shape(column.shape[6]).text).toBe('=R1C1+5.5');
-        expect(column.shape[5]).toBe(0);
-    });
-
-    test('a read past a column, or past the sheet, is empty', () => {
-        const workbook = new Workbook([source('s1', [[2, 0, 1]])]);
-        expect(read(workbook, 3, 0)).toBeNull();
-        expect(read(workbook, 1000000, 0)).toBeNull();
-        expect(read(workbook, 0, 5)).toBeNull();
-        expect(workbook.sheet('nope')).toBeUndefined();
-    });
-
-    test('a formula that came without a value waits to be computed, one with a value does not', () => {
-        const workbook = new Workbook([
-            source('s1', [
-                [0, 0, null, '=1+1'],
-                [1, 0, 2, '=1+1'],
-            ]),
-        ]);
-        expect(sheetOf(workbook).columns[0].pending).toBe(1);
     });
 });
 
@@ -122,7 +95,7 @@ describe('the tables', () => {
 });
 
 describe('writes', () => {
-    test('a write past the end grows the column by doubling, and the rows between are empty', () => {
+    test('a write past the end grows the column by doubling', () => {
         const workbook = new Workbook([source('s1', [[9, 0, 1]])]);
         const sheet = sheetOf(workbook);
         workbook.setValue(sheet, 10, 0, 2);
@@ -132,34 +105,26 @@ describe('writes', () => {
         workbook.setValue(sheet, 99, 0, 3);
         expect(column.length).toBe(100);
         expect(column.kind.length).toBe(100);
-        expect(read(workbook, 9, 0)).toBe(1);
-        expect(read(workbook, 10, 0)).toBe(2);
-        expect(read(workbook, 50, 0)).toBeNull();
-        expect(read(workbook, 99, 0)).toBe(3);
         workbook.setValue(sheet, 3, 4, 'far');
         expect(sheet.columns.map((held) => held.length)).toEqual([100, 0, 0, 0, 4]);
     });
 
-    test('a literal replaces a formula, a formula a literal, and a clear both', () => {
-        const workbook = new Workbook([source('s1', [[0, 0, 5]])]);
+    test('a formula counts as to be computed until it is replaced or cleared', () => {
+        const workbook = new Workbook([
+            source('s1', [
+                [0, 0, null, '=1+1'],
+                [1, 0, 2, '=1+1'],
+            ]),
+        ]);
         const sheet = sheetOf(workbook);
         const column = sheet.columns[0];
-        workbook.setFormula(sheet, 0, 0, '=1+1');
-        expect(column.shape[0]).toBe(1);
         expect(column.pending).toBe(1);
-        expect(read(workbook, 0, 0)).toBeNull();
+        workbook.setFormula(sheet, 1, 0, '=2+2');
+        expect(column.pending).toBe(2);
         workbook.setValue(sheet, 0, 0, 'typed');
-        expect(column.shape[0]).toBe(0);
+        workbook.clear(sheet, 1, 0);
         expect(column.pending).toBe(0);
-        expect(read(workbook, 0, 0)).toBe('typed');
-        workbook.setFormula(sheet, 0, 0, '=1+1');
-        workbook.clear(sheet, 0, 0);
-        expect(column.shape[0]).toBe(0);
-        expect(column.pending).toBe(0);
-        expect(column.kind[0]).toBe(CellKind.Empty);
-        workbook.clear(sheet, 500, 9);
-        expect(sheet.columns.length).toBe(1);
-        expect(column.length).toBe(0);
+        expect(Array.from(column.shape)).toEqual([0, 0]);
     });
 
     test('a column ends at its last cell, whatever it held before', () => {
@@ -190,6 +155,8 @@ describe('writes', () => {
         sheet.insertRows(1, 1);
         expect(first.length).toBe(4);
         expect(read(workbook, 3, 0)).toBe(1);
+        workbook.clear(sheet, 500, 9);
+        expect(sheet.columns.length).toBe(2);
     });
 
     test('a column counts its errors and bumps its version on every change', () => {

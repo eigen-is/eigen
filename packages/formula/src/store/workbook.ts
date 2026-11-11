@@ -7,7 +7,8 @@ import { ShapeTable } from '../text/shapes';
 import type { FormulaError } from '../values/errors';
 import { ERRORS } from '../values/errors';
 import type { Scalar } from '../values/value';
-import { CellKind, Column, KIND_MASK } from './column';
+import type { Column } from './column';
+import { CellKind, KIND_MASK } from './column';
 import { Sheet } from './sheet';
 import { StringTable } from './strings';
 
@@ -25,7 +26,7 @@ export type SheetSource = {
 };
 
 export class Workbook {
-    public readonly sheets: Sheet[] = [];
+    public readonly sheets: readonly Sheet[];
     public readonly strings = new StringTable();
     public readonly shapes = new ShapeTable();
     private readonly byId = new Map<string, Sheet>();
@@ -34,23 +35,23 @@ export class Workbook {
     private readonly carriedCodes = new Map<string, number>();
 
     public constructor(sources: readonly SheetSource[]) {
-        for (const source of sources) {
-            const sheet = new Sheet(source.id);
-            this.sheets.push(sheet);
-            this.byId.set(sheet.id, sheet);
+        this.sheets = sources.map((source) => {
             const lengths: number[] = [];
-            source.cells((row, column) => {
+            source.cells((row, column, value, formula) => {
+                if (value === null && formula === null) return;
                 while (lengths.length <= column) lengths.push(0);
                 if (row >= lengths[column]) lengths[column] = row + 1;
             });
-            for (const length of lengths) sheet.columns.push(new Column(length));
+            const sheet = new Sheet(source.id, lengths);
+            this.byId.set(sheet.id, sheet);
             source.cells((row, column, value, formula) => {
                 const held = sheet.columns[column];
                 if (formula !== null) held.shape[row] = this.shapes.intern(formula);
                 if (value !== null) this.put(held, row, value);
                 else if (formula !== null) held.markDirty(row);
             });
-        }
+            return sheet;
+        });
     }
 
     public sheet(id: string): Sheet | undefined {

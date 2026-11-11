@@ -45,6 +45,17 @@ const READS = new Map([
     ['1234567890123457', 1234567890123450],
 ]);
 
+type KeyKind = 'number' | 'text' | 'boolean';
+
+const ORDERS: readonly (readonly KeyKind[])[] = [
+    ['number', 'text', 'boolean'],
+    ['number', 'boolean', 'text'],
+    ['text', 'number', 'boolean'],
+    ['text', 'boolean', 'number'],
+    ['boolean', 'number', 'text'],
+    ['boolean', 'text', 'number'],
+];
+
 const ROWS = 90;
 // Ranges may run this far past the last row that holds something.
 const PAST = 6;
@@ -220,6 +231,51 @@ describe('the column index against a walk over the cells', () => {
             model.verify(engine);
         }
     });
+
+    // Every order of the three kinds of key, each asked three times so that the second and third read the index.
+    for (const order of ORDERS) {
+        test(`each kind of key finds its own cells whichever was asked first: ${order.join(', ')}`, () => {
+            const cells = { A1: '5', A2: 'x', A3: 5, A4: true, A5: '5.0', A6: 'X', A7: 5, A8: false, A9: true };
+            const engine = engineOf({
+                s1: { ...cells, B1: 1, B2: 2, B3: 4, B4: 8, B5: 16, B6: 32, B7: 64, B8: 128, B9: 256 },
+            });
+            let next = 1;
+            const ask = (formula: string) => {
+                const label = `D${next}`;
+                next += 1;
+                engine.setFormula('s1', ...at(label), stored(formula, label));
+                engine.recalc(Number.POSITIVE_INFINITY);
+                return valueAt(engine, label);
+            };
+            const asks = {
+                number: () => [ask('=COUNTIF(A1:A9,5)'), ask('=SUMIF(A1:A9,5,B1:B9)'), ask('=MATCH(5,A1:A9,0)')],
+                text: () => [ask('=COUNTIF(A1:A9,"x")'), ask('=SUMIF(A1:A9,"X",B1:B9)'), ask('=MATCH("5",A1:A9,0)')],
+                boolean: () => [
+                    ask('=COUNTIF(A1:A9,TRUE)'),
+                    ask('=SUMIF(A1:A9,TRUE,B1:B9)'),
+                    ask('=MATCH(FALSE,A1:A9,0)'),
+                ],
+            };
+            const answers = { number: [4, 85, 3], text: [2, 34, 1], boolean: [2, 264, 8] };
+            for (let round = 0; round < 3; round += 1) {
+                for (const kind of order)
+                    expect([kind, round, ...asks[kind]()]).toEqual([kind, round, ...answers[kind]]);
+            }
+            // A write drops the whole index: the text that read as 5 is gone, and so is the first x.
+            engine.setValue('s1', 0, 0, 'x');
+            engine.setValue('s1', 1, 0, 6);
+            const after = { number: [3, 84, 3], text: [2, 33, 1], boolean: [2, 264, 8] };
+            for (let round = 0; round < 3; round += 1) {
+                for (const kind of order) {
+                    const got =
+                        kind === 'text'
+                            ? [ask('=COUNTIF(A1:A9,"x")'), ask('=SUMIF(A1:A9,"X",B1:B9)'), ask('=MATCH("X",A1:A9,0)')]
+                            : asks[kind]();
+                    expect([kind, round, ...got]).toEqual([kind, round, ...after[kind]]);
+                }
+            }
+        });
+    }
 
     test('a write between two reads of a column is seen by the second', () => {
         const engine = engineOf({ s1: { A1: 'x', A2: 'y', A3: 'x', B1: 1, B2: 2, B3: 3 } });
