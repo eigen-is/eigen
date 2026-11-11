@@ -71,7 +71,7 @@ export function roundDecimal(n: number, digits: number): number {
     if (unit === undefined || unit > 1e15) return 0;
     const shown = Number(text.charAt(0) + text.slice(2, 16));
     let kept = Math.floor(shown / unit);
-    if (2 * (shown - kept * unit) >= unit) kept++;
+    if (2 * (shown - kept * unit) >= unit) kept += 1;
     if (kept === 0) return 0;
     return Number(`${n < 0 ? '-' : ''}${kept}e${-digits}`);
 }

@@ -1,6 +1,3 @@
-// Text read as a number the way a person could type it into a cell: every form taken and every form refused, each
-// from the oracle's Excel answers or from Excel's own results as the research read them.
-
 import { describe, expect, test } from 'bun:test';
 import { parseNumber } from '../../values/parse-number';
 
@@ -34,6 +31,27 @@ describe('plain numbers', () => {
             ['1.5e-30', 1.5e-30],
             ['1e25', 1e25],
         ]);
+    });
+
+    test('Excel batch 3: text handed to a function as a number', () => {
+        taken([
+            ['1', 1],
+            ['2', 2],
+            ['5', 5],
+            ['1e-14', 1e-14],
+            ['1E-014', 1e-14],
+            ['1E14', 1e14],
+            ['100000000000000000000', 1e20],
+            ['123456789012345678', 123456789012345000],
+            ['0.000000000000123456', 1.23456e-13],
+            ['-0.00000000000001', -1e-14],
+            ['1E-19', 1e-19],
+            ['1E+20', 1e20],
+            ['1.5E+25', 1.5e25],
+            ['10000000000000000000', 1e19],
+            ['0.000000000000000001', 1e-18],
+        ]);
+        refused(['TRUE', 'true', 'x', '']);
     });
 
     test('a sign in front, never negative zero', () => {

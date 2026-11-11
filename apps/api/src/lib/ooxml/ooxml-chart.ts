@@ -30,7 +30,6 @@ import type {
 } from '@workspace/lib/types/chart';
 import { CHART_BLANKS } from '@workspace/lib/types/chart';
 import { solidFill, TRANSPARENT_COLOR } from '@workspace/lib/vector';
-// The one engine module a chart reads, not the engine: a docx or pptx import never evaluates the formula engine.
 import { a1RangeRef, parseA1Range, unquoteSheetName } from '@workspace/sheet/engine/a1-notation';
 import type { XmlElement } from '../core/xml';
 import {
@@ -49,10 +48,8 @@ import { A_NS, alternativeFor, C_NS, C16_NS, isOn, isOnElement, ooxmlElements } 
 import type { OoxmlPackage, Relationship } from './opc';
 import { optional, relTarget } from './opc';
 
-// Where a chart's data comes from. A docx or pptx chart is drawn from its caches, which hold every value. An xlsx
-// chart's refs name the workbook's own sheets, which the importer gives ids. A ref the reader can't follow, such as a
-// literal, a defined name, several areas, an area, a sheet not in the workbook, or a pie's range past its slices,
-// brings in the caches' numbers inline instead. Those show, but follow no cell.
+// Where a chart's data comes from: its caches, as in a docx or pptx, or the workbook's own sheets by id. A ref the
+// reader can't follow, such as a defined name, brings in the caches' numbers inline: those show, but follow no cell.
 type ChartSource = 'cache' | { ranges: (sheetName: string) => string | undefined };
 
 // `name` is PowerPoint's name for the chart's type, as Insert Chart lists it, such as Clustered Column, Pie of Pie or
@@ -99,9 +96,8 @@ export const LEGEND_BY_POSITION: ReadonlyMap<string, LegendPosition> = new Map<s
 
 // ── Finding and weighing a chart ────────────────────────────────────────────────────────────────────────────────
 
-// The c:chartSpace an r:id names. It is read only through a chart relationship, only under the format's charts folder
-// (such as word/charts/) and only when it has the chart content type, so a part's own relationships never lead to
-// it. A missing or damaged part is undefined, so it costs only its chart.
+// The c:chartSpace an r:id names, read only through a chart relationship, under the format's charts folder and with
+// the chart content type, so a part's own relationships never lead to it. A missing or damaged part is undefined.
 export function chartPart(
     pkg: Pick<OoxmlPackage, 'part' | 'contentTypeOf'>,
     rels: ReadonlyMap<string, Relationship>,
@@ -113,10 +109,8 @@ export function chartPart(
     return optional(() => pkg.part(path));
 }
 
-// What a format charges before it reads a chart: the part's elements, plus the points readChart builds from them. A
-// cache counts its points by its c:ptCount, else by its last c:pt, whatever it holds. The reader builds each series,
-// the categories and the slices, each as long as the longest, before the spec's cap on all points together refuses
-// them.
+// What a format charges before it reads a chart: the part's elements, plus the points readChart builds from them,
+// which is every series, the categories and the slices at the length of the longest cache.
 export function chartCost(root: XmlElement): number {
     let nodes = 0;
     let series = 0;
@@ -256,9 +250,8 @@ function chartSpec(
 
     const [first] = series;
     const categories = series.map((ser) => child(ser, 'cat')).find(Boolean);
-    // The values' own format, which their labels show. A 100% stack's axis shows each value's share of its stack, so
-    // the values carry their own format.
-    // A docx's or pptx's values are their caches, and an xlsx's cells carry their own.
+    // The values' own format, which their labels show: a 100% stack's axis shows shares, so it never gives one. A
+    // docx's or pptx's values are their caches, and an xlsx's cells carry their own.
     const numFmt = child(valueAxis, 'numFmt');
     const linked = stacking === 'percent' || !numFmt || isOn(xmlAttr(numFmt, '', 'sourceLinked')) === true;
     const format = linked
@@ -392,8 +385,7 @@ function chartSpec(
 }
 
 // A series' id: Office's c16:uniqueId without its GUID's braces, when it is a valid series id no earlier series took.
-// Else x- and the c:idx, else that and the series' place. A crafted file that takes even the last one reads as
-// unsupported.
+// Else x- and the c:idx, else that and the series' place, and a file that takes even that one is unsupported.
 function seriesIds(series: XmlElement[]): string[] {
     const ids: string[] = [];
     for (const [i, ser] of series.entries()) {
@@ -409,9 +401,8 @@ function seriesIds(series: XmlElement[]): string[] {
     return ids;
 }
 
-// Excel's chart title. A chart without a title element shows its only series' name, unless the automatic title was
-// deleted. A title element without text shows that name too, or a placeholder when there are more series. A series
-// without a name gives no title.
+// Excel's chart title. Without a title element, or with one that has no text, a chart shows its only series' name,
+// unless the automatic title was deleted; with more series an empty title element shows a placeholder.
 function chartTitle(chart: XmlElement | undefined, groups: XmlElement[]): string {
     const title = child(chart, 'title');
     const text = titleText(child(title, 'tx'));
@@ -490,9 +481,8 @@ function pointText(point: XmlElement): string {
     return value ? xmlText(value) : '';
 }
 
-// A chart's c:f as a sheet's A1 cell or area. A ref Excel shows as #REF! is null, and a shape a range can't hold is
-// unsupported. The ref is split at its last '!' rather than by the engine's sheet prefix, because Excel leaves a sheet
-// name of any script's letters unquoted.
+// A chart's c:f as a sheet's A1 cell or area, and null for a ref Excel shows as #REF!. It is split at its last '!'
+// rather than by the engine's sheet prefix, because Excel leaves a sheet name of any script's letters unquoted.
 function refOfFormula(formula: string, sheetId: (sheetName: string) => string | undefined): CellRangeRef | null {
     if (formula.includes('#REF!')) return null;
     const bang = formula.lastIndexOf('!');
@@ -594,9 +584,8 @@ function chartName(groups: XmlElement[]): string {
 
 // ── The look ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-// Where a part states no look of its own, Office draws chart style 2's automatic look. LibreOffice's oox chart
-// ObjectFormatter reads it the same way (spChartSpaceFill, spAxisLines, spMajorGridLines, PptGraphicHelper). The
-// background is bg1, but none on a slide, and every line is tx1 at a 75% tint, 9525 EMU wide.
+// Where a part states no look of its own, Office draws chart style 2's automatic look: a bg1 background, but none
+// on a slide, and every line tx1 at a 75% tint, 9525 EMU wide.
 const BG1 = automaticShape('<a:solidFill><a:schemeClr val="bg1"/></a:solidFill>');
 const AUTOMATIC_BACKGROUND: Record<ChartHost, XmlElement | undefined> = {
     docx: BG1,
@@ -613,13 +602,8 @@ function automaticShape(fill: string): XmlElement | undefined {
     return parseXml(`<a:spPr xmlns:a="${A_NS}">${fill}</a:spPr>`) ?? undefined;
 }
 
-// The look writeChart maps onto the part, read back. The background comes from c:chartSpace's c:spPr. The label
-// color comes from its c:txPr, else from the theme's tx1, as Office draws a label without one. The stroke's color
-// and width come from the category axis's line, as the writer strokes every axis and gridline with it. An axis Office
-// draws no line along still shows its gridlines, so then the stroke is theirs. A line chart's series width is its
-// first series' line's. A gradient reads as its middle color and a pattern as its foreground, since the writer writes
-// one color. `emuPerPx` is how many EMU one px of the chart's own box is in the file. A pie has no stroke to read, so
-// it reads flat.
+// The look writeChart maps onto the part, read back from where the writer puts each piece, with Office's automatic
+// look where the part states none. `emuPerPx` is how many EMU one px of the chart's own box is in the file.
 export function readChartPartLook(
     root: XmlElement,
     { theme, emuPerPx, host }: { theme: DrawingTheme; emuPerPx: number; host: ChartHost },

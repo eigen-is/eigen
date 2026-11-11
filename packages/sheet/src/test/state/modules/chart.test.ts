@@ -1,7 +1,3 @@
-// Charts ride the op pipeline as a map keyed by chart id, so these tests drive the real one: an
-// editor recipe through produceWithPatches → patchToOp, a peer through Workbook's applyOp, and a
-// joiner through replaySheetsOps. Every client and the joiner must end on the same charts.
-
 import { describe, expect, test } from 'bun:test';
 import {
     CHART_MAX_SIDE,
