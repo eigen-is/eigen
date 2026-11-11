@@ -367,6 +367,16 @@ const METRICS: Metric[] = [
         count: ({ text }) => (text.match(STRING_LITERAL) ?? []).filter(keyboardHostileReveal).length,
         fix: 'Hide a hover-revealed control with HOVER_REVEAL_CLASS from @workspace/ui/lib/utils: opacity-0, shown on group-hover and on group-has-focus-visible. See docs/LAYOUT.md § Hover-revealed affordances rest visible on touch.',
     },
+    {
+        id: 'formula-module-state',
+        label: 'Module state, a clock or a draw in the formula engine',
+        hardZero: true,
+        count: ({ path, text }) =>
+            path.startsWith('packages/formula/src/') && !path.includes('/test/')
+                ? countMatches(text, /^(?:export )?(?:let|var) |\bMath\.random\b|\bnew Date\b|\bDate\.\w/gm)
+                : 0,
+        fix: 'The engine keeps nothing between calls and reads no clock: hold state on the Evaluator or a Frame, and take the time and a draw through the NOW and RANDOM parameters. See docs/CODE-EXAMPLES.md § Standards Gates.',
+    },
 ];
 
 const exportsMaps: ExportsMaps = {};

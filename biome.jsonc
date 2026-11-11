@@ -203,6 +203,66 @@
       }
     },
     {
+      // A function's body only computes: the call wrapper reads its arguments, so a family file imports no evaluator, store, recalc or coercion. The registry is the one file that makes the vocabulary from them.
+      "includes": ["packages/formula/src/functions/**", "!packages/formula/src/functions/registry.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "../eval/**",
+                      "../store/**",
+                      "../recalc/**",
+                      "../values/coerce",
+                      "../values/parse-number"
+                    ],
+                    "message": "A function body does not coerce, evaluate or read a cell: declare a parameter from ./registry instead (see packages/formula/src/functions/registry.ts)."
+                  },
+                  // Overrides replace the root rule options wholesale — restate the leaf rule and the suffix ban.
+                  {
+                    "group": ["**", "!./**", "!../**"],
+                    "message": "@workspace/formula is a leaf: it imports no package, and numfmt only in src/format (see ARCHITECTURE.md § Dependency direction)."
+                  },
+                  {
+                    "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
+                    "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  },
+                  {
+                    "group": ["./**/*.ts", "./**/*.tsx", "../**/*.ts", "../**/*.tsx"],
+                    "message": "Relative imports resolve extensionless under moduleResolution: bundler — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // The engine computes the same on every machine: no clock and no locale but what a pass hands it.
+      "includes": ["packages/formula/src/**", "!packages/formula/src/test/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "Date": "The engine reads no clock: take the time through the NOW parameter.",
+                  "Intl": "The engine's text order and number display are its own, the same on every machine.",
+                  "performance": "The engine reads no clock."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       // Its format module is the one place that imports numfmt, the package's one dependency.
       "includes": ["packages/formula/src/format/**"],
       "linter": {
