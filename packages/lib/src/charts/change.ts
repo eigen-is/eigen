@@ -9,9 +9,8 @@ import type { ChartSpec, ChartSpecChange, ChartSpecOp, StoredChartSpec } from '.
 import type { StoredRecord } from './limits';
 import { INHERITED_KEYS, own } from './limits';
 
-// The stored spec with a change applied, sharing what it didn't touch. Every record it makes or copies has no
-// prototype, and an op whose path names a key a plain object inherits is dropped, so a forged key can't reach
-// Object.prototype.
+// The stored spec with a change applied, sharing what it didn't touch. Every record it makes has no prototype, and
+// an op naming a key a plain object inherits is dropped, so a forged key can't reach Object.prototype.
 export function applyChartSpecChange(stored: StoredChartSpec, change: ChartSpecChange): StoredChartSpec {
     let next = stored;
     for (const op of change) {

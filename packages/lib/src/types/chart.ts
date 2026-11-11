@@ -121,6 +121,12 @@ export const CHART_SPEC_PART_KEY = {
 
 export const CHART_SPEC_PART_KEYS = Object.values(CHART_SPEC_PART_KEY);
 
+const PART_KEYS: ReadonlySet<string> = new Set(CHART_SPEC_PART_KEYS);
+
+export function isChartSpecPartKey(key: string): key is ChartSpecPartKey {
+    return PART_KEYS.has(key);
+}
+
 // A chart's parts as a host stores them and the clipboard carries them: each part's JSON text, parsed or not.
 export type ChartSpecTexts = { readonly [K in ChartSpecPartKey]?: string };
 

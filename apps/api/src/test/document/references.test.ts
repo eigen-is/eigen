@@ -289,14 +289,23 @@ describe('documentReferences', () => {
         expect(() => documentReferences('stickies', doc)).toThrow();
     });
 
-    test('a workbook snapshot or op batch it cannot read throws', () => {
+    test('a workbook snapshot it cannot read throws', () => {
         const snapshot = buildSheets();
         snapshot.getMap('state').set('snapshot', '{"f":"eigensheets/0"}');
         expect(() => documentReferences('sheets', snapshot)).toThrow();
+    });
 
-        const ops = buildSheets();
-        ops.getArray<unknown>('ops').push(['not a batch']);
-        expect(() => documentReferences('sheets', ops)).toThrow();
+    // Every reader skips such an entry whole, so no workbook holds what it names.
+    test('a log entry that is no op batch names nothing, and the batches around it still do', () => {
+        const doc = buildSheets();
+        const before = documentReferences('sheets', doc);
+        const image = { op: 'add', id: 's1', path: ['images', 'i9'], value: { mediaName: 'late.png' } };
+        doc.getArray<unknown>('ops').push([
+            'not a batch',
+            [{ ...image, value: { mediaName: 'never.png', n: 1n } }],
+            [image],
+        ]);
+        expect(documentReferences('sheets', doc).media.sort()).toEqual([...before.media, 'late.png'].sort());
     });
 });
 

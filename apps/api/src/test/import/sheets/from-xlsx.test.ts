@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
+import { MAX_GRID_SLOTS } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
 import { isSheetName } from '@workspace/sheet/engine/a1-notation';
 import { ApiError } from '../../../lib/core/errors';
 import { readXlsx, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
-import { MAX_GRID_SLOTS, MAX_SHARED_FORMULA_TEXT, MAX_TEXT } from '../../../lib/import/sheets/limits';
+import { MAX_SHARED_FORMULA_TEXT, MAX_TEXT } from '../../../lib/import/sheets/limits';
 import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../../lib/ooxml/zip';
 import { cellLinks } from '../../fixtures/cell-links';
 import { formatList, ruleAt, rulesByCell } from '../../fixtures/validations';

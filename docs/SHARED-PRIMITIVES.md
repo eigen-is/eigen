@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2155 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2164 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -562,7 +562,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (448)
+## Types (449)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -634,6 +634,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MergeCell` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Op` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Range` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `RangeRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Sheet` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetChart` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetConfig` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
@@ -1015,7 +1016,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1176)
+## Utilities & constants (1184)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1642,9 +1643,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isCellLinkType` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isCurrentSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `isExcelFunction` | `@workspace/lib/sheets` | packages/lib/src/sheets/excel-functions.ts |
+| `isOpBatch` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isPatchOp` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isStructuralBatch` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `MAX_CONDITIONAL_FORMATS` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
+| `MAX_GRID_SLOTS` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `MAX_RULE_RANGES` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `MAX_VALIDATIONS` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `mergedBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
@@ -1654,6 +1657,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `orderedRules` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `parseCellKey` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `rangesOverlap` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
+| `readSheetsLog` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `readSheetsSnapshotJson` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `REFERENCE_COLUMN_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `REFERENCE_ROW_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
@@ -1663,12 +1667,16 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SHEET_DEFAULT_FONT` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
 | `SHEET_DEFAULT_FONT_SIZE` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `SHEET_DEFAULT_ROW_HEIGHT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `SHEET_KEYED_MAPS` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SHEET_ROW_HEADER_WIDTH` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `sheetColumnsWidth` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `sheetDefaultColWidth` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `sheetDefaultRowHeight` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `sheetFitsGrid` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `sheetFloatingBox` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
+| `sheetKeyedMaps` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `sheetRowsHeight` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `sheetsBatchOf` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetsLogStartsWith` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetsOpLog` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetsStateMap` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
@@ -1778,6 +1786,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CHART_SPEC_PARTS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `CHART_STACKINGS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `CHART_TYPES` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `isChartSpecPartKey` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `isStackingChartType` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `LEGEND_POSITIONS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `commentMapName` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |

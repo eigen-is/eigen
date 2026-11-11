@@ -5,11 +5,8 @@
 
 const BASE_62_DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
-// `a` may be empty string, `b` is null or non-empty string.
-// `a < b` lexicographically if `b` is non-null.
-// no trailing zeros allowed.
-// digits is a string such as '0123456789' for base 10. Digits must be in
-// ascending character code order!
+// `a` may be empty and sorts before `b`, which is null or not empty. Neither ends in the zero digit. `digits` lists
+// the base's digits in ascending character code order.
 function midpoint(a: string, b: string | null | undefined, digits: string): string {
     const zero = digits[0];
     if (b != null && a >= b) {

@@ -413,6 +413,32 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(() => decodeSheetsSnapshot(JSON.stringify(envelope))).toThrow('Unknown sheets snapshot format');
     });
 
+    // Every reader builds a sheet's matrix at its size and out to its farthest cell, so a snapshot that names a grid
+    // past what a sheet may hold would cost every open its memory.
+    test.each([
+        ['a row count past the grid', { row: 4294967296 }],
+        ['a column count past the grid', { column: 16385 }],
+        ['a row and a column count that fit only apart', { row: 1048576, column: 16384 }],
+        ['a count that is no whole number', { row: 'many' }],
+        ['a cell far down a wide sheet', { column: 16384, cells: [[1048575, 0, -1, 1]] }],
+        ['a cell at a row that is no index', { cells: [[-1, 0, -1, 1]] }],
+        ['a cell at a column that is no index', { cells: [[0, 'x', -1, 1]] }],
+    ])('%s throws the same error', (_name, forged) => {
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        Object.assign(envelope.sheets[0]!, forged);
+        expect(() => decodeSheetsSnapshot(JSON.stringify(envelope))).toThrow('Unknown sheets snapshot format');
+    });
+
+    test("a sheet as large as Excel's tallest or widest decodes", () => {
+        const tall: Sheet = { id: 'tall', name: 'Tall', row: 1048576, celldata: [{ r: 1048575, c: 25, v: { v: 1 } }] };
+        const wide: Sheet = { id: 'wide', name: 'Wide', column: 16384, celldata: [{ r: 99, c: 16383, v: { v: 1 } }] };
+        const decoded = decodeSheetsSnapshot(encodeSheetsSnapshot([tall, wide], { computed: true }));
+        expect(decoded.map(({ row, column }) => [row, column])).toEqual([
+            [1048576, undefined],
+            [undefined, 16384],
+        ]);
+    });
+
     test('a sheet without an id throws the same error, as no reader could agree on one', () => {
         const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
         delete envelope.sheets[0]!['id'];

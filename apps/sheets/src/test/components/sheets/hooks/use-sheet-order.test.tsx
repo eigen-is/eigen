@@ -12,9 +12,8 @@ const { WebsocketProvider } = await import('y-websocket');
 const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const realCollab = { ...(await import('@workspace/lib/collab')) };
-const { decodeSheetsSnapshot, encodeSheetsSnapshot, readSheetsSnapshotJson, writeSheetsSnapshot } = await import(
-    '@workspace/lib/sheets'
-);
+const { decodeSheetsSnapshot, encodeSheetsSnapshot, readSheetsLog, readSheetsSnapshotJson, writeSheetsSnapshot } =
+    await import('@workspace/lib/sheets');
 const { Workbook } = await import('@workspace/sheet');
 const { replaySheetsOps, withMaterializedData } = await import('@workspace/sheet/engine');
 type Op = import('@workspace/sheet').Op;
@@ -201,7 +200,7 @@ const parts = (s: Sheet) =>
 
 function joined(doc: YDoc) {
     const stored = decodeSheetsSnapshot(readSheetsSnapshotJson(doc) ?? '');
-    const [first] = replaySheetsOps(stored, doc.getArray<Op[]>('ops').toArray());
+    const [first] = replaySheetsOps(stored, readSheetsLog(doc));
     return parts(withMaterializedData(first));
 }
 
@@ -866,3 +865,26 @@ test('batches deleted from the head of the log without a new snapshot load the l
     expect(tab.cell(0, 0)).toBeNull();
     expectJoined(tab);
 });
+
+// A peer can store anything as a log entry. Every reader reads one that is no batch of well-formed ops as an empty
+// batch, so the tab applies the honest batch behind it and ends as a joiner.
+for (const [name, forged] of [
+    ['a number', 42],
+    ['a null op', [null]],
+    ['text', 'abc'],
+    ['an op with no path', [{ op: 'replace', id: 's1' }]],
+    ['a BigInt', [1n]],
+    ['a BigInt inside a value', [{ op: 'replace', id: 's1', path: ['data', 5, 1], value: { v: 1n } }]],
+] as const) {
+    test(`a forged log entry (${name}) that overtakes the tab's batch is skipped, and the batch after it lands`, async () => {
+        const s = server();
+        const tab = await openTab(s, 50);
+        const peer = replica(s, 2);
+        await tab.edit((w) => w.setCellFormat(0, 0, 'v', 'mine'));
+        peer.getArray('ops').push([forged, typed(3, 1, 'honest')]);
+        await deliver(peer, tab.doc);
+        expect(opsOf(tab.doc)).toHaveLength(3);
+        expect([tab.cell(0, 0)?.v, tab.cell(3, 1)?.v, tab.cell(5, 1)]).toEqual(['mine', 'honest', null]);
+        expectJoined(tab);
+    });
+}

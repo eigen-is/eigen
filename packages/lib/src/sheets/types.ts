@@ -2,6 +2,7 @@
 // The sheet engine, the editor and the API all use them. They live in lib because the sheet package depends on lib,
 // not the other way around, so the backend can import them without React.
 
+import { isRecord } from '../core/guards';
 import type { ChartLook, ChartSpecPartKey } from '../types/chart';
 
 export type CellStyle = {
@@ -61,15 +62,47 @@ export type CellWithRowAndCol = {
     v: Cell | null;
 };
 
+const OP_NAMES = [
+    'replace',
+    'remove',
+    'add',
+    'insertRowCol',
+    'deleteRowCol',
+    'addSheet',
+    'deleteSheet',
+    'renameSheet',
+] as const;
+
 // One edit to a workbook, made by the editor from immer's patches and replayed by every reader. `value` stays `any`
 // because it carries a cell, a sheet or a row or column op, with no field that says which.
 export type Op = {
-    op: 'replace' | 'remove' | 'add' | 'insertRowCol' | 'deleteRowCol' | 'addSheet' | 'deleteSheet' | 'renameSheet';
+    op: (typeof OP_NAMES)[number];
     id?: string;
     path: (string | number)[];
     // biome-ignore lint/suspicious/noExplicitAny: see comment above
     value?: any;
 };
+
+// Whether a log entry, which a peer can store as anything, is a batch every reader can walk and send on as JSON: each
+// op a known kind, its sheet id text, its path text and numbers, and no BigInt in its value.
+export function isOpBatch(entry: unknown): entry is Op[] {
+    return Array.isArray(entry) && entry.every(isOp);
+}
+
+function isOp(value: unknown): value is Op {
+    if (!isRecord(value)) return false;
+    const { op, id, path } = value;
+    if (!OP_NAMES.some((name) => name === op) || (id !== undefined && typeof id !== 'string')) return false;
+    if (!Array.isArray(path) || !path.every((key) => typeof key === 'string' || typeof key === 'number')) return false;
+    // Walked with a list, since a value nested deep enough would overflow the stack of a walk that calls itself.
+    const pending: unknown[] = [value['value']];
+    while (pending.length > 0) {
+        const next = pending.pop();
+        if (typeof next === 'bigint') return false;
+        if (typeof next === 'object' && next !== null) for (const held of Object.values(next)) pending.push(held);
+    }
+    return true;
+}
 
 // A batch with a row or column op, or a sheet's add, delete or rename. Such an op ships no values, so every reader's
 // replay rewrites the formulas it moves or renames and recomputes what it can affect, which a cell edit never costs.
@@ -161,9 +194,12 @@ export type DataValidationRule = {
     prohibitInput?: boolean;
 };
 
-// One rule over its ranges, stored under an id in `Sheet.dataValidations`. `order` is a fractional key: where two
-// rules cover a cell, the last in order has it.
-export type SheetValidation = { ranges: SingleRange[]; order: string; rule: DataValidationRule };
+// What every rule a sheet holds over cells shares. `order` is a fractional key that sorts a sheet's rules of one kind.
+export type RangeRule = { ranges: SingleRange[]; order: string };
+
+// One rule over its ranges, stored under an id in `Sheet.dataValidations`. Where two rules cover a cell, the last in
+// order has it.
+export type SheetValidation = RangeRule & { rule: DataValidationRule };
 
 export type SheetConfig = {
     merge?: Record<string, MergeCell>;
@@ -194,11 +230,9 @@ export type ConditionalFormatConditionName =
     | 'belowAverage'
     | 'formula';
 
-type CFRuleBase = { ranges: SingleRange[]; order: string };
-
-type DataBarRule = CFRuleBase & { type: 'dataBar'; format: string[] };
-type ColorGradationRule = CFRuleBase & { type: 'colorGradation'; format: string[] };
-export type DefaultConditionalFormatRule = CFRuleBase & {
+type DataBarRule = RangeRule & { type: 'dataBar'; format: string[] };
+type ColorGradationRule = RangeRule & { type: 'colorGradation'; format: string[] };
+export type DefaultConditionalFormatRule = RangeRule & {
     type: 'default';
     format: { textColor?: string | null; cellColor?: string | null };
     conditionName: ConditionalFormatConditionName;
@@ -206,8 +240,8 @@ export type DefaultConditionalFormatRule = CFRuleBase & {
     conditionValue: (string | number)[];
 };
 
-// A conditional-format rule over its ranges, stored under an id in `Sheet.conditionalFormats`. `order` is a fractional
-// key: the rules apply first to last, so the last rule's colors win a cell.
+// A conditional-format rule over its ranges, stored under an id in `Sheet.conditionalFormats`. The rules apply first
+// to last in order, so the last rule's colors win a cell.
 export type ConditionalFormatRule = DataBarRule | ColorGradationRule | DefaultConditionalFormatRule;
 
 export type Sheet = {
@@ -245,6 +279,9 @@ export type Sheet = {
     images?: Record<string, SheetImage>;
     charts?: Record<string, SheetChart>;
 };
+
+// The sheet fields that hold records by id, each written under its own key. Every reader gives a sheet all of them.
+export const SHEET_KEYED_MAPS = ['images', 'charts', 'conditionalFormats', 'dataValidations'] as const;
 
 // Whether a frozen pane freezes rows: 'row', 'both', and their range forms 'rangeRow' and 'rangeBoth'.
 export function freezesRows(frozen: Sheet['frozen']): boolean {

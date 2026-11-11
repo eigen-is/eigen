@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { newChartSpecParts, sampleChartSpec } from '../../charts';
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../../sheets/defaults';
 import { MAX_CONDITIONAL_FORMATS, MAX_VALIDATIONS } from '../../sheets/range-rules';
 import type { ConditionalFormatRule, Op, Sheet, SheetChart, SheetImage } from '../../sheets/types';
 import { applySheetWrites, opToPatchOnSheets } from '../../sheets/yjs-ops';
@@ -157,13 +158,26 @@ describe('applySheetWrites', () => {
         expect(Object.getPrototypeOf(next[0].config)).toBe(Object.prototype);
     });
 
-    test('a path that holds anything but text and numbers is no write', () => {
-        const forged: Op[] = JSON.parse(
-            '[{"op":"add","id":"s1","path":["config",["__proto__"]],"value":{"polluted":true}}]',
-        );
-        const { sheets: next, applied } = landed(sheets(), forged);
-        expect(applied).toEqual([]);
-        expect(Object.getPrototypeOf(next[0].config)).toBe(Object.prototype);
+    // Every reader builds a sheet's matrix at its `row` by `column`, so one write of a size past the grid a sheet may
+    // hold would cost every later open its memory.
+    test('a write of a row or column count past the grid a sheet may hold is skipped', () => {
+        for (const size of [4294967296, REFERENCE_ROW_COUNT + 1, -1, 1.5, '9', null, Number.NaN]) {
+            expect(paths([write('replace', ['row'], size)])).toEqual([]);
+            expect(paths([write('add', ['column'], size)])).toEqual([]);
+        }
+        expect(paths([write('replace', ['column'], REFERENCE_COLUMN_COUNT + 1)])).toEqual([]);
+        expect(paths([write('replace', ['row'], REFERENCE_ROW_COUNT)])).toEqual(['row']);
+        expect(paths([write('replace', ['column'], REFERENCE_COLUMN_COUNT)])).toEqual(['column']);
+        const grown = [write('replace', ['row'], 500), write('replace', ['column'], 40), write('remove', ['row'])];
+        expect(paths(grown)).toEqual(['row', 'column', 'row']);
+    });
+
+    test('a row count and a column count that each fit, but not together, land only the first', () => {
+        const rows = write('replace', ['row'], REFERENCE_ROW_COUNT);
+        const columns = write('replace', ['column'], REFERENCE_COLUMN_COUNT);
+        expect(paths([rows, columns])).toEqual(['row']);
+        expect(paths([columns, rows])).toEqual(['column']);
+        expect(paths([rows], landed(sheets(), [columns]).sheets)).toEqual([]);
     });
 
     test('an add puts a row in at its index, at the end past it, and a shorter length cuts the array', () => {

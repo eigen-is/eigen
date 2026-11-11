@@ -669,7 +669,7 @@ function readCells(out: string, file: string): Cells {
         : { prints: [], sample: {} };
 }
 
-export function readList(list: string): Set<string> {
+function readList(list: string): Set<string> {
     return new Set(
         fs
             .readFileSync(list, 'utf8')
@@ -936,7 +936,7 @@ function cellFields(cell: Cell | null | undefined): Map<string, unknown> {
 }
 
 // A sheet's maps compared key by key, its lists item by item; a key either holds is compared, so nothing is left out.
-export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['media']): RoundtripDifference[] {
+function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['media']): RoundtripDifference[] {
     const differences: RoundtripDifference[] = [];
     const note = (
         feature: string,

@@ -393,6 +393,26 @@ describe('replaySheetsOps', () => {
         expect(replaySheetsOps([baseSheet('s1', 'A')], ops).map(({ id }) => id)).toEqual(['s1', 's2']);
     });
 
+    // The fold stores an added sheet as it came, and every later open builds its matrix at that size.
+    test('addSheet with a grid past what a sheet may hold adds nothing', () => {
+        const far = { r: 1048575, c: 0, v: { v: 1 } };
+        for (const size of [
+            { row: 4294967296 },
+            { column: 4294967296 },
+            { row: 1048576, column: 16384 },
+            { row: 2.5 },
+            { column: 16384, celldata: [far] },
+            { celldata: [{ r: -1, c: 0, v: null }] },
+            { celldata: [{ r: 0, c: 'x', v: null }] },
+        ]) {
+            const ops: Op[][] = [[{ op: 'addSheet', id: 's2', path: [], value: { id: 's2', name: 'B', ...size } }]];
+            expect(replaySheetsOps([baseSheet('s1', 'A')], ops).map(({ id }) => id)).toEqual(['s1']);
+        }
+        const value = { id: 's2', name: 'B', row: 5000, celldata: [{ r: 5999, c: 30, v: { v: 1 } }] };
+        const ops: Op[][] = [[{ op: 'addSheet', id: 's2', path: [], value }]];
+        expect(replaySheetsOps([baseSheet('s1', 'A')], ops).map(({ id }) => id)).toEqual(['s1', 's2']);
+    });
+
     test('addSheet mid-replay with a celldata-only value is materialized for later data ops', () => {
         // copySheet emits addSheet values carrying celldata only (data is
         // deleted, row/column absent when the source sheet had none). A later
