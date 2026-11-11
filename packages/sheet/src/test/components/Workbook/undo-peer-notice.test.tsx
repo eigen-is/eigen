@@ -72,10 +72,10 @@ async function mount() {
         return ref.current;
     };
 
-    const press = async (hotkey: string) => {
+    const press = async (hotkey: string, target: Element = input) => {
         const { key, ctrl, meta, shift, alt } = parseHotkey(hotkey);
         await act(async () => {
-            input.dispatchEvent(
+            target.dispatchEvent(
                 new KeyboardEvent('keydown', {
                     key: shift ? key : key.toLowerCase(),
                     code: `Key${key}`,
@@ -103,6 +103,7 @@ async function mount() {
         workbook,
         openEditMenu,
         undo: () => press('Mod+Z'),
+        undoWhereTheFocusIs: () => press('Mod+Z', document.activeElement ?? document.body),
         redo: () => press('Mod+Shift+Z'),
         bold: () => act(async () => workbook().setCellFormat(0, 0, 'bl', 1)),
         a1Bold: () => workbook().getAllSheets()[0]?.data?.[0]?.[0]?.bl,
@@ -273,6 +274,19 @@ test('a late batch that makes the tab apply the log again takes both stacks', as
     });
 
     await sheet.undo();
+    expect(await takeNotice()).toBe(CANT_UNDO);
+});
+
+// An import that replaces the workbook brings sheets with new ids, so the grid moves to the first one and its A1.
+test('a new snapshot without the sheet on screen keeps the focus on the grid, so undo shows the notice', async () => {
+    const sheet = await mount();
+    await sheet.bold();
+    const imported: Sheet[] = [{ id: 's9', name: 'Imported', order: 0, row: 10, column: 5, celldata: [], config: {} }];
+    await act(async () => {
+        sheet.workbook().replayOps(imported, [], new Set());
+    });
+
+    await sheet.undoWhereTheFocusIs();
     expect(await takeNotice()).toBe(CANT_UNDO);
 });
 

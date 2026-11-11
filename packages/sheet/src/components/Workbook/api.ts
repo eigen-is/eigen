@@ -117,13 +117,12 @@ export function generateAPIs(
                 const firstMove = batches.findIndex((ops) => fresh.has(ops) && movesRows(ops));
                 return firstMove !== -1 && batches.slice(firstMove).some((ops) => !fresh.has(ops) && movesRows(ops));
             };
-            let lost = overtaken(currentSheetId);
             // The formula engine starts empty, so a replay of cell edits builds no formula graph, and it is built once
             // the browser is idle. A batch with a sheet or row op builds it for its recompute.
             getContext().formulaCache.resetEngine();
             setContext(
                 (draftCtx) => {
-                    if (lost) {
+                    if (overtaken(currentSheetId)) {
                         cancelNormalSelected(draftCtx);
                         draftCtx.selections = undefined;
                     }
@@ -141,7 +140,6 @@ export function generateAPIs(
                     Object.assign(draftCtx, next);
                     // A new snapshot's grid can end before a selection made on the old one, which then has no cell.
                     if (!holdsSelections(next.sheets, next.currentSheetId, next.selections)) {
-                        lost = true;
                         cancelNormalSelected(draftCtx);
                         draftCtx.selections = undefined;
                     }
@@ -152,7 +150,7 @@ export function generateAPIs(
                 },
                 { noHistory: true },
             );
-            if (lost) getContext().getRefs().cellInput.current?.blur();
+            if (!getContext().selections) getContext().getRefs().cellInput.current?.blur();
             warmFormulaGraphOnIdle(getContext);
             setStacksAfterPeer(history, [], []);
         },
