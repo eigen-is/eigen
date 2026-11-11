@@ -99,7 +99,7 @@ export function CanvasDocumentShell({
                                 <DrivePickerWithUpload
                                     open={imagePickerOpen}
                                     onOpenChange={onImagePickerOpenChange}
-                                    title="Add image"
+                                    title="Insert image"
                                     canPick={(item) => isImageMime(item.mimeType)}
                                     multiSelect
                                     onPickFromDrive={(paths) =>

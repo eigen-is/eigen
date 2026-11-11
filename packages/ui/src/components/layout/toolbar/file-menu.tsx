@@ -1,5 +1,5 @@
 // The File menu on the toolbar of an open Eigen document, such as a doc, a sheet or a board. It
-// creates, opens, renames, downloads, shares and trashes the document, and opens its version history.
+// creates, opens, copies, renames, downloads, shares and trashes the document, and opens its version history.
 // Its Drive rows, such as Rename and Move to trash, come from the Drive action catalog with Drive's
 // gates. It also hands the document and those rows to the command palette, so both offer the same ones.
 
@@ -7,7 +7,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { getDriveShareUrl, openDocument, openMailComposeWith } from '@workspace/lib/api';
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { usePaletteSelection } from '@workspace/lib/command-palette';
-import { useDriveActionsFor } from '@workspace/lib/drive';
+import { useDriveActionsFor, useMakeCopy } from '@workspace/lib/drive';
 import type { DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
 import {
     DRIVE_MIME_CHAT,
@@ -29,7 +29,7 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import type { LucideIcon } from 'lucide-react';
-import { Download, FileText, Folder, Upload } from 'lucide-react';
+import { CopyPlus, Download, FileText, Folder, Upload } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { DriveActionMenuItem } from '../../drive/drive-action-menu-item';
@@ -45,7 +45,7 @@ import { DeleteHistoryDialog, RestoreVersionDialog, VersionHistoryMenu } from '.
 const OPEN_LABELS: Record<EigenDocType, { mime: string; title: string }> = {
     doc: { mime: DRIVE_MIME_DOC, title: 'Open doc' },
     stickies: { mime: DRIVE_MIME_STICKIES, title: 'Open stickies' },
-    slides: { mime: DRIVE_MIME_SLIDES, title: 'Open slide' },
+    slides: { mime: DRIVE_MIME_SLIDES, title: 'Open slides' },
     sheets: { mime: DRIVE_MIME_SHEETS, title: 'Open sheet' },
     chat: { mime: DRIVE_MIME_CHAT, title: 'Open chat' },
     vector: { mime: DRIVE_MIME_VECTOR, title: 'Open vector' },
@@ -96,6 +96,7 @@ export function FileMenu({
     // The document stands where Drive's folder browser stands on a folder: the viewer's write access
     // to it gates the writes, and an item shared with the viewer is removed rather than trashed.
     const actionsFor = useDriveActionsFor(browseCapabilities(canWrite));
+    const { mutate: makeCopy } = useMakeCopy();
 
     // The Drive rows this menu can run, through the dialogs it owns. The menu draws Rename, Share, Email
     // collaborators and the delete row; Copy link and Mail to go to the palette only, and so does
@@ -114,7 +115,8 @@ export function FileMenu({
         trash: () => setDeleteOpen(true),
         'remove-shared': () => setDeleteOpen(true),
     };
-    const rows = actionsFor([path]).flatMap((action) => {
+    const actions = actionsFor([path]);
+    const rows = actions.flatMap((action) => {
         const run = runs[action.id];
         return run ? [{ action, run }] : [];
     });
@@ -126,6 +128,8 @@ export function FileMenu({
         return row && <DriveActionMenuItem action={row.action} count={1} onClick={() => row.run()} />;
     };
     const remove = rowFor('trash') ?? rowFor('remove-shared');
+    // A copy lands beside the original, so it is offered where Drive offers Duplicate.
+    const canCopy = actions.some((action) => action.id === 'duplicate');
 
     return (
         <>
@@ -141,6 +145,9 @@ export function FileMenu({
                         <Upload className="h-4 w-4" /> Import…
                     </DropdownMenuItem>
                 )}
+                <DropdownMenuItem disabled={!canCopy} onClick={() => makeCopy(path)}>
+                    <CopyPlus className="h-4 w-4" /> Make a copy
+                </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
                 {canDownload && (

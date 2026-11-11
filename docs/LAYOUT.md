@@ -113,6 +113,20 @@ A bar trigger is a `role="menuitem"` inside `role="menubar"`, so a test looks fo
 
 The bar of every document app is a `CenteredToolbar`: menus left, the icon row at the true center, the share cluster right. The icon row folds into the menus as the bar narrows, so every icon it folds away is a menu row. Sheets reads the bar's own width through a container query, because a panel beside the workbook narrows the bar; the other editors read the viewport.
 
+## The bar's menus come in Google's order
+
+**An editor's bar menus read File, Edit, View, Insert, Format, the app's own menus, Tools and Help, as Google's do, and each app shows the ones it has.** Docs has File, Edit, Insert, Format and Tools; Sheets File, Edit, View, Insert, Format and Data; Slides and Vector File, Edit and Insert; Stickies File, Edit, Insert and Filter. A user who knows Google Docs or Sheets looks for a menu in that place, so an app that adds a menu puts it in its Google place.
+
+Every editor's Edit is `EditMenu` (`packages/ui/src/components/layout/toolbar/edit-menu.tsx`): Undo and Redo, the host's rows, then Find. A host that cuts and copies hands it `ClipboardMenuItems`, the rows its right-click menus draw, so Cut, Copy, Paste, Select all, Duplicate and Delete have one label, icon and order in Docs, Sheets, Slides and Vector. Stickies has no clipboard rows.
+
+## A row greys while it waits, and hides when it can never act
+
+A row that depends on the selection or the document's state is disabled, such as Copy with nothing selected or the canvas's Insert › Comment unless one object is selected. A row the app or the user's role can never use is not drawn: a viewer's Edit in Docs and Sheets has no Cut, Paste or Delete, and on a canvas only Find. Google greys both. Eigen hides the second, so a viewer's menu is not a wall of dead rows, and a grey row means something the user can change. `ClipboardMenuItems` draws a row only when its host passes the handler, so a host gates a row by leaving it out. File › Make a copy greys for a reader as well, where Drive's Duplicate does not apply.
+
+## A shown shortcut is the binding's own constant
+
+A menu row shows `formatForDisplay` of the constant its key handler binds, such as `PRINT_HOTKEY`, `ADD_COMMENT_HOTKEY` or `SHEET_HOTKEYS`, so the menu cannot name a key that does something else. The shared clipboard rows show the lib constants (`CUT_HOTKEY`, `SELECT_ALL_HOTKEY`, …) that the sheet's table and the canvas's keys bind too; Cut, Copy and Paste themselves are the browser's clipboard events, which every editor handles. ⌘K is the command palette in every app ([COMMAND-PALETTE.md](COMMAND-PALETTE.md)), so Insert › Link shows no shortcut, where Google's shows ⌘K.
+
 ## A row that deletes is red and last
 
 **A row that deletes, trashes or removes is `variant="destructive"`**, red with its icon, alone in the last group. Google draws none of these red and puts Delete mid-menu; Eigen follows iOS and Material, so the one row that loses work is the one a user finds last and sees coloured. Move to trash is red too, even though Trash restores it. Log out is last but plain, since it loses nothing. A share dialog's role Remove is a `SelectItem` with the same variant.

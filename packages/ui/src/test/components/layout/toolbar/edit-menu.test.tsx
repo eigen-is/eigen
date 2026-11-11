@@ -1,5 +1,6 @@
 // The Edit menu hands focus back through the host's handler, an editor's keep-focus, unless a Find pick already gave it
-// to the find bar. A host's selection entries sit in a group of their own between Undo and Find, for viewers too.
+// to the find bar. A host's selection entries sit in a group of their own between Undo and Find, for viewers too, and a
+// host's classes reach the menu, such as Sheets' width.
 import { afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../../happy-dom';
 import { collapseSeparators } from '../../../menu-rows';
@@ -19,7 +20,15 @@ afterEach(() => unmount());
 let onUndo = mock(() => {});
 let onCloseAutoFocus = mock((_event: Event) => {});
 
-async function render({ canEdit = true, selectionItems }: { canEdit?: boolean; selectionItems?: string[] } = {}) {
+async function render({
+    canEdit = true,
+    selectionItems,
+    contentClassName,
+}: {
+    canEdit?: boolean;
+    selectionItems?: string[];
+    contentClassName?: string;
+} = {}) {
     // Fresh handlers per render: a menu the last test left open calls its own one a tick after it unmounts.
     onUndo = mock(() => {});
     onCloseAutoFocus = mock((_event: Event) => {});
@@ -30,6 +39,7 @@ async function render({ canEdit = true, selectionItems }: { canEdit?: boolean; s
         onUndo,
         onRedo: () => {},
         onCloseAutoFocus,
+        contentClassName,
         selectionItems: selectionItems?.map((label) => createElement(DropdownMenuItem, { key: label }, label)),
     });
     const controller = { search: () => [], highlightAll: () => {}, reveal: () => {} };
@@ -102,4 +112,12 @@ test('without selection entries the menu stays Undo, Redo, then Find', async () 
     await render();
     await open();
     expect(entries()).toEqual(['Undo', 'Redo', '—', 'Find']);
+});
+
+test("a host's classes reach the menu", async () => {
+    await render({ contentClassName: 'w-56 sheet-mousedown-cancel' });
+    await open();
+    const menu = document.querySelector('[role="menu"]');
+    expect(menu?.classList.contains('w-56')).toBe(true);
+    expect(menu?.classList.contains('sheet-mousedown-cancel')).toBe(true);
 });

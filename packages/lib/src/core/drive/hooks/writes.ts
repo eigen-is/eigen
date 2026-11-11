@@ -5,7 +5,7 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { driveApi, getDriveAppUrl, getDriveFileUploadUrl } from '@workspace/lib/api';
+import { driveApi, getDriveAppUrl, getDriveFileUploadUrl, openDocument } from '@workspace/lib/api';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPE_INFO, withEigenExtension } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
@@ -165,6 +165,24 @@ type DriveCopy = {
     name?: string;
 };
 
+// Each item copied into its own folder as "Copy of" its name, as Duplicate and Make a copy name one. A root has
+// no folder to land in.
+export function copiesBeside(sources: readonly DrivePath[]): DriveCopy[] {
+    return sources.flatMap((source) =>
+        source.parentId
+            ? [
+                  {
+                      source,
+                      targetOwnerId: source.ownerId,
+                      targetMountId: source.mountId,
+                      targetParentId: source.parentId,
+                      name: `Copy of ${source.name}`,
+                  },
+              ]
+            : [],
+    );
+}
+
 // Each copy names its own target folder, so one batch can fill several folders, as Duplicate does.
 export function useCopyPaths() {
     const queryClient = useQueryClient();
@@ -200,6 +218,21 @@ export function useCopyToFolder() {
                     },
                 },
             });
+        },
+        onError: onMutationError,
+    });
+}
+
+// An open document's Make a copy. The user stays in the original, so the toast offers to open the copy.
+export function useMakeCopy() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (source: DrivePath) => {
+            const [copy] = await copyEach(queryClient, copiesBeside([source]));
+            return copy;
+        },
+        onSuccess: (copy) => {
+            toast.success('Copy made', { action: { label: 'Open', onClick: () => openDocument(copy) } });
         },
         onError: onMutationError,
     });

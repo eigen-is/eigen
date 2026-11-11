@@ -8,6 +8,7 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { ArrowDownAZ, Columns2, Funnel, FunnelX, ShieldCheck } from 'lucide-react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
@@ -21,7 +22,7 @@ export function DataMenu() {
     const { context, setContext } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
 
-    const dispatch = (fn: (ctx: Context) => void) => () => setContext((draftCtx) => fn(draftCtx));
+    const dispatch = (fn: (ctx: Context) => void) => () => setContext(fn);
 
     const filterActive = context.sheets.find(({ id }) => id === context.currentSheetId)?.filterRange != null;
     // A sort works on one selected range.
@@ -30,7 +31,9 @@ export function DataMenu() {
     return (
         <>
             <DropdownMenuSub>
-                <DropdownMenuSubTrigger disabled={!selection}>Sort range</DropdownMenuSubTrigger>
+                <DropdownMenuSubTrigger disabled={!selection}>
+                    <ArrowDownAZ className="h-4 w-4" /> Sort range
+                </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="sheet-mousedown-cancel">
                     <DropdownMenuItem onClick={dispatch((ctx) => sortSelection(ctx, true))}>Ascending</DropdownMenuItem>
                     <DropdownMenuItem onClick={dispatch((ctx) => sortSelection(ctx, false))}>
@@ -46,13 +49,25 @@ export function DataMenu() {
             <DropdownMenuSeparator />
 
             <DropdownMenuItem onClick={dispatch((ctx) => (filterActive ? clearFilter(ctx) : createFilter(ctx)))}>
-                {filterActive ? 'Clear filter' : 'Create filter'}
+                {filterActive ? (
+                    <>
+                        <FunnelX className="h-4 w-4" /> Clear filter
+                    </>
+                ) : (
+                    <>
+                        <Funnel className="h-4 w-4" /> Create filter
+                    </>
+                )}
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem onClick={() => showDialog(<DataValidation />)}>Data validation</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => showDialog(<SplitColumn />)}>Split text</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => showDialog(<DataValidation />)}>
+                <ShieldCheck className="h-4 w-4" /> Data validation
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => showDialog(<SplitColumn />)}>
+                <Columns2 className="h-4 w-4" /> Split text
+            </DropdownMenuItem>
         </>
     );
 }

@@ -10,8 +10,9 @@ import { AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Highlighter, Italic
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
-import type { Context, RunStyle } from '../../state';
+import type { RunStyle } from '../../state';
 import {
+    HORIZONTAL_ALIGNS,
     handleBold,
     handleFont,
     handleHorizontalAlign,
@@ -22,29 +23,22 @@ import {
     runStyleOf,
 } from '../../state';
 import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
+import { useFormatCells } from './use-format-cells';
 
 // The controls show the anchor cell's colors, font and alignment. While a cell is open, they show the
 // run at its `caret` instead, as the docs toolbar does.
 export function FormatToolbar({ caret }: { caret: RunStyle | null }) {
-    const { context, setContext, refs } = useContext(WorkbookContext);
+    const { context } = useContext(WorkbookContext);
     const cell = useAnchorCell();
     const refocusCellEditor = useCellEditorRefocus();
+    const format = useFormatCells();
 
     if (!context.allowEdit) return null;
 
     const textColor = caret?.fc ?? cell?.fc ?? '';
     const fillColor = cell?.bg ?? '';
-    // The align handler stores `ht` as the text '1', '0' or '2', while a default or an import stores a number. Either
-    // way 0 is center, 1 left and 2 right.
-    const align = cell?.ht == null ? undefined : Number(cell.ht);
+    const align = cell?.ht == null ? undefined : HORIZONTAL_ALIGNS[cell.ht];
     const { ff: fontName, fs: fontSize, bl, it } = caret ?? runStyleOf(cell);
-    // Every handler formats through the cell input, which holds the open editor's selection.
-    const format = (apply: (ctx: Context, input: HTMLDivElement) => void) => {
-        setContext((ctx) => {
-            const input = refs.cellInput.current;
-            if (input) apply(ctx, input);
-        });
-    };
     const setFontSize = (size: number) => format((ctx, input) => handleTextSize(ctx, input, size));
 
     // The row folds from its right end as the bar narrows, as the Docs bar does, so its order is its priority order.
@@ -122,21 +116,21 @@ export function FormatToolbar({ caret }: { caret: RunStyle | null }) {
                 <TooltipButton
                     icon={AlignLeft}
                     tooltipText="Align left"
-                    active={align === 1}
+                    active={align === 'left'}
                     preventFocusLoss
                     onClick={() => format((ctx, input) => handleHorizontalAlign(ctx, input, 'left'))}
                 />
                 <TooltipButton
                     icon={AlignCenter}
                     tooltipText="Align center"
-                    active={align === 0}
+                    active={align === 'center'}
                     preventFocusLoss
                     onClick={() => format((ctx, input) => handleHorizontalAlign(ctx, input, 'center'))}
                 />
                 <TooltipButton
                     icon={AlignRight}
                     tooltipText="Align right"
-                    active={align === 2}
+                    active={align === 'right'}
                     preventFocusLoss
                     onClick={() => format((ctx, input) => handleHorizontalAlign(ctx, input, 'right'))}
                 />
