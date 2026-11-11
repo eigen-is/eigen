@@ -54,7 +54,7 @@ describe('replaySheetsOps', () => {
 
     test('a sheet an addSheet op introduces is materialized like the replay base', () => {
         // The editor writes each image and chart under its own key and each config entry the same way, so a
-        // patch against a sheet that lacks the map fails to resolve and drops the batch.
+        // write into a sheet that lacks the map would be skipped.
         const ops: Op[][] = [[{ op: 'addSheet', path: [], value: baseSheet('s2', 'Sheet2') }]];
         const [base, added] = replaySheetsOps([baseSheet('s1', 'Sheet1')], ops);
         expect(added.images).toEqual({});
@@ -194,10 +194,8 @@ describe('replaySheetsOps', () => {
     });
 
     test('celldata-only snapshot: data is materialized so cell ops can apply', () => {
-        // The persisted snapshot (xlsxToSheets / an FE snapshot from before
-        // materialization) typically carries celldata only. Patches reference
-        // ['data', r, c]; without internal materialization applyPatches throws
-        // "path doesn't resolve". Verifies the BE export and FE startup paths.
+        // A stored snapshot carries celldata only, and a cell op writes ['data', r, c]: without the matrix the
+        // replay builds, every cell write would be skipped.
         const sheet: Sheet = {
             id: 's1',
             name: 'Sheet1',
@@ -473,13 +471,9 @@ describe('a sheet added under a name it cannot take', () => {
     });
 });
 
-// A granular patch into a collection (`['config','rowlen','2']`) only resolves if the collection
-// already exists. Every document written before the editor started materializing them — and every
-// fresh doc before its first compaction — stores `config: {}`, so the replay base must materialize
-// them too. Without this,
-// replaySheetsOps throws "path doesn't resolve" and rolls back the WHOLE batch: the edit is
-// lost, not degraded, on every reader (a second client opening the doc, the preview renderer,
-// and every xlsx/HTML/PDF export).
+// A write into a collection, such as ['config', 'rowlen', '2'], applies only when the collection is there. A fresh
+// workbook before its first compaction stores `config: {}`, so the replay base gets every collection first. Without
+// them the write is skipped and the edit is lost on every reader: a second tab, the preview and every export.
 describe('ops from a normalizing editor apply to an un-normalized stored sheet', () => {
     const storedBeforeThisBranch = (): Sheet[] => [{ name: 'Sheet1', id: 'id_1', order: 0, celldata: [], config: {} }];
 
@@ -537,6 +531,76 @@ describe('a rule a peer deleted', () => {
             ],
         );
         expect(sheet.dataValidations).toEqual({});
+    });
+});
+
+// A write into something a peer deleted or cleared finds no parent on any reader, so that write alone is skipped. The
+// rest of its batch was written for cells and fields that are still there.
+describe('a write whose parent is gone', () => {
+    const cell = (v: string) => ({ v, m: v, ct: { fa: 'General', t: 'g' } });
+    const image = { id: 'i1', index: 'a0', x: 10, y: 20, width: 40, height: 30, mediaName: 'i1.png' };
+    const base = (): Sheet => ({
+        id: 's1',
+        name: 'Sheet1',
+        order: 0,
+        data: [
+            [cell('a'), null],
+            [null, null],
+        ],
+        config: {},
+        images: { i1: image },
+    });
+    const kept: Op = { op: 'replace', id: 's1', path: ['data', 0, 1], value: cell('kept') };
+
+    test.each<[string, Op['op'], Op['path'], unknown]>([
+        ['a field of a cell a peer cleared', 'add', ['data', 1, 1, 'bg'], '#ff0000'],
+        ['a cell on a row a peer deleted', 'replace', ['data', 5, 0], cell('x')],
+        ['a field of a cell on a row a peer deleted', 'replace', ['data', 5, 0, 'v'], 'x'],
+        ['a row past the matrix', 'replace', ['data', 50], [cell('x'), null]],
+        ['a cell past its row', 'replace', ['data', 0, 9], cell('x')],
+        ['a matrix made longer by its length', 'replace', ['data', 'length'], 50],
+        ['a write below a field of an image', 'replace', ['images', 'i1', 'x', 'y'], 1],
+        ['a field of an image a peer deleted', 'replace', ['images', 'gone', 'x'], 1],
+        ['an entry of a filter a peer cleared', 'add', ['filter', '1'], { rows: [1] }],
+        ['a key every object inherits', 'add', ['config', '__proto__'], { polluted: true }],
+    ])('%s is skipped, and the rest of its batch applies', (_, op, path, value) => {
+        const dropped: unknown[] = [];
+        for (const batch of [
+            [{ op, id: 's1', path, value }, kept],
+            [kept, { op, id: 's1', path, value }],
+        ]) {
+            const [sheet] = replaySheetsOps([base()], [batch], (e) => dropped.push(e));
+            expect(sheet.data).toHaveLength(2);
+            expect(sheet.data).toEqual([
+                [cell('a'), cell('kept')],
+                [null, null],
+            ]);
+            expect(sheet.images).toEqual({ i1: image });
+            expect(sheet).not.toHaveProperty('filter');
+            expect(Object.getPrototypeOf(sheet.config)).toBe(Object.prototype);
+        }
+        expect(dropped).toEqual([]);
+    });
+
+    test('a batch of only such writes hands the sheets back as they were', () => {
+        const [sheet] = replaySheetsOps(
+            [base()],
+            [[{ op: 'add', id: 's1', path: ['data', 1, 1, 'bg'], value: '#ff0000' }]],
+        );
+        expect(sheet.data).toEqual(base().data);
+    });
+
+    test('a refused row op still rolls its whole batch back', () => {
+        const dropped: unknown[] = [];
+        const refused: Op = { op: 'insertRowCol', id: 's1', path: [], value: { type: 'row', index: -1 } };
+        const [sheet] = replaySheetsOps([base()], [[kept, refused]], (e) => dropped.push(e));
+        expect(dropped).toHaveLength(1);
+        expect(sheet.data).toEqual(base().data);
+    });
+
+    test('a shorter length cuts an array, as the undo of a grown one writes it', () => {
+        const [sheet] = replaySheetsOps([base()], [[{ op: 'replace', id: 's1', path: ['data', 'length'], value: 1 }]]);
+        expect(sheet.data).toEqual([[cell('a'), null]]);
     });
 });
 

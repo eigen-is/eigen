@@ -1,8 +1,7 @@
 // Applies one op batch to the editor's context. applySheetsBatch, which the replay applies a joiner's batches with,
 // runs on the plain sheets outside immer, and one recipe writes what changed into the context. Every sheet, row or
 // column change of the open workbook comes through here, such as a peer's batch, an undo step or the author's own row
-// op, so every tab ends the same. It reports the ops that moved rows, which the undo stacks follow, and a batch new to
-// the tab moves its view too.
+// op, so every tab ends the same. It reports the ops that moved rows, which the undo stacks follow.
 
 import { isRecord } from '@workspace/lib/guards';
 import { produce } from 'immer';

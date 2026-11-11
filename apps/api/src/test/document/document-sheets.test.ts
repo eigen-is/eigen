@@ -1085,7 +1085,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
     test('a batch the replay rejects is dropped and counted, and the others still apply', () => {
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         try {
-            const poison: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['missing', 'deep'], value: 1 }];
+            const poison: Op[] = [{ op: 'insertRowCol', id: 'sheet-1', path: [], value: { type: 'row', index: -1 } }];
             const { snapshot, dropped } = compactSheetsSnapshot(
                 encodeSheetsSnapshot(sheets, { computed: true }),
                 JSON.stringify([edit(0, 'a'), poison, edit(1, 'b'), poison]),

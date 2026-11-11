@@ -238,7 +238,7 @@ test('a later batch that cuts nothing keeps it', async () => {
 test("a peer's batch that fails to apply sets nothing", async () => {
     const sheet = await mount();
     await sheet.deleteRow();
-    await sheet.peer([{ op: 'replace', id: 's1', path: ['data', 999, 999, 'v'], value: 1 }]);
+    await sheet.peer([{ op: 'insertRowCol', id: 's1', path: [], value: { type: 'row', index: -1 } }]);
 
     await sheet.undo();
     expect(sheet.rows()).toBe(10);

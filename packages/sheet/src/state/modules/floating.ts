@@ -3,10 +3,9 @@
 // redoing its insert or undoing its delete, brings one a peer deleted back only where the delete arrived first.
 
 import type { SheetFloatingKind } from '@workspace/lib/sheets';
-import { floatingItems, floatingWriteFilter, nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
+import { floatingItems, nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
 import type { Box, ZOp } from '@workspace/lib/vector';
 import { DUPLICATE_OFFSET, zOrderKeys } from '@workspace/lib/vector';
-import type { Patch } from 'immer';
 import { copySheetChartSpec } from '../../engine/chart-data';
 import type { Context } from '../context';
 import { getSheetIndex } from '../utils';
@@ -81,10 +80,4 @@ export function deleteActiveObject(ctx: Context) {
     if (!ctx.activeObject) return;
     deleteFloatingObject(ctx, ctx.activeObject);
     ctx.activeObject = undefined;
-}
-
-// What of an undo or redo entry still applies, by the rule every client and the replay apply to its batch.
-export function withoutDeletedFloatingEdits(ctx: Context, patches: Patch[]): Patch[] {
-    const applies = floatingWriteFilter(ctx.sheets);
-    return patches.filter(({ op, path: [root, ...path], value }) => root !== 'sheets' || applies({ op, path, value }));
 }

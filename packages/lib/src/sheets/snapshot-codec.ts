@@ -69,7 +69,7 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
         // `data` and leaves `celldata` stale, so the cells come from `data`, as they do at the end of a replay.
         const entries = data ? denseToEntries(data) : celldata;
         // A row op or a paste can grow the dense matrix past the sheet's `row` and `column`. A reader builds its grid
-        // from those two, so they never say less than the matrix holds. An op recorded in a row the reader lacks fails.
+        // from those two, so they never say less than the matrix holds: a write into a row the reader lacks is skipped.
         if (data) {
             out.row = Math.max(rest.row ?? 0, data.length);
             out.column = data.reduce((widest, row) => Math.max(widest, row?.length ?? 0), rest.column ?? 0);
@@ -81,7 +81,7 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
         }
 
         // An empty config is still written. A replayed op that adds to it, such as a merge or a row height, can't
-        // resolve its path without one, and its whole batch fails.
+        // resolve its path without one, and is skipped.
         if (config) {
             const { borderInfo, ...restConfig } = config;
             out.config = restConfig;

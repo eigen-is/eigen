@@ -1,13 +1,15 @@
 // What ⌘Z and ⌘⇧Z do in this tab. An edit is recorded as an entry of immer patches that names its sheet by id, and
 // undo and redo turn an entry into the next context and the batch to send. A cell or field entry skips a target a peer
-// changed since and recalculates the formulas it writes back. A structural entry, such as a row op or a rename, leaves
-// the stacks at a peer's first batch, so it always finds the workbook as it left it, and its step applies exactly the
-// ops it sends, through applyOpBatch, as its peers will. The Workbook keeps the stacks.
+// changed since, applies the rest through applySheetWrites, which skips what its peers will skip, and recalculates the
+// formulas it writes back. A structural entry, such as a row op or a rename, leaves the stacks at a peer's first
+// batch, so it always finds the workbook as it left it, and its step applies exactly the ops it sends, through
+// applyOpBatch, as its peers will. The Workbook keeps the stacks.
 
 import type { MergeCell } from '@workspace/lib/sheets';
+import { applySheetWrites } from '@workspace/lib/sheets/yjs-ops';
 import { get, isEqual } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
-import { applyPatches, produce, produceWithPatches } from 'immer';
+import { produce, produceWithPatches } from 'immer';
 import { computedKey, createArrayResolver } from '../../engine/cell-resolver';
 import { applyRowColOp, hidesEverySheet } from '../../engine/replay-ops';
 import { RowColError } from '../../engine/rowcol';
@@ -29,7 +31,6 @@ import {
     storedCopy,
 } from '../utils';
 import { applyOpBatch } from './apply-ops';
-import { withoutDeletedFloatingEdits } from './floating';
 import { execFunctionGroup } from './formula-exec';
 import { namesStructuralOp, unitOf } from './history-shift';
 import { settleCurrentSheet, shiftSheetOrders } from './sheet';
@@ -181,33 +182,38 @@ function sheetStep(ctx: Context, batch: (after: Sheet[]) => Op[], recorded: Patc
 // A cell or field entry: `apply` goes in, and `written`, the entry's other side, says what the targets should hold.
 // The formula values the entry recorded were right for the inputs of their time, so the step recalculates them.
 function patchStep(ctx: Context, apply: Patch[], written: Patch[]): Step {
-    const kept = stillWritten(
-        ctx,
-        withoutDeletedFloatingEdits(ctx, atSheetIndex(ctx, apply)),
-        atSheetIndex(ctx, written),
-    );
-    const patches = withoutComputedValues(ctx, kept);
-    if (patches.length === 0) return { ctx, ops: [] };
-    const applied = applyPatches(ctx, patches);
+    const kept = stillWritten(ctx, atSheetIndex(ctx, apply), atSheetIndex(ctx, written));
+    const { sheets, patches } = appliedWrites(ctx, withoutComputedValues(ctx, kept));
     // Every reader refuses a batch that would leave no sheet shown, so the step does nothing instead.
-    if (hidesEverySheet(ctx.sheets, applied.sheets)) return { ctx, ops: [] };
-    const restored = produce(applied, settleCurrentSheet);
+    if (patches.length === 0 || hidesEverySheet(ctx.sheets, sheets)) return { ctx, ops: [] };
+    const restored = produce(ctx, (draft: Context) => {
+        draft.sheets = sheets;
+        settleCurrentSheet(draft);
+    });
     restored.formulaCache.followPatches(restored, patches);
     const [next, recalculated] = produceWithPatches(restored, (draft: Context) => recalculate(draft, patches));
     return { ctx: next, ops: patchToOp(ctx, next, [...patches, ...filterPatch(recalculated)]) };
 }
 
+// The sheets the patches leave and the patches that applied, by the rule every reader applies to the batch they
+// ship: a write into an object or a cell a peer deleted is left out.
+function appliedWrites(ctx: Context, patches: Patch[]): { sheets: Sheet[]; patches: Patch[] } {
+    const writes = patches.map((patch) => ({ ...patch, path: patch.path.slice(1) }));
+    const { sheets, applied } = applySheetWrites(ctx.sheets, writes);
+    return { sheets, patches: applied.map((write) => ({ ...write, path: ['sheets', ...write.path] })) };
+}
+
 // The patches without the value and display text a formula cell computes once they apply, since a peer may have
 // changed the formula or its inputs since. One the engine can't evaluate keeps them, as a recompute does.
 function withoutComputedValues(ctx: Context, patches: Patch[]): Patch[] {
-    const after = applyPatches(ctx, patches);
+    const after = appliedWrites(ctx, patches).sheets;
     const { engine } = ctx.formulaCache;
-    const resolver = createArrayResolver(after.sheets);
+    const resolver = createArrayResolver(after);
     return patches.filter(({ path }) => {
         const [, index, field, r, c, key] = path;
         if (field !== 'data' || path.length !== 6 || (key !== 'v' && key !== 'm')) return true;
         if (typeof index !== 'number' || typeof r !== 'number' || typeof c !== 'number') return true;
-        const { id, data } = after.sheets[index];
+        const { id, data } = after[index];
         const f = data?.[r]?.[c]?.f;
         return f == null || engine.cantEvaluate(f, engine.evaluate(f, id, resolver));
     });
@@ -273,8 +279,9 @@ function repairOps(sheet: Sheet, recorded: CellMatrix): Op[] {
     return ops;
 }
 
-// The patches whose targets still hold what the entry wrote there: a target a peer changed since keeps the peer's
-// value, as Google does. A merge and its cells pass or skip together.
+// The patches whose targets still hold what the entry wrote there, which is when writing the entry's side again, as
+// every reader would, changes nothing: a target a peer changed since keeps the peer's value, as Google does. A merge
+// and its cells pass or skip together.
 function stillWritten(ctx: Context, apply: Patch[], written: Patch[]): Patch[] {
     const parent = new Map<string, string>();
     const find = (key: string): string => {
@@ -297,32 +304,27 @@ function stillWritten(ctx: Context, apply: Patch[], written: Patch[]): Patch[] {
         }
     };
     for (const patch of apply) joinUnits(patch, JSON.stringify(unitOf(patch.path)));
-    const writes = new Map<string, { unit: (string | number)[]; patches: Patch[] }>();
+    const units = new Map<string, (string | number)[]>();
     for (const patch of written) {
         const unit = unitOf(patch.path);
         const key = JSON.stringify(unit);
         joinUnits(patch, key);
-        const write = writes.get(key) ?? { unit, patches: [] };
-        write.patches.push(patch);
-        writes.set(key, write);
+        units.set(key, unit);
     }
+    const rewritten = appliedWrites(ctx, written);
     const changed = new Set<string>();
-    for (const [key, { unit, patches }] of writes) if (!holds(ctx, unit, patches)) changed.add(find(key));
+    for (const [key, unit] of units) if (!holds(ctx, rewritten.sheets, unit)) changed.add(find(key));
     if (changed.size === 0) return apply;
     return apply.filter((patch) => !changed.has(find(JSON.stringify(unitOf(patch.path)))));
 }
 
-// The target holds what the entry wrote when writing it again changes nothing.
-function holds(ctx: Context, unit: (string | number)[], patches: Patch[]): boolean {
+// The target holds what the entry wrote when `rewritten`, the sheets with the entry's side written again, left it as
+// it is.
+function holds(ctx: Context, rewritten: Sheet[], unit: (string | number)[]): boolean {
     const current = get(ctx, unit);
-    const rebased = patches.map((patch) => ({ ...patch, path: ['value', ...patch.path.slice(unit.length)] }));
-    try {
-        const { value } = applyPatches({ value: current }, rebased);
-        if (unit[2] !== 'data' || unit.length !== 5) return isEqual(value, current);
-        return isEqual(authored(value), authored(current));
-    } catch {
-        return false;
-    }
+    const value = get({ sheets: rewritten }, unit);
+    if (unit[2] !== 'data' || unit.length !== 5) return isEqual(value, current);
+    return isEqual(authored(value), authored(current));
 }
 
 // What a person wrote into a cell: a formula's value, its display text and its value type are the engine's.
