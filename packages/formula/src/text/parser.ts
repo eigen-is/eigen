@@ -4,7 +4,29 @@
 // Text that does not parse is a result, never a throw, and the limits on length, nesting and arguments are kept here.
 
 import { columnIndex, GRID_ROWS } from './a1';
-import { Char, continuesWord, ERROR_LITERALS, errorCode, lexAt, Token, tokenEnd, tokenKind } from './lexer';
+import {
+    BANG,
+    BRACKET_CLOSE,
+    BRACKET_OPEN,
+    COLON,
+    continuesWord,
+    DOLLAR,
+    DOT,
+    EQUALS,
+    ERROR_LITERALS,
+    errorCode,
+    LOWER_A,
+    LOWER_E,
+    lexAt,
+    MINUS,
+    OPEN,
+    Token,
+    tokenEnd,
+    tokenKind,
+    UPPER_C,
+    UPPER_R,
+    ZERO,
+} from './lexer';
 import type { FormulaNode } from './tree';
 import { branch, EMPTY, leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from './tree';
 
@@ -33,7 +55,7 @@ export type A1Range = {
 // Whether stored text is typed text that did not parse, kept behind a second =. No printed shape starts with two,
 // so the mark alone says the text is no formula, whatever the stored grammar would make of the rest.
 export function isUnparsed(stored: string): boolean {
-    return stored.charCodeAt(0) === Char.Equals && stored.charCodeAt(1) === Char.Equals;
+    return stored.charCodeAt(0) === EQUALS && stored.charCodeAt(1) === EQUALS;
 }
 
 // A formula as typed at a cell, such as =SUM(A1:B2)*Sheet2!$C$1, with the row and column from 0.
@@ -136,7 +158,7 @@ class Parser {
         const limit = this.stored ? MAX_STORED_LENGTH : MAX_FORMULA_LENGTH;
         if (this.text.length > limit) return { reason: 'too-long', at: limit };
         if (isUnparsed(this.text)) return { reason: 'syntax', at: 1 };
-        if (this.text.charCodeAt(0) === Char.Equals) {
+        if (this.text.charCodeAt(0) === EQUALS) {
             this.end = 1;
             this.next();
         }
@@ -261,7 +283,7 @@ class Parser {
 
     private startsReference(): boolean {
         const { kind } = this;
-        if (kind === Token.Number) return this.text.charCodeAt(this.end) === Char.Colon;
+        if (kind === Token.Number) return this.text.charCodeAt(this.end) === COLON;
         if (kind === Token.Error) return errorCode(this.text, this.pos) === REF_ERROR;
         return kind === Token.Word || kind === Token.Quote || kind === Token.Bracket || kind === Token.Open;
     }
@@ -271,7 +293,7 @@ class Parser {
         this.height = 0;
         switch (kind) {
             case Token.Number: {
-                if (text.charCodeAt(end) === Char.Colon) {
+                if (text.charCodeAt(end) === COLON) {
                     const rows = this.reference(space, SheetKind.Host, '');
                     if (rows) return rows;
                 }
@@ -281,10 +303,10 @@ class Parser {
                     let significant = 0;
                     let at = pos;
                     literal = '';
-                    for (; at < end && (text.charCodeAt(at) | 32) !== Char.LowerE; at += 1) {
+                    for (; at < end && (text.charCodeAt(at) | 32) !== LOWER_E; at += 1) {
                         const code = text.charCodeAt(at);
-                        if (code !== Char.Dot && (significant > 0 || code !== Char.Zero)) significant += 1;
-                        literal += significant > 15 && code !== Char.Dot ? '0' : text.charAt(at);
+                        if (code !== DOT && (significant > 0 || code !== ZERO)) significant += 1;
+                        literal += significant > 15 && code !== DOT ? '0' : text.charAt(at);
                     }
                     literal += text.slice(at, end);
                 }
@@ -328,17 +350,17 @@ class Parser {
             case Token.Word:
                 return this.word(space);
             case Token.Quote:
-                if (text.charCodeAt(end) !== Char.Bang) return this.fail();
+                if (text.charCodeAt(end) !== BANG) return this.fail();
                 return this.named(space, end, this.unquoted(pos, end));
             case Token.Bracket: {
                 if (this.stored) {
-                    if (text.charCodeAt(end) !== Char.Bang) return this.fail();
+                    if (text.charCodeAt(end) !== BANG) return this.fail();
                     return this.prefixed(space, end, SheetKind.Id, text.slice(pos + 1, end - 1));
                 }
                 // Another workbook as a file writes it: its index, then the sheet, if any.
                 const sheet = lexAt(text, end);
                 const bang = tokenKind(sheet) === Token.Word ? tokenEnd(sheet) : end;
-                if (text.charCodeAt(bang) !== Char.Bang) return this.fail();
+                if (text.charCodeAt(bang) !== BANG) return this.fail();
                 return this.prefixed(space, bang, SheetKind.External, text.slice(pos, bang));
             }
             default:
@@ -351,7 +373,7 @@ class Parser {
     private word(space: string): FormulaNode {
         const { text, pos, end } = this;
         const after = text.charCodeAt(end);
-        if (after === Char.Open) {
+        if (after === OPEN) {
             const name = text.slice(pos, end).toUpperCase();
             this.next();
             const args: FormulaNode[] = [];
@@ -359,7 +381,7 @@ class Parser {
             this.height += 1;
             return branch(NodeKind.Call, 0, name, args, space, spaceEnd);
         }
-        if (after === Char.Bang) return this.bare(space, end);
+        if (after === BANG) return this.bare(space, end);
         const reference = this.reference(space, SheetKind.Host, '');
         if (reference) return reference;
         if (end - pos === 4 || end - pos === 5) {
@@ -369,9 +391,9 @@ class Parser {
                 return leaf(NodeKind.Boolean, upper === 'TRUE' ? 1 : 0, '', space, SheetKind.Host, '');
             }
         }
-        if (after === Char.Colon) {
+        if (after === COLON) {
             const last = lexAt(text, end + 1);
-            if (tokenKind(last) === Token.Word && text.charCodeAt(tokenEnd(last)) === Char.Bang) {
+            if (tokenKind(last) === Token.Word && text.charCodeAt(tokenEnd(last)) === BANG) {
                 return this.bare(space, tokenEnd(last));
             }
         }
@@ -501,10 +523,10 @@ class Parser {
         const row = this.legRow;
         const column = this.legColumn;
         const flags = this.legFlags;
-        if (text.charCodeAt(end) === Char.Colon) {
+        if (text.charCodeAt(end) === COLON) {
             const legEnd = this.leg(end + 1);
             const after = text.charCodeAt(legEnd);
-            const whole = after !== Char.Open && after !== Char.Bang && !continuesWord(after);
+            const whole = after !== OPEN && after !== BANG && !continuesWord(after);
             if (legEnd !== -1 && this.legKind === kind && whole) {
                 this.end = legEnd;
                 this.next();
@@ -528,13 +550,13 @@ class Parser {
         const { text } = this;
         let at = pos;
         let flags = 0;
-        if (text.charCodeAt(at) === Char.Dollar) {
+        if (text.charCodeAt(at) === DOLLAR) {
             flags = RefFlag.ColumnAbsolute;
             at += 1;
         }
         const lettersAt = at;
         for (;;) {
-            const letter = (text.charCodeAt(at) | 32) - Char.LowerA;
+            const letter = (text.charCodeAt(at) | 32) - LOWER_A;
             if (!(letter >= 0 && letter < 26)) break;
             at += 1;
         }
@@ -542,14 +564,14 @@ class Parser {
         const column = columnIndex(text, lettersAt, at);
         if (letters === 0) {
             if (flags !== 0) flags = RefFlag.RowAbsolute;
-        } else if (text.charCodeAt(at) === Char.Dollar) {
+        } else if (text.charCodeAt(at) === DOLLAR) {
             flags |= RefFlag.RowAbsolute;
             at += 1;
         }
         const digitsAt = at;
         let row = 0;
         for (;;) {
-            const digit = text.charCodeAt(at) - Char.Zero;
+            const digit = text.charCodeAt(at) - ZERO;
             if (!(digit >= 0 && digit <= 9)) break;
             row = row * 10 + digit;
             at += 1;
@@ -573,14 +595,14 @@ class Parser {
         let row = 0;
         let column = 0;
         this.legKind = 0;
-        if (text.charCodeAt(at) === Char.UpperR) {
+        if (text.charCodeAt(at) === UPPER_R) {
             at = this.storedIndex(at + 1);
             if (at === -1) return -1;
             row = this.index;
             if (this.absolute) flags = RefFlag.RowAbsolute;
             this.legKind = LEG_ROW;
         }
-        if (text.charCodeAt(at) === Char.UpperC) {
+        if (text.charCodeAt(at) === UPPER_C) {
             at = this.storedIndex(at + 1);
             if (at === -1) return -1;
             column = this.index;
@@ -598,14 +620,14 @@ class Parser {
     private storedIndex(pos: number): number {
         const { text } = this;
         let at = pos;
-        const bracket = text.charCodeAt(at) === Char.BracketOpen;
+        const bracket = text.charCodeAt(at) === BRACKET_OPEN;
         if (bracket) at += 1;
-        const negative = bracket && text.charCodeAt(at) === Char.Minus;
+        const negative = bracket && text.charCodeAt(at) === MINUS;
         if (negative) at += 1;
         const digitsAt = at;
         let value = 0;
         for (;;) {
-            const digit = text.charCodeAt(at) - Char.Zero;
+            const digit = text.charCodeAt(at) - ZERO;
             if (!(digit >= 0 && digit <= 9)) break;
             value = value * 10 + digit;
             at += 1;
@@ -614,7 +636,7 @@ class Parser {
         if (digits > 7) return -1;
         this.absolute = !bracket && digits > 0;
         if (bracket) {
-            if (digits === 0 || text.charCodeAt(at) !== Char.BracketClose) return -1;
+            if (digits === 0 || text.charCodeAt(at) !== BRACKET_CLOSE) return -1;
             this.index = negative ? -value : value;
             return at + 1;
         }

@@ -46,30 +46,28 @@ export const Token = {
 export type TokenKind = (typeof Token)[keyof typeof Token];
 
 // The characters the lexer and the parser look for, as the codes charCodeAt gives.
-export const Char = {
-    Bang: 33,
-    DoubleQuote: 34,
-    Hash: 35,
-    Dollar: 36,
-    Quote: 39,
-    Open: 40,
-    Plus: 43,
-    Minus: 45,
-    Dot: 46,
-    Zero: 48,
-    Nine: 57,
-    Colon: 58,
-    Less: 60,
-    Equals: 61,
-    Greater: 62,
-    UpperC: 67,
-    UpperR: 82,
-    BracketOpen: 91,
-    BracketClose: 93,
-    LowerA: 97,
-    LowerE: 101,
-    LowerZ: 122,
-} as const;
+export const BANG = 33;
+const DOUBLE_QUOTE = 34;
+const HASH = 35;
+export const DOLLAR = 36;
+const QUOTE = 39;
+export const OPEN = 40;
+const PLUS = 43;
+export const MINUS = 45;
+export const DOT = 46;
+export const ZERO = 48;
+const NINE = 57;
+export const COLON = 58;
+const LESS = 60;
+export const EQUALS = 61;
+const GREATER = 62;
+export const UPPER_C = 67;
+export const UPPER_R = 82;
+export const BRACKET_OPEN = 91;
+export const BRACKET_CLOSE = 93;
+export const LOWER_A = 97;
+export const LOWER_E = 101;
+const LOWER_Z = 122;
 
 // The error literals a formula may hold. An error leaf holds the place of its literal here, from 1, and the first
 // ten are the errors the engine computes, in the order of their codes.
@@ -162,34 +160,32 @@ export function lexAt(text: string, pos: number): number {
         default:
     }
     switch (code) {
-        case Char.Dot:
+        case DOT:
             return classOf(text.charCodeAt(end)) === DIGIT
                 ? (numberEnd(text, pos) << 6) | Token.Number
                 : (end << 6) | Token.Bad;
-        case Char.DoubleQuote:
+        case DOUBLE_QUOTE:
             return quotedEnd(text, pos, '"', Token.String);
-        case Char.Quote:
+        case QUOTE:
             return quotedEnd(text, pos, "'", Token.Quote);
-        case Char.BracketOpen: {
+        case BRACKET_OPEN: {
             const close = text.indexOf(']', end);
             return close === -1 ? (length << 6) | Token.Bad : ((close + 1) << 6) | Token.Bracket;
         }
-        case Char.Hash: {
+        case HASH: {
             // A # that starts no error literal is the spill operator, so A1#/Sheet2!B1 divides.
             const error = errorCode(text, pos);
             if (error !== 0) end = pos + ERROR_LITERALS[error - 1].length;
             return (end << 6) | (error !== 0 ? Token.Error : Token.Hash);
         }
-        case Char.Less: {
+        case LESS: {
             const next = text.charCodeAt(end);
-            if (next === Char.Equals) return ((end + 1) << 6) | Token.LessEqual;
-            if (next === Char.Greater) return ((end + 1) << 6) | Token.NotEqual;
+            if (next === EQUALS) return ((end + 1) << 6) | Token.LessEqual;
+            if (next === GREATER) return ((end + 1) << 6) | Token.NotEqual;
             return (end << 6) | Token.Less;
         }
-        case Char.Greater:
-            return text.charCodeAt(end) === Char.Equals
-                ? ((end + 1) << 6) | Token.GreaterEqual
-                : (end << 6) | Token.Greater;
+        case GREATER:
+            return text.charCodeAt(end) === EQUALS ? ((end + 1) << 6) | Token.GreaterEqual : (end << 6) | Token.Greater;
         default:
             return (end << 6) | (code < 128 && OPERATORS[code] !== 0 ? OPERATORS[code] : Token.Bad);
     }
@@ -215,7 +211,7 @@ export function errorCode(text: string, pos: number): number {
         let i = 1;
         for (; i < literal.length; i += 1) {
             const code = text.charCodeAt(pos + i);
-            if ((code >= Char.LowerA && code <= Char.LowerZ ? code - 32 : code) !== literal.charCodeAt(i)) break;
+            if ((code >= LOWER_A && code <= LOWER_Z ? code - 32 : code) !== literal.charCodeAt(i)) break;
         }
         if (i === literal.length) return index + 1;
     }
@@ -230,21 +226,21 @@ function classOf(code: number): number {
 }
 
 function isDigit(code: number): boolean {
-    return code >= Char.Zero && code <= Char.Nine;
+    return code >= ZERO && code <= NINE;
 }
 
 // Digits, an optional fraction and an optional exponent. A sign is an operator, never part of the number.
 function numberEnd(text: string, pos: number): number {
     let end = pos;
     while (isDigit(text.charCodeAt(end))) end += 1;
-    if (text.charCodeAt(end) === Char.Dot) {
+    if (text.charCodeAt(end) === DOT) {
         end += 1;
         while (isDigit(text.charCodeAt(end))) end += 1;
     }
-    if ((text.charCodeAt(end) | 32) === Char.LowerE) {
+    if ((text.charCodeAt(end) | 32) === LOWER_E) {
         let exponent = end + 1;
         const sign = text.charCodeAt(exponent);
-        if (sign === Char.Plus || sign === Char.Minus) exponent += 1;
+        if (sign === PLUS || sign === MINUS) exponent += 1;
         if (isDigit(text.charCodeAt(exponent))) {
             end = exponent + 1;
             while (isDigit(text.charCodeAt(end))) end += 1;
@@ -258,12 +254,12 @@ function wordEnd(text: string, pos: number): number {
     let end = pos;
     for (;;) {
         while (classOf(text.charCodeAt(end)) >= DIGIT) end += 1;
-        if (text.charCodeAt(end) !== Char.BracketOpen) return end;
+        if (text.charCodeAt(end) !== BRACKET_OPEN) return end;
         let digits = end + 1;
-        if (text.charCodeAt(digits) === Char.Minus) digits += 1;
+        if (text.charCodeAt(digits) === MINUS) digits += 1;
         let close = digits;
         while (isDigit(text.charCodeAt(close))) close += 1;
-        if (close === digits || text.charCodeAt(close) !== Char.BracketClose) return end;
+        if (close === digits || text.charCodeAt(close) !== BRACKET_CLOSE) return end;
         end = close + 1;
     }
 }
