@@ -200,7 +200,7 @@ function dataValidationsXml(rules: Record<string, SheetValidation>, lost: Lost):
 
 // Where rules overlap the last in order wins the cell, but the file orders by cell, so each rule loses the cells a
 // later rule holds. A rule the cuts leave with more ranges than a rule may hold is dropped and counted.
-export function withoutOverlaps(rules: Record<string, SheetValidation>, lost: Lost): Record<string, SheetValidation> {
+function withoutOverlaps(rules: Record<string, SheetValidation>, lost: Lost): Record<string, SheetValidation> {
     const kept: Record<string, SheetValidation> = {};
     // The rules from the last down. The index holds the ranges of the rules already walked, the later ones.
     const above = rangeIndex();

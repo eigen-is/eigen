@@ -9,7 +9,7 @@ import type {
 import { MAX_RULE_RANGES, orderedRules, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { generateNKeysBetween } from '@workspace/lib/vector';
 import type { CountedWarningCode } from '../../../../lib/document/transform/protocol';
-import { rulesXml, withoutOverlaps } from '../../../../lib/export/sheets/xlsx/rules';
+import { rulesXml } from '../../../../lib/export/sheets/xlsx/rules';
 import { styleRegistry } from '../../../../lib/export/sheets/xlsx/styles';
 import { readRules } from '../../../../lib/import/sheets/rules';
 import { readDxfs } from '../../../../lib/import/sheets/styles';
@@ -23,7 +23,9 @@ import { sheetXml } from '../../../fixtures/xlsx';
 function roundTrip(sheet: Partial<Sheet>) {
     const lost: CountedWarningCode[] = [];
     const styles = styleRegistry((code) => lost.push(code));
+    const started = performance.now();
     const xml = rulesXml({ id: 'fixture', name: 'Sheet1', ...sheet }, styles, (code) => lost.push(code));
+    const writeMs = performance.now() - started;
     const looks = readDxfs(parseOoxml(styles.xml()) ?? undefined, []);
     const read = readRules(parseOoxml(sheetXml({ after: xml })) ?? undefined, {
         dxfs: looks,
@@ -35,7 +37,7 @@ function roundTrip(sheet: Partial<Sheet>) {
         inline: (formula) => formula,
         dates: new Set(),
     });
-    return { xml, lost, looks, ...read, formats: formatList(read.conditionalFormats) };
+    return { xml, lost, looks, writeMs, ...read, formats: formatList(read.conditionalFormats) };
 }
 
 type FormatList = ReturnType<typeof formatList>;
@@ -397,15 +399,21 @@ describe('a data validation', () => {
             rule: validation({ type: 'dropdown', type2: '', value1: 'a,b', value2: '' }),
         }));
 
+    // Each rule's ranges as the file lists them, in the file's order of rules.
+    const sqrefs = (xml: string) => [...xml.matchAll(/ sqref="([^"]*)"/g)].map(([, sqref]) => sqref.split(' '));
+
     test('many rules of many ranges, each in a band of its own, are kept whole in a moment', () => {
         for (const height of [64, 16384]) {
-            const dataValidations = numbered(bandList(height));
-            const started = performance.now();
-            const kept = withoutOverlaps(dataValidations, () => {});
-            expect(performance.now() - started).toBeLessThan(2000);
-            expect(kept).toEqual(dataValidations);
+            const { xml, lost, writeMs } = roundTrip({ dataValidations: numbered(bandList(height)) });
+            expect(writeMs).toBeLessThan(2000);
+            expect(lost).toEqual([]);
+            const written = sqrefs(xml);
+            expect(written.map((ranges) => ranges.length)).toEqual(Array(64).fill(MAX_RULE_RANGES));
+            expect(written.map(([first]) => first)).toEqual(
+                Array.from({ length: 64 }, (_, k) => `A${height * k + 1}:A${height * k + height}`),
+            );
         }
-    });
+    }, 30_000);
 
     test('many rules of many ranges, each in a band a higher rule touches once, are cut in a moment', () => {
         const dataValidations = numbered([
@@ -415,10 +423,8 @@ describe('a data validation', () => {
                 rule: validation({ type: 'dropdown', type2: '', value1: 'x', value2: '' }),
             },
         ]);
-        const lost: CountedWarningCode[] = [];
-        const started = performance.now();
-        const kept = withoutOverlaps(dataValidations, (code) => lost.push(code));
-        expect(performance.now() - started).toBeLessThan(2000);
+        const { lost, writeMs, ...kept } = roundTrip({ dataValidations });
+        expect(writeMs).toBeLessThan(2000);
         expect(lost).toEqual([]);
         for (const [r, c] of [
             [0, 0],
@@ -427,9 +433,9 @@ describe('a data validation', () => {
             [64 * 63, 0],
             [64 * 63 + 63, MAX_RULE_RANGES - 1],
         ]) {
-            expect(ruleAt(kept, r, c)).toEqual(ruleAt(dataValidations, r, c));
+            expect(ruleAt(kept.dataValidations, r, c)).toEqual(ruleAt(dataValidations, r, c));
         }
-    });
+    }, 30_000);
 
     // Whole rows, each rule's a row in every band of 64, so each range covers too many square tiles to keep in them.
     // A lookup that checks every such range against every other takes most of a minute.
@@ -443,11 +449,11 @@ describe('a data validation', () => {
                 rule: validation({ type: 'dropdown', type2: '', value1: 'a,b', value2: '' }),
             })),
         );
-        const started = performance.now();
-        const kept = withoutOverlaps(dataValidations, () => {});
-        expect(performance.now() - started).toBeLessThan(2000);
-        expect(kept).toEqual(dataValidations);
-    });
+        const { xml, lost, writeMs } = roundTrip({ dataValidations });
+        expect(writeMs).toBeLessThan(2000);
+        expect(lost).toEqual([]);
+        expect(sqrefs(xml).map((ranges) => ranges.length)).toEqual(Array(64).fill(2048));
+    }, 30_000);
 
     // A whole column sits in the index's grid of tall bands, while single cells sit in its square tiles and a whole row
     // in its wide bands. A lookup must find the overlaps across grids both ways: a column under higher cells and rows,
@@ -462,8 +468,7 @@ describe('a data validation', () => {
             { ranges: [column(1), column(3)], rule: rule('columns') },
             { ranges: [cell(2, 1), row(9), cell(70_000, 3)], rule: rule('top') },
         ]);
-        const lost: CountedWarningCode[] = [];
-        const kept = withoutOverlaps(dataValidations, (code) => lost.push(code));
+        const { lost, dataValidations: kept = {} } = roundTrip({ dataValidations });
         expect(lost).toEqual([]);
         const rows = [0, 2, 9, 19, 29, 39, 70_000, REFERENCE_ROW_COUNT - 1];
         for (const r of rows) {
