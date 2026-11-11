@@ -122,6 +122,8 @@ export type Entry = {
     // How many arguments come before the ones that repeat, and how many repeat together.
     readonly fixed: number;
     readonly group: number;
+    // Whether a parameter takes criteria, or the numbers or blanks they match.
+    readonly criteria: boolean;
     // The place of the range of numbers that takes its size from the criteria range before it, or -1.
     readonly sized: number;
     // Whether the body gets its arguments as they are read, one per argument: no reader, no list.

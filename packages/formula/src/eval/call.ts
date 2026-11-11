@@ -60,6 +60,8 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
     else {
         for (let i = 0; i < size && result === null; i += 1) {
             const param = slotOf(entry, i);
+            // A token is what the body gets, and a number where a number is read is read already.
+            if (param.prepare === Prepare.Lazy || (param.read === Read.Number && typeof held[i] === 'number')) continue;
             const value = read(param, held[i]);
             if (isError(value) && ends(param)) result = value;
             held[i] = value;

@@ -233,6 +233,7 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
         fixed,
         group,
         sized,
+        criteria: params.some((param) => param.read >= Read.Where && param.read <= Read.Blanks),
         volatile: params.some((param) => param.read === Read.Random || param.read === Read.Now),
         plain,
         run: body,

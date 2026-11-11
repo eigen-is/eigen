@@ -23,7 +23,7 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
     const { params } = entry;
     const { held, args } = frame;
     frame.failed = null;
-    const unmatched = weigh(ctx, entry, frame, count);
+    const unmatched = entry.criteria ? weigh(ctx, entry, frame, count) : null;
     if (unmatched !== null) return unmatched;
     let at = 0;
     for (let p = 0; p < params.length; p += 1) {
@@ -43,8 +43,13 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
             args[p] = frame.numbers(p).bind(at, at + 1, Families.Numbers, false);
         } else if (family === null) args[p] = frame.matches;
         else {
-            for (let i = at; i < to; i += 1) settle(ctx, held[i], family);
-            for (let i = at; family.errors === Errors.Result && i < to; i += 1) {
+            // Most often the one argument is one range: its cells are computed and looked at in one go.
+            const one = to === at + 1 && isReference(value) && value.next === null ? value : null;
+            if (one !== null) ctx.recalc.settleArea(one);
+            else for (let i = at; i < to; i += 1) settle(ctx, held[i], family);
+            const found = family.errors !== Errors.Result ? null : one !== null ? firstError(ctx, one) : null;
+            if (found !== null) return found;
+            for (let i = at; one === null && family.errors === Errors.Result && i < to; i += 1) {
                 const error = errorIn(ctx, held[i], family);
                 if (error !== null) return error;
             }

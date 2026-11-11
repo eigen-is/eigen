@@ -153,8 +153,16 @@ export class Evaluator {
 
     // The cell a formula is in, as a reference.
     public here(sheet: Sheet, row: number, column: number): Reference {
-        const at = { top: row, left: column, bottom: row, right: column };
-        return { type: ValueType.Reference, sheet: this.place(sheet), ...at, next: null };
+        const here = this.place(sheet);
+        return {
+            type: ValueType.Reference,
+            sheet: here,
+            top: row,
+            left: column,
+            bottom: row,
+            right: column,
+            next: null,
+        };
     }
 
     // An element of an array as a value: of a reference its first cell.

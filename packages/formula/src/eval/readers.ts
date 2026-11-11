@@ -205,12 +205,16 @@ export class Table {
         const { value } = this;
         const piece = this.spare();
         if (isReference(value)) {
-            const corner = { top: value.top + top, left: value.left + left };
+            const first = value.top + top;
+            const start = value.left + left;
+            const { type, sheet } = value;
             return piece.over({
-                ...value,
-                ...corner,
-                bottom: corner.top + rows - 1,
-                right: corner.left + columns - 1,
+                type,
+                sheet,
+                top: first,
+                left: start,
+                bottom: first + rows - 1,
+                right: start + columns - 1,
                 next: null,
             });
         }
