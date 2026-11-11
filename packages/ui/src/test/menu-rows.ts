@@ -8,19 +8,19 @@ export function collapseSeparators(rows: (string | undefined)[]): (string | unde
     );
 }
 
-// The open menu's rows, each label without its shortcut, which reads per platform. A group's rows (a radio group's)
-// read one by one.
+// A row's label without its trailing shortcut, which reads per platform and can repeat a letter of the label (Eraser, E).
+export function rowLabel(row: Element): string {
+    const text = row.textContent?.trim() ?? '';
+    const shortcut = row.querySelector('[data-slot="dropdown-menu-shortcut"]')?.textContent ?? '';
+    return text.slice(0, text.length - shortcut.length).trim();
+}
+
+// The open menu's rows, each label without its shortcut. A group's rows (a radio group's) read one by one.
 export function menuRows(): (string | undefined)[] {
     return collapseSeparators(
         [...(document.querySelector('[role="menu"]')?.children ?? [])]
             .flatMap((row) => (row.getAttribute('role') === 'group' ? [...row.children] : [row]))
-            .map((row) =>
-                row.getAttribute('role') === 'separator'
-                    ? '—'
-                    : (row.textContent ?? '')
-                          .replace(row.querySelector('[data-slot="dropdown-menu-shortcut"]')?.textContent ?? '', '')
-                          .trim(),
-            ),
+            .map((row) => (row.getAttribute('role') === 'separator' ? '—' : rowLabel(row))),
     );
 }
 

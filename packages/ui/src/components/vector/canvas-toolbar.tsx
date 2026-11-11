@@ -141,29 +141,24 @@ export function CanvasToolbar({
                             onUndo={undo}
                             onRedo={redo}
                             selectionItems={
-                                <>
-                                    <ClipboardMenuItems
-                                        onCut={canEdit ? () => canvasRef.current?.cut() : undefined}
-                                        onCopy={() => canvasRef.current?.copy()}
-                                        onPaste={canEdit ? () => canvasRef.current?.paste() : undefined}
-                                        onDuplicate={canEdit ? () => canvasRef.current?.duplicate() : undefined}
-                                        onDelete={canEdit ? () => canvasRef.current?.delete() : undefined}
-                                        selectionEmpty={selectionEmpty}
-                                    />
-                                    {canEdit && (
-                                        <>
-                                            <DropdownMenuSeparator />
-                                            <ToolMenuItems tools={EDIT_TOOLS} setTool={setTool} />
-                                            <DropdownMenuCheckboxItem
-                                                checked={toolLocked}
-                                                onCheckedChange={setToolLocked}
-                                            >
-                                                Keep selected tool
-                                                <DropdownMenuShortcut>{TOOL_LOCK_KEY}</DropdownMenuShortcut>
-                                            </DropdownMenuCheckboxItem>
-                                        </>
-                                    )}
-                                </>
+                                canEdit && (
+                                    <>
+                                        <ClipboardMenuItems
+                                            onCut={() => canvasRef.current?.cut()}
+                                            onCopy={() => canvasRef.current?.copy()}
+                                            onPaste={() => canvasRef.current?.paste()}
+                                            onDuplicate={() => canvasRef.current?.duplicate()}
+                                            onDelete={() => canvasRef.current?.delete()}
+                                            selectionEmpty={selectionEmpty}
+                                        />
+                                        <DropdownMenuSeparator />
+                                        <ToolMenuItems tools={EDIT_TOOLS} setTool={setTool} />
+                                        <DropdownMenuCheckboxItem checked={toolLocked} onCheckedChange={setToolLocked}>
+                                            Keep selected tool
+                                            <DropdownMenuShortcut>{TOOL_LOCK_KEY}</DropdownMenuShortcut>
+                                        </DropdownMenuCheckboxItem>
+                                    </>
+                                )
                             }
                         />
                         {canEdit && (

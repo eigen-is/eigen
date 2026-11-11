@@ -3,7 +3,7 @@
 // as Google Slides' does, and keeps the tools, which below the compact breakpoint no button reaches.
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
-import { collapseSeparators } from '../../menu-rows';
+import { menuRows, rowLabel } from '../../menu-rows';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
@@ -130,19 +130,6 @@ function handle(log: string[] = []) {
     };
 }
 
-// A row's label without its trailing shortcut, which reads per platform and can repeat a letter of the label (Eraser, E).
-function rowLabel(item: Element) {
-    const text = item.textContent?.trim() ?? '';
-    const shortcut = item.querySelector('[data-slot="dropdown-menu-shortcut"]')?.textContent ?? '';
-    return text.slice(0, text.length - shortcut.length).trim();
-}
-// The open menu's rows, a separator as '—'.
-const menuRows = () =>
-    collapseSeparators(
-        [...(document.querySelector('[role="menu"]')?.children ?? [])].map((row) =>
-            row.getAttribute('role') === 'separator' ? '—' : rowLabel(row),
-        ),
-    );
 const menuItem = (label: string) =>
     [...document.querySelectorAll('[role="menuitem"]')].find((item) => rowLabel(item) === label);
 const disabledRows = () =>
@@ -177,10 +164,10 @@ test('with nothing selected only Paste of the clipboard rows stays enabled', asy
     expect(disabledRows()).toEqual(['Undo', 'Redo', 'Cut', 'Copy', 'Duplicate', 'Delete']);
 });
 
-test('a viewer keeps Copy and Find, and no row that writes', async () => {
+test('a viewer, who selects nothing on the canvas, keeps only Find', async () => {
     await render({ canEdit: false });
     await openMenu('Edit');
-    expect(menuRows()).toEqual(['Copy', '—', 'Find']);
+    expect(menuRows()).toEqual(['Find']);
 });
 
 test("an Edit row runs the canvas's own action", async () => {
