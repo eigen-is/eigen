@@ -104,7 +104,8 @@ describe('a retry stays inside the storage deadline', () => {
                 jest.advanceTimersByTime(STORAGE_TIMEOUT_MS - 100);
                 return exists;
             },
-            () => fake.heads.get(key) === 1,
+            // The deadline and the wait it must stop are both armed.
+            () => jest.getTimerCount() === 2,
         );
         expect(await probe).toMatchObject({ status: 503 });
         // A wait the deadline did not stop has run out by now, and its HEAD has arrived.
