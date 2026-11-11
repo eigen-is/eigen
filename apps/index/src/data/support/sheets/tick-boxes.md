@@ -31,7 +31,7 @@ A cell that holds a formula does not toggle. Writing `TRUE` into it would replac
 
 ## What the cell holds
 
-A ticked box is the value `TRUE` and an empty box is `FALSE`. Nothing else is stored, which means a `TRUE` that arrives some other way (typed in, pasted, imported from Excel, or produced by a formula) draws as a ticked box too.
+A ticked box is the value `TRUE` and an empty box is `FALSE`. So a `TRUE` that arrives some other way (typed in, pasted, imported from Excel, or produced by a formula) draws as a ticked box too.
 
 If a cell in the range holds something else, such as a word, it shows the word and no box, with a red triangle in its top-left corner. Clear the cell or type `TRUE` or `FALSE` to get the box back.
 

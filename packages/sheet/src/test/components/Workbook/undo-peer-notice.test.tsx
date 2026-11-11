@@ -280,7 +280,7 @@ test('the Edit menu keeps Undo pressable when a peer took it away, and pressing 
     const sheet = await mount();
     const disabled = (label: string) =>
         [...document.querySelectorAll('[role="menu"] [role="menuitem"]')]
-            .find((entry) => entry.textContent?.startsWith(label))
+            .find((entry) => entry.textContent?.trim().startsWith(label))
             ?.hasAttribute('data-disabled');
 
     await sheet.openEditMenu();
@@ -295,7 +295,7 @@ test('the Edit menu keeps Undo pressable when a peer took it away, and pressing 
     expect(disabled('Undo')).toBe(false);
     expect(disabled('Redo')).toBe(true);
     const undoRow = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find((entry) =>
-        entry.textContent?.startsWith('Undo'),
+        entry.textContent?.trim().startsWith('Undo'),
     );
     await act(async () => undoRow?.click());
     expect(await takeNotice()).toBe(CANT_UNDO);

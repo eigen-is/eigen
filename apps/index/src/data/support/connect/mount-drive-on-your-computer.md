@@ -6,10 +6,10 @@ category: WebDAV
 tags: [webdav, drive, finder, windows, mount]
 crossSections: [drive]
 related: [drive/get-started, drive/share-a-file]
-updated: 2026-06-30
+updated: 2026-11-11
 ---
 
-Eigen Drive supports WebDAV (RFC 4918), so you can connect any of your drives as a network volume on macOS or Windows. Files appear in Finder or File Explorer like a local folder, so you can open, edit, and save them without going through the browser.
+Eigen Drive supports WebDAV, so you can connect any of your drives as a network volume on macOS or Windows. Files appear in Finder or File Explorer like a local folder, so you can open, edit, and save them without going through the browser.
 
 ## Before you start
 
@@ -32,7 +32,7 @@ https://<your-eigen-host>/webdav/<ownerId>/<mountId>/
 
 <div class="eigen-callout">
 
-Finder's built-in WebDAV support works but can be slow on large folders and caches metadata aggressively. For better performance, consider [Mountain Duck](https://mountainduck.io) (commercial) or [rclone](https://rclone.org) (free, command-line).
+Finder's built-in WebDAV support works but can be slow on large folders and holds on to old file information for a long time. For better performance, consider [Mountain Duck](https://mountainduck.io) (commercial) or [rclone](https://rclone.org) (free, command-line).
 
 </div>
 
@@ -47,11 +47,11 @@ Windows connects WebDAV drives through the **WebClient** service.
 
 <div class="eigen-callout">
 
-Use **Map network drive** and paste the URL straight into the **Folder** field. Do not use the **Add a network location** wizard (the "Connect to a Web site that you can use to store your documents and pictures" link). It checks the parent folders of the address to validate it, and Eigen deliberately does not expose those, so the wizard reports the address as invalid even though the drive itself works fine.
+Use **Map network drive** and paste the URL straight into the **Folder** field. Do not use the **Add a network location** wizard (the "Connect to a Web site that you can use to store your documents and pictures" link). That wizard reports the address as invalid, even though the drive itself works fine.
 
 </div>
 
-Windows requires HTTPS for HTTP Basic authentication. Plain HTTP connections are rejected. There is also a 50 MB default upload size limit; large files may fail unless the registry setting `FileSizeLimitInBytes` under `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WebClient\Parameters` is increased.
+Windows only signs in over HTTPS. Plain HTTP connections are rejected. Windows also limits uploads to 50 MB by default. Large files may fail unless you increase the registry setting `FileSizeLimitInBytes` under `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WebClient\Parameters`.
 
 ## What you can do over WebDAV
 

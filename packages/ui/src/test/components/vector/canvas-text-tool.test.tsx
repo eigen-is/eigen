@@ -1,5 +1,5 @@
 // The Text tool places a text box: a rectangle that fits its text. An empty one is gone once its editor closes, where an
-// empty rectangle the user drew stays, painted or not.
+// empty rectangle the user drew stays, painted or not. The host hears when an editor opens and closes.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -57,7 +57,7 @@ afterEach(() => unmount());
 
 let container: HTMLElement;
 
-async function render(tool: VectorTool) {
+async function render(tool: VectorTool, onTextEditingChange: (textEditing: boolean) => void = () => {}) {
     function Host() {
         const canvas = useCanvasDoc('owner', 'mount', 'drawing', VECTOR_STYLE_DEFAULTS);
         const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -79,6 +79,8 @@ async function render(tool: VectorTool) {
             toggle: () => {},
             aspectLocked: false,
             publishCursor: () => {},
+            canvasRef: { current: null },
+            onTextEditingChange,
         });
     }
     const rendered = await renderInDocument(
@@ -186,4 +188,14 @@ test('an empty rectangle without fill or border stays when its editor closes', a
 
     await click(900, 900);
     expect(elements().map((el) => el.id)).toEqual(['box']);
+});
+
+// The host's toolbar greys its Edit rows from this, as the canvas's keys stand down.
+test('the canvas tells its host while a text editor is open', async () => {
+    const reports: boolean[] = [];
+    await render('select', (textEditing) => reports.push(textEditing));
+    await doubleClick(200, 200);
+    expect(reports).toEqual([true]);
+    await click(900, 900);
+    expect(reports).toEqual([true, false]);
 });

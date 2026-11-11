@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, spreadsheet, create, edit, cells, data]
 related: [sheets/get-started, sheets/enter-and-edit-data]
 order: 20
-updated: 2026-11-09
+updated: 2026-11-11
 ---
 
 You can create a spreadsheet directly in Drive or from inside Sheets, then enter data and edit it using the toolbar menus and keyboard shortcuts.
@@ -47,7 +47,7 @@ To delete the contents of one or more cells, select them and press **Backspace**
 
 Click a single cell to select it. To select a range, click and drag. To select a whole column or row, click its header letter or number.
 
-You can select multiple separate ranges by holding **Ctrl** (Windows and Linux) or **⌘** (Mac) while clicking.
+You can select multiple separate ranges by holding **Ctrl** (Windows and Linux) or **⌘** (Mac) while clicking. To select every cell of the sheet, press **Ctrl+A** (Mac: **⌘A**) or choose **Edit → Select all**.
 
 ## Copy, cut, and paste
 
@@ -72,7 +72,15 @@ Copied cells paste into other apps as rows and columns, the same ones a paste in
 
 Both are also available under **Edit → Undo** and **Edit → Redo**.
 
-Once someone else edits the spreadsheet, you can no longer undo or redo your last insert or delete of rows or columns, your last added, duplicated, deleted or renamed sheet, a paste that added rows or columns, a conditional format rule you removed or added to a sheet that already has rules, or anything you did before it. What you did after it still undoes. If someone else renames a sheet, you can no longer undo or redo anything you did before that. Your own edit in another tab or on another device counts too.
+Once someone else edits the spreadsheet, you can no longer undo or redo:
+
+- Your last insert or delete of rows or columns.
+- Your last added, duplicated, deleted or renamed sheet.
+- A paste that added rows or columns.
+- A conditional format rule you removed, or one you added to a sheet that already has rules.
+- Anything you did before one of these.
+
+What you did after it still undoes. If someone else renames a sheet, you can no longer undo or redo anything you did before that. Your own edit in another tab or on another device counts too.
 
 When there is nothing left to undo for this reason, pressing undo shows a notice: "Someone else edited this spreadsheet, so this can't be undone anymore." Pressing redo says: "Someone else edited this spreadsheet, so this can't be redone anymore." The notice stops once you make a new edit.
 

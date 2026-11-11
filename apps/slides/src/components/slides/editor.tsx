@@ -76,6 +76,8 @@ export function SlideEditor({
     });
     const { tool, setTool, toolLocked, setToolLocked } = useTool();
     const { selectedIds, setSelectedIds, toggle } = useSelection();
+    // The canvas reports an open text editor, so the toolbar's Edit rows stand down as the canvas's keys do.
+    const [textEditing, setTextEditing] = useState(false);
     const { user } = useAuth();
     // Presence carries the frame, so a peer's cursor shows only on the slide they are on.
     const publishCursor = useCanvasPresence(doc.provider, user, selectedIds, frameId);
@@ -127,6 +129,7 @@ export function SlideEditor({
         isMobile,
         onReveal: revealElement,
     });
+    const addComment = canWrite && chatFolderId ? comments.addCommentTo : undefined;
 
     // A search result names its slide, such as "Slide 3". The number follows the stored frame order.
     const frameNumbers = useMemo(() => new Map(doc.frames.map((f, i) => [f.id, i + 1])), [doc.frames]);
@@ -329,9 +332,12 @@ export function SlideEditor({
                     undoManager={doc.undoManager}
                     tool={tool}
                     setTool={setTool}
+                    selectedIds={selectedIds}
+                    textEditing={textEditing}
                     toolLocked={toolLocked}
                     setToolLocked={setToolLocked}
                     onInsertImage={insertImage}
+                    onAddComment={addComment}
                     canvasRef={canvasRef}
                     onAccessDialogOpen={onAccessDialogOpen}
                     createLabel="New slides"
@@ -434,9 +440,10 @@ export function SlideEditor({
                             aspectLocked={aspectLocked}
                             publishCursor={publishCursor}
                             canvasRef={canvasRef}
+                            onTextEditingChange={setTextEditing}
                             onOpenCard={comments.openCard}
                             commentCards={comments.lifecycle.cards}
-                            onAddComment={canWrite && chatFolderId ? comments.addCommentTo : undefined}
+                            onAddComment={addComment}
                             onCommentHover={comments.onCommentHover}
                             searchMatchedIds={searchMatchedIds}
                             searchActiveId={searchActiveId}

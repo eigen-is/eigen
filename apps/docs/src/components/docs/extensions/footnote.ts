@@ -2,6 +2,7 @@
 // in the note's editor, and the numbering the list under the page shows. A note is one of the doc's stories: finding
 // the open one, forwarding its edits and guarding its formatting live with the stories.
 
+import type { Hotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/core';
 import type { Fragment, Node as PMNode } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
@@ -10,7 +11,11 @@ import { ReplaceAroundStep, ReplaceStep } from '@tiptap/pm/transform';
 import type { DecorationSource, NodeView } from '@tiptap/pm/view';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { FootnoteNode, footnoteNumbers, insertFootnote } from '@workspace/lib/docs/eigendoc';
+import { proseMirrorKey } from './prosemirror-key';
 import { registerStoryView } from './story';
+
+// Google's ⌘⌥F.
+export const INSERT_FOOTNOTE_HOTKEY = 'Mod+Alt+F' satisfies Hotkey;
 
 export type FootnoteOptions = {
     // A press on a reference; the body's editor only.
@@ -129,10 +134,9 @@ export const Footnote = FootnoteNode.extend<FootnoteOptions>({
         return { onOpen: () => {}, onInsert: () => false };
     },
 
-    // Google's ⌘⌥F.
     addKeyboardShortcuts() {
         return {
-            'Mod-Alt-f': () => this.options.onInsert(),
+            [proseMirrorKey(INSERT_FOOTNOTE_HOTKEY)]: () => this.options.onInsert(),
         };
     },
 

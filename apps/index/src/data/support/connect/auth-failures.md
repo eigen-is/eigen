@@ -6,14 +6,14 @@ category: Authentication
 tags: [authentication, app passwords, imap, caldav, webdav, "401", integrations]
 related: [connect/app-passwords, connect/overview]
 order: 200
-updated: 2026-09-13
+updated: 2026-11-11
 ---
 
 If an external client shows a sign-in error or refuses to connect, the cause is almost always one of three things: the wrong password, the wrong username, or a connection over plain HTTP instead of HTTPS. This article covers each case.
 
 ## 401 Unauthorized
 
-A `401 Unauthorized` response means the server received your credentials but could not verify them.
+A `401 Unauthorized` error means Eigen received your username and password but could not confirm them.
 
 **The password was typed or pasted incorrectly.** App passwords are long and easy to mis-copy. Open the [**Integrations**](/space/services) page, find the password in the **App passwords** list, and delete it using the trash icon. Then click **Generate** to create a fresh one. Copy the new password straight from the box before you click **Done**.
 
@@ -23,7 +23,7 @@ A `401 Unauthorized` response means the server received your credentials but cou
 
 **The app password belongs to a different account.** Each app password is tied to the account that created it. If you have more than one Eigen account, make sure the app password matches the email address you are entering as the username.
 
-**Too many sign-ins have already failed.** After 10 failed sign-ins on one email address within 15 minutes, or 50 from one internet address, Eigen stops checking passwords for a while and answers `429 Too many failed authentication attempts` instead of `401`. Most clients report that as a sign-in failure too. Switch the client to an app password: a valid app password is checked before this limit and is never refused, and a successful sign-in clears the count for your address. Otherwise, stop the client that keeps retrying and wait for the 15 minutes to pass, or it will keep the count topped up.
+**Too many sign-ins have already failed.** After 10 failed sign-ins on one email address within 15 minutes, or 50 from one internet address, Eigen stops checking passwords for a while and answers `429 Too many failed authentication attempts` instead of `401`. Most clients report that as a sign-in failure too. Switch the client to an app password. A valid app password is never refused, even while this limit is active, and a successful sign-in clears the count for your address. Otherwise, stop the client that keeps retrying and wait for the 15 minutes to pass. A client that keeps trying keeps the count up.
 
 **The account is a guest account.** Guest accounts cannot be used from an external client at all. The server answers `403 Guests cannot access this resource`, which most clients show as a password problem. Use Eigen in the browser instead, or ask whoever runs your Eigen server if you need a full account.
 
@@ -41,7 +41,7 @@ The CalDAV server URL for most clients is `https://<your-eigen-host>/dav/`. Thun
 
 <div class="eigen-callout">
 
-The IMAP server rejects plain (unencrypted) connections regardless of whether the password is correct.
+Eigen refuses an unencrypted IMAP connection, even when the password is correct.
 
 </div>
 

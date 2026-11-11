@@ -7,10 +7,10 @@ tags: [webdav, drive, rclone, mountain-duck, sync, backup]
 related: [connect/mount-drive-on-your-computer, connect/app-passwords]
 crossSections: [drive]
 order: 50
-updated: 2026-06-08
+updated: 2026-11-11
 ---
 
-Eigen Drive supports WebDAV, and the built-in WebDAV client in Finder or File Explorer works. On large folders, though, Finder can be slow and caches file metadata aggressively. rclone and Mountain Duck are two well-regarded alternatives that handle those cases better. Both use exactly the same connection details as the built-in client.
+Eigen Drive supports WebDAV, and the built-in WebDAV client in Finder or File Explorer works. On large folders, though, Finder can be slow, and it holds on to old file information for a long time. rclone and Mountain Duck are two well-regarded alternatives that handle those cases better. Both use exactly the same connection details as the built-in client.
 
 ## Before you start
 
@@ -63,7 +63,7 @@ Eigen document files (such as `.eigendoc` or `.eigensheets`) appear as folders i
 
 ## Connect with Mountain Duck
 
-[Mountain Duck](https://mountainduck.io) is a commercial app for macOS and Windows that mounts WebDAV drives in Finder and File Explorer using the operating system's native file provider. It handles reconnects automatically and avoids the metadata caching issues that affect the built-in Finder WebDAV client.
+[Mountain Duck](https://mountainduck.io) is a commercial app for macOS and Windows that mounts WebDAV drives in Finder and File Explorer. It reconnects automatically and avoids the old file information that affects the built-in Finder WebDAV client.
 
 To add a new connection, open Mountain Duck and create a new WebDAV (HTTPS) bookmark. Enter:
 

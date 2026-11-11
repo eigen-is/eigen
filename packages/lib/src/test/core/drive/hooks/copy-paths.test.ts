@@ -1,6 +1,6 @@
 // A batch copy keeps what copied when part of it fails, and says which sources failed and why, so a retry sends
 // only those and nothing lands twice. Copy to… and Save to Drive also say how many items copied, and a media
-// insert uses what copied.
+// insert uses what copied. Make a copy lands beside its original as "Copy of" its name and says so.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '../../../../types/drive';
 import { renderHook } from '../../../render-hook';
@@ -35,17 +35,20 @@ const TARGET = { targetOwnerId: OWNER, targetMountId: 'm1', targetParentId: 'med
 const GOOD = path('good');
 const BAD = path('bad');
 
-// The source ids the copy route was asked for, in order. The source `bad` always fails.
+// The source ids the copy route was asked for, in order, and the bodies. The source `bad` always fails.
 const posted: string[] = [];
+const bodies: unknown[] = [];
 
 beforeEach(() => {
     toasts.length = 0;
     posted.length = 0;
+    bodies.length = 0;
     g.fetch = async (url: string, init?: RequestInit) => {
         const sourceId = /\/path\/([^/]+)\/copy$/.exec(url)?.[1] ?? '';
         posted.push(sourceId);
         if (sourceId === 'bad') return new Response('Server error', { status: 500 });
         const body = JSON.parse(String(init?.body));
+        bodies.push(body);
         return Response.json(path(`copy-of-${sourceId}`, body.targetParentId));
     };
 });
@@ -170,6 +173,43 @@ describe('useCopyToMediaFolder', () => {
         const { AppError } = await import('../../../../core/api-error');
         const { error } = await copy('media', [BAD]);
         expect(error).toBeInstanceOf(AppError);
+        expect(toasts).toEqual(['error: Server error (500)']);
+    });
+});
+
+describe('useMakeCopy', () => {
+    async function makeCopy(source: DrivePath): Promise<{ result: DrivePath | null; error: unknown }> {
+        const { act } = await import('react');
+        const { useMakeCopy } = await import('../../../../core/drive/hooks/writes');
+        const { queryClient } = trackingClient();
+        const { latest, unmount } = await renderHook(() => useMakeCopy(), queryClient);
+        const outcome: { result: DrivePath | null; error: unknown } = { result: null, error: null };
+        await act(async () => {
+            await latest.mutateAsync(source).then(
+                (result) => {
+                    outcome.result = result;
+                },
+                (error) => {
+                    outcome.error = error;
+                },
+            );
+        });
+        await unmount();
+        return outcome;
+    }
+
+    test('the copy lands in the folder of its original, named "Copy of" it, and a toast says so', async () => {
+        const { result } = await makeCopy(path('plan', 'projects'));
+        expect(bodies).toEqual([
+            { targetOwnerId: OWNER, targetMountId: 'm1', targetParentId: 'projects', name: 'Copy of plan.png' },
+        ]);
+        expect(result?.id).toBe('copy-of-plan');
+        expect(toasts).toEqual(['success: Copy made']);
+    });
+
+    test('a failed copy toasts the server error and no success', async () => {
+        const { error } = await makeCopy(BAD);
+        expect(error).not.toBeNull();
         expect(toasts).toEqual(['error: Server error (500)']);
     });
 });

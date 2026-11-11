@@ -4,7 +4,7 @@
 // occurrences, and an account that appears later is sent what it was invited to. The event writes call it once they
 // commit, such as a save or a delete, and a guest's answer to an organizer on this server goes back the same way.
 
-import { heldAttendees, isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
+import { isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
 import { getServerSettings } from '../config/server-settings';
 import type { Home } from '../home';
@@ -25,6 +25,7 @@ import type { InvitationRequest } from './types';
 // a series carries its `exceptions`, so a guest's copy never shows a moved or deleted date at its old slot.
 export async function propagateInvitation(
     organizerHome: Home,
+    organizer: Organizer,
     event: CalendarEvent,
     user: User,
     oldAttendees: readonly Attendee[],
@@ -36,7 +37,6 @@ export async function propagateInvitation(
     const newEmails = new Set(newAttendees.map((a) => a.email.toLowerCase()));
     const selves = new Set([user.email.toLowerCase(), organizerHome.user.email.toLowerCase()]);
     const notSelf = (a: Attendee) => !selves.has(a.email.toLowerCase());
-    const organizer = organizerOf(organizerHome, user);
     let request: OutboundICalEvent | undefined;
 
     for (const attendee of newAttendees.filter(notSelf)) {
@@ -103,13 +103,12 @@ export async function propagateRsvp(
 // `attendees` is who held the event, because a cancelled occurrence is an EXDATE with no guest list of its own.
 export async function propagateCancellation(
     organizerHome: Home,
-    user: User | undefined,
+    organizer: Organizer,
     cancelled: CalendarEvent,
     attendees: readonly Attendee[],
     series?: CalendarEvent,
 ): Promise<void> {
     const occurrence = occurrenceRevision(cancelled, series);
-    const organizer = organizerOf(organizerHome, user);
     for (const attendee of attendees) {
         try {
             const targetUser = await getUserByEmail(attendee.email);
@@ -134,7 +133,7 @@ export async function propagateCancellation(
     }
 }
 
-// What a newcomer to the server is owed when their account appears: each series that lists them, and each occurrence
+// What a newcomer is owed when their account appears: each live series that lists them, and each live occurrence
 // that lists them while its series doesn't. An event somebody else organizes is not this Home's to send, linked or not.
 export function pendingInvitations(calendar: Calendar, email: string): InvitationRequest[] {
     const address = email.toLowerCase();
@@ -143,14 +142,28 @@ export function pendingInvitations(calendar: Calendar, email: string): Invitatio
     const all = calendar.joinedEvents().all().map(toEvent);
     const byId = new Map(all.map((event) => [event.id, event]));
     const exceptionsOf = Map.groupBy(all, (event) => event.parentEventId);
-    const organizer = organizerOf(calendar.home, undefined);
     return all.flatMap((event) => {
         const series = event.parentEventId ? byId.get(event.parentEventId) : undefined;
         if (!lists(event) || lists(series)) return [];
+        if (event.status === 'cancelled' || series?.status === 'cancelled') return [];
         if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return [];
         const exceptions = series ? [] : (exceptionsOf.get(event.id) ?? []);
+        const organizer = organizerOf(calendar.home, undefined, event.data?.organizer);
         return [invitationRequest(organizer, calendar.home.user.id, email, event, series, exceptions)];
     });
+}
+
+// Set only for a copy that is one occurrence of a series the guest does not hold. An exception answers through the
+// master it hangs on.
+export function answeredOccurrence(event: CalendarEvent): string | undefined {
+    return event.parentEventId ? undefined : (event.recurrenceDate ?? undefined);
+}
+
+// A guest answers the ORGANIZER, and only the calendar's own Home holds the event, so every message names the one its
+// file stores. A file that stores none is organized by the Home's user, or on a team, which has no address, by `user`.
+export function organizerOf(organizerHome: Home, user: User | undefined, stored?: Organizer): Organizer {
+    const named = stored ?? (organizerHome.user.email ? organizerHome.user : user);
+    return { userId: organizerHome.user.id, email: named?.email ?? '', name: named?.name };
 }
 
 // The REQUEST one guest on this server gets. A series carries its master and every exception, and an occurrence the
@@ -176,15 +189,14 @@ function invitationRequest(
             key && !series.allDay
                 ? { instant: computeOccurrenceTimes(series, key).startTime, timezone: series.timezone }
                 : null;
-        return { link, events: [requestedEvent(event, key, organizer, heldAttendees(event, series), recurrenceId)] };
+        return { link, events: [requestedEvent(event, key, organizer, recurrenceId)] };
     }
     const address = email.toLowerCase();
-    const isOn = (e: CalendarEvent) => heldAttendees(e, event).some((a) => a.email.toLowerCase() === address);
-    const requested = exceptions.map((e) => {
-        const sent = isOn(e) ? e : { ...e, status: 'cancelled' as const };
-        return requestedEvent(sent, e.recurrenceDate, organizer, heldAttendees(e, event));
-    });
-    return { link, events: [requestedEvent(event, null, organizer, heldAttendees(event, null)), ...requested] };
+    const isOn = (e: CalendarEvent) => !!e.data?.attendees?.some((a) => a.email.toLowerCase() === address);
+    const requested = exceptions.map((e) =>
+        requestedEvent(isOn(e) ? e : { ...e, status: 'cancelled' }, e.recurrenceDate, organizer),
+    );
+    return { link, events: [requestedEvent(event, null, organizer), ...requested] };
 }
 
 // The REQUEST a guest on this server files, through the same decision as a mailed one. It names no Eigen stamp and no
@@ -193,7 +205,6 @@ function requestedEvent(
     event: CalendarEvent,
     recurrenceDate: string | null,
     organizer: Organizer,
-    attendees: readonly Attendee[],
     recurrenceId: RecurrenceId | null = null,
 ): ParsedEvent {
     return {
@@ -212,21 +223,8 @@ function requestedEvent(
         dtstamp: event.updatedAt,
         recurrenceDate,
         recurrenceId,
-        data: { organizer, attendees: [...attendees] },
+        data: { organizer, attendees: event.data?.attendees },
     };
-}
-
-// Set only for a copy that is one occurrence of a series the guest does not hold. An exception answers through the
-// master it hangs on.
-export function answeredOccurrence(event: CalendarEvent): string | undefined {
-    return event.parentEventId ? undefined : (event.recurrenceDate ?? undefined);
-}
-
-// A guest answers the ORGANIZER, and only the calendar's own Home holds the event, so its user is named whoever saved.
-// A team has no address, so a team event names the member who saved it.
-function organizerOf(organizerHome: Home, user: User | undefined): Organizer {
-    const named = organizerHome.user.email ? organizerHome.user : user;
-    return { userId: organizerHome.user.id, email: named?.email ?? '', name: named?.name };
 }
 
 // The revision its receiver orders the removal against; undefined for a message about the whole series.

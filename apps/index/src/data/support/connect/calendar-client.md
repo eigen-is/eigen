@@ -7,7 +7,7 @@ tags: [calendar, caldav, sync, integrations, app-passwords, thunderbird, apple-c
 related: [connect/app-passwords, connect/overview]
 crossSections: [calendar]
 order: 40
-updated: 2026-09-22
+updated: 2026-11-11
 ---
 
 Eigen Calendar syncs over CalDAV, so you can keep your events in step with Apple Calendar, Thunderbird, or any other CalDAV-compatible app on your computer or phone.
@@ -19,7 +19,7 @@ You need two things: the CalDAV server address, and an app password.
 **Find the server address.** Open the [**Integrations** page](/space/services) in Space and look at the **CalDAV (Calendar sync)** section. Three kinds of address are listed there:
 
 - **Server URL**: the address to use in most CalDAV clients.
-- **Server URL (Thunderbird)**: a longer address that points directly to your calendar collection. Use this one in Thunderbird and in any other client that does not follow CalDAV auto-discovery.
+- **Server URL (Thunderbird)**: a longer address that points straight at your calendars. Use this one in Thunderbird and in any other client that cannot find your calendars on its own.
 - **Calendar — …**: one address per calendar, named after it. Use it to add a single calendar to a client that subscribes to calendars one at a time, or to add a calendar you created after you connected.
 
 Copy the address from the page rather than typing it. A single wrong character stops the connection.

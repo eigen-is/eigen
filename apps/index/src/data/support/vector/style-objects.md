@@ -6,7 +6,7 @@ category: Editing
 tags: [vector, styling, fill, stroke, colors, text]
 related: [vector/draw-shapes-and-text, vector/connect-with-arrows, vector/arrange-and-align]
 order: 50
-updated: 2026-10-28
+updated: 2026-11-11
 ---
 
 Select an object in a drawing and the panel on the right fills with its style controls. The sections change to match what you picked: a shape has a fill, an arrow does not, text has its own typography rows. This page lists every section, in the order it appears, and what each control does.
@@ -61,7 +61,7 @@ The color inside a shape. Shown for shapes and text, and for a line or drawing w
 
 | Control | What it does |
 |---|---|
-| Color swatch | Fills the object with a solid color or a two-stop gradient. Choose **None** for no fill. |
+| Color swatch | Fills the object with a solid color or a gradient between two colors. Choose **None** for no fill. |
 | **Style** | How the fill is drawn: **Solid**, **Hachure**, **Cross-hatch**, or **Zigzag** |
 
 ## Stroke

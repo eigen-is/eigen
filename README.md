@@ -1,104 +1,57 @@
 # Eigen
 
-**Your own workspace. Simple, secure, self-hosted.**
+A self-hosted alternative to Google Workspace.
 
-**Try the live demo at [demo.eigen.is](https://demo.eigen.is).** It is a shared workspace that resets every hour.
+Mail, drive, docs, sheets, slides, drawings, stickies, calendar, contacts and chat. Syncs with your own apps over IMAP, SMTP, CalDAV, CardDAV and WebDAV. Opens and saves Word, Excel and PowerPoint files.
 
-Eigen is a self-hosted alternative to Google Workspace. It runs as a single server with integrated apps for email, file storage, documents, spreadsheets, presentations, drawings, kanban boards, calendar, contacts, and real-time chat, all sharing one API, one auth system, and one UI.
+Try the demo at [demo.eigen.is](https://demo.eigen.is). It is a shared workspace that resets every hour.
 
-It syncs with your own apps over IMAP, SMTP, CalDAV, CardDAV and WebDAV. It opens and saves Word, Excel and PowerPoint files.
+### Native sync
 
-The name *Eigen* is Dutch and German for "own." You own your data, you own your infrastructure, you own your workspace.
+Works with the mail, calendar, contacts and file apps on your phone, Mac or PC. No vendor lock-in. `IMAP` `SMTP` `CalDAV` `CardDAV` `WebDAV`
 
-> For the backstory on how and why this project started, see [Eigen: Building a Workspace](https://reindernijhoff.net/2025/10/eigen-building-a-workspace/).
+### Office compatible
+
+Edit documents, spreadsheets and presentations in the browser. Bring the files you have, and take them with you when you leave. `.docx` `.xlsx` `.pptx`
+
+### Built for data sovereignty
+
+Runs on your own hardware, and the code is MIT licensed. Your mail, contacts and calendars stay in open formats. `.eml` `.vcf` `.ics`
 
 ## Why
 
-Given the power large tech companies hold over our data, a self-hosted European alternative feels needed. Eigen aims to be that alternative: a workspace you can run on your own server, where every byte of data stays under your control.
+The name is Dutch and German for "own". Given the power large tech companies hold over our data, I think a self-hosted European alternative is needed. [Eigen: Building a Workspace](https://reindernijhoff.net/2025/10/eigen-building-a-workspace/) tells how it started. The help center has [a tour of the apps](https://eigen.is/support/getting-started/about-eigen).
 
-## Why not Nextcloud?
+Why not Nextcloud? Nextcloud is mature and has a large ecosystem. If you need something proven today, it is the safer choice. Eigen is one codebase: the apps share one API and one login, and several people can edit a doc, sheet, deck, drawing or board at the same time without a separate office server. It runs from one compose file on SQLite, with no PHP, MySQL or Redis.
 
-Nextcloud is the established self-hosted workspace. It is mature, has a huge ecosystem, and if you need something proven today, it is the safer choice. Eigen is pre-1.0 and built by one person.
+## Status
 
-Eigen makes different choices:
+Reality check: Eigen is pre-1.0 and I build it on my own, in my spare time, unpaid. The core works and improves fast, but I would not yet trust it with data you cannot afford to lose. For hobbyists, self-hosters and small teams comfortable with rough edges, it is ready to try.
 
-- **One codebase.** Nextcloud is a core with apps and plugins. Eigen's apps are built together: one API, one auth system, one UI. Everything is designed to work with everything else.
-- **Collaboration is built in.** In Nextcloud, collaborative editing comes from an external office server (Collabora or OnlyOffice). In Eigen, every app is collaborative through CRDTs (Yjs). Two people on the same document, sheet, or board works out of the box.
-- **Simple to run.** One server, one compose file, SQLite per user. No PHP, no MySQL, no Redis. One command backs up the whole server while it runs.
+Until 1.0 a release can change how data is stored. It then converts the data once or drops it. `./eigen update` makes a Full backup first, so `./eigen rollback` can go back.
 
-If Nextcloud works for you, keep using it. Eigen exists for people who want a workspace that feels like one product instead of a platform with plugins.
+The backups are yours to arrange. Turn on the nightly backup in Admin, under Settings, or run `./eigen backup`. Send the backups to a bucket off the server and [try a restore](https://eigen.is/support/self-hosting/back-up-and-restore#try-a-restore-without-moving).
 
-## Goal
+The server's security is yours too: keep the host patched and lock down SSH.
 
-The first goal is a **self-hostable workspace for individuals, enthusiasts, and small organizations**. During active development, expect rough edges, but the core is functional and improving fast. As the project matures and stabilizes, the aim is to make Eigen reliable enough for mid-to-large organizations as well.
+What is planned is in [docs/ROADMAP.md](docs/ROADMAP.md), and what changed is in [CHANGELOG.md](CHANGELOG.md).
 
-## Status & responsibilities
+## Install on a server
 
-Eigen is **pre-1.0 and actively developed**. The core works, but be deliberate about what you put on it:
-
-- **Breaking changes** are likely between minor versions until 1.0. A release that changes how data is stored converts it once or drops it, and only stickies stay backward compatible. `./eigen update` shows such a release's notes, asks, and makes a Full backup first, so `./eigen rollback` can go back.
-- **You own your data, including the backups.** Apart from the backup `./eigen update` makes, Eigen backs up only once you turn on the nightly backup in Settings, or run `./eigen backup`. Send the backups off the server to a bucket of their own, keep that bucket's keys somewhere else, and [try a restore](https://eigen.is/support/self-hosting/back-up-and-restore#try-a-restore-without-moving).
-- **You own your server's security.** Keep the host patched, lock down SSH, use strong passwords, and watch your logs. A self-hosted server is your responsibility end-to-end.
-- **No warranty**: see [LICENSE.txt](LICENSE.txt). Eigen is built by a single developer in their spare time. It's provided as-is, in good faith, with no SLA.
-
-If data loss in your workspace would be catastrophic, wait for 1.0. For personal use, hobbyists, and small teams comfortable with rough edges, the current build is functional and improving fast.
-
-## Apps
-
-Eigen ships as a monorepo with a single API server and a set of tightly integrated frontend apps:
-
-- **Mail** — Webmail client with full mailbox management. Email is stored in standard Maildir++ format, fully compatible with Dovecot. Connect any IMAP client (Thunderbird, Apple Mail, etc.) to access your mail alongside the web UI.
-- **Drive** — File storage with folders, sharing, ACL, thumbnails, file previews, and pluggable storage backends (local filesystem, flat key-based, or S3-compatible). Soft delete with configurable trash retention. Supports inline editing of text, code, and Markdown files. Mount your drives as a network drive in Finder, Windows Explorer, or any WebDAV client.
-- **Docs** — Collaborative document editor built on Tiptap and Yjs. Multiple users edit the same document in real time. Export to DOCX, PDF, and HTML. Embedded comment threads with @mentions.
-- **Sheets** — Collaborative spreadsheets using an in-tree sheet engine (forked from fortune-sheet/luckysheet) with Yjs-based op-level sync. Concurrent edits on different cells merge cleanly.
-- **Slides** — Collaborative presentations with a pixel-based canvas (1920×1080), resolution-independent rendering, drag-and-drop objects, background images, and a presentation mode.
-- **Vector** — Collaborative drawings on an infinite canvas: sketchy shapes, freehand strokes, arrows that dock to shapes, rich text, and images. Export to SVG.
-- **Stickies** — Kanban boards with real-time collaboration via Yjs. Drag-and-drop cards and columns. Each card has its own embedded chat room for discussion.
-- **Calendar** — Full calendar with recurring events (RFC 5545 RRULE), invitations with RSVP, shared calendars, and team calendars. Includes a **CalDAV server**: sync with Thunderbird, Apple Calendar, or DAVx5 using standard protocols.
-- **Contacts** — Contact management with labels and avatars. Each contact is stored as its standard vCard bytes in SQLite, with the indexed columns projected from them. Includes a **CardDAV server**: sync your address book with iOS/macOS Contacts, Thunderbird, or DAVx5.
-- **Chat** — Real-time chat inspired by classic MUDs. Over 80 built-in slash commands including emotes, whispers, and @mentions. Chat rooms live inside Drive (inheriting its ACL), and can be embedded inside documents and kanban cards as comment threads.
-- **Space** — Personal account settings, profile, and preferences.
-- **Admin** — Organization and team administration. Manage members, roles, shared drives, team calendars, quotas, and server-wide settings. Includes the first-run setup wizard.
-
-### Protocol support
-
-Eigen doesn't lock you into its web interface. Standard protocols let you use your favorite native clients:
-
-- **IMAP** — Via Dovecot. Eigen writes Maildir++, Dovecot serves it over IMAP. They coexist on the same filesystem.
-- **CalDAV** — Built-in CalDAV server with discovery, sync-collection, and recurring event support. Tested with Thunderbird.
-- **CardDAV** — Built-in CardDAV server (RFC 6352) with discovery, sync-collection, and addressbook-query support. Accepts vCard 3.0 and 4.0; labels and contact photos sync along with the cards.
-- **WebDAV** — Built-in WebDAV server (RFC 4918 Class 1+2). Mount your Drive as a network drive in Finder, Windows Explorer, Mountain Duck, rclone, or any standard WebDAV client.
-- **SMTP** — Postfix handles inbound and outbound email, with DKIM signing and relay support.
-
-## Getting started
-
-### Install on a server
-
-You need:
-
-- A Linux server, amd64 or arm64, with 2 GB of RAM (4 GB recommended) and 10 GB of disk for Eigen's images, plus room for your data
-- Docker, with the Docker Compose plugin 2.20 or newer. No Bun, no Node
-- A domain that points at the server
-- A mail relay when you keep your existing mail. When Eigen hosts your mail, only when your provider blocks outgoing port 25
-
-Then:
+You need a Linux server (amd64 or arm64) with 2 GB of RAM, 4 GB recommended, and 10 GB of disk plus room for your data. It needs Docker with the Docker Compose plugin 2.20 or newer, and a domain that points at it.
 
 ```bash
 mkdir -p /opt/eigen && cd /opt/eigen
 curl -fsSL https://eigen.is/install | sh
 ```
 
-The script downloads the `eigen` command and runs `./eigen setup`. Setup asks for your web address and mail domain, whether Eigen or your own web server handles HTTPS, whether to host email on this server or keep the mail you have, and which mail relay sends Eigen's own mail (needed when you keep your mail). Then it starts Eigen and prints a link that finishes the setup in your browser.
+The script downloads the `eigen` command and runs `./eigen setup`. Setup asks five questions, starts Eigen and prints a link that finishes the setup in your browser. Everything runs in Docker: Caddy for HTTPS, the Eigen API, and Postfix, Dovecot and Unbound when Eigen hosts your mail. The same command updates, backs up and restores: `./eigen help`.
 
-Everything runs in Docker: Caddy for HTTPS, the Eigen API, and Postfix, Dovecot and Unbound when Eigen hosts your mail. The same `eigen` command updates, backs up and restores: `./eigen help`.
+The step-by-step guide is the [Self-hosting](https://eigen.is/support/self-hosting/get-started) section of the help center. The technical reference is [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md).
 
-The step-by-step guide, from DNS records to backups and updates, is the [Self-hosting](https://eigen.is/support/self-hosting/get-started) section of the help center. The technical reference (Compose profiles, `.env.production`, proxy snippets, firewall) is [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md).
+## Development
 
-Developing Eigen? See [CONTRIBUTING.md § Eigen in Docker](docs/CONTRIBUTING.md#eigen-in-docker).
-
-### Development
-
-Needs [Bun](https://bun.sh) at the version in `.bun-version` (install it with `curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat .bun-version)"`) and [Git](https://git-scm.com). PDF export needs WeasyPrint 68 or later, from Homebrew (`brew install weasyprint`) or pip in a venv, with its `weasyprint` launcher on your PATH: the Python the launcher names must run `python3 -I -c 'import weasyprint'`, so `pip install --user` won't do. Video thumbnails need `ffmpeg`. Everything else works without them.
+You need [Bun](https://bun.sh) at the version in `.bun-version`, and Git.
 
 ```bash
 git clone https://github.com/eigen-is/eigen.git
@@ -107,62 +60,26 @@ bun install
 bun run serve
 ```
 
-This starts the API on `localhost:8000` and every app on its own port. The API logs a one-time link, `Finish the setup at http://localhost:3009/admin/#setup=…`. Open it to create your admin account and choose where files are stored. Data lands in `data/` in the checkout.
+This starts the API on `localhost:8000` and each app on its own port. The API prints a one-time link that starts with `Finish the setup at`. Open it to create your admin account. Your data goes to `data/` in the checkout. Run `bun run check` before a pull request.
 
-The API reads `.env.development`. Put your own overrides in `.env`. Eigen sends no mail in development: the API logs each message's sender, recipient and subject instead. To read 2FA and guest codes, run [Mailpit](https://mailpit.axllent.org) and add `SMTP_HOST=localhost` and `SMTP_PORT=1025` to `.env`.
+The rest is in [CONTRIBUTING.md](docs/CONTRIBUTING.md): the optional tools, running one app, mail in development, [Eigen in Docker](docs/CONTRIBUTING.md#eigen-in-docker) and how to contribute.
 
-```bash
-bun run serve:mail     # One app + API (works for any app name)
-bun run lint           # Lint + format check (Biome)
-bun run lint:fix       # Auto-fix
-bun run typecheck      # Type check all packages
-bun run test           # Run all tests
-bun run check          # lint + typecheck + repo guards + tests, before every PR
-```
+## How it is built
 
-Docker is only needed to test mail delivery, IMAP or the images: see [CONTRIBUTING.md](docs/CONTRIBUTING.md#eigen-in-docker).
+Each user and each team has its own folder on the server, with its own SQLite databases. [docs/STORAGE.md](docs/STORAGE.md) describes the layout and [docs/BACKUP.md](docs/BACKUP.md) the backups.
 
-## Architecture
+The server is [Bun](https://bun.sh) with [Elysia](https://elysiajs.com) and [Drizzle](https://orm.drizzle.team). The apps are React and TypeScript, and [Yjs](https://yjs.dev) carries the live editing.
 
-Each user gets their own directory on the server. SQLite databases (per user) store metadata and structured data. Files are stored separately. With no shared database, code that serves one user works in that user's own files, and reaching another home takes a deliberate call through the relay. That makes a leak hard to write by accident, but a bug in a permission check can still expose data. `./eigen backup` saves the whole server as one archive, which holds a backup of every user and team; [docs/BACKUP.md](docs/BACKUP.md) covers it and the backup of one user or team.
+[docs/README.md](docs/README.md) lists every doc by topic, [ARCHITECTURE.md](docs/ARCHITECTURE.md) says where each kind of code lives, [CODE-STANDARDS.md](docs/CODE-STANDARDS.md) covers how it is written and [AGENTS.md](AGENTS.md) holds the rules every change follows.
 
-```
-data/home/{userId}/
-├── settings.json         # Per-user settings
-├── mounts/default/       # Drive files + metadata.db
-├── eigen.mail/           # Maildir + mail.db
-├── eigen.contacts/       # contacts.db (the vCards themselves) + avatars
-├── eigen.calendar/       # calendar.db
-└── eigen.notifications/  # notifications.db
-```
+## Security
 
-Organizations and teams follow the same pattern in sibling `data/team/{teamId}/` and `data/org/{orgId}/` trees: team drives, team calendars, and group-based ACL. Real-time collaboration runs through Yjs over WebSocket, while Server-Sent Events push live updates to all connected clients.
+Found a security issue? Do not open a public issue. [SECURITY.md](SECURITY.md) says how to report it privately.
 
-## Tech stack
+## License
 
-| Layer     | Technology                                                        |
-|-----------|-------------------------------------------------------------------|
-| Runtime   | [Bun](https://bun.sh)                                            |
-| Backend   | [Elysia](https://elysiajs.com) + [Drizzle ORM](https://orm.drizzle.team) (SQLite) |
-| Frontend  | React 19 + TypeScript + [TanStack Router](https://tanstack.com/router) + [TanStack Query](https://tanstack.com/query) |
-| API       | [Eden Treaty](https://elysiajs.com/eden/overview) (end-to-end type-safe) |
-| Styling   | [Tailwind CSS 4](https://tailwindcss.com) + [shadcn/ui](https://ui.shadcn.com) + [Lucide](https://lucide.dev) |
-| Auth      | [better-auth](https://www.better-auth.com) (email/password, 2FA, organizations, teams) |
-| Real-time | [Yjs](https://yjs.dev) (collaborative editing) + WebSocket + SSE |
-| Tooling   | [Biome](https://biomejs.dev) (lint + format) + [Vite](https://vite.dev) (build) |
-
-## Contributing
-
-Eigen is open source and contributions are welcome. The project is still in active early development. There's plenty to do and plenty of room to shape the direction.
-
-See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for how to get involved: reporting bugs, submitting PRs, adopting a subsystem, or sponsoring the project. The full project context (for humans and AI agents alike) lives in [AGENTS.md](AGENTS.md), [CODE-STANDARDS.md](docs/CODE-STANDARDS.md) covers code style, and [ARCHITECTURE.md](docs/ARCHITECTURE.md) covers the architecture patterns.
-
-Found a security issue? Please **do not** open a public issue. [SECURITY.md](SECURITY.md) says how to report it privately.
-
-### Documentation
-
-The docs in `docs/` explain how each part of Eigen works and why. The index of every doc, by domain, is [docs/README.md](docs/README.md).
+MIT, see [LICENSE.txt](LICENSE.txt). Eigen comes as it is, with no warranty.
 
 ## Contact
 
-Questions, ideas, or want to contribute? Reach out at [reinder@eigen.is](mailto:reinder@eigen.is).
+Questions or ideas? [reinder@eigen.is](mailto:reinder@eigen.is)

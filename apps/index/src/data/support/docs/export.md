@@ -6,7 +6,7 @@ category: Files
 tags: [docs, export, download, word, pdf, html]
 related: [docs/import-word, docs/print]
 order: 90
-updated: 2026-11-01
+updated: 2026-11-11
 ---
 
 You can download a copy of any document as a Word file, a PDF, or a standalone web page. The original document in Eigen stays exactly as it was.
@@ -31,7 +31,7 @@ You do not need to open the document to export it. In Drive, right-click the doc
 
 ## What is included
 
-The exported file contains the document text and all formatting: headings, lists, tables, images, charts, code blocks, and other content. Code blocks keep their colors. Code blocks with no language set keep them up to about 65,000 characters of code in all. Past that, they are exported as plain text. Comment threads are not included in the exported file. In the Word file, a chart is a Word chart with its numbers, kept the way Word keeps a chart's data. A sketched, hatched, or dashed look is drawn plain, and a gradient background becomes its middle color. A WebP image is saved as PNG or JPEG, since Word, PowerPoint and Google's editors can't show WebP.
+The exported file contains the document text and all formatting: headings, lists, tables, images, charts, code blocks, and other content. Code blocks keep their colors. Code blocks with no language set keep them up to about 65,000 characters of code in all. Past that, they are exported as plain text. Comment threads are not included in the exported file. In the Word file, a chart is a Word chart with its numbers. A sketched, hatched, or dashed look is drawn plain, and a gradient background becomes its middle color. A WebP image is saved as PNG or JPEG, since Word, PowerPoint and Google's editors can't show WebP.
 
 The PDF and the Word file put the header and footer on every page, with the page numbers and page count filled in, and give the first page its own when you set one. The web page shows the header at the top and the footer at the end, with **#** for a page number. See [Add headers, footers, and page numbers](/support/docs/headers-and-footers).
 
@@ -45,7 +45,7 @@ A page break starts a new page in the PDF and the Word file. Equations show in a
 
 A download carries the images the document shows. When they add up to more than 200 MB, Eigen refuses the download with "This document's images are too large to export".
 
-The PDF, the web page, and the Word file use the editor's spacing, including the space around images and tables. In the PDF, a list next to an image that floats left or right starts below the image instead of beside it. An image behind or in front of the text near the end of a page is cut off at the paper's edge, or left out, since it doesn't continue on the next page, and one whose paragraph runs over two pages prints on the first. In the Word file:
+The PDF, the web page, and the Word file use the editor's spacing, including the space around images and tables. In the PDF, a list next to an image that floats left or right starts below the image instead of beside it. An image behind or in front of the text near the end of a page is cut off at the paper's edge, or left out, since it doesn't continue on the next page. One whose paragraph runs over two pages prints on the first. In the Word file:
 
 - The fonts your document uses are included, so it keeps its typeface on a computer that doesn't have them.
 - Paragraphs keep their line spacing, the space before and after them, and their indents. The first paragraph of a list item follows the list's indent.

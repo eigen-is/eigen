@@ -140,6 +140,8 @@ async function render(canEdit = true): Promise<HTMLElement> {
             toggle: () => {},
             aspectLocked: false,
             publishCursor: () => {},
+            canvasRef: { current: null },
+            onTextEditingChange: () => {},
         });
     }
     const rendered = await renderInDocument(

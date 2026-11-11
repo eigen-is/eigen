@@ -6,7 +6,7 @@ category: Basics
 tags: [offline, sync, editing, troubleshooting, getting-started]
 related: [getting-started/your-first-steps, drive/file-versions]
 order: 7
-updated: 2026-11-02
+updated: 2026-11-11
 ---
 
 Documents, spreadsheets, presentations, drawings, and boards save themselves as you type, which means they need the server. This page explains what you see when the connection to it goes away for a moment, and what happens to the work you did meanwhile.
@@ -15,7 +15,7 @@ Documents, spreadsheets, presentations, drawings, and boards save themselves as 
 
 **What it means:** the editor has lost its connection to the server. The icon is a crossed-out wifi symbol at the right of the toolbar, and clicking it says "Offline, will sync when back online".
 
-**What to do:** keep working. The document stays open and you can carry on typing. Your edits are held in this browser tab and are sent the moment the connection is back, which the editor keeps trying to do on its own. The icon disappears when that happens.
+**What to do:** keep working. The document stays open and you can carry on typing. Your edits are held in this browser tab. The editor keeps trying to reconnect on its own, and sends them the moment the connection is back. The icon disappears when that happens.
 
 A short hiccup never shows the icon at all. Eigen waits a second or two before deciding you are really offline, so a blink of the network passes unnoticed.
 
@@ -63,6 +63,6 @@ While Eigen restarts, the banner says "Eigen is updating. This page reloads when
 
 ## The page reloads by itself
 
-**What it means:** Eigen was updated, or someone restored this account from a backup, while you had the page open. The page in your tab belongs to what has been replaced, so Eigen reloads it rather than sending the old copy back.
+**What it means:** Eigen was updated, or someone restored this account from a backup, while you had the page open. The page in your tab is now out of date, so Eigen reloads it rather than sending the old copy back.
 
 **What to do:** nothing. The page comes back on the new version or the restored document. Before an update, the banner above warns you first. Anything you typed in the seconds before the reload, or while Eigen was down, is not kept.

@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, guests, sharing, access]
 related: [admin/get-started, drive/share-a-file]
 order: 50
-updated: 2026-11-09
+updated: 2026-11-11
 ---
 
 Guest access lets people outside your organization view files you have shared with them. Guests sign in with a one-time code sent to their email address, not a password, so they do not need a full account on your server.
@@ -35,9 +35,9 @@ Turn this off if you want to restrict sign-in codes to email addresses that alre
 
 ### Days of inactivity before deletion
 
-Eigen runs a daily sweep that removes guest accounts that have not been active for longer than this many days. The default is 7. You can set any value from 1 to 365.
+Once a day, Eigen removes guest accounts that have not been active for longer than this many days. The default is 7. You can set any value from 1 to 365.
 
-Deletion removes the guest account, but the share record is preserved. If the same person signs in again later, their access is restored automatically.
+This removes the guest account, but the share stays. If the same person signs in again later, they get their access back.
 
 ## Review and remove guest accounts
 

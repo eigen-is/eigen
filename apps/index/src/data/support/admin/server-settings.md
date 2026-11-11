@@ -5,7 +5,7 @@ type: reference
 tags: [admin, settings, quotas, storage, notifications, mail, backup]
 related: [admin/get-started, admin/storage-quotas, self-hosting/back-up-and-restore]
 order: 80
-updated: 2026-11-09
+updated: 2026-11-11
 ---
 
 The **Settings** page in Admin is where the server owner sets up the organization, mail, storage, backups, and notifications. Only the owner sees it in the sidebar.
@@ -118,9 +118,9 @@ These toggles control whether Eigen sends an email for each type of event. Anyon
 | Toggle | What triggers the email |
 |---|---|
 | **Email guests when added to share** | A guest is given access to a file or folder. A guest rarely has Eigen open, and one who never signed in has no bell, so this is often how they learn about the share. On by default. |
-| **Email users when added to share** | A registered user is given access to a file or folder. An in-app notification already fires. Off by default. |
+| **Email users when added to share** | A registered user is given access to a file or folder. They already get a notification in Eigen. Off by default. |
 | **Email guests when assigned a comment or card** | A guest, or someone with no account yet, is assigned a comment or card. The email names the card and links to it. A person gets at most one an hour for each document or board. On by default. |
-| **Email users when assigned a comment or card** | A registered user is assigned a comment or card, with the same limit. An in-app notification already fires. Off by default. |
+| **Email users when assigned a comment or card** | A registered user is assigned a comment or card, with the same limit. They already get a notification in Eigen. Off by default. |
 | **Email users for calendar invites** | A user receives a calendar invitation. On by default. |
 | **Email owner on access request** | Someone clicks **Request access** on a file or folder they can't open. The email goes to its owner, or to the members of the team that owns it. On by default. |
 

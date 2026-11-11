@@ -6,7 +6,7 @@ category: Install
 tags: [self-hosting, install, setup, docker, dns]
 related: [self-hosting/requirements, admin/get-started, self-hosting/host-your-mail, self-hosting/keep-your-mail]
 order: 30
-updated: 2026-10-28
+updated: 2026-11-11
 ---
 
 This takes you from an empty server to your first sign-in. The install itself is two lines. Check [what you need](/support/self-hosting/requirements) first. If your server already runs a web server for other sites, read [Run Eigen behind your own web server](/support/self-hosting/behind-your-web-server) before you start.
@@ -28,7 +28,7 @@ Add one DNS record. Replace `eigen.example.com` with your domain and `1.2.3.4` w
 
 A new record can take a few minutes to reach everyone, sometimes half an hour. Check it with `dig eigen.example.com A`.
 
-The setup lists every other record your answers need. With hosted mail, the mail records come after the first start: see [Host your mail on Eigen](/support/self-hosting/host-your-mail). A new install makes a new DKIM key to sign mail with, so a domain that still has the `eigen._domainkey` record of an earlier install needs it replaced, while [a restore](/support/self-hosting/move-to-another-server) keeps the old key.
+The setup lists every other record your answers need. With hosted mail, the mail records come after the first start: see [Host your mail on Eigen](/support/self-hosting/host-your-mail). A new install makes a new DKIM key to sign mail with, so a domain that still has the `eigen._domainkey` record of an earlier install needs it replaced. [A restore](/support/self-hosting/move-to-another-server) keeps the old key.
 
 ## 3. Open the ports
 

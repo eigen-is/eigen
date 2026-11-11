@@ -27,6 +27,8 @@ The reader is a normal Eigen user who can use a computer but knows no jargon. Th
 - **Describe what the user sees and does**, never how it's built.
 - **Banned vocabulary** (implementation words that never appear in a user article): `Yjs`, `ACL`, `ApiError`, `Eden`, `Elysia`, `SQLite`, `WebSocket`, `SSE`, `Drizzle`, `Home`, `container`, `data.db`. WebDAV, IMAP and CalDAV **are** allowed, since users configure them in other apps. So is "mount", the Admin interface's word for a storage location, so an admin article names the control; in an app article, say "drive".
 - Research the code for the **facts**, then write them in **plain language**.
+- **No history.** An article describes Eigen as it is now: never what it did before, what went wrong, what an incident taught us, or why a design was chosen over another ("before this was in place", "a single account was enough to…"). One plain line of why that helps the reader stays; the backstory goes to the domain doc.
+- **Name the effect, not the mechanism.** "Eigen refuses the message" beats "the submission port checks the envelope sender at RCPT TO". An error code the user sees on screen stays, in `code` font, so they can match it.
 
 ## 3. Voice
 

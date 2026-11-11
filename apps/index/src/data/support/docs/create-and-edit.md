@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, editing, create, writing, outline, headings]
 related: [docs/format-text, docs/get-started]
 order: 20
-updated: 2026-10-27
+updated: 2026-11-11
 ---
 
 Docs is the document editor in Eigen. You can create a new document in seconds, write and format your content in the browser, and share it with others when you're ready. Everything saves as you go.
@@ -42,7 +42,7 @@ A page break makes the text after it start on a new page when you print the docu
 1. Place your cursor where the new page should start.
 2. Open the **Insert** menu and choose **Page break**, or press Cmd+Enter (Mac) or Ctrl+Enter (Windows).
 
-In the document, the page break shows as a dashed line labeled "Page break". The line itself doesn't print. In a code block, the shortcut leaves the block instead. A page-less document has no page breaks to insert, and shows the ones it has as nothing ([Use page-less mode and set your text width](/support/docs/page-less)).
+In the document, the page break shows as a dashed line labeled "Page break". The line itself doesn't print. In a code block, the shortcut leaves the block instead. A page-less document can't take a new page break, and doesn't show the ones it has ([Use page-less mode and set your text width](/support/docs/page-less)).
 
 A page break inside a list, a quote, or a table starts a new page in the Word file too. See [Export to Word, PDF, or HTML](/support/docs/export).
 
@@ -80,7 +80,7 @@ Open the **Edit** menu in the toolbar and choose **Undo** or **Redo**, or use th
 
 ## Cut, copy, and select
 
-The **Edit** menu also has **Cut**, **Copy**, **Select all**, and **Delete**. Select some text first for **Cut**, **Copy**, and **Delete**. To paste, press Cmd+V (Mac) or Ctrl+V (Windows).
+The **Edit** menu also has **Cut**, **Copy**, **Paste**, **Select all**, and **Delete**. Select some text first for **Cut**, **Copy**, and **Delete**. **Paste** needs your browser's permission to read the clipboard. If you don't allow it, nothing is pasted, and Cmd+V (Mac) or Ctrl+V (Windows) still works.
 
 If you can only view the document, you can still use **Copy** and **Select all**.
 

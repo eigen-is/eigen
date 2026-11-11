@@ -6,7 +6,7 @@ category: Files
 tags: [drive, versions, history, restore, docs, sheets, slides, stickies, vector]
 related: [drive/get-started, drive/use-the-trash]
 order: 120
-updated: 2026-11-05
+updated: 2026-11-11
 ---
 
 Eigen keeps a history of saved states for every document, spreadsheet, presentation, board, and drawing you own or can edit. You can browse that history and restore an earlier version at any time.
@@ -15,9 +15,9 @@ Version history is available in the **File** menu inside the editor. It is not s
 
 ## Save a version manually
 
-Open the file you want to snapshot, then click **File** in the toolbar and choose **Save version now**. Eigen saves the current state straight away and shows a brief "Version saved" confirmation. You can do this at any point, for example before making a big change.
+Open the file, then click **File** in the toolbar and choose **Save version now**. Eigen saves the current state straight away and shows a brief "Version saved" confirmation. You can do this at any point, for example before making a big change.
 
-Eigen also saves versions automatically as you work. These automatic saves follow the same retention schedule as manual ones, so the two are listed together in the history.
+Eigen also saves versions automatically as you work. Automatic versions are kept as long as manual ones, and the two are listed together in the history.
 
 ## View and restore a previous version
 
@@ -39,7 +39,7 @@ A restore brings back the comments that version had, including one you deleted s
 
 ## Delete the version history
 
-To free up the space a file's versions take, you can delete its whole history. Open the file, click **File** in the toolbar, point at **Version history** and click **Delete history…**, the last row below the list, grayed out until there is a version. A dialog says how much space it frees. Click **Delete history** to confirm.
+To free up the space a file's versions take, you can delete its whole history. Open the file, click **File** in the toolbar, point at **Version history** and click **Delete history…**. It is the last row below the list, and it is grayed out until there is a version. A dialog says how much space it frees. Click **Delete history** to confirm.
 
 Every earlier version goes, and so do the versions of the file's comments. You can't undo this. Images and comments you deleted from the file are removed right away, except those added or replied to in the last three days. If removing them fails, the versions are still gone, but those images and comments stay. If someone else has the file open, their **Undo** can't bring those back.
 

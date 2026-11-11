@@ -580,6 +580,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                 <li>Bold text: {formatWithLabels(SHEET_HOTKEYS.bold)}.</li>
                                 <li>Italic text: {formatWithLabels(SHEET_HOTKEYS.italic)}.</li>
                                 <li>Underline text: {formatWithLabels(SHEET_HOTKEYS.underline)}.</li>
+                                <li>Clear formatting: {formatWithLabels(SHEET_HOTKEYS.clearFormatting)}.</li>
+                                <li>Select all: {formatWithLabels(SHEET_HOTKEYS.selectAll)}.</li>
                                 <li>Cut: {formatWithLabels(SHEET_HOTKEYS.cut)}.</li>
                                 <li>Copy: {formatWithLabels(SHEET_HOTKEYS.copy)}.</li>
                                 <li>Paste: {formatWithLabels(SHEET_HOTKEYS.paste)}.</li>

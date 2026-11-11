@@ -6,7 +6,7 @@ category: Sharing
 tags: [vector, sharing, permissions, comments, collaboration]
 related: [vector/get-started, drive/share-a-file]
 order: 70
-updated: 2026-11-09
+updated: 2026-11-11
 ---
 
 Drawings are private to you until you share them. You can share with specific people, with a team, or with anyone who has a link, and choose whether they can view or edit. If you can edit a drawing, you can also leave comments, either on a single object or on the drawing as a whole.
@@ -58,6 +58,8 @@ Comments attach to a single object on the canvas, such as a shape, an arrow, or 
 2. Choose **Add comment** from the menu.
 3. In the **New comment** dialog, give the comment a title and, if you like, a description and a color. You can also assign it to someone.
 4. Click **Add comment**.
+
+Or select one object and choose **Comment** from the **Insert** menu, which opens the same dialog.
 
 A small colored triangle appears in the top-right corner of the object to show it has a comment.
 

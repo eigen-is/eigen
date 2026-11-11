@@ -37,6 +37,8 @@ describe('a patch that changes nothing', () => {
             'UID:same',
             'DTSTART:20260401T100000Z',
             'SUMMARY:Same',
+            // Apple Calendar and Thunderbird name the account itself on every event they send guests.
+            `ORGANIZER:mailto:${calendar.home.user.email}`,
             ...CLIENT_LINES,
             'END:VEVENT',
         ]);

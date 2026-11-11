@@ -10,6 +10,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Install line on the landing page** — the owner can show the one-line install command, with a copy button, from **Show install section** under **Landing page** in Admin's server settings. It is off until turned on
 - **Covers on the blog** — a blog post can have a cover image, shown big under its title
 - **Delete history** — in Docs, Sheets, Slides, Vector and Stickies, File › Version history › **Delete history…** deletes every earlier version of a document, and the images and comments deleted from it, to free space. It keeps what was added or replied to in the last three days. Only an owner of the drive sees it
+- **Make a copy** — in Docs, Sheets, Slides, Vector and Stickies, File › **Make a copy** puts a copy of the open file beside it, named "Copy of" its name. You stay in the file, and the notice's **Open** opens the copy
 - **Comments on hover** — in Docs, Sheets, Slides and Vector, rest the mouse on a comment to read its card, then click to open it. The pane lists comments by title, and in Sheets a click there jumps to the cell
 - **Assignment emails** — assigning a comment or card in Docs, Sheets, Slides, Vector or Stickies emails a guest a link to it, at most once an hour per document. Admin's server settings have a toggle for guests (on) and one for users (off)
 - **Recent files in Drive** — **Recent files** lists the files you lately opened or were notified about, from any drive, newest first. The sidebars of Drive, the document apps, Chat, Calendar, Mail and Contacts link to it
@@ -26,8 +27,11 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Uploading a backup** — only the owner can upload an archive in the **Backup** section of a user or team in Admin. Other admins still back up, download and restore
 - **Cards assigned to you** — on a Stickies board and in the comments pane of Docs, Sheets, Slides and Vector, the assignee's avatar stands out with a ring in the app's color when an open card is yours
 - **Deleting a comment** — in Docs, Sheets, Slides, Vector and Stickies, the edit form of a comment or sticky has a Delete button, and deleting from it or from the comment's right-click menu asks you to confirm
+- **Menus in Docs** — the menus read File, Edit, Insert, Format, Tools. Edit has **Paste**, which asks your browser for the clipboard, and Print and Insert › Comment show their shortcuts, ⌘P and ⌥⌘M
 - **Links in Docs** — the link dialog matches the one in Sheets: it shows the selected text, waits for a valid address and edits a link the cursor is on. Right-clicking a link offers Open, Copy, Edit and Remove link
+- **Menus in Slides and Vector** — Edit has Cut, Copy, Paste, Select all, Duplicate and Delete, and Insert › **Comment** comments on the one object you selected
 - **Unread dots** — on a sticky or a comment in the pane, the red dot moves to the start of the card's footer, beside its replies
+- **Attachments in a row** — the files on a sticky or comment, a chat message and a mail sit in one row that scrolls sideways, so a card with many files no longer pushes its footer under the reply box
 - **Flat icon buttons** — icon-only buttons have no border in the edit form of a sticky or comment, Drive's file details, the add button of share dialogs and guest lists, and the remove-image button in properties panels, so they match the toolbars
 - **GIFs stand still in lists** — in Drive's grid, on Stickies card covers and in the slide list of Slides, an animated GIF or WebP shows its first frame. It still plays in a file's details in Drive, in Quick preview, on the slide itself and in present mode. A deck full of GIFs opens faster, because the slide list loads small stills instead of every animation. Pictures uploaded before this keep playing in lists until the file changes
 - **Deleted comments** — a link, notification, activity entry or search result for a deleted comment opens it as "This comment was deleted" under its grayed title, with nothing to reply to, resolve or assign
@@ -36,6 +40,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Comments in Sheets** — the comments pane lists the comments on every tab, with another tab's name first. Deleting a comment removes it from every cell it sits on, and a duplicated tab starts without comments
 - **Undo in Sheets** — once someone else edits the spreadsheet, you can no longer undo or redo your last insert or delete of rows or columns, your last added, duplicated, deleted or renamed tab, or anything before it. What you did after it still undoes. When someone else renames a tab, you can no longer undo or redo anything before that. Pressing undo or redo with nothing left for this reason shows a notice that says so
 - **Renaming a tab in Sheets** — formulas, formula rules, dropdown lists and links that name the tab follow its new name, as in Excel, and undo renames it back
+- **Menus in Sheets** — Edit matches the other apps and adds **Select all** (⌘A), and every row has an icon. Insert › **Image** and **Link** and Format › Text › **Text color** take Docs' names, and **Clear formatting** gets ⌘\\
 - **Paste from a menu in Sheets** — **Edit › Paste** and the right-click **Paste** paste what is on the clipboard, from any app. Where the browser blocks that, a notice says to press ⌘V (Ctrl+V on Windows and Linux)
 - **Pasting edited cells in Sheets** — if you edit cells after copying them, a paste in the same tab brings them as they are now
 - **Tick boxes in Sheets** — a tick box with its own values, such as Yes and No, shows the box alone, centered like any other, as in Google Sheets. A cell whose value the rule doesn't name shows it as text with the red invalid mark, and no box
@@ -63,6 +68,9 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Unusual repeat rules in Calendar** — an event whose repeat rule would take the server too long to work out shows on its first date only, and calendar apps still get the whole rule. An invite whose rule names no frequency arrives as one event instead of getting lost
 - **Invitation emails in Calendar** — an invitation or cancellation names the time zone of a timed event, and says how a repeating event repeats, such as "Every week on Wednesday"
 - **End dates of repeating events** — the event card, the Repeat menu and invitation emails write a series' end as "until 15 December 2026", on its last day in the event's own time zone
+- **Guests of moved dates in Calendar** — calendar apps syncing your calendar show each moved date of a repeating event with its guests and you as organizer. Clearing one date's guests cancels it for them. A date moved before this update has no guests until you add them again
+- **Organizer of team events** — the person who first adds guests to a team event stays its organizer, so invitations and replies name them, whoever edits the event later
+- **You in your guest lists in Calendar** — an event of yours with guests lists you first, marked Organizer, as your guests already saw it
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
 
 ### Fixed
@@ -128,8 +136,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Changing room in Chat** — what you were about to send is cleared when you change room, so it can't go to the wrong one
 - **Two people editing in Calendar** — editing, moving or deleting an event someone else just changed is refused instead of overwriting their change
 - **Removing a location in Calendar** — an update that only removes an event's location or description reaches its guests
+- **Deleting a repeating event in Calendar** — deleting or cancelling the whole series cancels it for guests invited to only one of its dates too
+- **Invitations for a new account in Calendar** — someone invited to a repeating event, or to one of its dates, who signs up after it was cancelled no longer finds it in their calendar
 - **Calendar files from others** — a calendar file someone else made, in a mail invite, from a calendar app or in an import, no longer freezes the server
-- **Guest emails in Calendar** — changing only an event's color or reminder, or moving a one-off event to another time zone without changing when it happens, no longer emails its guests. Neither does a save that changes nothing
+- **Guest emails in Calendar** — changing only the color or reminder of an event or of one of its dates, or moving a one-off event to another time zone without changing when it happens, no longer emails its guests. Neither does a save that changes nothing
 - **Events from other calendar apps** — the first save in Calendar of an event made in another calendar app no longer rewrites what you didn't change, or emails its guests
 - **Repeating events that end in Calendar** — a repeating event from Apple Calendar or another app ends on the date it names, and one you end with **This and following events** ends on the same day in other calendar apps, all-day ones included
 - **Guest replies in Calendar** — a guest's answer for a date a repeating event doesn't have no longer adds that date to it

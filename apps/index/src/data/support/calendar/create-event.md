@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, events, recurring, attendees]
 related: [calendar/get-started, calendar/invite-people, calendar/recurring-events]
 order: 30
-updated: 2026-11-08
+updated: 2026-11-11
 ---
 
 You can create an event from the sidebar or by clicking any day in the calendar, then fill in the date, time, guests, and other details. This article covers creating an event, editing it, and deleting it.
@@ -37,7 +37,7 @@ The **New event** form opens as a dialog. Fill in the fields you need:
 
 On an event someone else invited you to, the details are grayed out, because only the organizer can change them. You can still move it to a different calendar, and you can [respond to the invitation](/support/calendar/respond-to-invitation).
 
-If the event changes elsewhere while you edit it, for example on your phone, by someone you share the calendar with, or when a guest replies, what you typed stays in the form and the fields you haven't changed switch to the newer version. If you have typed something, your next save is refused and a message tells you the event changed elsewhere. Check the form and click **Save** again.
+The event can change elsewhere while you edit it, for example on your phone, by someone you share the calendar with, or when a guest replies. What you typed stays in the form, and the fields you haven't changed switch to the newer version. If you have typed something, your next save is refused and a message tells you the event changed elsewhere. Check the form and click **Save** again.
 
 ### Editing a recurring event
 

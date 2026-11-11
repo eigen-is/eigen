@@ -134,7 +134,7 @@ export function NoteCard({
                                         email={assigneeEmail}
                                         className={cn(
                                             !resolved && 'ml-auto',
-                                            onMyPlate ? 'ring-2 ring-(--app-current-color)' : 'opacity-50',
+                                            onMyPlate ? 'ring-1 ring-(--app-current-color)' : 'opacity-50',
                                         )}
                                     />
                                 )}

@@ -1,11 +1,11 @@
 ---
 title: "Set storage quotas and the default storage type"
-description: "Configure server-wide storage limits and the storage backend for new users, and override those limits for specific teams."
+description: "Set storage limits for the whole server, choose where new users' files are stored, and raise those limits for specific teams."
 type: how-to
 tags: [admin, quotas, storage, settings]
 related: [admin/server-settings, admin/teams]
 order: 60
-updated: 2026-10-28
+updated: 2026-11-11
 ---
 
 Storage quotas control how much space each user and team can use. You set server-wide defaults on the [**Settings**](/admin/settings) page, and you can raise those defaults for specific teams without changing the server-wide values. Only the server owner can access the **Settings** page.

@@ -5,7 +5,7 @@ type: how-to
 tags: [contacts, photo, birthday, details, edit]
 related: [contacts/add-a-contact, contacts/edit-or-delete]
 order: 40
-updated: 2026-10-28
+updated: 2026-11-11
 ---
 
 Contacts can hold more than a name and email address. You can attach a photo, record where someone works, store their birthday and postal address, and add free-form notes. All of these fields are optional and can be filled in when you first create a contact or added later.
@@ -28,7 +28,7 @@ In the **Basic information** section:
 - **Company**: the organization this person works for.
 - **Job title**: their role at that organization.
 
-When both are filled in, the contact detail view shows "Job title at Company" under the name, and the company again under **Company**, followed by the job title and separated from it by a hyphen. A job title with no company shows on its own under the name.
+When both are filled in, the contact detail view shows "Job title at Company" under the name. It shows the company again under **Company**, followed by a hyphen and the job title. A job title with no company shows on its own under the name.
 
 ## Labels
 

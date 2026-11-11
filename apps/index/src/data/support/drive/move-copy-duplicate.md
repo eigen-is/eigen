@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, files, folders, move, copy, duplicate, organize]
 related: [drive/rename-move-organise, drive/share-a-file]
 order: 75
-updated: 2026-11-05
+updated: 2026-11-11
 ---
 
 Dragging works well for a folder you can see on screen. When the destination is somewhere else, or in another drive, the right-click menu has three options that open a folder picker instead: **Move to…**, **Copy to…**, and **Duplicate**.
@@ -40,11 +40,13 @@ When the copy is done, a message says **1 item copied** (or **3 items copied**, 
 
 If some of the items fail, a message says how many and why, and the **Copy to** dialog stays open with only those items left. Click **Copy here** again to retry them. The ones that already copied are not copied a second time.
 
-Copying a folder copies everything inside it. A folder or a document only needs to fit in the free space of the drive you copy it to, while a single file must also be within the upload size limit. A folder that fails part way leaves nothing half-copied in the folder you picked, and nothing in the Trash. If someone added their own files to the folder while it copied, the folder goes to the Trash instead, so those files can be restored. Copying a document, spreadsheet, presentation, board, or drawing gives you a working file with the same contents, but the copy starts its own version history rather than inheriting the original's. The copy leaves out the images and comments you deleted from the original, which only its earlier versions could bring back. The same goes for **Duplicate**.
+Copying a folder copies everything inside it. A folder or a document only needs to fit in the free space of the drive you copy it to. A single file must also be within the upload size limit. A folder that fails part way leaves nothing half-copied in the folder you picked, and nothing in the Trash. If someone added their own files to the folder while it copied, the folder goes to the Trash instead, so those files can be restored. Copying a document, spreadsheet, presentation, board, or drawing gives you a working file with the same contents. The copy starts its own version history and does not get the original's. The copy leaves out the images and comments you deleted from the original, which only its earlier versions could bring back. The same goes for **Duplicate**.
 
 ## Duplicate a file in place
 
 To make a second copy next to the original, right-click it and choose **Duplicate**. The new item appears in the same folder, named **Copy of** followed by the original name. Eigen shows no message when it is done.
+
+With a document, spreadsheet, presentation, board, or drawing open, choose **File → Make a copy** for the same copy. A message says **Copy made**, with an **Open** button for the copy, and you stay in the original. The option is grayed out for a file you can only read or that someone shared with you.
 
 **Duplicate** is also in the menu when you browse a list of files from several folders, such as a type filter, but not for a drive's top-level folder or for files you can only read.
 

@@ -100,6 +100,8 @@ async function render() {
             toggle: () => {},
             aspectLocked: false,
             publishCursor: () => {},
+            canvasRef: { current: null },
+            onTextEditingChange: () => {},
         });
     }
     const rendered = await renderInDocument(

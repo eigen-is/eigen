@@ -90,6 +90,42 @@ test('new comment colors for an editor that is gone are dropped', () => {
     expect(() => updateCommentDecorations(editor, new Set(), new Map([['card-1', '#123456']]))).not.toThrow();
 });
 
+// The key Insert › Comment shows: on selected text it adds a comment, elsewhere it opens the panel.
+test('⌘⌥M adds a comment on selected text and otherwise toggles the panel', () => {
+    const calls: string[] = [];
+    const editor = new Editor({
+        element: document.body.appendChild(document.createElement('div')),
+        extensions: [
+            ...getDocExtensions({ exclude: ['comment'] }),
+            CommentMark.configure({
+                onAddComment: () => calls.push('add'),
+                onToggleCommentPanel: () => calls.push('panel'),
+            }),
+        ],
+        content: docOf(text('words')),
+    });
+    // prosemirror-keymap reads the platform once, maybe before happy-dom's, so ⌘ or Ctrl, whichever it takes as Mod.
+    const press = () =>
+        [true, false].some((meta) => {
+            const event = new KeyboardEvent('keydown', {
+                key: 'm',
+                altKey: true,
+                metaKey: meta,
+                ctrlKey: !meta,
+                bubbles: true,
+                cancelable: true,
+            });
+            editor.view.dom.dispatchEvent(event);
+            return event.defaultPrevented;
+        });
+    editor.commands.setTextSelection({ from: 1, to: 6 });
+    press();
+    editor.commands.setTextSelection(2);
+    press();
+    expect(calls).toEqual(['add', 'panel']);
+    editor.destroy();
+});
+
 // A mark on the equation would last only until reload.
 test('a new card on text and an equation marks the text alone', () => {
     const editor = new Editor({

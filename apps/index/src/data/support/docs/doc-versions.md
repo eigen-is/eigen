@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, versions, history, restore]
 related: [docs/create-and-edit, docs/comments]
 order: 130
-updated: 2026-11-05
+updated: 2026-11-11
 ---
 
 Docs keeps a version history for every document you own or can edit. You can save a snapshot at any point, then browse the list and roll back to an earlier state whenever you need to.
@@ -16,7 +16,7 @@ Docs keeps a version history for every document you own or can edit. You can sav
 2. Click **File** in the toolbar.
 3. Click **Save version now**.
 
-A toast confirms "Version saved". The version is added to the list and labeled with the date and time it was saved.
+A message confirms "Version saved". The version is added to the list and labeled with the date and time it was saved.
 
 ## View and restore a version
 

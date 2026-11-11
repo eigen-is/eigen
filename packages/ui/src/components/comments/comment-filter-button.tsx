@@ -92,7 +92,7 @@ export function CommentFilterButton({ filter, members, currentUserEmail }: Comme
                                             )}
                                         </button>
                                     </TooltipTrigger>
-                                    <TooltipContent>{c.label.replace(/-\d+$/, '')}</TooltipContent>
+                                    <TooltipContent>{c.name}</TooltipContent>
                                 </Tooltip>
                             );
                         })}

@@ -1,3 +1,6 @@
+// A grid of palette swatches with a check on the current color, for pickers such as text, fill and border
+// colors. By default it offers a gray ramp above the palette's lighter rows; a caller may pass its own rows.
+
 import type { EigenColor } from '@workspace/lib/constants';
 import { EIGEN_ACCENT_COLOR_ROW, EIGEN_COLORS, isLightColor } from '@workspace/lib/constants';
 import { cn } from '@workspace/ui/lib/utils';
@@ -22,6 +25,7 @@ DEFAULT_COLORS.unshift(
         const b = ((Math.sqrt(i / (DEFAULT_COLUMNS - 1)) * 255) | 0).toString(16).padStart(2, '0');
         return {
             label: `#${b}${b}${b}`,
+            name: 'Gray',
             value: `#${b}${b}${b}`,
         };
     }),

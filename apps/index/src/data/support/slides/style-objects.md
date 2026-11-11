@@ -6,7 +6,7 @@ category: Editing
 tags: [slides, styling, fill, stroke, colors, text]
 related: [slides/insert-content, slides/draw-shapes-and-arrows, slides/arrange-and-align]
 order: 50
-updated: 2026-10-28
+updated: 2026-11-11
 ---
 
 Select an object on a slide and the panel on the right fills with its style controls. This page lists every section, top to bottom, and what each control does.
@@ -77,7 +77,7 @@ An arrow has its own sections in place of **Fill**. If the arrow has a label, a 
 
 ## Fill
 
-The color inside a shape or text box. Set a solid color or a two-stop gradient, or turn the fill off.
+The color inside a shape or text box. Set a solid color or a gradient between two colors, or turn the fill off.
 
 | Control | What it does |
 |---|---|
