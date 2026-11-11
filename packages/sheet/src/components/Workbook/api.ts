@@ -75,6 +75,7 @@ export function generateAPIs(
         // True when the batch applied, false when an op failed and the whole batch was rolled back.
         applyOp: (ops: Op[]): boolean => {
             let accepted = false;
+            const selected = getContext().selections != null;
             setContext(
                 (draftCtx) => {
                     const applied = applyOpBatch(current(draftCtx), ops);
@@ -96,6 +97,9 @@ export function generateAPIs(
                 },
                 { noHistory: true },
             );
+            // A delete of the editor's cell drops the selection, and the grid gives up the focus too, as a replay
+            // that loses the selection does, so a keystroke writes nowhere.
+            if (selected && !getContext().selections) getContext().getRefs().cellInput.current?.blur();
             return accepted;
         },
 

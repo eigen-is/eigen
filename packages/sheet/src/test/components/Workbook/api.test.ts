@@ -646,6 +646,28 @@ describe("the selection follows a peer's row and column ops", () => {
         expect(focus(applyPeerOps(selected(2, 1), [remove('column', 0, 1)]))).toEqual([[2, 2], [0, 0], 2, 0]);
     });
 
+    // The text typed so far is for a cell that is gone, and the next keys would land on the one that took its place.
+    it('a delete of the cell being edited closes the editor without writing and drops it', () => {
+        const editing = produce(selected(2, 1), (draft: Context) => {
+            draft.editingCellPosition = [2, 1];
+        });
+        for (const op of [remove('row', 2, 2), remove('column', 0, 1)]) {
+            const ctx = applyPeerOps(editing, [op]);
+            expect([ctx.editingCellPosition, ctx.selections]).toEqual([[], undefined]);
+        }
+    });
+
+    it('a delete that only moves the cell being edited keeps it and the editor on that cell', () => {
+        const editing = produce(selected(2, 1), (draft: Context) => {
+            draft.editingCellPosition = [2, 1];
+        });
+        const ctx = applyPeerOps(editing, [remove('row', 0, 0)]);
+        expect([ctx.editingCellPosition, focus(ctx)]).toEqual([
+            [1, 1],
+            [[1, 1], [1, 1], 1, 1],
+        ]);
+    });
+
     it('a delete of the last row or column clamps it to the grid', () => {
         expect(focus(applyPeerOps(selected(3, 3), [remove('row', 3, 3)]))).toEqual([[2, 2], [3, 3], 2, 3]);
         expect(focus(applyPeerOps(selected(3, 3), [remove('column', 3, 3)]))).toEqual([[3, 3], [2, 2], 3, 2]);

@@ -89,7 +89,7 @@ export function contextFactory({
                 column_focus: 0,
             },
         ],
-        editingCellPosition: [0, 0],
+        editingCellPosition: [],
         visibledatarow: [20, 40, 60, 80, 100],
         visibledatacolumn: [74, 148, 222, 296, 370],
         scrollLeft: 0,
