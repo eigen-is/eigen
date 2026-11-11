@@ -71,11 +71,7 @@ export async function createEvent(
         // A resource under a calendar nobody owns any more would dangle on its foreign key.
         if (!calendar.calendarRow(calendarId)) throw new ApiError(404, 'Calendar not found');
         validateEventInput(args);
-        if (args.parentEventId) {
-            // Who held the date this write replaces, read before the write takes it away.
-            const replaced = exceptionOf(calendar, args.parentEventId, recurrenceDate);
-            return { created: await writeOverride(calendar, calendarId, args.parentEventId, args, user), replaced };
-        }
+        if (args.parentEventId) return writeOverride(calendar, calendarId, args.parentEventId, args, user);
         // Eigen mints every name it writes: a UID is its author's string and may carry `/`, `..` or quotes.
         const uri = `${crypto.randomUUID()}.ics`;
         const uid = args.uid || crypto.randomUUID();
@@ -350,25 +346,14 @@ async function propagateWrite(
     previous: CalendarEvent | null,
 ): Promise<void> {
     const series = event.parentEventId ? eventById(calendar, event.parentEventId) : null;
-    // A new date replaces the occurrence its series yielded there, which is what its guests held.
-    const before =
-        previous ??
-        (series && event.recurrenceDate
-            ? {
-                  ...series,
-                  ...computeOccurrenceTimes(series, event.recurrenceDate),
-                  rrule: null,
-                  recurrenceDate: event.recurrenceDate,
-              }
-            : null);
     // A name missing from the list the guests held cancels that instance.
-    const held = before?.data?.attendees ?? [];
+    const held = previous?.data?.attendees ?? [];
     const attendees = event.data?.attendees ?? [];
     if (!attendees.length && !held.length) return;
     if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
-    if (before && guestView(before, series) === guestView(event, series)) return;
+    if (previous && guestView(previous, series) === guestView(event, series)) return;
     // An event that lost its last guests names no organizer any more, so their cancellation names the one they held.
-    const organizer = organizerOf(calendar.home, user, event.data?.organizer ?? before?.data?.organizer);
+    const organizer = organizerOf(calendar.home, user, event.data?.organizer ?? previous?.data?.organizer);
     if (series && event.status === 'cancelled') {
         await propagateCancellation(calendar.home, organizer, event, held, series);
         return;
@@ -465,7 +450,7 @@ async function writeOverride(
     parentEventId: string,
     input: CreateEventArgs,
     user: User | undefined,
-): Promise<CalendarEvent> {
+): Promise<{ created: CalendarEvent; replaced: CalendarEvent }> {
     const parent = eventById(calendar, parentEventId);
     if (!parent || parent.calendarId !== calendarId || parent.parentEventId) {
         throw new ApiError(404, 'Event not found');
@@ -477,11 +462,18 @@ async function writeOverride(
     const key = input.recurrenceDate;
     if (!key) throw new ApiError(400, 'Invalid occurrence date');
 
+    // What the date held before this write takes it away: its own row, else the occurrence the series yields there.
+    const replaced = exceptionOf(calendar, parent.id, key) ?? {
+        ...parent,
+        ...computeOccurrenceTimes(parent, key),
+        rrule: null,
+        recurrenceDate: key,
+    };
     const organizer = !isInvitationFromOthers(parent, calendar.home.user.email);
     const edit = exceptionEdit(parent, input, saveContext(calendar, organizer, user));
     await editResource(calendar, resource, (component) => applyEdits(component, new Map([[key, edit]])));
-    const stored = exceptionOf(calendar, parent.id, key);
-    return stored ?? requireEvent(calendar, parent.id);
+    const created = exceptionOf(calendar, parent.id, key) ?? requireEvent(calendar, parent.id);
+    return { created, replaced };
 }
 
 // An organizer's save names whoever saves as the ORGANIZER of a file that names none yet.
