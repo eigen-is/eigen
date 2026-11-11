@@ -433,7 +433,7 @@ A sheet keeps its validation rules in `dataValidations`: a record from an id to 
 
 ## A tick box is a validation rule, and the value is its state
 
-Tick boxes, list chevrons and the three corner marks are canvas paint, not DOM. Their model and geometry live in `state/modules/data-validation.ts` and `cell-glyph.ts`, the paint in `state/render/cells.ts`. Which rule covers a cell is `validationAt` (`state/modules/validation-rules.ts`), and the painter takes its lookup once per pass ([§ A validation rule is stored once over its ranges](#a-validation-rule-is-stored-once-over-its-ranges)).
+Tick boxes, list chevrons and the three corner marks are canvas paint, not DOM. A tick box's and a chevron's model and geometry live in `state/modules/data-validation.ts`, which of them takes a press in `cell-glyph.ts`, and the paint, with the corner marks' geometry, in `state/render/cells.ts`. Which rule covers a cell is `validationAt` (`state/modules/validation-rules.ts`), and the painter takes its lookup once per pass ([§ A validation rule is stored once over its ranges](#a-validation-rule-is-stored-once-over-its-ranges)).
 
 `Insert → Tick box` and the cell context menu both call `insertCheckbox`, which writes a `checkbox` rule with the values `TRUE` and `FALSE`. That is Google's model: a tick box is data validation, not a cell format. The context-menu entry exists because the common intent is converting an existing TRUE/FALSE column.
 

@@ -30,96 +30,6 @@ const FORCED_STRING_INDICATOR_COLOR = '#487f1e';
 // What Excel paints a number whose format says [Red].
 const NUMBER_FORMAT_RED = '#ff0000';
 
-// The square a corner triangle is drawn in, anchored on the cell corner itself (the 1px is the grid line).
-function cellIndicatorRect(corner: 'left' | 'right', left: number, top: number, right: number): CellGlyphRect {
-    return { x: (corner === 'left' ? left : right - CELL_INDICATOR_SIZE) - 1, y: top, size: CELL_INDICATOR_SIZE };
-}
-
-// A right-angled triangle filling half of its cellIndicatorRect, anchored on the cell corner: one leg along the top
-// edge, one down the side.
-function drawCellIndicator(
-    renderCtx: CanvasRenderingContext2D,
-    corner: 'left' | 'right',
-    rect: CellGlyphRect,
-    color: string,
-) {
-    const x = corner === 'left' ? rect.x : rect.x + rect.size;
-    renderCtx.beginPath();
-    renderCtx.moveTo(x, rect.y);
-    renderCtx.lineTo(corner === 'left' ? x + rect.size : x - rect.size, rect.y);
-    renderCtx.lineTo(x, rect.y + rect.size);
-    renderCtx.fillStyle = color;
-    renderCtx.fill();
-    renderCtx.closePath();
-}
-
-function drawCommentIndicator(pass: RenderPass, cardId: string, startY: number, endX: number) {
-    const { renderCtx, sheetCtx, offsetLeft, offsetTop } = pass;
-    const color = commentIndicatorColor(sheetCtx.commentCards?.[cardId]?.color);
-    drawCellIndicator(renderCtx, 'right', cellIndicatorRect('right', 0, startY + offsetTop, endX + offsetLeft), color);
-}
-
-function drawTickBox(renderCtx: CanvasRenderingContext2D, rect: CellGlyphRect, checked: boolean) {
-    renderCtx.lineWidth = 1;
-    renderCtx.strokeStyle = CHECKBOX_STROKE;
-    // The stroke stays inside the rect, so the box is drawn on the very pixels that take its press.
-    renderCtx.strokeRect(rect.x + HALF_PIXEL, rect.y + HALF_PIXEL, rect.size - 1, rect.size - 1);
-    if (!checked) return;
-
-    renderCtx.beginPath();
-    renderCtx.moveTo(rect.x + 2, rect.y + rect.size / 2);
-    renderCtx.lineTo(rect.x + rect.size / 2 - 1, rect.y + rect.size - 3);
-    renderCtx.lineTo(rect.x + rect.size - 2, rect.y + 2);
-    renderCtx.stroke();
-    renderCtx.closePath();
-}
-
-// The list chevron takes the cell's own text color at low alpha, as a fixed gray would vanish into a dark fill.
-const DROPDOWN_CHEVRON_ALPHA = 0.55;
-
-function renderDropdownChevron(pass: RenderPass, r: number, c: number, box: Rect) {
-    const { renderCtx, flowdata } = pass;
-    const rect = dropdownChevronRect(box);
-    if (!rect) return;
-
-    renderCtx.save();
-    renderCtx.globalAlpha = DROPDOWN_CHEVRON_ALPHA;
-    // An empty cell has no fc of its own; black is what its text would take.
-    renderCtx.strokeStyle = normalizedAttr(flowdata, r, c, 'fc') ?? '#000000';
-    renderCtx.lineWidth = 1.5;
-    renderCtx.lineCap = 'round';
-    renderCtx.lineJoin = 'round';
-    renderCtx.beginPath();
-    // Lucide chevron-down proportions inside the box: full width, middle fifth.
-    renderCtx.moveTo(rect.x + 1, rect.y + rect.size * 0.3);
-    renderCtx.lineTo(rect.x + rect.size / 2, rect.y + rect.size * 0.7);
-    renderCtx.lineTo(rect.x + rect.size - 1, rect.y + rect.size * 0.3);
-    renderCtx.stroke();
-    renderCtx.restore();
-}
-
-// A cell adds its grid lines to the pass's grid path, which drawMain strokes once. Spilled text hides the
-// right line. Both lines lie on the cell's own last pixel. The right line stops one pixel above the next
-// row, so it leaves no stub where the cell below draws no right line.
-function addGridLines(
-    pass: RenderPass,
-    startY: number,
-    startX: number,
-    endY: number,
-    endX: number,
-    rightLine: boolean,
-) {
-    const { gridLines, offsetLeft, offsetTop } = pass;
-    if (rightLine) {
-        const x = endX + offsetLeft - 2 + HALF_PIXEL;
-        gridLines.moveTo(x, startY + offsetTop);
-        gridLines.lineTo(x, endY + offsetTop - 1);
-    }
-    const y = endY + offsetTop - 2 + HALF_PIXEL;
-    gridLines.moveTo(startX + offsetLeft - 1, y);
-    gridLines.lineTo(endX + offsetLeft - 1, y);
-}
-
 export function nullCellRender(
     pass: RenderPass,
     r: number,
@@ -351,4 +261,93 @@ export function cellRender(
     if (drawGridLines) {
         addGridLines(pass, startY, startX, endY, endX, drawRightGridLine);
     }
+}
+
+// The square a corner triangle is drawn in, anchored on the cell corner itself (the 1px is the grid line).
+function cellIndicatorRect(corner: 'left' | 'right', left: number, top: number, right: number): CellGlyphRect {
+    return { x: (corner === 'left' ? left : right - CELL_INDICATOR_SIZE) - 1, y: top, size: CELL_INDICATOR_SIZE };
+}
+
+// A right-angled triangle filling half of its cellIndicatorRect, anchored on the cell corner: one leg along the top
+// edge, one down the side.
+function drawCellIndicator(
+    renderCtx: CanvasRenderingContext2D,
+    corner: 'left' | 'right',
+    rect: CellGlyphRect,
+    color: string,
+) {
+    const x = corner === 'left' ? rect.x : rect.x + rect.size;
+    renderCtx.beginPath();
+    renderCtx.moveTo(x, rect.y);
+    renderCtx.lineTo(corner === 'left' ? x + rect.size : x - rect.size, rect.y);
+    renderCtx.lineTo(x, rect.y + rect.size);
+    renderCtx.fillStyle = color;
+    renderCtx.fill();
+    renderCtx.closePath();
+}
+
+function drawCommentIndicator(pass: RenderPass, cardId: string, startY: number, endX: number) {
+    const { renderCtx, sheetCtx, offsetLeft, offsetTop } = pass;
+    const color = commentIndicatorColor(sheetCtx.commentCards?.[cardId]?.color);
+    drawCellIndicator(renderCtx, 'right', cellIndicatorRect('right', 0, startY + offsetTop, endX + offsetLeft), color);
+}
+
+function drawTickBox(renderCtx: CanvasRenderingContext2D, rect: CellGlyphRect, checked: boolean) {
+    renderCtx.lineWidth = 1;
+    renderCtx.strokeStyle = CHECKBOX_STROKE;
+    // The stroke stays inside the rect, so the box is drawn on the very pixels that take its press.
+    renderCtx.strokeRect(rect.x + HALF_PIXEL, rect.y + HALF_PIXEL, rect.size - 1, rect.size - 1);
+    if (!checked) return;
+
+    renderCtx.beginPath();
+    renderCtx.moveTo(rect.x + 2, rect.y + rect.size / 2);
+    renderCtx.lineTo(rect.x + rect.size / 2 - 1, rect.y + rect.size - 3);
+    renderCtx.lineTo(rect.x + rect.size - 2, rect.y + 2);
+    renderCtx.stroke();
+    renderCtx.closePath();
+}
+
+// The list chevron takes the cell's own text color at low alpha, as a fixed gray would vanish into a dark fill.
+const DROPDOWN_CHEVRON_ALPHA = 0.55;
+
+function renderDropdownChevron(pass: RenderPass, r: number, c: number, box: Rect) {
+    const { renderCtx, flowdata } = pass;
+    const rect = dropdownChevronRect(box);
+    if (!rect) return;
+
+    renderCtx.save();
+    renderCtx.globalAlpha = DROPDOWN_CHEVRON_ALPHA;
+    // An empty cell has no fc of its own; black is what its text would take.
+    renderCtx.strokeStyle = normalizedAttr(flowdata, r, c, 'fc') ?? '#000000';
+    renderCtx.lineWidth = 1.5;
+    renderCtx.lineCap = 'round';
+    renderCtx.lineJoin = 'round';
+    renderCtx.beginPath();
+    // Lucide chevron-down proportions inside the box: full width, middle fifth.
+    renderCtx.moveTo(rect.x + 1, rect.y + rect.size * 0.3);
+    renderCtx.lineTo(rect.x + rect.size / 2, rect.y + rect.size * 0.7);
+    renderCtx.lineTo(rect.x + rect.size - 1, rect.y + rect.size * 0.3);
+    renderCtx.stroke();
+    renderCtx.restore();
+}
+
+// A cell adds its grid lines to the pass's grid path, which drawMain strokes once, both on the cell's own last pixel.
+// The right line stops a pixel above the next row, so no stub shows where the cell below draws none.
+function addGridLines(
+    pass: RenderPass,
+    startY: number,
+    startX: number,
+    endY: number,
+    endX: number,
+    rightLine: boolean,
+) {
+    const { gridLines, offsetLeft, offsetTop } = pass;
+    if (rightLine) {
+        const x = endX + offsetLeft - 2 + HALF_PIXEL;
+        gridLines.moveTo(x, startY + offsetTop);
+        gridLines.lineTo(x, endY + offsetTop - 1);
+    }
+    const y = endY + offsetTop - 2 + HALF_PIXEL;
+    gridLines.moveTo(startX + offsetLeft - 1, y);
+    gridLines.lineTo(endX + offsetLeft - 1, y);
 }

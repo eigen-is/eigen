@@ -70,8 +70,7 @@ export function applySheetView(ctx: Context) {
 }
 
 // What the geometry, the gridlines, the selection's box and the filter's rects are worked out from, besides the grid's
-// size. The first row counts too: a column's width depends on whether its first cell is set, and its length is the
-// column count.
+// size and its first row: a column's width depends on whether its first cell is set.
 const GEOMETRY_MAPS = ['rowlen', 'columnlen', 'rowhidden', 'colhidden', 'merge'] as const;
 const VIEW_FIELDS = ['filterRange', 'showGridLines', 'defaultRowHeight', 'defaultColWidth'] as const;
 

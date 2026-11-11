@@ -7,7 +7,7 @@ import { REFERENCE_ROW_COUNT, SHEET_COLUMN_HEADER_HEIGHT, SHEET_ROW_HEADER_WIDTH
 import { Canvas } from '../../../state/canvas';
 import type { Context } from '../../../state/context';
 import { cellGlyphAt } from '../../../state/modules/cell-glyph';
-import { CHECKBOX_SIZE, checkboxChange } from '../../../state/modules/data-validation';
+import { checkboxChange } from '../../../state/modules/data-validation';
 import type { Cell, DataValidationRule } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 
@@ -78,8 +78,10 @@ function paintAround5000(ctx: Context) {
     return canvas.calls;
 }
 
-const tickBoxes = (calls: Call[]) =>
-    calls.filter(({ name, args }) => name === 'strokeRect' && args[2] === CHECKBOX_SIZE - 1);
+// A tick box is 10 px a side, and its stroke stays inside it.
+const BOX_STROKE = 9;
+
+const tickBoxes = (calls: Call[]) => calls.filter(({ name, args }) => name === 'strokeRect' && args[2] === BOX_STROKE);
 
 describe('the painter and a whole-column tick box', () => {
     test('draws a tick box on every row of the window at row 5000, and ticks the TRUE one', () => {
@@ -88,7 +90,7 @@ describe('the painter and a whole-column tick box', () => {
         expect(tickBoxes(calls)).toHaveLength(11);
         const ticks = calls.filter(
             ({ name, args }, i) =>
-                name === 'strokeRect' && args[2] === CHECKBOX_SIZE - 1 && calls[i + 1]?.name === 'beginPath',
+                name === 'strokeRect' && args[2] === BOX_STROKE && calls[i + 1]?.name === 'beginPath',
         );
         expect(ticks).toHaveLength(1);
     });

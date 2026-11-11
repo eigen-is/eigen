@@ -30,10 +30,8 @@ import { renderChartSpecSvg } from '@workspace/lib/vector';
 import { cellDisplay } from './format';
 import type { Cell, CellResolver } from './types';
 
-// Reads a range chart's cells: values from the computed `v`, labels and names from the display
-// text `m` or a rich-text cell's runs, the same strings the grid shows. Hidden rows and columns are
-// read like any other. A series whose values were deleted is left out, as Google does, and keeps its
-// id, so its style stays in the spec for an undo.
+// Reads a range chart's cells as the grid shows them: values from the computed `v`, labels and names from the display
+// text, hidden lines included. A series whose values were deleted is left out and keeps its id for an undo.
 export function resolveRangeChartData(data: RangeChartData, resolver: CellResolver): ChartData | ChartDataError {
     const usable = (ref: CellRangeRef): boolean =>
         resolver.hasSheet(ref.sheetId) && (ref.row[0] === ref.row[1] || ref.column[0] === ref.column[1]);
@@ -78,9 +76,8 @@ export function cellLabel(cell: Cell | null): string {
     return chartLabel(String(cellDisplay(cell) ?? ''));
 }
 
-// A chart as the editor's overlay and the export draw it: its box clamped as stored, in the look it stores, its range
-// data read through the resolver, and its value ticks and data labels in the axis's own format or else the first value
-// cell's, Google's "From source data". Cells without a format read as General, as the grid shows them.
+// A chart as the editor's overlay and the export draw it, its range data read through the resolver. Value ticks and
+// data labels take the axis's own format, or else the first value cell's, and a cell without one reads as General.
 export function renderSheetChartSvg(chart: SheetChart, resolver: CellResolver): string {
     const { spec } = readChartSpec(chart);
     const range = spec?.data.source === 'range' ? spec.data : null;
