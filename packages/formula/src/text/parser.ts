@@ -568,7 +568,7 @@ class Parser {
             }
             const legEnd = this.leg(second);
             const after = text.charCodeAt(legEnd);
-            const whole = after !== OPEN && after !== BANG && !continuesWord(after);
+            const whole = after !== OPEN && after !== BANG && !continuesWord(text, legEnd);
             if (legEnd !== -1 && this.legKind === kind && whole) {
                 this.end = legEnd;
                 this.next();

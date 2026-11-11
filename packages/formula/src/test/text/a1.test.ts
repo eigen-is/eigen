@@ -5,6 +5,7 @@ import {
     findSheetByName,
     GRID_COLUMNS,
     GRID_ROWS,
+    parseA1,
     parseA1Range,
     quoteSheetName,
     rangeToA1,
@@ -115,9 +116,26 @@ describe('quoteSheetName', () => {
         ['Q1 (final)', "'Q1 (final)'"],
         ['a!b', "'a!b'"],
         ['', "''"],
+        ['a?b', "'a?b'"],
+        ['a\\b', "'a\\b'"],
+        ['a$b', "'a$b'"],
+        ['\uff21\uff11', "'\uff21\uff11'"],
+        ['x\u200by', "'x\u200by'"],
+        ['a\u3000b', "'a\u3000b'"],
+        ['\u3164', "'\u3164'"],
+        ['\u0e2a\u0e23\u0e38\u0e1b', "'\u0e2a\u0e23\u0e38\u0e1b'"],
     ])('%s is quoted', (name, expected) => {
         expect(quoteSheetName(name)).toBe(expected);
     });
+
+    test.each(['\u6570\u636e', '\uff21\uff11', 'x\u200by', '\u0e2a\u0e23\u0e38\u0e1b', '\ud83d\ude00', 'a\u00d7b'])(
+        'a sheet named %s is spelled so that it reads back',
+        (name) => {
+            const find = sheetFinder([{ id: 'id1', name }]);
+            const tree = parseA1(`=${quoteSheetName(name)}!A1`, 0, 0, find);
+            expect(tree).toMatchObject({ sheet: 'id1' });
+        },
+    );
 });
 
 describe('sheetNameKey', () => {

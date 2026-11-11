@@ -14,6 +14,7 @@ import {
     RefKind,
     SheetKind,
     sheetFinder,
+    storedText,
     Token,
 } from '../../text';
 import { at, failure, findSheet, grouped, sheetName, shown, stored, treeA1, treeStored } from './support';
@@ -328,6 +329,66 @@ describe('literals and names (parsing.md 2.3)', () => {
         '',
     ])('%p does not parse, and says so without throwing', (text) => {
         expect(failure(text)).toBe('syntax');
+    });
+});
+
+describe('what a name may hold (parsing.md rule 31)', () => {
+    test.each([
+        ['an ideographic space', '=SUM(A1,\u3000B1)'],
+        ['a zero-width space', '=A1\u200b+1'],
+        ['a zero-width joiner', '=x\u200dy'],
+        ['a byte-order mark', '=\ufeffA1'],
+        ['a line separator', '=A1\u2028+1'],
+        ['a no-break space', '=A1\u00a0+B1'],
+        ['a narrow no-break space', '=1\u202f+1'],
+        ['a Hangul filler', '=\u3164'],
+        ['a variation selector', '=x\ufe0f'],
+        ['a soft hyphen', '=x\u00ady'],
+        ['full-width digits and plus', '=\uff11\uff0b\uff12'],
+        ['a full-width plus', '=A1\uff0bB1'],
+        ['full-width letters', '=\uff21\uff11'],
+        ['a full-width call', '=\uff33\uff35\uff2d(1)'],
+        ['a multiplication sign', '=A\u00d7B'],
+        ['a minus sign', '=A1\u2212B1'],
+        ['curly quotes', '=\u201ca\u201d'],
+        ['a currency sign', '=\u20ac'],
+        ['an emoji', '=\ud83d\ude00'],
+        ['an emoji inside a name', '=x\ud83d\ude00'],
+        ['half a surrogate pair', '=x\ud83d'],
+        ['a digit of another script first', '=\u0663x'],
+        ['a combining mark alone', '=\u0301'],
+    ])('%s is no part of a name, so the text does not parse', (_, text) => {
+        expect(failure(text)).toBe('syntax');
+        expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
+        expect(storedText(text, 0, 0, findSheet)).toBe(`=${text}`);
+    });
+
+    test.each([
+        '=\u00dcbersicht',
+        '=\u00e9t\u00e9_2',
+        '=\u0394x',
+        '=\u6570\u636e',
+        '=\ub370\uc774\ud130',
+        '=\ud840\udc00x',
+        '=Stra\u00dfe9',
+        '=x\u0663',
+        '=\uff76\uff85',
+        '=x.y?',
+        '=\\a',
+        '=_1',
+        '=a\\b?c.d',
+    ])('letters of any script, digits, _ . \\ and ? make a name: %s', (text) => {
+        const tree = treeA1(text);
+        expect(tree).toMatchObject({ kind: NodeKind.Name, text: text.slice(1) });
+        expect(treeStored(printStored(tree))).toEqual(tree);
+        expect(shown(text)).toBe(text);
+    });
+
+    test('a sheet and a function are named by the same characters', () => {
+        expect(treeA1('=\u6570\u636e!A1')).toMatchObject({ kind: NodeKind.Ref, sheet: '\u6570\u636e' });
+        expect(treeA1('=\u0394x(1)')).toMatchObject({ kind: NodeKind.Call, text: '\u0394X' });
+        expect(failure('=\u6570\u3000\u636e!A1')).toBe('syntax');
+        expect(failure('=A1:B2\u200b')).toBe('syntax');
     });
 });
 

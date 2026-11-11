@@ -165,4 +165,15 @@ describe('tokens', () => {
             'Close:)',
         ]);
     });
+
+    test('a character no formula holds is one bad token, both halves of it', () => {
+        expect(cut('=A1\u3000+\ud83d\ude00\u0394x')).toEqual([
+            'Equal:=',
+            'Reference:A1',
+            'Bad:\u3000',
+            'Plus:+',
+            'Bad:\ud83d\ude00',
+            'Name:\u0394x',
+        ]);
+    });
 });

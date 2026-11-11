@@ -374,6 +374,20 @@ const TYPED_WORDS = [
     ...['SUM (', 'TRUE (', 'F  (', 'RC (', 'A1 (', 'Rate\n('],
     ...['Sheet2!A', 'Sheet2!A', 'Sheet2!$B', 'Sheet2!1', 'Sheet2!$2', 'Sheet2!A1', "'No Such'!B", 'NoSuch!B'],
     ...['#REF!A1', '#REF!$B$2', '#ref!A', '#REF!1', '#REF!A1:B2', '#N/AA1'],
+    ...[
+        '\u3000',
+        '\u200b',
+        '\uff11',
+        '\uff0b',
+        '\uff21',
+        '\u00d7',
+        '\u201c',
+        '\u3164',
+        '\ufe0f',
+        '\ud83d\ude00',
+        '\ud83d',
+    ],
+    ...['\u0394x', '\u6570\u636e', '\u6570\u636e!', '\ud840\udc00', 'x\u0663', '\\a', 'a?'],
 ];
 
 const STORED_WORDS = [
@@ -387,6 +401,18 @@ const STORED_WORDS = [
     ...['SUM (', 'TRUE (', 'F  (', 'RC (', 'A1 (', 'rc (', 'Rate\n('],
     ...['[s2]!C1', '[s2]!C[2]', '[s2]!R', '[s2]!R2', '[s2]!A', '[s2]!B', '[s2]!RC', "'x'!C"],
     ...['#REF!RC', '#REF!R1C1', '#REF!A1', '#REF!C'],
+    ...[
+        '\u3000',
+        '\u200b',
+        '\uff11',
+        '\uff0b',
+        '\u00d7',
+        '\u3164',
+        '\ud83d\ude00',
+        '\ud83d',
+        '\u0394x',
+        '\u6570\u636e',
+    ],
 ];
 
 // A seeded token soup: a few words of one grammar's vocabulary in any order, most of which do not parse.
