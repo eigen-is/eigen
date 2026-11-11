@@ -278,13 +278,15 @@ class Parser {
         const elsewhere = left.sheetKind !== right.sheetKind || left.sheet !== right.sheet;
         if (right.sheetKind !== SheetKind.Host && elsewhere) return this.fail();
         if (space === '') {
-            // A name that is a column label, a colon and a column would show as text that reads as one range. Typed
-            // text never gets here that way, so this refuses only stored text.
+            // A name that is a column label, a colon and a column would show as text that reads as one range, and so
+            // would a function named like a column and called with whitespace. Typed text never gets here that way,
+            // so this refuses only stored text.
             const before = left.kind === NodeKind.Binary ? left.children[1] : left;
             let after = right;
-            while (after.kind === NodeKind.Postfix) after = after.children[0];
-            const column = after.kind === NodeKind.Ref ? after.op === RefKind.Columns : isColumnName(after);
-            if (isColumnName(before) && column && after.space === '') return this.fail();
+            while (after.kind === NodeKind.Postfix || after.kind === NodeKind.Invoke) after = after.children[0];
+            const label = after.kind === NodeKind.Name || after.spaceOpen !== '';
+            const column = after.kind === NodeKind.Ref ? after.op === RefKind.Columns : label && isColumn(after);
+            if (before.kind === NodeKind.Name && isColumn(before) && column && after.space === '') return this.fail();
         }
         return branch(NodeKind.Binary, Token.Colon, '', [left, right], space, '', '');
     }
@@ -706,6 +708,6 @@ function yieldsReference(node: FormulaNode): boolean {
     }
 }
 
-function isColumnName(node: FormulaNode): boolean {
-    return node.kind === NodeKind.Name && columnIndex(node.text) !== -1;
+function isColumn(named: FormulaNode): boolean {
+    return columnIndex(named.text) !== -1;
 }

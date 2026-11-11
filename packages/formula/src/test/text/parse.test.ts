@@ -267,6 +267,15 @@ describe('literals and names (parsing.md 2.3)', () => {
         expect(treeA1(shown(text))).toEqual(tree);
     });
 
+    test('a column, a colon and a column before whitespace and ( is one range in both grammars', () => {
+        expect(group('=A:IF (B1)')).toBe('(C:C[239] [RC[1]])');
+        expect(parseStored('=A:IF (RC)')).toMatchObject({ reason: 'syntax' });
+        expect(parseStored('=[s2]!A:BF  (1)()')).toMatchObject({ reason: 'syntax' });
+        expect(stored('=IF (A1,B1):B', 'A1')).toBe('=IF (RC,RC[1]):B');
+        expect(grouped(treeStored('=IF (RC,RC[1]):B'))).toBe('(IF(RC,RC[1]):B)');
+        expect(stored('=A:IF(B1)', 'A1')).toBe('=A:IF(RC[1])');
+    });
+
     test('stored text reads a word, whitespace and ( the same way', () => {
         expect(treeStored('=SUM (RC)')).toEqual(treeA1('=SUM (N1)'));
         expect(grouped(treeStored('=RC (R1C1)'))).toBe('(RC [R1C1])');
