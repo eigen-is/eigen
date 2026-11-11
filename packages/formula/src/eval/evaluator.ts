@@ -51,6 +51,7 @@ export class Evaluator {
             ? this.read(this.binary(tree, sheet, row, column, true))
             : this.operand(tree, sheet, row, column);
         const single = isArray(value) ? value.items[0] : value;
+        if (isReference(single)) return VALUE;
         return single === null ? 0 : single;
     }
 

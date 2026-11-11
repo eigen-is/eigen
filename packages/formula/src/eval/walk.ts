@@ -1,15 +1,18 @@
 // The one walk over the arguments of an aggregate such as SUM, MAX or AND. It hands the function spans of numbers
 // to loop over, in argument order: a value typed as an argument once it is coerced, a stretch of a column's own
-// plane for a reference, and the elements of an array. It skips what the function does not count, stops at the
-// first error, and copies no range. The formulas in every reference are computed before the first span.
+// plane for a reference, and the stored rows of an array. It skips what the function does not count, stops at the
+// first error, and copies no range. The formulas in every reference are computed before the first span. It also
+// adds what it hands out, since a stored row of an array can stand for a million written ones.
 
 import { CellKind, KIND_MASK } from '../store/column';
 import { toBoolean, toNumber } from '../values/coerce';
 import type { FormulaError } from '../values/errors';
+import { CALC } from '../values/errors';
 import { parseNumber } from '../values/parse-number';
 import type { ArrayValue, Reference, Value } from '../values/value';
 import { isArray, isError, isReference, OMITTED } from '../values/value';
 import type { Evaluator } from './evaluator';
+import { repeated } from './sum';
 
 // Which cells an aggregate takes. A value typed as an argument is coerced where a cell would be skipped: for
 // Numbers a text is read as a number and a boolean is 1 or 0, for Truths a number is TRUE unless it is 0.
@@ -24,6 +27,12 @@ export const Take = {
     Filled: 3,
 } as const;
 
+export type Take = (typeof Take)[keyof typeof Take];
+
+// The most additions one sum makes one by one for cells an array does not store: a row of different numbers that
+// stands for many written rows is added that many times over. A sum that needs more is #CALC!.
+const MOST_ADDITIONS = 2 ** 27;
+
 const NUMBER = 1 << CellKind.Number;
 const EVERY = (1 << CellKind.Number) | (1 << CellKind.Boolean) | (1 << CellKind.Text) | (1 << CellKind.Error);
 // Per `Take`, the kinds of cell that count, one bit per kind.
@@ -34,32 +43,43 @@ export class Walk {
     public num: Float64Array;
     public from = 0;
     public to = 0;
-    // How many cells each number of the span stands for: more than 1 only for the last row or column of an array.
-    public times = 1;
+    // A span from an array is one stored row: how many equal elements each number stands for, null when each stands
+    // for one, and how many written rows the whole span stands for. In written order every number comes `reps`
+    // times and the span as a whole `rows` times.
+    public reps: Int32Array | null = null;
+    public rows = 1;
     // How many cells were handed out so far.
     public count = 0;
     public error: FormulaError | null = null;
+    // After `add`, the sum before its last addition.
+    public before = 0;
+    // Whether blank elements of an array were passed since the last number handed out. A sum takes them for an
+    // addition of 0, which a blank cell of a reference is not.
+    private blank = false;
     private readonly ctx: Evaluator;
     // Where a value that lies in no plane is put to be handed out: one typed value, or the cells of one row.
     private span = new Float64Array(8);
+    private widths = new Int32Array(8);
     private args: readonly Value[] = [];
-    private take = 0;
+    private take: Take = Take.Numbers;
     private arg = 0;
     // The reference in progress, with its last column, the row to go on from and the row to stop at, or the array
-    // in progress, with the element to go on from.
+    // in progress, with the stored row to go on from.
     private area: Reference | null = null;
     private right = 0;
     private row = 0;
     private end = 0;
     private array: ArrayValue | null = null;
     private item = 0;
+    // The additions made so far for cells that no array stores.
+    private unstored = 0;
 
     public constructor(ctx: Evaluator) {
         this.ctx = ctx;
         this.num = this.span;
     }
 
-    public start(args: readonly Value[], take: number): void {
+    public start(args: readonly Value[], take: Take): void {
         // Another aggregate can run while these formulas are computed, and it uses this same walk.
         for (const arg of args) {
             for (let area = isReference(arg) ? arg : null; area !== null; area = area.next) {
@@ -71,8 +91,12 @@ export class Walk {
         this.arg = 0;
         this.area = null;
         this.array = null;
+        this.reps = null;
+        this.rows = 1;
         this.count = 0;
         this.error = null;
+        this.blank = false;
+        this.unstored = 0;
     }
 
     // Moves to the next span. False when there is none, or when an error ended the walk.
@@ -86,6 +110,46 @@ export class Walk {
             else if (this.argument(this.args[this.arg++])) return true;
             if (this.error !== null) return false;
         }
+    }
+
+    // The sum of everything the walk still hands out, as adding the numbers one by one in written order gives it.
+    public add(): number {
+        let sum = 0;
+        let before = 0;
+        while (this.next()) {
+            const { num, from, to, reps, rows } = this;
+            if (reps === null && rows === 1) {
+                for (let i = from; i < to - 1; i += 1) sum += num[i];
+                before = sum;
+                sum += num[to - 1];
+                continue;
+            }
+            let cells = 0;
+            let equal = true;
+            for (let i = from; i < to; i += 1) {
+                cells += reps === null ? 1 : reps[i];
+                equal &&= num[i] === num[from];
+            }
+            if (equal) {
+                before = repeated(sum, num[from], cells * rows - 1);
+                sum = before + num[from];
+                continue;
+            }
+            const more = (rows - 1) * (to - from);
+            if (!this.ctx.recalc.room(more, MOST_ADDITIONS - this.unstored)) {
+                this.fail(CALC);
+                break;
+            }
+            this.unstored += more;
+            for (let row = 0; row < rows; row += 1) {
+                for (let i = from; i < to; i += 1) {
+                    before = reps === null ? sum : repeated(sum, num[i], reps[i] - 1);
+                    sum = before + num[i];
+                }
+            }
+        }
+        this.before = this.blank ? sum : before;
+        return sum;
     }
 
     private argument(value: Value): boolean {
@@ -169,7 +233,7 @@ export class Walk {
                 this.num = held.num;
                 this.from = row;
                 this.to = stop;
-                this.times = 1;
+                this.blank = false;
                 this.count += stop - row;
                 return true;
             }
@@ -188,52 +252,78 @@ export class Walk {
             this.num = span;
             this.from = 0;
             this.to = found;
-            this.times = 1;
+            this.blank = false;
             this.count += found;
             return true;
         }
         return this.enter(area.next);
     }
 
-    // The stored elements of the array that count, row by row. The last stored row and column are handed out once,
-    // with the number of rows or columns they stand for in `times`.
+    // The stored rows of the array, each handed out with the numbers in it that count. Of an array of numbers, a
+    // stretch of rows that each stand for one written row is one span of the block itself.
     private elements(array: ArrayValue): boolean {
-        const { items, nums, height, width } = array;
-        const start = (height - 1) * width;
-        const down = array.rows - height + 1;
-        if (nums !== null && width === array.columns) {
-            const whole = this.item === 0 && (down === 1 || start === 0);
-            const to = this.item === 0 && !whole ? start : nums.length;
-            this.num = nums;
-            this.from = this.item;
-            this.to = to;
-            this.times = to === start ? 1 : down;
-            this.count += (to - this.item) * this.times;
-            this.item = to;
-            if (to === nums.length) this.array = null;
+        const { items, nums, height, width, rowEnds, columnEnds } = array;
+        const { take } = this;
+        if (this.span.length < width) this.span = new Float64Array(width);
+        if (this.widths.length < width) this.widths = new Int32Array(width);
+        const { span, widths } = this;
+        while (this.item < height) {
+            const row = this.item;
+            const rows = rowEnds === null ? 1 : rowEnds[row] - (row === 0 ? 0 : rowEnds[row - 1]);
+            if (nums !== null && columnEnds === null && rows === 1) {
+                let stop = rowEnds === null ? height : row + 1;
+                while (rowEnds !== null && stop < height && rowEnds[stop] - rowEnds[stop - 1] === 1) stop += 1;
+                this.item = stop;
+                this.num = nums;
+                this.from = row * width;
+                this.to = stop * width;
+                this.reps = null;
+                this.rows = 1;
+                this.blank = false;
+                this.count += (stop - row) * width;
+                return true;
+            }
+            this.item = row + 1;
+            let found = 0;
+            let cells = 0;
+            for (let c = 0; c < width; c += 1) {
+                const item = items[row * width + c];
+                let number = 0;
+                if (typeof item === 'number') number = item;
+                else if (item === null) {
+                    this.blank = true;
+                    continue;
+                } else if (typeof item === 'boolean' && take === Take.Truths) number = item ? 1 : 0;
+                else if (isError(item) && take <= Take.Truths) return this.fail(item);
+                else if (take !== Take.Filled) continue;
+                this.blank = false;
+                span[found] = number;
+                widths[found] = columnEnds === null ? 1 : columnEnds[c] - (c === 0 ? 0 : columnEnds[c - 1]);
+                cells += widths[found];
+                found += 1;
+            }
+            if (found === 0) continue;
+            this.num = span;
+            this.from = 0;
+            this.to = found;
+            this.reps = columnEnds === null ? null : widths;
+            this.rows = rows;
+            this.count += cells * rows;
             return true;
         }
-        while (this.item < items.length) {
-            const at = this.item++;
-            const item = items[at];
-            const times = (at < start ? 1 : down) * ((at + 1) % width === 0 ? array.columns - width + 1 : 1);
-            if (typeof item === 'number') return this.single(item, times);
-            if (item === null) continue;
-            if (typeof item === 'boolean' && this.take === Take.Truths) return this.single(item ? 1 : 0, times);
-            if (this.take === Take.Filled) return this.single(0, times);
-            if (isError(item) && this.take <= Take.Truths) return this.fail(item);
-        }
         this.array = null;
+        this.reps = null;
+        this.rows = 1;
         return false;
     }
 
-    private single(value: number, times = 1): boolean {
+    private single(value: number): boolean {
         this.span[0] = value;
         this.num = this.span;
         this.from = 0;
         this.to = 1;
-        this.times = times;
-        this.count += times;
+        this.blank = false;
+        this.count += 1;
         return true;
     }
 
@@ -241,6 +331,8 @@ export class Walk {
         this.error = error;
         this.area = null;
         this.array = null;
+        this.reps = null;
+        this.rows = 1;
         this.arg = this.args.length;
         return false;
     }

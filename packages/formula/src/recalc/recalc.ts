@@ -4,7 +4,6 @@
 // towards it, and all of them get the loop's result whatever they computed. Nesting is bounded by one budget: past
 // it the calls in progress are dropped by a throw and the cells computed again from the list of cells in progress.
 
-import type { Evaluator as EvaluatorType } from '../eval/evaluator';
 import { Evaluator } from '../eval/evaluator';
 import { FACT_BITS, Fact, shapeFacts } from '../eval/facts';
 import type { Registry } from '../functions/registry';
@@ -35,7 +34,7 @@ const STOP = Object.freeze({ reason: 'the recalc computed as many formulas as it
 export class Recalc {
     private readonly workbook: Workbook;
     private readonly functions: Registry;
-    private readonly evaluator: EvaluatorType;
+    private readonly evaluator: Evaluator;
     private readonly index = new ReverseIndex();
     // Whether a formula came or went since the index was built.
     private stale = true;
@@ -131,18 +130,20 @@ export class Recalc {
                 }
             }
         } catch (thrown) {
-            if (thrown !== STOP) throw thrown;
-            stopped = true;
-            // The cells in progress are still to be computed, loops and all.
+            // The cells in progress are still to be computed, loops and all, whatever was thrown: the next pass
+            // starts clean.
             for (let i = 0; i < this.size; i += 1) {
                 const column = this.columns[i];
                 const kind = column.kind[this.rows[i]];
+                if (kind <= SETTLED) continue;
                 if (kind & LOOP) column.loops -= 1;
                 column.kind[this.rows[i]] = (kind & KIND_MASK) | DIRTY;
             }
             this.size = 0;
             this.current = -1;
             this.looped.clear();
+            if (thrown !== STOP) throw thrown;
+            stopped = true;
         }
         const loops: CellAddress[] = [];
         for (const sheet of workbook.sheets) {
@@ -177,9 +178,12 @@ export class Recalc {
         }
     }
 
-    // Adds the elements of an array that a formula made to what the pass costs.
-    public count(elements: number): void {
-        this.made[this.current] += elements;
+    // Asks for what the running formula is about to make, such as the elements of an array, before it makes them:
+    // false when that is more than `most`, and else it is added to what the pass costs.
+    public room(units: number, most: number): boolean {
+        if (units > most) return false;
+        this.made[this.current] += units;
+        return true;
     }
 
     private seed(sheet: number, c: number, row: number): void {

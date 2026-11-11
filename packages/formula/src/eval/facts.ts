@@ -1,6 +1,6 @@
 // What a shape's tree says about every cell that holds it, worked out from the tree and the function list alone,
-// without evaluating: whether this build can evaluate it at all, whether it is volatile or reads cells it does not
-// name, and how deep its evaluation nests. They are packed into one number, the depth above the flags.
+// without evaluating: whether this build can evaluate it at all, whether it reads cells it does not name, and how
+// deep its evaluation nests. They are packed into one number, the depth above the flags.
 
 import type { Registry } from '../functions/registry';
 import { FunctionFlag } from '../functions/registry';
@@ -11,7 +11,6 @@ import { NodeKind, RefFlag, RefKind, SheetKind } from '../text/tree';
 export const Fact = {
     // A reference into another workbook or across sheets: the cell keeps the value it came with.
     Kept: 1,
-    Volatile: 2,
     ReadsUnnamed: 4,
 } as const;
 
@@ -42,7 +41,6 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
     }
     const entry = node.kind === NodeKind.Call ? functions.get(node.text) : undefined;
     if (entry !== undefined) {
-        if (entry.flags & FunctionFlag.Volatile) flags |= Fact.Volatile;
         if (entry.flags & FunctionFlag.ReadsUnnamed) flags |= Fact.ReadsUnnamed;
         const [range, , resized] = node.children;
         if (entry.flags & FunctionFlag.Resizes && resized !== undefined && !sameSize(range, resized)) {

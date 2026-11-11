@@ -1,21 +1,19 @@
 // The call wrapper: the one place that turns the argument nodes of a call into what the function's body gets.
 // It checks the count, leaves a lazy argument unevaluated, keeps a reference where the parameter wants one, reads
 // a scalar, and fills in what was left out. When a scalar parameter gets an array, `lift` runs the body once per
-// element, and an operator on an array goes through the same lift.
+// element of the arrays lined up, and an operator on an array goes through the same lift.
 
 import type { FunctionEntry, Param } from '../functions/registry';
-import { ParamKind, PENDING } from '../functions/registry';
+import { FunctionFlag, ParamKind, PENDING } from '../functions/registry';
 import type { Sheet } from '../store/sheet';
 import type { FormulaNode } from '../text/tree';
 import type { FormulaError } from '../values/errors';
 import { CALC, NA, NAME, VALUE } from '../values/errors';
 import type { ArrayValue, Scalar, Value } from '../values/value';
-import { arrayOf, elementAt, isArray, isError, isReference, OMITTED } from '../values/value';
+import { arrayOf, isArray, isError, isReference, MOST_ELEMENTS, OMITTED } from '../values/value';
+import { align, apart } from './bands';
 import type { Evaluator } from './evaluator';
 import { held } from './operators';
-
-// The most elements an operation stores to hold the #N/A of an array that is shorter than the one it meets.
-const MOST_FORCED = 2 ** 21;
 
 function paramAt(entry: FunctionEntry, index: number): Param {
     const { params, repeat } = entry;
@@ -63,9 +61,9 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
     return result;
 }
 
-// Runs the body once per element of the arrays its scalar parameters got. A length of 1 repeats, and a shorter
-// length that is not 1 leaves #N/A. A lazy parameter is evaluated here, so with an array every branch runs. The
-// result stores as many rows and columns as the arrays do, and its last ones stand for the rest as theirs did.
+// Runs the body once per stored element of the arrays its scalar parameters got, lined up: one result stands for
+// every written element of its run. A length of 1 repeats, and a shorter length that is not 1 leaves #N/A. A lazy
+// parameter is evaluated here, so with an array every branch runs.
 export function lift(
     ctx: Evaluator,
     entry: FunctionEntry,
@@ -76,50 +74,48 @@ export function lift(
     column: number,
 ): Value {
     const element = args.slice();
-    const spread: (ArrayValue | null)[] = [];
+    const arrays: ArrayValue[] = [];
+    // The argument each array is.
+    const places: number[] = [];
     let rows = 1;
     let columns = 1;
     for (let i = 0; i < element.length; i += 1) {
         const { kind } = paramAt(entry, i);
         if (element[i] === PENDING) element[i] = ctx.operand(node.children[i], sheet, row, column);
         const value = element[i];
-        const array = (kind === ParamKind.Scalar || kind === ParamKind.Lazy) && isArray(value) ? value : null;
-        spread.push(array);
-        if (array !== null) {
-            rows = Math.max(rows, array.rows);
-            columns = Math.max(columns, array.columns);
-        }
+        if ((kind !== ParamKind.Scalar && kind !== ParamKind.Lazy) || !isArray(value)) continue;
+        arrays.push(value);
+        places.push(i);
+        rows = Math.max(rows, value.rows);
+        columns = Math.max(columns, value.columns);
     }
-    // An array shorter than the result is #N/A past its last row or column, which takes storing it up to there and
-    // one more. So that a whole column against a shorter one cannot take the memory of the grid, a result that
-    // would store more than this build allows is #N/A whole.
-    let height = 1;
-    let width = 1;
-    let short = false;
-    for (const array of spread) {
-        if (array === null) continue;
-        const lower = array.rows !== rows && array.rows !== 1;
-        const narrower = array.columns !== columns && array.columns !== 1;
-        height = Math.max(height, lower ? array.rows + 1 : array.height);
-        width = Math.max(width, narrower ? array.columns + 1 : array.width);
-        short ||= lower || narrower;
+    let down = align(arrays, rows, true);
+    let across = align(arrays, columns, false);
+    // A volatile body answers anew at every call, so each written element is made by a call of its own.
+    const each = (entry.flags & FunctionFlag.Volatile) !== 0;
+    if (!ctx.recalc.room(each ? rows * columns : down.count * across.count, MOST_ELEMENTS)) return CALC;
+    if (each) {
+        down = apart(down, rows);
+        across = apart(across, columns);
     }
-    height = Math.min(height, rows);
-    width = Math.min(width, columns);
-    if (short && height * width > MOST_FORCED) return NA;
-    ctx.recalc.count(height * width);
+    const height = down.count;
+    const width = across.count;
     const items = new Array<Scalar>(height * width);
+    // Per array, where its stored row for the row in progress starts, or -1 past its last row.
+    const starts = arrays.map(() => 0);
     for (let r = 0; r < height; r += 1) {
+        for (let k = 0; k < arrays.length; k += 1) {
+            const stored = down.from[k]?.[r] ?? r;
+            starts[k] = stored < 0 ? -1 : stored * arrays[k].width;
+        }
         for (let c = 0; c < width; c += 1) {
-            for (let i = 0; i < spread.length; i += 1) {
-                const array = spread[i];
-                if (array === null) continue;
-                const past = (r >= array.rows && array.rows !== 1) || (c >= array.columns && array.columns !== 1);
-                element[i] = past ? NA : elementAt(array, r, c);
+            for (let k = 0; k < arrays.length; k += 1) {
+                const stored = across.from[k]?.[c] ?? c;
+                element[places[k]] = starts[k] < 0 || stored < 0 ? NA : arrays[k].items[starts[k] + stored];
             }
             const result = ctx.read(held(entry.run(element, ctx, node, sheet, row, column)));
             items[r * width + c] = isArray(result) ? CALC : result;
         }
     }
-    return arrayOf(rows, columns, items, height, width);
+    return arrayOf(rows, columns, items, down.ends, across.ends);
 }
