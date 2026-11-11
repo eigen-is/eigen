@@ -624,6 +624,8 @@ describe('references and sheets (parsing.md 2.4)', () => {
         '=Sheet2!1:Sheet2!B',
         '=Sheet2!$A:Sheet2!2',
         '=Sheet2!1:Sheet2!',
+        "=''!A1:5!B1",
+        "=''!A:+!B",
     ])('and names no other sheet, and no other kind of end: %s does not parse', (text) => {
         expect(failure(text)).toBe('syntax');
     });

@@ -510,7 +510,9 @@ class Parser {
             this.prefixKind = SheetKind.Id;
             this.prefixSheet = text.slice(pos + 1, bang - 1);
             return text.charCodeAt(bang) === BANG ? bang : -1;
-        } else if (kind === Token.Word || kind === Token.Bracket) {
+        } else if (kind !== Token.Word && kind !== Token.Bracket) {
+            return -1;
+        } else {
             let named = kind === Token.Word;
             if (!named) {
                 const sheet = lexAt(text, bang);
