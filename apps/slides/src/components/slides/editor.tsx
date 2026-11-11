@@ -127,6 +127,7 @@ export function SlideEditor({
         isMobile,
         onReveal: revealElement,
     });
+    const addComment = canWrite && chatFolderId ? comments.addCommentTo : undefined;
 
     // A search result names its slide, such as "Slide 3". The number follows the stored frame order.
     const frameNumbers = useMemo(() => new Map(doc.frames.map((f, i) => [f.id, i + 1])), [doc.frames]);
@@ -329,10 +330,11 @@ export function SlideEditor({
                     undoManager={doc.undoManager}
                     tool={tool}
                     setTool={setTool}
-                    selectionEmpty={selectedIds.length === 0}
+                    selectedIds={selectedIds}
                     toolLocked={toolLocked}
                     setToolLocked={setToolLocked}
                     onInsertImage={insertImage}
+                    onAddComment={addComment}
                     canvasRef={canvasRef}
                     onAccessDialogOpen={onAccessDialogOpen}
                     createLabel="New slides"
@@ -437,7 +439,7 @@ export function SlideEditor({
                             canvasRef={canvasRef}
                             onOpenCard={comments.openCard}
                             commentCards={comments.lifecycle.cards}
-                            onAddComment={canWrite && chatFolderId ? comments.addCommentTo : undefined}
+                            onAddComment={addComment}
                             onCommentHover={comments.onCommentHover}
                             searchMatchedIds={searchMatchedIds}
                             searchActiveId={searchActiveId}

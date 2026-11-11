@@ -161,6 +161,7 @@ test('on a phone a writer only views the scene, but keeps the rights that are no
 test('a reader never edits, and adds no comment', async () => {
     await renderEditor({ canWrite: false });
     expect(seen.canvas).toMatchObject({ canEdit: false, onAddComment: undefined });
+    expect(seen.toolbar?.onAddComment).toBeUndefined();
 });
 
 test('an image is offered only with a media folder, and opens the picker', async () => {
@@ -179,10 +180,13 @@ test('an image is offered only with a media folder, and opens the picker', async
 test('a comment needs the chat folder', async () => {
     await renderEditor({ chatFolderId: null });
     expect(seen.canvas?.onAddComment).toBeUndefined();
+    expect(seen.toolbar?.onAddComment).toBeUndefined();
     await unmount();
 
+    // The toolbar's Insert › Comment and the canvas's own menu row raise the same card.
     await renderEditor({});
     expect(seen.canvas?.onAddComment).toBe(comments.addCommentTo);
+    expect(seen.toolbar?.onAddComment).toBe(comments.addCommentTo);
 });
 
 test('a reveal selects the element and centers the canvas on it', async () => {
@@ -192,6 +196,7 @@ test('a reveal selects the element and centers the canvas on it', async () => {
     const element = { id: 'shape-7' };
     await act(async () => reveal(element));
     expect(seen.canvas?.selectedIds).toEqual(['shape-7']);
+    expect(seen.toolbar?.selectedIds).toEqual(['shape-7']);
     expect(centerOn).toHaveBeenCalledWith(element);
 });
 

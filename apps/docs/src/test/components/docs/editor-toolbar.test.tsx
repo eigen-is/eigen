@@ -61,6 +61,7 @@ async function render(
     canWrite: boolean,
     {
         active = editor,
+        onAddComment,
         onInsertEquation,
         onInsertFootnote,
         onInsertTextBox,
@@ -71,6 +72,7 @@ async function render(
         bands = true,
     }: {
         active?: typeof editor;
+        onAddComment?: () => void;
         onInsertEquation?: () => void;
         onInsertFootnote?: () => void;
         onInsertTextBox?: () => void;
@@ -87,6 +89,7 @@ async function render(
         editor: active,
         body: editor,
         canWrite,
+        onAddComment,
         onInsertEquation,
         onInsertFootnote,
         onInsertTextBox,
@@ -1683,6 +1686,13 @@ test.each([
     await openMenu('Insert');
     await clickItem('Table of contents');
     expect(closePanels).toHaveBeenCalledTimes(closed);
+});
+
+// The row names the shortcut the comment mark binds, as Google's Insert › Comment does.
+test('Insert ends with Comment and its shortcut', async () => {
+    await render(1920, true, { onAddComment: () => {} });
+    await openMenu('Insert');
+    expect(openMenuEntries().slice(-2)).toEqual(['—', `Comment${formatForDisplay('Mod+Alt+M')}`]);
 });
 
 // The command refuses in a cell, so the item says so rather than doing nothing.

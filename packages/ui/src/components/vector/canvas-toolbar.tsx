@@ -1,14 +1,14 @@
-// The toolbar a canvas app mounts, such as Vector's or Slides': the File and Edit menus, the Insert menu, the
-// shape tools, and the share, comments and activity buttons. Its rows act on the canvas through the canvas's handle.
-// The apps differ only in their File menu, such as its export formats and its New row, and in the deck's extra
-// actions, which arrive as slots. So the tools, the undo wiring and the compact layout's breakpoint cannot drift
-// apart between them.
+// The toolbar a canvas app mounts, such as Vector's or Slides': the File, Edit and Insert menus, the shape tools,
+// and the share, comments and activity buttons. Its rows act on the canvas through the canvas's handle, and
+// Insert › Comment through the host's comments, as the canvas's own menu row does. The apps differ only in their
+// File menu and the deck's extra actions, which arrive as slots, so the tools, the undo wiring and the compact
+// breakpoint cannot drift apart.
 
 import { useYjsUndoState } from '@workspace/lib/collab';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
-import { ImagePlus } from 'lucide-react';
+import { ImagePlus, MessageSquarePlus } from 'lucide-react';
 import type { ReactNode, RefObject } from 'react';
 import { CHART_TYPE_OPTIONS } from '../charts';
 import { ClipboardMenuItems } from '../context-menu';
@@ -47,13 +47,15 @@ type CanvasToolbarProps = {
     undoManager: Parameters<typeof useYjsUndoState>[0];
     tool: VectorTool;
     setTool: (tool: VectorTool) => void;
-    // Greys the Edit rows that act on the selection.
-    selectionEmpty: boolean;
-    // Tool lock (Q): keeps the selected tool active for repeated placement — a toggle in the Edit menu.
+    // Greys the Edit rows that act on the selection, and Insert › Comment unless it is one element.
+    selectedIds: readonly string[];
+    // Tool lock (Q): keeps the selected tool active for repeated placement.
     toolLocked: boolean;
     setToolLocked: (locked: boolean) => void;
     // Present when the container has a media/ folder — opens the host's image picker.
     onInsertImage?: () => void;
+    // Present when the user may comment, as for the canvas's own menu row.
+    onAddComment?: (elementId: string) => void;
     // The canvas the Insert menu places into (Insert → Chart) and the Edit menu's clipboard rows act on.
     canvasRef: RefObject<CanvasHandle | null>;
     onAccessDialogOpen: () => void;
@@ -86,10 +88,11 @@ export function CanvasToolbar({
     undoManager,
     tool,
     setTool,
-    selectionEmpty,
+    selectedIds,
     toolLocked,
     setToolLocked,
     onInsertImage,
+    onAddComment,
     canvasRef,
     onAccessDialogOpen,
     onToggleCommentPanel,
@@ -149,7 +152,7 @@ export function CanvasToolbar({
                                             onPaste={() => canvasRef.current?.paste()}
                                             onDuplicate={() => canvasRef.current?.duplicate()}
                                             onDelete={() => canvasRef.current?.delete()}
-                                            selectionEmpty={selectionEmpty}
+                                            selectionEmpty={selectedIds.length === 0}
                                         />
                                         <DropdownMenuSeparator />
                                         <ToolMenuItems tools={EDIT_TOOLS} setTool={setTool} />
@@ -186,6 +189,17 @@ export function CanvasToolbar({
                                         ))}
                                     </DropdownMenuSubContent>
                                 </DropdownMenuSub>
+                                {onAddComment && (
+                                    <>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            disabled={selectedIds.length !== 1}
+                                            onClick={() => onAddComment(selectedIds[0])}
+                                        >
+                                            <MessageSquarePlus className="h-4 w-4" /> Comment
+                                        </DropdownMenuItem>
+                                    </>
+                                )}
                             </AppBarMenu>
                         )}
                     </Menubar>
