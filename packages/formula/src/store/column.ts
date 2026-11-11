@@ -1,5 +1,5 @@
 // One column of one sheet: four parallel typed arrays over its rows, holding each cell's value and, for a formula,
-// the id of its shape. A column is as long as its last row, grows by doubling, and counts its errors, its formulas
+// the id of its shape. A column ends at its last cell, grows by doubling, and counts its errors, its formulas
 // still to compute and its cells on a loop, so that a loop over it can skip the per-cell checks. The high bits of
 // `kind` are the recalc's own flags, which move with the cell when rows do.
 

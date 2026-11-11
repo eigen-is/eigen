@@ -1,6 +1,6 @@
 // The functions on numbers. ABS and ROUND are the plain case of numbers in and one out, SUM adds what the walk
-// over its arguments hands it, SUMPRODUCT loops over the planes of the columns it is given and copies no range, and
-// SUMIF and SUMIFS add what the criteria module matched.
+// over its arguments hands it, SUMPRODUCT multiplies its arguments as typed arrays, a column's own plane where it
+// can, and SUMIF and SUMIFS add what the criteria module matched.
 
 import type { Evaluator } from '../eval/evaluator';
 import { firstError, storedColumns, storedRows } from '../eval/views';

@@ -11,7 +11,7 @@ import type { Workbook } from '../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { ERROR_LITERALS, Token } from '../text/lexer';
 import type { Ends, FormulaNode } from '../text/tree';
-import { endsAt, NodeKind, RefKind, SheetKind } from '../text/tree';
+import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from '../text/tree';
 import type { FormulaError } from '../values/errors';
 import { errorOf, NAME, NULL, REF, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
@@ -20,6 +20,9 @@ import { call, lift } from './call';
 import { LIFTED_BINARY, LIFTED_NEGATE, LIFTED_PERCENT, negate, operate, percent } from './operators';
 import { toArray } from './views';
 import { Walk } from './walk';
+
+// The error of each error literal, by its place in the list of literals.
+const LITERAL_ERRORS = ERROR_LITERALS.map(errorOf);
 
 export class Evaluator {
     public readonly workbook: Workbook;
@@ -98,10 +101,11 @@ export class Evaluator {
     public operand(node: FormulaNode, sheet: Sheet, row: number, column: number): Scalar | ArrayValue {
         if (node.kind === NodeKind.Ref && node.op === RefKind.Cell) {
             const target = this.sheetOf(node, sheet);
-            const { ends } = this;
-            if (target === undefined || !endsAt(node, true, row, GRID_ROWS, ends)) return REF;
-            const r = ends.first;
-            return endsAt(node, false, column, GRID_COLUMNS, ends) ? this.recalc.valueOf(target, r, ends.first) : REF;
+            // Written out, where a range goes through endsAt: most of what a recalc reads is one cell.
+            const r = node.flags & RefFlag.RowAbsolute ? node.row : row + node.row;
+            const c = node.flags & RefFlag.ColumnAbsolute ? node.column : column + node.column;
+            if (target === undefined || r < 0 || r >= GRID_ROWS || c < 0 || c >= GRID_COLUMNS) return REF;
+            return this.recalc.valueOf(target, r, c);
         }
         return this.read(this.evaluate(node, sheet, row, column));
     }
@@ -229,9 +233,6 @@ export class Evaluator {
         return value;
     }
 }
-
-// The error of each error literal, by its place in the list of literals.
-const LITERAL_ERRORS = ERROR_LITERALS.map(errorOf);
 
 function isReferenceOperator(op: number): boolean {
     return op === Token.Colon || op === Token.Space || op === Token.Comma;
