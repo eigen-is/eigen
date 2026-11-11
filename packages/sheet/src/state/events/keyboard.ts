@@ -1,7 +1,7 @@
 // The grid's keyboard. The Workbook hands each keydown to handleGlobalKeyDown, which moves the selection, commits an
 // open edit on Enter or Tab, runs the ⌘ shortcuts and opens a cell when a key types into it. While a cell is open,
 // the in-cell editor handles every other key, and a key during an IME composition is the IME's. SHEET_HOTKEYS defines
-// every letter shortcut once: the key handlers match against it through TanStack's hotkey matcher, as the other apps'
+// every shortcut once: the key handlers match against it through TanStack's hotkey matcher, as the other apps'
 // shortcuts do, and the menus show it.
 
 import type { Hotkey } from '@tanstack/react-hotkeys';
@@ -19,7 +19,7 @@ import { openCellEditor } from '../modules/cell-editor';
 import { cellFocus, checkboxChange, getCellDataValidation } from '../modules/data-validation';
 import { fillFromEdge } from '../modules/drop-cell';
 import { moveHighlightCell, moveHighlightRange, normalizeSelection, selectAll } from '../modules/selection';
-import { handleBold, handleItalic, handleUnderline } from '../modules/toolbar';
+import { handleBold, handleClearFormat, handleItalic, handleUnderline } from '../modules/toolbar';
 import { getSheetIndex } from '../utils';
 import { clearSelectedContents } from './clear';
 import { handleCopy, handleCut } from './copy';
@@ -36,6 +36,7 @@ export const SHEET_HOTKEYS = {
     bold: 'Mod+B',
     italic: 'Mod+I',
     underline: 'Mod+U',
+    clearFormatting: 'Mod+\\',
     selectAll: 'Mod+A',
     fillDown: 'Mod+D',
     fillRight: 'Mod+R',
@@ -229,6 +230,8 @@ function handleWithCtrlOrMetaKey(ctx: Context, e: KeyboardEvent, cellInput: HTML
         handleItalic(ctx, cellInput);
     } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.underline)) {
         handleUnderline(ctx, cellInput);
+    } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.clearFormatting)) {
+        handleClearFormat(ctx);
     } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.selectAll)) {
         selectAll(ctx);
     } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.fillDown) || matchesKeyboardEvent(e, SHEET_HOTKEYS.fillRight)) {
@@ -416,9 +419,7 @@ export function handleGlobalKeyDown(ctx: Context, cellInput: HTMLDivElement, e: 
         }
     }
 
-    if (cellInput !== document.activeElement) {
-        cellInput?.focus();
-    }
+    if (cellInput !== document.activeElement) cellInput.focus();
 
     e.stopPropagation();
 }

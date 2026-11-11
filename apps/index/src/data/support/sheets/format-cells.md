@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, formatting, cells, numbers, alignment, borders]
 related: [sheets/conditional-formatting]
 order: 60
-updated: 2026-11-09
+updated: 2026-11-11
 ---
 
 Sheets lets you change how cells look without changing the values inside them. You can apply text styles, number formats, colors, borders, and alignment from the **Format** menu in the toolbar.
@@ -26,7 +26,7 @@ To change how text looks in one or more cells:
    - **Underline**: adds a line under the text.
    - **Strikethrough**: draws a line through the text.
 4. To change the font family, open **Format → Text → Font** and pick a font from the list.
-5. To change the text color, open **Format → Text → Font color** and pick a color from the picker.
+5. To change the text color, open **Format → Text → Text color** and pick a color from the picker.
 
 On a computer, the menu shows the shortcut next to each style that has one: **Ctrl+B** (Mac: **⌘B**) for bold, **Ctrl+I** (Mac: **⌘I**) for italic and **Ctrl+U** (Mac: **⌘U**) for underline.
 
@@ -83,7 +83,7 @@ On a wide enough toolbar, you can also use the fill color button (the highlighte
 ### Text color
 
 1. Select the cells.
-2. Open **Format → Text → Font color** and pick a color.
+2. Open **Format → Text → Text color** and pick a color.
 
 On a wide enough toolbar, the text color button (a letter icon with a color stripe beneath it) is also in the quick-format bar.
 
@@ -157,6 +157,6 @@ Merging cells can break sorting, filtering, and some formulas. Avoid merging cel
 To remove formatting from a selection without changing the values:
 
 1. Select the cells.
-2. Open **Format → Clear formatting**.
+2. Open **Format → Clear formatting**, or press **Ctrl+\\** (Mac: **⌘\\**).
 
 Clearing formatting removes text styles, colors, alignment settings, and borders. It keeps the cell values, number formats, links, and comments, and any style set on part of a cell's text.

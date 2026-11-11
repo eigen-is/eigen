@@ -8,6 +8,7 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { Palette } from 'lucide-react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
@@ -92,7 +93,9 @@ export function ConditionalFormattingSubmenu() {
 
     return (
         <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Conditional formatting</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger>
+                <Palette className="h-4 w-4" /> Conditional formatting
+            </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="sheet-mousedown-cancel">
                 {RULE_SUBMENUS.map(({ title, rules }) => (
                     <DropdownMenuSub key={title}>
@@ -131,14 +134,7 @@ export function ConditionalFormattingSubmenu() {
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>Delete rule</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="sheet-mousedown-cancel">
-                        <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() => {
-                                setContext((ctx) => {
-                                    clearSheetRules(ctx);
-                                });
-                            }}
-                        >
+                        <DropdownMenuItem variant="destructive" onClick={() => setContext(clearSheetRules)}>
                             Delete sheet rules
                         </DropdownMenuItem>
                     </DropdownMenuSubContent>

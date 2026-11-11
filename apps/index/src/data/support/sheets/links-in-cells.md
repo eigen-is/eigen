@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, links, hyperlinks, cells]
 related: [sheets/enter-and-edit-data, sheets/multiple-tabs]
 order: 140
-updated: 2026-11-09
+updated: 2026-11-11
 ---
 
 A cell can carry a link to a web page, to a range of cells, or to another sheet tab in the same spreadsheet. The cell shows the text you choose for it, in blue with an underline. The link stays with the cell when you move, sort, or fill it.
@@ -13,7 +13,7 @@ A cell can carry a link to a web page, to a range of cells, or to another sheet 
 ## Add a link
 
 1. Select the cell.
-2. Open the **Insert** menu and click **Insert link**. Right-clicking the cell and choosing **Insert link** does the same thing.
+2. Open the **Insert** menu and click **Link**. Right-clicking the cell and choosing **Insert link** does the same thing.
 3. In the **Insert link** dialog, type what the cell should show in **Display text**.
 4. Pick where the link goes from **Link type**:
    - **Webpages**: type the address in **Link address**. An address without `https://` in front of it gets one added.
