@@ -11,6 +11,20 @@ import { branch, leaf, NodeKind, RefFlag, SheetKind } from '../text/tree';
 export function mapLeaves(node: FormulaNode, map: (leaf: FormulaNode) => FormulaNode): FormulaNode {
     const { children } = node;
     if (children.length === 0) return map(node);
+    if (node.kind === NodeKind.Binary) {
+        // A long sum is a chain too deep to recurse down its left operands, so it is rebuilt from its far end up.
+        const chain: FormulaNode[] = [];
+        let first = node;
+        for (; first.kind === NodeKind.Binary; first = first.children[0]) chain.push(first);
+        let left = mapLeaves(first, map);
+        for (let i = chain.length - 1; i >= 0; i -= 1) {
+            const link = chain[i];
+            const right = mapLeaves(link.children[1], map);
+            const same = left === link.children[0] && right === link.children[1];
+            left = same ? link : branch(link.kind, link.op, link.text, [left, right], link.space, link.spaceEnd);
+        }
+        return left;
+    }
     let mapped: FormulaNode[] | null = null;
     for (let i = 0; i < children.length; i += 1) {
         const child = mapLeaves(children[i], map);

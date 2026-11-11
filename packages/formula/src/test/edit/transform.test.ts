@@ -221,6 +221,12 @@ describe('what the transform leaves alone', () => {
         expect(printStored(result.tree)).toBe('=SUM(#REF!:R5C1)+SUM([s1]!#REF!:[s1]!R[5]C)');
         expect(result.tree.children[1].children[0].children[0]).toBe(before.children[1].children[0].children[0]);
     });
+    test('a sum of thousands of terms, which is a tree that deep', () => {
+        const before = treeStored(`=${'R[4]C+'.repeat(21000)}R1C1`);
+        const result = transformLines(before, insertRows(3), 's1', 0);
+        expect(printStored(result.tree)).toBe(`=${'R[5]C+'.repeat(21000)}R1C1`);
+        expect(transformLines(before, insertRows(3), 's2', 0).tree).toBe(before);
+    });
     test('every part of the formula around its references', () => {
         const text = '= IF( A5>0, {1,2;3,4}, -A5% ) & "x" & LAMBDA(x,x+A5)(2)';
         expect(after(text, 'C1', insertRows(2)).text).toBe(text.replaceAll('A5', 'A6'));

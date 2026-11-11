@@ -30,6 +30,10 @@ describe('remapSheets', () => {
             '=[s2]!RC+[s1]!R1C1:R2C2+[s1]!Rate+[s2]!#REF!',
         );
     });
+    test('reaches every term of a sum of thousands, which is a tree that deep', () => {
+        const before = treeStored(`=${'[s1]!RC+'.repeat(16000)}RC`);
+        expect(printStored(remapSheets(before, ids))).toBe(`=${'[n1]!RC+'.repeat(16000)}RC`);
+    });
     test('a duplicated tab points its references to itself at the copy', () => {
         const copy = remapSheets(tree('=A1+Sheet1!B1+Sheet2!C1', 'D1'), new Map([['s1', 'copy']]));
         const names = (id: string) => (id === 'copy' ? 'Sheet1 (2)' : sheetName(id));

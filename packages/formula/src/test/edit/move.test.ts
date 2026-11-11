@@ -183,6 +183,11 @@ describe('what a move leaves alone', () => {
         expect(printStored(result.tree)).toBe('=SUM(#REF!:R5C1)+SUM([s2]!#REF!:[s2]!R[12]C)');
         expect(result.tree.children[1].children[0].children[0]).toBe(before.children[1].children[0].children[0]);
     });
+    test('a sum of thousands of terms, which is a tree that deep', () => {
+        const before = treeStored(`=${'R[4]C+'.repeat(21000)}R1C1`);
+        const result = transformMove(before, move('Sheet1!A5', 'Sheet1!A9'), 's1', 0, 0);
+        expect(printStored(result.tree)).toBe(`=${'R[8]C+'.repeat(21000)}R1C1`);
+    });
     test('a reference off the grid at its host', () => {
         const copied = tree('=A1', 'B2');
         expect(shown(transformMove(copied, move('Sheet1!A1:B1', 'Sheet1!C5'), 's1', 0, 1).tree, 'D5')).toBe('=#REF!');
