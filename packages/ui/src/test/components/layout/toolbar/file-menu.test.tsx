@@ -1,6 +1,7 @@
 // The File menu draws its Rename, Share, Email collaborators and delete rows from the Drive action catalog,
 // gated as Drive gates them, and hands the command palette the same rows. A guest may not mail people
 // through the server, a reader may not share, and an item shared with the viewer is removed, not trashed.
+// Make a copy lands beside the file as Drive's Duplicate does, and greys out where Duplicate would not apply.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { PaletteSelectionActions } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -8,6 +9,19 @@ import { installHappyDom } from '../../../happy-dom';
 import { renderInDocument } from '../../../render-in-document';
 
 installHappyDom();
+
+// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
+const g = globalThis as any;
+
+// What the copy route was asked for: the source id and the body.
+const copies: { sourceId: string; body: unknown }[] = [];
+g.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const sourceId = /\/path\/([^/]+)\/copy$/.exec(url)?.[1];
+    if (!sourceId) return Response.json([]);
+    copies.push({ sourceId, body: JSON.parse(String(init?.body)) });
+    return Response.json(drivePath({ id: `copy-of-${sourceId}`, name: 'Copy of Plan', mimeType: DRIVE_MIME_DOC }));
+};
 
 let isGuest = false;
 const session = { user: { id: 'user-1', email: 'editor@example.com' } };
@@ -54,6 +68,7 @@ async function openFileMenu(path: DrivePath = plan, canWrite = true) {
         path,
         canWrite,
         onAccessDialogOpen: () => {},
+        onImport: () => {},
         createLabel: 'New doc',
         createType: 'doc',
     });
@@ -73,10 +88,10 @@ async function openFileMenu(path: DrivePath = plan, canWrite = true) {
     await act(async () => {
         trigger?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
     });
-    const rows = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map((item) =>
-        item.textContent?.trim(),
-    );
-    return { rows, palette: (published.actions ?? []).map(({ action }) => action.id) };
+    const items = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')];
+    const rows = items.map((item) => item.textContent?.trim());
+    const disabled = items.filter((item) => item.hasAttribute('data-disabled')).map((item) => item.textContent?.trim());
+    return { rows, disabled, palette: (published.actions ?? []).map(({ action }) => action.id) };
 }
 
 test('an editor can email the collaborators of an item someone else can see', async () => {
@@ -117,4 +132,35 @@ test('the palette gets the rows the menu draws, plus the link and the mail', asy
     isGuest = false;
     expect((await openFileMenu(plan)).palette).toEqual(['rename', 'share', 'copy-link', 'mail-to', 'trash']);
     expect((await openFileMenu(plan, false)).palette).toEqual(['copy-link', 'mail-to']);
+});
+
+test('Make a copy follows Import, in the group that makes and opens files', async () => {
+    isGuest = false;
+    const { rows } = await openFileMenu(plan);
+    expect(rows.slice(0, 4)).toEqual(['New doc', 'Open…', 'Import…', 'Make a copy']);
+});
+
+test('Make a copy shows greyed out for a reader and for an item shared with the viewer', async () => {
+    isGuest = false;
+    expect((await openFileMenu(plan)).disabled).not.toContain('Make a copy');
+    for (const { rows, disabled } of [await openFileMenu(plan, false), await openFileMenu(sharedWithMe)]) {
+        expect(rows).toContain('Make a copy');
+        expect(disabled).toContain('Make a copy');
+    }
+});
+
+test('Make a copy copies the file beside itself as "Copy of" its name', async () => {
+    isGuest = false;
+    copies.length = 0;
+    await openFileMenu(plan);
+    const row = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find(
+        (item) => item.textContent?.trim() === 'Make a copy',
+    );
+    await act(async () => row?.click());
+    expect(copies).toEqual([
+        {
+            sourceId: plan.id,
+            body: { targetOwnerId: 'user-1', targetMountId: 'default', targetParentId: 'root', name: 'Copy of Plan' },
+        },
+    ]);
 });
