@@ -19,6 +19,7 @@ import { saveThumbnail } from '../../lib/shared/thumbnails';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
 import type { FaultStorage } from '../fault-storage-helpers';
 import { createHomeFaultMount, provisionDoc, registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
+import { seedFile } from '../mount-test-helpers';
 import type { TestUser } from '../setup';
 import {
     assertJson,
@@ -153,9 +154,9 @@ beforeAll(async () => {
     await s3Mount.init();
     registerFaultMount(home.drive, s3Mount);
     const s3Root = (await s3Mount.getRootFolder())!.id;
-    await s3Mount.createFile(s3Root, 'stored.png', 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
+    await seedFile(s3Mount, s3Root, 'stored.png', 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
     const storedBytes = new TextEncoder().encode('in the bucket');
-    const pending = await s3Mount.createFile(s3Root, 'pending.txt', 'text/plain', storedBytes.byteLength, storedBytes);
+    const pending = await seedFile(s3Mount, s3Root, 'pending.txt', 'text/plain', storedBytes.byteLength, storedBytes);
     await s3Mount.uploadQueue?.drain({ flushNow: true });
     pendingObjectKey = await s3Mount.getStorageKey(pending);
     // What an outage leaves: newer bytes in staging/ with a pending row, their PUT parked.

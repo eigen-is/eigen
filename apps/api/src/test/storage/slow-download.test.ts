@@ -28,7 +28,7 @@ import {
     settlesWithin,
     waitFor,
 } from '../fault-storage-helpers';
-import { TEST_ACTOR } from '../mount-test-helpers';
+import { seedFile, TEST_ACTOR } from '../mount-test-helpers';
 import { getTestContext } from '../setup';
 
 // A mount whose real S3Storage talks to a FakeS3Server that stalls, fails or cuts its reads.
@@ -63,7 +63,7 @@ async function storedDoc(mount: Mount, rows = 1): Promise<{ containerId: string;
 async function storedFile(name: string): Promise<{ fileId: string; key: string }> {
     const rootId = (await mount.getRootFolder())!.id;
     const bytes = new Uint8Array(256 * 1024).fill(7);
-    const fileId = await mount.createFile(rootId, name, 'application/octet-stream', bytes.length, bytes);
+    const fileId = await seedFile(mount, rootId, name, 'application/octet-stream', bytes.length, bytes);
     return { fileId, key: await mount.getStorageKey(fileId) };
 }
 
@@ -93,7 +93,7 @@ describe('Stalled S3 reads', () => {
     test('a download whose HEAD stalls answers 503 instead of waiting on the backend', async () => {
         setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
         const rootId = (await mount.getRootFolder())!.id;
-        const fileId = await mount.createFile(rootId, 'a.bin', 'application/octet-stream', 4, new Uint8Array(4));
+        const fileId = await seedFile(mount, rootId, 'a.bin', 'application/octet-stream', 4, new Uint8Array(4));
         fake.faults.set(await mount.getStorageKey(fileId), 'stall');
         const failure = mount.readFile(fileId).catch((error: unknown) => error);
         expect(await settlesWithin([failure], STALL_BOUND_MS)).toBe(true);
@@ -178,7 +178,7 @@ describe('Whole-body reads', () => {
     test('mount teardown does not wait on a text extraction whose GET stalls', async () => {
         setStorageTimeoutMs(3_000);
         const rootId = (await mount.getRootFolder())!.id;
-        const fileId = await mount.createFile(rootId, 'notes.txt', 'text/plain', 5, new TextEncoder().encode('notes'));
+        const fileId = await seedFile(mount, rootId, 'notes.txt', 'text/plain', 5, new TextEncoder().encode('notes'));
         fake.faults.set(await mount.getStorageKey(fileId), 'stall-body');
         // The same mount restarted with an extractor: its reindex queue replays the dirty row at init.
         await mount.closeAllDatabases();
@@ -191,7 +191,8 @@ describe('Whole-body reads', () => {
     test('the teardown abort stops the reindex drain and leaves its backlog due', async () => {
         const rootId = (await mount.getRootFolder())!.id;
         for (let i = 0; i < 20; i++) {
-            const fileId = await mount.createFile(
+            const fileId = await seedFile(
+                mount,
                 rootId,
                 `n${i}.txt`,
                 'text/plain',
@@ -242,7 +243,7 @@ describe('A stalled DELETE', () => {
 describe('S3 reads that fail', () => {
     test('a download whose HEAD fails answers 503', async () => {
         const rootId = (await mount.getRootFolder())!.id;
-        const fileId = await mount.createFile(rootId, 'b.bin', 'application/octet-stream', 4, new Uint8Array(4));
+        const fileId = await seedFile(mount, rootId, 'b.bin', 'application/octet-stream', 4, new Uint8Array(4));
         fake.faults.set(await mount.getStorageKey(fileId), 'fail');
         await expect(mount.readFile(fileId)).rejects.toMatchObject({ status: 503 });
     });
@@ -250,7 +251,7 @@ describe('S3 reads that fail', () => {
     test('a copy whose source GET dies midway leaves nothing in tmp/', async () => {
         const rootId = (await mount.getRootFolder())!.id;
         const bytes = new Uint8Array(256 * 1024).fill(7);
-        const fileId = await mount.createFile(rootId, 'c.bin', 'application/octet-stream', bytes.length, bytes);
+        const fileId = await seedFile(mount, rootId, 'c.bin', 'application/octet-stream', bytes.length, bytes);
         const before = readdirSync(mount.tmpDir);
         fake.faults.set(await mount.getStorageKey(fileId), 'cut');
         await expect(
@@ -270,7 +271,7 @@ describe('Abandoned downloads', () => {
     test('a client that abandons a streaming download closes the upstream GET', async () => {
         const rootId = (await mount.getRootFolder())!.id;
         const bytes = new Uint8Array(256 * 1024).fill(7);
-        const fileId = await mount.createFile(rootId, 'd.bin', 'application/octet-stream', bytes.length, bytes);
+        const fileId = await seedFile(mount, rootId, 'd.bin', 'application/octet-stream', bytes.length, bytes);
         fake.faults.set(await mount.getStorageKey(fileId), 'stall-body');
         const reader = (await mount.readFile(fileId))!.stream().getReader();
         expect((await reader.read()).done).toBe(false);

@@ -528,20 +528,6 @@ export class Mount {
         return folderId;
     }
 
-    public async createFile(
-        parentId: string,
-        name: string,
-        mimeType: string,
-        size: number,
-        data: Buffer | Uint8Array | ArrayBuffer | BunFile | undefined,
-    ): Promise<string> {
-        name = validateName(name);
-        const hash = data !== undefined ? await this.computeHash(data) : null;
-        return this.insertFile(parentId, name, mimeType, size, hash, async (storageKey) => {
-            if (data !== undefined) await this.storage.write(storageKey, data);
-        });
-    }
-
     public async createFileFromTemp(
         parentId: string,
         name: string,
@@ -557,7 +543,7 @@ export class Mount {
 
     // An empty file row with no bytes yet, such as the one createDatabase then fills.
     public async touchFile(parentId: string, name: string, mimeType: string): Promise<string> {
-        return this.createFile(parentId, name, mimeType, 0, undefined);
+        return this.insertFile(parentId, validateName(name), mimeType, 0, null, async () => {});
     }
 
     // The name is validated already. writeBytes puts the bytes at the new storage key.

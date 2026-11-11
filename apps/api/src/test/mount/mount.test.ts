@@ -20,7 +20,7 @@ import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { parseSnapshotTimestamp } from '../../lib/versioning/timestamp';
 import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
 import { createGetLocalDatabase, FaultStorage } from '../fault-storage-helpers';
-import { createTestMountConfig, TEST_ACTOR } from '../mount-test-helpers';
+import { createTestMountConfig, seedFile, TEST_ACTOR } from '../mount-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-mount-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
@@ -82,7 +82,7 @@ describe('downloadToTemp', () => {
 
     test('copies a stored file to a temp path, then cleanupTemp removes it', async () => {
         const data = Buffer.from('snapshot-bytes');
-        const fileId = await mount.createFile(rootId, 'snap.db', 'application/octet-stream', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'snap.db', 'application/octet-stream', data.length, data);
         const tempId = crypto.randomUUID();
         const tempPath = await mount.downloadToTemp(fileId, tempId);
         expect(readFileSync(tempPath).toString()).toBe('snapshot-bytes');
@@ -95,7 +95,7 @@ describe('downloadToTemp', () => {
         // was the original S3 bug. downloadToTemp goes through storage.read, which
         // every backend implements.
         const data = Buffer.from('snapshot-bytes-no-getpath');
-        const fileId = await mount.createFile(rootId, 'snap2.db', 'application/octet-stream', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'snap2.db', 'application/octet-stream', data.length, data);
 
         const storage = (mount as unknown as { storage: { getPath?: (key: string) => string } }).storage;
         const originalGetPath = storage.getPath;
@@ -131,7 +131,7 @@ describe('downloadToTemp', () => {
     // handleApiError answers a raw error 500; a 503 would read as a storage outage.
     test('a local tmp/ failure is no storage outage, and leaves no side file behind', async () => {
         const data = Buffer.from('snapshot-bytes-local-failure');
-        const fileId = await mount.createFile(rootId, 'snap3.db', 'application/octet-stream', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'snap3.db', 'application/octet-stream', data.length, data);
         const tempId = crypto.randomUUID();
         // A non-empty directory at the temp path: the rename of the downloaded side file onto it fails.
         mkdirSync(join(mount.getTempPath(tempId), 'blocker'), { recursive: true });
@@ -159,7 +159,7 @@ describe('snapshotContainerDataDb concurrency', () => {
     test('concurrent snapshots serialize: one versions folder, no clobbered files', async () => {
         const container = await mount.createFolder(rootId, 'snap-container');
         const data = Buffer.from('container-data-db-bytes');
-        await mount.createFile(container, 'data.db', 'application/octet-stream', data.length, data);
+        await seedFile(mount, container, 'data.db', 'application/octet-stream', data.length, data);
 
         // Without the container lock these race on creating the versions folder and the
         // timestamped copy, producing duplicate versions folders or a duplicate-name
@@ -194,7 +194,7 @@ describe('replaceContainerDataDb', () => {
 
     test('replaces the bytes of data.db under the same row', async () => {
         const container = await mount.createFolder(rootId, 'replace-container');
-        const dataDbId = await mount.createFile(container, 'data.db', 'application/x-sqlite3', 3, Buffer.from('old'));
+        const dataDbId = await seedFile(mount, container, 'data.db', 'application/x-sqlite3', 3, Buffer.from('old'));
         const sourcePath = join(TEST_DIR, 'replace-source.db');
         await Bun.write(sourcePath, 'restored-bytes');
 
@@ -240,7 +240,7 @@ describe('Mount (local-key storage)', () => {
 
     test('create file stores data', async () => {
         const data = Buffer.from('file content');
-        const fileId = await mount.createFile(rootId, 'test.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'test.txt', 'text/plain', data.length, data);
         const file = await mount.getPath(fileId);
         expect(file).not.toBeNull();
         expect(file!.name).toBe('test.txt');
@@ -266,8 +266,8 @@ describe('Mount (local-key storage)', () => {
     // files (unique storage keys, no disk aliasing). Only path-based mounts fold stricter.
     test('non-ASCII case pair is allowed on id-keyed storage', async () => {
         const folderId = await mount.createFolder(rootId, 'UnicodePair');
-        await mount.createFile(folderId, 'É.txt', 'text/plain', 1, Buffer.from('a'));
-        const secondId = await mount.createFile(folderId, 'é.txt', 'text/plain', 1, Buffer.from('b'));
+        await seedFile(mount, folderId, 'É.txt', 'text/plain', 1, Buffer.from('a'));
+        const secondId = await seedFile(mount, folderId, 'é.txt', 'text/plain', 1, Buffer.from('b'));
         expect((await mount.getPath(secondId))!.name).toBe('é.txt');
     });
 
@@ -281,7 +281,7 @@ describe('Mount (local-key storage)', () => {
     test('updatePath returns the updated row', async () => {
         const srcId = await mount.createFolder(rootId, 'ReturnSrc');
         const dstId = await mount.createFolder(rootId, 'ReturnDst');
-        const fileId = await mount.createFile(srcId, 'moved.txt', 'text/plain', 1, Buffer.from('a'));
+        const fileId = await seedFile(mount, srcId, 'moved.txt', 'text/plain', 1, Buffer.from('a'));
         const moved = await mount.updatePath(fileId, { name: 'renamed.txt', parentId: dstId });
         expect(moved.name).toBe('renamed.txt');
         expect(moved.parentId).toBe(dstId);
@@ -289,7 +289,7 @@ describe('Mount (local-key storage)', () => {
 
     test('delete file', async () => {
         const data = Buffer.from('to delete');
-        const fileId = await mount.createFile(rootId, 'deleteme.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'deleteme.txt', 'text/plain', data.length, data);
         await mount.deletePath(fileId);
         const file = await mount.getPath(fileId);
         expect(file).toBeNull();
@@ -299,7 +299,7 @@ describe('Mount (local-key storage)', () => {
         const folderId = await mount.createFolder(rootId, 'ParentToDelete');
         const childId = await mount.createFolder(folderId, 'ChildFolder');
         const data = Buffer.from('child file');
-        const fileId = await mount.createFile(childId, 'child.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, childId, 'child.txt', 'text/plain', data.length, data);
         const objectPath = join(mount.dataDir, buildStorageKey(fileId, 'child.txt'));
         expect(existsSync(objectPath)).toBe(true);
 
@@ -324,7 +324,7 @@ describe('Mount (local-key storage)', () => {
         const folderId = await mount.createFolder(rootId, 'CrumbsParent');
         const siblingA = await mount.createFolder(folderId, 'CrumbsA');
         const data = Buffer.from('b');
-        const siblingB = await mount.createFile(folderId, 'crumbs-b.txt', 'text/plain', data.length, data);
+        const siblingB = await seedFile(mount, folderId, 'crumbs-b.txt', 'text/plain', data.length, data);
         const ids = [siblingB, rootId, 'missing-id', siblingA, folderId];
 
         const single = await Promise.all(ids.map((id) => mount.getBreadcrumb(id)));
@@ -334,7 +334,7 @@ describe('Mount (local-key storage)', () => {
     });
 
     test('writeFile updates size', async () => {
-        const fileId = await mount.createFile(rootId, 'sized.txt', 'text/plain', 0, undefined);
+        const fileId = await mount.touchFile(rootId, 'sized.txt', 'text/plain');
         await mount.writeFile(fileId, Buffer.from('updated content'));
         const file = await mount.getPath(fileId);
         expect(file!.size).toBe(15);
@@ -342,14 +342,14 @@ describe('Mount (local-key storage)', () => {
 
     // The row keeps updatedAt in whole seconds, so an answer built from the clock would differ from a later read.
     test('an overwrite answers the row it committed, the one a fresh read gives', async () => {
-        const fileId = await mount.createFile(rootId, 'committed.txt', 'text/plain', 0, undefined);
+        const fileId = await mount.touchFile(rootId, 'committed.txt', 'text/plain');
         const committed = await mount.writeFile(fileId, Buffer.from('committed content'));
         expect(committed).toEqual(await mount.getActivePath(fileId));
     });
 
     test('writeFile refuses a file trashed with its folder and keeps its bytes', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashedWithFolder');
-        const fileId = await mount.createFile(folderId, 'inside.txt', 'text/plain', 3, Buffer.from('old'));
+        const fileId = await seedFile(mount, folderId, 'inside.txt', 'text/plain', 3, Buffer.from('old'));
         await mount.trashPath(folderId);
         await expect(mount.writeFile(fileId, Buffer.from('new'))).rejects.toMatchObject({
             status: 404,
@@ -361,7 +361,7 @@ describe('Mount (local-key storage)', () => {
 
     test('a plain overwrite queued while its folder is trashed writes nothing', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashedWhileQueued');
-        const fileId = await mount.createFile(folderId, 'inside.txt', 'text/plain', 3, Buffer.from('old'));
+        const fileId = await seedFile(mount, folderId, 'inside.txt', 'text/plain', 3, Buffer.from('old'));
         const hold = Promise.withResolvers<void>();
         const held = mount.withPathLock(fileId, () => hold.promise);
         const write = mount.writeFile(fileId, Buffer.from('new'));
@@ -376,7 +376,7 @@ describe('Mount (local-key storage)', () => {
 
     test('an overwrite whose folder is trashed mid-upload records the new bytes, then refuses', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashedMidUpload');
-        const fileId = await mount.createFile(folderId, 'inside.txt', 'text/plain', 3, Buffer.from('old'));
+        const fileId = await seedFile(mount, folderId, 'inside.txt', 'text/plain', 3, Buffer.from('old'));
         const fault = new FaultStorage(mount.storage);
         fault.parkWrites = true;
         mount.storage = fault;
@@ -481,7 +481,7 @@ describe('Mount (local path-based storage)', () => {
     test('create file stores data at correct path', async () => {
         const folderId = await mount.createFolder(rootId, 'FileFolder');
         const data = Buffer.from('path-based content');
-        const fileId = await mount.createFile(folderId, 'doc.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, folderId, 'doc.txt', 'text/plain', data.length, data);
         expect(existsSync(join(mount.dataDir, 'FileFolder', 'doc.txt'))).toBe(true);
 
         const content = await mount.readFile(fileId);
@@ -491,7 +491,7 @@ describe('Mount (local path-based storage)', () => {
 
     test('rename folder renames physical directory', async () => {
         const folderId = await mount.createFolder(rootId, 'RenameMe');
-        await mount.createFile(folderId, 'inside.txt', 'text/plain', 5, Buffer.from('hello'));
+        await seedFile(mount, folderId, 'inside.txt', 'text/plain', 5, Buffer.from('hello'));
         expect(existsSync(join(mount.dataDir, 'RenameMe'))).toBe(true);
 
         await mount.updatePath(folderId, { name: 'Renamed' });
@@ -504,7 +504,7 @@ describe('Mount (local path-based storage)', () => {
         const srcFolder = await mount.createFolder(rootId, 'Source');
         const dstFolder = await mount.createFolder(rootId, 'Destination');
         const data = Buffer.from('movable');
-        const fileId = await mount.createFile(srcFolder, 'move.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, srcFolder, 'move.txt', 'text/plain', data.length, data);
         expect(existsSync(join(mount.dataDir, 'Source', 'move.txt'))).toBe(true);
 
         await mount.updatePath(fileId, { parentId: dstFolder });
@@ -514,7 +514,7 @@ describe('Mount (local path-based storage)', () => {
 
     test('a rename the disk refuses leaves the row on the old name, so a trash moves the right bytes', async () => {
         const folderId = await mount.createFolder(rootId, 'RenameRefused');
-        const fileId = await mount.createFile(folderId, 'A.txt', 'text/plain', 5, Buffer.from('alpha'));
+        const fileId = await seedFile(mount, folderId, 'A.txt', 'text/plain', 5, Buffer.from('alpha'));
         const spy = spyOn(mount.storage, 'rename').mockImplementation(async () => {
             throw new Error('EIO');
         });
@@ -536,7 +536,7 @@ describe('Mount (local path-based storage)', () => {
         async (op) => {
             const fromId = await mount.createFolder(rootId, `SizeFailFrom-${op}`);
             const toId = await mount.createFolder(rootId, `SizeFailTo-${op}`);
-            const fileId = await mount.createFile(fromId, 'sized.txt', 'text/plain', 5, Buffer.from('sized'));
+            const fileId = await seedFile(mount, fromId, 'sized.txt', 'text/plain', 5, Buffer.from('sized'));
             if (op === 'restore') await mount.trashPath(fileId);
 
             mount.db.run(
@@ -573,7 +573,7 @@ describe('Mount (local path-based storage)', () => {
 
     test('delete folder removes physical directory', async () => {
         const folderId = await mount.createFolder(rootId, 'DeletePhysical');
-        await mount.createFile(folderId, 'file.txt', 'text/plain', 3, Buffer.from('abc'));
+        await seedFile(mount, folderId, 'file.txt', 'text/plain', 3, Buffer.from('abc'));
         expect(existsSync(join(mount.dataDir, 'DeletePhysical'))).toBe(true);
 
         await mount.deletePath(folderId);
@@ -584,7 +584,7 @@ describe('Mount (local path-based storage)', () => {
     test('delete folder removes descendant DB entries', async () => {
         const folderId = await mount.createFolder(rootId, 'DeepDelete');
         const subId = await mount.createFolder(folderId, 'Sub');
-        const fileId = await mount.createFile(subId, 'deep.txt', 'text/plain', 4, Buffer.from('deep'));
+        const fileId = await seedFile(mount, subId, 'deep.txt', 'text/plain', 4, Buffer.from('deep'));
 
         await mount.deletePath(folderId);
         expect(await mount.getPath(subId)).toBeNull();
@@ -592,12 +592,12 @@ describe('Mount (local path-based storage)', () => {
     });
 
     test('a create into a deleted folder answers 404 and leaves the root file of that name', async () => {
-        const rootFileId = await mount.createFile(rootId, 'notes.txt', 'text/plain', 9, Buffer.from('root-text'));
+        const rootFileId = await seedFile(mount, rootId, 'notes.txt', 'text/plain', 9, Buffer.from('root-text'));
         const folderId = await mount.createFolder(rootId, 'DeletedParent');
         await mount.deletePath(folderId);
 
         await expect(
-            mount.createFile(folderId, 'notes.txt', 'text/plain', 6, Buffer.from('orphan')),
+            seedFile(mount, folderId, 'notes.txt', 'text/plain', 6, Buffer.from('orphan')),
         ).rejects.toMatchObject({ status: 404 });
         expect(await (await mount.readFile(rootFileId))!.text()).toBe('root-text');
     });
@@ -610,8 +610,8 @@ describe('Mount (local path-based storage)', () => {
     test('same name in different folders is allowed', async () => {
         const a = await mount.createFolder(rootId, 'FolderA');
         const b = await mount.createFolder(rootId, 'FolderB');
-        await mount.createFile(a, 'same.txt', 'text/plain', 1, Buffer.from('a'));
-        await mount.createFile(b, 'same.txt', 'text/plain', 1, Buffer.from('b'));
+        await seedFile(mount, a, 'same.txt', 'text/plain', 1, Buffer.from('a'));
+        await seedFile(mount, b, 'same.txt', 'text/plain', 1, Buffer.from('b'));
 
         const fileA = await mount.getChildByName(a, 'same.txt');
         const fileB = await mount.getChildByName(b, 'same.txt');
@@ -624,15 +624,15 @@ describe('Mount (local path-based storage)', () => {
     // filesystems (APFS, Windows) fold non-ASCII case pairs to one file — a silent clobber.
     test('non-ASCII case pair in same folder throws 409', async () => {
         const folderId = await mount.createFolder(rootId, 'UnicodeCase');
-        await mount.createFile(folderId, 'Ärger.txt', 'text/plain', 1, Buffer.from('a'));
-        await expect(mount.createFile(folderId, 'ärger.txt', 'text/plain', 1, Buffer.from('b'))).rejects.toThrow(
+        await seedFile(mount, folderId, 'Ärger.txt', 'text/plain', 1, Buffer.from('a'));
+        await expect(seedFile(mount, folderId, 'ärger.txt', 'text/plain', 1, Buffer.from('b'))).rejects.toThrow(
             'already exists',
         );
     });
 
     test('getChildByName finds a non-ASCII cross-case sibling', async () => {
         const folderId = await mount.createFolder(rootId, 'UnicodeLookup');
-        const fileId = await mount.createFile(folderId, 'Übung.txt', 'text/plain', 1, Buffer.from('u'));
+        const fileId = await seedFile(mount, folderId, 'Übung.txt', 'text/plain', 1, Buffer.from('u'));
         const found = await mount.getChildByName(folderId, 'übung.txt');
         expect(found).not.toBeNull();
         expect(found!.id).toBe(fileId);
@@ -704,9 +704,7 @@ describe('Name validation', () => {
     });
 
     test('rejects .. as file name', async () => {
-        await expect(mount.createFile(rootId, '..', 'text/plain', 0, undefined)).rejects.toThrow(
-            'Invalid file or folder name',
-        );
+        await expect(mount.touchFile(rootId, '..', 'text/plain')).rejects.toThrow('Invalid file or folder name');
     });
 
     test('rejects .. on rename', async () => {
@@ -730,7 +728,7 @@ describe('Name validation', () => {
     });
 
     test('rejects .trash as file name', async () => {
-        await expect(mount.createFile(rootId, '.trash', 'text/plain', 0, undefined)).rejects.toThrow('reserved name');
+        await expect(mount.touchFile(rootId, '.trash', 'text/plain')).rejects.toThrow('reserved name');
     });
 
     test('rejects .trash on rename', async () => {
@@ -759,13 +757,13 @@ describe('Name validation', () => {
     });
 
     test('allows dotfiles', async () => {
-        const id = await mount.createFile(rootId, '.gitignore', 'text/plain', 0, undefined);
+        const id = await mount.touchFile(rootId, '.gitignore', 'text/plain');
         const file = await mount.getPath(id);
         expect(file!.name).toBe('.gitignore');
     });
 
     test('allows names with dots', async () => {
-        const id = await mount.createFile(rootId, 'archive.tar.gz', 'application/gzip', 0, undefined);
+        const id = await mount.touchFile(rootId, 'archive.tar.gz', 'application/gzip');
         const file = await mount.getPath(id);
         expect(file!.name).toBe('archive.tar.gz');
     });
@@ -833,7 +831,7 @@ describe('Trash query filtering', () => {
 
     test('listFolder excludes trashed items', async () => {
         const data = Buffer.from('trash-test');
-        const fileId = await mount.createFile(rootId, 'trashed-file.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'trashed-file.txt', 'text/plain', data.length, data);
 
         // Verify it appears before trashing
         let children = await mount.listFolder(rootId);
@@ -865,7 +863,7 @@ describe('Trash query filtering', () => {
 
     test('getPath still returns trashed items (unfiltered)', async () => {
         const data = Buffer.from('still-visible');
-        const fileId = await mount.createFile(rootId, 'still-visible.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'still-visible.txt', 'text/plain', data.length, data);
 
         await mount.updatePath(fileId, { trashedAt: new Date() });
 
@@ -879,7 +877,7 @@ describe('Trash query filtering', () => {
         const sizeBefore = await mount.getTotalSize();
 
         const data = Buffer.from('counted-even-when-trashed');
-        const fileId = await mount.createFile(rootId, 'counted.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'counted.txt', 'text/plain', data.length, data);
 
         const sizeAfterCreate = await mount.getTotalSize();
         expect(sizeAfterCreate).toBe(sizeBefore + data.length);
@@ -894,7 +892,7 @@ describe('Trash query filtering', () => {
 
     test('getActivePath throws 404 for trashed items', async () => {
         const data = Buffer.from('active-test');
-        const fileId = await mount.createFile(rootId, 'active-test.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'active-test.txt', 'text/plain', data.length, data);
 
         await mount.updatePath(fileId, { trashedAt: new Date() });
 
@@ -903,7 +901,7 @@ describe('Trash query filtering', () => {
 
     test('getActivePath returns active items normally', async () => {
         const data = Buffer.from('active-ok');
-        const fileId = await mount.createFile(rootId, 'active-ok.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'active-ok.txt', 'text/plain', data.length, data);
 
         const result = await mount.getActivePath(fileId);
         expect(result).not.toBeNull();
@@ -921,14 +919,14 @@ describe('Trash query filtering', () => {
 
     test('assertUniqueName allows creating file with same name as trashed file', async () => {
         const data = Buffer.from('original');
-        const fileId = await mount.createFile(rootId, 'reusable-name.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'reusable-name.txt', 'text/plain', data.length, data);
 
         // Trash the original
         await mount.updatePath(fileId, { trashedAt: new Date() });
 
         // Should be able to create a new file with the same name
         const newData = Buffer.from('replacement');
-        const newFileId = await mount.createFile(rootId, 'reusable-name.txt', 'text/plain', newData.length, newData);
+        const newFileId = await seedFile(mount, rootId, 'reusable-name.txt', 'text/plain', newData.length, newData);
         expect(newFileId).not.toBe(fileId);
 
         const newFile = await mount.getPath(newFileId);
@@ -953,7 +951,7 @@ describe('trashPath (local-key storage)', () => {
     test('trash a file sets trashedAt, trashedFrom, and parentId=root', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashFileParent');
         const data = Buffer.from('trash-me');
-        const fileId = await mount.createFile(folderId, 'trash-me.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, folderId, 'trash-me.txt', 'text/plain', data.length, data);
 
         const result = await mount.trashPath(fileId);
         expect(result.trashedAt).not.toBeNull();
@@ -972,7 +970,7 @@ describe('trashPath (local-key storage)', () => {
 
     test('trash a file preserves acl column', async () => {
         const data = Buffer.from('acl-test');
-        const fileId = await mount.createFile(rootId, 'acl-preserve.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'acl-preserve.txt', 'text/plain', data.length, data);
         const testAcl = [{ id: 'user-1', read: true, write: false }];
         await mount.updatePath(fileId, { acl: testAcl });
 
@@ -985,7 +983,7 @@ describe('trashPath (local-key storage)', () => {
     test('trash a folder sets trashedAt on folder and all descendants', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashFolderDeep');
         const subId = await mount.createFolder(folderId, 'SubFolder');
-        const fileId = await mount.createFile(subId, 'deep.txt', 'text/plain', 4, Buffer.from('deep'));
+        const fileId = await seedFile(mount, subId, 'deep.txt', 'text/plain', 4, Buffer.from('deep'));
 
         await mount.trashPath(folderId);
 
@@ -999,7 +997,7 @@ describe('trashPath (local-key storage)', () => {
 
     test('trash a folder: descendants get trashedFrom=null', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashFolderDescendants');
-        const childId = await mount.createFile(folderId, 'child.txt', 'text/plain', 5, Buffer.from('child'));
+        const childId = await seedFile(mount, folderId, 'child.txt', 'text/plain', 5, Buffer.from('child'));
 
         await mount.trashPath(folderId);
 
@@ -1015,7 +1013,7 @@ describe('trashPath (local-key storage)', () => {
 
     test('trash a folder with already-trashed child: child keeps its own trashedFrom', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashNestedPrior');
-        const childId = await mount.createFile(folderId, 'nested.txt', 'text/plain', 6, Buffer.from('nested'));
+        const childId = await seedFile(mount, folderId, 'nested.txt', 'text/plain', 6, Buffer.from('nested'));
 
         // Trash the child first
         await mount.trashPath(childId);
@@ -1045,8 +1043,8 @@ describe('trashPath (local-key storage)', () => {
         await mount2.init();
         const root2 = (await mount2.getRootFolder())!;
 
-        const f1 = await mount2.createFile(root2.id, 'first.txt', 'text/plain', 5, Buffer.from('first'));
-        const f2 = await mount2.createFile(root2.id, 'second.txt', 'text/plain', 6, Buffer.from('second'));
+        const f1 = await seedFile(mount2, root2.id, 'first.txt', 'text/plain', 5, Buffer.from('first'));
+        const f2 = await seedFile(mount2, root2.id, 'second.txt', 'text/plain', 6, Buffer.from('second'));
 
         await mount2.trashPath(f1);
         // Backdate f1's trashedAt so f2 is newer (avoids a 1s+ sleep)
@@ -1080,7 +1078,7 @@ describe('trashPath (local path-based storage)', () => {
     test('trash a file moves to .trash/{pathId}.ext on disk', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashLocalFile');
         const data = Buffer.from('local-trash');
-        const fileId = await mount.createFile(folderId, 'report.pdf', 'application/pdf', data.length, data);
+        const fileId = await seedFile(mount, folderId, 'report.pdf', 'application/pdf', data.length, data);
 
         expect(existsSync(join(mount.dataDir, 'TrashLocalFile', 'report.pdf'))).toBe(true);
 
@@ -1093,7 +1091,7 @@ describe('trashPath (local path-based storage)', () => {
 
     test('trash a file updates file column and content is still readable', async () => {
         const data = Buffer.from('file-col-test');
-        const fileId = await mount.createFile(rootId, 'filecol.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'filecol.txt', 'text/plain', data.length, data);
 
         await mount.trashPath(fileId);
 
@@ -1107,7 +1105,7 @@ describe('trashPath (local path-based storage)', () => {
 
     test('trash a folder moves to .trash/{pathId}/ on disk', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashLocalFolder');
-        await mount.createFile(folderId, 'inside.txt', 'text/plain', 5, Buffer.from('inner'));
+        await seedFile(mount, folderId, 'inside.txt', 'text/plain', 5, Buffer.from('inner'));
 
         expect(existsSync(join(mount.dataDir, 'TrashLocalFolder'))).toBe(true);
 
@@ -1123,7 +1121,7 @@ describe('trashPath (local path-based storage)', () => {
 
     test('trash a folder: descendants file columns unchanged', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashDescFile');
-        const childId = await mount.createFile(folderId, 'child.txt', 'text/plain', 5, Buffer.from('child'));
+        const childId = await seedFile(mount, folderId, 'child.txt', 'text/plain', 5, Buffer.from('child'));
 
         const childBefore = await mount.getPath(childId);
 
@@ -1137,12 +1135,12 @@ describe('trashPath (local path-based storage)', () => {
     test('after trash, create new file with same name: no collision on disk', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashCollision');
         const data1 = Buffer.from('original');
-        const file1Id = await mount.createFile(folderId, 'same.txt', 'text/plain', data1.length, data1);
+        const file1Id = await seedFile(mount, folderId, 'same.txt', 'text/plain', data1.length, data1);
 
         await mount.trashPath(file1Id);
 
         const data2 = Buffer.from('replacement');
-        const file2Id = await mount.createFile(folderId, 'same.txt', 'text/plain', data2.length, data2);
+        const file2Id = await seedFile(mount, folderId, 'same.txt', 'text/plain', data2.length, data2);
 
         // Both should be accessible
         const content1 = await mount.readFile(file1Id);
@@ -1156,7 +1154,7 @@ describe('trashPath (local path-based storage)', () => {
     test('trash a file: trashedAt, trashedFrom, parentId set correctly', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashLocalMeta');
         const data = Buffer.from('meta-test');
-        const fileId = await mount.createFile(folderId, 'meta.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, folderId, 'meta.txt', 'text/plain', data.length, data);
 
         const result = await mount.trashPath(fileId);
         expect(result.trashedAt).not.toBeNull();
@@ -1167,7 +1165,7 @@ describe('trashPath (local path-based storage)', () => {
     // (data/.trash), so deleting it deleted every trashed file's bytes. Reserved in validateName.
     test('no user path can alias the real trash dir — trashed bytes survive', async () => {
         const data = Buffer.from('must-survive');
-        const fileId = await mount.createFile(rootId, 'survive.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'survive.txt', 'text/plain', data.length, data);
         await mount.trashPath(fileId);
         const trashKey = buildStorageKey(fileId, 'survive.txt');
         expect(existsSync(join(mount.dataDir, '.trash', trashKey))).toBe(true);
@@ -1183,7 +1181,7 @@ describe('trashPath (local path-based storage)', () => {
     // A row write lost after the rename left a live row whose bytes sat in .trash/, and the next trash hit ENOTEMPTY.
     test('a trash whose row write fails puts the bytes back', async () => {
         const data = Buffer.from('stays-live');
-        const fileId = await mount.createFile(rootId, 'row-fails.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'row-fails.txt', 'text/plain', data.length, data);
 
         await withFailingTrashedAtWrite(mount, async () => {
             await expect(mount.trashPath(fileId)).rejects.toThrow();
@@ -1196,7 +1194,7 @@ describe('trashPath (local path-based storage)', () => {
 
     test('a trash over a stale folder at its trash key succeeds and keeps that folder aside', async () => {
         const folderId = await mount.createFolder(rootId, 'Stale.eigensheets');
-        await mount.createFile(folderId, 'data.db', 'application/octet-stream', 5, Buffer.from('newer'));
+        await seedFile(mount, folderId, 'data.db', 'application/octet-stream', 5, Buffer.from('newer'));
         const trashKey = buildStorageKey(folderId, 'Stale.eigensheets');
         const stale = join(mount.dataDir, '.trash', trashKey);
         mkdirSync(stale);
@@ -1214,7 +1212,7 @@ describe('trashPath (local path-based storage)', () => {
     });
 
     test('a trash over a stale file at its trash key keeps that file aside', async () => {
-        const fileId = await mount.createFile(rootId, 'stale.txt', 'text/plain', 5, Buffer.from('newer'));
+        const fileId = await seedFile(mount, rootId, 'stale.txt', 'text/plain', 5, Buffer.from('newer'));
         const trashKey = buildStorageKey(fileId, 'stale.txt');
         writeFileSync(join(mount.dataDir, '.trash', trashKey), 'older');
 
@@ -1228,7 +1226,7 @@ describe('trashPath (local path-based storage)', () => {
 
     test('a second trash of a trashed item is refused and keeps its original folder', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashTwice');
-        const fileId = await mount.createFile(folderId, 'twice.txt', 'text/plain', 5, Buffer.from('twice'));
+        const fileId = await seedFile(mount, folderId, 'twice.txt', 'text/plain', 5, Buffer.from('twice'));
 
         await mount.trashPath(fileId);
         await expect(mount.trashPath(fileId)).rejects.toMatchObject({ status: 404 });
@@ -1240,7 +1238,7 @@ describe('trashPath (local path-based storage)', () => {
 
     // A crash between the rename and the row write: the only copy is at the trash key, under a live row.
     test('a trash after a crash between its rename and its row write finishes that trash', async () => {
-        const fileId = await mount.createFile(rootId, 'crashed.txt', 'text/plain', 7, Buffer.from('crashed'));
+        const fileId = await seedFile(mount, rootId, 'crashed.txt', 'text/plain', 7, Buffer.from('crashed'));
         const trashKey = buildStorageKey(fileId, 'crashed.txt');
         renameSync(join(mount.dataDir, 'crashed.txt'), join(mount.dataDir, '.trash', trashKey));
 
@@ -1255,7 +1253,7 @@ describe('trashPath (local path-based storage)', () => {
 
     test('a trash after a failed row write whose move-back failed too finishes that trash', async () => {
         const folderId = await mount.createFolder(rootId, 'MoveBackFails');
-        const fileId = await mount.createFile(folderId, 'stuck.txt', 'text/plain', 5, Buffer.from('stuck'));
+        const fileId = await seedFile(mount, folderId, 'stuck.txt', 'text/plain', 5, Buffer.from('stuck'));
         const rename = mount.storage.rename!.bind(mount.storage);
         const spy = spyOn(mount.storage, 'rename').mockImplementation(async (from, to) => {
             if (from.startsWith('.trash/')) throw new Error('EIO');
@@ -1280,7 +1278,7 @@ describe('trashPath (local path-based storage)', () => {
     test('a move that lands while a trash waits for the lock is the folder the trash records', async () => {
         const fromId = await mount.createFolder(rootId, 'MoveFrom');
         const toId = await mount.createFolder(rootId, 'MoveTo');
-        const fileId = await mount.createFile(fromId, 'moving.txt', 'text/plain', 6, Buffer.from('moving'));
+        const fileId = await seedFile(mount, fromId, 'moving.txt', 'text/plain', 6, Buffer.from('moving'));
 
         let release!: () => void;
         const held = mount.withPathLock(fileId, () => new Promise<void>((resolve) => (release = resolve)));
@@ -1299,7 +1297,7 @@ describe('trashPath (local path-based storage)', () => {
     test('a move that waited while a trash committed is refused and leaves the bytes in trash', async () => {
         const fromId = await mount.createFolder(rootId, 'TrashFirstFrom');
         const toId = await mount.createFolder(rootId, 'TrashFirstTo');
-        const fileId = await mount.createFile(fromId, 'first.txt', 'text/plain', 5, Buffer.from('first'));
+        const fileId = await seedFile(mount, fromId, 'first.txt', 'text/plain', 5, Buffer.from('first'));
 
         let release!: () => void;
         const held = mount.withPathLock(fileId, () => new Promise<void>((resolve) => (release = resolve)));
@@ -1347,7 +1345,7 @@ describe('restorePath (local-key storage)', () => {
     test('restore a file clears trashedAt, trashedFrom, restores parentId', async () => {
         const folderId = await mount.createFolder(rootId, 'RestoreFileParent');
         const data = Buffer.from('restore-me');
-        const fileId = await mount.createFile(folderId, 'restore.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, folderId, 'restore.txt', 'text/plain', data.length, data);
 
         await mount.trashPath(fileId);
         const trashed = await mount.getPath(fileId);
@@ -1362,7 +1360,7 @@ describe('restorePath (local-key storage)', () => {
     test('restore a folder clears flags on folder and non-independently-trashed descendants', async () => {
         const folderId = await mount.createFolder(rootId, 'RestoreFolderDeep');
         const subId = await mount.createFolder(folderId, 'Sub');
-        const fileId = await mount.createFile(subId, 'deep.txt', 'text/plain', 4, Buffer.from('deep'));
+        const fileId = await seedFile(mount, subId, 'deep.txt', 'text/plain', 4, Buffer.from('deep'));
 
         await mount.trashPath(folderId);
 
@@ -1382,7 +1380,7 @@ describe('restorePath (local-key storage)', () => {
 
     test('restore a folder: descendants with trashedFrom IS NOT NULL stay trashed', async () => {
         const folderId = await mount.createFolder(rootId, 'RestoreIndepTrash');
-        const childId = await mount.createFile(folderId, 'indep.txt', 'text/plain', 5, Buffer.from('indep'));
+        const childId = await seedFile(mount, folderId, 'indep.txt', 'text/plain', 5, Buffer.from('indep'));
 
         // Trash child independently first
         await mount.trashPath(childId);
@@ -1403,7 +1401,7 @@ describe('restorePath (local-key storage)', () => {
     test('restore when original parent deleted restores to root', async () => {
         const folderId = await mount.createFolder(rootId, 'RestoreDeletedParent');
         const data = Buffer.from('orphan');
-        const fileId = await mount.createFile(folderId, 'orphan.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, folderId, 'orphan.txt', 'text/plain', data.length, data);
 
         await mount.trashPath(fileId);
         // Delete the original parent permanently
@@ -1417,7 +1415,7 @@ describe('restorePath (local-key storage)', () => {
     test('restore when original parent trashed restores to root', async () => {
         const folderId = await mount.createFolder(rootId, 'RestoreTrashedParent');
         const data = Buffer.from('nested-orphan');
-        const fileId = await mount.createFile(folderId, 'nested-orphan.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, folderId, 'nested-orphan.txt', 'text/plain', data.length, data);
 
         // Trash the file first
         await mount.trashPath(fileId);
@@ -1433,7 +1431,7 @@ describe('restorePath (local-key storage)', () => {
     test('restore when an ancestor of the original parent is trashed restores to root', async () => {
         const outerId = await mount.createFolder(rootId, 'RestoreTrashedAncestor');
         const innerId = await mount.createFolder(outerId, 'Inner');
-        const fileId = await mount.createFile(innerId, 'deep-orphan.txt', 'text/plain', 1, Buffer.from('d'));
+        const fileId = await seedFile(mount, innerId, 'deep-orphan.txt', 'text/plain', 1, Buffer.from('d'));
         await mount.trashPath(fileId);
         await mount.trashPath(outerId);
         await mount.db.update(paths).set({ trashedAt: null }).where(eq(paths.id, innerId));
@@ -1446,13 +1444,13 @@ describe('restorePath (local-key storage)', () => {
     test('restore with name conflict auto-renames', async () => {
         const folderId = await mount.createFolder(rootId, 'RestoreConflict');
         const data1 = Buffer.from('original');
-        const fileId = await mount.createFile(folderId, 'conflict.txt', 'text/plain', data1.length, data1);
+        const fileId = await seedFile(mount, folderId, 'conflict.txt', 'text/plain', data1.length, data1);
 
         await mount.trashPath(fileId);
 
         // Create a new file with the same name
         const data2 = Buffer.from('blocker');
-        await mount.createFile(folderId, 'conflict.txt', 'text/plain', data2.length, data2);
+        await seedFile(mount, folderId, 'conflict.txt', 'text/plain', data2.length, data2);
 
         const restored = await mount.restorePath(fileId);
         expect(restored.parentId).toBe(folderId);
@@ -1462,7 +1460,7 @@ describe('restorePath (local-key storage)', () => {
 
     test('restore non-trashed item throws 400', async () => {
         const data = Buffer.from('not-trashed');
-        const fileId = await mount.createFile(rootId, 'not-trashed.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'not-trashed.txt', 'text/plain', data.length, data);
 
         await expect(mount.restorePath(fileId)).rejects.toThrow('Item is not in trash');
     });
@@ -1483,7 +1481,7 @@ describe('restorePath (local path-based storage)', () => {
     test('restore file moves back from .trash/, file column = name', async () => {
         const folderId = await mount.createFolder(rootId, 'RestoreLocalFile');
         const data = Buffer.from('restore-local');
-        const fileId = await mount.createFile(folderId, 'back.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, folderId, 'back.txt', 'text/plain', data.length, data);
 
         await mount.trashPath(fileId);
 
@@ -1506,7 +1504,7 @@ describe('restorePath (local path-based storage)', () => {
 
     test('restore folder moves back from .trash/', async () => {
         const folderId = await mount.createFolder(rootId, 'RestoreLocalFolder');
-        await mount.createFile(folderId, 'inside.txt', 'text/plain', 6, Buffer.from('inside'));
+        await seedFile(mount, folderId, 'inside.txt', 'text/plain', 6, Buffer.from('inside'));
 
         await mount.trashPath(folderId);
 
@@ -1522,12 +1520,12 @@ describe('restorePath (local path-based storage)', () => {
     test('restore with name conflict auto-renames on disk too', async () => {
         const folderId = await mount.createFolder(rootId, 'RestoreLocalConflict');
         const data1 = Buffer.from('first');
-        const fileId = await mount.createFile(folderId, 'dupe.txt', 'text/plain', data1.length, data1);
+        const fileId = await seedFile(mount, folderId, 'dupe.txt', 'text/plain', data1.length, data1);
 
         await mount.trashPath(fileId);
 
         // Create blocker
-        await mount.createFile(folderId, 'dupe.txt', 'text/plain', 6, Buffer.from('blocker'));
+        await seedFile(mount, folderId, 'dupe.txt', 'text/plain', 6, Buffer.from('blocker'));
 
         const restored = await mount.restorePath(fileId);
         expect(restored.name).not.toBe('dupe.txt');
@@ -1538,7 +1536,7 @@ describe('restorePath (local path-based storage)', () => {
     test('restore when original parent deleted restores to root', async () => {
         const folderId = await mount.createFolder(rootId, 'RestoreLocalDelParent');
         const data = Buffer.from('orphan-local');
-        const fileId = await mount.createFile(folderId, 'orphan-local.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, folderId, 'orphan-local.txt', 'text/plain', data.length, data);
 
         await mount.trashPath(fileId);
         await mount.deletePath(folderId);
@@ -1552,7 +1550,7 @@ describe('restorePath (local path-based storage)', () => {
     test('restore when an ancestor of the original parent is trashed restores to root', async () => {
         const outerId = await mount.createFolder(rootId, 'RestoreLocalTrashedAncestor');
         const innerId = await mount.createFolder(outerId, 'Inner');
-        const fileId = await mount.createFile(innerId, 'deep-orphan-local.txt', 'text/plain', 1, Buffer.from('d'));
+        const fileId = await seedFile(mount, innerId, 'deep-orphan-local.txt', 'text/plain', 1, Buffer.from('d'));
         await mount.trashPath(fileId);
         await mount.trashPath(outerId);
         await mount.db.update(paths).set({ trashedAt: null }).where(eq(paths.id, innerId));
@@ -1564,7 +1562,7 @@ describe('restorePath (local path-based storage)', () => {
 
     test('a restore whose row write fails leaves the item in trash, bytes and all', async () => {
         const folderId = await mount.createFolder(rootId, 'RestoreRowFails');
-        const fileId = await mount.createFile(folderId, 'back.txt', 'text/plain', 4, Buffer.from('back'));
+        const fileId = await seedFile(mount, folderId, 'back.txt', 'text/plain', 4, Buffer.from('back'));
         await mount.trashPath(fileId);
 
         await withFailingTrashedAtWrite(mount, async () => {
@@ -1581,7 +1579,7 @@ describe('restorePath (local path-based storage)', () => {
     test('a restore onto a leftover folder no row owns keeps the leftover aside in .trash/', async () => {
         const parentId = await mount.createFolder(rootId, 'LeftoverParent');
         const folderId = await mount.createFolder(parentId, 'Leftover');
-        await mount.createFile(folderId, 'inside.txt', 'text/plain', 7, Buffer.from('trashed'));
+        await seedFile(mount, folderId, 'inside.txt', 'text/plain', 7, Buffer.from('trashed'));
         await mount.trashPath(folderId);
         const leftover = join(mount.dataDir, 'LeftoverParent', 'Leftover');
         mkdirSync(leftover);
@@ -1602,7 +1600,7 @@ describe('restorePath (local path-based storage)', () => {
     // A restore's rename landed and its row write did not, or a failed trash could not move the bytes back.
     test('a restore whose bytes already sit at the target writes the row', async () => {
         const parentId = await mount.createFolder(rootId, 'AlreadyBack');
-        const fileId = await mount.createFile(parentId, 'back.txt', 'text/plain', 7, Buffer.from('already'));
+        const fileId = await seedFile(mount, parentId, 'back.txt', 'text/plain', 7, Buffer.from('already'));
         await mount.trashPath(fileId);
         renameSync(
             join(mount.dataDir, '.trash', buildStorageKey(fileId, 'back.txt')),
@@ -1617,9 +1615,9 @@ describe('restorePath (local path-based storage)', () => {
 
     test('a restore refuses a target whose bytes a live row holds', async () => {
         const parentId = await mount.createFolder(rootId, 'HeldTarget');
-        const trashedId = await mount.createFile(parentId, 'held.txt', 'text/plain', 7, Buffer.from('trashed'));
+        const trashedId = await seedFile(mount, parentId, 'held.txt', 'text/plain', 7, Buffer.from('trashed'));
         await mount.trashPath(trashedId);
-        const liveId = await mount.createFile(parentId, 'other.txt', 'text/plain', 4, Buffer.from('live'));
+        const liveId = await seedFile(mount, parentId, 'other.txt', 'text/plain', 4, Buffer.from('live'));
         // A live row whose bytes sit at another name, as a case-insensitive disk aliases two names.
         renameSync(join(mount.dataDir, 'HeldTarget', 'other.txt'), join(mount.dataDir, 'HeldTarget', 'held.txt'));
         await mount.db.update(paths).set({ file: 'held.txt' }).where(eq(paths.id, liveId));
@@ -1633,7 +1631,7 @@ describe('restorePath (local path-based storage)', () => {
 
     test('a restore that waited while its original folder was trashed goes to the root', async () => {
         const parentId = await mount.createFolder(rootId, 'TrashedWhileWaiting');
-        const fileId = await mount.createFile(parentId, 'waiting.txt', 'text/plain', 7, Buffer.from('waiting'));
+        const fileId = await seedFile(mount, parentId, 'waiting.txt', 'text/plain', 7, Buffer.from('waiting'));
         await mount.trashPath(fileId);
 
         let release!: () => void;
@@ -1663,7 +1661,7 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
 
     test('permanently delete a trashed file — DB row gone, storage file gone', async () => {
         const data = Buffer.from('perm-delete-file');
-        const fileId = await mount.createFile(rootId, 'perm-delete.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'perm-delete.txt', 'text/plain', data.length, data);
 
         await mount.trashPath(fileId);
         expect((await mount.getPath(fileId))?.trashedAt).not.toBeNull();
@@ -1675,7 +1673,7 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
     test('permanently delete a trashed folder — folder and all descendants gone', async () => {
         const folderId = await mount.createFolder(rootId, 'PermanentFolder');
         const subId = await mount.createFolder(folderId, 'Sub');
-        const fileId = await mount.createFile(subId, 'nested.txt', 'text/plain', 3, Buffer.from('abc'));
+        const fileId = await seedFile(mount, subId, 'nested.txt', 'text/plain', 3, Buffer.from('abc'));
 
         await mount.trashPath(folderId);
         await mount.permanentlyDeleteFromTrash(folderId);
@@ -1687,7 +1685,7 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
 
     test('permanently delete folder with independently-trashed orphan child — both deleted', async () => {
         const folderId = await mount.createFolder(rootId, 'OrphanParent');
-        const childId = await mount.createFile(folderId, 'orphan-child.txt', 'text/plain', 5, Buffer.from('child'));
+        const childId = await seedFile(mount, folderId, 'orphan-child.txt', 'text/plain', 5, Buffer.from('child'));
 
         // Trash the child independently first (it gets trashedFrom = folderId, parentId = rootId)
         await mount.trashPath(childId);
@@ -1707,7 +1705,7 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         const outerId = await mount.createFolder(rootId, 'ChainOuter');
         const midId = await mount.createFolder(outerId, 'ChainMid');
         const midSubId = await mount.createFolder(midId, 'ChainMidSub');
-        const fileId = await mount.createFile(midSubId, 'chain.txt', 'text/plain', 5, Buffer.from('chain'));
+        const fileId = await seedFile(mount, midSubId, 'chain.txt', 'text/plain', 5, Buffer.from('chain'));
         await mount.trashPath(fileId);
         await mount.trashPath(midId);
 
@@ -1738,8 +1736,8 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         await mount2.init();
         const root2 = (await mount2.getRootFolder())!;
 
-        const f1 = await mount2.createFile(root2.id, 'purge1.txt', 'text/plain', 1, Buffer.from('a'));
-        const f2 = await mount2.createFile(root2.id, 'purge2.txt', 'text/plain', 1, Buffer.from('b'));
+        const f1 = await seedFile(mount2, root2.id, 'purge1.txt', 'text/plain', 1, Buffer.from('a'));
+        const f2 = await seedFile(mount2, root2.id, 'purge2.txt', 'text/plain', 1, Buffer.from('b'));
         await mount2.trashPath(f1);
         await mount2.trashPath(f2);
 
@@ -1774,8 +1772,8 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         await mount4.init();
         const root4 = (await mount4.getRootFolder())!;
 
-        const oldId = await mount4.createFile(root4.id, 'old-file.txt', 'text/plain', 3, Buffer.from('old'));
-        const newId = await mount4.createFile(root4.id, 'new-file.txt', 'text/plain', 3, Buffer.from('new'));
+        const oldId = await seedFile(mount4, root4.id, 'old-file.txt', 'text/plain', 3, Buffer.from('old'));
+        const newId = await seedFile(mount4, root4.id, 'new-file.txt', 'text/plain', 3, Buffer.from('new'));
 
         await mount4.trashPath(oldId);
         await mount4.trashPath(newId);
@@ -1793,7 +1791,7 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
     });
 
     test('permanentlyDeleteFromTrash keeps an item that is not in trash', async () => {
-        const fileId = await mount.createFile(rootId, 'not-trashed2.txt', 'text/plain', 3, Buffer.from('nop'));
+        const fileId = await seedFile(mount, rootId, 'not-trashed2.txt', 'text/plain', 3, Buffer.from('nop'));
         expect(await mount.permanentlyDeleteFromTrash(fileId)).toBe(false);
         expect(await mount.getPath(fileId)).not.toBeNull();
     });
@@ -1805,7 +1803,7 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
     // The delete has read the row as trashed and sits in deletePath when the restore arrives. The
     // restore must then wait, and find the item gone.
     test('a restore that races a permanent delete never reports a deleted item as restored', async () => {
-        const fileId = await mount.createFile(rootId, 'raced-restore.txt', 'text/plain', 2, Buffer.from('hi'));
+        const fileId = await seedFile(mount, rootId, 'raced-restore.txt', 'text/plain', 2, Buffer.from('hi'));
         await mount.trashPath(fileId);
 
         let restored: Promise<string | number> | undefined;
@@ -1831,7 +1829,7 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
     // The same race on a separately trashed child, which the folder's delete takes with it.
     test('a child restored while its trashed folder is deleted is reported gone', async () => {
         const folderId = await mount.createFolder(rootId, 'RacedChildParent');
-        const childId = await mount.createFile(folderId, 'raced-child.txt', 'text/plain', 1, Buffer.from('c'));
+        const childId = await seedFile(mount, folderId, 'raced-child.txt', 'text/plain', 1, Buffer.from('c'));
         await mount.trashPath(childId);
         await mount.trashPath(folderId);
 
@@ -1877,7 +1875,8 @@ describe('the trash purge at mount open', () => {
         await first.init();
         const rootId = (await first.getRootFolder())!.id;
         for (let i = 0; i < 20; i++) {
-            const id = await first.createFile(
+            const id = await seedFile(
+                first,
                 rootId,
                 `expired-${i}.bin`,
                 'application/octet-stream',
@@ -1945,7 +1944,7 @@ describe('a write under a folder deleted meanwhile (local-key storage)', () => {
             return write(key, data);
         });
         try {
-            const created = mount.createFile(folderId, 'late.bin', 'application/octet-stream', 5, Buffer.from('hello'));
+            const created = seedFile(mount, folderId, 'late.bin', 'application/octet-stream', 5, Buffer.from('hello'));
             const outcome = created.then(
                 () => null,
                 (e: unknown) => e,
@@ -1968,7 +1967,7 @@ describe('a write under a folder deleted meanwhile (local-key storage)', () => {
     // Off `local` a folder delete locks none of its files, and the object at the key is this file's alone.
     test('an overwrite answers 404 and leaves no object behind', async () => {
         const folderId = await mount.createFolder(rootId, 'GoneWhileOverwriting');
-        const fileId = await mount.createFile(folderId, 'late.bin', 'application/octet-stream', 3, Buffer.from('old'));
+        const fileId = await seedFile(mount, folderId, 'late.bin', 'application/octet-stream', 3, Buffer.from('old'));
         const key = await mount.getStorageKey(fileId);
         const inWrite = Promise.withResolvers<void>();
         const release = Promise.withResolvers<void>();
@@ -2002,7 +2001,7 @@ describe('a write under a folder deleted meanwhile (local-key storage)', () => {
     // Drive checked the folder before the move. It was trashed and deleted after that check.
     test('a move answers 404', async () => {
         const folderId = await mount.createFolder(rootId, 'GoneBeforeMove');
-        const fileId = await mount.createFile(rootId, 'moved.txt', 'text/plain', 1, Buffer.from('m'));
+        const fileId = await seedFile(mount, rootId, 'moved.txt', 'text/plain', 1, Buffer.from('m'));
         await mount.trashPath(folderId);
         await mount.permanentlyDeleteFromTrash(folderId);
 
@@ -2017,7 +2016,7 @@ describe('a write under a folder deleted meanwhile (local-key storage)', () => {
     // inside that check.
     test('a restore answers 404', async () => {
         const folderId = await mount.createFolder(rootId, 'GoneBeforeRestore');
-        const fileId = await mount.createFile(folderId, 'restored.txt', 'text/plain', 1, Buffer.from('r'));
+        const fileId = await seedFile(mount, folderId, 'restored.txt', 'text/plain', 1, Buffer.from('r'));
         await mount.trashPath(fileId);
 
         const hasLiveChild = mount.hasLiveChild.bind(mount);
@@ -2041,7 +2040,7 @@ describe('a write under a folder deleted meanwhile (local-key storage)', () => {
     test('a move into a folder trashed meanwhile answers 404', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashedBeforeMove');
         const subId = await mount.createFolder(folderId, 'Sub');
-        const fileId = await mount.createFile(rootId, 'kept-out.txt', 'text/plain', 1, Buffer.from('k'));
+        const fileId = await seedFile(mount, rootId, 'kept-out.txt', 'text/plain', 1, Buffer.from('k'));
         await mount.trashPath(folderId);
 
         for (const target of [folderId, subId]) {
@@ -2057,7 +2056,7 @@ describe('a write under a folder deleted meanwhile (local-key storage)', () => {
     // As above, the trash is a row write inside the restore's name check.
     test('a restore into a folder trashed meanwhile answers 404', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashedBeforeRestore');
-        const fileId = await mount.createFile(folderId, 'restored-later.txt', 'text/plain', 1, Buffer.from('r'));
+        const fileId = await seedFile(mount, folderId, 'restored-later.txt', 'text/plain', 1, Buffer.from('r'));
         await mount.trashPath(fileId);
 
         const hasLiveChild = mount.hasLiveChild.bind(mount);
@@ -2100,8 +2099,8 @@ describe('Folder sizes', () => {
 
     test('folder size sums file children', async () => {
         const folderId = await mount.createFolder(rootId, 'SumChildren');
-        await mount.createFile(folderId, 'a.txt', 'text/plain', 5, Buffer.from('aaaaa'));
-        await mount.createFile(folderId, 'b.txt', 'text/plain', 7, Buffer.from('bbbbbbb'));
+        await seedFile(mount, folderId, 'a.txt', 'text/plain', 5, Buffer.from('aaaaa'));
+        await seedFile(mount, folderId, 'b.txt', 'text/plain', 7, Buffer.from('bbbbbbb'));
 
         const folder = await mount.getPath(folderId);
         expect(folder!.size).toBe(12);
@@ -2111,25 +2110,25 @@ describe('Folder sizes', () => {
         const topId = await mount.createFolder(rootId, 'CascadeTop');
         const midId = await mount.createFolder(topId, 'CascadeMid');
         const leafId = await mount.createFolder(midId, 'CascadeLeaf');
-        await mount.createFile(leafId, 'deep.txt', 'text/plain', 10, Buffer.from('1234567890'));
+        await seedFile(mount, leafId, 'deep.txt', 'text/plain', 10, Buffer.from('1234567890'));
 
         expect((await mount.getPath(leafId))!.size).toBe(10);
         expect((await mount.getPath(midId))!.size).toBe(10);
         expect((await mount.getPath(topId))!.size).toBe(10);
     });
 
-    test('createFile invalidates ancestor sizes', async () => {
+    test('a new file invalidates ancestor sizes', async () => {
         const folderId = await mount.createFolder(rootId, 'InvalidateOnCreate');
-        await mount.createFile(folderId, 'first.txt', 'text/plain', 3, Buffer.from('xxx'));
+        await seedFile(mount, folderId, 'first.txt', 'text/plain', 3, Buffer.from('xxx'));
         expect((await mount.getPath(folderId))!.size).toBe(3);
 
-        await mount.createFile(folderId, 'second.txt', 'text/plain', 4, Buffer.from('yyyy'));
+        await seedFile(mount, folderId, 'second.txt', 'text/plain', 4, Buffer.from('yyyy'));
         expect((await mount.getPath(folderId))!.size).toBe(7);
     });
 
     test('writeFile propagates new size to ancestors', async () => {
         const folderId = await mount.createFolder(rootId, 'WriteFilePropagate');
-        const fileId = await mount.createFile(folderId, 'grow.txt', 'text/plain', 5, Buffer.from('small'));
+        const fileId = await seedFile(mount, folderId, 'grow.txt', 'text/plain', 5, Buffer.from('small'));
         expect((await mount.getPath(folderId))!.size).toBe(5);
 
         await mount.writeFile(fileId, Buffer.from('much-bigger-content'));
@@ -2138,8 +2137,8 @@ describe('Folder sizes', () => {
 
     test('deletePath decreases ancestor sizes', async () => {
         const folderId = await mount.createFolder(rootId, 'DeletePropagate');
-        const f1 = await mount.createFile(folderId, '1.txt', 'text/plain', 4, Buffer.from('1234'));
-        await mount.createFile(folderId, '2.txt', 'text/plain', 6, Buffer.from('567890'));
+        const f1 = await seedFile(mount, folderId, '1.txt', 'text/plain', 4, Buffer.from('1234'));
+        await seedFile(mount, folderId, '2.txt', 'text/plain', 6, Buffer.from('567890'));
         expect((await mount.getPath(folderId))!.size).toBe(10);
 
         await mount.deletePath(f1);
@@ -2149,7 +2148,7 @@ describe('Folder sizes', () => {
     test('move file between folders updates both ancestor chains', async () => {
         const aId = await mount.createFolder(rootId, 'MoveFromA');
         const bId = await mount.createFolder(rootId, 'MoveToB');
-        const fileId = await mount.createFile(aId, 'movable.txt', 'text/plain', 7, Buffer.from('payload'));
+        const fileId = await seedFile(mount, aId, 'movable.txt', 'text/plain', 7, Buffer.from('payload'));
 
         expect((await mount.getPath(aId))!.size).toBe(7);
         expect((await mount.getPath(bId))!.size).toBe(0);
@@ -2163,7 +2162,7 @@ describe('Folder sizes', () => {
     test('copyPath grows destination ancestor sizes', async () => {
         const srcFolder = await mount.createFolder(rootId, 'CopySrc');
         const dstFolder = await mount.createFolder(rootId, 'CopyDst');
-        const fileId = await mount.createFile(srcFolder, 'orig.txt', 'text/plain', 7, Buffer.from('copy-me'));
+        const fileId = await seedFile(mount, srcFolder, 'orig.txt', 'text/plain', 7, Buffer.from('copy-me'));
 
         expect((await mount.getPath(srcFolder))!.size).toBe(7);
         expect((await mount.getPath(dstFolder))!.size).toBe(0);
@@ -2182,7 +2181,7 @@ describe('Folder sizes', () => {
 
     test('trashPath removes file size from old parent', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashShrink');
-        const fileId = await mount.createFile(folderId, 'trash.txt', 'text/plain', 5, Buffer.from('bytes'));
+        const fileId = await seedFile(mount, folderId, 'trash.txt', 'text/plain', 5, Buffer.from('bytes'));
         expect((await mount.getPath(folderId))!.size).toBe(5);
 
         await mount.trashPath(fileId);
@@ -2191,7 +2190,7 @@ describe('Folder sizes', () => {
 
     test('trashed file at root does not inflate root size', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashRootExclude');
-        const fileId = await mount.createFile(folderId, 'trashed.txt', 'text/plain', 5, Buffer.from('XXXXX'));
+        const fileId = await seedFile(mount, folderId, 'trashed.txt', 'text/plain', 5, Buffer.from('XXXXX'));
         const rootBefore = (await mount.getPath(rootId))!.size;
 
         await mount.trashPath(fileId);
@@ -2203,7 +2202,7 @@ describe('Folder sizes', () => {
 
     test('restorePath adds size back to restored parent', async () => {
         const folderId = await mount.createFolder(rootId, 'RestoreGrow');
-        const fileId = await mount.createFile(folderId, 'restore.txt', 'text/plain', 4, Buffer.from('back'));
+        const fileId = await seedFile(mount, folderId, 'restore.txt', 'text/plain', 4, Buffer.from('back'));
         expect((await mount.getPath(folderId))!.size).toBe(4);
 
         await mount.trashPath(fileId);
@@ -2215,7 +2214,7 @@ describe('Folder sizes', () => {
 
     test('peeking inside a trashed folder still shows its descendant sizes', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashedFolderInternals');
-        await mount.createFile(folderId, 'inside.txt', 'text/plain', 6, Buffer.from('hidden'));
+        await seedFile(mount, folderId, 'inside.txt', 'text/plain', 6, Buffer.from('hidden'));
         expect((await mount.getPath(folderId))!.size).toBe(6);
 
         await mount.trashPath(folderId);
@@ -2231,8 +2230,8 @@ describe('Folder sizes', () => {
         const parentId = await mount.createFolder(rootId, 'ListSized');
         const child1 = await mount.createFolder(parentId, 'Child1');
         const child2 = await mount.createFolder(parentId, 'Child2');
-        await mount.createFile(child1, 'c1.txt', 'text/plain', 2, Buffer.from('aa'));
-        await mount.createFile(child2, 'c2.txt', 'text/plain', 4, Buffer.from('bbbb'));
+        await seedFile(mount, child1, 'c1.txt', 'text/plain', 2, Buffer.from('aa'));
+        await seedFile(mount, child2, 'c2.txt', 'text/plain', 4, Buffer.from('bbbb'));
 
         const children = await mount.listFolder(parentId);
         const c1 = children.find((c) => c.id === child1)!;
@@ -2249,7 +2248,7 @@ describe('Folder sizes', () => {
 
         const aId = await m.createFolder(root.id, 'PathMoveA');
         const bId = await m.createFolder(root.id, 'PathMoveB');
-        const fileId = await m.createFile(aId, 'movable.txt', 'text/plain', 7, Buffer.from('payload'));
+        const fileId = await seedFile(m, aId, 'movable.txt', 'text/plain', 7, Buffer.from('payload'));
 
         expect((await m.getPath(aId))!.size).toBe(7);
         expect((await m.getPath(bId))!.size).toBe(0);
@@ -2266,7 +2265,7 @@ describe('Folder sizes', () => {
         const x = await mount.createFolder(rootId, 'RaceMoveX');
         const y = await mount.createFolder(rootId, 'RaceMoveY');
         const z = await mount.createFolder(rootId, 'RaceMoveZ');
-        const fileId = await mount.createFile(x, 'raced.bin', 'application/octet-stream', 10, Buffer.alloc(10));
+        const fileId = await seedFile(mount, x, 'raced.bin', 'application/octet-stream', 10, Buffer.alloc(10));
 
         let entered!: () => void;
         const waiting = new Promise<void>((r) => {
@@ -2473,8 +2472,8 @@ describe('content search (upsertPathContent / clearPathContent / searchPaths bod
 
     test('searchPaths finds a file by its body content and ranks name over body', async () => {
         // Two files: one whose NAME contains the term, one whose only BODY contains it.
-        const bodyHit = await mount.createFile(rootId, 'quarterly-notes.txt', 'text/plain', 0, undefined);
-        const nameHit = await mount.createFile(rootId, 'z004term-in-name.txt', 'text/plain', 0, undefined);
+        const bodyHit = await mount.touchFile(rootId, 'quarterly-notes.txt', 'text/plain');
+        const nameHit = await mount.touchFile(rootId, 'z004term-in-name.txt', 'text/plain');
         mount.upsertPathContent(bodyHit, 'budget figures for z004term and more');
 
         const hits = mount.searchPaths({ q: 'z004term', limit: 20 });
@@ -2486,7 +2485,7 @@ describe('content search (upsertPathContent / clearPathContent / searchPaths bod
     });
 
     test('clearPathContent and AFTER DELETE both remove the content row from search', async () => {
-        const f = await mount.createFile(rootId, 'plain.txt', 'text/plain', 0, undefined);
+        const f = await mount.touchFile(rootId, 'plain.txt', 'text/plain');
         mount.upsertPathContent(f, 'zelphine appears here');
         expect(mount.searchPaths({ q: 'zelphine', limit: 20 }).some((h) => h.id === f)).toBe(true);
 
@@ -2512,24 +2511,24 @@ describe('content index dirty marks', () => {
     });
 
     test('creating a plaintext file marks it contentDirty; a binary file does not', async () => {
-        const txt = await mount.createFile(rootId, 'marked.txt', 'text/plain', 0, undefined);
-        const png = await mount.createFile(rootId, 'image.png', 'image/png', 0, undefined);
+        const txt = await mount.touchFile(rootId, 'marked.txt', 'text/plain');
+        const png = await mount.touchFile(rootId, 'image.png', 'image/png');
         const dirtyIds = mount.getContentDirtyPaths(0, 100).map((p) => p.id);
         expect(dirtyIds).toContain(txt);
         expect(dirtyIds).not.toContain(png);
     });
 
     test('getContentDirtyPaths honours the re-extract cap', async () => {
-        const txt = await mount.createFile(rootId, 'cap-test.txt', 'text/plain', 0, undefined);
+        const txt = await mount.touchFile(rootId, 'cap-test.txt', 'text/plain');
         expect(mount.getContentDirtyPaths(0, 100).map((p) => p.id)).toContain(txt);
         mount.markContentIndexed(txt);
         expect(mount.getContentDirtyPaths(120, 100).map((p) => p.id)).not.toContain(txt);
     });
 
-    // Overwrites mirror createFile's isSearchableTextFile gate — a binary PUT must not queue a re-extract.
+    // Overwrites mirror a create's isSearchableTextFile gate — a binary PUT must not queue a re-extract.
     test('overwriting a plaintext file re-marks it contentDirty; a binary overwrite does not', async () => {
-        const txt = await mount.createFile(rootId, 'rewrite.txt', 'text/plain', 0, undefined);
-        const png = await mount.createFile(rootId, 'rewrite.png', 'image/png', 0, undefined);
+        const txt = await mount.touchFile(rootId, 'rewrite.txt', 'text/plain');
+        const png = await mount.touchFile(rootId, 'rewrite.png', 'image/png');
         mount.clearContentDirty(txt);
         mount.clearContentDirty(png);
 
@@ -2542,8 +2541,8 @@ describe('content index dirty marks', () => {
     });
 
     test('overwriting from a temp file (streaming PUT) follows the same searchable gate', async () => {
-        const txt = await mount.createFile(rootId, 'stream.txt', 'text/plain', 0, undefined);
-        const png = await mount.createFile(rootId, 'stream.png', 'image/png', 0, undefined);
+        const txt = await mount.touchFile(rootId, 'stream.txt', 'text/plain');
+        const png = await mount.touchFile(rootId, 'stream.png', 'image/png');
         mount.clearContentDirty(txt);
         mount.clearContentDirty(png);
 
@@ -2626,7 +2625,7 @@ describe('content reindex failure handling', () => {
     // dropped from body search until its next write. The failed attempt only stamps contentIndexedAt so
     // the 2-min cap defers the retry; a later successful drain then indexes it and clears the bit.
     test('a failed extract keeps the path dirty; a later success indexes it and clears the bit', async () => {
-        const txt = await mount.createFile(rootId, 'reindex-retry.txt', 'text/plain', 0, undefined);
+        const txt = await mount.touchFile(rootId, 'reindex-retry.txt', 'text/plain');
 
         let shouldThrow = true;
         const queue = new ContentReindexQueue({
@@ -2662,7 +2661,7 @@ describe('content reindex failure handling', () => {
     // A gone data.db answers 410 on every open, so retrying it every cap window never ends. It indexes as
     // empty instead; a version restore re-marks it.
     test('a 410 extract clears the body from search and leaves the path indexed', async () => {
-        const txt = await mount.createFile(rootId, 'reindex-gone.txt', 'text/plain', 0, undefined);
+        const txt = await mount.touchFile(rootId, 'reindex-gone.txt', 'text/plain');
         mount.upsertPathContent(txt, 'quorblegone body text');
         const queue = new ContentReindexQueue({
             mount,

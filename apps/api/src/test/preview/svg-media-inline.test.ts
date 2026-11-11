@@ -12,7 +12,7 @@ import { sanitizeExportMedia } from '../../lib/export/sanitize';
 import { Mount } from '../../lib/mount/mount';
 import { inlineSvgMediaRefs, SVG_INLINE_MAX_BYTES } from '../../lib/preview/svg-media-inline';
 import { embeddedSliceFiles, sliceFileOf } from '../fixtures/font-slices';
-import { createTestMountConfig } from '../mount-test-helpers';
+import { createTestMountConfig, seedFile } from '../mount-test-helpers';
 import { authedRequest, driveGet, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-svg-inline-${Date.now()}`);
@@ -59,7 +59,7 @@ describe('inlineSvgMediaRefs', () => {
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
         folderId = await mount.createFolder(rootId, 'media');
-        await mount.createFile(folderId, 'pic.png', 'image/png', pngBytes.length, pngBytes);
+        await seedFile(mount, folderId, 'pic.png', 'image/png', pngBytes.length, pngBytes);
     });
 
     afterAll(() => {
@@ -103,7 +103,7 @@ describe('inlineSvgMediaRefs', () => {
         // mimeType is client-supplied at upload; a type carrying a quote would otherwise escape the
         // attribute. The inliner falls back to a neutral binary type instead of interpolating it.
         const evil = Buffer.from('gif89a-ish');
-        await mount.createFile(folderId, 'evil.gif', 'image/gif" onerror="alert(1)', evil.length, evil);
+        await seedFile(mount, folderId, 'evil.gif', 'image/gif" onerror="alert(1)', evil.length, evil);
         const out = (await inlineSvgMediaRefs(mount, folderId, Buffer.from(svgReferencing('evil.gif')))).toString(
             'utf8',
         );
@@ -112,7 +112,7 @@ describe('inlineSvgMediaRefs', () => {
     });
 
     test('a sibling svg is inlined recursively', async () => {
-        await mount.createFile(folderId, 'inner.svg', SVG_MIME, 0, Buffer.from(svgReferencing('pic.png')));
+        await seedFile(mount, folderId, 'inner.svg', SVG_MIME, 0, Buffer.from(svgReferencing('pic.png')));
         const svg = svgReferencing('inner.svg');
         const out = (await inlineSvgMediaRefs(mount, folderId, Buffer.from(svg))).toString('utf8');
         expect(out).toContain('data:image/svg+xml;base64,');
@@ -127,11 +127,11 @@ describe('inlineSvgMediaRefs', () => {
         // served(0) -> a(1) -> b(2) -> c(3) -> d(4, stripped). d embeds a unique marker png; with the
         // depth cap of 3, c's ref to d is stripped, so the marker never reaches the output.
         const marker = Buffer.from('DEPTH-CAP-MARKER-BYTES');
-        await mount.createFile(folderId, 'marker.png', 'image/png', marker.length, marker);
-        await mount.createFile(folderId, 'd.svg', SVG_MIME, 0, Buffer.from(svgReferencing('marker.png')));
-        await mount.createFile(folderId, 'c.svg', SVG_MIME, 0, Buffer.from(svgReferencing('d.svg')));
-        await mount.createFile(folderId, 'b.svg', SVG_MIME, 0, Buffer.from(svgReferencing('c.svg')));
-        await mount.createFile(folderId, 'a.svg', SVG_MIME, 0, Buffer.from(svgReferencing('b.svg')));
+        await seedFile(mount, folderId, 'marker.png', 'image/png', marker.length, marker);
+        await seedFile(mount, folderId, 'd.svg', SVG_MIME, 0, Buffer.from(svgReferencing('marker.png')));
+        await seedFile(mount, folderId, 'c.svg', SVG_MIME, 0, Buffer.from(svgReferencing('d.svg')));
+        await seedFile(mount, folderId, 'b.svg', SVG_MIME, 0, Buffer.from(svgReferencing('c.svg')));
+        await seedFile(mount, folderId, 'a.svg', SVG_MIME, 0, Buffer.from(svgReferencing('b.svg')));
         const out = (await inlineSvgMediaRefs(mount, folderId, Buffer.from(svgReferencing('a.svg')))).toString('utf8');
         expect(out).toContain('data:image/svg+xml;base64,');
         expect(out).not.toContain(marker.toString('base64'));
@@ -141,7 +141,7 @@ describe('inlineSvgMediaRefs', () => {
         // One ~10MB sibling referenced twice inflates past the ~16MB ceiling once base64-encoded, so
         // the pass degrades: every ref stripped, the svg still served.
         const big = Buffer.alloc(10 * 1024 * 1024, 1);
-        await mount.createFile(folderId, 'big.bin', 'image/png', big.length, big);
+        await seedFile(mount, folderId, 'big.bin', 'image/png', big.length, big);
         const svg = svgReferencing('big.bin', 'big.bin');
         const out = (await inlineSvgMediaRefs(mount, folderId, Buffer.from(svg))).toString('utf8');
         expect(out).not.toContain('data:');
@@ -268,7 +268,7 @@ describe('inlineSvgMediaRefs font injection', () => {
 
     test('media inlining and font injection compose in one pass', async () => {
         const pngBytes = Buffer.from(TEST_PNG_BYTES);
-        await mount.createFile(folderId, 'pic.png', 'image/png', pngBytes.length, pngBytes);
+        await seedFile(mount, folderId, 'pic.png', 'image/png', pngBytes.length, pngBytes);
         const svg =
             `<svg xmlns="http://www.w3.org/2000/svg"><image href="${eigenMediaHref('pic.png')}"/>` +
             `<text font-family="&apos;Excalifont&apos;, cursive">hi</text></svg>`;
@@ -305,11 +305,12 @@ describe('export media path (prepareMedia, then sanitizeExportMedia in the trans
         const rootId = (await mount.getRootFolder())!.id;
         containerId = await mount.createFolder(rootId, 'doc.eigendoc');
         const mediaId = await mount.createFolder(containerId, 'media');
-        await mount.createFile(mediaId, 'pic.png', 'image/png', pngBytes.length, pngBytes);
-        await mount.createFile(mediaId, 'figure.svg', SVG_MIME, 0, Buffer.from(svgReferencing('pic.png')));
-        await mount.createFile(mediaId, 'text.svg', SVG_MIME, 0, Buffer.from(svgWithText('Excalifont')));
+        await seedFile(mount, mediaId, 'pic.png', 'image/png', pngBytes.length, pngBytes);
+        await seedFile(mount, mediaId, 'figure.svg', SVG_MIME, 0, Buffer.from(svgReferencing('pic.png')));
+        await seedFile(mount, mediaId, 'text.svg', SVG_MIME, 0, Buffer.from(svgWithText('Excalifont')));
         const faces = slicesFaceCss(drawnCodePoints('hi'), ['Excalifont']);
-        await mount.createFile(
+        await seedFile(
+            mount,
             mediaId,
             'fonted.svg',
             SVG_MIME,

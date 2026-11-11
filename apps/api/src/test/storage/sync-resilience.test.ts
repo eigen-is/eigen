@@ -35,7 +35,7 @@ import {
     STALL_BOUND_MS,
     settlesWithin,
 } from '../fault-storage-helpers';
-import { createTestMountConfig, TEST_ACTOR } from '../mount-test-helpers';
+import { createTestMountConfig, seedFile, TEST_ACTOR } from '../mount-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-sync-resilience-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
@@ -884,7 +884,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         await mount.closeDatabase(leakDbId);
 
         // A searchable text file dirties a row → the reindexer drains it → extract runs and parks.
-        await mount.createFile(rootId, 'note.txt', 'text/plain', 5, Buffer.from('hello'));
+        await seedFile(mount, rootId, 'note.txt', 'text/plain', 5, Buffer.from('hello'));
         const draining = mount.reindexQueue?.drain(); // handle to the in-flight drain loop
         await entered; // extract is parked at the gate, before its open
 
@@ -975,8 +975,8 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
 
-        // A searchable file dirties a row; createFile's kick starts the drain, which parks in extract.
-        await mount.createFile(rootId, 'note.txt', 'text/plain', 5, Buffer.from('hello'));
+        // A searchable file dirties a row; the create's kick starts the drain, which parks in extract.
+        await seedFile(mount, rootId, 'note.txt', 'text/plain', 5, Buffer.from('hello'));
         await entered;
 
         // The close waits out its real deadline on fake time. Pre-fix it awaited the parked drain unboundedly, so

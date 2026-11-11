@@ -17,6 +17,7 @@ import {
     settlesWithin,
     waitFor,
 } from '../fault-storage-helpers';
+import { seedFile } from '../mount-test-helpers';
 
 // Shutdown drain, further edits and direct (non-queued) PUTs while one PUT is parked on the wire.
 
@@ -199,7 +200,7 @@ describe('direct (non-queued) PUTs', () => {
         const { mount, fault } = createS3Mount('direct-overwrite-order');
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
-        const fileId = await mount.createFile(rootId, 'notes.md', 'text/markdown', 2, Buffer.from('v0'));
+        const fileId = await seedFile(mount, rootId, 'notes.md', 'text/markdown', 2, Buffer.from('v0'));
         const key = await mount.getStorageKey(fileId);
 
         fault.parkWrites = true;
@@ -225,7 +226,7 @@ describe('direct (non-queued) PUTs', () => {
         const { mount, fault } = createS3Mount('direct-overwrite-delete');
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
-        const fileId = await mount.createFile(rootId, 'secret.txt', 'text/plain', 2, Buffer.from('v0'));
+        const fileId = await seedFile(mount, rootId, 'secret.txt', 'text/plain', 2, Buffer.from('v0'));
         const key = await mount.getStorageKey(fileId);
 
         fault.parkWrites = true;

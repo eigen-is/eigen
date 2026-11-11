@@ -17,6 +17,7 @@ import {
 } from '../../lib/storage/s3-storage';
 import { FakeS3Server } from '../fake-s3-server';
 import { pendingUploadCount } from '../fault-storage-helpers';
+import { seedFile } from '../mount-test-helpers';
 
 // Live-S3 suite (audit test-gap 1): pins the network-touching S3Storage surface and the S3-mount
 // trash lifecycle against a real S3 — the scripts/s3-local MinIO harness. Opt-in: set
@@ -523,9 +524,9 @@ describe.skipIf(!live)('Mount (s3 storage, MinIO)', () => {
         await mount?.closeAllDatabases();
     });
 
-    test('createFile puts the bytes in S3; readFile returns them', async () => {
+    test('a new file puts its bytes in S3; readFile returns them', async () => {
         const data = Buffer.from('s3-mount-bytes');
-        const fileId = await mount.createFile(rootId, 'round-trip.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'round-trip.txt', 'text/plain', data.length, data);
         const storageKey = await mount.getStorageKey(fileId);
         createdKeys.push(storageKey);
 
@@ -536,7 +537,7 @@ describe.skipIf(!live)('Mount (s3 storage, MinIO)', () => {
 
     test('trash then restore: content survives', async () => {
         const data = Buffer.from('survives-the-trash');
-        const fileId = await mount.createFile(rootId, 'restore-me.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'restore-me.txt', 'text/plain', data.length, data);
         createdKeys.push(await mount.getStorageKey(fileId));
 
         await mount.trashPath(fileId);
@@ -549,7 +550,7 @@ describe.skipIf(!live)('Mount (s3 storage, MinIO)', () => {
 
     test('trash then permanent delete: DB row gone and S3 object gone', async () => {
         const data = Buffer.from('gone-for-good');
-        const fileId = await mount.createFile(rootId, 'perm-delete.txt', 'text/plain', data.length, data);
+        const fileId = await seedFile(mount, rootId, 'perm-delete.txt', 'text/plain', data.length, data);
         const storageKey = await mount.getStorageKey(fileId); // capture before the row disappears
 
         await mount.trashPath(fileId);

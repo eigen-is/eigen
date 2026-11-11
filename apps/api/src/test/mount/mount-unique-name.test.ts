@@ -7,7 +7,7 @@ import { ApiError, ManagedDatabase } from '../../lib/core';
 import { MOUNT_DB_CONFIG } from '../../lib/mount/db-config';
 import { Mount } from '../../lib/mount/mount';
 import { writeTempWithHash } from '../../lib/storage';
-import { createTestMountConfig } from '../mount-test-helpers';
+import { createTestMountConfig, seedFile } from '../mount-test-helpers';
 
 const UNIQUE_INDEX = 'idx_paths_unique_active_name';
 const INDEX_DDL = `CREATE UNIQUE INDEX IF NOT EXISTS ${UNIQUE_INDEX} ON paths(parentId, LOWER(name)) WHERE trashedAt IS NULL;`;
@@ -185,8 +185,8 @@ describe('concurrent same-name create → exactly one 409', () => {
         // Both requests pass assertUniqueName's SELECT (neither has inserted yet), then both INSERT;
         // the DB serializes the inserts and the loser trips the v7 index → 409, not a clobber.
         const results = await Promise.allSettled([
-            mount.createFile(rootId, 'race.txt', 'text/plain', 5, Buffer.from('hello')),
-            mount.createFile(rootId, 'race.txt', 'text/plain', 5, Buffer.from('world')),
+            seedFile(mount, rootId, 'race.txt', 'text/plain', 5, Buffer.from('hello')),
+            seedFile(mount, rootId, 'race.txt', 'text/plain', 5, Buffer.from('world')),
         ]);
         const fulfilled = results.filter((r) => r.status === 'fulfilled');
         const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
@@ -229,8 +229,8 @@ describe('concurrent same-name create → exactly one 409', () => {
         let results: PromiseSettledResult<string>[];
         try {
             results = await Promise.allSettled([
-                mount.createFile(rootId, first, 'text/plain', 5, Buffer.from('AAAAA')),
-                mount.createFile(rootId, second, 'text/plain', 5, Buffer.from('BBBBB')),
+                seedFile(mount, rootId, first, 'text/plain', 5, Buffer.from('AAAAA')),
+                seedFile(mount, rootId, second, 'text/plain', 5, Buffer.from('BBBBB')),
             ]);
         } finally {
             spy.mockRestore();
@@ -254,8 +254,8 @@ describe('concurrent same-name create → exactly one 409', () => {
         const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
-        const one = await mount.createFile(rootId, 'one.txt', 'text/plain', 1, Buffer.from('1'));
-        const two = await mount.createFile(rootId, 'two.txt', 'text/plain', 1, Buffer.from('2'));
+        const one = await seedFile(mount, rootId, 'one.txt', 'text/plain', 1, Buffer.from('1'));
+        const two = await seedFile(mount, rootId, 'two.txt', 'text/plain', 1, Buffer.from('2'));
 
         // Both racers pass assertUniqueName's SELECT (no 'same.txt' yet); the loser's UPDATE trips
         // the index → translated to 409.
@@ -283,7 +283,8 @@ describe('concurrent same-name create → exactly one 409', () => {
     test('raced rename to the same name → 409, path-based (local)', () => renameRaceOnBackend('local'));
     test('raced rename to the same name → 409, id-based (local-key)', () => renameRaceOnBackend('local-key'));
 
-    // The upload passes its name check and holds the tree lock through its row write; the rename waits on it.
+    // The upload's bytes wait in a temp file, as a real upload's do. It passes its name check and holds the tree lock
+    // through its row write; the rename waits on it.
     // `Y.txt` lands on `y.txt` on a case-insensitive disk (APFS, NTFS).
     test.each([
         ['y.txt', 'exact'],
@@ -293,11 +294,14 @@ describe('concurrent same-name create → exactly one 409', () => {
         const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
-        const renamed = await mount.createFile(rootId, 'x.txt', 'text/plain', 1, Buffer.from('x'));
+        const renamed = await seedFile(mount, rootId, 'x.txt', 'text/plain', 1, Buffer.from('x'));
+
+        const tempId = crypto.randomUUID();
+        const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), Buffer.from('upload'));
 
         const [rename, upload] = await Promise.allSettled([
             mount.updatePath(renamed, { name: target }),
-            mount.createFile(rootId, 'y.txt', 'text/plain', 6, Buffer.from('upload')),
+            mount.createFileFromTemp(rootId, 'y.txt', 'text/plain', size, hash, tempId),
         ]);
 
         expect(rename.status).toBe('rejected');
@@ -317,7 +321,7 @@ describe('concurrent same-name create → exactly one 409', () => {
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
         const renamed = await mount.createFolder(rootId, 'Old');
-        await mount.createFile(renamed, 'inside.txt', 'text/plain', 6, Buffer.from('inside'));
+        await seedFile(mount, renamed, 'inside.txt', 'text/plain', 6, Buffer.from('inside'));
 
         const [rename, create] = await Promise.allSettled([
             mount.updatePath(renamed, { name: 'New' }),
@@ -340,7 +344,7 @@ describe('concurrent same-name create → exactly one 409', () => {
         const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
-        const existingId = await mount.createFile(rootId, 'pk-one.txt', 'text/plain', 1, Buffer.from('1'));
+        const existingId = await seedFile(mount, rootId, 'pk-one.txt', 'text/plain', 1, Buffer.from('1'));
 
         // A DIFFERENT name (no active-name collision) with the SAME id → pure PK violation.
         const { insertPathRow } = mount as unknown as {
@@ -395,7 +399,7 @@ describe('a local rename or create onto bytes already on disk', () => {
 
     test('a leftover no row owns moves aside into .trash/ and the rename goes on', async () => {
         const { mount, rootId } = await localMount('rename-onto-leftover');
-        const renamed = await mount.createFile(rootId, 'x.txt', 'text/plain', 1, Buffer.from('x'));
+        const renamed = await seedFile(mount, rootId, 'x.txt', 'text/plain', 1, Buffer.from('x'));
         writeFileSync(join(mount.dataDir, 'y.txt'), 'leftover');
 
         await mount.updatePath(renamed, { name: 'y.txt' });
@@ -411,7 +415,7 @@ describe('a local rename or create onto bytes already on disk', () => {
 
     test('a case-only rename on a case-insensitive disk is not a leftover', async () => {
         const { mount, rootId } = await localMount('rename-case-only');
-        const renamed = await mount.createFile(rootId, 'x.txt', 'text/plain', 1, Buffer.from('x'));
+        const renamed = await seedFile(mount, rootId, 'x.txt', 'text/plain', 1, Buffer.from('x'));
 
         await mount.updatePath(renamed, { name: 'X.txt' });
 
@@ -427,8 +431,8 @@ describe('a local rename or create onto bytes already on disk', () => {
         ['straße.txt', 'strasse.txt', 'sharp-s'],
     ])('a rename to %s beside %s answers 409 and keeps both files', async (target, sibling, mountId) => {
         const { mount, rootId } = await localMount(`rename-fold-${mountId}`);
-        const renamed = await mount.createFile(rootId, 'x.txt', 'text/plain', 1, Buffer.from('x'));
-        const other = await mount.createFile(rootId, sibling, 'text/plain', 5, Buffer.from('other'));
+        const renamed = await seedFile(mount, rootId, 'x.txt', 'text/plain', 1, Buffer.from('x'));
+        const other = await seedFile(mount, rootId, sibling, 'text/plain', 5, Buffer.from('other'));
 
         await expect(mount.updatePath(renamed, { name: target })).rejects.toMatchObject({ status: 409 });
 
@@ -441,7 +445,7 @@ describe('a local rename or create onto bytes already on disk', () => {
 
     async function create(mount: Mount, kind: CreateKind, parentId: string, name: string): Promise<string> {
         if (kind === 'folder') return mount.createFolder(parentId, name);
-        if (kind === 'file') return mount.createFile(parentId, name, 'text/plain', 3, Buffer.from('new'));
+        if (kind === 'file') return seedFile(mount, parentId, name, 'text/plain', 3, Buffer.from('new'));
         const tempId = crypto.randomUUID();
         const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), Buffer.from('new'));
         try {
@@ -480,7 +484,7 @@ describe('a local rename or create onto bytes already on disk', () => {
             const sibling =
                 kind === 'folder'
                     ? await mount.createFolder(rootId, siblingName)
-                    : await mount.createFile(rootId, siblingName, 'text/plain', 5, Buffer.from('other'));
+                    : await seedFile(mount, rootId, siblingName, 'text/plain', 5, Buffer.from('other'));
 
             await expect(create(mount, kind, rootId, name)).rejects.toMatchObject({ status: 409 });
 
@@ -593,10 +597,8 @@ describe('NFC filename normalization on write', () => {
 
         const nfd = 'cafe\u0301.txt'; // "cafe.txt" decomposed: e + U+0301
         const nfc = 'caf\u00e9.txt'; // "cafe.txt" composed: U+00E9
-        await mount.createFile(rootId, nfd, 'text/plain', 1, Buffer.from('1'));
-        await expect(mount.createFile(rootId, nfc, 'text/plain', 1, Buffer.from('2'))).rejects.toThrow(
-            /already exists/,
-        );
+        await seedFile(mount, rootId, nfd, 'text/plain', 1, Buffer.from('1'));
+        await expect(seedFile(mount, rootId, nfc, 'text/plain', 1, Buffer.from('2'))).rejects.toThrow(/already exists/);
 
         const cafes = (await mount.listFolder(rootId)).filter((c) => c.name.normalize('NFC') === nfc);
         expect(cafes.length).toBe(1);
