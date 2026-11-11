@@ -2,9 +2,7 @@
 // kind cannot be forgotten by one that reads `children`, the one way down the tree. A tree is immutable and holds
 // nothing that depends on the cell it sits in: a relative reference is an offset, a sheet is an id, and the corners
 // of a range stay as typed. The parser builds it through the three constructors here, the one place a node is made,
-// and the printers, the shape table and the evaluator read it.
-
-import type { TokenKind } from './lexer';
+// the printers, the shape table and the evaluator read it, and endsAt says where a reference points from a cell.
 
 export const NodeKind = {
     Number: 0,
@@ -20,6 +18,8 @@ export const NodeKind = {
     Invoke: 8,
     Prefix: 9,
     Postfix: 10,
+    // A long sum is a chain thousands of nodes deep down its left operands, so a walker reads that side in a loop.
+    // By any other way down, a tree is at most a few hundred nodes deep.
     Binary: 11,
     Paren: 12,
     // An array constant, its elements row by row, with the column count in `op`.
@@ -44,9 +44,10 @@ export const RefFlag = { RowAbsolute: 1, ColumnAbsolute: 2, Row2Absolute: 4, Col
 export type FormulaNode = {
     readonly kind: (typeof NodeKind)[keyof typeof NodeKind];
     // The operator of a prefix, postfix or binary node, the RefKind of a reference, the column count of an array.
-    readonly op: TokenKind | number;
+    readonly op: number;
+    // A number, 1 for TRUE, or the place of an error in ERROR_LITERALS, from 1.
     readonly value: number;
-    // A string's content, an error, a name, a function name.
+    // A string's content, a name, a function name.
     readonly text: string;
     readonly children: readonly FormulaNode[];
     // The whitespace before the node's own token, which for a binary or postfix node is its operator.
@@ -149,3 +150,22 @@ export function referenceNode(
 
 // The one node of an argument left out.
 export const EMPTY = leaf(NodeKind.Empty, 0, '', '', SheetKind.Host, '');
+
+// The lines a reference names on one axis at a host, in the order they were typed. The caller's own, written by
+// endsAt, so that reading a reference allocates nothing.
+export type Ends = { first: number; second: number };
+
+// Writes the rows, or the columns, a reference names from a host on line `host` of that axis into `into`, and says
+// whether both are on an axis of `lines` lines. A cell's second end is its first, and where a whole column or row
+// names no line, both are the host's own.
+export function endsAt(reference: FormulaNode, rows: boolean, host: number, lines: number, into: Ends): boolean {
+    const { flags } = reference;
+    const absolute = flags & (rows ? RefFlag.RowAbsolute : RefFlag.ColumnAbsolute);
+    const absolute2 = flags & (rows ? RefFlag.Row2Absolute : RefFlag.Column2Absolute);
+    const first = (rows ? reference.row : reference.column) + (absolute ? 0 : host);
+    const second =
+        reference.op === RefKind.Cell ? first : (rows ? reference.row2 : reference.column2) + (absolute2 ? 0 : host);
+    into.first = first;
+    into.second = second;
+    return first >= 0 && first < lines && second >= 0 && second < lines;
+}

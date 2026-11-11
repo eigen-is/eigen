@@ -4,37 +4,12 @@
 // #REF! for a reference that falls off the grid there or names a sheet that is gone.
 
 import { columnLabel, GRID_COLUMNS, GRID_ROWS } from './a1';
-import { Token } from './lexer';
-import { isBareSheetName, quotedSheetName, quoteSheetName } from './sheet-name';
-import type { FormulaNode } from './tree';
-import { NodeKind, RefFlag, RefKind, SheetKind } from './tree';
+import { ERROR_LITERALS, SYMBOLS } from './lexer';
+import { quotedSheetName, quoteSheetName } from './sheet-name';
+import type { Ends, FormulaNode } from './tree';
+import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from './tree';
 
-type SheetNames = (id: string) => string | undefined;
-
-// An intersection has no symbol: its whitespace is the operator.
-const SYMBOLS: Record<number, string> = {
-    [Token.Space]: '',
-    [Token.Colon]: ':',
-    [Token.Comma]: ',',
-    [Token.Plus]: '+',
-    [Token.Minus]: '-',
-    [Token.At]: '@',
-    [Token.Percent]: '%',
-    [Token.Hash]: '#',
-    [Token.Power]: '^',
-    [Token.Multiply]: '*',
-    [Token.Divide]: '/',
-    [Token.Concat]: '&',
-    [Token.Equal]: '=',
-    [Token.NotEqual]: '<>',
-    [Token.Less]: '<',
-    [Token.LessEqual]: '<=',
-    [Token.Greater]: '>',
-    [Token.GreaterEqual]: '>=',
-};
-
-// Another workbook's prefix as a file writes it bare: an index, then a sheet name that needs no quotes.
-const BARE_EXTERNAL = /^\[\d+\](?:[\p{L}_][\p{L}\p{N}_.]*)?$/u;
+export type SheetNames = (id: string) => string | undefined;
 
 export function printStored(tree: FormulaNode): string {
     return `=${print(tree, true, 0, 0, noName)}`;
@@ -65,7 +40,8 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
         case NodeKind.Error:
         case NodeKind.Name: {
             const prefix = sheetPrefix(node, stored, sheetName);
-            return space + (prefix === null ? '#REF!' : prefix + node.text);
+            if (prefix === null) return `${space}#REF!`;
+            return space + prefix + (node.kind === NodeKind.Name ? node.text : ERROR_LITERALS[node.value - 1]);
         }
         case NodeKind.Ref:
             return space + reference(node, stored, row, column, sheetName);
@@ -80,8 +56,15 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
         case NodeKind.Postfix:
             return print(children[0], stored, row, column, sheetName) + space + SYMBOLS[node.op];
         case NodeKind.Binary: {
-            const left = print(children[0], stored, row, column, sheetName);
-            return left + space + SYMBOLS[node.op] + print(children[1], stored, row, column, sheetName);
+            // A sum of thousands of terms is a chain that deep down its left operands, so it is read in a loop.
+            let chain = node;
+            let text = '';
+            while (chain.kind === NodeKind.Binary) {
+                const right = print(chain.children[1], stored, row, column, sheetName);
+                text = chain.space + SYMBOLS[chain.op] + right + text;
+                chain = chain.children[0];
+            }
+            return print(chain, stored, row, column, sheetName) + text;
         }
         case NodeKind.Paren:
             return `${space}(${print(children[0], stored, row, column, sheetName)}${node.spaceEnd})`;
@@ -123,9 +106,8 @@ function sheetPrefix(node: FormulaNode, stored: boolean, sheetName: SheetNames):
         case SheetKind.Name:
             return `${stored ? quotedSheetName(sheet) : quoteSheetName(sheet)}!`;
         case SheetKind.External:
-            return `${stored || !BARE_EXTERNAL.test(sheet) ? quotedSheetName(sheet) : sheet}!`;
         case SheetKind.Span:
-            return `${stored || !sheet.split(':').every(isBareSheetName) ? quotedSheetName(sheet) : sheet}!`;
+            return `${quotedSheetName(sheet)}!`;
     }
 }
 
@@ -151,21 +133,19 @@ function reference(
             (columns ? `C${storedIndex(node.column2, flags & RefFlag.Column2Absolute)}` : '');
         return `${prefix}${start}:${end}`;
     }
-    // A whole column holds no row and a cell no second corner, and both resolve to the host's own, inside the grid.
-    const row = flags & RefFlag.RowAbsolute ? node.row : hostRow + node.row;
-    const column = flags & RefFlag.ColumnAbsolute ? node.column : hostColumn + node.column;
-    const row2 = flags & RefFlag.Row2Absolute ? node.row2 : hostRow + node.row2;
-    const column2 = flags & RefFlag.Column2Absolute ? node.column2 : hostColumn + node.column2;
-    if (Math.min(row, row2, column, column2) < 0 || Math.max(row, row2) >= GRID_ROWS) return `${prefix}#REF!`;
-    if (Math.max(column, column2) >= GRID_COLUMNS) return `${prefix}#REF!`;
-    let top = (flags & RefFlag.RowAbsolute ? '$' : '') + (row + 1);
-    let left = (flags & RefFlag.ColumnAbsolute ? '$' : '') + columnLabel(column);
+    const rowEnds: Ends = { first: 0, second: 0 };
+    const columnEnds: Ends = { first: 0, second: 0 };
+    const onGrid =
+        endsAt(node, true, hostRow, GRID_ROWS, rowEnds) && endsAt(node, false, hostColumn, GRID_COLUMNS, columnEnds);
+    if (!onGrid) return `${prefix}#REF!`;
+    let top = (flags & RefFlag.RowAbsolute ? '$' : '') + (rowEnds.first + 1);
+    let left = (flags & RefFlag.ColumnAbsolute ? '$' : '') + columnLabel(columnEnds.first);
     if (op === RefKind.Cell) return prefix + left + top;
-    let bottom = (flags & RefFlag.Row2Absolute ? '$' : '') + (row2 + 1);
-    let right = (flags & RefFlag.Column2Absolute ? '$' : '') + columnLabel(column2);
+    let bottom = (flags & RefFlag.Row2Absolute ? '$' : '') + (rowEnds.second + 1);
+    let right = (flags & RefFlag.Column2Absolute ? '$' : '') + columnLabel(columnEnds.second);
     // The corners print in order at this host, each coordinate taking its $ along, as Excel shows a range.
-    if (row > row2) [top, bottom] = [bottom, top];
-    if (column > column2) [left, right] = [right, left];
+    if (rowEnds.first > rowEnds.second) [top, bottom] = [bottom, top];
+    if (columnEnds.first > columnEnds.second) [left, right] = [right, left];
     if (op === RefKind.Columns) return `${prefix}${left}:${right}`;
     if (op === RefKind.Rows) return `${prefix}${top}:${bottom}`;
     return `${prefix}${left}${top}:${right}${bottom}`;
