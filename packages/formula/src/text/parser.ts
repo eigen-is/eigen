@@ -82,7 +82,13 @@ function noSheet(): undefined {
 export function callsSpaced(text: string, pos: number, end: number): boolean {
     const gap = lexAt(text, end);
     if (tokenKind(gap) !== Token.Space || text.charCodeAt(tokenEnd(gap)) !== OPEN) return false;
-    return !READS_AS_REFERENCE.test(text.slice(pos, end));
+    return !readsAsReference(text.slice(pos, end));
+}
+
+// Whether a word is a cell label or a stored reference by its form alone, in any letter case and on or off the
+// grid, or holds what no name does. Such a word is never a name where a reference could stand.
+export function readsAsReference(word: string): boolean {
+    return READS_AS_REFERENCE.test(word);
 }
 
 // The reference that starts at `from` in typed text, and where it ends. Its sheet, if any, stays a name.
@@ -126,8 +132,6 @@ for (const [power, ...operators] of [
     for (const operator of operators) BINDING[operator] = power;
 }
 
-// A cell label or a stored reference by its form alone, in any letter case and on or off the grid, and a word that
-// holds what no name does.
 const READS_AS_REFERENCE = /^(?:[A-Z]{1,3}\d+|(?:R\d*)?(?:C\d*)?)$|[$[]/i;
 
 const LEG_CELL = 1;
@@ -236,7 +240,10 @@ class Parser {
             // A comma is a union only inside parentheses of its own, and ( calls only what can return a function.
             if (op === Token.Comma && !union) power = 0;
             const callable =
-                left.kind === NodeKind.Call || left.kind === NodeKind.Invoke || left.kind === NodeKind.Paren;
+                left.kind === NodeKind.Call ||
+                left.kind === NodeKind.Invoke ||
+                left.kind === NodeKind.Paren ||
+                (left.kind === NodeKind.Name && left.sheetKind === SheetKind.External);
             if (op === Token.Open && (space !== '' || !callable)) power = 0;
             if (power === 0) {
                 if (space === '' || !this.startsReference() || !yieldsReference(left)) break;
@@ -547,6 +554,14 @@ class Parser {
         if (this.kind === Token.Error && errorCode(this.text, this.pos) === REF_ERROR) {
             this.next();
             return leaf(NodeKind.Error, REF_ERROR, '', space, sheetKind, sheet);
+        }
+        // Another workbook's name may be quoted, and one right before ( is a function whatever it reads as.
+        const { text, pos, end } = this;
+        const functionName = this.kind === Token.Word && text.charCodeAt(end) === OPEN;
+        if (sheetKind === SheetKind.External && (this.kind === Token.Quote || functionName)) {
+            const name = functionName ? text.slice(pos, end) : text.slice(pos + 1, end - 1).replaceAll("''", "'");
+            this.next();
+            return leaf(NodeKind.Name, 0, name, space, sheetKind, sheet);
         }
         if (this.kind !== Token.Word && this.kind !== Token.Number) return this.fail();
         const reference = this.reference(space, sheetKind, sheet);

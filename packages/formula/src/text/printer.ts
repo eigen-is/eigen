@@ -4,7 +4,8 @@
 // #REF! for a reference that falls off the grid there or names a sheet that is gone.
 
 import { columnLabel, GRID_COLUMNS, GRID_ROWS } from './a1';
-import { ERROR_LITERALS, SYMBOLS } from './lexer';
+import { ERROR_LITERALS, isWord, SYMBOLS } from './lexer';
+import { readsAsReference } from './parser';
 import { quotedSheetName, quoteSheetName } from './sheet-name';
 import type { Ends, FormulaNode } from './tree';
 import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from './tree';
@@ -43,7 +44,10 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
         case NodeKind.Name: {
             const prefix = sheetPrefix(node, stored, sheetName);
             if (prefix === null) return `${space}#REF!`;
-            return space + prefix + (node.kind === NodeKind.Name ? node.text : ERROR_LITERALS[node.value - 1]);
+            if (node.kind === NodeKind.Error) return space + prefix + ERROR_LITERALS[node.value - 1];
+            // Another workbook's name can be any text, so it is quoted unless it reads back bare as itself.
+            const bare = node.sheetKind !== SheetKind.External || (isWord(node.text) && !readsAsReference(node.text));
+            return space + prefix + (bare ? node.text : quotedSheetName(node.text));
         }
         case NodeKind.Ref:
             return space + reference(node, stored, row, column, sheetName);

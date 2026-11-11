@@ -158,6 +158,7 @@ export function formulas(seed: number, ordered: boolean): () => string {
                   "'No Such'!",
                   "'Missing'!",
                   "'[1]Book'!",
+                  "'[2]Jan:Dec'!",
                   "'Sheet1:Sheet3'!",
                   "'A 1:B 2'!",
               ]);
@@ -203,12 +204,14 @@ export function formulas(seed: number, ordered: boolean): () => string {
             () => space() + reference(),
             () => space() + reference() + (chance(0.2) ? `${space()}#` : ''),
             () => space() + pick(['Rate', 'total_2', 'rc', 'x.y', '[s2]!Scoped', "'Missing'!Scoped", '[pl]!#REF!']),
+            () => space() + pick(["'[1]'!Rate", "'[1]'!'SGJ212,LA'", "'[1]'!'A1'", "'[1]x'!'it''s'", "'[1]'!'RC'"]),
         ];
         if (depth <= 0) return pick(leaves)();
         return pick([
             ...leaves,
             () => space() + call(depth),
             () => space() + call(depth) + list(depth),
+            () => space() + pick(["'[1]'!Func", "'[1]'!'TAX2'", "'[1]Book'!'my fn'"]) + list(depth),
             () => `${space()}(${expression(depth - 1)}${space()})${chance(0.1) ? list(depth) : ''}`,
             () => `${space()}(${region(depth)},${region(depth)}${space()})`,
             () => space() + array(),
@@ -259,6 +262,7 @@ export function typedFormulas(seed: number): () => string {
             "'A 1:B 2'!",
             '[1]Sheet1!',
             '[1]!',
+            '[2]Jan:Dec!',
             "'[1]x y'!",
             "'C:\\path\\[Book.xlsx]Sheet1'!",
         ]);
@@ -332,6 +336,8 @@ export function typedFormulas(seed: number): () => string {
                 ...leaves,
                 () => call(depth),
                 () => call(depth) + list(depth),
+                () => pick(['[1]!Func', '[1]!TAX2', "[1]!'my fn'", "'[1]x y'!rc"]) + list(depth),
+                () => pick(["[1]!'SGJ212,LA'", "[1]!'A1'", "'[1]x y'!'it''s'", "[1]!'Rate'"]),
                 () => `(${expression(depth - 1)}${space()})`,
                 () => `(${region(depth)},${region(depth)}${space()})`,
                 array,
@@ -376,6 +382,7 @@ const TYPED_WORDS = [
     ...['SUM (', 'TRUE (', 'F  (', 'RC (', 'A1 (', 'Rate\n('],
     ...['Sheet2!A', 'Sheet2!A', 'Sheet2!$B', 'Sheet2!1', 'Sheet2!$2', 'Sheet2!A1', "'No Such'!B", 'NoSuch!B'],
     ...['A1 TRUE', 'A1 5', 'A1 "x"', '(1,2)', '(A1,2)', '(A1,B1)', 'A1 B1', 'A1##'],
+    ...['[1]!', '[1]!', '[1]!Func(', '[2]A:B!', "'x,y'", "'A1'", "'Rate'", "'[1]'!", 'TAX2('],
     ...['#REF!A1', '#REF!$B$2', '#ref!A', '#REF!1', '#REF!A1:B2', '#N/AA1'],
     ...[
         '\u3000',
@@ -404,6 +411,7 @@ const STORED_WORDS = [
     ...['SUM (', 'TRUE (', 'F  (', 'RC (', 'A1 (', 'rc (', 'Rate\n('],
     ...['[s2]!C1', '[s2]!C[2]', '[s2]!R', '[s2]!R2', '[s2]!A', '[s2]!B', '[s2]!RC', "'x'!C"],
     ...['RC TRUE', 'RC 5', 'RC "x"', '(1,2)', '(RC,2)', '(RC,R1C1)', 'RC R1C1', 'RC##'],
+    ...["'[1]'!", "'[1]'!", "'[1]'!Func(", "'[2]A:B'!", "'x,y'", "'A1'", "'Rate'", "'RC'", 'TAX2('],
     ...['#REF!RC', '#REF!R1C1', '#REF!A1', '#REF!C'],
     ...[
         '\u3000',

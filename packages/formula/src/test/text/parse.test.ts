@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Fact, shapeFacts } from '../../eval/facts';
 import {
     ERROR_LITERALS,
     MAX_ARGUMENTS,
@@ -683,6 +684,78 @@ describe('references and sheets (parsing.md 2.4)', () => {
         expect(stored('=[1]Sheet1!$A$1')).toBe("='[1]Sheet1'!R1C1");
         expect(stored('=[1]!GlobalName')).toBe("='[1]'!GlobalName");
         expect(treeA1('=[1]Sheet1!$A$1')).toMatchObject({ sheetKind: SheetKind.External, sheet: '[1]Sheet1' });
+    });
+
+    test.each([
+        ['=[1]!Func(1)', "='[1]'!Func(1)"],
+        ['=[1]!PCovar($B$6:$B$17, 2 )', "='[1]'!PCovar($B$6:$B$17, 2 )"],
+        ['=[1]!wbname()', "='[1]'!wbname()"],
+        ['=1+[1]!Func(A1)(2)*3', "=1+'[1]'!Func(A1)(2)*3"],
+        ["='C:\\x\\[Book.xlsx]'!Func(1)", "='C:\\x\\[Book.xlsx]'!Func(1)"],
+        ["=[1]!'SGJ212,LA'", "='[1]'!'SGJ212,LA'"],
+        ["=[1]!'it''s'+1", "='[1]'!'it''s'+1"],
+        ["=[1]!'Rate'", "='[1]'!Rate"],
+        ["=[1]!'A1'", "='[1]'!'A1'"],
+        ["=[1]!'RC'", "='[1]'!'RC'"],
+        ["=[1]!''", "='[1]'!''"],
+        ['=[1]!TAX2(1)', "='[1]'!'TAX2'(1)"],
+        ['=[1]!R[1]C(1)', "='[1]'!'R[1]C'(1)"],
+        ["=[1]!'my fn'(1)", "='[1]'!'my fn'(1)"],
+        ['=SUM([2]A:B!B11)', "=SUM('[2]A:B'!B11)"],
+        ['=SUM([2]Section3A:formulas!$B$11:C12)', "=SUM('[2]Section3A:formulas'!$B$11:C12)"],
+        ['=[2]Jan:Dec!A:[2]Jan:Dec!B', "='[2]Jan:Dec'!A:B"],
+    ])('a function, a quoted name and a 3-D pair of another workbook parse and are kept: %s', (text, a1) => {
+        const tree = treeA1(text);
+        expect(shown(text)).toBe(a1);
+        expect(treeStored(printStored(tree))).toEqual(tree);
+        expect(treeA1(a1)).toEqual(tree);
+        expect(shapeFacts(tree, new Map()) & Fact.Kept).toBe(Fact.Kept);
+    });
+
+    test('another workbook is a prefix kept as text on a name or a reference, and a call calls the name', () => {
+        const call = treeA1('=[1]!Func(1)');
+        expect(call.kind).toBe(NodeKind.Invoke);
+        expect(call.children[0]).toMatchObject({
+            kind: NodeKind.Name,
+            text: 'Func',
+            sheetKind: SheetKind.External,
+            sheet: '[1]',
+        });
+        expect(call.children[1]).toMatchObject({ kind: NodeKind.Number, value: 1 });
+        expect(treeA1("=[1]!'SGJ212,LA'")).toMatchObject({
+            kind: NodeKind.Name,
+            text: 'SGJ212,LA',
+            sheetKind: SheetKind.External,
+            sheet: '[1]',
+        });
+        expect(treeA1('=SUM([2]A:B!B11)').children[0]).toMatchObject({
+            kind: NodeKind.Ref,
+            sheetKind: SheetKind.External,
+            sheet: '[2]A:B',
+        });
+        expect(stored('=[1]!Func(A1)', 'A1')).toBe("='[1]'!Func(RC)");
+    });
+
+    test.each([
+        ...["=Sheet2!'x'", '=Sheet2!Func(1)', "='No Such'!Func(1)", '=Jan:Dec!Func(1)', "=Jan:Dec!'x'"],
+        ...["=[1]!'x'!A1", "=[1]! 'x'", "=[1]!'x", '=[1]!(1)', '=[1]:B!A1', '=[1]A:!A1', '=[1]!5(1)'],
+    ])('only another workbook has them: %s does not parse', (text) => {
+        expect(failure(text)).toBe('syntax');
+    });
+
+    test.each([
+        '=[s2]!Func(1)',
+        "=[s2]!'x'",
+        "='No Such'!Func(1)",
+        "='Jan:Dec'!'x'",
+        '=[1]!Func(1)',
+        "='[1]'! Func(1)",
+    ])('nor does stored text hold them for a sheet: %s does not parse', (text) => {
+        expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
+    });
+
+    test('whitespace before the parenthesis of such a call is an intersection, as it is behind a sheet', () => {
+        expect(group('=[1]!Func (B1)')).toBe("('[1]'!Func [RC[1]])");
     });
 
     test('#REF! behind a sheet is an error that keeps its sheet', () => {
