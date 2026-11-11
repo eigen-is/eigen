@@ -158,6 +158,7 @@ export function formulas(seed: number, ordered: boolean): () => string {
                   "'No Such'!",
                   "'Missing'!",
                   "'[1]Book'!",
+                  "'[2]Jan:Dec'!",
                   "'Sheet1:Sheet3'!",
                   "'A 1:B 2'!",
               ]);
@@ -178,7 +179,7 @@ export function formulas(seed: number, ordered: boolean): () => string {
     };
     const constant = () =>
         pick([
-            () => pick(['0', '1', '42', '2.5', '0.001', '1E+21', '1.5E-7', '123456789012345']),
+            () => pick(['0', '1', '42', '2.5', '0.001', '1E+21', '0.00000015', '6.626E-34', '123456789012345']),
             () => pick(['"a"', '""', '"a""b"', '"x, (y) \'z\'"', '"line\nbreak"']),
             () => pick(['TRUE', 'FALSE']),
             () => pick(['#N/A', '#DIV/0!', '#NAME?', '#VALUE!', '#REF!', '#GETTING_DATA']),
@@ -195,20 +196,24 @@ export function formulas(seed: number, ordered: boolean): () => string {
         const row = () => Array.from({ length: columns }, element).join(',');
         return `{${Array.from({ length: small() }, row).join(';')}${space()}}`;
     };
+    const region = (depth: number) =>
+        space() + pick([reference, reference, () => 'Rate', () => '#REF!', () => call(depth)])();
     const primary = (depth: number): string => {
         const leaves = [
             () => space() + constant(),
             () => space() + reference(),
             () => space() + reference() + (chance(0.2) ? `${space()}#` : ''),
             () => space() + pick(['Rate', 'total_2', 'rc', 'x.y', '[s2]!Scoped', "'Missing'!Scoped", '[pl]!#REF!']),
+            () => space() + pick(["'[1]'!Rate", "'[1]'!'SGJ212,LA'", "'[1]'!'A1'", "'[1]x'!'it''s'", "'[1]'!'RC'"]),
         ];
         if (depth <= 0) return pick(leaves)();
         return pick([
             ...leaves,
             () => space() + call(depth),
             () => space() + call(depth) + list(depth),
+            () => space() + pick(["'[1]'!Func", "'[1]'!'TAX2'", "'[1]Book'!'my fn'"]) + list(depth),
             () => `${space()}(${expression(depth - 1)}${space()})${chance(0.1) ? list(depth) : ''}`,
-            () => `${space()}(${expression(depth - 1)},${expression(depth - 1)}${space()})`,
+            () => `${space()}(${region(depth)},${region(depth)}${space()})`,
             () => space() + array(),
             () => space() + reference() + pick([' ', '  ', '\n']) + pick([reference, () => call(depth)])(),
             () => `${space()}${pick([cell, () => call(depth)])()}${space()}:${space()}${call(depth)}`,
@@ -257,12 +262,16 @@ export function typedFormulas(seed: number): () => string {
             "'A 1:B 2'!",
             '[1]Sheet1!',
             '[1]!',
+            '[2]Jan:Dec!',
             "'[1]x y'!",
             "'C:\\path\\[Book.xlsx]Sheet1'!",
         ]);
     const reference = (): string => {
         const prefix = chance(0.6) ? '' : sheet();
-        if (prefix !== '' && chance(0.2)) return `${prefix}${cell()}:${prefix}${cell()}`;
+        if (prefix !== '' && chance(0.2)) {
+            const end = pick([cell, cell, column, row]);
+            return `${prefix}${end()}:${prefix}${end()}`;
+        }
         if (prefix !== '' && chance(0.1)) return `${prefix}#REF!`;
         return (
             prefix +
@@ -327,6 +336,8 @@ export function typedFormulas(seed: number): () => string {
                 ...leaves,
                 () => call(depth),
                 () => call(depth) + list(depth),
+                () => pick(['[1]!Func', '[1]!TAX2', "[1]!'my fn'", "'[1]x y'!rc"]) + list(depth),
+                () => pick(["[1]!'SGJ212,LA'", "[1]!'A1'", "'[1]x y'!'it''s'", "[1]!'Rate'"]),
                 () => `(${expression(depth - 1)}${space()})`,
                 () => `(${region(depth)},${region(depth)}${space()})`,
                 array,
@@ -368,6 +379,26 @@ const TYPED_WORDS = [
     ...['Jan:Dec!', 'Q:FY!', 'A1Sheet!', 'B1x!', '[s2]!', '[1]', '!', '$', '.', '?', '\u00a0', 'é'],
     ...['+', '-', '@', '%', '#', '^', '*', '/', '&', '=', '<>', '<', '<=', '>', '>=', ':', ',', ';', '{', '}'],
     ...['(', ')', '(', ')', '(', ')', ',', ':', ':', ':'],
+    ...['SUM (', 'TRUE (', 'F  (', 'RC (', 'A1 (', 'Rate\n('],
+    ...['Sheet2!A', 'Sheet2!A', 'Sheet2!$B', 'Sheet2!1', 'Sheet2!$2', 'Sheet2!A1', "'No Such'!B", 'NoSuch!B'],
+    ...['A1 TRUE', 'A1 5', 'A1 "x"', '(1,2)', '(A1,2)', '(A1,B1)', 'A1 B1', 'A1##'],
+    ...['[1]!', '[1]!', '[1]!Func(', '[2]A:B!', "'x,y'", "'A1'", "'Rate'", "'[1]'!", 'TAX2('],
+    ...["''!A1", "''!A", '5!', '+!', '#REF!!'],
+    ...['#REF!A1', '#REF!$B$2', '#ref!A', '#REF!1', '#REF!A1:B2', '#N/AA1'],
+    ...[
+        '\u3000',
+        '\u200b',
+        '\uff11',
+        '\uff0b',
+        '\uff21',
+        '\u00d7',
+        '\u201c',
+        '\u3164',
+        '\ufe0f',
+        '\ud83d\ude00',
+        '\ud83d',
+    ],
+    ...['\u0394x', '\u6570\u636e', '\u6570\u636e!', '\ud840\udc00', 'x\u0663', '\\a', 'a?'],
 ];
 
 const STORED_WORDS = [
@@ -378,6 +409,24 @@ const STORED_WORDS = [
     ...['[s2]!', '[my]!', '[gone]!', "'No Such'!", "'A:B'!", "'[1]x'!", 'NoSuch!', '[1]x!', 'Jan:Dec!', '[', ']'],
     ...['+', '-', '@', '%', '#', '^', '*', '/', '&', '=', '=', '<>', '<', '<=', '>', '>=', ':', ',', ';', '{', '}'],
     ...['(', ')', '(', ')', '(', ')', ',', ':', ':', ':', '!', '$'],
+    ...['SUM (', 'TRUE (', 'F  (', 'RC (', 'A1 (', 'rc (', 'Rate\n('],
+    ...['[s2]!C1', '[s2]!C[2]', '[s2]!R', '[s2]!R2', '[s2]!A', '[s2]!B', '[s2]!RC', "'x'!C"],
+    ...['RC TRUE', 'RC 5', 'RC "x"', '(1,2)', '(RC,2)', '(RC,R1C1)', 'RC R1C1', 'RC##'],
+    ...["'[1]'!", "'[1]'!", "'[1]'!Func(", "'[2]A:B'!", "'x,y'", "'A1'", "'Rate'", "'RC'", 'TAX2('],
+    ...["''!RC", "''!C", '5!', '+!', '#REF!!'],
+    ...['#REF!RC', '#REF!R1C1', '#REF!A1', '#REF!C'],
+    ...[
+        '\u3000',
+        '\u200b',
+        '\uff11',
+        '\uff0b',
+        '\u00d7',
+        '\u3164',
+        '\ud83d\ude00',
+        '\ud83d',
+        '\u0394x',
+        '\u6570\u636e',
+    ],
 ];
 
 // A seeded token soup: a few words of one grammar's vocabulary in any order, most of which do not parse.

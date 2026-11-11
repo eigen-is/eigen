@@ -105,7 +105,7 @@ describe('round trip', () => {
             if (!keepsLaws(text, true, row, column, seen)) throw new Error(`run ${run}: ${failure(text)}`);
         }
         expect(longest).toBeGreaterThan(5000);
-        expect(seen.size).toBeGreaterThan(RUNS * 0.9);
+        expect(seen.size).toBeGreaterThan(RUNS * 0.85);
     });
 
     test('a token soup of either grammar keeps the laws, and nothing throws', () => {

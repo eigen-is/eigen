@@ -32,7 +32,9 @@ export function mapLeaves(
             const right = mapLeaves(link.children[1], map, colons > 0);
             if (link.op === Token.Colon) colons -= 1;
             const same = left === link.children[0] && right === link.children[1];
-            left = same ? link : branch(link.kind, link.op, link.text, [left, right], link.space, link.spaceEnd);
+            left = same
+                ? link
+                : branch(link.kind, link.op, link.text, [left, right], link.space, link.spaceOpen, link.spaceEnd);
         }
         return left;
     }
@@ -43,7 +45,7 @@ export function mapLeaves(
         mapped ??= children.slice();
         mapped[i] = child;
     }
-    return mapped ? branch(node.kind, node.op, node.text, mapped, node.space, node.spaceEnd) : node;
+    return mapped ? branch(node.kind, node.op, node.text, mapped, node.space, node.spaceOpen, node.spaceEnd) : node;
 }
 
 // What a reference becomes when the cells it named are gone: #REF! in its place, on the sheet it named.

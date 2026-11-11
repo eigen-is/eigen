@@ -137,4 +137,43 @@ describe('tokens', () => {
             'Plus:+',
         ]);
     });
+
+    test('a word before whitespace and ( is a function, unless it is a reference', () => {
+        expect(cut('=SUM (1)+TRUE ()+A1 (B1)+RC (1)')).toEqual([
+            'Equal:=',
+            'Function:SUM',
+            'Space: ',
+            'Open:(',
+            'Number:1',
+            'Close:)',
+            'Plus:+',
+            'Function:TRUE',
+            'Space: ',
+            'Open:(',
+            'Close:)',
+            'Plus:+',
+            'Reference:A1',
+            'Space: ',
+            'Open:(',
+            'Reference:B1',
+            'Close:)',
+            'Plus:+',
+            'Name:RC',
+            'Space: ',
+            'Open:(',
+            'Number:1',
+            'Close:)',
+        ]);
+    });
+
+    test('a character no formula holds is one bad token, both halves of it', () => {
+        expect(cut('=A1\u3000+\ud83d\ude00\u0394x')).toEqual([
+            'Equal:=',
+            'Reference:A1',
+            'Bad:\u3000',
+            'Plus:+',
+            'Bad:\ud83d\ude00',
+            'Name:\u0394x',
+        ]);
+    });
 });

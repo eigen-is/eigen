@@ -4,10 +4,15 @@
 // #REF! for a reference that falls off the grid there or names a sheet that is gone.
 
 import { columnLabel, GRID_COLUMNS, GRID_ROWS } from './a1';
-import { ERROR_LITERALS, SYMBOLS } from './lexer';
+import { ERROR_LITERALS, isWord, SYMBOLS } from './lexer';
+import { readsAsReference } from './parser';
 import { quotedSheetName, quoteSheetName } from './sheet-name';
 import type { Ends, FormulaNode } from './tree';
 import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from './tree';
+
+// The smallest exponent a number below 1 prints in plain digits with. Files Excel wrote hold plain digits at
+// 1E-12 and E notation at 1.6E-19; where between the two it turns is assumed.
+const PLAIN_EXPONENT_MIN = -18;
 
 export type SheetNames = (id: string) => string | undefined;
 
@@ -27,10 +32,8 @@ function noName(): undefined {
 function print(node: FormulaNode, stored: boolean, row: number, column: number, sheetName: SheetNames): string {
     const { children, space } = node;
     switch (node.kind) {
-        case NodeKind.Number: {
-            const text = String(node.value);
-            return space + (text.includes('e') ? text.replace('e', 'E') : text);
-        }
+        case NodeKind.Number:
+            return space + numberText(node.value);
         case NodeKind.String:
             return `${space}"${node.text.includes('"') ? node.text.replaceAll('"', '""') : node.text}"`;
         case NodeKind.Boolean:
@@ -41,12 +44,15 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
         case NodeKind.Name: {
             const prefix = sheetPrefix(node, stored, sheetName);
             if (prefix === null) return `${space}#REF!`;
-            return space + prefix + (node.kind === NodeKind.Name ? node.text : ERROR_LITERALS[node.value - 1]);
+            if (node.kind === NodeKind.Error) return space + prefix + ERROR_LITERALS[node.value - 1];
+            // Another workbook's name can be any text, so it is quoted unless it reads back bare as itself.
+            const bare = node.sheetKind !== SheetKind.External || (isWord(node.text) && !readsAsReference(node.text));
+            return space + prefix + (bare ? node.text : quotedSheetName(node.text));
         }
         case NodeKind.Ref:
             return space + reference(node, stored, row, column, sheetName);
         case NodeKind.Call:
-            return `${space}${node.text}(${list(node, 0, 0, stored, row, column, sheetName)}${node.spaceEnd})`;
+            return `${space}${node.text}${node.spaceOpen}(${list(node, 0, 0, stored, row, column, sheetName)}${node.spaceEnd})`;
         case NodeKind.Invoke: {
             const callee = print(children[0], stored, row, column, sheetName);
             return `${callee}(${list(node, 1, 0, stored, row, column, sheetName)}${node.spaceEnd})`;
@@ -71,6 +77,17 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
         case NodeKind.Array:
             return `${space}{${list(node, 0, node.op, stored, row, column, sheetName)}${node.spaceEnd}}`;
     }
+}
+
+// The one spelling of a number: the shortest digits that read back as it, plain where Excel rewrites a literal to
+// plain digits on entry. JavaScript turns to E notation at 1E+21, as Excel does, but below 1 already at 1E-7.
+function numberText(value: number): string {
+    const short = String(value);
+    if (!short.includes('e')) return short;
+    const [mantissa, power] = short.split('e');
+    const exponent = Number(power);
+    if (exponent > 0 || exponent < PLAIN_EXPONENT_MIN) return `${mantissa}E${power}`;
+    return `0.${'0'.repeat(-exponent - 1)}${mantissa.replace('.', '')}`;
 }
 
 // The children from `from` on with commas between, and a semicolon where a row of `columns` ends.

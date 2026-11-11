@@ -2,18 +2,21 @@
 // key two names are compared by, and the sheet a typed name reads. The parser resolves names through these and the
 // A1 printer writes them, as does anything else that builds a reference to another sheet.
 
-const BARE_CHARACTERS = /^[\p{L}\p{N}_.]+$/u;
-const MISREAD_BARE = /^(?:[\d.].*|[A-Z]{1,3}\d+|R\d*C\d*|[RC]|TRUE|FALSE)$/i;
+import { isWord } from './lexer';
+import { readsAsReference } from './parser';
+
+const NEVER_BARE = /[?\\]|^(?:TRUE|FALSE)$/i;
 
 export function quotedSheetName(name: string): string {
     return `'${name.replaceAll("'", "''")}'`;
 }
 
 // The name as a reference's sheet prefix spells it: bare where that reads back as the name, quoted otherwise. Bare is
-// an allow-list: letters, digits, _ and ., and not what the grammar reads as a number, a cell in either notation or
-// a boolean.
+// an allow-list: a word of letters, digits, _ and ., and not what the grammar reads as a reference in either
+// notation or as a boolean.
 export function quoteSheetName(name: string): string {
-    return BARE_CHARACTERS.test(name) && !MISREAD_BARE.test(name) ? name : quotedSheetName(name);
+    const bare = isWord(name) && !readsAsReference(name) && !NEVER_BARE.test(name);
+    return bare ? name : quotedSheetName(name);
 }
 
 // What two sheet names are compared by. Each character folds to its uppercase on its own, so the Greek final ς

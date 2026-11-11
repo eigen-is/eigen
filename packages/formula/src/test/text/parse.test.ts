@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Fact, shapeFacts } from '../../eval/facts';
 import {
     ERROR_LITERALS,
     MAX_ARGUMENTS,
@@ -14,9 +15,10 @@ import {
     RefKind,
     SheetKind,
     sheetFinder,
+    storedText,
     Token,
 } from '../../text';
-import { at, failure, findSheet, grouped, sheetName, shown, stored, treeA1, treeStored } from './support';
+import { at, dice, failure, findSheet, grouped, sheetName, shown, stored, treeA1, treeStored } from './support';
 
 const group = (text: string, host = 'A1') => grouped(treeA1(text, host));
 
@@ -111,6 +113,27 @@ describe('reference operators (parsing.md 2.2)', () => {
         expect(failure('="a" A1')).toBe('syntax');
     });
 
+    test.each([
+        ...['=A1 TRUE', '=A1 false', '=NOT TRUE', '=A1 5', '=A1 "x"', '=A1 #N/A', '=A1 {1}', '=A1:B2 TRUE C1'],
+        ...['=(1,2)', '=(A1,2)', '=(1,A1)', '=("a",A1)', '=(A1,TRUE)', '=SUM((A1,1))', '=(A1,B1,3)', '=(A1,{1})'],
+    ])('an intersection and a union take only what may yield a reference: %s does not parse', (text) => {
+        expect(failure(text)).toBe('syntax');
+        expect(parseStored(text.replaceAll(/[A-C]\d/g, 'RC'))).toMatchObject({ reason: 'syntax' });
+    });
+
+    test.each([
+        ['=A1 (1+2)', '(RC [(1+2)])'],
+        ['=A1 SUM(1)', '(RC SUM(1))'],
+        ['=A1 Rate', '(RC Rate)'],
+        ['=A1 TRUE()', '(RC TRUE())'],
+        ['=(A1,Rate)', '[(RC,Rate)]'],
+        ['=(A1,#REF!,C1)', '[((RC,#REF!),RC[2])]'],
+        ['=(A1,(B1))', '[(RC,[RC[1]])]'],
+        ['=(IF(1,A1),B1#)', '[(IF(1,RC),(RC[1]#))]'],
+    ])('and cannot know more than that: %s', (text, expected) => {
+        expect(group(text)).toBe(expected);
+    });
+
     test('an error literal ends where it ends, and # before / is the spill operator', () => {
         expect(group('=#N/A/2')).toBe('(#N/A/2)');
         expect(group('=#GETTING_DATA/#DIV/0!')).toBe('(#GETTING_DATA/#DIV/0!)');
@@ -171,6 +194,64 @@ describe('literals and names (parsing.md 2.3)', () => {
         expect(shown(text)).toBe(expected);
     });
 
+    test.each([
+        ['=0.0000001', '=0.0000001'],
+        ['=1E-7', '=0.0000001'],
+        ['=A1*0.000000001', '=A1*0.000000001'],
+        ['=1.5E-7', '=0.00000015'],
+        ['=1E-10', '=0.0000000001'],
+        ['=1E-5', '=0.00001'],
+        ['=0.000000000008854', '=0.000000000008854'],
+        ['=1E-18', '=0.000000000000000001'],
+        ['=1.23456789012345E-18', '=0.00000000000000000123456789012345'],
+        ['=9.99999999999999E-19', '=9.99999999999999E-19'],
+        ['=1.6e-19', '=1.6E-19'],
+        ['=0.0000000000000000001', '=1E-19'],
+        ['=1E-20', '=1E-20'],
+        ['=6.626E-34', '=6.626E-34'],
+        ['=0.00000000000000000000000000000000066260', '=6.626E-34'],
+        ['=5E-324', '=5E-324'],
+        ['=1E+15', '=1000000000000000'],
+        ['=1E20', '=100000000000000000000'],
+        ['=123456789012345E6', '=123456789012345000000'],
+        ['=9.99999999999999e20', '=999999999999999000000'],
+        ['=1E21', '=1E+21'],
+        ['=1000000000000000000000', '=1E+21'],
+        ['=1.5e21', '=1.5E+21'],
+        ['=1.23456789012345E+100', '=1.23456789012345E+100'],
+        ['=1E308', '=1E+308'],
+        ['=0', '=0'],
+    ])('a number prints in plain digits where Excel writes them: %s shows as %s', (text, expected) => {
+        expect(shown(text)).toBe(expected);
+        expect(stored(text)).toBe(expected.replace('A1', 'RC[-13]'));
+        expect(treeStored(stored(text))).toEqual(treeA1(text));
+    });
+
+    test('a number of 15 digits at any exponent has one spelling, which reads back as the same value', () => {
+        const { random } = dice(9);
+        for (let exponent = -323; exponent <= 307; exponent += 1) {
+            for (let run = 0; run < 40; run += 1) {
+                let digits = String(1 + Math.floor(random() * 9));
+                for (let i = Math.floor(random() * 15); i > 0; i -= 1) digits += Math.floor(random() * 10);
+                const typed = `=${digits.charAt(0)}.${digits.slice(1)}0E${exponent}`;
+                const tree = treeA1(typed);
+                const value = Number(typed.slice(1));
+                expect(tree.value).toBe(value);
+                const text = printStored(tree);
+                expect(treeStored(text).value).toBe(value);
+                expect(printStored(treeStored(text))).toBe(text);
+                expect(shown(text)).toBe(text);
+                const plain = /^=(?:0|[1-9]\d*)(?:\.\d*[1-9])?$/.test(text);
+                const scientific = /^=[1-9](?:\.\d*[1-9])?E[+-]\d{2,3}$/.test(text);
+                // Below the smallest normal number a double holds fewer digits than were typed.
+                const significant = text.replace(/E.*|[=.]/g, '').replace(/^0+|0+$/g, '').length;
+                if (exponent > -300) expect(significant).toBeLessThanOrEqual(15);
+                expect(plain || scientific).toBe(true);
+                expect(plain).toBe(exponent >= -18 && exponent <= 20);
+            }
+        }
+    });
+
     test('a number is its value, a string its content', () => {
         expect(treeA1('=1.5e-3')).toMatchObject({ kind: NodeKind.Number, value: 0.0015 });
         expect(treeA1('="a""b"')).toMatchObject({ kind: NodeKind.String, text: 'a"b' });
@@ -229,6 +310,60 @@ describe('literals and names (parsing.md 2.3)', () => {
         expect(treeA1('=nosuchfn(1)')).toMatchObject({ kind: NodeKind.Call, text: 'NOSUCHFN' });
     });
 
+    test.each([
+        ['=SUM (1,2)', 'SUM(1,2)', '=SUM (1,2)', ' '],
+        ['=IF (A1,1,2)', 'IF(RC[-13],1,2)', '=IF (A1,1,2)', ' '],
+        ['=sum  (A1:A3)', 'SUM(RC[-13]:R[2]C[-13])', '=SUM  (A1:A3)', '  '],
+        ['=TRUE ()', 'TRUE()', '=TRUE ()', ' '],
+        ['=false\n()', 'FALSE()', '=FALSE\n()', '\n'],
+        ['=MyRange (A1:B2)', 'MYRANGE(RC[-13]:R[1]C[-12])', '=MYRANGE (A1:B2)', ' '],
+        ['=A (1)', 'A(1)', '=A (1)', ' '],
+    ])('a word, whitespace and ( is a call, and keeps its whitespace: %p', (text, expected, a1, spaceOpen) => {
+        const tree = treeA1(text);
+        expect(tree).toMatchObject({ kind: NodeKind.Call, spaceOpen });
+        expect(grouped(tree)).toBe(expected);
+        expect(shown(text)).toBe(a1);
+        expect(treeStored(printStored(tree))).toEqual(tree);
+        expect(treeA1(a1)).toEqual(tree);
+    });
+
+    test('a call nested in a call keeps the whitespace of each', () => {
+        expect(shown('=IF (SUM  (A1)>0, MAX (1,2) ,3)')).toBe('=IF (SUM  (A1)>0, MAX (1,2),3)');
+        expect(stored('=1+SUM (A1)', 'A1')).toBe('=1+SUM (RC)');
+    });
+
+    test.each([
+        ['=A1 (B1:C1)', '(RC[-13] [RC[-12]:RC[-11]])'],
+        ['=LOG10 (100)', '(R[9]C[8495] [100])'],
+        ['=A1:B2 (B1)', '(RC[-13]:R[1]C[-12] [RC[-12]])'],
+        ['=SUM(A1:B2) (B1)', '(SUM(RC[-13]:R[1]C[-12]) [RC[-12]])'],
+        ['=(A1:B2) (B1)', '([RC[-13]:R[1]C[-12]] [RC[-12]])'],
+        ['=Sheet2!Rate (B1)', '([s2]!Rate [RC[-12]])'],
+        ['=RC (B1)', '(rc [RC[-12]])'],
+        ['=r1c1 (B1)', '(r1c1 [RC[-12]])'],
+    ])('a reference, whitespace and ( stays an intersection: %s', (text, expected) => {
+        const tree = treeA1(text);
+        expect(grouped(tree)).toBe(expected);
+        expect(treeStored(printStored(tree))).toEqual(tree);
+        expect(treeA1(shown(text))).toEqual(tree);
+    });
+
+    test('a column, a colon and a column before whitespace and ( is one range in both grammars', () => {
+        expect(group('=A:IF (B1)')).toBe('(C:C[239] [RC[1]])');
+        expect(parseStored('=A:IF (RC)')).toMatchObject({ reason: 'syntax' });
+        expect(parseStored('=[s2]!A:BF  (1)()')).toMatchObject({ reason: 'syntax' });
+        expect(stored('=IF (A1,B1):B', 'A1')).toBe('=IF (RC,RC[1]):B');
+        expect(grouped(treeStored('=IF (RC,RC[1]):B'))).toBe('(IF(RC,RC[1]):B)');
+        expect(stored('=A:IF(B1)', 'A1')).toBe('=A:IF(RC[1])');
+    });
+
+    test('stored text reads a word, whitespace and ( the same way', () => {
+        expect(treeStored('=SUM (RC)')).toEqual(treeA1('=SUM (N1)'));
+        expect(grouped(treeStored('=RC (R1C1)'))).toBe('(RC [R1C1])');
+        expect(parseStored('=A1 (1)')).toMatchObject({ reason: 'syntax' });
+        expect(grouped(treeStored('=rc (1)'))).toBe('(rc [1])');
+    });
+
     test('a left-out argument is a node of its own', () => {
         expect(treeA1('=IF(A1,,2)').children.map((child) => child.kind)).toEqual([
             NodeKind.Ref,
@@ -274,6 +409,66 @@ describe('literals and names (parsing.md 2.3)', () => {
         '',
     ])('%p does not parse, and says so without throwing', (text) => {
         expect(failure(text)).toBe('syntax');
+    });
+});
+
+describe('what a name may hold (parsing.md rule 31)', () => {
+    test.each([
+        ['an ideographic space', '=SUM(A1,\u3000B1)'],
+        ['a zero-width space', '=A1\u200b+1'],
+        ['a zero-width joiner', '=x\u200dy'],
+        ['a byte-order mark', '=\ufeffA1'],
+        ['a line separator', '=A1\u2028+1'],
+        ['a no-break space', '=A1\u00a0+B1'],
+        ['a narrow no-break space', '=1\u202f+1'],
+        ['a Hangul filler', '=\u3164'],
+        ['a variation selector', '=x\ufe0f'],
+        ['a soft hyphen', '=x\u00ady'],
+        ['full-width digits and plus', '=\uff11\uff0b\uff12'],
+        ['a full-width plus', '=A1\uff0bB1'],
+        ['full-width letters', '=\uff21\uff11'],
+        ['a full-width call', '=\uff33\uff35\uff2d(1)'],
+        ['a multiplication sign', '=A\u00d7B'],
+        ['a minus sign', '=A1\u2212B1'],
+        ['curly quotes', '=\u201ca\u201d'],
+        ['a currency sign', '=\u20ac'],
+        ['an emoji', '=\ud83d\ude00'],
+        ['an emoji inside a name', '=x\ud83d\ude00'],
+        ['half a surrogate pair', '=x\ud83d'],
+        ['a digit of another script first', '=\u0663x'],
+        ['a combining mark alone', '=\u0301'],
+    ])('%s is no part of a name, so the text does not parse', (_, text) => {
+        expect(failure(text)).toBe('syntax');
+        expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
+        expect(storedText(text, 0, 0, findSheet)).toBe(`=${text}`);
+    });
+
+    test.each([
+        '=\u00dcbersicht',
+        '=\u00e9t\u00e9_2',
+        '=\u0394x',
+        '=\u6570\u636e',
+        '=\ub370\uc774\ud130',
+        '=\ud840\udc00x',
+        '=Stra\u00dfe9',
+        '=x\u0663',
+        '=\uff76\uff85',
+        '=x.y?',
+        '=\\a',
+        '=_1',
+        '=a\\b?c.d',
+    ])('letters of any script, digits, _ . \\ and ? make a name: %s', (text) => {
+        const tree = treeA1(text);
+        expect(tree).toMatchObject({ kind: NodeKind.Name, text: text.slice(1) });
+        expect(treeStored(printStored(tree))).toEqual(tree);
+        expect(shown(text)).toBe(text);
+    });
+
+    test('a sheet and a function are named by the same characters', () => {
+        expect(treeA1('=\u6570\u636e!A1')).toMatchObject({ kind: NodeKind.Ref, sheet: '\u6570\u636e' });
+        expect(treeA1('=\u0394x(1)')).toMatchObject({ kind: NodeKind.Call, text: '\u0394X' });
+        expect(failure('=\u6570\u3000\u636e!A1')).toBe('syntax');
+        expect(failure('=A1:B2\u200b')).toBe('syntax');
     });
 });
 
@@ -394,7 +589,7 @@ describe('references and sheets (parsing.md 2.4)', () => {
         ['=NoSuch!A1:NoSuch!B2', "='NoSuch'!RC[-13]:R[1]C[-12]", '=NoSuch!A1:B2'],
         ["='No Such'!$A$1:'No Such'!B2", "='No Such'!R1C1:R[1]C[-12]", "='No Such'!$A$1:B2"],
         ['=Sheet2!A1: Sheet2!B2', '=[s2]!RC[-13]: [s2]!R[1]C[-12]', '=Sheet2!A1: Sheet2!B2'],
-        ['=Sheet2!A1:Sheet2!B2:C3', '=[s2]!RC[-13]:[s2]!R[1]C[-12]:R[2]C[-11]', '=Sheet2!A1:Sheet2!B2:C3'],
+        ['=Sheet2!A1:Sheet2!B2:C3', '=[s2]!RC[-13]:R[1]C[-12]:R[2]C[-11]', '=Sheet2!A1:B2:C3'],
         ['=Sheet2!A1:Sheet2!B2:Sheet2!C3', '=[s2]!RC[-13]:R[1]C[-12]:[s2]!R[2]C[-11]', '=Sheet2!A1:B2:Sheet2!C3'],
         ['=Sheet2!A1:Sheet2!Rate', '=[s2]!RC[-13]:[s2]!Rate', '=Sheet2!A1:Sheet2!Rate'],
         ['=A1:INDEX(Sheet2!B:B,5)', '=RC[-13]:INDEX([s2]!C[-12]:C[-12],5)', '=A1:INDEX(Sheet2!B:B,5)'],
@@ -402,6 +597,45 @@ describe('references and sheets (parsing.md 2.4)', () => {
         expect(stored(text)).toBe(kept);
         expect(treeStored(kept)).toEqual(treeA1(text));
         expect(shown(text)).toBe(a1);
+    });
+
+    test.each([
+        ['=Sheet2!A:Sheet2!B', '=[s2]!C[-13]:C[-12]', '=Sheet2!A:B'],
+        ['=Sheet2!$A:Sheet2!$B', '=[s2]!C1:C2', '=Sheet2!$A:$B'],
+        ['=Sheet2!1:Sheet2!2', '=[s2]!R:R[1]', '=Sheet2!1:2'],
+        ["=sheet2!$1:'Sheet2'!3", '=[s2]!R1:R[2]', '=Sheet2!$1:3'],
+        ['=SUM(Sheet2!A:Sheet2!A)', '=SUM([s2]!C[-13]:C[-13])', '=SUM(Sheet2!A:A)'],
+        ["='No Such'!A:'No Such'!B", "='No Such'!C[-13]:C[-12]", "='No Such'!A:B"],
+        ['=Jan:Dec!1:Jan:Dec!2', "='Jan:Dec'!R:R[1]", "='Jan:Dec'!1:2"],
+        ['=[1]Book!$A:[1]Book!B', "='[1]Book'!C1:C[-12]", "='[1]Book'!$A:B"],
+        ['=Sheet2!A:Sheet2!B:Sheet2!C', '=[s2]!C[-13]:C[-12]:[s2]!c', '=Sheet2!A:B:Sheet2!c'],
+    ])('a whole column or row may repeat its sheet too: %s is stored as %s and shows as %s', (text, kept, a1) => {
+        expect(stored(text)).toBe(kept);
+        expect(treeStored(kept)).toEqual(treeA1(text));
+        expect(shown(text)).toBe(a1);
+        expect(stored(a1)).toBe(kept);
+    });
+
+    test.each([
+        '=Sheet2!A:Sheet1!B',
+        '=Sheet2!$A:Sheet1!$B',
+        '=Sheet2!1:Sheet1!2',
+        '=Sheet2!A:NoSuch!B',
+        '=Sheet2!1:Sheet2!B',
+        '=Sheet2!$A:Sheet2!2',
+        '=Sheet2!1:Sheet2!',
+        "=''!A1:5!B1",
+        "=''!A:+!B",
+    ])('and names no other sheet, and no other kind of end: %s does not parse', (text) => {
+        expect(failure(text)).toBe('syntax');
+    });
+
+    test('stored text that repeats the sheet reads as the one range', () => {
+        expect(treeStored('=[s2]!C1:[s2]!C2')).toEqual(treeStored('=[s2]!C1:C2'));
+        expect(treeStored('=[s2]!R:[s2]!R[1]')).toEqual(treeStored('=[s2]!R:R[1]'));
+        expect(treeStored("='x'!RC:'x'!R[1]C")).toEqual(treeStored("='x'!RC:R[1]C"));
+        expect(parseStored('=[s2]!A:[s2]!B')).toMatchObject({ reason: 'syntax' });
+        expect(parseStored('=[s2]!C1:[s1]!C2')).toMatchObject({ reason: 'syntax' });
     });
 
     test('a 3-D reference parses and is kept, and shows in quotes', () => {
@@ -453,6 +687,78 @@ describe('references and sheets (parsing.md 2.4)', () => {
         expect(treeA1('=[1]Sheet1!$A$1')).toMatchObject({ sheetKind: SheetKind.External, sheet: '[1]Sheet1' });
     });
 
+    test.each([
+        ['=[1]!Func(1)', "='[1]'!Func(1)"],
+        ['=[1]!PCovar($B$6:$B$17, 2 )', "='[1]'!PCovar($B$6:$B$17, 2 )"],
+        ['=[1]!wbname()', "='[1]'!wbname()"],
+        ['=1+[1]!Func(A1)(2)*3', "=1+'[1]'!Func(A1)(2)*3"],
+        ["='C:\\x\\[Book.xlsx]'!Func(1)", "='C:\\x\\[Book.xlsx]'!Func(1)"],
+        ["=[1]!'SGJ212,LA'", "='[1]'!'SGJ212,LA'"],
+        ["=[1]!'it''s'+1", "='[1]'!'it''s'+1"],
+        ["=[1]!'Rate'", "='[1]'!Rate"],
+        ["=[1]!'A1'", "='[1]'!'A1'"],
+        ["=[1]!'RC'", "='[1]'!'RC'"],
+        ["=[1]!''", "='[1]'!''"],
+        ['=[1]!TAX2(1)', "='[1]'!'TAX2'(1)"],
+        ['=[1]!R[1]C(1)', "='[1]'!'R[1]C'(1)"],
+        ["=[1]!'my fn'(1)", "='[1]'!'my fn'(1)"],
+        ['=SUM([2]A:B!B11)', "=SUM('[2]A:B'!B11)"],
+        ['=SUM([2]Section3A:formulas!$B$11:C12)', "=SUM('[2]Section3A:formulas'!$B$11:C12)"],
+        ['=[2]Jan:Dec!A:[2]Jan:Dec!B', "='[2]Jan:Dec'!A:B"],
+    ])('a function, a quoted name and a 3-D pair of another workbook parse and are kept: %s', (text, a1) => {
+        const tree = treeA1(text);
+        expect(shown(text)).toBe(a1);
+        expect(treeStored(printStored(tree))).toEqual(tree);
+        expect(treeA1(a1)).toEqual(tree);
+        expect(shapeFacts(tree, new Map()) & Fact.Kept).toBe(Fact.Kept);
+    });
+
+    test('another workbook is a prefix kept as text on a name or a reference, and a call calls the name', () => {
+        const call = treeA1('=[1]!Func(1)');
+        expect(call.kind).toBe(NodeKind.Invoke);
+        expect(call.children[0]).toMatchObject({
+            kind: NodeKind.Name,
+            text: 'Func',
+            sheetKind: SheetKind.External,
+            sheet: '[1]',
+        });
+        expect(call.children[1]).toMatchObject({ kind: NodeKind.Number, value: 1 });
+        expect(treeA1("=[1]!'SGJ212,LA'")).toMatchObject({
+            kind: NodeKind.Name,
+            text: 'SGJ212,LA',
+            sheetKind: SheetKind.External,
+            sheet: '[1]',
+        });
+        expect(treeA1('=SUM([2]A:B!B11)').children[0]).toMatchObject({
+            kind: NodeKind.Ref,
+            sheetKind: SheetKind.External,
+            sheet: '[2]A:B',
+        });
+        expect(stored('=[1]!Func(A1)', 'A1')).toBe("='[1]'!Func(RC)");
+    });
+
+    test.each([
+        ...["=Sheet2!'x'", '=Sheet2!Func(1)', "='No Such'!Func(1)", '=Jan:Dec!Func(1)', "=Jan:Dec!'x'"],
+        ...["=[1]!'x'!A1", "=[1]! 'x'", "=[1]!'x", '=[1]!(1)', '=[1]:B!A1', '=[1]A:!A1', '=[1]!5(1)'],
+    ])('only another workbook has them: %s does not parse', (text) => {
+        expect(failure(text)).toBe('syntax');
+    });
+
+    test.each([
+        '=[s2]!Func(1)',
+        "=[s2]!'x'",
+        "='No Such'!Func(1)",
+        "='Jan:Dec'!'x'",
+        '=[1]!Func(1)',
+        "='[1]'! Func(1)",
+    ])('nor does stored text hold them for a sheet: %s does not parse', (text) => {
+        expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
+    });
+
+    test('whitespace before the parenthesis of such a call is an intersection, as it is behind a sheet', () => {
+        expect(group('=[1]!Func (B1)')).toBe("('[1]'!Func [RC[1]])");
+    });
+
     test('#REF! behind a sheet is an error that keeps its sheet', () => {
         expect(shown('=Sheet2!#REF!')).toBe('=Sheet2!#REF!');
         expect(stored('=SUM(Sheet2!#REF!)')).toBe('=SUM([s2]!#REF!)');
@@ -477,6 +783,45 @@ describe('references and sheets (parsing.md 2.4)', () => {
         expect(treeStored(printStored(tree))).toEqual(tree);
         expect(treeA1(shown(text))).toEqual(tree);
     });
+
+    test.each([
+        ['=#REF!A1', '#REF!'],
+        ['=#REF!$A$1', '#REF!'],
+        ['=#ReF!xfd1048576', '#REF!'],
+        ['=SUM(#REF!A1:B2)', 'SUM(#REF!)'],
+        ['=#REF!A:B+1', '(#REF!+1)'],
+        ['=#REF!$1:2', '#REF!'],
+        ['=1+#REF!A1*2', '(1+(#REF!*2))'],
+        ['=#REF!A1:#REF!B2', '(#REF!:#REF!)'],
+        ['=#REF!A1#', '(#REF!#)'],
+        ['=A1 #REF!B1', '(RC[-13] #REF!)'],
+    ])('the cells Excel writes behind the #REF! of a deleted sheet are dropped: %s', (text, expected) => {
+        const tree = treeA1(text);
+        expect(grouped(tree)).toBe(expected);
+        expect(treeStored(printStored(tree))).toEqual(tree);
+        expect(treeA1(shown(text))).toEqual(tree);
+    });
+
+    test('that #REF! is the leaf of a reference that broke, with its whitespace', () => {
+        expect(treeA1('=#REF!A1')).toEqual(treeA1('=#REF!'));
+        expect(shown('= #REF!A1 + 1')).toBe('= #REF! + 1');
+        expect(shown("='[1]x y'!#REF!")).toBe("='[1]x y'!#REF!");
+        expect(shown('=SUM(Sheet2!A1:#REF!)')).toBe('=SUM(Sheet2!A1:#REF!)');
+    });
+
+    test.each(['=#REF!Rate', '=#REF!A', '=#REF!5', '=#REF!A1B', '=#N/AA1', '=#REF!"a"', '=#REF!#REF!'])(
+        'only cells stand there: %s does not parse',
+        (text) => {
+            expect(failure(text)).toBe('syntax');
+        },
+    );
+
+    test.each(['=#REF!RC', '=#REF!R1C1', '=#REF!A1', '=#REF!C:C'])(
+        'the stored form never holds that spelling: %s does not parse',
+        (text) => {
+            expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
+        },
+    );
 
     test('a reference that left the grid or lost its sheet shows as text that parses', () => {
         const tree = treeA1('=SUM(A1:B2 C1)+A1#+Sheet2!A1', 'C3');

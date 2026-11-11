@@ -96,7 +96,6 @@ export const ERROR_LITERALS = [
 // What is left of a reference whose cells or sheet are gone. It stands wherever a reference may.
 export const REF_ERROR = ERROR_LITERALS.indexOf('#REF!') + 1;
 
-const OTHER = 0;
 const SPACE = 1;
 const DIGIT = 2;
 const WORD_START = 3;
@@ -111,6 +110,12 @@ for (const [chars, charClass] of [
 ] as const) {
     for (let i = 0; i < chars.length; i += 1) CLASS[chars.charCodeAt(i)] = charClass;
 }
+
+const LETTER = /^\p{L}$/u;
+const LETTER_OR_DIGIT = /^[\p{L}\p{N}]$/u;
+const NOT_DRAWN = /^\p{Default_Ignorable_Code_Point}$/u;
+const FULL_WIDTH_FIRST = 0xff01;
+const FULL_WIDTH_LAST = 0xff5e;
 
 // The one table of operators: the lexer reads a character by it and the printers write a kind by SYMBOLS. An
 // intersection has no symbol, as its whitespace is the operator.
@@ -152,9 +157,16 @@ export function lexAt(text: string, pos: number): number {
     if (pos >= length) return (length << 6) | Token.End;
     const code = text.charCodeAt(pos);
     let end = pos + 1;
-    switch (classOf(code)) {
+    if (code >= 128) {
+        const width = wideWidth(text, pos, LETTER);
+        if (width !== 0) return (wordEnd(text, pos + width) << 6) | Token.Word;
+        // A character no formula holds is one bad token, both halves of it when it is a pair.
+        if ((text.codePointAt(pos) ?? 0) > 0xffff) end += 1;
+        return (end << 6) | Token.Bad;
+    }
+    switch (CLASS[code]) {
         case SPACE:
-            while (end < length && classOf(text.charCodeAt(end)) === SPACE) end += 1;
+            while (CLASS[text.charCodeAt(end)] === SPACE) end += 1;
             return (end << 6) | Token.Space;
         case DIGIT:
             return (numberEnd(text, pos) << 6) | Token.Number;
@@ -164,9 +176,7 @@ export function lexAt(text: string, pos: number): number {
     }
     switch (code) {
         case DOT:
-            return classOf(text.charCodeAt(end)) === DIGIT
-                ? (numberEnd(text, pos) << 6) | Token.Number
-                : (end << 6) | Token.Bad;
+            return isDigit(text.charCodeAt(end)) ? (numberEnd(text, pos) << 6) | Token.Number : (end << 6) | Token.Bad;
         case DOUBLE_QUOTE:
             return quotedEnd(text, pos, '"', Token.String);
         case QUOTE:
@@ -190,7 +200,7 @@ export function lexAt(text: string, pos: number): number {
         case GREATER:
             return text.charCodeAt(end) === EQUALS ? ((end + 1) << 6) | Token.GreaterEqual : (end << 6) | Token.Greater;
         default:
-            return (end << 6) | (code < 128 && OPERATORS[code] !== 0 ? OPERATORS[code] : Token.Bad);
+            return (end << 6) | (OPERATORS[code] !== 0 ? OPERATORS[code] : Token.Bad);
     }
 }
 
@@ -202,9 +212,15 @@ export function tokenEnd(token: number): number {
     return token >>> 6;
 }
 
-// Whether a word that ends before this character would in fact run on, so what was read is only its start.
-export function continuesWord(code: number): boolean {
-    return classOf(code) >= DIGIT;
+// Whether a word that ends at `pos` would in fact run on, so what was read is only its start.
+export function continuesWord(text: string, pos: number): boolean {
+    return partWidth(text, pos) !== 0;
+}
+
+// Whether the text is one word and no more, so it can stand where a name does.
+export function isWord(text: string): boolean {
+    const token = lexAt(text, 0);
+    return tokenKind(token) === Token.Word && tokenEnd(token) === text.length;
 }
 
 // The code of the error literal at `pos`, in any letter case, or 0 when the # there starts none.
@@ -221,11 +237,22 @@ export function errorCode(text: string, pos: number): number {
     return 0;
 }
 
-// Every character past the no-break space may be part of a name, as a sheet or a defined name can be in any script.
-// The no-break space itself is refused, as Excel does: as a name it would be invisible. Past the end is NaN.
-function classOf(code: number): number {
-    if (code < 128) return CLASS[code];
-    return code > 0xa0 ? WORD_START : OTHER;
+// How many code units the character at `pos` takes when it may continue a word, and 0 when it may not or the text
+// ends there.
+function partWidth(text: string, pos: number): number {
+    const code = text.charCodeAt(pos);
+    if (code < 128) return CLASS[code] >= DIGIT ? 1 : 0;
+    return wideWidth(text, pos, LETTER_OR_DIGIT);
+}
+
+// The same for a character past ASCII, by the class it must be of. A sheet or a name can be in any script, but not
+// hold what cannot be seen or reads as something else: a space or an operator of another script, a character
+// that is not drawn, such as a Hangul filler, or the full-width twin of an ASCII character.
+function wideWidth(text: string, pos: number, wanted: RegExp): number {
+    const point = text.codePointAt(pos);
+    if (point === undefined || (point >= FULL_WIDTH_FIRST && point <= FULL_WIDTH_LAST)) return 0;
+    const character = String.fromCodePoint(point);
+    return wanted.test(character) && !NOT_DRAWN.test(character) ? character.length : 0;
 }
 
 function isDigit(code: number): boolean {
@@ -256,7 +283,7 @@ function numberEnd(text: string, pos: number): number {
 function wordEnd(text: string, pos: number): number {
     let end = pos;
     for (;;) {
-        while (classOf(text.charCodeAt(end)) >= DIGIT) end += 1;
+        for (let width = partWidth(text, end); width !== 0; width = partWidth(text, end)) end += width;
         if (text.charCodeAt(end) !== BRACKET_OPEN) return end;
         let digits = end + 1;
         if (text.charCodeAt(digits) === MINUS) digits += 1;

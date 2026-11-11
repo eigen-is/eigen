@@ -5,7 +5,7 @@
 
 import type { TokenKind } from './lexer';
 import { lexAt, Token, tokenEnd, tokenKind } from './lexer';
-import { referenceAt } from './parser';
+import { callsSpaced, referenceAt } from './parser';
 
 export type FormulaToken = {
     readonly kind: TokenKind;
@@ -30,6 +30,8 @@ export function tokens(text: string): FormulaToken[] {
             if (reference) {
                 kind = Token.Reference;
                 end = reference.end;
+            } else if (kind === Token.Word && callsSpaced(text, start, end)) {
+                kind = Token.Function;
             } else if (kind === Token.Word) {
                 const word = text.slice(start, end).toUpperCase();
                 kind = word === 'TRUE' || word === 'FALSE' ? Token.Boolean : Token.Name;
