@@ -126,9 +126,9 @@ export async function deleteEvent(
     if (!erased) return;
     const { existing, dates } = erased;
 
-    // A cancelled master answers and cancels nothing: its PUT already fanned out STATUS:CANCELLED.
     const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
     const invitation = isInvitationFromOthers(series ?? existing, calendar.home.user.email) ? existing.data : null;
+    // A cancelled master answers and cancels nothing: its PUT already fanned out STATUS:CANCELLED.
     const live = existing.status === 'cancelled' ? [] : [existing, ...dates.filter((d) => d.status !== 'cancelled')];
     const listed = live.flatMap((event) => event.data?.attendees ?? []);
     const held = [...new Map(listed.map((a) => [a.email.toLowerCase(), a])).values()];
@@ -148,7 +148,7 @@ export async function deleteEvent(
             ).catch(console.error);
         }
     } else if (!invitation && held.length) {
-        // An event with no foreign organizer makes this user its organizer, and an organizer's delete cancels.
+        // An event nobody else organizes is this calendar's own, and its organizer's delete cancels it.
         const stored = live.find((event) => event.data?.organizer)?.data?.organizer;
         const organizer = organizerOf(calendar.home, user, stored);
         propagateCancellation(calendar.home, organizer, existing, held, series ?? undefined).catch(console.error);
