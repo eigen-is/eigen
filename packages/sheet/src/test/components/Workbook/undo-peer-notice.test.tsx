@@ -16,8 +16,8 @@ type Op = import('../../../state').Op;
 type Sheet = import('../../../state').Sheet;
 type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
 
-const CANT_UNDO = "Someone else edited this spreadsheet, so this can't be undone anymore.";
-const CANT_REDO = "Someone else edited this spreadsheet, so this can't be redone anymore.";
+const CANT_UNDO = "This spreadsheet was replaced or edited by someone else, so this can't be undone anymore.";
+const CANT_REDO = "This spreadsheet was replaced or edited by someone else, so this can't be redone anymore.";
 // Longer than the delay SheetOverlay shows a notice after.
 const NOTICE_DELAY_MS = 300;
 

@@ -87,8 +87,8 @@ type AdditionalProps = {
 };
 
 const CUT_BY_PEER_NOTICE = {
-    undo: "Someone else edited this spreadsheet, so this can't be undone anymore.",
-    redo: "Someone else edited this spreadsheet, so this can't be redone anymore.",
+    undo: "This spreadsheet was replaced or edited by someone else, so this can't be undone anymore.",
+    redo: "This spreadsheet was replaced or edited by someone else, so this can't be redone anymore.",
 };
 
 // The copied cell range as a text item, its box in pixels from the row and column edges, as a sheet has no zoom. The
