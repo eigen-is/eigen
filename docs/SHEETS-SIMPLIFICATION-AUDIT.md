@@ -22,13 +22,14 @@ Like ROADMAP and the proposals, this doc holds only open work: strike a finding 
   - F3 yes: past the validation cap the rule stops extending and the edit goes through (done).
   - [F4](#f4) yes, and the owner's aim is wider: sheet charts use the same format as the other apps, perhaps except for data references, so the code can be completely shared. Concurrent restyles of one part are last write wins. Sheets needs no backward compatibility here, so old sheet charts aren't converted. Everything in CHARTS.md that keeps a newer build's keys stays.
   - F6 no, corrected by the owner: the chart format stays future proof, so an edit keeps keys a newer build stored. The batch's answer read yes, on a question that called it the mirror of the no-compatibility ruling and didn't say the format was chosen on purpose.
-  - [F7](#f7) yes, after checking what Google does: pie slice colours stay at their index. If Google follows the rows, it comes back to the owner.
+  - F7 (done) yes, after checking what Google does: pie slice colours stay at their index. If Google follows the rows, it comes back to the owner.
   - [F8](#f8) yes, last in Wave 2: a tick box draws its box alone, and corner marks don't outrank the handles.
 - The rest of Wave 2, 2026-11-11, for the next Sheets session:
-  - [F7](#f7) and [F4](#f4) yes. For F4 the owner wants the best chart format, chosen from thorough research before any code: it need not be the format Docs, Slides and Vector store today, since nothing needs backward compatibility, but it is exactly the same in all four apps. So F4 may change the other apps' stored charts too.
+  - F7 (done) and [F4](#f4) yes. For F4 the owner wants the best chart format, chosen from thorough research before any code: it need not be the format Docs, Slides and Vector store today, since nothing needs backward compatibility, but it is exactly the same in all four apps. So F4 may change the other apps' stored charts too.
   - [S5](#s5) yes.
   - [S4](#s4) yes, built the better way, and the owner accepts its loss: a tab that slept through a compaction loses its undo stacks.
   - [F8](#f8) only where Google Sheets looks that way: check how Google draws a tick box with custom values and what a click on a corner mark does, then build the parts that match.
+  - F4's format, 2026-11-11, after research and a cold check (`docs/superpowers/f4-chart-format-proposal.md`, local): keep the eight JSON strings Docs, Slides and Vector store (`specChart` to `specData`) and move Sheets onto them, with no reader for the old records. Existing sheet charts lose axis settings (axis titles too), stacking, series styles and slice colours; an undo of a style edit does nothing once a peer has since edited the same part. The part set closes at eight: readers take the eight known keys, and the prefix scan and its forged-key guards go. Keys inside a part still survive every edit.
 
 ## Where the piles come from
 
@@ -187,13 +188,6 @@ Lost: two peers editing two series of one chart at the same instant; the last wr
 
 F6 (dropping what chart code keeps for a newer build's keys) is ruled out. The stored chart format is future proof on purpose, chosen after studying the big chart libraries ([CHARTS.md](CHARTS.md)), and the owner keeps it. The no-compatibility ruling looks backward only, and it doesn't reach this.
 
-<a id="f7"></a>**F7. A pie's slice colours follow their rows through row ops and Edit data (product).**
-`pointsForInsert`, `pointsForDelete`, `runsAlong` (`engine/rowcol.ts`), the `points` parameter of `mapChartRefs` and `shiftChartsAcrossSheets`, `chartPointMoves`, the row tracking in `chart-data-dialog.tsx` Save.
-History: `49e0d2bb5`, `2d185b9ca`, `69b4fe8e8`, `11744cd42`.
-Root cause: pattern 4. Moving index-keyed styles needs ordered move ops with their own race rule.
-Simpler: point styles stay keyed by index.
-Lost: after a row insert or delete inside a pie's categories, custom slice colours stay at their index. Check what Google does first. ~75 LOC + ~120 test, low-medium risk, medium confidence.
-
 <a id="f8"></a>**F8. Tick box and corner-mark rules that are precision the owner could drop (small product).**
 `showsCheckboxLabel` and `checkboxAlign` (`state/modules/data-validation.ts`), the comment, invalid and forced-string branches of `cellGlyphAt` (`state/modules/cell-glyph.ts`), which claim a corner only to keep the move band and fill handle off it.
 History: `0578953d3`, `ea5bffa8b`, `948d4e2f8`, `505e131c9`.
@@ -234,7 +228,7 @@ Wave 1 (nothing lost, or decided):
 | Lane | Units, in order | Main files |
 |---|---|---|
 
-Wave 2 (cross-cutting, after the lanes they depend on merged): [E2](#e2); S2 (done) then [S5](#s5); [F7](#f7), [F4](#f4), [F8](#f8) as ruled. F4 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
+Wave 2 (cross-cutting, after the lanes they depend on merged): [E2](#e2); S2 (done) then [S5](#s5); F7 (done), [F4](#f4), [F8](#f8) as ruled. F4 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
 
 Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s order. Each is sized again at its Step 0 and shown to the owner before it is built: [S10](#s10) with [D9](#d9), [S9](#s9) (which supersedes [S4](#s4)), [D10](#d10), [F9](#f9), [E8](#e8), [R9](#r9) with [R10](#r10), [F10](#f10) (touches Docs and Canvas: tell the other session), [U6](#u6) only if still worth it. [U7](#u7) stays parked in ROADMAP-POST-1.
 
@@ -327,3 +321,4 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 - 2026-11-10, eigen-74 (docs links): the owner wants one shared link card for Sheets and Docs in packages/ui, built after this branch merges, as its own branch; at the develop merge, `isLinkValid` uses eigen-74's `webLinkHref` and drops `HOST_WITH_SPACE`. Details in `.superpowers/close-findings.md`.
 - 2026-11-11, the close: `sheets-audit` merged into `develop` as `79f705b3b` and pushed. S2 (one `applySheetsBatch`, `8ca23eaa1`) and the cut formulas that follow Excel (`unit-cut-refs`) were done in this run. Array operators move into the engine rewrite's arrays step (ROADMAP). Accepted: an undo of a sheet add, copy or rename rewrites formulas it never recorded, and a row delete undo past the row limit does nothing silently (both in SHEETS.md). A peer's delete that closes your open editor should leave no selection, so the keys that follow go nowhere: `unit-peer-closes-editor`, being built.
 - **Next session, in order** (a fresh branch from `develop`; the owner's rulings of 2026-11-11 under "The rest of Wave 2" above): 1. F7, then F4 as one chart unit. F4's Step 0 is research and a proposal the owner signs off: start from CHARTS.md, which records why today's format was chosen, and study how the big chart libraries, Office and Google store a chart's look; then one format for Sheets, Docs, Slides and Vector, with no reader for the old shapes. Both change `packages/lib/src/charts` and `packages/ui/src/components/charts`: tell the other sessions first. 2. S5, which should also close the SHEETS-TODO row "A batch recorded before a peer's row insert writes at the rows it recorded" (its write into a now-empty cell drops the whole batch). 3. S4: the grid mounts once and a new snapshot replays in place, with `SheetsBase`, the judge and both stampers gone. 4. F8, after checking Google Sheets. Each unit gets its sizing, a red test first, a cold review and a browser pass, then a closing review and `bun run check` before the owner's go to merge.
+- 2026-11-11, the rest of Wave 2 on `sheets-wave2` (worktree `eigen-wave2`, from `develop` at `3de38e63b`; local state in its `.superpowers/STATE.md`). Merged F7 (`ae6e1085f`): slice colours stay at their index through row ops and Edit data, in all four apps; `chartPointMoves`, the `move` change op, `applyChartSpecChange`'s write cache and Edit data's row tracking go; production net −129. For F4: the undo shifter's `chartNamesSheet` still drops a point write's undo after a peer's row op, a reason F7 removed; for the wave's docs unit, a CHANGELOG line. S5 runs beside F4's sign-off; F4's build starts from S5's `floatingWriteFilter`.
