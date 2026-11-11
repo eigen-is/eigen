@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { define, FunctionFlag, SCALAR } from '../../functions/legacy';
 import { FUNCTIONS } from '../../functions/library';
-import { define, FunctionFlag, SCALAR } from '../../functions/registry';
 import { NA, NAME } from '../../index';
 import { Recalc } from '../../recalc/recalc';
 import { Workbook } from '../../store/workbook';
@@ -57,11 +57,7 @@ const SAMPLES: Readonly<Record<string, string>> = {
 };
 
 describe('a function answers the same for the same arguments, which is what lets one call stand for a run', () => {
-    test.each(
-        [...FUNCTIONS.values()]
-            .filter((entry) => (entry.flags & FunctionFlag.Volatile) === 0)
-            .map((entry) => entry.name),
-    )('%s', (name) => {
+    test.each([...FUNCTIONS.values()].map((entry) => entry.name))('%s', (name) => {
         const formula = SAMPLES[name];
         expect(formula).toBeDefined();
         const cells = { A1: 1, A2: 2, A3: 3, B1: 'x', B2: 'y', B3: 'x' };

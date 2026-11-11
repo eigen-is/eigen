@@ -13,19 +13,9 @@ import { roundDecimal, snapSum } from '../values/precision';
 import type { Value } from '../values/value';
 import { arrayOf, isArray, isError, isReference, MOST_ELEMENTS, OMITTED } from '../values/value';
 import { tally } from './criteria';
-import type { FunctionBody } from './registry';
-import {
-    aggregate,
-    define,
-    FunctionFlag,
-    INTEGER,
-    NUMBER,
-    optional,
-    RANGE,
-    SCALAR,
-    scalar1,
-    scalar2,
-} from './registry';
+import type { FunctionBody } from './legacy';
+import { aggregate, define, FunctionFlag, optional, RANGE, SCALAR } from './legacy';
+import { fn, INTEGER, NUMBER } from './registry';
 import { heightOf, widthOf } from './search';
 
 // The sum of what a walk hands out, in its order. Only the last addition can snap to 0.
@@ -129,8 +119,8 @@ const sumproduct: FunctionBody = (args, ctx) => {
 };
 
 export const MATH = [
-    scalar1('ABS', NUMBER, Math.abs),
-    scalar2('ROUND', NUMBER, INTEGER, roundDecimal),
+    fn('ABS', [NUMBER], Math.abs),
+    fn('ROUND', [NUMBER, INTEGER], roundDecimal),
     aggregate('SUM', Take.Numbers, total),
     define('SUMPRODUCT', [RANGE], sumproduct, 0, 1),
     define(

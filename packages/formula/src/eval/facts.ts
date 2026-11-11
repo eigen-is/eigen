@@ -2,8 +2,8 @@
 // without evaluating: whether this build can evaluate it at all, whether it reads cells it does not name, and how
 // deep its evaluation nests. They are packed into one number, the depth above the flags.
 
+import { FunctionFlag } from '../functions/legacy';
 import type { Registry } from '../functions/registry';
-import { FunctionFlag } from '../functions/registry';
 import { Token } from '../text/lexer';
 import type { FormulaNode } from '../text/tree';
 import { NodeKind, RefFlag, RefKind, SheetKind } from '../text/tree';
@@ -40,7 +40,7 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
         flags |= facts & FLAGS;
     }
     const entry = node.kind === NodeKind.Call ? functions.get(node.text) : undefined;
-    if (entry !== undefined) {
+    if (entry !== undefined && 'flags' in entry) {
         if (entry.flags & FunctionFlag.ReadsUnnamed) flags |= Fact.ReadsUnnamed;
         const [range, , resized] = node.children;
         if (entry.flags & FunctionFlag.Resizes && resized !== undefined && !sameSize(range, resized)) {

@@ -9,9 +9,9 @@ import { DIV0, VALUE } from '../values/errors';
 import type { Reference } from '../values/value';
 import { isError, isReference, OMITTED } from '../values/value';
 import { tally } from './criteria';
+import type { FunctionBody } from './legacy';
+import { aggregate, define, FunctionFlag, optional, RANGE, SCALAR } from './legacy';
 import { total } from './math';
-import type { FunctionBody } from './registry';
-import { aggregate, define, FunctionFlag, optional, RANGE, SCALAR } from './registry';
 
 function counted(walk: Walk): number {
     while (walk.next());

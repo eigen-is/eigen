@@ -47,15 +47,18 @@ export type Value = Scalar | Reference | ArrayValue | Omitted;
 // An argument left out between two separators, as in SUM(1,,2).
 export const OMITTED: Omitted = Object.freeze({ type: ValueType.Omitted });
 
-export function isError(value: Value): value is FormulaError {
+// Anything a slot of a call can hold: a guard below asks only for its tag.
+type Tagged = { readonly type: number } | number | string | boolean | null | undefined;
+
+export function isError(value: Tagged): value is FormulaError {
     return typeof value === 'object' && value !== null && value.type === ValueType.Error;
 }
 
-export function isReference(value: Value): value is Reference {
+export function isReference(value: Tagged): value is Reference {
     return typeof value === 'object' && value !== null && value.type === ValueType.Reference;
 }
 
-export function isArray(value: Value): value is ArrayValue {
+export function isArray(value: Tagged): value is ArrayValue {
     return typeof value === 'object' && value !== null && value.type === ValueType.Array;
 }
 

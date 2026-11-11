@@ -3,8 +3,8 @@
 // something needs its value, and reading a cell goes through the recalc, which computes a formula that is still
 // to be computed first. So the order of a recalc comes from these reads.
 
+import { PENDING } from '../functions/legacy';
 import type { Registry } from '../functions/registry';
-import { PENDING } from '../functions/registry';
 import type { Recalc } from '../recalc/recalc';
 import type { Sheet } from '../store/sheet';
 import type { Workbook } from '../store/workbook';
@@ -16,8 +16,10 @@ import type { FormulaError } from '../values/errors';
 import { errorOf, NAME, NULL, REF, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { arrayOf, isArray, isError, isReference, OMITTED, ValueType } from '../values/value';
-import { call, lift } from './call';
+import { call } from './call';
+import { lift } from './lift';
 import { LIFTED_BINARY, LIFTED_NEGATE, LIFTED_PERCENT, negate, operate, percent } from './operators';
+import type { Held } from './signature';
 import { toArray } from './views';
 import { Walk } from './walk';
 
@@ -29,7 +31,8 @@ export class Evaluator {
     public readonly functions: Registry;
     public readonly recalc: Recalc;
     // The argument lists of the calls in progress, one per level of nesting, reused from call to call.
-    public readonly frames: Value[][] = [];
+    public readonly frames: Held[][] = [];
+    public readonly oldFrames: Value[][] = [];
     public calls = 0;
     public readonly walk = new Walk(this);
     // Where endsAt writes the rows or columns of the reference being read.
@@ -88,7 +91,7 @@ export class Evaluator {
                 // Nothing spills in this build, so no cell is an anchor.
                 if (node.op === Token.Hash) return REF;
                 const value = this.operand(node.children[0], sheet, row, column);
-                return isArray(value) ? lift(this, LIFTED_PERCENT, [value], node, sheet, row, column) : percent(value);
+                return isArray(value) ? lift(this, LIFTED_PERCENT, [value]) : percent(value);
             }
             case NodeKind.Binary:
                 return this.binary(node, sheet, row, column, false);
@@ -189,7 +192,7 @@ export class Evaluator {
         if (node.op === Token.Plus) return this.evaluate(child, sheet, row, column);
         if (node.op === Token.Minus) {
             const value = this.operand(child, sheet, row, column);
-            return isArray(value) ? lift(this, LIFTED_NEGATE, [value], node, sheet, row, column) : negate(value);
+            return isArray(value) ? lift(this, LIFTED_NEGATE, [value]) : negate(value);
         }
         const value = this.evaluate(child, sheet, row, column);
         if (isArray(value)) return value.items[0];
@@ -232,7 +235,7 @@ export class Evaluator {
         }
         const a = this.read(left);
         const b = this.operand(node.children[1], sheet, row, column);
-        if (isArray(a) || isArray(b)) return lift(this, LIFTED_BINARY[op], [a, b], node, sheet, row, column);
+        if (isArray(a) || isArray(b)) return lift(this, LIFTED_BINARY[op], [a, b]);
         return operate(op, a, b, snap);
     }
 

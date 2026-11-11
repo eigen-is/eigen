@@ -7,7 +7,7 @@ import type { FormulaError } from '../values/errors';
 import { CALC, NA, REF, VALUE } from '../values/errors';
 import type { Reference, Value } from '../values/value';
 import { arrayOf, elementAt, isArray, isError, isReference, MOST_ELEMENTS, OMITTED, partOf } from '../values/value';
-import type { FunctionBody } from './registry';
+import type { FunctionBody } from './legacy';
 import {
     BOOLEAN,
     define,
@@ -20,7 +20,7 @@ import {
     REF as REF_PARAM,
     refusal,
     SCALAR,
-} from './registry';
+} from './legacy';
 import type { Key, Vector } from './search';
 import { bisect, edgeOf, exact, heightOf, nearest, widthOf } from './search';
 
