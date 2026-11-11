@@ -286,16 +286,18 @@ class Parser {
     // Each operand must be able to yield a reference, so a number never stands beside a colon as a row would.
     private colon(left: FormulaNode, right: FormulaNode, space: string): FormulaNode {
         if (!yieldsReference(left) || !yieldsReference(right)) return this.fail();
-        // The right operand may repeat the sheet of the left, and name no other.
-        const elsewhere = left.sheetKind !== right.sheetKind || left.sheet !== right.sheet;
-        if (right.sheetKind !== SheetKind.Host && elsewhere) return this.fail();
         if (space === '') {
-            // A name that is a column label, a colon and a column would show as text that reads as one range, and so
-            // would a function named like a column and called with whitespace. Typed text never gets here that way,
-            // so this refuses only stored text.
             const before = left.kind === NodeKind.Binary ? left.children[1] : left;
             let after = right;
             while (after.kind === NodeKind.Postfix || after.kind === NodeKind.Invoke) after = after.children[0];
+            // Two cells with only a colon between them are one reference, so the second names no sheet of its own.
+            const cell = before.kind === NodeKind.Ref && before.op === RefKind.Cell;
+            if (cell && after.kind === NodeKind.Ref && after.op <= RefKind.Range && after.space === '') {
+                return this.fail();
+            }
+            // A name that is a column label, a colon and a column would show as text that reads as one range, and so
+            // would a function named like a column and called with whitespace. Typed text never gets here that way,
+            // so this refuses only stored text.
             const label = after.kind === NodeKind.Name || after.spaceOpen !== '';
             const column = after.kind === NodeKind.Ref ? after.op === RefKind.Columns : label && isColumn(after);
             if (before.kind === NodeKind.Name && isColumn(before) && column && after.space === '') return this.fail();

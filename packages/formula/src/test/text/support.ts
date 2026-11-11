@@ -444,7 +444,7 @@ export function soup(seed: number, typed: boolean): () => string {
 
 // Whether a tree shows at a host as text that is another shape: a range's corners are out of order there, where the
 // A1 printer swaps them, or a sheet is gone, or a sheet kept by its name has come to exist.
-function showsAsAnother(node: FormulaNode, row: number, column: number): boolean {
+export function showsAsAnother(node: FormulaNode, row: number, column: number): boolean {
     if (node.sheetKind === SheetKind.Id && sheetName(node.sheet) === undefined) return true;
     if (node.sheetKind === SheetKind.Name && findSheet(node.sheet)) return true;
     if (node.kind === NodeKind.Ref && node.op !== RefKind.Cell) {

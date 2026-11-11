@@ -4,7 +4,7 @@
 // #REF! for a reference that falls off the grid there or names a sheet that is gone.
 
 import { columnLabel, GRID_COLUMNS, GRID_ROWS } from './a1';
-import { ERROR_LITERALS, isWord, SYMBOLS } from './lexer';
+import { ERROR_LITERALS, isWord, SYMBOLS, Token } from './lexer';
 import { readsAsReference } from './parser';
 import { quotedSheetName, quoteSheetName } from './sheet-name';
 import type { Ends, FormulaNode } from './tree';
@@ -66,9 +66,17 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
             let chain = node;
             let text = '';
             while (chain.kind === NodeKind.Binary) {
-                const right = print(chain.children[1], stored, row, column, sheetName);
+                const [left, operand] = chain.children;
+                let right = print(operand, stored, row, column, sheetName);
+                // A name, a colon and a bare sheet read as the two sheets of a 3-D reference, so that sheet is quoted.
+                const before = left.kind === NodeKind.Binary ? left.children[1] : left;
+                const named = before.kind === NodeKind.Name && before.sheetKind === SheetKind.Host;
+                if (chain.op === Token.Colon && chain.space === '' && named) {
+                    const sheet = right.slice(0, Math.max(0, right.indexOf('!')));
+                    if (isWord(sheet)) right = quotedSheetName(sheet) + right.slice(sheet.length);
+                }
                 text = chain.space + SYMBOLS[chain.op] + right + text;
-                chain = chain.children[0];
+                chain = left;
             }
             return print(chain, stored, row, column, sheetName) + text;
         }

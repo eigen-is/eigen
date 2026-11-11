@@ -92,3 +92,66 @@ export function random(seed: number): (below: number) => number {
         return Math.floor((((t ^ (t >>> 14)) >>> 0) / 4294967296) * below);
     };
 }
+
+// A seeded writer of typed formulas over a few cells of three sheets, from the grammar and not from the parser, so
+// some do not parse. It is rich in what a transform may leave beside an operator that joins references: a sheet on
+// either side of a colon, a name, a call, a chain of ranges and whitespace on either side.
+export function shapes(pick: (below: number) => number): () => string {
+    const one = <T>(list: readonly T[]): T => list[pick(list.length)];
+    const space = () => (pick(6) === 0 ? one([' ', '  ', '\n']) : '');
+    const dollar = () => (pick(3) === 0 ? '$' : '');
+    const column = () => dollar() + 'ABCDEF'[pick(6)];
+    const row = () => dollar() + (1 + pick(8));
+    const cell = () => column() + row();
+    const prefix = () => one(['', '', '', '', 'Sheet1!', 'Sheet2!', "'My Sheet'!", 'Later!']);
+    const reference = () =>
+        prefix() +
+        one([
+            cell,
+            cell,
+            cell,
+            () => `${cell()}:${cell()}`,
+            () => `${column()}:${column()}`,
+            () => `${row()}:${row()}`,
+        ])();
+    const name = () => one(['Rate', 'x', 'B', 'total_2', 'Sheet2', 'Sheet2!Rate', 'Later!x']);
+    const call = (depth: number) =>
+        one([
+            () => `INDEX(${reference()},${1 + pick(3)})`,
+            () => `SUM(${region(depth - 1)},${expression(depth - 1)})`,
+            () => `OFFSET(${reference()},1,${space()}1)`,
+            () => `IF(${expression(depth - 1)},${region(depth - 1)},)`,
+        ])();
+    const end = (depth: number): string => {
+        const leaves = [reference, reference, reference, cell, name, () => `${reference()}#`, () => '#REF!'];
+        if (depth <= 0) return one(leaves)();
+        return one([
+            ...leaves,
+            () => call(depth),
+            () => `(${region(depth - 1)}${space()})`,
+            () => `(${region(depth - 1)},${region(depth - 1)})`,
+            () => `(${end(depth - 1)})#`,
+        ])();
+    };
+    // One to four ends with the `:` operator between them, then perhaps an intersection.
+    const region = (depth: number): string => {
+        let text = space() + end(depth);
+        for (let more = one([0, 0, 1, 1, 1, 2, 3]); more > 0; more -= 1) text += `${space()}:${space()}${end(depth)}`;
+        return pick(8) === 0 ? `${text}${one([' ', '  '])}${end(depth)}` : text;
+    };
+    const operand = (depth: number): string =>
+        one([
+            () => region(depth),
+            () => region(depth),
+            () => region(depth),
+            () => `${space()}${one(['-', '+', '@'])}${region(depth)}`,
+            () => `${region(depth)}${space()}%`,
+            () => space() + one(['1', '2.5', '"a"', 'TRUE', '#N/A', '{1,2;3,4}']),
+        ])();
+    const expression = (depth: number): string => {
+        let text = operand(depth);
+        while (pick(4) === 0) text += space() + one(['+', '-', '*', '&', '=', '<=']) + operand(depth);
+        return text;
+    };
+    return () => `=${expression(2)}`;
+}
