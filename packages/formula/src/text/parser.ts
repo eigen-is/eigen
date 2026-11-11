@@ -8,7 +8,11 @@ import { continuesWord, lexAt, Token, tokenEnd, tokenKind } from './lexer';
 import type { FormulaNode } from './tree';
 import { branch, EMPTY, leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from './tree';
 
+// Excel's limit on what a person types.
 export const MAX_FORMULA_LENGTH = 8192;
+// Stored text also arrives from a peer, so it has a cap of its own. A typed formula grows at most twelvefold when
+// stored, as a!A1 does with a uuid for the sheet and offsets that span the grid.
+export const MAX_STORED_LENGTH = 16 * MAX_FORMULA_LENGTH;
 export const MAX_NESTING = 64;
 export const MAX_ARGUMENTS = 255;
 
@@ -105,7 +109,8 @@ class Parser {
     }
 
     public formula(): FormulaNode | ParseFailure {
-        if (this.text.length > MAX_FORMULA_LENGTH) return { reason: 'too-long', at: MAX_FORMULA_LENGTH };
+        const limit = this.stored ? MAX_STORED_LENGTH : MAX_FORMULA_LENGTH;
+        if (this.text.length > limit) return { reason: 'too-long', at: limit };
         if (this.text.charCodeAt(0) === 61) {
             this.end = 1;
             this.next();

@@ -3,6 +3,7 @@ import {
     MAX_ARGUMENTS,
     MAX_FORMULA_LENGTH,
     MAX_NESTING,
+    MAX_STORED_LENGTH,
     NodeKind,
     parseA1,
     parseStored,
@@ -11,6 +12,7 @@ import {
     RefFlag,
     RefKind,
     SheetKind,
+    sheetFinder,
     Token,
 } from '../../text';
 import { at, failure, findSheet, grouped, sheetName, shown, stored, treeA1, treeStored } from './support';
@@ -449,6 +451,22 @@ describe('limits', () => {
         expect(failure(longest)).toBe('parsed');
         expect(failure(`${longest} `)).toBe('too-long');
         expect(MAX_FORMULA_LENGTH).toBe(8192);
+    });
+
+    test('the limit on length is on what a person types, and stored text may be longer', () => {
+        const sheets = sheetFinder([{ id: '0b9f6c1e-6a4d-4c1b-9a53-3f1f0c9d2e77', name: 'a' }]);
+        const typed = `=${'a!A1+'.repeat(1638)}1`;
+        expect(typed.length).toBeLessThanOrEqual(MAX_FORMULA_LENGTH);
+        const tree = parseA1(typed, 1048575, 16383, sheets);
+        if ('reason' in tree) throw new Error(tree.reason);
+        const text = printStored(tree);
+        expect(text).toHaveLength(1638 * 60 + 2);
+        expect(parseStored(text)).toEqual(tree);
+        expect(MAX_STORED_LENGTH).toBe(16 * MAX_FORMULA_LENGTH);
+        const longest = `=${'1+'.repeat((MAX_STORED_LENGTH - 2) / 2)}1`;
+        expect(longest).toHaveLength(MAX_STORED_LENGTH);
+        expect(printStored(treeStored(longest))).toBe(longest);
+        expect(parseStored(`${longest} `)).toEqual({ reason: 'too-long', at: MAX_STORED_LENGTH });
     });
 
     test('64 levels of nesting', () => {
