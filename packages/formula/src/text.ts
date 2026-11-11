@@ -6,5 +6,7 @@ export { printA1, printStored } from './text/printer';
 export type { Shape } from './text/shapes';
 export { ShapeTable } from './text/shapes';
 export { findSheetByName, quoteSheetName, sheetFinder, sheetNameKey } from './text/sheet-name';
+export type { FormulaToken } from './text/tokens';
+export { tokens } from './text/tokens';
 export type { FormulaNode } from './text/tree';
 export { NodeKind, RefFlag, RefKind, SheetKind } from './text/tree';
