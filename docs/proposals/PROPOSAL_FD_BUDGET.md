@@ -147,8 +147,8 @@ Never evict a home that:
 - has SSE listeners attached (expose a `hasClients` accessor over `sseListeners`);
 - has a hold: `holds > 0` on the Home. An event stream holds its Home (`Home.hold`) while the tab is open, and a collab socket holds the Home of its document's owner (`Drive.holdHome`) until it closes, as do the long requests (WebDAV PUT, convert, copy) and a running backup. That is a positive live signal and needs no keepalive tick or open-connections check over the collab registry. Expose it with a small `isHeld` accessor. An evict still closes under a hold, by design (a restore or a deletion): the hold's callback closes the socket or stream with a retry code, so the client reconnects to the next Home;
 - has a mount with a non-empty `UploadQueue` or a draining `ContentReindexQueue` — like
-  `hasClients`/`lastTouched`, these need small accessors: `UploadQueue.pendingCount` is public,
-  but the reindex queue's drain state, `Drive`'s mounts, and `Mount`'s queue fields are
+  `hasClients`/`lastTouched`, these need small accessors: the upload queue's depth is a count of
+  `pending_uploads` rows, and the reindex queue's drain state, `Drive`'s mounts, and `Mount`'s queue fields are
   private/internal today;
 - was touched within the last 30 seconds. Every request path goes through the `home.drive` /
   `home.mail` getters, all of which `touch()`, so a min-idle threshold is the flat, honest
