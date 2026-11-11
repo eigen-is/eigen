@@ -5,6 +5,7 @@
 
 import { cloneDeep } from 'es-toolkit/compat';
 import { cellDisplay, cellValue, parseCellInput, update } from '../../engine/format';
+import { showFilterRows } from '../../engine/rowcol';
 import type { Cell } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
@@ -107,11 +108,7 @@ export function clearFilter(ctx: Context) {
     ctx.filterContextMenu = undefined;
     // Delete in place: a fresh object would replace the whole rowhidden map on the wire.
     const rowhidden = sheet.config?.rowhidden;
-    if (rowhidden) {
-        for (const entry of Object.values(sheet.filter ?? {})) {
-            for (const r of Object.keys(entry.rowhidden ?? {})) delete rowhidden[r];
-        }
-    }
+    if (rowhidden) showFilterRows(rowhidden, Object.values(sheet.filter ?? {}));
     sheet.filter = undefined;
     sheet.filterRange = undefined;
 }

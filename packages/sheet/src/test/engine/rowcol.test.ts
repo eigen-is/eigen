@@ -1163,6 +1163,58 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
     });
 });
 
+// A filter on B3:D9 whose criterion on C hides rows 5 and 7 and whose criterion on D hides row 8. Row 9 is hidden by
+// hand, so no entry lists it.
+describe('applySheetsDeleteRowCol — a filter the delete removes shows its rows again', () => {
+    const entry = (cindex: number, rowhidden: Record<string, number>) => ({
+        [cindex - 1]: { rowhidden, optionstate: true, str: 2, edr: 8, cindex, stc: 1, edc: 3 },
+    });
+    const filtered = () =>
+        makeSheet(
+            's1',
+            'Sheet1',
+            Array.from({ length: 12 }, () => Array.from({ length: 6 }, () => null)),
+            {
+                config: { rowhidden: { 4: 0, 6: 0, 7: 0, 8: 0 } },
+                filterRange: { row: [2, 8], column: [1, 3] },
+                filter: { ...entry(2, { 4: 0, 6: 0 }), ...entry(3, { 7: 0 }) },
+            },
+        );
+    const deleted = (type: 'row' | 'column', start: number, end: number) => {
+        const before = filtered();
+        const [after] = applySheetsDeleteRowCol([before], { type, start, end, id: 's1' });
+        // The op writes on its own copy of the hidden rows.
+        expect(before).toEqual(filtered());
+        return { filterRange: after.filterRange, filter: after.filter, rowhidden: after.config?.rowhidden };
+    };
+    const gone = { filterRange: undefined, filter: undefined };
+
+    test('a delete of the header row leaves only the row hidden by hand, where it moved to', () => {
+        expect(deleted('row', 2, 2)).toEqual({ ...gone, rowhidden: { 7: 0 } });
+    });
+
+    test('a delete of the header row and the rows above it does the same', () => {
+        expect(deleted('row', 0, 2)).toEqual({ ...gone, rowhidden: { 5: 0 } });
+    });
+
+    test('a delete of every column of the filter does', () => {
+        expect(deleted('column', 1, 3)).toEqual({ ...gone, rowhidden: { 8: 0 } });
+    });
+
+    test('a delete of every row of the filter does', () => {
+        expect(deleted('row', 2, 8)).toEqual({ ...gone, rowhidden: {} });
+        expect(deleted('row', 2, 7)).toEqual({ ...gone, rowhidden: { 2: 0 } });
+    });
+
+    test("a delete of one criterion's column shows the rows that criterion hid and keeps the other's", () => {
+        expect(deleted('column', 2, 2)).toEqual({
+            filterRange: { row: [2, 8], column: [1, 2] },
+            filter: { 1: { rowhidden: { 7: 0 }, optionstate: true, str: 2, edr: 8, cindex: 2, stc: 1, edc: 2 } },
+            rowhidden: { 7: 0, 8: 0 },
+        });
+    });
+});
+
 describe('applySheetsInsertRowCol/Delete — formulas on the other sheets', () => {
     // Names that are a prefix of another, differ only in case, need quotes or hold one, hold regex specials, or fold
     // their case one way only.
