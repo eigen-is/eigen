@@ -111,9 +111,10 @@ export class Evaluator {
         }
     }
 
-    // A lazy argument, evaluated now unless the wrapper already had to.
+    // A lazy argument, evaluated now unless the wrapper already had to. One left empty is a blank from here on.
     public force(value: Value, node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
-        return value === PENDING ? this.evaluate(node, sheet, row, column) : value;
+        if (value !== PENDING) return value;
+        return node.kind === NodeKind.Empty ? null : this.evaluate(node, sheet, row, column);
     }
 
     // Only the last + or - of a formula snaps a result that is tiny against its left operand to 0.

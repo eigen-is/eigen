@@ -118,6 +118,21 @@ describe('IF and IFERROR', () => {
         expect(evaluate(formula, MIXED)).toBe(expected);
     });
 
+    test.each([
+        ['=IF(TRUE,)&"x"', 'x'],
+        ['=ISBLANK(IF(TRUE,))', true],
+        ['=IF(TRUE,)=""', true],
+        ['=IF(TRUE,)=0', true],
+        ['=IF(FALSE,1,)&"x"', 'x'],
+        ['=IFERROR(,)&"x"', 'x'],
+        ['=IFERROR(1/0,)&"x"', 'x'],
+        ['=IF(TRUE,)', 0],
+        ['=COUNTBLANK(IF(TRUE,))', VALUE],
+        ['=INDEX(IF({TRUE,FALSE},,5),1,1)&"x"', 'x'],
+    ])('an empty argument that a function hands on is a blank: %s is %p', (formula, expected) => {
+        expect(evaluate(formula)).toBe(expected);
+    });
+
     // The pick taken from Google: empty text is FALSE as a condition, where Excel answers #VALUE!.
     test('empty text is FALSE as a condition', () => {
         expect(evaluate('=IF("",1,2)')).toBe(2);

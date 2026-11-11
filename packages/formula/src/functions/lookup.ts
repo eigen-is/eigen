@@ -177,7 +177,7 @@ const xlookup: FunctionBody = (args, ctx, node, sheet, row, column) => {
     if (typeof at !== 'number') return at;
     if (at < 0) {
         const missing = ctx.force(args[3], node.children[3], sheet, row, column);
-        return missing === OMITTED || missing === null ? NA : missing;
+        return missing === null ? NA : missing;
     }
     if (isReference(source)) {
         return down
