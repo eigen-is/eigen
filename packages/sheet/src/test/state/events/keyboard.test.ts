@@ -238,6 +238,67 @@ describe('handleGlobalKeyDown — Ctrl+Arrow over rich text', () => {
     });
 });
 
+// Ctrl+Arrow jumps to the filled cell at the edge of the gap, and Shift with it extends the selection there.
+describe('handleGlobalKeyDown — Ctrl+Arrow in each direction', () => {
+    function centered() {
+        const x: Cell = { v: 'x', m: 'x' };
+        const data: (Cell | null)[][] = [
+            [null, null, x, null, null],
+            [null, null, null, null, null],
+            [x, null, x, null, x],
+            [null, null, null, null, null],
+            [null, null, x, null, null],
+        ];
+        const ctx = contextFactory({
+            sheets: [{ name: 'Sheet1', id: 'id_1', order: 0, data }],
+            selections: [{ row: [2, 2], column: [2, 2], row_focus: 2, column_focus: 2 }],
+        }) as Context;
+        ctx.sheetFocused = true;
+        ctx.editingCellPosition = [];
+        return ctx;
+    }
+
+    test('each arrow moves the focus to the edge of the gap', () => {
+        const focusAfter = (key: string) => {
+            const ctx = centered();
+            keyDown(ctx, key, { mod: true });
+            return [ctx.selections?.[0]?.row_focus, ctx.selections?.[0]?.column_focus];
+        };
+        expect(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].map(focusAfter)).toEqual([
+            [0, 2],
+            [4, 2],
+            [2, 0],
+            [2, 4],
+        ]);
+    });
+
+    test('Shift extends the selection to the edge', () => {
+        const rangeAfter = (key: string) => {
+            const ctx = centered();
+            keyDown(ctx, key, { mod: true, shiftKey: true });
+            return [ctx.selections?.[0]?.row, ctx.selections?.[0]?.column];
+        };
+        expect(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].map(rangeAfter)).toEqual([
+            [
+                [0, 2],
+                [2, 2],
+            ],
+            [
+                [2, 4],
+                [2, 2],
+            ],
+            [
+                [2, 2],
+                [0, 2],
+            ],
+            [
+                [2, 2],
+                [2, 4],
+            ],
+        ]);
+    });
+});
+
 // Tab while editing commits the cell and moves right, Shift+Tab left, as Enter commits and moves
 // down: Google's behavior. The keydown returned early and the edit stayed open.
 describe('handleGlobalKeyDown — Tab while editing', () => {
