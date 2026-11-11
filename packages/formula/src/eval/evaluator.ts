@@ -14,7 +14,7 @@ import type { FormulaNode } from '../text/tree';
 import { NodeKind, RefFlag, RefKind, SheetKind } from '../text/tree';
 import { toNumber } from '../values/coerce';
 import type { FormulaError } from '../values/errors';
-import { errorOf, NAME, NULL, REF, VALUE } from '../values/errors';
+import { ERRORS, NAME, NULL, REF, VALUE } from '../values/errors';
 import { snapSum } from '../values/precision';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { arrayOf, isArray, isError, isReference, OMITTED, ValueType } from '../values/value';
@@ -53,7 +53,7 @@ export class Evaluator {
             case NodeKind.Boolean:
                 return node.value !== 0;
             case NodeKind.Error:
-                return errorOf(node.text);
+                return ERRORS[node.value - 1];
             case NodeKind.Empty:
                 return OMITTED;
             case NodeKind.Ref:
@@ -202,7 +202,7 @@ export class Evaluator {
                 case NodeKind.Boolean:
                     return element.value !== 0;
                 case NodeKind.Error:
-                    return errorOf(element.text);
+                    return ERRORS[element.value - 1];
                 default:
                     return element.op === Token.Minus ? 0 - element.children[0].value : element.children[0].value;
             }
