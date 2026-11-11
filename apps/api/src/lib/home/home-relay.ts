@@ -47,7 +47,7 @@ import { TeamHome } from './team-home';
 
 // A message is plain data, so that it can later travel to a home in another process. The target
 // home does the whole job itself, its events and notifications included.
-export type HomeMessage =
+type HomeMessage =
     | { type: 'drive:acl-change'; path: DrivePath; acl: DriveACL[] | null; actorEmail?: string; actorName?: string }
     | { type: 'drive:recent-open'; ownerId: string; mountId: string; pathId: string }
     | {
