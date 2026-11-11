@@ -1,10 +1,11 @@
-// The one walk every transform of formula text shares: a tree goes in, each node without children is offered to the
-// caller, and a tree comes out that is the same object where nothing changed and shares every untouched branch. The
-// row and column transform, the move and the sheet rewrites are each one function over a leaf on top of it.
+// What every transform of formula text shares. The walk: a tree goes in, each node without children is offered to
+// the caller, and a tree comes out that is the same object where nothing changed and shares every untouched branch;
+// the row and column transform, the move and the sheet rewrites are each one function over a leaf on top of it. And
+// the questions they ask of a reference leaf, such as which sheet it reads and whether it fell off the grid.
 
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { FormulaNode } from '../text/tree';
-import { branch, RefFlag, SheetKind } from '../text/tree';
+import { branch, leaf, NodeKind, RefFlag, SheetKind } from '../text/tree';
 
 export function mapLeaves(node: FormulaNode, map: (leaf: FormulaNode) => FormulaNode): FormulaNode {
     const { children } = node;
@@ -17,6 +18,11 @@ export function mapLeaves(node: FormulaNode, map: (leaf: FormulaNode) => Formula
         mapped[i] = child;
     }
     return mapped ? branch(node.kind, node.op, node.text, mapped, node.space, node.spaceEnd) : node;
+}
+
+// What a reference becomes when the cells it named are gone: #REF! in its place, on the sheet it named.
+export function broken(reference: FormulaNode): FormulaNode {
+    return leaf(NodeKind.Error, 0, '#REF!', reference.space, reference.sheetKind, reference.sheet);
 }
 
 // The id of the sheet a reference reads from a host on `hostSheet`, or null when it names no sheet of this workbook.

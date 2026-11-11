@@ -167,6 +167,17 @@ describe('what a move leaves alone', () => {
             resized: false,
         });
     });
+    test('a broken reference, though the formula itself moves or is landed beside', () => {
+        const before = parseStored('=#REF!+[s2]!#REF!+SUM(#REF!)');
+        if ('reason' in before) throw new Error(before.reason);
+        for (const edit of [
+            move('Sheet1!A1:B2', 'Sheet2!A1'),
+            move('Sheet2!A1', 'Sheet1!C1'),
+            move('Sheet2!C3', 'Sheet2!A1'),
+        ]) {
+            expect(transformMove(before, edit, 's1', 0, 0)).toMatchObject({ tree: before, lossy: false });
+        }
+    });
     test('a reference off the grid at its host', () => {
         const copied = tree('=A1', 'B2');
         expect(shown(transformMove(copied, move('Sheet1!A1:B1', 'Sheet1!C5'), 's1', 0, 1).tree, 'D5')).toBe('=#REF!');

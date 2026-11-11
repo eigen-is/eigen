@@ -287,6 +287,13 @@ describe('a column filled down splits into few classes, not one per cell', () =>
         ]);
     });
 
+    test('a reference to another sheet splits the run only where the host crosses the line', () => {
+        expect(classesOf('=Sheet2!A1', 'D5', insertRows(3), 0, 999)).toEqual([
+            [0, 1, '=[s2]!R[-4]C[-3]'],
+            [2, 999, '=[s2]!R[-5]C[-3]'],
+        ]);
+    });
+
     test('a running total whose fixed end is deleted is one class', () => {
         expect(classesOf('=SUM(A$2:A2)', 'B2', deleteRows(2), 1, 99999)).toEqual([[2, 99999, '=SUM(R2C[-1]:RC[-1])']]);
     });

@@ -209,6 +209,13 @@ describe('what the transform leaves alone', () => {
         expect(shown(result.tree, 'B4')).toBe('=#REF!+SUM(#REF!)');
         expect(result).toMatchObject(QUIET);
     });
+    test('a broken reference, which is no reference to the cell the formula is in', () => {
+        const before = parseStored('=#REF!+[s2]!#REF!+SUM(#REF!)');
+        if ('reason' in before) throw new Error(before.reason);
+        for (const edit of [insertRows(1), deleteRows(1), insertRows(1, 1, 's2'), deleteColumns('A')]) {
+            expect(transformLines(before, edit, 's1', 0)).toEqual({ tree: before, ...QUIET });
+        }
+    });
     test('every part of the formula around its references', () => {
         const text = '= IF( A5>0, {1,2;3,4}, -A5% ) & "x" & LAMBDA(x,x+A5)(2)';
         expect(after(text, 'C1', insertRows(2)).text).toBe(text.replaceAll('A5', 'A6'));

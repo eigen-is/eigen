@@ -5,8 +5,8 @@
 
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { FormulaNode } from '../text/tree';
-import { leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from '../text/tree';
-import { mapLeaves, sheetOf } from './leaves';
+import { NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from '../text/tree';
+import { broken, mapLeaves, sheetOf } from './leaves';
 import type { Transformed } from './transform';
 
 // The block of `rows` by `columns` cells at `row`, `column` goes to `toRow`, `toColumn`. Sheets are ids.
@@ -64,7 +64,7 @@ export function transformMove(
             } else if (sheet === move.toSheet && covers(move, move.toRow, move.toColumn, top, left, bottom, right)) {
                 lossy = true;
                 recompute = true;
-                return leaf(NodeKind.Error, 0, '#REF!', node.space, sheetKind, node.sheet);
+                return broken(node);
             }
         }
         // A sheet that was written stays written. An unwritten one is named once it is no longer the host's, and

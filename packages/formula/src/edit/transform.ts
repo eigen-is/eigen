@@ -5,8 +5,8 @@
 // stretches with one outcome each and the store transforms a filled column once per stretch, not once per cell.
 
 import type { FormulaNode } from '../text/tree';
-import { leaf, NodeKind, RefFlag, RefKind, referenceNode } from '../text/tree';
-import { mapLeaves, sheetOf } from './leaves';
+import { NodeKind, RefFlag, RefKind, referenceNode } from '../text/tree';
+import { broken, mapLeaves, sheetOf } from './leaves';
 import type { Edit, Span } from './map';
 import { GONE, mapIndex, mapSpan } from './map';
 
@@ -116,7 +116,7 @@ function shift(tree: FormulaNode, edit: LineEdit, hostSheet: string, host: numbe
             if (!mapSpan(edit, low, high, span)) {
                 lossy = true;
                 recompute = true;
-                return leaf(NodeKind.Error, 0, '#REF!', node.space, sheetKind, node.sheet);
+                return broken(node);
             }
             const lowCut = !edit.insert && low >= index && low < after;
             const highCut = edit.insert ? high >= index && high + count >= lines : high >= index && high < after;
