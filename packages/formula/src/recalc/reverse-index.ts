@@ -43,12 +43,15 @@ export class ReverseIndex {
         const rectangles: number[] = [];
         this.formulas = sheets.map((sheet) => new Int32Array(sheet.columns.length));
         for (let s = 0; s < sheets.length; s += 1) {
+            const formulas = this.formulas[s];
             // The runs of the column before, from the top down: first row, last row, shape, and where in the list
-            // its rectangle starts.
+            // its rectangle starts. The two lists swap from column to column.
             let open: number[] = [];
+            let runs: number[] = [];
+            let opened = 0;
             for (let c = 0; c < sheets[s].columns.length; c += 1) {
                 const { shape, length } = sheets[s].columns[c];
-                const runs: number[] = [];
+                let ran = 0;
                 let o = 0;
                 let row = 0;
                 while (row < length) {
@@ -57,17 +60,21 @@ export class ReverseIndex {
                     row += 1;
                     if (id === 0) continue;
                     while (row < length && shape[row] === id) row += 1;
-                    this.formulas[s][c] += row - first;
-                    while (o < open.length && open[o] < first) o += 4;
-                    if (open[o] === first && open[o + 1] === row - 1 && open[o + 2] === id) {
-                        rectangles[open[o + 3] + 2] = c;
-                        runs.push(first, row - 1, id, open[o + 3]);
-                    } else {
-                        runs.push(first, row - 1, id, rectangles.length);
-                        rectangles.push(s, c, c, first, row - 1, id);
-                    }
+                    formulas[c] += row - first;
+                    while (o < opened && open[o] < first) o += 4;
+                    const joins = o < opened && open[o] === first && open[o + 1] === row - 1 && open[o + 2] === id;
+                    runs[ran] = first;
+                    runs[ran + 1] = row - 1;
+                    runs[ran + 2] = id;
+                    runs[ran + 3] = joins ? open[o + 3] : rectangles.length;
+                    ran += 4;
+                    if (joins) rectangles[open[o + 3] + 2] = c;
+                    else rectangles.push(s, c, c, first, row - 1, id);
                 }
+                const before = open;
                 open = runs;
+                runs = before;
+                opened = ran;
             }
         }
         const ids = sheets.map((sheet) => sheet.id);
