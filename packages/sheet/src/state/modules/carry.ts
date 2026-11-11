@@ -100,7 +100,7 @@ export function carryCells(
     lines: CarriedLines,
     tiles: readonly CarryTile[],
     land: (cell: LandingCell) => Cell | null,
-    { cut = false }: { cut?: boolean } = {},
+    cut = false,
 ) {
     const { rows, columns } = lines;
     const from = getSheet(ctx, { id: lines.sheetId });
@@ -319,7 +319,7 @@ export function moveCells(ctx: Context, lines: CarriedLines, range: SingleRange,
                       ...cloneDeep(source),
                       f: `=${moveFormulaRefs(source.f, range, rowOffset, colOffset, from, to, findSheet)}`,
                   },
-        { cut: true },
+        true,
     );
 }
 

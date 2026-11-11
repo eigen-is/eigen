@@ -91,9 +91,8 @@ const CUT_BY_PEER_NOTICE = {
     redo: "This spreadsheet was replaced or edited by someone else, so this can't be redone anymore.",
 };
 
-// The copied cell range as a text item, its box in pixels from the row and column edges, as a sheet has no zoom. The
-// first cell's font size goes along, so an app that keeps the box, such as slides, draws the text at that size and not
-// at its own larger default, which the box would clip.
+// The copied cells as a text item, its box in pixels from the row and column edges. The first cell's font size goes
+// along, so an app that keeps the box, such as slides, draws the text at that size and doesn't clip it.
 function buildCellRangeClipboardItem(ctx: Context, text: string): EigenClipboardTextItem {
     const [r1, r2] = ctx.selections?.[0]?.row ?? [0, 0];
     const [c1, c2] = ctx.selections?.[0]?.column ?? [0, 0];
@@ -175,9 +174,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             applySheetView(ctx);
             return ctx;
         });
-        // The workbook with every write so far. A write lands here at its call, and React renders it a moment later.
-        // A read outside render, such as the host's getFlowdata or a paste, reads it here, so it sees an edit made just
-        // before.
+        // The workbook with every write so far: a write lands here at its call and React renders it a moment later, so
+        // a read outside render, such as the host's getFlowdata or a paste, sees an edit made just before.
         const contextRef = useRef(context);
         const getContext = useCallback(() => contextRef.current, []);
         const commit = useCallback((next: Context) => {
@@ -291,9 +289,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             }
         }, [context.currentSheetId, context.selections]);
 
-        // Tells the app about the selected image or chart, so it can mount its properties panel. It fires on select,
-        // on deselect and after a write. Immer keeps the record's reference while it is unchanged, and the item is
-        // memoized on it, so the app's setState bails out when nothing moved.
+        // Tells the app which image or chart is selected, for its properties panel. The item is memoized on the record,
+        // whose reference immer keeps while it is unchanged, so the app's setState bails out when nothing moved.
         const { image: activeImage, chart: activeChart } = activeFloating(context);
         const activeItem = useMemo((): SheetFloatingItem | null => {
             if (activeImage) return { kind: 'image', object: activeImage };
@@ -422,14 +419,12 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const onKeyDown = useCallback(
             (e: React.KeyboardEvent<HTMLDivElement>) => {
-                // The grid owns only the keys from its own part of the page. Portalled menus, popovers and dialogs
-                // render outside this div, but their keydown still bubbles here through the React tree, where it
-                // would move the selection and take the focus out of an open menu.
+                // A portalled menu, popover or dialog renders outside this div, but its keydown still bubbles here
+                // through the React tree, where it would move the selection and take the focus out of the menu.
                 if (!(e.target instanceof Node && e.currentTarget.contains(e.target))) return;
                 const { nativeEvent } = e;
-                // Undo and redo run ahead of the grid's handler, because a write must not start another write
-                // inside its recipe, and handleUndo and handleRedo are writes. An open cell editor leaves them to
-                // the browser, which undoes the typing, as Google Sheets does.
+                // Undo and redo are writes, and a write must not start inside another's recipe, so they run ahead of
+                // the grid's handler. An open cell editor leaves the keys to the browser, which undoes the typing.
                 if (contextRef.current.editingCellPosition.length === 0) {
                     if (matchesKeyboardEvent(nativeEvent, SHEET_HOTKEYS.undo)) {
                         handleUndo();
@@ -467,9 +462,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 const floating = !isTypingTarget();
                 const ctx = contextRef.current;
                 const { chart, image } = activeFloating(ctx);
-                // A selected chart copies itself with its ranges read into inline data, the one thing every
-                // other app can draw; this workbook keeps its ranges for a paste here. A chart that draws
-                // #REF! or too much data copies nothing. A cut deletes it, as Google's does.
+                // A selected chart copies itself with its ranges read into inline data, which every other app can draw,
+                // and a paste here keeps the ranges. One that draws #REF! or too much data copies nothing.
                 if (chart && floating) {
                     const item = sheetChartClipboardItem(ctx, chart);
                     if (!item) return;
@@ -479,9 +473,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     if (e.type === 'cut' && ctx.allowEdit !== false) setContextWithProduce(deleteActiveObject);
                     return;
                 }
-                // A selected floating image wins over the pending cell copy. Its copy is only the Eigen clipboard
-                // item, as Vector's is: no plain text and no PNG, because a native copy event can't wait for the
-                // image's file to load. A cut deletes the image.
+                // A selected image wins over the pending cell copy. It goes out as the Eigen clipboard item alone, as
+                // Vector's does, since a native copy event can't wait for the image's file to load.
                 if (image && floating) {
                     const source = resolveMediaPath(image.mediaName);
                     if (source) {
@@ -505,9 +498,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
                 e.preventDefault();
 
-                // The cells go out as an Eigen text item, the same way the image above does. The sheet's HTML table
-                // follows the marker span, so an app outside Eigen still pastes a real table. The Eigen item travels
-                // under its own MIME type, which a read from the same origin picks up.
+                // The cells go out as an Eigen text item under its own MIME type, which a same-origin read picks up.
+                // The sheet's HTML table follows the marker span, so an app outside Eigen still pastes a real table.
                 const eigenData: EigenClipboardData = {
                     version: 1,
                     items: [buildCellRangeClipboardItem(ctx, pending.cellText)],

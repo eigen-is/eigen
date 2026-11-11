@@ -297,10 +297,11 @@ describe("a row or column op racing a peer's unfreeze", () => {
         ],
     ] as const;
 
-    // The undo entry puts each field back whole. Images, charts and validation rules are written one object at a time.
+    // The undo entry puts each field back whole. The maps every sheet holds, such as the config's, the images, the
+    // charts and the validation rules, are written one entry at a time.
     test.each(cases)('%s writes every sheet field whole, in the op and in its undo entry', (_, recipe, options) => {
         const op = author(frozenContext(), recipe, options);
-        const perObject = new Set(['images', 'charts', 'dataValidations']);
+        const perObject = new Set(['config', 'images', 'charts', 'dataValidations']);
         const into = [...op.patches, ...op.inverse].filter(
             (p) => p.path.length > 3 && !perObject.has(String(p.path[2])),
         );

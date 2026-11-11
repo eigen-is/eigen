@@ -9,7 +9,7 @@ import { useAwarenessPeers } from '@workspace/ui/components/collab';
 import { useCallback, useEffect, useRef } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 
-export type PublishSelection = (sheetId: string, r: number, c: number) => void;
+type PublishSelection = (sheetId: string, r: number, c: number) => void;
 
 export function usePresence(
     provider: WebsocketProvider | null,

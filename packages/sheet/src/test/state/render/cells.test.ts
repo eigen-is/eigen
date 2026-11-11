@@ -1,42 +1,16 @@
-// The corner indicator triangles a cell can carry — comment (top-right),
-// invalid-value and forced-string (top-left). They used to be three inline
-// magic sizes (11 / 5 / 6) with the comment block copied verbatim between
-// nullCellRender and cellRender; one painter and one constant now settle all
-// three, so a warning triangle reads as the same mark as a comment triangle.
+// The corner triangles a cell can carry: a comment's top right, an invalid value's and a forced string's top left.
+// One painter and one size draw all three, so a warning reads as the same mark as a comment. Each case paints a
+// sheet through the grid's own draw and reads the triangles off the 2D context.
 
 import { describe, expect, test } from 'bun:test';
 import { CELL_INDICATOR_SIZE, INDICATOR_RED } from '@workspace/lib/constants/comment-indicator';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import type { Cell } from '../../../engine/types';
 import { Canvas } from '../../../state/canvas';
 import type { Context } from '../../../state/context';
-import { cellIndicatorRect } from '../../../state/modules/cell-glyph';
-import { drawCellIndicator } from '../../../state/render/cells';
 import { workbookContextFactory } from '../factories/context';
 
 installHappyDom();
-
-function recordingCanvas() {
-    const points: [number, number][] = [];
-    let fillStyle = '';
-    const renderCtx = {
-        beginPath() {},
-        closePath() {},
-        fill() {},
-        moveTo(x: number, y: number) {
-            points.push([x, y]);
-        },
-        lineTo(x: number, y: number) {
-            points.push([x, y]);
-        },
-        get fillStyle() {
-            return fillStyle;
-        },
-        set fillStyle(value: string) {
-            fillStyle = value;
-        },
-    };
-    return { renderCtx: renderCtx as unknown as CanvasRenderingContext2D, points, colour: () => fillStyle };
-}
 
 Object.assign(globalThis, {
     Path2D: class {
@@ -46,16 +20,25 @@ Object.assign(globalThis, {
     },
 });
 
-// Every colour the painter fills with, through a 2D context that does nothing else.
-function paintedFills(ctx: Context) {
-    const fills: unknown[] = [];
-    const state: Record<string | symbol, unknown> = {};
+type Triangle = { colour: unknown; points: [number, number][] };
+
+// Every shape the painter fills, with its colour, through a 2D context that does nothing else.
+function paintedTriangles(ctx: Context): Triangle[] {
+    const triangles: Triangle[] = [];
+    let points: [number, number][] = [];
+    const state: Record<string | symbol, unknown> = {
+        beginPath: () => {
+            points = [];
+        },
+        moveTo: (x: number, y: number) => points.push([x, y]),
+        lineTo: (x: number, y: number) => points.push([x, y]),
+    };
     const context = new Proxy(state, {
         get: (target, key) =>
             key in target
                 ? target[key]
                 : () => {
-                      if (key === 'fill') fills.push(target.fillStyle);
+                      if (key === 'fill') triangles.push({ colour: target.fillStyle, points });
                       return key === 'measureText'
                           ? { width: 10, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2 }
                           : undefined;
@@ -74,8 +57,20 @@ function paintedFills(ctx: Context) {
         offsetLeft: 0,
         offsetTop: 0,
     });
-    return fills;
+    return triangles;
 }
+
+const paintedFills = (ctx: Context) => paintedTriangles(ctx).map(({ colour }) => colour);
+
+// A1 spans x 0..74 and y 0..20, and a sheet pixel paints one to the left and one up.
+const grid = (a1: Cell) => {
+    const ctx = workbookContextFactory({ visibledatarow: [20, 40], visibledatacolumn: [74, 148], devicePixelRatio: 1 });
+    ctx.sheets[0].data = [
+        [a1, null],
+        [null, null],
+    ];
+    return ctx;
+};
 
 describe('a comment mark', () => {
     // An empty cell and a filled one reach the painter by different paths.
@@ -103,35 +98,23 @@ describe('a comment mark', () => {
     });
 });
 
-describe('drawCellIndicator', () => {
-    test('a left-corner mark runs right and down from its anchor', () => {
-        const canvas = recordingCanvas();
-        drawCellIndicator(canvas.renderCtx, 'left', { x: 10, y: 40, size: CELL_INDICATOR_SIZE }, '#487f1e');
-        expect(canvas.points).toEqual([
-            [10, 40],
-            [10 + CELL_INDICATOR_SIZE, 40],
-            [10, 40 + CELL_INDICATOR_SIZE],
-        ]);
-        expect(canvas.colour()).toBe('#487f1e');
-    });
-
-    test('a right-corner mark mirrors it, same legs', () => {
-        const canvas = recordingCanvas();
-        drawCellIndicator(canvas.renderCtx, 'right', cellIndicatorRect('right', 0, 40, 101), '#FC6666');
-        expect(canvas.points).toEqual([
-            [100, 40],
-            [100 - CELL_INDICATOR_SIZE, 40],
-            [100, 40 + CELL_INDICATOR_SIZE],
+describe('a corner mark', () => {
+    test("a comment's runs left and down from the cell's top-right corner", () => {
+        const [{ points }] = paintedTriangles(grid({ commentCardIds: ['card'] }));
+        expect(points).toEqual([
+            [73, -1],
+            [73 - CELL_INDICATOR_SIZE, -1],
+            [73, -1 + CELL_INDICATOR_SIZE],
         ]);
     });
 
-    test('both corners draw legs of exactly one size', () => {
-        for (const corner of ['left', 'right'] as const) {
-            const canvas = recordingCanvas();
-            drawCellIndicator(canvas.renderCtx, corner, { x: 50, y: 0, size: CELL_INDICATOR_SIZE }, '#000000');
-            const [origin, along, down] = canvas.points;
-            expect(Math.abs(along[0] - origin[0])).toBe(CELL_INDICATOR_SIZE);
-            expect(down[1] - origin[1]).toBe(CELL_INDICATOR_SIZE);
-        }
+    test("a forced string's mirrors it from the top-left corner, same legs", () => {
+        const [{ colour, points }] = paintedTriangles(grid({ v: '12', m: '12', qp: 1 }));
+        expect(points).toEqual([
+            [-1, -1],
+            [-1 + CELL_INDICATOR_SIZE, -1],
+            [-1, -1 + CELL_INDICATOR_SIZE],
+        ]);
+        expect(colour).toBe('#487f1e');
     });
 });

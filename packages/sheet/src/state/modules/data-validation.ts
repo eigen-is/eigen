@@ -28,9 +28,8 @@ import { jfrefreshgrid } from './refresh';
 import { diff, isdatetime, isRealNull, isRealNum } from './validation';
 import { addValidation, validationAt } from './validation-rules';
 
-// The words a hint sentence puts in for its rule type and its condition. The keys are loose strings because a rule's
-// type and condition are free-form. Text rules have sentences of their own, because "Text must equal to ACME" reads
-// wrong.
+// The words a hint sentence puts in for its rule type and its condition, keyed loosely because both are free-form. Text
+// rules have sentences of their own, because "Text must equal to ACME" reads wrong.
 const OPTION_LABEL: Record<string, string> = {
     number: 'a number',
     number_integer: 'a whole number',
@@ -163,14 +162,13 @@ function meetsCondition(n: number, condition: string, v1: number, v2: number) {
     }
 }
 
-// A tick box rule names the value that counts as checked, and the cell's value says whether it is. No second flag is
-// stored, so a TRUE that was imported, pasted, typed or computed by a formula shows ticked like any other. These are
-// the engine's own boolean texts, the ones a recalculated formula writes, so a computed TRUE matches.
+// A tick box rule names the value that counts as checked and stores no second flag, so a TRUE that was imported, typed
+// or computed shows ticked. These are the engine's own boolean texts, the ones a recalculated formula writes.
 export const CHECKBOX_CHECKED_VALUE = booleanDisplay(true);
 export const CHECKBOX_UNCHECKED_VALUE = booleanDisplay(false);
 
 // The tick box's side in px. The painter and the hit test both place it through checkboxRect, so they agree.
-export const CHECKBOX_SIZE = 10;
+const CHECKBOX_SIZE = 10;
 // The same padding the painter keeps inside a cell.
 const CHECKBOX_PADDING = 2;
 
@@ -178,9 +176,8 @@ const CHECKBOX_PADDING = 2;
 // pixels and the hit test in sheet pixels, and the glyph sits at the same offset from the box in both.
 export type CellGlyphRect = { x: number; y: number; size: number };
 
-// The box a cell lays its text out in, from the painter's edges of the cell. It leaves out the grid lines: one pixel
-// at the top, and two off the width and the height. A hit test passes the same edges in sheet pixels, so a click
-// lands where the glyph is painted.
+// The box a cell lays its text out in, from the painter's edges of the cell less the grid lines: one pixel at the top,
+// two off the width and the height. A hit test passes the same edges in sheet pixels.
 export function cellTextBox(left: number, top: number, right: number, bottom: number): Rect {
     return { left, top: top + 1, width: right - left - 2, height: bottom - top - 2 };
 }
@@ -195,9 +192,8 @@ export function checkboxAlign(cell: Cell | null | undefined): number {
     return cell?.ht != null ? Number(normalizedCellAttr(cell, 'ht')) : 0;
 }
 
-// The alignments use the cell's codes. For horizonAlign 0 is center, 1 is left and 2 is right. For verticalAlign 0 is
-// middle, 1 is top and 2 is bottom. An empty cell's vertical alignment is NaN, which falls to the middle, as in the
-// painter.
+// The alignments are the cell's codes: horizontally 0 is center, 1 left and 2 right, vertically 0 is middle, 1 top and
+// 2 bottom. An empty cell's vertical alignment is NaN, which falls to the middle, as in the painter.
 export function checkboxRect(box: Rect, horizonAlign: number, verticalAlign: number): CellGlyphRect {
     let x = box.left + CHECKBOX_PADDING;
     if (horizonAlign === 0) {
@@ -252,13 +248,12 @@ export function checkboxChange(ctx: Context, r: number, c: number) {
     return true;
 }
 
-// A list rule paints its chevron on every cell it covers, selected or not, as the comment triangle and the filter
-// button are painted. Keyboard users and viewers who can't edit then see the list too. These are the glyph's side in
-// pixels and its gap from the cell's right edge.
-export const DROPDOWN_CHEVRON_SIZE = 8;
+// A list rule paints its chevron on every cell it covers, selected or not, so keyboard users and viewers who can't edit
+// see the list too. These are the glyph's side in pixels and its gap from the cell's right edge.
+const DROPDOWN_CHEVRON_SIZE = 8;
 const DROPDOWN_CHEVRON_PADDING = 2;
 // The click target around the glyph is wide enough for a finger, as the filter button's is.
-export const DROPDOWN_CHEVRON_HIT_WIDTH = 20;
+const DROPDOWN_CHEVRON_HIT_WIDTH = 20;
 // The narrowest text box that still gets a chevron: the glyph, its padding, and as much again clear to its left. In a
 // narrower cell the glyph would look like the cell's content, so it is left out, as Google Sheets does.
 const DROPDOWN_CHEVRON_MIN_WIDTH = DROPDOWN_CHEVRON_SIZE * 2 + DROPDOWN_CHEVRON_PADDING;
@@ -284,10 +279,8 @@ export function isDropdownChevronClick(ctx: Context, r: number, c: number, box: 
     return x >= right - DROPDOWN_CHEVRON_HIT_WIDTH && x <= right && y >= box.top && y <= box.top + box.height;
 }
 
-// Puts one rule on a range, in place of the rules its cells had. Tick boxes seed their unchecked value into EMPTY
-// cells only: pointing a tick box at a column of existing TRUE/FALSE must keep the data, and isCheckboxChecked reads
-// whatever was already there. The seeding stops where the sheet's cells stop, so a whole-column tick box writes no
-// million cells.
+// Puts one rule on a range, in place of the rules its cells had. A tick box seeds its unchecked value into empty cells
+// only, so existing TRUE/FALSE data stays, and only as far as the sheet's cells go.
 export function applyDataValidation(ctx: Context, range: SingleRange, item: DataValidationRule) {
     if (ctx.allowEdit === false) return;
     const d = getFlowdata(ctx);
@@ -309,9 +302,8 @@ export function applyDataValidation(ctx: Context, range: SingleRange, item: Data
     if (seeded) jfrefreshgrid(ctx, [seededRange]);
 }
 
-// The range the dialog's text names. A whole column such as B:B runs to the grid's last row, as Excel stores it, so
-// the rule also covers the rows added later. A whole row runs to the grid's last column. The formula reader would
-// stop both where the sheet's cells stop.
+// The range the dialog's text names. A whole column such as B:B runs to the grid's last row, as Excel stores it, so the
+// rule covers rows added later, and a whole row to its last column. The formula reader would stop at the cells.
 export function validationRange(ctx: Context, txt: string): SingleRange | undefined {
     const range = getRangeByTxt(ctx, txt).at(-1);
     if (!range) return undefined;
@@ -322,9 +314,8 @@ export function validationRange(ctx: Context, txt: string): SingleRange | undefi
     return { row: range.row, column: range.column };
 }
 
-// Insert > Tick box adds a tick box in one click, with no dialog, as in Google Sheets. With no dialog there is no
-// chance to check the range. So a whole column or row selected from its header stops where the sheet's cells stop,
-// because a tick box past them marks nothing. A range the user dragged out can still lay a checklist over empty cells.
+// Insert > Tick box has no dialog to check the range in, so a whole column or row selected from its header stops where
+// the sheet's cells stop, as a tick box past them marks nothing. A dragged range still covers empty cells.
 export function insertCheckbox(ctx: Context) {
     const selection = ctx.selections?.[ctx.selections.length - 1];
     if (!selection) return;

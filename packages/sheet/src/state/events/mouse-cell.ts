@@ -50,9 +50,8 @@ function takesFormulaReference(ctx: Context): boolean {
     );
 }
 
-// Swallows the press on the grid that only closes a menu while a formula waits for a reference, and returns whether it
-// did. Like a reference press it keeps the browser from moving the focus out of the editor, which would put the caret
-// back at the start.
+// Swallows the press on the grid that only closes a menu while a formula waits for a reference, and says whether it
+// did. It keeps the focus in the editor, as a reference press does, or the caret would go back to the start.
 export function swallowMenuPress(ctx: Context, globalCache: GlobalCache, e: MouseEvent): boolean {
     if (!globalCache.pressClosedMenu || !takesFormulaReference(ctx)) return false;
     e.preventDefault();

@@ -108,10 +108,10 @@ export function generateAPIs(
             if (selected && !getContext().selections) getContext().getRefs().cellInput.current?.blur();
         },
 
-        // Only the `fresh` batches move the view again. A fresh batch that moves rows ahead of an applied one loses
-        // the selection there, and the undo and redo entries fit an order that is gone, so both stacks empty.
+        // Only the `fresh` batches move the view again, and the undo and redo entries fit an order that is gone, so
+        // both stacks empty.
         replayOps: (base: Sheet[], batches: Op[][], fresh: ReadonlySet<Op[]>) => {
-            const { currentSheetId } = getContext();
+            // A fresh batch that moves rows ahead of an applied one: the tab can't tell where a selection there went.
             const overtaken = (sheetId: string) => {
                 const movesRows = (ops: Op[]) => ops.some((op) => isRowColOp(op) && op.id === sheetId);
                 const firstMove = batches.findIndex((ops) => fresh.has(ops) && movesRows(ops));
@@ -122,13 +122,6 @@ export function generateAPIs(
             getContext().formulaCache.resetEngine();
             setContext(
                 (draftCtx) => {
-                    if (overtaken(currentSheetId)) {
-                        cancelNormalSelected(draftCtx);
-                        draftCtx.selections = undefined;
-                    }
-                    for (const [sheetId, left] of Object.entries(draftCtx.sheetViewRecord)) {
-                        if (overtaken(sheetId)) left.selections = undefined;
-                    }
                     // Sheets decoded from a snapshot hold no matrix yet, so they enter as at the mount.
                     const sheets = base.map((sheet) => ({ ...sheet }));
                     for (const sheet of sheets) initSheetData(sheet);
@@ -139,12 +132,14 @@ export function generateAPIs(
                     }
                     Object.assign(draftCtx, next);
                     // A new snapshot's grid can end before a selection made on the old one, which then has no cell.
-                    if (!holdsSelections(next.sheets, next.currentSheetId, next.selections)) {
+                    const lost = (sheetId: string, selections: Selection[] | undefined) =>
+                        overtaken(sheetId) || !holdsSelections(next.sheets, sheetId, selections);
+                    if (lost(next.currentSheetId, next.selections)) {
                         cancelNormalSelected(draftCtx);
                         draftCtx.selections = undefined;
                     }
                     for (const [sheetId, left] of Object.entries(draftCtx.sheetViewRecord)) {
-                        if (!holdsSelections(next.sheets, sheetId, left.selections)) left.selections = undefined;
+                        if (lost(sheetId, left.selections)) left.selections = undefined;
                     }
                     settleCurrentSheet(draftCtx);
                 },

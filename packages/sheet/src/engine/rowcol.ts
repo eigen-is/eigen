@@ -99,7 +99,7 @@ export function shiftMergeForInsert(
     direction: 'lefttop' | 'rightbottom',
 ): Record<string, MergeCell> {
     const shifted: Record<string, MergeCell> = {};
-    for (const merge of Object.values(cfg.merge ?? {})) {
+    for (const merge of mergesInKeyOrder(cfg)) {
         const [first, span] = type === 'row' ? [merge.r, merge.rs] : [merge.c, merge.cs];
         const last = first + span - 1;
         const above = direction === 'lefttop';
@@ -119,7 +119,7 @@ export function shiftMergeForDelete(
 ): Record<string, MergeCell> {
     const end = start + slen - 1;
     const shifted: Record<string, MergeCell> = {};
-    for (const merge of Object.values(cfg.merge ?? {})) {
+    for (const merge of mergesInKeyOrder(cfg)) {
         const [first, span] = type === 'row' ? [merge.r, merge.rs] : [merge.c, merge.cs];
         const last = first + span - 1;
         if (first > end) placeMerge(shifted, merge, type, first - slen, span);
@@ -129,6 +129,14 @@ export function shiftMergeForDelete(
         else placeMerge(shifted, merge, type, first, last >= end ? span - slen : start - first);
     }
     return shifted;
+}
+
+// Merges that overlap, as two tabs merging at once leave them, land and stamp their cells in turn. The turn is the
+// keys' order, since two readers may hold the same map written in different orders.
+function mergesInKeyOrder({ merge = {} }: ExtendedSheetConfig): MergeCell[] {
+    return Object.keys(merge)
+        .sort()
+        .map((key) => merge[key]);
 }
 
 function placeMerge(

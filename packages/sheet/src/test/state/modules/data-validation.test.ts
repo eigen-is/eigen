@@ -14,7 +14,6 @@ import {
     checkboxAlign,
     checkboxChange,
     checkboxRect,
-    DROPDOWN_CHEVRON_HIT_WIDTH,
     dropdownChevronRect,
     getCellDataValidation,
     getDropdownList,
@@ -572,6 +571,7 @@ describe('isDropdownChevronClick', () => {
     // Glyph at x 60..70 ⇒ the finger-sized hit box spans x 50..70, full height.
     const box = cellTextBox(0, 0, 74, 20);
     const RIGHT = 70;
+    const DROPDOWN_CHEVRON_HIT_WIDTH = 20;
 
     test('only a click on the chevron counts', () => {
         const ctx = listContext();
