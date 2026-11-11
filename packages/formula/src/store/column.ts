@@ -4,6 +4,7 @@
 // `kind` are the recalc's own flags, which move with the cell when rows do.
 
 import { GRID_ROWS } from '../text/a1';
+import type { ColumnIndex } from './column-index';
 
 export const CellKind = { Empty: 0, Number: 1, Boolean: 2, Text: 3, Error: 4 } as const;
 
@@ -30,6 +31,8 @@ export class Column {
     public loops = 0;
     // Goes up with every change to a cell of the column.
     public version = 0;
+    // What exact lookups keep of the column, true for one version of it.
+    public index: ColumnIndex | null = null;
 
     public constructor(length: number) {
         this.kind = new Uint8Array(length);

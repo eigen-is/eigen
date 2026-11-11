@@ -1,11 +1,11 @@
-// The logical functions. IF and IFERROR take their branches lazily, so the branch not taken is never evaluated;
+// The logical functions. IF, IFERROR and IFNA take their branches lazily, so the branch not taken is never evaluated;
 // AND and OR evaluate everything, and an error anywhere in their arguments is their result.
 
 import type { Evaluator } from '../eval/evaluator';
 import { firstError } from '../eval/views';
 import { CellKind, KIND_MASK } from '../store/column';
 import { toBoolean } from '../values/coerce';
-import { VALUE } from '../values/errors';
+import { NA, VALUE } from '../values/errors';
 import type { Reference, Value } from '../values/value';
 import { isArray, isError, isReference, OMITTED } from '../values/value';
 import { define, LAZY, optional, RANGE, SCALAR } from './registry';
@@ -64,6 +64,9 @@ export const LOGICAL = [
     }),
     define('IFERROR', [SCALAR, LAZY], (args, ctx, node, sheet, row, column) =>
         isError(args[0]) ? ctx.force(args[1], node.children[1], sheet, row, column) : args[0],
+    ),
+    define('IFNA', [SCALAR, LAZY], (args, ctx, node, sheet, row, column) =>
+        args[0] === NA ? ctx.force(args[1], node.children[1], sheet, row, column) : args[0],
     ),
     define('TRUE', [], () => true),
     define('FALSE', [], () => false),
