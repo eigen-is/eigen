@@ -20,11 +20,16 @@ export type Reference = {
     readonly next: Reference | null;
 };
 
+// An array has the size that was written, such as the 1,048,576 rows of A:A, and stores only as far as its values
+// reach: where fewer rows or columns are stored, the last stored one stands for every one after it.
 export type ArrayValue = {
     readonly type: typeof ValueType.Array;
     readonly rows: number;
     readonly columns: number;
-    // Row by row. When every element is a number this is `nums` itself.
+    // The rows and columns stored, at least one of each.
+    readonly height: number;
+    readonly width: number;
+    // The stored part, row by row. When every element is a number this is `nums` itself.
     readonly items: ArrayLike<Scalar>;
     readonly nums: Float64Array | null;
 };
@@ -48,14 +53,49 @@ export function isArray(value: Value): value is ArrayValue {
     return typeof value === 'object' && value !== null && value.type === ValueType.Array;
 }
 
-// An array of these elements, or the element itself when there is one: a 1×1 array is a scalar everywhere.
-export function arrayOf(rows: number, columns: number, items: readonly Scalar[]): Scalar | ArrayValue {
-    if (items.length === 1) return items[0];
+// An array of `rows` by `columns` that stores these elements, `height` rows of `width`, or the element itself when
+// the array is one: a 1×1 array is a scalar everywhere.
+export function arrayOf(
+    rows: number,
+    columns: number,
+    items: readonly Scalar[],
+    height = rows,
+    width = columns,
+): Scalar | ArrayValue {
+    if (rows * columns === 1) return items[0];
     const nums = new Float64Array(items.length);
     for (let i = 0; i < items.length; i += 1) {
         const item = items[i];
-        if (typeof item !== 'number') return { type: ValueType.Array, rows, columns, items, nums: null };
+        if (typeof item !== 'number') return { type: ValueType.Array, rows, columns, height, width, items, nums: null };
         nums[i] = item;
     }
-    return { type: ValueType.Array, rows, columns, items: nums, nums };
+    return { type: ValueType.Array, rows, columns, height, width, items: nums, nums };
+}
+
+// An array of numbers, all of them stored, or the number itself when there is one.
+export function numbersOf(rows: number, columns: number, nums: Float64Array): number | ArrayValue {
+    if (nums.length === 1) return nums[0];
+    return { type: ValueType.Array, rows, columns, height: rows, width: columns, items: nums, nums };
+}
+
+export function elementAt(array: ArrayValue, row: number, column: number): Scalar {
+    const { height, width } = array;
+    return array.items[(row < height ? row : height - 1) * width + (column < width ? column : width - 1)];
+}
+
+// The part of an array that starts at a row and a column of it and is `rows` by `columns`.
+export function partOf(
+    array: ArrayValue,
+    top: number,
+    left: number,
+    rows: number,
+    columns: number,
+): Scalar | ArrayValue {
+    const height = Math.min(rows, Math.max(1, array.height - top));
+    const width = Math.min(columns, Math.max(1, array.width - left));
+    const items: Scalar[] = [];
+    for (let row = 0; row < height; row += 1) {
+        for (let column = 0; column < width; column += 1) items.push(elementAt(array, top + row, left + column));
+    }
+    return arrayOf(rows, columns, items, height, width);
 }

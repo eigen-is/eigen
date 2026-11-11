@@ -10,7 +10,7 @@ import type { FormulaNode } from '../text/tree';
 import type { FormulaError } from '../values/errors';
 import { CALC, NA, NAME, NUM, VALUE } from '../values/errors';
 import type { ArrayValue, Scalar, Value } from '../values/value';
-import { arrayOf, isArray, isError, isReference, OMITTED } from '../values/value';
+import { arrayOf, elementAt, isArray, isError, isReference, OMITTED } from '../values/value';
 import type { Evaluator } from './evaluator';
 
 function paramAt(entry: FunctionEntry, index: number): Param {
@@ -63,14 +63,9 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
     return result;
 }
 
-function elementOf(array: ArrayValue, r: number, c: number): Scalar {
-    const row = array.rows === 1 ? 0 : r;
-    const column = array.columns === 1 ? 0 : c;
-    return row < array.rows && column < array.columns ? array.items[row * array.columns + column] : NA;
-}
-
 // Runs the body once per element of the arrays its scalar parameters got. A length of 1 repeats, and a shorter
-// length that is not 1 leaves #N/A. A lazy parameter is evaluated here, so with an array every branch runs.
+// length that is not 1 leaves #N/A. A lazy parameter is evaluated here, so with an array every branch runs. The
+// result stores as many rows and columns as the arrays do, and its last ones stand for the rest as theirs did.
 export function lift(
     ctx: Evaluator,
     entry: FunctionEntry,
@@ -95,16 +90,31 @@ export function lift(
             columns = Math.max(columns, array.columns);
         }
     }
-    const items = new Array<Scalar>(rows * columns);
-    for (let r = 0; r < rows; r += 1) {
-        for (let c = 0; c < columns; c += 1) {
+    // An array shorter than the result is #N/A past what it stores, which takes one more row or column to say.
+    let height = 1;
+    let width = 1;
+    for (const array of spread) {
+        if (array === null) continue;
+        height = Math.max(height, array.rows === rows || array.rows === 1 ? array.height : array.height + 1);
+        width = Math.max(width, array.columns === columns || array.columns === 1 ? array.width : array.width + 1);
+    }
+    height = Math.min(height, rows);
+    width = Math.min(width, columns);
+    ctx.cells.count(height * width);
+    const items = new Array<Scalar>(height * width);
+    for (let r = 0; r < height; r += 1) {
+        for (let c = 0; c < width; c += 1) {
             for (let i = 0; i < spread.length; i += 1) {
                 const array = spread[i];
-                if (array !== null) element[i] = elementOf(array, r, c);
+                if (array === null) continue;
+                const short =
+                    (array.rows !== rows && array.rows !== 1 && r >= array.height) ||
+                    (array.columns !== columns && array.columns !== 1 && c >= array.width);
+                element[i] = short ? NA : elementAt(array, r, c);
             }
             const result = ctx.read(finite(entry.run(element, ctx, node, sheet, row, column)));
-            items[r * columns + c] = isArray(result) ? CALC : result;
+            items[r * width + c] = isArray(result) ? CALC : result;
         }
     }
-    return arrayOf(rows, columns, items);
+    return arrayOf(rows, columns, items, height, width);
 }

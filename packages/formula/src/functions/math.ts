@@ -3,9 +3,10 @@
 // SUMIF and SUMIFS add what the criteria module matched.
 
 import type { Evaluator } from '../eval/evaluator';
-import { columnsOf, firstError, toArray } from '../eval/views';
+import { firstError, storedColumns, storedRows } from '../eval/views';
 import type { Walk } from '../eval/walk';
 import { Take } from '../eval/walk';
+import type { FormulaError } from '../values/errors';
 import { VALUE } from '../values/errors';
 import { roundDecimal, snapSum } from '../values/precision';
 import type { Value } from '../values/value';
@@ -23,66 +24,100 @@ import {
     scalar1,
     scalar2,
 } from './registry';
+import { heightOf, widthOf } from './search';
 
 // The sum of what a walk hands out, in its order. Only the last addition can snap to 0.
 export function total(walk: Walk): number {
     let sum = 0;
     let before = 0;
     while (walk.next()) {
-        const { num, to } = walk;
-        for (let i = walk.from; i < to - 1; i += 1) sum += num[i];
+        const { num, to, times } = walk;
+        for (let i = walk.from; i < to - 1; i += 1) sum += num[i] * times;
         before = sum;
-        sum += num[to - 1];
+        sum += num[to - 1] * times;
     }
     return snapSum(sum, before);
 }
 
-// The numbers of one argument, row by row, with 0 for everything that is no number. A reference to one column is
-// its own plane, uncopied, and stops where the column does.
-function factors(ctx: Evaluator, arg: Value): Float64Array | Value {
-    if (isReference(arg) && arg.left === arg.right) {
+type Factor = { readonly nums: Float64Array; readonly height: number; readonly width: number };
+
+// One argument as numbers, with 0 for everything that is no number, stored as an array is: the last stored row and
+// column stand for the rest. A reference to one column is its own plane, uncopied, when the column reaches its end.
+function factorOf(ctx: Evaluator, arg: Value): Factor | FormulaError {
+    if (isReference(arg)) {
         ctx.cells.settleArea(arg);
         const error = firstError(ctx, arg);
         if (error !== null) return error;
-        const column = arg.sheet.columns[arg.left];
-        if (column === undefined) return new Float64Array(0);
-        return column.num.subarray(arg.top, Math.min(arg.bottom + 1, column.length));
+        const { columns } = arg.sheet;
+        const { top, left } = arg;
+        const whole = arg.right === left && arg.bottom < (columns[left]?.length ?? 0);
+        if (whole)
+            return { nums: columns[left].num.subarray(top, arg.bottom + 1), height: arg.bottom - top + 1, width: 1 };
+        const width = storedColumns(arg);
+        const height = storedRows(arg, width);
+        ctx.cells.count(height * width);
+        const nums = new Float64Array(height * width);
+        for (let c = 0; c < width; c += 1) {
+            const column = columns[left + c];
+            if (column === undefined) continue;
+            const held = Math.min(height, column.length - top);
+            for (let r = 0; r < held; r += 1) nums[r * width + c] = column.num[top + r];
+        }
+        return { nums, height, width };
     }
-    const values = isReference(arg) ? toArray(ctx, arg) : arg;
-    if (!isArray(values)) return isError(values) ? values : new Float64Array([typeof values === 'number' ? values : 0]);
-    if (values.nums !== null) return values.nums;
-    const numbers = new Float64Array(values.items.length);
-    for (let i = 0; i < numbers.length; i += 1) {
-        const item = values.items[i];
+    if (!isArray(arg))
+        return isError(arg)
+            ? arg
+            : { nums: new Float64Array([typeof arg === 'number' ? arg : 0]), height: 1, width: 1 };
+    const { items, height, width } = arg;
+    if (arg.nums !== null) return { nums: arg.nums, height, width };
+    const nums = new Float64Array(items.length);
+    for (let i = 0; i < nums.length; i += 1) {
+        const item = items[i];
         if (isError(item)) return item;
-        if (typeof item === 'number') numbers[i] = item;
+        if (typeof item === 'number') nums[i] = item;
     }
-    return numbers;
+    return { nums, height, width };
 }
 
-// Every argument must have the same size; text, booleans and blanks in them count as 0.
+// Every argument must have the same size; text, booleans and blanks in them count as 0. The products are added row
+// by row over what the arguments store, and a last stored row or column counts for all the rows or columns it
+// stands for.
 function sumproduct(args: readonly Value[], ctx: Evaluator): Value {
-    const lists: Float64Array[] = [];
+    const factors: Factor[] = [];
     let rows = 0;
     let columns = 0;
+    let height = 1;
+    let width = 1;
     for (const arg of args) {
         if (isReference(arg) && arg.next !== null) return VALUE;
-        const height = isReference(arg) ? arg.bottom - arg.top + 1 : isArray(arg) ? arg.rows : 1;
-        const width = isReference(arg) ? columnsOf(arg) : isArray(arg) ? arg.columns : 1;
-        if (lists.length > 0 && (height !== rows || width !== columns)) return VALUE;
-        rows = height;
-        columns = width;
-        const list = factors(ctx, arg);
-        if (!(list instanceof Float64Array)) return list;
-        lists.push(list);
+        if (factors.length > 0 && (heightOf(arg) !== rows || widthOf(arg) !== columns)) return VALUE;
+        rows = heightOf(arg);
+        columns = widthOf(arg);
+        const factor = factorOf(ctx, arg);
+        if (!('nums' in factor)) return factor;
+        factors.push(factor);
+        height = Math.max(height, factor.height);
+        width = Math.max(width, factor.width);
     }
-    let count = lists[0].length;
-    for (const list of lists) count = Math.min(count, list.length);
     let total = 0;
-    for (let i = 0; i < count; i += 1) {
-        let product = lists[0][i];
-        for (let k = 1; k < lists.length; k += 1) product *= lists[k][i];
+    // Where every argument stores every row and column, the elements line up and one index reads them all.
+    const [first] = factors;
+    let flat = true;
+    for (const factor of factors) flat &&= factor.height === rows && factor.width === columns;
+    for (let i = 0; flat && i < first.nums.length; i += 1) {
+        let product = first.nums[i];
+        for (let k = 1; k < factors.length; k += 1) product *= factors[k].nums[i];
         total += product;
+    }
+    for (let r = 0; !flat && r < height; r += 1) {
+        const down = r === height - 1 ? rows - height + 1 : 1;
+        for (let c = 0; c < width; c += 1) {
+            let product = c === width - 1 ? down * (columns - width + 1) : down;
+            for (const { nums, height: h, width: w } of factors)
+                product *= nums[Math.min(r, h - 1) * w + Math.min(c, w - 1)];
+            total += product;
+        }
     }
     return total;
 }

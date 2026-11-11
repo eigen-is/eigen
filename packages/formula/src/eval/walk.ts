@@ -34,6 +34,8 @@ export class Walk {
     public num: Float64Array;
     public from = 0;
     public to = 0;
+    // How many cells each number of the span stands for: more than 1 only for the last row or column of an array.
+    public times = 1;
     // How many cells were handed out so far.
     public count = 0;
     public error: FormulaError | null = null;
@@ -167,6 +169,7 @@ export class Walk {
                 this.num = held.num;
                 this.from = row;
                 this.to = stop;
+                this.times = 1;
                 this.count += stop - row;
                 return true;
             }
@@ -185,40 +188,52 @@ export class Walk {
             this.num = span;
             this.from = 0;
             this.to = found;
+            this.times = 1;
             this.count += found;
             return true;
         }
         return this.enter(area.next);
     }
 
+    // The stored elements of the array that count, row by row. The last stored row and column are handed out once,
+    // with the number of rows or columns they stand for in `times`.
     private elements(array: ArrayValue): boolean {
-        const { items, nums } = array;
-        if (nums !== null && this.item === 0) {
-            this.array = null;
+        const { items, nums, height, width } = array;
+        const start = (height - 1) * width;
+        const down = array.rows - height + 1;
+        if (nums !== null && width === array.columns) {
+            const whole = this.item === 0 && (down === 1 || start === 0);
+            const to = this.item === 0 && !whole ? start : nums.length;
             this.num = nums;
-            this.from = 0;
-            this.to = nums.length;
-            this.count += nums.length;
+            this.from = this.item;
+            this.to = to;
+            this.times = to === start ? 1 : down;
+            this.count += (to - this.item) * this.times;
+            this.item = to;
+            if (to === nums.length) this.array = null;
             return true;
         }
         while (this.item < items.length) {
-            const item = items[this.item++];
-            if (typeof item === 'number') return this.single(item);
+            const at = this.item++;
+            const item = items[at];
+            const times = (at < start ? 1 : down) * ((at + 1) % width === 0 ? array.columns - width + 1 : 1);
+            if (typeof item === 'number') return this.single(item, times);
             if (item === null) continue;
-            if (typeof item === 'boolean' && this.take === Take.Truths) return this.single(item ? 1 : 0);
-            if (this.take === Take.Filled) return this.single(0);
+            if (typeof item === 'boolean' && this.take === Take.Truths) return this.single(item ? 1 : 0, times);
+            if (this.take === Take.Filled) return this.single(0, times);
             if (isError(item) && this.take <= Take.Truths) return this.fail(item);
         }
         this.array = null;
         return false;
     }
 
-    private single(value: number): boolean {
+    private single(value: number, times = 1): boolean {
         this.span[0] = value;
         this.num = this.span;
         this.from = 0;
         this.to = 1;
-        this.count += 1;
+        this.times = times;
+        this.count += times;
         return true;
     }
 

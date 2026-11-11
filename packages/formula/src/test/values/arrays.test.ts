@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { DIV0, NA, VALUE } from '../../index';
+import { DIV0, NA, REF, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
-import { evaluate } from '../recalc/support';
+import { engineOf, evaluate, valueAt } from '../recalc/support';
 
 // A cell shows the top-left of an array, so each element is read with INDEX and the size with a sum of ones.
 function element(formula: string, row: number, column: number, cells: Cells = {}, host = 'N1') {
@@ -105,12 +105,108 @@ describe('element by element', () => {
         expect(evaluate('=SUM(F5:F8*{1;2;3})', FIXTURE)).toBe(NA);
         expect(evaluate('=AND({TRUE,FALSE})')).toBe(false);
     });
+});
 
-    test('a whole column in an array formula is as long as the sheet is used', () => {
-        const cells: Cells = { A1: 1, A2: 2, A3: 3, B1: 10, B2: 20, B5: 50 };
-        expect(evaluate('=SUM(A:A*B:B)', cells)).toBe(50);
-        expect(evaluate('=SUM(--(A:A=""))', cells)).toBe(2);
-        expect(evaluate('=SUM((3:3="")*1)', { A3: 1, C3: 'x' })).toBe(12);
+// Excel's answers, second batch, for the first four: a whole column is 1,048,576 rows whatever the sheet holds.
+describe('an array has the size that was written', () => {
+    const cells: Cells = { A1: 'x', A2: 'y', A3: 'x', B1: 10, B2: 20, B3: 30, C1: 2, D1: 3 };
+
+    test.each([
+        ['=SUMPRODUCT(B:B,--(A:A="x"))', 40],
+        ['=SUM(B:B*Sheet2!D:D)', 9000],
+        ['=SUM(--(B:B=""))', 1048573],
+        ['=SUMPRODUCT(--(A:A=""))', 1048573],
+        ['=SUMPRODUCT((A:A="x")*B:B)', 40],
+        ['=SUMPRODUCT(B:B,B:B)', 1400],
+        ['=SUMPRODUCT(B:B+1,B:B+1)', 121 + 441 + 961 + 1048573],
+        ['=SUMPRODUCT(A:B="x",A:B="x")', 0],
+        ['=SUMPRODUCT(--(A:B="x"),--(A:B<>"y"))', 2],
+        ['=SUMPRODUCT(--(A:B=""),--(A:B=""))', 2 * 1048573],
+        ['=SUMPRODUCT(B:B,A1:A1048575)', VALUE],
+        ['=COUNT(--(A:A="x"))', 1048576],
+        ['=COUNTA(B:B&"")', 1048576],
+        ['=AVERAGE(B:B*1)', 60 / 1048576],
+        ['=MAX(--(B:B=""))', 1],
+        ['=MIN(B:B+5)', 5],
+        ['=AND(B:B<100)', true],
+        ['=OR(B:B>100)', false],
+        ['=SUM(B:B+{1,2})', 2 * 60 + 3 * 1048576],
+        ['=SUM({1;2}+B2:XFD2)', 3 * 16383 + 2 * 20],
+        ['=SUM((A:B="x")*1)', 2],
+        ['=SUM((A:C="")*1)', 3 * 1048576 - 7],
+        ['=SUM((2:2="y")*1)', 1],
+        ['=SUM((2:2="")*1)', 16384 - 2],
+        ['=SUM(B1:M1048576*1)', 65],
+        ['=SUM(B1:B1000000*C1:F1)', 300],
+        ['=INDEX(--(B:B=""),3)', 0],
+        ['=INDEX(--(B:B=""),4)', 1],
+        ['=INDEX(--(B:B=""),1048576)', 1],
+        ['=INDEX(--(B:B=""),1048577)', REF],
+        ['=INDEX(B:B*2,2)', 40],
+        ['=INDEX(B:C*2,1,2)', 4],
+        ['=INDEX(B:C*2,900,2)', 0],
+        ['=SUM(INDEX((A:C="")*1,0,3))', 1048575],
+        ['=SUM(INDEX((A:C="")*1,0,2))', 1048573],
+        ['=SUM(INDEX((A:C="")*1,500000,0))', 3],
+        ['=SUM(INDEX((A:C="")*1,2,0))', 1],
+        ['=SUM(ROW(B:B))', 549756338176],
+        ['=SUM(COLUMN(1:1))', (16384 * 16385) / 2],
+        ['=MATCH(1,--(A:A="y"),0)', 2],
+        ['=MATCH(1,--(A:A=""),0)', 4],
+        ['=XMATCH(0,--(A:A="x"),0,-1)', 1048576],
+        ['=XMATCH(1,--(A:A="x"),0,-1)', 3],
+        ['=VLOOKUP(40,B:B*2,1,FALSE)', 40],
+        ['=XLOOKUP(1,--(A:A="y"),B:B*3)', 60],
+        ['=A1:XFC1048575', REF],
+        ['=Sheet2!A1:XFC1048575', 0],
+        ['=Sheet2!D3:XFC1048575', 300],
+        ['=A:A="x"', true],
+        ['=@(B:B+1)', 11],
+    ])('%s is %p', (formula, expected) => {
+        expect(evaluate(formula, cells)).toBe(expected);
+    });
+
+    test('a value does not depend on a cell the formula does not name', () => {
+        const engine = engineOf({ s1: { ...cells, N1: '=SUM(--(B:B=""))', N2: '=SUM((3:3="")*1)' } });
+        engine.recalc(Number.POSITIVE_INFINITY);
+        expect(valueAt(engine, 'N1')).toBe(1048573);
+        expect(valueAt(engine, 'N2')).toBe(16382);
+        engine.setValue('s1', 99, 25, 1);
+        engine.setFormula('s1', 5, 13, '=R1C14+R2C14');
+        engine.recalc(Number.POSITIVE_INFINITY);
+        expect(valueAt(engine, 'N6')).toBe(1048573 + 16382);
+        expect(valueAt(engine, 'N1')).toBe(1048573);
+        expect(valueAt(engine, 'N2')).toBe(16382);
+    });
+
+    test('a range is stored as far as its cells reach, so a pass with a small cap still computes it', () => {
+        const sheets = {
+            s1: { ...cells, N1: '=SUM(B1:B1000000*C1:F1)', N2: '=SUM(--(Sheet2!A:XFD=""))' },
+            s2: { D3: 300 },
+        };
+        const engine = engineOf(sheets);
+        expect(engine.recalc(1000).stopped).toBe(false);
+        expect(valueAt(engine, 'N1')).toBe(300);
+        expect(valueAt(engine, 'N2')).toBe(16384 * 1048576 - 1);
+    });
+
+    test('the elements an operator makes count against the cap of a pass', () => {
+        const filled: Record<string, number | string> = { N1: '=SUM(A1:A2000*2)', N2: '=N1+1' };
+        for (let row = 1; row <= 2000; row += 1) filled[`A${row}`] = row;
+        expect(engineOf({ s1: filled }).recalc(1000).stopped).toBe(true);
+        expect(engineOf({ s1: filled }).recalc(100000).stopped).toBe(false);
+    });
+
+    // The one case the stored form cannot hold: an array shorter than the one it meets, with rows past its cells.
+    // Excel has 0 from the end of its cells to its last row and #N/A after it; here it is #N/A from the first on.
+    test('a shorter array is #N/A past its last row, and past its cells when it holds fewer', () => {
+        expect(evaluate('=INDEX(B1:B3*{1;2},3)', cells)).toBe(NA);
+        expect(evaluate('=INDEX(B1:B5*{1;2;3},3)', cells)).toBe(90);
+        expect(evaluate('=INDEX(B1:B5*{1;2;3},4)', cells)).toBe(NA);
+        expect(evaluate('=INDEX(B1:B10*C1:C20,15)', cells)).toBe(NA);
+        expect(evaluate('=INDEX(B1:B10*C1:C20,1)', cells)).toBe(20);
+        expect(evaluate('=INDEX(B1:B10*C1:C20,8)', cells)).toBe(NA);
+        expect(evaluate('=SUM(B1:B10*C1:C20)', cells)).toBe(NA);
     });
 });
 
