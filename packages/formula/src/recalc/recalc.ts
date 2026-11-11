@@ -168,7 +168,8 @@ export class Recalc {
 
     // Computes what is still to be computed in one area, so a loop over its planes meets values only.
     public settleArea(area: Reference): void {
-        const { sheet, top } = area;
+        const { top } = area;
+        const sheet = this.workbook.sheets[area.sheet];
         const right = Math.min(area.right, sheet.columns.length - 1);
         for (let c = area.left; c <= right; c += 1) {
             const column = sheet.columns[c];

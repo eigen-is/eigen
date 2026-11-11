@@ -86,7 +86,8 @@ function keyOf(value: Value): Key | FormulaError {
 
 // One cell of a range or one element of an array, by its row and column from 0.
 function pick(ctx: Evaluator, source: Value, row: number, column: number): Value {
-    if (isReference(source)) return ctx.recalc.valueOf(source.sheet, source.top + row, source.left + column);
+    if (isReference(source))
+        return ctx.recalc.valueOf(ctx.workbook.sheets[source.sheet], source.top + row, source.left + column);
     return isArray(source) ? elementAt(source, row, column) : source;
 }
 

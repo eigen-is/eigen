@@ -3,17 +3,17 @@
 // to cells that nobody has read yet, an array, and the argument a call leaves out. An array keeps the size that
 // was written apart from what it stores, so a whole column costs its cells and not the grid.
 
-import type { Sheet } from '../store/sheet';
 import type { FormulaError } from './errors';
 
 export const ValueType = { Error: 1, Reference: 2, Array: 3, Omitted: 4 } as const;
 
 export type Scalar = number | string | boolean | null | FormulaError;
 
-// One rectangle of one sheet, corners included, and the next area when a union made it.
+// One rectangle of one sheet, corners included, and the next area when a union made it. The sheet is its place in
+// the workbook, so a reference is plain data that reads nothing.
 export type Reference = {
     readonly type: typeof ValueType.Reference;
-    readonly sheet: Sheet;
+    readonly sheet: number;
     readonly top: number;
     readonly left: number;
     readonly bottom: number;

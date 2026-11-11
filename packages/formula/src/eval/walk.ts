@@ -189,7 +189,7 @@ export class Walk {
     }
 
     private cell(at: Reference): boolean {
-        const held = at.sheet.columns[at.left];
+        const held = this.ctx.workbook.sheets[at.sheet].columns[at.left];
         if (held === undefined || at.top >= held.length) return false;
         const kind = held.kind[at.top] & KIND_MASK;
         if ((KINDS[this.take] >> kind) & 1) {
@@ -202,7 +202,7 @@ export class Walk {
     private enter(area: Reference | null): boolean {
         this.area = area;
         if (area === null) return false;
-        const { columns } = area.sheet;
+        const { columns } = this.ctx.workbook.sheets[area.sheet];
         this.right = Math.min(area.right, columns.length - 1);
         this.row = area.top;
         this.end = 0;
@@ -217,7 +217,7 @@ export class Walk {
     // cells of one row, gathered.
     private cells(area: Reference): boolean {
         const { take, right, end, span } = this;
-        const { columns } = area.sheet;
+        const { columns } = this.ctx.workbook.sheets[area.sheet];
         const kinds = KINDS[take];
         const strict = take <= Take.Truths;
         if (this.row < end && area.left === right) {

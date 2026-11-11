@@ -205,7 +205,7 @@ export function tally(ctx: Evaluator, pairs: readonly Value[], counted: Value | 
     const columns: (Column | undefined)[] = [];
     const used: number[] = [];
     for (let across = 0; across < width; across += 1) {
-        const value = values?.sheet.columns[values.left + across];
+        const value = values === null ? undefined : ctx.workbook.sheets[values.sheet].columns[values.left + across];
         const valueTop = values?.top ?? 0;
         const valueUsed = value === undefined ? 0 : Math.min(value.length - valueTop, rows);
         // Rows from `stop` on hold no cell that can change the outcome: with a criterion that refuses a blank none
@@ -215,7 +215,7 @@ export function tally(ctx: Evaluator, pairs: readonly Value[], counted: Value | 
         let listed: readonly number[] | null = null;
         for (let i = 0; i < criteria.length; i += 1) {
             const { top, left, sheet } = ranges[i];
-            const column = sheet.columns[left + across];
+            const column = ctx.workbook.sheets[sheet].columns[left + across];
             const criterion = criteria[i];
             columns[i] = column;
             used[i] = column === undefined ? 0 : Math.min(column.length - top, rows);

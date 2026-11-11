@@ -59,7 +59,7 @@ function rangeProducts(ctx: Evaluator, args: readonly Value[]): Value | null {
     for (const area of areas) {
         let used = 0;
         for (let c = 0; c < columns; c += 1) {
-            used = Math.max(used, (area.sheet.columns[area.left + c]?.length ?? 0) - area.top);
+            used = Math.max(used, (ctx.workbook.sheets[area.sheet].columns[area.left + c]?.length ?? 0) - area.top);
         }
         rows = Math.min(rows, used);
     }
@@ -69,10 +69,10 @@ function rangeProducts(ctx: Evaluator, args: readonly Value[]): Value | null {
     for (let c = 0; c < columns; c += 1) {
         let common = rows;
         for (const area of areas) {
-            common = Math.min(common, (area.sheet.columns[area.left + c]?.length ?? 0) - area.top);
+            common = Math.min(common, (ctx.workbook.sheets[area.sheet].columns[area.left + c]?.length ?? 0) - area.top);
         }
         for (let k = 0; k < areas.length && common > 0; k += 1) {
-            const { num } = areas[k].sheet.columns[areas[k].left + c];
+            const { num } = ctx.workbook.sheets[areas[k].sheet].columns[areas[k].left + c];
             const { top } = areas[k];
             if (k === 0) for (let r = 0; r < common; r += 1) products[r * columns + c] = num[top + r];
             else for (let r = 0; r < common; r += 1) products[r * columns + c] *= num[top + r];

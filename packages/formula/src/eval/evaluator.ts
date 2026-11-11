@@ -37,6 +37,8 @@ export class Evaluator {
     // Where a reference that is read as an array marks its rows and its columns that hold a cell.
     private rowMarks = new Uint8Array(64);
     private columnMarks = new Uint8Array(64);
+    private placed: Sheet | null = null;
+    private placedAt = 0;
     // The value of each array constant met, which is the same for every cell that holds it.
     private readonly constants = new WeakMap<FormulaNode, Scalar | ArrayValue>();
 
@@ -120,7 +122,7 @@ export class Evaluator {
             case ValueType.Reference:
                 if (value.next !== null) return VALUE;
                 if (value.top === value.bottom && value.left === value.right) {
-                    return this.recalc.valueOf(value.sheet, value.top, value.left);
+                    return this.recalc.valueOf(this.workbook.sheets[value.sheet], value.top, value.left);
                 }
                 return toArray(this, value);
             case ValueType.Omitted:
@@ -146,6 +148,15 @@ export class Evaluator {
         return node.kind === NodeKind.Empty ? null : this.evaluate(node, sheet, row, column);
     }
 
+    // The place of a sheet in the workbook. Most formulas name their own sheet, so the last answer is kept.
+    public place(sheet: Sheet): number {
+        if (sheet !== this.placed) {
+            this.placed = sheet;
+            this.placedAt = this.workbook.sheets.indexOf(sheet);
+        }
+        return this.placedAt;
+    }
+
     private sheetOf(node: FormulaNode, host: Sheet): Sheet | undefined {
         if (node.sheetKind === SheetKind.Host) return host;
         return node.sheetKind === SheetKind.Id ? this.workbook.sheet(node.sheet) : undefined;
@@ -169,7 +180,7 @@ export class Evaluator {
             left = Math.min(ends.first, ends.second);
             right = Math.max(ends.first, ends.second);
         }
-        return { type: ValueType.Reference, sheet, top, left, bottom, right, next: null };
+        return { type: ValueType.Reference, sheet: this.place(sheet), top, left, bottom, right, next: null };
     }
 
     private prefix(node: FormulaNode, sheet: Sheet, row: number, column: number): Value {

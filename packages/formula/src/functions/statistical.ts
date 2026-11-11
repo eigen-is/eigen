@@ -29,7 +29,7 @@ const countBlank: FunctionBody = (args, ctx) => {
         // Asked once the formulas are computed: the empty text has an id only when a cell holds it.
         const empty = ctx.workbook.strings.find('');
         blank += (area.bottom - area.top + 1) * (area.right - area.left + 1);
-        const { columns } = area.sheet;
+        const { columns } = ctx.workbook.sheets[area.sheet];
         const right = Math.min(area.right, columns.length - 1);
         for (let c = area.left; c <= right; c += 1) {
             const { kind, ref, length } = columns[c];

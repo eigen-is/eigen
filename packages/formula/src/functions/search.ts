@@ -47,7 +47,7 @@ export function edgeOf(ctx: Evaluator, range: Value, down: boolean): Vector {
     const { workbook } = ctx;
     if (isReference(range) && down) {
         ctx.recalc.settleArea({ ...range, right: range.left, next: null });
-        const column = range.sheet.columns[range.left];
+        const column = workbook.sheets[range.sheet].columns[range.left];
         const length = range.bottom - range.top + 1;
         // The blanks at the end of the range take no part, whatever cells the column holds below it.
         let used = column === undefined ? 0 : Math.max(0, Math.min(length, column.length - range.top));

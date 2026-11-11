@@ -12,7 +12,7 @@ import type { Evaluator } from './evaluator';
 
 // The first error of one area, row by row, once its cells are settled. A cell on a loop still carries its flags.
 export function firstError(ctx: Evaluator, area: Reference): FormulaError | null {
-    const { columns } = area.sheet;
+    const { columns } = ctx.workbook.sheets[area.sheet];
     const right = Math.min(area.right, columns.length - 1);
     let found: FormulaError | null = null;
     let foundRow = GRID_ROWS;
@@ -34,7 +34,7 @@ export function firstError(ctx: Evaluator, area: Reference): FormulaError | null
 export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
     ctx.recalc.settleArea(area);
     const { top, left } = area;
-    const sheet = area.sheet.columns;
+    const sheet = ctx.workbook.sheets[area.sheet].columns;
     const rows = area.bottom - top + 1;
     const columns = area.right - left + 1;
     const across = Math.max(0, Math.min(columns, sheet.length - left));
