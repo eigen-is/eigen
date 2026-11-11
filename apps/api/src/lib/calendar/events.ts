@@ -80,9 +80,9 @@ export async function createEvent(
         const uri = `${crypto.randomUUID()}.ics`;
         const uid = args.uid || crypto.randomUUID();
         if (uidHolder(calendar, calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
-        const organized = { ...args, data: organizedData(calendar, user, args.data) };
-        const event = eventForResource({ id: crypto.randomUUID(), calendarId, uid, input: organized, now: new Date() });
-        const prepared = prepareResource(calendarId, buildResource([event]), null);
+        const event = eventForResource({ id: crypto.randomUUID(), calendarId, uid, input: args, now: new Date() });
+        const resource = buildResource([event], user && organizerOf(calendar.home, user));
+        const prepared = prepareResource(calendarId, resource, null);
         await calendar.writeResource({ calendarId, uri, prepared, creditBytes: 0 });
         return { created: requireEvent(calendar, event.id), replaced: null };
     });
@@ -142,7 +142,8 @@ export async function deleteEvent(
         }
     } else if (!invitation && held.length) {
         // An event with no foreign organizer makes this user its organizer, and an organizer's delete cancels.
-        propagateCancellation(calendar.home, user, existing, held, series ?? undefined).catch(console.error);
+        const organizer = organizerOf(calendar.home, user, existing.data?.organizer);
+        propagateCancellation(calendar.home, organizer, existing, held, series ?? undefined).catch(console.error);
     }
 
     calendar.announce(SSEventType.CALENDAR_EVENT_DELETED, calendarId);
@@ -366,22 +367,23 @@ async function propagateWrite(
     if (!attendees.length && !held.length) return;
     if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
     if (before && guestView(before, series) === guestView(event, series)) return;
+    // An event that lost its last guests names no organizer any more, so their cancellation names the one they held.
+    const organizer = organizerOf(calendar.home, user, event.data?.organizer ?? before?.data?.organizer);
     if (series && event.status === 'cancelled') {
-        await propagateCancellation(calendar.home, user, event, held, series);
+        await propagateCancellation(calendar.home, organizer, event, held, series);
         return;
     }
     // An occurrence write is itself one exception and carries none.
     const exceptions = series ? [] : exceptionsOf(calendar, event.id);
-    await propagateInvitation(calendar.home, event, user, held, attendees, series ?? undefined, exceptions);
+    await propagateInvitation(calendar.home, organizer, event, user, held, attendees, series ?? undefined, exceptions);
 }
 
-// The file a guest would get, minus the revision that changes with every write and the ORGANIZER every message names
-// for itself. An instant reads the same in any zone, unless a rule repeats in that zone's wall clock.
+// The file a guest would get, minus the revision that changes with every write. An instant reads the same in any zone,
+// unless a rule repeats in that zone's wall clock.
 function guestView(event: CalendarEvent, series: CalendarEvent | null): string {
     const never = new Date(0);
     const timezone = event.rrule ? event.timezone : null;
-    const data = { ...event.data, organizer: undefined };
-    const view = { ...event, timezone, data, sequence: 0, createdAt: never, updatedAt: never };
+    const view = { ...event, timezone, sequence: 0, createdAt: never, updatedAt: never };
     return serializeEventForImip(view, 'REQUEST', series ?? undefined);
 }
 
@@ -407,8 +409,6 @@ async function patchStoredEvent(
             localData.color = input.data.color ?? localData.color;
         }
         input = { data: localData };
-    } else {
-        input = { ...input, data: organizedData(calendar, user, input.data) };
     }
 
     // The stored rule passed these checks when it was projected, so it is checked again only beside a moved start.
@@ -453,7 +453,7 @@ async function patchStoredEvent(
             status: input.status,
             data: input.data ?? undefined,
         },
-        writeContext(!!user && organizer),
+        saveContext(calendar, !!user && organizer, user),
     );
 
     return { updated: requireEvent(calendar, id), existing };
@@ -478,23 +478,15 @@ async function writeOverride(
     if (!key) throw new ApiError(400, 'Invalid occurrence date');
 
     const organizer = !isInvitationFromOthers(parent, calendar.home.user.email);
-    const data = organizer ? organizedData(calendar, user, input.data) : input.data;
-    const edit = exceptionEdit(parent, { ...input, data }, writeContext(organizer));
+    const edit = exceptionEdit(parent, input, saveContext(calendar, organizer, user));
     await editResource(calendar, resource, (component) => applyEdits(component, new Map([[key, edit]])));
     const stored = exceptionOf(calendar, parent.id, key);
     return stored ?? requireEvent(calendar, parent.id);
 }
 
-// Guests answer the ORGANIZER (RFC 5546), so an organizer's VEVENT with guests names the one every message about it
-// names. One without guests names none, since RFC 5545 gives an event on one person's calendar no ORGANIZER.
-function organizedData(
-    calendar: Calendar,
-    user: User | undefined,
-    data: EventData | null | undefined,
-): EventData | null | undefined {
-    if (!data?.attendees?.length) return data;
-    const { email, name } = organizerOf(calendar.home, user);
-    return email ? { ...data, organizer: { userId: '', email, name } } : data;
+// An organizer's save names whoever saves as the ORGANIZER of a file that names none yet.
+function saveContext(calendar: Calendar, organizes: boolean, user: User | undefined): WriteContext {
+    return { ...writeContext(organizes), organizer: organizes && user ? organizerOf(calendar.home, user) : undefined };
 }
 
 // An event a write under the lock just stored or read through its series, so only a delete since then misses it.

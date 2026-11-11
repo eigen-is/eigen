@@ -25,6 +25,7 @@ import type { InvitationRequest } from './types';
 // a series carries its `exceptions`, so a guest's copy never shows a moved or deleted date at its old slot.
 export async function propagateInvitation(
     organizerHome: Home,
+    organizer: Organizer,
     event: CalendarEvent,
     user: User,
     oldAttendees: readonly Attendee[],
@@ -36,7 +37,6 @@ export async function propagateInvitation(
     const newEmails = new Set(newAttendees.map((a) => a.email.toLowerCase()));
     const selves = new Set([user.email.toLowerCase(), organizerHome.user.email.toLowerCase()]);
     const notSelf = (a: Attendee) => !selves.has(a.email.toLowerCase());
-    const organizer = organizerOf(organizerHome, user);
     let request: OutboundICalEvent | undefined;
 
     for (const attendee of newAttendees.filter(notSelf)) {
@@ -103,13 +103,12 @@ export async function propagateRsvp(
 // `attendees` is who held the event, because a cancelled occurrence is an EXDATE with no guest list of its own.
 export async function propagateCancellation(
     organizerHome: Home,
-    user: User | undefined,
+    organizer: Organizer,
     cancelled: CalendarEvent,
     attendees: readonly Attendee[],
     series?: CalendarEvent,
 ): Promise<void> {
     const occurrence = occurrenceRevision(cancelled, series);
-    const organizer = organizerOf(organizerHome, user);
     for (const attendee of attendees) {
         try {
             const targetUser = await getUserByEmail(attendee.email);
@@ -143,12 +142,12 @@ export function pendingInvitations(calendar: Calendar, email: string): Invitatio
     const all = calendar.joinedEvents().all().map(toEvent);
     const byId = new Map(all.map((event) => [event.id, event]));
     const exceptionsOf = Map.groupBy(all, (event) => event.parentEventId);
-    const organizer = organizerOf(calendar.home, undefined);
     return all.flatMap((event) => {
         const series = event.parentEventId ? byId.get(event.parentEventId) : undefined;
         if (!lists(event) || lists(series)) return [];
         if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return [];
         const exceptions = series ? [] : (exceptionsOf.get(event.id) ?? []);
+        const organizer = organizerOf(calendar.home, undefined, event.data?.organizer);
         return [invitationRequest(organizer, calendar.home.user.id, email, event, series, exceptions)];
     });
 }
@@ -159,10 +158,10 @@ export function answeredOccurrence(event: CalendarEvent): string | undefined {
     return event.parentEventId ? undefined : (event.recurrenceDate ?? undefined);
 }
 
-// A guest answers the ORGANIZER, and only the calendar's own Home holds the event, so its user is named whoever saved.
-// A team has no address, so a team event names the member who saved it.
-export function organizerOf(organizerHome: Home, user: User | undefined): Organizer {
-    const named = organizerHome.user.email ? organizerHome.user : user;
+// A guest answers the ORGANIZER, and only the calendar's own Home holds the event, so every message names the one its
+// file `stored`. A file that names none is organized by the Home's user, or on a team, which has no address, by `user`.
+export function organizerOf(organizerHome: Home, user: User | undefined, stored?: Organizer): Organizer {
+    const named = stored ?? (organizerHome.user.email ? organizerHome.user : user);
     return { userId: organizerHome.user.id, email: named?.email ?? '', name: named?.name };
 }
 

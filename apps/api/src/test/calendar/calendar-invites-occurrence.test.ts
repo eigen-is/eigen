@@ -766,6 +766,24 @@ describe('Occurrence edits of an invited series', () => {
         expect((await aliceVEvents(series.uid))[0]).toMatch(organizerLine());
     });
 
+    test('an event drops the ORGANIZER line with its last guest', async () => {
+        const series = await createSeries('Weekly Last Guest');
+        expect((await aliceVEvents(series.uid))[0]).toMatch(organizerLine());
+
+        expect((await putEvent(series.id, { data: { attendees: [] } })).status).toBe(200);
+        expect((await aliceVEvents(series.uid))[0]).not.toContain('ORGANIZER');
+    });
+
+    test('a date the series gives its first guest names the ORGANIZER too', async () => {
+        const series = await createSeries('Weekly Date First Guest', []);
+        await editOccurrence(series.id, '2027-02-09', { title: 'Date First Guest Moved', data: { attendees: [] } });
+
+        expect((await putEvent(series.id, { data: { attendees: guests() } })).status).toBe(200);
+        const vevents = await aliceVEvents(series.uid);
+        expect(vevents).toHaveLength(2);
+        for (const vevent of vevents) expect(vevent).toMatch(organizerLine());
+    });
+
     // A date's list is its whole guest list, so an emptied one has no guests, and those it had hear it is cancelled.
     test("emptying one date's guest list cancels that date for its guests and leaves it guest-less", async () => {
         const CAROL = 'carol.emptied@example.org';

@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
 import { vcal } from '../ics-test-helpers';
@@ -1289,52 +1291,6 @@ describe('A save only its owner sees', () => {
         mail.mockRestore();
     });
 
-    // An older build stored an organizer's event with guests and no ORGANIZER line, and its next save writes one. Every
-    // message names the organizer itself, so the line is no news to a guest.
-    test('the ORGANIZER line a save adds to an event stored without one mails nobody', async () => {
-        const ctx = await getTestContext();
-        const owner = ctx.alice.user;
-        const { calendar } = await getHome(owner.id);
-        const calendarId = findOrFail(await calendar.getCalendars(), (c) => c.isDefault).id;
-        const uid = crypto.randomUUID();
-        const GUEST = 'bare@external.com';
-        const body = vcal([
-            'BEGIN:VEVENT',
-            `UID:${uid}`,
-            'DTSTART:20271201T090000Z',
-            'DTEND:20271201T100000Z',
-            'SUMMARY:Stored bare',
-            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${GUEST}`,
-            'END:VEVENT',
-        ]);
-        expect(
-            (await calendar.putResource(calendarId, `${uid}.ics`, body, { ifMatch: null, ifNoneMatch: null })).ok,
-        ).toBe(true);
-        const event = findOrFail(await calendar.getEventsByUid(uid), () => true);
-        const save = (changes: object) =>
-            authedRequest(owner.sessionToken, `/calendar/${owner.id}/calendars/${calendarId}/events/${event.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(changes),
-            });
-        const mailer = await import('../../lib/mailer/mailer');
-        const mail = spyOn(mailer, 'sendMail').mockResolvedValue(true);
-        mail.mockClear();
-        try {
-            const reminders = [{ type: 'notification', minutes: 10 }];
-            const saved = await assertJson<CalendarEvent>(await save({ data: { ...event.data, reminders } }));
-            expect(saved.data?.organizer?.email).toBe(owner.email);
-
-            // Absence only counts behind what IS expected: a rename, made second, takes the path the first save must not.
-            expect((await save({ title: 'Stored bare renamed' })).status).toBe(200);
-            const toGuest = () => mail.mock.calls.filter(([sent]) => sent.to.some((to) => to.address === GUEST));
-            await eventually(async () => toGuest().length || undefined, 'the rename to reach the guest');
-            expect(toGuest().map(([sent]) => sent.subject)).toEqual(['Updated invitation: Stored bare renamed']);
-        } finally {
-            mail.mockRestore();
-        }
-    });
-
     test('a repeating event in another zone moves its later occurrences, so the guests hear it', async () => {
         const { save, mail, mailed, event } = await setup('Weekly zone', { rrule: 'FREQ=WEEKLY' });
 
@@ -1342,5 +1298,80 @@ describe('A save only its owner sees', () => {
 
         await eventually(async () => mailed('Updated invitation: Weekly zone') || undefined, 'the zone update');
         mail.mockRestore();
+    });
+});
+
+// A team has no address, so a team event's ORGANIZER is the member who first gave it guests, and it stays theirs
+// whoever saves it next: a guest's answer and every later message name that one organizer.
+describe('The organizer a team event names', () => {
+    test("a member's save of another member's event keeps the stored ORGANIZER", async () => {
+        const ctx = await getTestContext();
+        const [alice, bob] = [ctx.alice.user, ctx.bob.user];
+        const orgId = getServerConfig()?.orgId;
+        const post = (path: string, body: object, method = 'POST') =>
+            authedRequest(alice.sessionToken, path, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        await post('/auth/organization/set-active', { organizationId: orgId });
+        const team = await assertJson<{ id: string }>(
+            await post('/auth/organization/create-team', {
+                name: `Organizer ${crypto.randomUUID()}`,
+                organizationId: orgId,
+            }),
+        );
+        const owner = teamOwnerId(team.id);
+        await post(`/team/${owner}/settings`, { calendar: { enabled: true } }, 'PUT');
+        for (const member of [alice, bob]) {
+            await post('/auth/organization/add-team-member', { teamId: team.id, userId: member.id });
+        }
+        const calendar = await assertJson<CalendarItem>(
+            await post(`/calendar/${owner}/calendars`, { name: 'Team organizer', color: '#334455' }),
+        );
+        const events = `/calendar/${owner}/calendars/${calendar.id}/events`;
+        await post(
+            `/calendar/${owner}/calendars/${calendar.id}`,
+            { shares: [{ targetId: owner, permission: 'write' }] },
+            'PUT',
+        );
+
+        const GUEST = 'team-guest@external.com';
+        const mailer = await import('../../lib/mailer/mailer');
+        const mail = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        try {
+            const event = await assertJson<CalendarEvent>(
+                await post(events, {
+                    title: 'Team review',
+                    startTime: new Date(Date.now() + 3600_000),
+                    endTime: new Date(Date.now() + 7200_000),
+                    allDay: false,
+                    data: { attendees: [{ email: GUEST, status: 'pending', role: 'required' }] },
+                }),
+            );
+            expect(event.data?.organizer?.email).toBe(alice.email);
+
+            const save = (body: object) =>
+                authedRequest(bob.sessionToken, `${events}/${event.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+            const restated = await assertJson<CalendarEvent>(await save({ title: event.title, data: event.data }));
+            expect(restated.etag).toBe(event.etag);
+
+            mail.mockClear();
+            const renamed = await assertJson<CalendarEvent>(await save({ title: 'Team review moved' }));
+            expect(renamed.data?.organizer?.email).toBe(alice.email);
+            const update = await eventually(
+                async () => mail.mock.calls.map(([sent]) => sent).find((sent) => sent.to[0]?.address === GUEST),
+                "Bob's update to reach the guest",
+            );
+            expect(update.icalEvent?.content.replace(/\r\n[ \t]/g, '')).toMatch(
+                new RegExp(`\\r\\nORGANIZER[^\\r]*:mailto:${alice.email}\\r\\n`),
+            );
+        } finally {
+            mail.mockRestore();
+        }
     });
 });
