@@ -449,8 +449,7 @@ describe('charts converge over real ops', () => {
     });
 });
 
-// Every entry of a keyed part sits under its own key, so two peers editing two entries, or a part and an entry, keep
-// both on every client and a joiner.
+// Each part is its own field, so two peers editing two parts of one chart keep both.
 describe('two peers editing two parts of one chart keep both edits', () => {
     const set = (path: string[], value: unknown): ChartSpecChange => [{ op: 'set', path, value }];
     const title = set(['title', 'text'], 'Goals');
