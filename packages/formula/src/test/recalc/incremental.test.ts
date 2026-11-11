@@ -259,6 +259,34 @@ describe('a formula that reads cells its references do not name', () => {
         expect(valueAt(engine, 'A1')).toBe(13);
     });
 
+    test('SUMIF and AVERAGEIF are, only when the range they add up is not as large as the one they test', () => {
+        const { engine, computed, write } = opened({
+            s1: {
+                B1: 1,
+                B2: 1,
+                B3: 1,
+                C1: 1,
+                C2: 2,
+                C3: 3,
+                E1: '=SUMIF(B1:B3,">0",C1:C3)',
+                E2: '=AVERAGEIF($B$1:$B$3,">0",$C$1:$C$3)',
+                E3: '=SUMIF(B:B,">0",C:C)',
+                E4: '=SUMIF(B1:B3,">0")',
+                F1: '=SUMIF(B1:B3,">0",C1:C2)',
+                F2: '=AVERAGEIF(B1:B3,">0",C1)',
+                F3: '=SUMIF(B1:B3,">0",C$1:C3)',
+                F4: '=SUMIF(B1:B3,">0",(C1:C3))',
+                F5: '=SUMIF(B1:B3,">0",C1:D3)',
+            },
+        });
+        write('Z9', 1);
+        expect(computed()).toEqual(['F1', 'F2', 'F3', 'F4', 'F5']);
+        write('C3', 10);
+        expect(computed()).toEqual(['E1', 'E2', 'E3', 'F1', 'F2', 'F3', 'F4', 'F5']);
+        expect(valueAt(engine, 'E1')).toBe(13);
+        expect(valueAt(engine, 'F2')).toBe(13 / 3);
+    });
+
     test('whatever cell was written, and not when none was', () => {
         const { computed, write } = opened({
             s1: { A1: 1, 'E1:F2': '=SUM($A$1:INDEX($C$1:$C$3,3))', G1: '=F2+1', H1: '=A1' },

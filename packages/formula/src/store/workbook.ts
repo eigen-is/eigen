@@ -7,7 +7,7 @@ import { ShapeTable } from '../text/shapes';
 import type { FormulaError } from '../values/errors';
 import { ERRORS } from '../values/errors';
 import type { Scalar } from '../values/value';
-import { CellKind, Column } from './column';
+import { CellKind, Column, KIND_MASK } from './column';
 import { Sheet } from './sheet';
 import { StringTable } from './strings';
 
@@ -35,7 +35,7 @@ export class Workbook {
 
     public constructor(sources: readonly SheetSource[]) {
         for (const source of sources) {
-            const sheet = new Sheet(source.id, source.name);
+            const sheet = new Sheet(source.id);
             this.sheets.push(sheet);
             this.byId.set(sheet.id, sheet);
             const lengths: number[] = [];
@@ -59,7 +59,7 @@ export class Workbook {
 
     public value(column: Column, row: number): Scalar {
         if (row >= column.length) return null;
-        switch (column.kind[row] & 15) {
+        switch (column.kind[row] & KIND_MASK) {
             case CellKind.Number:
                 return column.num[row];
             case CellKind.Boolean:

@@ -24,8 +24,6 @@ export const ParamKind = {
     Ref: 2,
     // Not evaluated: the body forces it when it needs it.
     Lazy: 3,
-    // Whatever the argument evaluated to.
-    Any: 4,
 } as const;
 
 export type Param = {
@@ -39,9 +37,9 @@ export const FunctionFlag = {
     ReturnsReference: 2,
     // Reads cells its arguments do not name, as OFFSET does.
     ReadsUnnamed: 4,
-    // The result depends on the cell the formula sits in.
-    Positional: 8,
-    ReturnsDate: 16,
+    // Reads its third argument at the size of its first, as SUMIF does, so it reads cells that argument does not
+    // name unless the two are references of one size.
+    Resizes: 8,
 } as const;
 
 export type FunctionBody = (
