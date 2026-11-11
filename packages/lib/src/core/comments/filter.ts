@@ -11,13 +11,11 @@ export type CommentAssigneeFilter = 'all' | 'me' | 'unassigned' | { email: strin
 // In the Status submenu's order.
 export const COMMENT_STATUS_FILTERS = ['open', 'resolved', 'all'] as const;
 
-export type CommentFilter = {
+type CommentFilter = {
     assignee: CommentAssigneeFilter;
     colors: Set<string> | null; // null = all; matches card.color || ''
     status: (typeof COMMENT_STATUS_FILTERS)[number];
 };
-
-export const DEFAULT_COMMENT_FILTER: CommentFilter = { assignee: 'all', colors: null, status: 'open' };
 
 export const COMMENT_STATUS_LABELS: Record<CommentFilter['status'], string> = {
     open: 'Open',
@@ -33,7 +31,7 @@ export function useCommentFilter(defaults?: Partial<CommentFilter>): {
     isActive: boolean;
     clear: () => void;
 } {
-    const [initial] = useState<CommentFilter>(() => ({ ...DEFAULT_COMMENT_FILTER, ...defaults }));
+    const [initial] = useState<CommentFilter>(() => ({ assignee: 'all', colors: null, status: 'open', ...defaults }));
     const [filter, setFilter] = useState(initial);
 
     const setAssignee = useCallback(
@@ -56,7 +54,13 @@ export function useCommentFilter(defaults?: Partial<CommentFilter>): {
     );
     const clear = useCallback(() => setFilter(initial), [initial]);
 
-    const isActive = useMemo(() => isCommentFilterActive(filter, initial), [filter, initial]);
+    const isActive = useMemo(
+        () =>
+            filter.status !== initial.status ||
+            !sameAssignee(filter.assignee, initial.assignee) ||
+            !sameColors(filter.colors, initial.colors),
+        [filter, initial],
+    );
 
     return { filter, setAssignee, toggleColor, setStatus, isActive, clear };
 }
@@ -78,14 +82,6 @@ export function matchesCommentFilter(
 
     if (filter.colors && !filter.colors.has(card.color || '')) return false;
     return true;
-}
-
-export function isCommentFilterActive(filter: CommentFilter, defaults: CommentFilter): boolean {
-    return (
-        filter.status !== defaults.status ||
-        !sameAssignee(filter.assignee, defaults.assignee) ||
-        !sameColors(filter.colors, defaults.colors)
-    );
 }
 
 function sameAssignee(a: CommentAssigneeFilter, b: CommentAssigneeFilter): boolean {

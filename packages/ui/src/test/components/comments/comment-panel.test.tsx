@@ -15,7 +15,6 @@ afterAll(() => {
 });
 
 const { createElement } = await import('react');
-const { DEFAULT_COMMENT_FILTER } = await import('@workspace/lib/comments');
 const { useContextMenu } = await import('../../../components/context-menu');
 const { CommentPanel } = await import('../../../components/comments/comment-panel');
 const { PanelColumn } = await import('../../../components/comments/panel-column');
@@ -23,7 +22,7 @@ const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('../../drive-path');
 
 const filter = {
-    filter: DEFAULT_COMMENT_FILTER,
+    filter: { assignee: 'all', colors: null, status: 'open' } as const,
     setAssignee: () => {},
     toggleColor: () => {},
     setStatus: () => {},

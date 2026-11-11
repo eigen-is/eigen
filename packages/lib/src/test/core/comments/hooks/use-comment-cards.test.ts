@@ -1,18 +1,26 @@
 import { describe, expect, test } from 'bun:test';
+import { QueryClient } from '@tanstack/react-query';
 import * as Y from 'yjs';
-import { getItemMapRoot } from '../../../../core/collab/yjs-utils';
-import { readCards, useCommentCards } from '../../../../core/comments/hooks/use-comment-cards';
+import { useCommentCards } from '../../../../core/comments/hooks/use-comment-cards';
 import { countTaskItems } from '../../../../core/html';
 import { sanitizeCommentCardHtml } from '../../../../core/html-dom';
-import type { CommentCard } from '../../../../types/comments';
+import type { CommentCard, CommentMapName } from '../../../../types/comments';
 import type { AttachmentReference } from '../../../../types/drive-reference';
 import { installHappyDom } from '../../../happy-dom';
+import { renderHook } from '../../../render-hook';
 
-// readCards sanitizes each card's description: it reaches us verbatim from a hostile peer's Y.Doc write
+// useCommentCards sanitizes each card's description: it reaches us verbatim from a hostile peer's Y.Doc write
 // and is rendered via dangerouslySetInnerHTML.
 installHappyDom();
 
-function cardWithDescription(html: string): CommentCard {
+// The cards a host gets on its first render.
+async function readCards(doc: Y.Doc, mapName: CommentMapName): Promise<Record<string, CommentCard>> {
+    const { latest, unmount } = await renderHook(() => useCommentCards(doc, mapName), new QueryClient());
+    await unmount();
+    return latest;
+}
+
+async function cardWithDescription(html: string): Promise<CommentCard> {
     const doc = new Y.Doc();
     const tasks = doc.getMap<unknown>('tasks');
     doc.transact(() => {
@@ -22,11 +30,11 @@ function cardWithDescription(html: string): CommentCard {
         c.set('description', html);
         tasks.set('c1', c);
     });
-    return readCards(tasks)['c1'];
+    return (await readCards(doc, 'tasks'))['c1'];
 }
 
-describe('readCards', () => {
-    test('reads every field a card stores', () => {
+describe('useCommentCards', () => {
+    test('reads every field a card stores', async () => {
         const doc = new Y.Doc();
         const tasks = doc.getMap<unknown>('tasks');
         doc.transact(() => {
@@ -41,7 +49,7 @@ describe('readCards', () => {
             tasks.set('c1', c);
         });
 
-        const result = readCards(tasks);
+        const result = await readCards(doc, 'tasks');
         expect(result['c1']).toEqual({
             id: 'c1',
             title: 'A card',
@@ -53,7 +61,7 @@ describe('readCards', () => {
         });
     });
 
-    test('a card may lack its creator and createdAt', () => {
+    test('a card may lack its creator and createdAt', async () => {
         const doc = new Y.Doc();
         const tasks = doc.getMap<unknown>('tasks');
         doc.transact(() => {
@@ -66,13 +74,13 @@ describe('readCards', () => {
             tasks.set('new-1', c);
         });
 
-        const result = readCards(tasks);
+        const result = await readCards(doc, 'tasks');
         expect(result['new-1'].creator).toBeUndefined();
         expect(result['new-1'].createdAt).toBeUndefined();
         expect(result['new-1'].title).toBe('New card');
     });
 
-    test('parses attachments and ignores malformed values', () => {
+    test('parses attachments and ignores malformed values', async () => {
         const doc = new Y.Doc();
         const tasks = doc.getMap<unknown>('tasks');
         const reference: AttachmentReference = {
@@ -114,13 +122,13 @@ describe('readCards', () => {
             tasks.set('a3', dirtyElements);
         });
 
-        const result = readCards(tasks);
+        const result = await readCards(doc, 'tasks');
         expect(result['a1'].attachments).toEqual(['photo.png', reference]);
         expect(result['a2'].attachments).toBeUndefined();
         expect(result['a3'].attachments).toEqual(['ok.png']);
     });
 
-    test("skips a peer's scalar entry instead of throwing on it", () => {
+    test("skips a peer's scalar entry instead of throwing on it", async () => {
         const doc = new Y.Doc();
         const tasks = doc.getMap<unknown>('tasks');
         doc.transact(() => {
@@ -131,13 +139,13 @@ describe('readCards', () => {
             tasks.set('scalar', 'not-a-card');
         });
 
-        expect(Object.keys(readCards(getItemMapRoot(doc, 'tasks')))).toEqual(['ok']);
+        expect(Object.keys(await readCards(doc, 'tasks'))).toEqual(['ok']);
     });
 });
 
-describe('readCards sanitizes hostile description HTML', () => {
-    test('strips an <img onerror> handler and a <script> tag, keeps LightEditor markup', () => {
-        const card = cardWithDescription(
+describe('useCommentCards sanitizes hostile description HTML', () => {
+    test('strips an <img onerror> handler and a <script> tag, keeps LightEditor markup', async () => {
+        const card = await cardWithDescription(
             '<p><strong>bold</strong> <a href="https://eigen.is">link</a></p>' +
                 '<img src=x onerror="alert(1)"><script>alert(2)</script>',
         );
@@ -150,8 +158,8 @@ describe('readCards sanitizes hostile description HTML', () => {
         );
     });
 
-    test('preserves task-list markup while dropping a payload smuggled inside a task item', () => {
-        const card = cardWithDescription(
+    test('preserves task-list markup while dropping a payload smuggled inside a task item', async () => {
+        const card = await cardWithDescription(
             '<ul data-type="taskList">' +
                 '<li data-checked="true" data-type="taskItem"><label><input type="checkbox" checked="checked"><span></span></label><div><p>Done</p></div></li>' +
                 '<li data-checked="false" data-type="taskItem"><label><input type="checkbox"><span></span></label><div><p>Todo <img src=x onerror="alert(1)"></p></div></li>' +
@@ -166,8 +174,8 @@ describe('readCards sanitizes hostile description HTML', () => {
         expect(card.description).not.toContain('<img');
     });
 
-    test('a stray label/div/input outside a task item unwraps to its children', () => {
-        const card = cardWithDescription(
+    test('a stray label/div/input outside a task item unwraps to its children', async () => {
+        const card = await cardWithDescription(
             '<label>hi</label><div>body</div><input type="text" autofocus onfocus="alert(1)">',
         );
         expect(card.description).not.toContain('<label>');
@@ -178,8 +186,8 @@ describe('readCards sanitizes hostile description HTML', () => {
         expect(card.description).toContain('body');
     });
 
-    test('countTaskItems still counts done/total after readCards', () => {
-        const card = cardWithDescription(
+    test('countTaskItems still counts done/total after a read', async () => {
+        const card = await cardWithDescription(
             '<ul data-type="taskList">' +
                 '<li data-checked="true" data-type="taskItem"><label><input type="checkbox" checked="checked"></label><div><p>A</p></div></li>' +
                 '<li data-checked="true" data-type="taskItem"><label><input type="checkbox" checked="checked"></label><div><p>B</p></div></li>' +
@@ -214,9 +222,9 @@ describe('the canvas delete mark', () => {
         return doc;
     }
 
-    test('readCards carries the mark, and a value that is not a time reads as not deleted', () => {
-        expect(readCards(docWithCard(1700000000000).getMap('comments'))['c1'].deletedAt).toBe(1700000000000);
-        expect(readCards(docWithCard('yes').getMap('comments'))['c1'].deletedAt).toBeUndefined();
+    test('a read carries the mark, and a value that is not a time reads as not deleted', async () => {
+        expect((await readCards(docWithCard(1700000000000), 'comments'))['c1'].deletedAt).toBe(1700000000000);
+        expect((await readCards(docWithCard('yes'), 'comments'))['c1'].deletedAt).toBeUndefined();
     });
 
     // useCommentCards reuses a card object whose fields are unchanged, so a mark it does not compare would never
