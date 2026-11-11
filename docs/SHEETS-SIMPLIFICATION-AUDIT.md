@@ -24,6 +24,11 @@ Like ROADMAP and the proposals, this doc holds only open work: strike a finding 
   - F6 no, corrected by the owner: the chart format stays future proof, so an edit keeps keys a newer build stored. The batch's answer read yes, on a question that called it the mirror of the no-compatibility ruling and didn't say the format was chosen on purpose.
   - [F7](#f7) yes, after checking what Google does: pie slice colours stay at their index. If Google follows the rows, it comes back to the owner.
   - [F8](#f8) yes, last in Wave 2: a tick box draws its box alone, and corner marks don't outrank the handles.
+- The rest of Wave 2, 2026-11-11, for the next Sheets session:
+  - [F7](#f7) and [F4](#f4) yes. For F4 the owner wants the best chart format, chosen from thorough research before any code: it need not be the format Docs, Slides and Vector store today, since nothing needs backward compatibility, but it is exactly the same in all four apps. So F4 may change the other apps' stored charts too.
+  - [S5](#s5) yes.
+  - [S4](#s4) yes, built the better way, and the owner accepts its loss: a tab that slept through a compaction loses its undo stacks.
+  - [F8](#f8) only where Google Sheets looks that way: check how Google draws a tick box with custom values and what a click on a corner mark does, then build the parts that match.
 
 ## Where the piles come from
 
@@ -31,7 +36,7 @@ The API audit's six patterns all show up here. Read across the six areas, though
 
 1. **The wire is whatever immer wrote.** An op is a raw immer patch. So everything a reducer happens to write reaches every peer, and every leak got its own filter or repair: merge stamps that must land after the cells ([D9](#d9)), a pre-apply simulation of what `applyPatches` would throw on ([S5](#s5)), and `normalizeSheetConfig` at six entry points because a first write to a missing collection ships it whole. The cure is a closed op vocabulary ([S10](#s10)).
 2. **Facts stored twice inside the workbook.** `cell.mc` beside `config.merge` ([D9](#d9)), pixel boxes beside the indices ([R9](#r9)), the clipboard. Every writer has to keep the two in step, and each one that didn't is a fix in the log.
-3. **Two paths for one job.** The editor's batch applier beside the engine's replay ([S2](#s2)), and row and column handlers written twice ([R9](#r9)).
+3. **Two paths for one job.** The editor's batch applier beside the engine's replay (S2 (done)), and row and column handlers written twice ([R9](#r9)).
 4. **Structural undo across peers.** Undoing your own row, column or sheet op after a peer edited since needed a three-way merge, trial runs, a refusal path and half the shifter. The owner accepted the smaller undo, and that is done.
 5. **Fork scaffolding.** Fill modes no menu could choose and Chinese numeral series are gone with D4. Protection nobody can switch on is still checked on edits, and got a fix (`b6ecee4d3`, protection checked before a delete, for a protection nobody can switch on).
 
@@ -64,13 +69,6 @@ The owner's message for this audit: the package is old, there is no backward com
 Steps 1 and 2 remove the most mechanism, and step 7 is a cycle of its own (L to XL).
 
 ## Op log, sync, snapshot and compaction
-
-<a id="s2"></a>**S2. A batch is applied by two paths, the editor's reducers and the engine's replay, kept in step by fixes.**
-`state/modules/apply-ops.ts` (`applyOpBatch`) beside `engine/replay-ops.ts` (`replaySheetsOps`); the `fromBatch` flags on `insertRowCol`, `deleteRowCol`, `addSheet` and `deleteSheet`.
-History: `c6b839be3`, `52c817a2b`, `9cb1085e7`, `fca68450d`, `59a34caff` (three disagreements on a batch that adds a sheet in one commit), `ffd396cd6`, `2bf964067`, and the "only the editor moved it" halves of `8e65b0259` and `a02c56f4a`.
-Root cause: root 3. The editor applies a peer's row op through its own reducers, which add shifts the engine lacks and need `fromBatch` to skip the permission check and the selection change. `addSheet` drops the matrix a value carries, so `applyOpBatch` puts it back. Materializing a matrix is coded twice (`initSheetData`, `withMaterializedData`).
-Simpler: lift the body of `replaySheetsOps`' loop into `applySheetsBatch(sheets, ops) → { sheets, moved }`, throwing on a refusal. The replay keeps its base normalization, rollback and final celldata sync. `applyOpBatch` sets `draft.sheets` from it and runs only the editor's after-effects (`followView`, `leaveCurrentSheet`, filter options, formula cache). The `fromBatch` parameters go. 
-Lost: nothing. ~50 LOC + ~100 test (agreement tests become one path's tests), medium risk, medium-high confidence.
 
 <a id="s4"></a>**S4. A new snapshot remounts the grid, a late batch resets it in place, and the compaction base exists to dodge the remount (small product).**
 `apps/sheets/src/components/sheets/hooks/use-sheet.ts` (`pendingRef` and its effect, `reload`, `judgeTransaction`, `baseIdRef` written in six places, the `folded` and `overtaken` branches), `editor.tsx` (`key={snapshotVersion}`), `use-presence.ts` (republishes because a remount wipes presences), `lib/sheets/yjs-state.ts` (`SheetsBase`, `stampSheetsBase`, `compactedFrom`), `api/document/sheets.ts` (`stampMissingSheetsBase`, `restampRestoredSheetsBase`).
@@ -236,7 +234,7 @@ Wave 1 (nothing lost, or decided):
 | Lane | Units, in order | Main files |
 |---|---|---|
 
-Wave 2 (cross-cutting, after the lanes they depend on merged): [E2](#e2); [S2](#s2) then [S5](#s5); [F7](#f7), [F4](#f4), [F8](#f8) as ruled. F4 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
+Wave 2 (cross-cutting, after the lanes they depend on merged): [E2](#e2); S2 (done) then [S5](#s5); [F7](#f7), [F4](#f4), [F8](#f8) as ruled. F4 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
 
 Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s order. Each is sized again at its Step 0 and shown to the owner before it is built: [S10](#s10) with [D9](#d9), [S9](#s9) (which supersedes [S4](#s4)), [D10](#d10), [F9](#f9), [E8](#e8), [R9](#r9) with [R10](#r10), [F10](#f10) (touches Docs and Canvas: tell the other session), [U6](#u6) only if still worth it. [U7](#u7) stays parked in ROADMAP-POST-1.
 
@@ -327,3 +325,4 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 - 2026-11-10, the closing fan-out over `5142a99f7..d45c367a0` ran: server review, editor correctness review, standards audit (0 of 127 files worse, 26 neutral with findings), two hunters, efficiency, simplicity and a docs claim check (fixed in `f5e11cfc0`). Every finding, its ruling and the three-unit fix wave plan are in `.superpowers/close-findings.md` (gitignored, in this worktree): the resume point for the fix wave. Real bugs it found, all to fix: a forged write to a sheet's own `id` or `name` bricks a workbook at the next fold or blocks every structural op; two concurrent adds give two tabs one name, and deleting or renaming one breaks formulas reading the other (the later add is now refused, as SHEETS.md already said, ruled on the owner's behalf); two concurrent deletes can leave zero rows, which a fold turns into 100 (a delete now never removes the last line); a refused Duplicate records the wrong sheet and its undo deletes another tab. The owner on 2026-11-10: Import… → Insert's live read (23 s on the API's main thread on an 8,000-row running total) moves into the transform child; the fold's cell budget (32M, which an 8,000-row running total passes on one row insert, so such a workbook never folds) is sized against the 60 s deadline, measured first and shown to the owner (`/tmp/close-budget/`). Accepted, ledger: a link dialog open during a peer's row op saves to the cell that slid in.
 - 2026-11-10, the fold's bound (the owner, after the measurement in `.superpowers/close-findings.md`): a fold stops before the batch that would start past about 40 s and stores what it finished, so a long session folds over several closes; the recompute's cell cap per batch goes from 32M to 120M (a 10,000-row running total reads 50M on one insert, about 10 s); Stage A's 20-batch count and its ROADMAP row go. In the fix wave's F3.
 - 2026-11-10, eigen-74 (docs links): the owner wants one shared link card for Sheets and Docs in packages/ui, built after this branch merges, as its own branch; at the develop merge, `isLinkValid` uses eigen-74's `webLinkHref` and drops `HOST_WITH_SPACE`. Details in `.superpowers/close-findings.md`.
+- 2026-11-11, the close: `sheets-audit` merged into `develop` as `79f705b3b` and pushed. S2 (one `applySheetsBatch`, `8ca23eaa1`) and the cut formulas that follow Excel (`unit-cut-refs`) were done in this run. Array operators move into the engine rewrite's arrays step (ROADMAP). Accepted: an undo of a sheet add, copy or rename rewrites formulas it never recorded, and a row delete undo past the row limit does nothing silently (both in SHEETS.md). A peer's delete that closes your open editor should leave no selection, so the keys that follow go nowhere: `unit-peer-closes-editor`, being built.
