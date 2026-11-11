@@ -2,7 +2,7 @@
 // other side: guests hear about an invitation or a cancellation, and the organizer hears about an answer. Calendar
 // hands its event changes to it, so the routes and the invitation code share one path.
 
-import { heldAttendees, isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
+import { isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent, EventData } from '@workspace/lib/types/calendar';
 import { isExternalOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -28,7 +28,13 @@ import type { Calendar } from './calendar';
 import * as davStore from './dav-store';
 import { eventForResource, validateEventInput } from './event-input';
 import { composeRsvpReply } from './imip';
-import { answeredOccurrence, propagateCancellation, propagateInvitation, propagateRsvp } from './invite-propagation';
+import {
+    answeredOccurrence,
+    organizerOf,
+    propagateCancellation,
+    propagateInvitation,
+    propagateRsvp,
+} from './invite-propagation';
 import { toEvent } from './mappers';
 import { prepareResource, resourceBytes } from './resource-store';
 import * as schema from './schema';
@@ -68,13 +74,14 @@ export async function createEvent(
         if (args.parentEventId) {
             // Who held the occurrence this write replaces: a cancelled override keeps no guest list of its own.
             const replaced = exceptionOf(calendar, args.parentEventId, recurrenceDate);
-            return { created: await writeOverride(calendar, calendarId, args.parentEventId, args), replaced };
+            return { created: await writeOverride(calendar, calendarId, args.parentEventId, args, user), replaced };
         }
         // Eigen mints every name it writes: a UID is its author's string and may carry `/`, `..` or quotes.
         const uri = `${crypto.randomUUID()}.ics`;
         const uid = args.uid || crypto.randomUUID();
         if (uidHolder(calendar, calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
-        const event = eventForResource({ id: crypto.randomUUID(), calendarId, uid, input: args, now: new Date() });
+        const input = { ...args, data: organizedData(calendar, user, args.data) };
+        const event = eventForResource({ id: crypto.randomUUID(), calendarId, uid, input, now: new Date() });
         const prepared = prepareResource(calendarId, buildResource([event]), null);
         await calendar.writeResource({ calendarId, uri, prepared, creditBytes: 0 });
         return { created: requireEvent(calendar, event.id), replaced: null };
@@ -114,11 +121,10 @@ export async function deleteEvent(
     const existing = await calendar.writeLock.run(() => eraseStoredEvent(calendar, calendarId, id, expectedEtag));
     if (!existing) return;
 
-    // An override without its own list has its series' guests. A cancelled master answers and cancels nothing: its PUT
-    // already fanned out STATUS:CANCELLED.
+    // A cancelled master answers and cancels nothing: its PUT already fanned out STATUS:CANCELLED.
     const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
     const invitation = isInvitationFromOthers(series ?? existing, calendar.home.user.email) ? existing.data : null;
-    const held = existing.status === 'cancelled' ? [] : heldAttendees(existing, series);
+    const held = existing.status === 'cancelled' ? [] : (existing.data?.attendees ?? []);
     const declining = user && held.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
     if (declining && invitation?.organizer) {
         const orgUserId = invitation.organizer.userId;
@@ -343,10 +349,9 @@ async function propagateWrite(
     previous: CalendarEvent | null,
 ): Promise<void> {
     const series = event.parentEventId ? eventById(calendar, event.parentEventId) : null;
-    // A name missing from the list the guests held cancels that instance.
-    const held = heldAttendees(previous, series);
-    const attendees = heldAttendees(event, series);
-    // A write that names nobody and replaced nobody owes the guests nothing; emptying a non-override's list cancels.
+    // A name missing from the list the guests held cancels that instance. A new date held its series' guests.
+    const held = (previous ?? series)?.data?.attendees ?? [];
+    const attendees = event.data?.attendees ?? [];
     if (!attendees.length && !held.length) return;
     if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
     if (previous && guestView(previous, series) === guestView(event, series)) return;
@@ -359,12 +364,13 @@ async function propagateWrite(
     await propagateInvitation(calendar.home, event, user, held, attendees, series ?? undefined, exceptions);
 }
 
-// The file a guest would get, minus the revision that changes with every write. An instant reads the same in any zone,
-// unless a rule repeats in that zone's wall clock.
+// The file a guest would get, minus the revision that changes with every write and the ORGANIZER every message names
+// for itself. An instant reads the same in any zone, unless a rule repeats in that zone's wall clock.
 function guestView(event: CalendarEvent, series: CalendarEvent | null): string {
     const never = new Date(0);
     const timezone = event.rrule ? event.timezone : null;
-    const view = { ...event, timezone, sequence: 0, createdAt: never, updatedAt: never };
+    const data = { ...event.data, organizer: undefined };
+    const view = { ...event, timezone, data, sequence: 0, createdAt: never, updatedAt: never };
     return serializeEventForImip(view, 'REQUEST', series ?? undefined);
 }
 
@@ -390,6 +396,8 @@ async function patchStoredEvent(
             localData.color = input.data.color ?? localData.color;
         }
         input = { data: localData };
+    } else if (input.data) {
+        input = { ...input, data: organizedData(calendar, user, input.data) };
     }
 
     // The stored rule passed these checks when it was projected, so it is checked again only beside a moved start.
@@ -445,6 +453,7 @@ async function writeOverride(
     calendarId: string,
     parentEventId: string,
     input: CreateEventArgs,
+    user: User | undefined,
 ): Promise<CalendarEvent> {
     const parent = eventById(calendar, parentEventId);
     if (!parent || parent.calendarId !== calendarId || parent.parentEventId) {
@@ -458,10 +467,23 @@ async function writeOverride(
     if (!key) throw new ApiError(400, 'Invalid occurrence date');
 
     const organizer = !isInvitationFromOthers(parent, calendar.home.user.email);
-    const edit = exceptionEdit(parent, input, writeContext(organizer));
+    const data = organizer ? organizedData(calendar, user, input.data) : input.data;
+    const edit = exceptionEdit(parent, { ...input, data }, writeContext(organizer));
     await editResource(calendar, resource, (component) => applyEdits(component, new Map([[key, edit]])));
     const stored = exceptionOf(calendar, parent.id, key);
     return stored ?? requireEvent(calendar, parent.id);
+}
+
+// Guests answer the ORGANIZER (RFC 5546), so an organizer's VEVENT with guests names the one every message about it
+// names. One without guests names none, since RFC 5545 gives an event on one person's calendar no ORGANIZER.
+function organizedData(
+    calendar: Calendar,
+    user: User | undefined,
+    data: EventData | null | undefined,
+): EventData | null | undefined {
+    if (!data?.attendees?.length) return data;
+    const { email, name } = organizerOf(calendar.home, user);
+    return email ? { ...data, organizer: { userId: '', email, name } } : data;
 }
 
 // An event a write under the lock just stored or read through its series, so only a delete since then misses it.

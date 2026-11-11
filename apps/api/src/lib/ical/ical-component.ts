@@ -3,7 +3,7 @@
 // calendar store calls it for every write. `ICAL.Component.toString()` is the only serializer, so folding,
 // escaping and quoting stay ical.js's problem and an untouched property survives an edit as the client wrote it.
 
-import { heldAttendees, localToUtc, normalizeTimezone, utcToLocal } from '@workspace/lib/calendar/calendar-utils';
+import { localToUtc, normalizeTimezone, utcToLocal } from '@workspace/lib/calendar/calendar-utils';
 import { stripControlChars, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Attendee, CalendarEvent, ImipMethod, Reminder, UpdateEventInput } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
@@ -125,18 +125,10 @@ export function serializeEventForImip(
     series?: CalendarEvent,
     exceptions: readonly CalendarEvent[] = [],
 ): string {
-    // An override that states no guests inherits the series' list. A guest's client would read the bare override as an
-    // occurrence they are not invited to.
-    const withGuests = (override: CalendarEvent, master: CalendarEvent): CalendarEvent => ({
-        ...override,
-        data: { ...override.data, attendees: heldAttendees(override, master) },
-    });
-    const vcalendar = series
-        ? newVCalendar()
-        : buildResource([event, ...exceptions.map((exception) => withGuests(exception, event))]);
+    const vcalendar = series ? newVCalendar() : buildResource([event, ...exceptions]);
     if (series) {
         // A RECURRENCE-ID names its instant in the SERIES' zone, which the occurrence's own may not be.
-        vcalendar.addSubcomponent(buildVEvent(withGuests(event, series), { master: buildVEvent(series) }));
+        vcalendar.addSubcomponent(buildVEvent(event, { master: buildVEvent(series) }));
         syncVTimezones(vcalendar);
     }
     vcalendar.addPropertyWithValue('method', method);
@@ -631,8 +623,8 @@ function shapeForImip(vevent: ICAL.Component, method: ImipMethod): void {
 }
 
 // A series-wide edit reaches an override whose value equals the master's BEFORE the edit; one that set its own keeps
-// it. Times never follow. A guest the edit adds to or drops from the series joins or leaves every override that holds
-// its own list. Each override it changes is a new revision of that date. It has to run before the master is patched.
+// it. Times never follow. A guest the edit adds to or drops from the series joins or leaves every override's list,
+// which is a new revision of that date. It has to run before the master is patched.
 function followMaster(
     resource: ICAL.Component,
     master: ICAL.Component,
@@ -663,9 +655,9 @@ function followMaster(
             if (String(vevent.getFirstPropertyValue(name) ?? '') !== before) continue;
             followed = setOptional(vevent, name, after) || followed;
         }
-        const listed = vevent.getAllProperties('attendee');
         let membersChanged = false;
-        if (guests && listed.length) {
+        if (guests) {
+            const listed = vevent.getAllProperties('attendee');
             const own = new Set(listed.map(addressOf));
             const kept = listed.filter((prop) => !wasGuest.has(addressOf(prop)) || isGuest.has(addressOf(prop)));
             const joined = guests.filter(

@@ -3,6 +3,7 @@ import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@work
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getHome } from '../../lib/home';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
+import { vcal } from '../ics-test-helpers';
 import { assertJson, authedRequest, collectSSE, eventually, findOrFail, getTestContext } from '../setup';
 
 describe('Calendar Invites', () => {
@@ -222,18 +223,38 @@ describe('Calendar Invites', () => {
 
         const orgEventId = `ext-occurrence-${crypto.randomUUID()}`;
         const orgUserId = 'external_org@example.com';
-        await home.calendar.createEvent(shared.id, {
-            title: 'Weekly Sync',
-            startTime: new Date('2026-07-06T09:00:00Z'),
-            endTime: new Date('2026-07-06T10:00:00Z'),
-            allDay: false,
-            rrule: 'FREQ=WEEKLY;COUNT=5',
-            data: {
-                organizer: { userId: orgUserId, email: 'org@example.com', name: 'Org' },
+        await home.calendar.receiveRequest(
+            [
+                {
+                    uid: orgEventId,
+                    title: 'Weekly Sync',
+                    description: null,
+                    location: null,
+                    startTime: new Date('2026-07-06T09:00:00Z'),
+                    endTime: new Date('2026-07-06T10:00:00Z'),
+                    allDay: false,
+                    rrule: 'FREQ=WEEKLY;COUNT=5',
+                    timezone: null,
+                    status: 'confirmed',
+                    sequence: 0,
+                    dtstamp: null,
+                    recurrenceDate: null,
+                    recurrenceId: null,
+                    data: {
+                        organizer: { userId: '', email: 'org@example.com', name: 'Org' },
+                        attendees: [{ email: ctx.alice.user.email, status: 'accepted', role: 'required' }],
+                    },
+                },
+            ],
+            {
+                organizerEmail: 'org@example.com',
                 organizerEventId: orgEventId,
-                attendees: [{ email: ctx.alice.user.email, status: 'accepted', role: 'required' }],
+                organizerUserId: orgUserId,
+                createByUserId: orgUserId,
             },
-        });
+        );
+        const copy = findOrFail(await home.calendar.getEventsByUid(orgEventId), () => true);
+        await home.calendar.moveEvent(copy.calendarId, copy.id, shared.id);
 
         const sse = await collectSSE(ctx.charlie.user.id);
         try {
@@ -395,7 +416,7 @@ describe('Calendar Invites', () => {
 
             // Alice should not get one — only Bob
             const selfInviteCopies = (await aliceEvents()).filter(
-                (e) => e.title === 'Self-Invite Test' && e.data?.organizer,
+                (e) => e.title === 'Self-Invite Test' && e.data?.organizerEventId,
             );
             expect(selfInviteCopies).toHaveLength(0);
         });
@@ -992,21 +1013,24 @@ describe('Delete-as-decline is for attendees only', () => {
     // against a mail that arrived rather than against nothing at all.
     const CONTROL = 'control@external.com';
 
-    // The client cannot declare itself an invitee (EventDataSchema strips organizer), so the linked copy is
-    // seeded through the domain, the way a CalDAV PUT or an import would leave one behind.
+    // The web app cannot name an organizer (EventDataSchema strips it), so the event comes in as a CalDAV PUT would.
     const seed = async (title: string, attendeeEmail: string, organizer = STRANGER) => {
-        const home = await getHome(ctx.bob.user.id);
-        return home.calendar.createEvent(calendarId, {
-            title,
-            startTime: new Date('2026-12-01T09:00:00Z'),
-            endTime: new Date('2026-12-01T10:00:00Z'),
-            allDay: false,
-            data: {
-                organizer: { userId: '', email: organizer, name: 'Stranger' },
-                organizerEventId: `stranger-${crypto.randomUUID()}`,
-                attendees: [{ email: attendeeEmail, status: 'pending', role: 'required' }],
-            },
-        });
+        const { calendar } = await getHome(ctx.bob.user.id);
+        const uid = crypto.randomUUID();
+        const body = vcal([
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            'DTSTART:20261201T090000Z',
+            'DTEND:20261201T100000Z',
+            `SUMMARY:${title}`,
+            `ORGANIZER;CN=Stranger:mailto:${organizer}`,
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${attendeeEmail}`,
+            'END:VEVENT',
+        ]);
+        expect(
+            (await calendar.putResource(calendarId, `${uid}.ics`, body, { ifMatch: null, ifNoneMatch: null })).ok,
+        ).toBe(true);
+        return findOrFail(await calendar.getEventsByUid(uid), () => true);
     };
 
     const removeEvent = (id: string) =>
@@ -1263,6 +1287,52 @@ describe('A save only its owner sees', () => {
         expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_UPDATED)).toHaveLength(4);
         sse.stop();
         mail.mockRestore();
+    });
+
+    // An older build stored an organizer's event with guests and no ORGANIZER line, and its next save writes one. Every
+    // message names the organizer itself, so the line is no news to a guest.
+    test('the ORGANIZER line a save adds to an event stored without one mails nobody', async () => {
+        const ctx = await getTestContext();
+        const owner = ctx.alice.user;
+        const { calendar } = await getHome(owner.id);
+        const calendarId = findOrFail(await calendar.getCalendars(), (c) => c.isDefault).id;
+        const uid = crypto.randomUUID();
+        const GUEST = 'bare@external.com';
+        const body = vcal([
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            'DTSTART:20271201T090000Z',
+            'DTEND:20271201T100000Z',
+            'SUMMARY:Stored bare',
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${GUEST}`,
+            'END:VEVENT',
+        ]);
+        expect(
+            (await calendar.putResource(calendarId, `${uid}.ics`, body, { ifMatch: null, ifNoneMatch: null })).ok,
+        ).toBe(true);
+        const event = findOrFail(await calendar.getEventsByUid(uid), () => true);
+        const save = (changes: object) =>
+            authedRequest(owner.sessionToken, `/calendar/${owner.id}/calendars/${calendarId}/events/${event.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(changes),
+            });
+        const mailer = await import('../../lib/mailer/mailer');
+        const mail = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        mail.mockClear();
+        try {
+            const reminders = [{ type: 'notification', minutes: 10 }];
+            const saved = await assertJson<CalendarEvent>(await save({ data: { ...event.data, reminders } }));
+            expect(saved.data?.organizer?.email).toBe(owner.email);
+
+            // Absence only counts behind what IS expected: a rename, made second, takes the path the first save must not.
+            expect((await save({ title: 'Stored bare renamed' })).status).toBe(200);
+            const toGuest = () => mail.mock.calls.filter(([sent]) => sent.to.some((to) => to.address === GUEST));
+            await eventually(async () => toGuest().length || undefined, 'the rename to reach the guest');
+            expect(toGuest().map(([sent]) => sent.subject)).toEqual(['Updated invitation: Stored bare renamed']);
+        } finally {
+            mail.mockRestore();
+        }
     });
 
     test('a repeating event in another zone moves its later occurrences, so the guests hear it', async () => {

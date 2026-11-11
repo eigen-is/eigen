@@ -4,7 +4,7 @@
 // occurrences, and an account that appears later is sent what it was invited to. The event writes call it once they
 // commit, such as a save or a delete, and a guest's answer to an organizer on this server goes back the same way.
 
-import { heldAttendees, isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
+import { isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
 import { getServerSettings } from '../config/server-settings';
 import type { Home } from '../home';
@@ -176,15 +176,14 @@ function invitationRequest(
             key && !series.allDay
                 ? { instant: computeOccurrenceTimes(series, key).startTime, timezone: series.timezone }
                 : null;
-        return { link, events: [requestedEvent(event, key, organizer, heldAttendees(event, series), recurrenceId)] };
+        return { link, events: [requestedEvent(event, key, organizer, recurrenceId)] };
     }
     const address = email.toLowerCase();
-    const isOn = (e: CalendarEvent) => heldAttendees(e, event).some((a) => a.email.toLowerCase() === address);
-    const requested = exceptions.map((e) => {
-        const sent = isOn(e) ? e : { ...e, status: 'cancelled' as const };
-        return requestedEvent(sent, e.recurrenceDate, organizer, heldAttendees(e, event));
-    });
-    return { link, events: [requestedEvent(event, null, organizer, heldAttendees(event, null)), ...requested] };
+    const isOn = (e: CalendarEvent) => !!e.data?.attendees?.some((a) => a.email.toLowerCase() === address);
+    const requested = exceptions.map((e) =>
+        requestedEvent(isOn(e) ? e : { ...e, status: 'cancelled' }, e.recurrenceDate, organizer),
+    );
+    return { link, events: [requestedEvent(event, null, organizer), ...requested] };
 }
 
 // The REQUEST a guest on this server files, through the same decision as a mailed one. It names no Eigen stamp and no
@@ -193,7 +192,6 @@ function requestedEvent(
     event: CalendarEvent,
     recurrenceDate: string | null,
     organizer: Organizer,
-    attendees: readonly Attendee[],
     recurrenceId: RecurrenceId | null = null,
 ): ParsedEvent {
     return {
@@ -212,7 +210,7 @@ function requestedEvent(
         dtstamp: event.updatedAt,
         recurrenceDate,
         recurrenceId,
-        data: { organizer, attendees: [...attendees] },
+        data: { organizer, attendees: event.data?.attendees },
     };
 }
 
@@ -224,7 +222,7 @@ export function answeredOccurrence(event: CalendarEvent): string | undefined {
 
 // A guest answers the ORGANIZER, and only the calendar's own Home holds the event, so its user is named whoever saved.
 // A team has no address, so a team event names the member who saved it.
-function organizerOf(organizerHome: Home, user: User | undefined): Organizer {
+export function organizerOf(organizerHome: Home, user: User | undefined): Organizer {
     const named = organizerHome.user.email ? organizerHome.user : user;
     return { userId: organizerHome.user.id, email: named?.email ?? '', name: named?.name };
 }

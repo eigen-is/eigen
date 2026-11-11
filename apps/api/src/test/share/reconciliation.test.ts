@@ -143,6 +143,7 @@ describe('share reconciliation', () => {
             title: 'Recon moved',
             startTime: '2027-03-09T11:00:00Z',
             endTime: '2027-03-09T12:00:00Z',
+            data: { attendees: [guest] },
         });
         await occurrence(series, '2027-03-16', { status: 'cancelled' });
         const other = await weekly('Recon other', []);
