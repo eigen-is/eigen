@@ -107,7 +107,7 @@ async function docSharedWith(owner: TestUser, teamId: string, ...direct: TestUse
         read: true,
         write: false,
     }));
-    await (await getHome(owner.id)).drive.updateACL(mountId, docId, acl);
+    await (await getHome(owner.id)).drive.updateACLDelta(mountId, docId, { add: acl });
     return { mountId, docId };
 }
 
@@ -115,7 +115,7 @@ async function docSharedWith(owner: TestUser, teamId: string, ...direct: TestUse
 async function docNaming(owner: TestUser, ...direct: TestUser[]) {
     const { mountId, docId } = await newDoc(owner);
     const acl = direct.map((user) => ({ id: user.email, read: true, write: true }));
-    await (await getHome(owner.id)).drive.updateACL(mountId, docId, acl);
+    await (await getHome(owner.id)).drive.updateACLDelta(mountId, docId, { add: acl });
     return { mountId, docId };
 }
 
@@ -296,7 +296,9 @@ describe('a membership that goes closes the sockets that lost read at the next t
         const home = await getHome(owner.id);
         const drive = home.drive;
         const folder = await drive.createFolder(mountId, root.id, `Revoke folder ${crypto.randomUUID()}`, home.user);
-        await drive.updateACL(mountId, folder.id, [{ id: teamOwnerId(teamId), read: true, write: false }]);
+        await drive.updateACLDelta(mountId, folder.id, {
+            add: [{ id: teamOwnerId(teamId), read: true, write: false }],
+        });
         const doc = await drivePost<DrivePath>(
             owner.sessionToken,
             owner.id,
@@ -463,7 +465,7 @@ describe('a share that goes', () => {
         shareeSocket.ws.send(new Uint8Array(editFrame('while shared')));
         await waitFor(() => probe.has('while shared'), 5_000);
 
-        await drive.updateACL(mountId, docId, []);
+        await drive.updateACLDelta(mountId, docId, { remove: [sharee.email] });
 
         expect(shareeSocket.ws.readyState).toBe(WebSocket.OPEN);
         shareeSocket.ws.send(new Uint8Array(editFrame('after the share went')));
@@ -485,7 +487,10 @@ describe('a share that goes', () => {
         const revokedSocket = await openSocket(revoked, owner.id, changed.mountId, changed.docId);
         const demotedSocket = await openSocket(demoted, owner.id, changed.mountId, changed.docId);
 
-        await drive.updateACL(changed.mountId, changed.docId, [{ id: demoted.email, read: true, write: false }]);
+        await drive.updateACLDelta(changed.mountId, changed.docId, {
+            add: [{ id: demoted.email, read: true, write: false }],
+            remove: [revoked.email],
+        });
         await tick();
 
         expect(await revokedSocket.closed).toEqual(REVOKED);
@@ -501,7 +506,7 @@ describe('a share that goes', () => {
         const home = await getHome(owner.id);
         const drive = home.drive;
         const folder = await drive.createFolder(mountId, root.id, `Shared ${crypto.randomUUID()}`, home.user);
-        await drive.updateACL(mountId, folder.id, [{ id: sharee.email, read: true, write: true }]);
+        await drive.updateACLDelta(mountId, folder.id, { add: [{ id: sharee.email, read: true, write: true }] });
         const inner = await drive.createFolder(mountId, folder.id, 'Inner', home.user);
         const doc = await drivePost<DrivePath>(
             owner.sessionToken,
@@ -606,7 +611,7 @@ describe('an open that is still loading the document', () => {
         const drive = (await getHome(ctx.alice.user.id)).drive;
 
         const socket = await revokeDuringLoad(removed, doc, syncStep1Frame(), () =>
-            drive.updateACL(doc.mountId, doc.docId, []),
+            drive.updateACLDelta(doc.mountId, doc.docId, { remove: [removed.email] }),
         );
 
         expect(contentFrames(socket)).toEqual([]);
@@ -658,7 +663,7 @@ describe('the tick', () => {
         const owner = ctx.alice.user;
         const { mountId, docId } = await docNaming(owner, sharee);
         const socket = await openSocket(sharee, owner.id, mountId, docId);
-        await (await getHome(owner.id)).drive.updateACL(mountId, docId, []);
+        await (await getHome(owner.id)).drive.updateACLDelta(mountId, docId, { remove: [sharee.email] });
         const canRead = spyOn(Drive.prototype, 'canRead').mockImplementationOnce(() => {
             throw new Error('a mount that fails');
         });
