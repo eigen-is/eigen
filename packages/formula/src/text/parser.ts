@@ -90,17 +90,20 @@ export function referenceAt(text: string, from: number): { readonly node: Formul
     return new Parser(text, false, 0, 0, noSheet).referenceFrom(from);
 }
 
-// A cell or a rectangle with an optional sheet, such as Sheet1!$A$1:B3, as indexes from 0. Null for anything else.
+// A cell or a rectangle with an optional sheet, such as Sheet1!$A$1:B3, as indexes from 0 with the corners in
+// order. Null for anything else.
 export function parseA1Range(range: string): A1Range | null {
     const found = referenceAt(range, 0);
     if (!found || found.end !== range.length) return null;
     const { node } = found;
     if (node.op > RefKind.Range || node.sheetKind > SheetKind.Name) return null;
-    const start = { col: node.column, row: node.row };
+    const { row, column } = node;
+    const row2 = node.op === RefKind.Cell ? row : node.row2;
+    const column2 = node.op === RefKind.Cell ? column : node.column2;
     return {
         sheet: node.sheetKind === SheetKind.Name ? node.sheet : undefined,
-        start,
-        end: node.op === RefKind.Cell ? { ...start } : { col: node.column2, row: node.row2 },
+        start: { col: Math.min(column, column2), row: Math.min(row, row2) },
+        end: { col: Math.max(column, column2), row: Math.max(row, row2) },
     };
 }
 
