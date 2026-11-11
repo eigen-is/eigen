@@ -43,10 +43,6 @@ export class Walk {
     public num: Float64Array;
     public from = 0;
     public to = 0;
-    // Of a stored row of an array: how many equal elements each number stands for, null when each stands for one,
-    // and how many written rows the row stands for. In written order each number comes `reps` times, all of it `rows`.
-    public reps: Int32Array | null = null;
-    public rows = 1;
     // How many cells were handed out so far.
     public count = 0;
     public error: FormulaError | null = null;
@@ -55,6 +51,10 @@ export class Walk {
     // Whether blank elements of an array were passed since the last number handed out. A sum takes them for an
     // addition of 0, which a blank cell of a reference is not.
     private blank = false;
+    // Of a stored row of an array: how many equal elements each number stands for, null when each stands for one,
+    // and how many written rows the row stands for. In written order each number comes `reps` times, all of it `rows`.
+    private reps: Int32Array | null = null;
+    private rows = 1;
     private readonly ctx: Evaluator;
     // Where a value that lies in no plane is put to be handed out: one typed value, or the cells of one row.
     private span = new Float64Array(8);
