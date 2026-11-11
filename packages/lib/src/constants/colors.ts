@@ -3,8 +3,12 @@
 // check a hex with isHexColor, read a stored #rrggbb with readHexColor, read its channels with hexChannels and read an
 // rgb() with parseRgb, so they agree on what a color is.
 
+import { upperFirst } from 'es-toolkit';
+
 export type EigenColor = {
     label: string;
+    // The hue a person reads, such as "Orange", without the step.
+    name: string;
     value: string; // hex value
 };
 
@@ -256,7 +260,11 @@ export const EIGEN_ACCENT_COLOR_ROW = 5;
 export const EIGEN_STICKIES_COLOR_ROW = 1;
 
 export const EIGEN_COLORS: EigenColor[][] = EIGEN_COLORS_MAP.map((col, i) =>
-    col.map((hex, s) => ({ label: `${EIGEN_COLOR_NAMES[i]}-${EIGEN_COLOR_STEPS[s]}`, value: hex })),
+    col.map((hex, s) => ({
+        label: `${EIGEN_COLOR_NAMES[i]}-${EIGEN_COLOR_STEPS[s]}`,
+        name: upperFirst(EIGEN_COLOR_NAMES[i]),
+        value: hex,
+    })),
 );
 // One palette color by its name and step, such as eigenColor('red', 400), for code that offers a fixed color.
 export function eigenColor(name: (typeof EIGEN_COLOR_NAMES)[number], step: (typeof EIGEN_COLOR_STEPS)[number]): string {

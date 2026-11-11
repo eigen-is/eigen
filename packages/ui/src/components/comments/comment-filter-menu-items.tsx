@@ -75,7 +75,7 @@ export function CommentFilterMenuItems({ filter, members, currentUserEmail, onCl
                                 className="size-4 rounded-full shrink-0 border border-border/50"
                                 style={{ backgroundColor: c.value }}
                             />
-                            {c.label[0].toUpperCase() + c.label.slice(1).replace(/-\d+$/, '')}
+                            {c.name}
                         </DropdownMenuCheckboxItem>
                     ))}
                 </DropdownMenuSubContent>
