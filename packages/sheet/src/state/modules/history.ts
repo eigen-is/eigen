@@ -243,10 +243,7 @@ function undoRowCol(ctx: Context, marker: Op, recorded: Patch[]): Step {
         if (e instanceof RowColError) return { ctx, ops: [] };
         throw e;
     }
-    const restored = restoredOps(ctx, moved, recorded);
-    const ops = [marker, ...restored];
-    const applied = applyOpBatch(ctx, ops);
-    return applied ? { ctx: applied.ctx, ops } : { ctx, ops: [] };
+    return batchStep(ctx, [marker, ...restoredOps(ctx, moved, recorded)]);
 }
 
 // The recorded writes `sheets` don't hold yet, the cells one by one and the config entry by entry.

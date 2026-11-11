@@ -756,6 +756,16 @@ describe('undo and redo recalculate the formulas they touch', () => {
         expectAgree(s);
     });
 
+    // The entry's recorded total would go out as a batch that changes nothing, and end the peer's structural undos.
+    test('an undo whose input a peer changed since sends nothing, though a formula reads that input', () => {
+        const s = session(workbook({ A1: num(1), B1: num(2), D10: { ...num(3), f: '=A1+B1' } }));
+        s.edit(s.a, typedAt('A1', '5'));
+        s.edit(s.b, typedAt('A1', '7'));
+        expect(tabUndo(s.a)).toEqual([]);
+        expect(s.a.history).toMatchObject({ undoList: [], redoList: [] });
+        expect(cellAt(s.a, 'D10')?.v).toBe(9);
+    });
+
     test('a formula a peer rewrote keeps a value that matches it after your undo', () => {
         const s = session(workbook({ A1: num(1), D10: { f: '=A1*2', v: 2, m: '2' } }));
         s.edit(s.a, typedAt('A1', '5'));
