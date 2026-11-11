@@ -82,6 +82,8 @@ class Parser {
     private end = 0;
     private space = '';
     private depth = 0;
+    // How many brackets and prefix or postfix operators deep the operand or expression read last is.
+    private height = 0;
     private reason: ParseFailure['reason'] | '' = '';
     private failedAt = 0;
     // What the leg and sheet readers found last: they return a position, so their findings land here.
@@ -159,6 +161,7 @@ class Parser {
 
     private expression(minPower: number, union: boolean): FormulaNode {
         let left = this.operand(union);
+        let height = this.height;
         for (;;) {
             let op = this.kind;
             const { space } = this;
@@ -167,27 +170,34 @@ class Parser {
             if (op === Token.Comma && !union) power = 0;
             if (op === Token.Open && (space !== '' || !returnsFunction(left))) power = 0;
             if (power === 0) {
-                if (space === '' || !this.startsReference() || !yieldsReference(left)) return left;
+                if (space === '' || !this.startsReference() || !yieldsReference(left)) break;
                 op = Token.Space;
                 power = BINDING[op];
             }
-            if (power < minPower) return left;
+            if (power < minPower) break;
             if (op === Token.Hash && !yieldsReference(left)) return this.fail();
             if (op === Token.Hash || op === Token.Percent) {
                 this.next();
                 left = branch(NodeKind.Postfix, op, '', [left], space, '');
+                height += 1;
                 continue;
             }
             if (op === Token.Open) {
                 const called = [left];
                 left = branch(NodeKind.Invoke, 0, '', called, '', this.argumentList(called));
+                height = Math.max(height, this.height) + 1;
                 continue;
             }
             // An intersection is written as the whitespace itself, so its right operand starts with none.
             if (op === Token.Space) this.space = '';
             else this.next();
             left = branch(NodeKind.Binary, op, '', [left, this.expression(power + 1, union)], space, '');
+            height = Math.max(height, this.height);
         }
+        // A postfix operator wraps what was already read, so the limit on nesting is checked on the way out too.
+        if (height > MAX_NESTING) return this.fail('too-deep');
+        this.height = height;
+        return left;
     }
 
     private startsReference(): boolean {
@@ -198,6 +208,7 @@ class Parser {
 
     private operand(union: boolean): FormulaNode {
         const { text, kind, pos, end, space } = this;
+        this.height = 0;
         switch (kind) {
             case Token.Number: {
                 if (text.charCodeAt(end) === 58) {
@@ -233,6 +244,7 @@ class Parser {
                 this.next();
                 const child = this.expression(PREFIX_POWER, union);
                 this.depth -= 1;
+                this.height += 1;
                 return branch(NodeKind.Prefix, kind, '', [child], space, '');
             }
             case Token.Open: {
@@ -243,6 +255,7 @@ class Parser {
                 const spaceEnd = this.space;
                 this.next();
                 this.depth -= 1;
+                this.height += 1;
                 return branch(NodeKind.Paren, 0, '', [child], space, spaceEnd);
             }
             case Token.BraceOpen:
@@ -278,7 +291,9 @@ class Parser {
             const name = text.slice(pos, end).toUpperCase();
             this.next();
             const args: FormulaNode[] = [];
-            return branch(NodeKind.Call, 0, name, args, space, this.argumentList(args));
+            const spaceEnd = this.argumentList(args);
+            this.height += 1;
+            return branch(NodeKind.Call, 0, name, args, space, spaceEnd);
         }
         if (after === 33) {
             this.nameSheet(text.slice(pos, end));
@@ -317,15 +332,21 @@ class Parser {
         return leaf(NodeKind.Name, 0, name, space, sheetKind, sheet);
     }
 
-    // The arguments from the current ( to its ), appended to `list`. Returns the whitespace before the ).
+    // The arguments from the current ( to its ), appended to `list`, and the height of the tallest into `height`.
+    // Returns the whitespace before the ).
     private argumentList(list: FormulaNode[]): string {
         const before = list.length;
+        let height = 0;
         if (!this.enter()) return '';
         this.next();
         if (this.kind !== Token.Close) {
             for (;;) {
-                const empty = this.kind === Token.Comma || this.kind === Token.Close;
-                list.push(empty ? EMPTY : this.expression(0, false));
+                if (this.kind === Token.Comma || this.kind === Token.Close) {
+                    list.push(EMPTY);
+                } else {
+                    list.push(this.expression(0, false));
+                    height = Math.max(height, this.height);
+                }
                 if (this.kind !== Token.Comma) break;
                 this.next();
             }
@@ -335,6 +356,7 @@ class Parser {
         const spaceEnd = this.space;
         this.next();
         this.depth -= 1;
+        this.height = height;
         return spaceEnd;
     }
 
@@ -344,9 +366,11 @@ class Parser {
         const elements: FormulaNode[] = [];
         let columns = 0;
         let rowStart = 0;
+        let height = 0;
         for (;;) {
             this.next();
             const element = this.operand(false);
+            height = Math.max(height, this.height);
             const constant =
                 element.kind === NodeKind.Prefix
                     ? element.op !== Token.At && element.children[0].kind === NodeKind.Number
@@ -363,6 +387,7 @@ class Parser {
         const spaceEnd = this.space;
         this.next();
         this.depth -= 1;
+        this.height = height + 1;
         return branch(NodeKind.Array, columns, '', elements, space, spaceEnd);
     }
 

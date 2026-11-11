@@ -51,11 +51,18 @@ export class ShapeTable {
     }
 }
 
+// A sum of thousands of terms is a chain that deep down its left operands, so that side is read in a loop.
 function collect(node: FormulaNode, refs: FormulaNode[]): boolean {
-    if (node.kind === NodeKind.Ref) refs.push(node);
-    let namesSheet = node.sheetKind === SheetKind.Name;
-    for (const child of node.children) {
+    const rights: FormulaNode[] = [];
+    let first = node;
+    for (; first.kind === NodeKind.Binary; first = first.children[0]) rights.push(first.children[1]);
+    if (first.kind === NodeKind.Ref) refs.push(first);
+    let namesSheet = first.sheetKind === SheetKind.Name;
+    for (const child of first.children) {
         if (collect(child, refs)) namesSheet = true;
+    }
+    for (let i = rights.length - 1; i >= 0; i -= 1) {
+        if (collect(rights[i], refs)) namesSheet = true;
     }
     return namesSheet;
 }

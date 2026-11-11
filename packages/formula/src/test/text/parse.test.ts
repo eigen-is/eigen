@@ -459,6 +459,32 @@ describe('limits', () => {
         expect(MAX_NESTING).toBe(64);
     });
 
+    test('a postfix operator and a call of a call nest too', () => {
+        expect(failure(`=1${'%'.repeat(MAX_NESTING)}`)).toBe('parsed');
+        expect(failure(`=1${'%'.repeat(MAX_NESTING + 1)}`)).toBe('too-deep');
+        expect(failure(`=F${'()'.repeat(MAX_NESTING)}`)).toBe('parsed');
+        expect(failure(`=F${'()'.repeat(MAX_NESTING + 1)}`)).toBe('too-deep');
+        expect(failure(`=A1${'#'.repeat(MAX_NESTING + 1)}`)).toBe('too-deep');
+        expect(failure(`=${'('.repeat(60)}1${')'.repeat(60)}%%%%`)).toBe('parsed');
+        expect(failure(`=${'('.repeat(60)}1${')'.repeat(60)}%%%%%`)).toBe('too-deep');
+        expect(failure(`=${'('.repeat(30)}1%%%%${')%'.repeat(30)}`)).toBe('parsed');
+        expect(failure(`=${'('.repeat(30)}1%%%%%${')%'.repeat(30)}`)).toBe('too-deep');
+        expect(failure(`=SUM(1,${'-'.repeat(32)}F(1)${'()'.repeat(30)})`)).toBe('parsed');
+        expect(failure(`=SUM(1,${'-'.repeat(32)}F(1)${'()'.repeat(31)})`)).toBe('too-deep');
+        expect(failure(`={1,2}${'%'.repeat(MAX_NESTING)}`)).toBe('too-deep');
+    });
+
+    test('a chain of binary operators is not nesting, however long', () => {
+        const sum = `=${'A1+'.repeat(2730)}1`;
+        expect(sum).toHaveLength(MAX_FORMULA_LENGTH);
+        const tree = treeA1(sum, 'B2');
+        expect(printA1(tree, ...at('B2'), sheetName)).toBe(sum);
+        expect(printStored(tree)).toBe(`=${'R[-1]C[-1]+'.repeat(2730)}1`);
+        const crossed = `=A1${' A1'.repeat(2000)}`;
+        expect(shown(crossed)).toBe(crossed);
+        expect(failure(`=${'1%+'.repeat(2000)}1`)).toBe('parsed');
+    });
+
     test('255 arguments', () => {
         expect(failure(args(MAX_ARGUMENTS))).toBe('parsed');
         expect(failure(args(MAX_ARGUMENTS + 1))).toBe('too-many-arguments');

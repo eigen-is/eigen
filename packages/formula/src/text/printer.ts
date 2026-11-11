@@ -80,8 +80,15 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
         case NodeKind.Postfix:
             return print(children[0], stored, row, column, sheetName) + space + SYMBOLS[node.op];
         case NodeKind.Binary: {
-            const left = print(children[0], stored, row, column, sheetName);
-            return left + space + SYMBOLS[node.op] + print(children[1], stored, row, column, sheetName);
+            // A sum of thousands of terms is a chain that deep down its left operands, so it is read in a loop.
+            let chain = node;
+            let text = '';
+            while (chain.kind === NodeKind.Binary) {
+                const right = print(chain.children[1], stored, row, column, sheetName);
+                text = chain.space + SYMBOLS[chain.op] + right + text;
+                chain = chain.children[0];
+            }
+            return print(chain, stored, row, column, sheetName) + text;
         }
         case NodeKind.Paren:
             return `${space}(${print(children[0], stored, row, column, sheetName)}${node.spaceEnd})`;
