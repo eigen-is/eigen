@@ -101,8 +101,6 @@ class Parser {
     private legFlags = 0;
     private index = 0;
     private absolute = false;
-    private sheetKind: FormulaNode['sheetKind'] = SheetKind.Host;
-    private sheet = '';
 
     public constructor(text: string, stored: boolean, hostRow: number, hostColumn: number, findSheet: SheetFinder) {
         this.text = text;
@@ -294,8 +292,7 @@ class Parser {
                 return this.word(space);
             case Token.Quote:
                 if (text.charCodeAt(end) !== 33) return this.fail();
-                this.nameSheet(this.unquoted(pos, end));
-                return this.prefixed(space, end, this.sheetKind, this.sheet);
+                return this.named(space, end, this.unquoted(pos, end));
             case Token.Bracket: {
                 if (this.stored) {
                     if (text.charCodeAt(end) !== 33) return this.fail();
@@ -325,10 +322,7 @@ class Parser {
             this.height += 1;
             return branch(NodeKind.Call, 0, name, args, space, spaceEnd);
         }
-        if (after === 33) {
-            this.nameSheet(text.slice(pos, end));
-            return this.prefixed(space, end, this.sheetKind, this.sheet);
-        }
+        if (after === 33) return this.bare(space, end);
         const reference = this.reference(space, SheetKind.Host, '');
         if (reference) return reference;
         if (end - pos === 4 || end - pos === 5) {
@@ -338,10 +332,10 @@ class Parser {
                 return leaf(NodeKind.Boolean, upper === 'TRUE' ? 1 : 0, '', space, SheetKind.Host, '');
             }
         }
-        if (after === 58 && !this.stored) {
+        if (after === 58) {
             const last = lexAt(text, end + 1);
             if (tokenKind(last) === Token.Word && text.charCodeAt(tokenEnd(last)) === 33) {
-                return this.prefixed(space, tokenEnd(last), SheetKind.Span, text.slice(pos, tokenEnd(last)));
+                return this.bare(space, tokenEnd(last));
             }
         }
         return this.name(space, SheetKind.Host, '');
@@ -427,18 +421,21 @@ class Parser {
         return name.includes("'") ? name.replaceAll("''", "'") : name;
     }
 
-    // Which sheet a prefix names, into sheetKind and sheet. Only typed text is looked up: stored text names by id.
-    private nameSheet(name: string): void {
-        this.sheet = name;
-        if (name.includes('[')) {
-            this.sheetKind = SheetKind.External;
-        } else if (name.includes(':')) {
-            this.sheetKind = SheetKind.Span;
-        } else {
-            const found = this.stored ? undefined : this.findSheet(name);
-            this.sheetKind = found ? SheetKind.Id : SheetKind.Name;
-            if (found) this.sheet = found.id;
-        }
+    // A sheet prefix written without quotes, from the current word to `bang`: one name, or the two of a 3-D
+    // reference. Another workbook's bracket needs quotes, or it would read as a stored offset.
+    private bare(space: string, bang: number): FormulaNode {
+        const name = this.text.slice(this.pos, bang);
+        return name.includes('[') ? this.fail() : this.named(space, bang, name);
+    }
+
+    // What follows the sheet prefix that ends at `bang`, on the sheet its name stands for. Only typed text is looked
+    // up: stored text names a sheet by id.
+    private named(space: string, bang: number, name: string): FormulaNode {
+        if (name.includes('[')) return this.prefixed(space, bang, SheetKind.External, name);
+        if (name.includes(':')) return this.prefixed(space, bang, SheetKind.Span, name);
+        const found = this.stored ? undefined : this.findSheet(name);
+        if (found) return this.prefixed(space, bang, SheetKind.Id, found.id);
+        return this.prefixed(space, bang, SheetKind.Name, name);
     }
 
     // What follows the ! of a sheet prefix: a reference, a name scoped to the sheet, or the #REF! a deletion left.

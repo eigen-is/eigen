@@ -362,17 +362,49 @@ describe('references and sheets (parsing.md 2.4)', () => {
         expect(shown(text)).toBe(a1);
     });
 
-    test('a 3-D reference parses and is kept', () => {
-        expect(shown('=SUM(Sheet1:Sheet3!A1)')).toBe('=SUM(Sheet1:Sheet3!A1)');
+    test('a 3-D reference parses and is kept, and shows in quotes', () => {
+        expect(shown('=SUM(Sheet1:Sheet3!A1)')).toBe("=SUM('Sheet1:Sheet3'!A1)");
         expect(shown("=SUM('Sheet 1:Sheet 3'!A1)")).toBe("=SUM('Sheet 1:Sheet 3'!A1)");
         expect(stored('=SUM(Sheet1:Sheet3!A1:B2)', 'A1')).toBe("=SUM('Sheet1:Sheet3'!RC:R[1]C[1])");
         expect(treeA1('=Sheet1:Sheet3!A1')).toMatchObject({ sheetKind: SheetKind.Span, sheet: 'Sheet1:Sheet3' });
+        expect(treeStored("='Sheet1:Sheet3'!RC")).toMatchObject({ sheetKind: SheetKind.Span, sheet: 'Sheet1:Sheet3' });
     });
 
-    test('a reference to another workbook parses and is kept', () => {
-        expect(shown('=[1]Sheet1!$A$1')).toBe('=[1]Sheet1!$A$1');
+    test.each([
+        ['=SUM(Jan:Dec!B2)', 'Jan:Dec'],
+        ['=SUM(Q:FY!B2)', 'Q:FY'],
+        ['=SUM(a:b!B2)', 'a:b'],
+        ['=SUM(Jan:Sheet3!B2)', 'Jan:Sheet3'],
+        ['=SUM(Sheet1:Dec!B2)', 'Sheet1:Dec'],
+    ])('the two sheets of a 3-D reference may read as columns: %s', (text, sheets) => {
+        const tree = treeA1(text, 'A1');
+        expect(tree.children[0]).toMatchObject({ kind: NodeKind.Ref, sheetKind: SheetKind.Span, sheet: sheets });
+        expect(printStored(tree)).toBe(`=SUM('${sheets}'!R[1]C[1])`);
+        const a1 = printA1(tree, 0, 0, sheetName);
+        expect(a1).toBe(`=SUM('${sheets}'!B2)`);
+        expect(treeA1(a1, 'A1')).toEqual(tree);
+        expect(treeStored(printStored(tree))).toEqual(tree);
+    });
+
+    test.each(['=A[1]:B[2]!C1', '=A[1]!C1', '=Sheet1:B[2]!C1', '=SUM(R[1]C:Dec!A1)'])(
+        'a sheet name with a bracket needs quotes: %s does not parse',
+        (text) => {
+            expect(failure(text)).toBe('syntax');
+        },
+    );
+
+    test('a quoted prefix with a bracket is another workbook in both grammars', () => {
+        const tree = treeA1("='A[1]:B[2]'!C1", 'A1');
+        expect(tree).toMatchObject({ sheetKind: SheetKind.External, sheet: 'A[1]:B[2]' });
+        expect(treeStored(printStored(tree))).toEqual(tree);
+        expect(parseStored('=A[1]:B[2]!RC')).toMatchObject({ reason: 'syntax' });
+    });
+
+    test('a reference to another workbook parses and is kept, and shows in quotes', () => {
+        expect(shown('=[1]Sheet1!$A$1')).toBe("='[1]Sheet1'!$A$1");
         expect(shown("='[1]My Sheet'!$A$1")).toBe("='[1]My Sheet'!$A$1");
-        expect(shown('=[1]!GlobalName')).toBe('=[1]!GlobalName');
+        expect(shown('=[1]!GlobalName')).toBe("='[1]'!GlobalName");
+        expect(shown("='[1]x'!$A$1:'[1]x'!B2")).toBe("='[1]x'!$A$1:B2");
         expect(shown("='C:\\path\\[Book.xlsx]Sheet1'!A1")).toBe("='C:\\path\\[Book.xlsx]Sheet1'!A1");
         expect(stored('=[1]Sheet1!$A$1')).toBe("='[1]Sheet1'!R1C1");
         expect(stored('=[1]!GlobalName')).toBe("='[1]'!GlobalName");

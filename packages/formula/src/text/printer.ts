@@ -5,7 +5,7 @@
 
 import { columnLabel, GRID_COLUMNS, GRID_ROWS } from './a1';
 import { Token } from './lexer';
-import { isBareSheetName, quotedSheetName, quoteSheetName } from './sheet-name';
+import { quotedSheetName, quoteSheetName } from './sheet-name';
 import type { FormulaNode } from './tree';
 import { NodeKind, RefFlag, RefKind, SheetKind } from './tree';
 
@@ -32,9 +32,6 @@ const SYMBOLS: Record<number, string> = {
     [Token.Greater]: '>',
     [Token.GreaterEqual]: '>=',
 };
-
-// Another workbook's prefix as a file writes it bare: an index, then a sheet name that needs no quotes.
-const BARE_EXTERNAL = /^\[\d+\](?:[\p{L}_][\p{L}\p{N}_.]*)?$/u;
 
 export function printStored(tree: FormulaNode): string {
     return `=${print(tree, true, 0, 0, noName)}`;
@@ -130,9 +127,8 @@ function sheetPrefix(node: FormulaNode, stored: boolean, sheetName: SheetNames):
         case SheetKind.Name:
             return `${stored ? quotedSheetName(sheet) : quoteSheetName(sheet)}!`;
         case SheetKind.External:
-            return `${stored || !BARE_EXTERNAL.test(sheet) ? quotedSheetName(sheet) : sheet}!`;
         case SheetKind.Span:
-            return `${stored || !sheet.split(':').every(isBareSheetName) ? quotedSheetName(sheet) : sheet}!`;
+            return `${quotedSheetName(sheet)}!`;
     }
 }
 
