@@ -9,31 +9,25 @@ import {
     BRACKET_CLOSE,
     BRACKET_OPEN,
     COLON,
-    continuesWord,
     DOLLAR,
     DOT,
     EQUALS,
-    errorCode,
     LOWER_A,
     LOWER_E,
-    lexAt,
     MINUS,
     OPEN,
-    REF_ERROR,
-    Token,
-    tokenEnd,
-    tokenKind,
     UPPER_C,
     UPPER_R,
     ZERO,
-} from './lexer';
+} from './chars';
+import { continuesWord, errorCode, lexAt, REF_ERROR, Token, tokenEnd, tokenKind } from './lexer';
 import type { FormulaNode } from './tree';
 import { branch, EMPTY, leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from './tree';
 
 // Excel's limit on what a person types.
 export const MAX_FORMULA_LENGTH = 8192;
-// Stored text also arrives from a peer, so it has a cap of its own. A typed formula grows at most twelvefold when
-// stored, as a!A1 does with a uuid for the sheet and offsets that span the grid.
+// Stored text also arrives from a peer, so it has a cap of its own, with room above the twelvefold a typed formula
+// can grow when stored, as a!A1 does with a uuid for the sheet and offsets that span the grid.
 export const MAX_STORED_LENGTH = 16 * MAX_FORMULA_LENGTH;
 // Brackets and prefix or postfix operators, one inside the other. A chain of binary operators is not nesting.
 export const MAX_NESTING = 64;
@@ -48,8 +42,8 @@ export type ParseFailure = {
 
 export type A1Range = {
     readonly sheet?: string;
-    readonly start: { readonly col: number; readonly row: number };
-    readonly end: { readonly col: number; readonly row: number };
+    readonly start: { readonly column: number; readonly row: number };
+    readonly end: { readonly column: number; readonly row: number };
 };
 
 // Whether stored text is typed text that did not parse, kept behind a second =. No printed shape starts with two,
@@ -108,8 +102,8 @@ export function parseA1Range(range: string): A1Range | null {
     const column2 = node.op === RefKind.Cell ? column : node.column2;
     return {
         sheet: node.sheetKind === SheetKind.Name ? node.sheet : undefined,
-        start: { col: Math.min(column, column2), row: Math.min(row, row2) },
-        end: { col: Math.max(column, column2), row: Math.max(row, row2) },
+        start: { column: Math.min(column, column2), row: Math.min(row, row2) },
+        end: { column: Math.max(column, column2), row: Math.max(row, row2) },
     };
 }
 
@@ -295,9 +289,8 @@ class Parser {
             if (cell && after.kind === NodeKind.Ref && after.op <= RefKind.Range && after.space === '') {
                 return this.fail();
             }
-            // A name that is a column label, a colon and a column would show as text that reads as one range, and so
-            // would a function named like a column and called with whitespace. Typed text never gets here that way,
-            // so this refuses only stored text.
+            // A name that is a column label, a colon and a column would show as one range, as would a function named
+            // like a column and called with whitespace. Only stored text gets here that way.
             const label = after.kind === NodeKind.Name || after.spaceOpen !== '';
             const column = after.kind === NodeKind.Ref ? after.op === RefKind.Columns : label && isColumn(after);
             if (before.kind === NodeKind.Name && isColumn(before) && column && after.space === '') return this.fail();
@@ -498,9 +491,8 @@ class Parser {
         return branch(NodeKind.Array, columns, '', elements, space, '', spaceEnd);
     }
 
-    // The sheet prefix that starts at `pos` with a token of this kind and end, into the prefix fields: a quoted
-    // name, a stored id, or one bare name or the two of a 3-D reference, which typed text may write behind another
-    // workbook's index. Returns where its ! is, or -1 when no prefix starts there.
+    // The sheet prefix that starts at `pos` with a token of this kind and end, into the prefix fields, such as a
+    // quoted name or the two names of a 3-D reference. Returns where its ! is, or -1 when no prefix starts there.
     private sheetPrefix(pos: number, kind: number, end: number): number {
         const { text } = this;
         let bang = end;

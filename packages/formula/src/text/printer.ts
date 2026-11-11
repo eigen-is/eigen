@@ -1,7 +1,7 @@
 // The two printers over the one tree. printStored writes the canonical shape text, which is what a cell stores and
 // what the shape table keys on: offsets in R1C1 notation and sheets by id. printA1 writes what a person reads at a
-// given cell, in the formula bar, on the clipboard and from FORMULATEXT: labels, sheet names, corners in order, and
-// #REF! for a reference that falls off the grid there or names a sheet that is gone.
+// given cell, such as in the formula bar: labels, sheet names, corners in order, and #REF! for a reference that
+// falls off the grid there or names a sheet that is gone.
 
 import { columnLabel, GRID_COLUMNS, GRID_ROWS } from './a1';
 import { ERROR_LITERALS, isWord, SYMBOLS, Token } from './lexer';
@@ -10,8 +10,7 @@ import { quotedSheetName, quoteSheetName } from './sheet-name';
 import type { Ends, FormulaNode } from './tree';
 import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from './tree';
 
-// The smallest exponent a number below 1 prints in plain digits with. Files Excel wrote hold plain digits at
-// 1E-12 and E notation at 1.6E-19; where between the two it turns is assumed.
+// The smallest exponent a number below 1 prints in plain digits with, which is about where Excel turns to E notation.
 const PLAIN_EXPONENT_MIN = -18;
 
 export type SheetNames = (id: string) => string | undefined;

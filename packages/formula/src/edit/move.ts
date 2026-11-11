@@ -1,7 +1,6 @@
 // What a formula's stored text becomes when a block of cells moves, as a cut and paste or a drag does it. A
 // reference to cells that are all in the block follows them, from any sheet; one to cells the block landed on is
 // #REF!; and a formula that moved keeps reading what it read, so its offsets to cells outside the block change.
-// The store calls this for the formulas in the block and for those the reverse index finds reading it.
 
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { Ends, FormulaNode } from '../text/tree';

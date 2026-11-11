@@ -1,5 +1,5 @@
 // Where a row or column index goes when rows or columns are inserted or deleted, the one rule for everything that
-// holds such an index: a formula's references, and the ranges of merges, rules, filters, charts and the frozen pane.
+// holds such an index, such as a formula's references and the ranges of merges and charts.
 // Both maps are blind to the axis, so the caller picks rows or columns and builds one edit for them. A span is never
 // mapped as two single indices, because its ends clamp where a lone index would be gone.
 

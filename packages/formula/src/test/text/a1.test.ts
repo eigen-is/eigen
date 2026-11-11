@@ -59,16 +59,19 @@ describe('toA1 and rangeToA1', () => {
 
 describe('parseA1Range', () => {
     test.each([
-        ['A1', { sheet: undefined, start: { col: 0, row: 0 }, end: { col: 0, row: 0 } }],
-        ['$B$2:c5', { sheet: undefined, start: { col: 1, row: 1 }, end: { col: 2, row: 4 } }],
-        ['Sheet1!$A$1:B3', { sheet: 'Sheet1', start: { col: 0, row: 0 }, end: { col: 1, row: 2 } }],
-        ["'My Sheet'!A1", { sheet: 'My Sheet', start: { col: 0, row: 0 }, end: { col: 0, row: 0 } }],
-        ["'Bob''s'!B2:A1", { sheet: "Bob's", start: { col: 0, row: 0 }, end: { col: 1, row: 1 } }],
-        ['B2:A1', { sheet: undefined, start: { col: 0, row: 0 }, end: { col: 1, row: 1 } }],
-        ['A3:C1', { sheet: undefined, start: { col: 0, row: 0 }, end: { col: 2, row: 2 } }],
-        ['$C$1:a3', { sheet: undefined, start: { col: 0, row: 0 }, end: { col: 2, row: 2 } }],
-        ['Sheet1!B2:Sheet1!A1', { sheet: 'Sheet1', start: { col: 0, row: 0 }, end: { col: 1, row: 1 } }],
-        ['XFD1048576', { sheet: undefined, start: { col: 16383, row: 1048575 }, end: { col: 16383, row: 1048575 } }],
+        ['A1', { sheet: undefined, start: { column: 0, row: 0 }, end: { column: 0, row: 0 } }],
+        ['$B$2:c5', { sheet: undefined, start: { column: 1, row: 1 }, end: { column: 2, row: 4 } }],
+        ['Sheet1!$A$1:B3', { sheet: 'Sheet1', start: { column: 0, row: 0 }, end: { column: 1, row: 2 } }],
+        ["'My Sheet'!A1", { sheet: 'My Sheet', start: { column: 0, row: 0 }, end: { column: 0, row: 0 } }],
+        ["'Bob''s'!B2:A1", { sheet: "Bob's", start: { column: 0, row: 0 }, end: { column: 1, row: 1 } }],
+        ['B2:A1', { sheet: undefined, start: { column: 0, row: 0 }, end: { column: 1, row: 1 } }],
+        ['A3:C1', { sheet: undefined, start: { column: 0, row: 0 }, end: { column: 2, row: 2 } }],
+        ['$C$1:a3', { sheet: undefined, start: { column: 0, row: 0 }, end: { column: 2, row: 2 } }],
+        ['Sheet1!B2:Sheet1!A1', { sheet: 'Sheet1', start: { column: 0, row: 0 }, end: { column: 1, row: 1 } }],
+        [
+            'XFD1048576',
+            { sheet: undefined, start: { column: 16383, row: 1048575 }, end: { column: 16383, row: 1048575 } },
+        ],
     ])('%s', (text, expected) => {
         expect(parseA1Range(text)).toEqual(expected);
     });

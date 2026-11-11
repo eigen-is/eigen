@@ -3,6 +3,25 @@
 // cut whole, with any bracketed offsets, and the parser decides what it is. The token kinds double as the operator
 // codes of the tree, and tokens() adds the four kinds it tells a word apart by.
 
+import { ERRORS, REF } from '../values/errors';
+import {
+    BRACKET_CLOSE,
+    BRACKET_OPEN,
+    DOT,
+    DOUBLE_QUOTE,
+    EQUALS,
+    GREATER,
+    HASH,
+    isDigit,
+    LESS,
+    LOWER_A,
+    LOWER_E,
+    LOWER_Z,
+    MINUS,
+    PLUS,
+    QUOTE,
+} from './chars';
+
 export const Token = {
     End: 0,
     // Whitespace, and in a binary node the intersection operator, which is written as whitespace.
@@ -45,43 +64,10 @@ export const Token = {
 
 export type TokenKind = (typeof Token)[keyof typeof Token];
 
-// The characters the lexer and the parser look for, as the codes charCodeAt gives.
-export const BANG = 33;
-const DOUBLE_QUOTE = 34;
-const HASH = 35;
-export const DOLLAR = 36;
-const QUOTE = 39;
-export const OPEN = 40;
-const PLUS = 43;
-export const MINUS = 45;
-export const DOT = 46;
-export const ZERO = 48;
-const NINE = 57;
-export const COLON = 58;
-const LESS = 60;
-export const EQUALS = 61;
-const GREATER = 62;
-export const UPPER_C = 67;
-export const UPPER_R = 82;
-export const BRACKET_OPEN = 91;
-export const BRACKET_CLOSE = 93;
-export const LOWER_A = 97;
-export const LOWER_E = 101;
-const LOWER_Z = 122;
-
-// The error literals a formula may hold. An error leaf holds the place of its literal here, from 1, and the first
-// ten are the errors the engine computes, in the order of their codes.
-export const ERROR_LITERALS = [
-    '#NULL!',
-    '#DIV/0!',
-    '#VALUE!',
-    '#REF!',
-    '#NAME?',
-    '#NUM!',
-    '#N/A',
-    '#SPILL!',
-    '#CALC!',
-    '#ERROR!',
+// The error literals a formula may hold. An error leaf holds the place of its literal here, from 1: first the errors
+// the engine computes, by their codes, then the ones only a file brings.
+export const ERROR_LITERALS: readonly string[] = [
+    ...ERRORS.map((error) => error.text),
     '#GETTING_DATA',
     '#FIELD!',
     '#BLOCKED!',
@@ -91,10 +77,10 @@ export const ERROR_LITERALS = [
     '#PYTHON!',
     '#TIMEOUT!',
     '#EXTERNAL!',
-] as const;
+];
 
 // What is left of a reference whose cells or sheet are gone. It stands wherever a reference may.
-export const REF_ERROR = ERROR_LITERALS.indexOf('#REF!') + 1;
+export const REF_ERROR = REF.code;
 
 const SPACE = 1;
 const DIGIT = 2;
@@ -164,16 +150,13 @@ export function lexAt(text: string, pos: number): number {
         if ((text.codePointAt(pos) ?? 0) > 0xffff) end += 1;
         return (end << 6) | Token.Bad;
     }
-    switch (CLASS[code]) {
-        case SPACE:
-            while (CLASS[text.charCodeAt(end)] === SPACE) end += 1;
-            return (end << 6) | Token.Space;
-        case DIGIT:
-            return (numberEnd(text, pos) << 6) | Token.Number;
-        case WORD_START:
-            return (wordEnd(text, end) << 6) | Token.Word;
-        default:
+    const charClass = CLASS[code];
+    if (charClass === SPACE) {
+        while (CLASS[text.charCodeAt(end)] === SPACE) end += 1;
+        return (end << 6) | Token.Space;
     }
+    if (charClass === DIGIT) return (numberEnd(text, pos) << 6) | Token.Number;
+    if (charClass === WORD_START) return (wordEnd(text, end) << 6) | Token.Word;
     switch (code) {
         case DOT:
             return isDigit(text.charCodeAt(end)) ? (numberEnd(text, pos) << 6) | Token.Number : (end << 6) | Token.Bad;
@@ -245,18 +228,13 @@ function partWidth(text: string, pos: number): number {
     return wideWidth(text, pos, LETTER_OR_DIGIT);
 }
 
-// The same for a character past ASCII, by the class it must be of. A sheet or a name can be in any script, but not
-// hold what cannot be seen or reads as something else: a space or an operator of another script, a character
-// that is not drawn, such as a Hangul filler, or the full-width twin of an ASCII character.
+// The same for a character past ASCII, by the class it must be of. A name can be in any script, but holds nothing
+// that is not drawn, such as a Hangul filler, and no full-width twin of an ASCII character.
 function wideWidth(text: string, pos: number, wanted: RegExp): number {
     const point = text.codePointAt(pos);
     if (point === undefined || (point >= FULL_WIDTH_FIRST && point <= FULL_WIDTH_LAST)) return 0;
     const character = String.fromCodePoint(point);
     return wanted.test(character) && !NOT_DRAWN.test(character) ? character.length : 0;
-}
-
-function isDigit(code: number): boolean {
-    return code >= ZERO && code <= NINE;
 }
 
 // Digits, an optional fraction and an optional exponent. A sign is an operator, never part of the number.

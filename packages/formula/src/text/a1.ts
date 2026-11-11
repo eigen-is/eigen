@@ -2,6 +2,8 @@
 // name. The parser and the A1 printer build on these, and so does everything outside the engine that writes a cell
 // label, such as a chart's range or a link.
 
+import { LOWER_A, UPPER_A } from './chars';
+
 // Excel's grid, A1 to XFD1048576. A label past it is a name, and a reference that resolves past it prints #REF!.
 export const GRID_ROWS = 1048576;
 export const GRID_COLUMNS = 16384;
@@ -12,9 +14,9 @@ export function columnIndex(label: string, from = 0, to = label.length): number 
     if (to === from || to - from > 3) return -1;
     let column = 0;
     for (let i = from; i < to; i += 1) {
-        const letter = (label.charCodeAt(i) | 32) - 96;
-        if (letter < 1 || letter > 26) return -1;
-        column = column * 26 + letter;
+        const letter = (label.charCodeAt(i) | 32) - LOWER_A;
+        if (letter < 0 || letter > 25) return -1;
+        column = column * 26 + letter + 1;
     }
     return column > GRID_COLUMNS ? -1 : column - 1;
 }
@@ -22,7 +24,7 @@ export function columnIndex(label: string, from = 0, to = label.length): number 
 export function columnLabel(column: number): string {
     let label = '';
     for (let rest = column; rest >= 0; rest = Math.floor(rest / 26) - 1) {
-        label = String.fromCharCode(65 + (rest % 26)) + label;
+        label = String.fromCharCode(UPPER_A + (rest % 26)) + label;
     }
     return label;
 }

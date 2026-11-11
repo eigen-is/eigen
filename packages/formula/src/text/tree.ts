@@ -1,8 +1,8 @@
 // The parsed formula: one node shape for every kind, told apart by an integer, so a walker is a switch and a new
 // kind cannot be forgotten by one that reads `children`, the one way down the tree. A tree is immutable and holds
 // nothing that depends on the cell it sits in: a relative reference is an offset, a sheet is an id, and the corners
-// of a range stay as typed. The parser builds it through the three constructors here, the one place a node is made,
-// the printers, the shape table and the evaluator read it, and endsAt says where a reference points from a cell.
+// of a range stay as typed. The three constructors here are the one place a node is made, and endsAt says where a
+// reference points from a cell.
 
 export const NodeKind = {
     Number: 0,
@@ -162,9 +162,8 @@ export const EMPTY = leaf(NodeKind.Empty, 0, '', '', SheetKind.Host, '');
 // endsAt, so that reading a reference allocates nothing.
 export type Ends = { first: number; second: number };
 
-// Writes the rows, or the columns, a reference names from a host on line `host` of that axis into `into`, and says
-// whether both are on an axis of `lines` lines. A cell's second end is its first, and where a whole column or row
-// names no line, both are the host's own.
+// Writes the rows, or the columns, a reference names from a host on line `host` into `into`, and says whether both
+// are on an axis of `lines` lines. A cell's second end is its first; a whole column names the host's own row twice.
 export function endsAt(reference: FormulaNode, rows: boolean, host: number, lines: number, into: Ends): boolean {
     const { flags } = reference;
     const absolute = flags & (rows ? RefFlag.RowAbsolute : RefFlag.ColumnAbsolute);

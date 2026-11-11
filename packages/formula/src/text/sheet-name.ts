@@ -11,9 +11,8 @@ export function quotedSheetName(name: string): string {
     return `'${name.replaceAll("'", "''")}'`;
 }
 
-// The name as a reference's sheet prefix spells it: bare where that reads back as the name, quoted otherwise. Bare is
-// an allow-list: a word of letters, digits, _ and ., and not what the grammar reads as a reference in either
-// notation or as a boolean.
+// The name as a reference's sheet prefix spells it. Bare is an allow-list, so that it reads back as the name: one
+// word that the grammar reads as no reference in either notation and as no boolean.
 export function quoteSheetName(name: string): string {
     const bare = isWord(name) && !readsAsReference(name) && !NEVER_BARE.test(name);
     return bare ? name : quotedSheetName(name);

@@ -2,7 +2,7 @@
 // cells it named, wherever they went. An absolute index goes through the edit's map on the target's sheet, and an
 // offset becomes the distance between the mapped target and the mapped host, each on its own sheet. A formula only
 // depends on its host through the host's line on the edited axis, so hostClasses cuts a span of host lines into
-// stretches with one outcome each and the store transforms a filled column once per stretch, not once per cell.
+// stretches with one outcome each: a filled column is transformed once per stretch, not once per cell.
 
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { Ends, FormulaNode } from '../text/tree';
