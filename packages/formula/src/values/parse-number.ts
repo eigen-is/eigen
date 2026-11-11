@@ -57,7 +57,7 @@ export function parseNumber(text: string): number | undefined {
     return readDecorated(text, start, end) ?? readFraction(text, start, end) ?? readDateTime(text, start, end);
 }
 
-// Digits with what may stand around them: a sign in front or behind or a pair of brackets, a currency sign in front
+// Digits with what may stand around them: a sign in front or a pair of brackets, a currency sign in front
 // or behind, commas between groups of three, a decimal point, an exponent and a percent sign.
 function readDecorated(text: string, start: number, end: number): number | undefined {
     let at = start;
@@ -126,10 +126,6 @@ function readDecorated(text: string, start: number, end: number): number | undef
         at = percentAt + 1;
     }
     if (!currency && at < end && (text.charCodeAt(at) === DOLLAR || text.charCodeAt(at) === EURO)) at++;
-    if (!signed && at < end && text.charCodeAt(at) === MINUS) {
-        negative = true;
-        at++;
-    }
     if (bracketed && text.charCodeAt(at++) !== CLOSE) return undefined;
     if (at !== end) return undefined;
 
@@ -174,6 +170,7 @@ function readDateTime(text: string, start: number, end: number): number | undefi
     if (!timed && half === 0) return readDate(text, start, end);
 
     let timeAt = timed ? colon : timeEnd;
+    while (timed && text.charCodeAt(timeAt - 1) === SPACE) timeAt--;
     while (timeAt > start && isDigit(text.charCodeAt(timeAt - 1))) timeAt--;
     const time = readTime(text, timeAt, timeEnd, half);
     if (time === undefined || timeAt === start) return time;
@@ -251,9 +248,14 @@ function readTime(text: string, from: number, to: number, half: number): number 
     let minutes = 0;
     let seconds = 0;
     if (hoursEnd < to) {
-        const minutesEnd = digitsEnd(text, hoursEnd + 1, to);
-        if (text.charCodeAt(hoursEnd) !== COLON || minutesEnd === hoursEnd + 1) return undefined;
-        minutes = toWhole(text, hoursEnd + 1, minutesEnd);
+        // Spaces may stand around the colon after the hours, as in 4 : 35.
+        let colon = hoursEnd;
+        while (text.charCodeAt(colon) === SPACE) colon++;
+        let minutesAt = colon + 1;
+        while (text.charCodeAt(minutesAt) === SPACE) minutesAt++;
+        const minutesEnd = digitsEnd(text, minutesAt, to);
+        if (text.charCodeAt(colon) !== COLON || minutesEnd === minutesAt) return undefined;
+        minutes = toWhole(text, minutesAt, minutesEnd);
         if (minutesEnd < to) {
             const secondsEnd = digitsEnd(text, minutesEnd + 1, to);
             if (text.charCodeAt(minutesEnd) !== COLON || secondsEnd === minutesEnd + 1) return undefined;
