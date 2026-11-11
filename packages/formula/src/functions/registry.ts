@@ -6,7 +6,7 @@
 import type { Family } from '../eval/families';
 import { Families } from '../eval/families';
 import type { Matches, Numbers, Room, Table } from '../eval/readers';
-import type { Entry, Lazy, PART, Param, Returns, Walked } from '../eval/signature';
+import type { ANYWHERE, Entry, Lazy, PART, Param, Returns, Walked } from '../eval/signature';
 import { MAX_ARGUMENTS, Prepare, Read } from '../eval/signature';
 import { toBoolean, toNumber, toText } from '../values/coerce';
 import type { FormulaError } from '../values/errors';
@@ -15,11 +15,20 @@ import type { ArrayValue, Reference, Scalar } from '../values/value';
 
 export type { Matches, Numbers, Room, Table } from '../eval/readers';
 export type { Vector } from '../eval/search';
-export { Find, PART } from '../eval/signature';
+export { ANYWHERE, Find, PART } from '../eval/signature';
+export { rectangle } from '../values/rectangle';
 
 export type Registry = ReadonlyMap<string, Entry>;
 
-const REQUIRED = { family: null, optional: false, fallback: undefined, skips: false, rest: false, union: null };
+const REQUIRED = {
+    strict: false,
+    family: null,
+    optional: false,
+    fallback: undefined,
+    skips: false,
+    rest: false,
+    union: null,
+};
 
 function scalar<T>(read: Read): Param<T> {
     return Object.freeze({ ...REQUIRED, prepare: Prepare.Scalar, read });
@@ -33,6 +42,8 @@ function walked(family: Family): Walked<Numbers> {
 export const NUMBER = scalar<number>(Read.Number);
 // A number cut toward zero, as a count or a position is.
 export const INTEGER = scalar<number>(Read.Integer);
+// A date: a number cut down to a whole day, and #NUM! below 0 or past the last date Excel has.
+export const SERIAL = scalar<number>(Read.Serial);
 // A number and a boolean are spelled out, a blank is empty text.
 export const TEXT = scalar<string>(Read.Text);
 // A number is TRUE unless it is 0, a blank and empty text are FALSE, and a text must spell TRUE or FALSE.
@@ -66,6 +77,21 @@ export const HERE: Param<Reference> = Object.freeze({
     ...REQUIRED,
     ...{ prepare: Prepare.Reference, read: Read.Here, optional: true, union: REF },
 });
+// Whatever was written, unread, as a table: never lifted, never refused, and an error is a value of it.
+export const ANYTHING: Param<Table> = Object.freeze({ ...REQUIRED, prepare: Prepare.Whole, read: Read.Anything });
+// Take no argument, and make the row answer anew in every pass: a draw in [0, 1), and the date and time.
+export const RANDOM: Param<number> = Object.freeze({
+    ...REQUIRED,
+    prepare: Prepare.Ambient,
+    read: Read.Random,
+    optional: true,
+});
+export const NOW: Param<number> = Object.freeze({
+    ...REQUIRED,
+    prepare: Prepare.Ambient,
+    read: Read.Now,
+    optional: true,
+});
 // Takes no argument: where a body that builds an array gets it.
 export const ROOM: Param<Room> = Object.freeze({
     ...REQUIRED,
@@ -81,6 +107,8 @@ const ONLY: Param<Reference> = Object.freeze({
     read: Read.Only,
     union: VALUE,
 });
+// A reference that is never read: a place. A union is #REF!.
+export const REFERENCE: Param<Reference> = Object.freeze({ ...ONLY, union: REF });
 // Two arguments, a criteria range and its criterion: the cells of the range that meet it. With several in a row,
 // the cells at one place that meet them all. A criterion that is an array runs the call once per element.
 export const WHERE: Walked<Matches> = Object.freeze({ ...REQUIRED, prepare: Prepare.Walked, read: Read.Where });
@@ -107,8 +135,14 @@ export function optional(param: Param<unknown>, fallback?: Scalar): Param<unknow
 // As `optional`, and an argument left empty is left out too: XMATCH(20,r,0,) searches from the first value on.
 export function skippable(param: Param<Lazy>, fallback: Scalar): Param<Lazy>;
 export function skippable<T>(param: Param<T>, fallback: NoInfer<T> & Scalar): Param<T>;
-export function skippable(param: Param<unknown>, fallback: Scalar): Param<unknown> {
+export function skippable<T>(param: Param<T>): Param<T | undefined>;
+export function skippable(param: Param<unknown>, fallback?: Scalar): Param<unknown> {
     return Object.freeze({ ...param, optional: true, skips: true, fallback });
+}
+
+// A number reading that refuses a boolean, typed or in a cell, with #VALUE!.
+export function strict(param: Param<number>): Param<number> {
+    return Object.freeze({ ...param, strict: true });
 }
 
 // A union is taken, every area of it.
@@ -140,7 +174,8 @@ type Out<P extends readonly Param<unknown>[], R extends Returns> =
     | Scalar
     | ArrayValue
     | Picks<P>
-    | (R extends typeof PART ? Table : never);
+    | (R extends typeof PART ? Table : never)
+    | (R extends typeof ANYWHERE ? Reference : never);
 
 export function fn<const P extends readonly Param<unknown>[], R extends Returns = 0>(
     name: string,
@@ -198,6 +233,7 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
         fixed,
         group,
         sized,
+        volatile: params.some((param) => param.read === Read.Random || param.read === Read.Now),
         plain,
         run: body,
     });
@@ -210,6 +246,7 @@ function reads(param: Param<unknown>): unknown {
         case Read.Number:
             return toNumber(fallback);
         case Read.Integer:
+        case Read.Serial:
             return typeof fallback === 'number' ? Math.trunc(fallback) : undefined;
         case Read.Text:
             return toText(fallback);

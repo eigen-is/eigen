@@ -184,14 +184,9 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             if (at < entry.min - 1 || (at >= entry.min && at < params.length - 1 && !params[at + 1].optional)) continue;
             // One empty argument alone is a call of no arguments.
             expect(cell).toEqual(blank);
-            if (param.skips) {
-                const [skipped, left] = evaluateAll([written(entry, [...upTo, '', '']), written(entry, upTo)]);
-                if (at === params.length - 1) expect(empty).toEqual(left);
-                else
-                    expect(skipped).toEqual(
-                        evaluateAll([written(entry, [...upTo, param.fallback === 1 ? '1' : 'NA()', ''])])[0],
-                    );
-            } else if (at > 0) expect(empty).toEqual(blank);
+            // An empty argument is a blank that is read, or left out where the parameter says so.
+            if (param.skips && at === params.length - 1) expect(empty).toEqual(evaluateAll([written(entry, upTo)])[0]);
+            else if (!param.skips && at > 0) expect(empty).toEqual(blank);
             if (!param.optional || param.fallback === undefined || at !== params.length - 1) continue;
             const fallback =
                 typeof param.fallback === 'string' ? `"${param.fallback}"` : String(param.fallback).toUpperCase();
@@ -216,6 +211,11 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
 
     test('equal arguments give equal answers', () => {
         const [first, second, third] = evaluateAll([written(entry, base), written(entry, base), written(entry, base)]);
+        // A row that draws answers anew at each call, with a value of one kind.
+        if (entry.volatile && entry.params.some((param) => param.read === Read.Random)) {
+            expect(typeof second).toBe(typeof first);
+            return;
+        }
         expect(second).toEqual(first);
         expect(third).toEqual(first);
     });

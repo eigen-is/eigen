@@ -42,8 +42,8 @@ export class Engine {
 
     // Computes the formulas that the writes since the last recalc reach: one that came with a value and reads
     // nothing written keeps it. After `cap` formulas the pass stops, and the next recalc goes on from there.
-    public recalc(cap: number): RecalcResult {
-        return this.calc.pass(cap);
+    public recalc(cap: number, now = 0, seed = 0): RecalcResult {
+        return this.calc.pass(cap, now, seed);
     }
 
     // The value a cell holds. For a formula that is the last one a recalc computed.

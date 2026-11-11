@@ -9,7 +9,7 @@ import { CALC, NA, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { arrayOf, isArray, isError, isReference, MOST_ELEMENTS } from '../values/value';
 import type { Axis } from './bands';
-import { align } from './bands';
+import { align, apart } from './bands';
 import { ends, isLazy, picked, read, run, slotOf } from './call';
 import type { Evaluator } from './evaluator';
 import type { Entry, Held, Lazy, Param } from './signature';
@@ -33,7 +33,7 @@ export function lift(
     const lifting = prepared.map((value, i) =>
         isArray(value) && lifts(slotOf(entry, i), value) ? arrays.push(value) - 1 : -1,
     );
-    const lined = lineUp(ctx, arrays);
+    const lined = lineUp(ctx, arrays, entry.volatile);
     if (lined === null) return CALC;
     const { down, across } = lined;
     const width = across.count;
@@ -60,10 +60,11 @@ export function lift(
             }
             result ??= run(ctx, entry, held, count);
             if (isLazy(result)) picks[r * width + c] = result;
-            else if (isArray(result)) items[r * width + c] = CALC;
             else {
-                items[r * width + c] = result;
-                references ||= isReference(result);
+                // Of an element that answers an array, the first value: ROW of a range of three rows is its first row.
+                const item = isArray(result) ? result.items[0] : result;
+                items[r * width + c] = item;
+                references ||= isReference(item);
             }
         }
     }
@@ -80,8 +81,8 @@ function lifts(param: Param<unknown>, array: ArrayValue): boolean {
 type Lined = { readonly rows: number; readonly columns: number; readonly down: Axis; readonly across: Axis };
 
 // The shape of an operation over these arrays and how each of them runs along it, or null when the result would
-// store more than an array may.
-function lineUp(ctx: Evaluator, arrays: readonly ArrayValue[]): Lined | null {
+// store more than an array may. `apiece` cuts every run into single elements.
+function lineUp(ctx: Evaluator, arrays: readonly ArrayValue[], apiece: boolean): Lined | null {
     let rows = 1;
     let columns = 1;
     for (const array of arrays) {
@@ -90,7 +91,13 @@ function lineUp(ctx: Evaluator, arrays: readonly ArrayValue[]): Lined | null {
     }
     const down = align(arrays, rows, true);
     const across = align(arrays, columns, false);
-    return ctx.recalc.room(down.count * across.count, MOST_ELEMENTS) ? { rows, columns, down, across } : null;
+    // A row that answers anew at every call makes each written element by a call of its own.
+    if (apiece && ctx.recalc.room(rows * columns, MOST_ELEMENTS)) {
+        return { rows, columns, down: apart(down, rows), across: apart(across, columns) };
+    }
+    return !apiece && ctx.recalc.room(down.count * across.count, MOST_ELEMENTS)
+        ? { rows, columns, down, across }
+        : null;
 }
 
 // Where array `k` stores its element for a run of rows and a run of columns, or -1 past its end.
@@ -131,7 +138,7 @@ function fill(
         values[token.index] = value;
         places[token.index] = isArray(value) ? arrays.push(value) - 1 : 0;
     }
-    const lined = lineUp(ctx, arrays);
+    const lined = lineUp(ctx, arrays, false);
     if (lined === null) return CALC;
     const { down, across } = lined;
     const width = across.count;

@@ -31,8 +31,9 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
         const { family } = param;
         const to = param.rest ? count : at + spanOf(param);
         const value = held[at];
-        if (param.prepare === Prepare.Ambient) args[p] = ctx.room;
-        else if (param.prepare === Prepare.Whole) {
+        if (param.prepare === Prepare.Ambient) {
+            args[p] = param.read === Read.Room ? ctx.room : param.read === Read.Now ? ctx.now : ctx.draw();
+        } else if (param.prepare === Prepare.Whole) {
             args[p] = value === undefined || isLazy(value) ? undefined : frame.table(p).over(value);
         } else if (param.prepare !== Prepare.Walked) args[p] = param.rest ? held.slice(at, count) : value;
         else if (param.read === Read.Matched) args[p] = frame.numbers(p).bind(at, to, Families.Numbers, false);

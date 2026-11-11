@@ -5,6 +5,7 @@
 import { NA, REF, VALUE } from '../values/errors';
 import type { Table } from './registry';
 import {
+    ANYWHERE,
     areas,
     BOOLEAN,
     Find,
@@ -16,7 +17,9 @@ import {
     optional,
     PART,
     PLAIN,
+    REFERENCE,
     ROOM,
+    rectangle,
     refusing,
     skippable,
     TABLE,
@@ -60,6 +63,20 @@ export const LOOKUP = [
             );
         },
         PART,
+    ),
+    fn(
+        'OFFSET',
+        [REFERENCE, INTEGER, INTEGER, skippable(INTEGER), skippable(INTEGER)],
+        (base, down, across, height, width) => {
+            const rows = height ?? base.bottom - base.top + 1;
+            const columns = width ?? base.right - base.left + 1;
+            if (rows === 0 || columns === 0) return REF;
+            // A negative size counts back from the corner.
+            const top = base.top + down + (rows < 0 ? rows + 1 : 0);
+            const left = base.left + across + (columns < 0 ? columns + 1 : 0);
+            return rectangle(base.sheet, top, left, top + Math.abs(rows) - 1, left + Math.abs(columns) - 1);
+        },
+        ANYWHERE,
     ),
     // A type of 0 is the key itself, a negative one takes the values for sorted downward.
     fn('MATCH', [PLAIN, refusing(TABLE, NA), optional(NUMBER, 1)], (key, table, type) => {

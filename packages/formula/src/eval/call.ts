@@ -8,7 +8,8 @@ import type { Sheet } from '../store/sheet';
 import type { FormulaNode } from '../text/tree';
 import { NodeKind } from '../text/tree';
 import { toBoolean, toNumber, toText } from '../values/coerce';
-import { NAME, VALUE } from '../values/errors';
+import { LAST_SERIAL } from '../values/dates';
+import { NAME, NUM, VALUE } from '../values/errors';
 import { parseNumber } from '../values/parse-number';
 import type { Value } from '../values/value';
 import { isArray, isError, isReference, ValueType } from '../values/value';
@@ -94,7 +95,7 @@ export function picked(
 
 // Whether an error at a parameter ends the call: every reading but the ones that take an error as a value.
 export function ends(param: Param<unknown>): boolean {
-    return param.read < Read.Any || param.read === Read.Products;
+    return param.read < Read.Any;
 }
 
 // What the argument at a place is read as.
@@ -109,10 +110,15 @@ export function read(param: Param<unknown>, value: Held): Held {
     if (isLazy(value)) return value;
     switch (param.read) {
         case Read.Number:
-            return typeof value === 'number' ? value : toNumber(value);
-        case Read.Integer: {
+            if (typeof value === 'number') return value;
+            return param.strict && typeof value === 'boolean' ? VALUE : toNumber(value);
+        case Read.Integer:
+        case Read.Serial: {
+            if (param.strict && typeof value === 'boolean') return VALUE;
             const number = typeof value === 'number' ? value : toNumber(value);
-            return typeof number === 'number' ? Math.trunc(number) : number;
+            if (typeof number !== 'number') return number;
+            if (param.read === Read.Integer) return Math.trunc(number);
+            return number < 0 || number > LAST_SERIAL ? NUM : Math.floor(number);
         }
         case Read.Text:
             return toText(value);
@@ -133,6 +139,9 @@ export function read(param: Param<unknown>, value: Held): Held {
         case Read.Where:
         case Read.Matched:
         case Read.Blanks:
+        case Read.Anything:
+        case Read.Random:
+        case Read.Now:
             return value;
         case Read.Products:
             return isReference(value) && value.next !== null ? VALUE : value;

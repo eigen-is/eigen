@@ -3,6 +3,9 @@
 // before March 1900 are a day off, as in Excel. The time of day is the serial's fraction. Whoever reads a date,
 // such as the reading of a typed one, does its arithmetic here, on whole numbers and without the host's Date.
 
+import type { FormulaError } from './errors';
+import { NUM } from './errors';
+
 // 31 December 9999, the last date Excel has.
 export const LAST_SERIAL = 2958465;
 
@@ -27,6 +30,16 @@ export function dateSerial(year: number, month: number, day: number): number {
     const inYear = year + Math.floor((month - 1) / 12);
     const leapDay = monthIndex > 1 && isLeapYear(inYear) ? 1 : 0;
     return firstSerial(inYear) + DAYS_BEFORE_MONTH[monthIndex] + leapDay + day - 1;
+}
+
+// The date `months` months after a serial, on the last day of that month when the month is shorter, and #NUM!
+// for a date Excel does not have.
+export function addMonths(serial: number, months: number): number | FormulaError {
+    const month = serialMonth(serial) + months;
+    const year = serialYear(serial) + Math.floor((month - 1) / 12);
+    const inYear = ((((month - 1) % 12) + 12) % 12) + 1;
+    const result = dateSerial(year, inYear, Math.min(serialDay(serial), daysInMonth(year, inYear)));
+    return year < 1900 || result > LAST_SERIAL ? NUM : result;
 }
 
 // The year by the mean length of one, which names the right year or the one after it.

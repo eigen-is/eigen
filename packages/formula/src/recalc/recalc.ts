@@ -100,8 +100,9 @@ export class Recalc {
 
     // Computes the formulas that the cells written since the last pass reach, those that read cells they do not
     // name and what an earlier pass left, in sheet, column, row order where the reads do not ask for another.
-    public pass(cap: number): RecalcResult {
+    public pass(cap: number, now = 0, seed = 0): RecalcResult {
         const { workbook } = this;
+        this.evaluator.clock(now, seed);
         if (this.stale) {
             for (let shape = 1; shape <= workbook.shapes.size; shape += 1) this.factsOf(shape);
             this.index.rebuild(workbook, this.facts);

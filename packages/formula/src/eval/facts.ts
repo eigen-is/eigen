@@ -6,6 +6,7 @@ import type { Registry } from '../functions/registry';
 import { Token } from '../text/lexer';
 import type { FormulaNode } from '../text/tree';
 import { NodeKind, RefFlag, RefKind, SheetKind } from '../text/tree';
+import { ANYWHERE } from './signature';
 
 export const Fact = {
     // A reference into another workbook or across sheets: the cell keeps the value it came with.
@@ -39,6 +40,8 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
         flags |= facts & FLAGS;
     }
     const entry = node.kind === NodeKind.Call ? functions.get(node.text) : undefined;
+    // An answer that differs from pass to pass, or cells that no argument names, must be computed in every pass.
+    if (entry !== undefined && (entry.volatile || entry.returns === ANYWHERE)) flags |= Fact.ReadsUnnamed;
     // A range that takes its size from another names cells of its own only when the two are of one size.
     if (entry !== undefined && entry.sized >= 0 && entry.sized < node.children.length) {
         if (!sameSize(node.children[entry.sized - 2], node.children[entry.sized])) flags |= Fact.ReadsUnnamed;

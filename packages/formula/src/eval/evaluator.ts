@@ -35,6 +35,9 @@ export class Evaluator {
     public calls = 0;
     public readonly walk = new Walk(this);
     public readonly room = new Room(this);
+    // The date and time of the pass in progress as a serial, which its author handed over with the seed of its draws.
+    public now = 0;
+    private drawn = 0;
     // Where endsAt writes the rows or columns of the reference being read.
     private readonly ends: Ends = { first: 0, second: 0 };
     // Where a reference that is read as an array marks its rows and its columns that hold a cell.
@@ -133,6 +136,19 @@ export class Evaluator {
             default:
                 return value;
         }
+    }
+
+    public clock(now: number, seed: number): void {
+        this.now = now;
+        this.drawn = seed | 0;
+    }
+
+    // The next number in [0, 1) of the pass, the same on every machine for one seed.
+    public draw(): number {
+        this.drawn = (this.drawn + 0x6d2b79f5) | 0;
+        let mixed = Math.imul(this.drawn ^ (this.drawn >>> 15), 1 | this.drawn);
+        mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
+        return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
     }
 
     // The cell a formula is in, as a reference.

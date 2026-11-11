@@ -256,8 +256,9 @@ describe('lifting', () => {
         expect(evaluate('=SUM(IF(A1:A3>1,A1:A3,0))', { A1: 1, A2: 2, A3: 3 })).toBe(5);
     });
 
-    test('an element that would be an array is #CALC!', () => {
-        expect(elements('=INDEX({1,2;3,4},{1,2},0)', 1, 2)).toMatchObject([[{ text: '#CALC!' }, { text: '#CALC!' }]]);
+    // Excel batch 5 records ROW of an array of ranges as the first row of each.
+    test('an element that would be an array is its first value', () => {
+        expect(elements('=INDEX({1,2;3,4},{1,2},0)', 1, 2)).toEqual([[1, 3]]);
     });
 });
 

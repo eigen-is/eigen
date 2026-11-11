@@ -3,7 +3,7 @@
 // is data the wrapper switches on. The words a function is written in are made from these records by the registry.
 
 import type { FormulaError } from '../values/errors';
-import type { ArrayValue, Scalar, Value } from '../values/value';
+import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { ValueType } from '../values/value';
 import type { Family } from './families';
 import type { Table } from './readers';
@@ -31,24 +31,31 @@ export type Prepare = (typeof Prepare)[keyof typeof Prepare];
 export const Read = {
     Number: 0,
     Integer: 1,
-    Text: 2,
-    Boolean: 3,
-    Plain: 4,
-    Walked: 5,
-    Table: 6,
-    Here: 7,
-    // A reference and nothing else, unread: a criteria range, or the range of the numbers beside it.
-    Only: 8,
-    Any: 9,
-    Lazy: 10,
-    Room: 11,
+    // A date: a number cut down to a whole day, #NUM! below 0 or past the last date.
+    Serial: 2,
+    Text: 3,
+    Boolean: 4,
+    Plain: 5,
+    Walked: 6,
+    Table: 7,
+    Here: 8,
+    // A reference and nothing else, unread: a criteria range, the range of the numbers beside it, a place.
+    Only: 9,
+    // Ranges of one size, multiplied place by place: the products.
+    Products: 10,
+    Any: 11,
+    Lazy: 12,
+    // Whatever was written, as a table: an error is a value of it, and nothing fails.
+    Anything: 13,
     // Readings of a whole parameter, whose arguments are read as Only and Any: a criteria range with its
     // criterion, the numbers beside the cells every criterion accepts, and the cells that show nothing.
-    Where: 12,
-    Matched: 13,
-    Blanks: 14,
-    // Ranges of one size, multiplied place by place: the products.
-    Products: 15,
+    Where: 14,
+    Matched: 15,
+    Blanks: 16,
+    // What takes no argument: room for an array, a draw in [0, 1), and the date and time as a serial.
+    Room: 17,
+    Random: 18,
+    Now: 19,
 } as const;
 
 export type Read = (typeof Read)[keyof typeof Read];
@@ -58,6 +65,8 @@ declare const carries: unique symbol;
 export type Param<T> = {
     readonly prepare: Prepare;
     readonly read: Read;
+    // Whether a number reading refuses a boolean.
+    readonly strict: boolean;
     // What a walked reading counts.
     readonly family: Family | null;
     // Whether the argument may be left out at the end, and what the body then gets.
@@ -95,9 +104,12 @@ export type Find = (typeof Find)[keyof typeof Find];
 // The mark of a row whose body may answer with a part of a range it was given.
 export const PART = 1;
 
-export type Returns = 0 | typeof PART;
+// The mark of a row whose body may answer with a reference it worked out, so it reads cells no argument names.
+export const ANYWHERE = 2;
 
-export type Result = Scalar | ArrayValue | Lazy | Table;
+export type Returns = 0 | typeof PART | typeof ANYWHERE;
+
+export type Result = Scalar | ArrayValue | Lazy | Table | Reference;
 
 export type Entry = {
     readonly name: string;
@@ -114,6 +126,8 @@ export type Entry = {
     readonly sized: number;
     // Whether the body gets its arguments as they are read, one per argument: no reader, no list.
     readonly plain: boolean;
+    // Whether the row takes a draw or the time, so its answer differs from call to call.
+    readonly volatile: boolean;
     // A method on purpose: a body typed by its parameters is stored here without a cast, since TypeScript compares
     // the parameters of a method loosely. `fn` is the only writer.
     run(...args: readonly unknown[]): Result;
