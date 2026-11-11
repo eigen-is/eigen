@@ -38,6 +38,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Renaming a tab in Sheets** — formulas, formula rules, dropdown lists and links that name the tab follow its new name, as in Excel, and undo renames it back
 - **Paste from a menu in Sheets** — **Edit › Paste** and the right-click **Paste** paste what is on the clipboard, from any app. Where the browser blocks that, a notice says to press ⌘V (Ctrl+V on Windows and Linux)
 - **Pasting edited cells in Sheets** — if you edit cells after copying them, a paste in the same tab brings them as they are now
+- **Tick boxes in Sheets** — a tick box with its own values, such as Yes and No, shows the box alone, centered like any other, as in Google Sheets. A cell whose value the rule doesn't name shows it as text with the red invalid mark, and no box
+- **Moving cells in Sheets** — a drag from the selection's border moves the cells when it starts on a comment or invalid mark too
 - **Validation limits in Sheets** — an edit that would push a validation rule past its limit goes through, and the cells past it get no rule
 - **Speed in Sheets** — editing a cell in a workbook of 100,000 formulas takes milliseconds, where it took over a tenth of a second, and a cell that 100,000 formulas read no longer stalls a sheet for a minute
 - **Large spreadsheets after row edits** — opening, exporting and searching a large workbook after many row or column inserts and deletes takes about half as long as before

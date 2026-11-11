@@ -1,6 +1,6 @@
-// nullCellRender/cellRender draw a single cell: background, indicators,
-// checkbox, data bar, text and grid lines. Text layout itself lives in
-// getCellTextInfo.
+// Draws one cell on the grid canvas: its background, its corner marks, such as a comment's, a tick box or a list
+// chevron, a data bar, its text and its grid lines. The grid's paint phases call cellRender for a cell with a value
+// and nullCellRender for one without, once per visible cell. The text layout is getCellTextInfo's.
 
 import { commentIndicatorColor, INDICATOR_RED } from '@workspace/lib/constants/comment-indicator';
 import { isForcedStringNumber, normalizedAttr } from '../modules/cell';
@@ -8,14 +8,12 @@ import { cellIndicatorRect } from '../modules/cell-glyph';
 import { checkCF } from '../modules/condition-format';
 import type { CellGlyphRect } from '../modules/data-validation';
 import {
-    CHECKBOX_LABEL_GAP,
     cellPassesRule,
     cellTextBox,
     checkboxAlign,
     checkboxRect,
     dropdownChevronRect,
     isCheckboxChecked,
-    showsCheckboxLabel,
 } from '../modules/data-validation';
 import { getCellTextInfo } from '../modules/text';
 import type { Rect } from '../types';
@@ -25,15 +23,13 @@ import { BORDER_FIX, HALF_PIXEL } from './geometry';
 import { overflowColIn } from './overflow';
 import type { RenderPass } from './types';
 
-// Data-validation tick box. Hardcoded light like the cell backgrounds —
-// the workbook surface is pinned light via `.eigen-paper` (RENDERING.md
-// § Theming) — and gray rather than black, the way Google draws the box.
+// Gray rather than black, the way Google draws the box, and fixed, as the grid is paper and doesn't re-theme.
 const CHECKBOX_STROKE = '#5f6368';
 
 const FORCED_STRING_INDICATOR_COLOR = '#487f1e';
 
-// A right-angled triangle filling half of its cellIndicatorRect, anchored on
-// the cell corner: one leg along the top edge, one down the side.
+// A right-angled triangle filling half of its cellIndicatorRect, anchored on the cell corner: one leg along the top
+// edge, one down the side.
 export function drawCellIndicator(
     renderCtx: CanvasRenderingContext2D,
     corner: 'left' | 'right',
@@ -50,8 +46,6 @@ export function drawCellIndicator(
     renderCtx.closePath();
 }
 
-// Drawn identically by both render paths — most commented cells in a workbook
-// hold a value, plenty do not.
 function drawCommentIndicator(pass: RenderPass, cardId: string, startY: number, endX: number) {
     const { renderCtx, sheetCtx, offsetLeft, offsetTop } = pass;
     const color = commentIndicatorColor(sheetCtx.commentCards?.[cardId]?.color);
@@ -72,12 +66,7 @@ function drawTickBox(renderCtx: CanvasRenderingContext2D, rect: CellGlyphRect, c
     renderCtx.closePath();
 }
 
-// Data-validation list chevron, painted on every cell a list rule covers —
-// empty ones included, which is where it earns its keep: a blank validated cell
-// is otherwise indistinguishable from a blank free-text one. It overlays the
-// cell text rather than reserving width, the way Google's does, and takes the
-// cell's OWN text color at low alpha instead of a flat gray: validated cells
-// sit on dark fills a fixed gray would vanish into.
+// The list chevron takes the cell's own text color at low alpha, as a fixed gray would vanish into a dark fill.
 const DROPDOWN_CHEVRON_ALPHA = 0.55;
 
 function renderDropdownChevron(pass: RenderPass, r: number, c: number, box: Rect) {
@@ -123,7 +112,6 @@ function addGridLines(
     gridLines.lineTo(endX + offsetLeft - 1, y);
 }
 
-// Empty cell rendering
 export function nullCellRender(
     pass: RenderPass,
     r: number,
@@ -148,7 +136,6 @@ export function nullCellRender(
     const rule = validationAt(r, c);
     const checksCF = checkCF(r, c, cfCompute);
 
-    // Background color
     let fillStyle = normalizedAttr(flowdata, r, c, 'bg');
 
     if (checksCF?.cellColor != null) {
@@ -170,30 +157,22 @@ export function nullCellRender(
 
     renderCtx.fillRect(cellsize[0], cellsize[1], cellsize[2], cellsize[3]);
 
-    // Comment indicator triangle
     const cardId = flowdata?.[r]?.[c]?.commentCardIds?.[0];
     if (cardId) drawCommentIndicator(pass, cardId, startY, endX);
 
     if (rule) {
         const box = cellTextBox(startX + offsetLeft, startY + offsetTop, endX + offsetLeft, endY + offsetTop);
-        // An empty cell inside a tick-box range still shows an unchecked box, so the
-        // range reads as one uniform column.
+        // An empty cell in a tick-box range shows an unchecked box, so the range reads as one column.
         if (rule.type === 'checkbox') {
             const verticalAlign = Number(normalizedAttr(flowdata, r, c, 'vt'));
-            drawTickBox(
-                renderCtx,
-                checkboxRect(box, checkboxAlign(flowdata?.[r]?.[c], rule, null), verticalAlign),
-                false,
-            );
+            drawTickBox(renderCtx, checkboxRect(box, checkboxAlign(flowdata?.[r]?.[c]), verticalAlign), false);
         } else if (rule.type === 'dropdown') {
             renderDropdownChevron(pass, r, c, box);
         }
     }
 
-    // Check overflow cell relationship
     const overflowInfo = overflowColIn(cellOverflowMap, r, c, colEnd);
 
-    // Last column of overflow range: render overflow cell content
     if (
         overflowInfo.colLast &&
         overflowInfo.rowIndex != null &&
@@ -244,7 +223,6 @@ export function cellRender(
 
     const checksCF = checkCF(r, c, cfCompute);
 
-    // Background color
     let fillStyle = normalizedAttr(flowdata, r, c, 'bg');
     if (checksCF?.cellColor != null) {
         fillStyle = checksCF.cellColor;
@@ -264,8 +242,8 @@ export function cellRender(
 
     renderCtx.fillRect(cellsize[0], cellsize[1], cellsize[2], cellsize[3]);
 
-    // Invalid-value indicator (red triangle top-left)
-    if (rule && !cellPassesRule(sheetCtx, rule, cell)) {
+    const invalid = rule != null && !cellPassesRule(sheetCtx, rule, cell);
+    if (invalid) {
         drawCellIndicator(
             renderCtx,
             'left',
@@ -274,11 +252,9 @@ export function cellRender(
         );
     }
 
-    // Comment indicator triangle
     const cardId = cell?.commentCardIds?.[0];
     if (cardId) drawCommentIndicator(pass, cardId, startY, endX);
 
-    // Forced-string indicator (green triangle top-left)
     if (isForcedStringNumber(cell)) {
         drawCellIndicator(
             renderCtx,
@@ -288,13 +264,11 @@ export function cellRender(
         );
     }
 
-    // Overflow cell handling
     let drawRightGridLine = true;
     const overflowInfo = overflowColIn(cellOverflowMap, r, c, colEnd);
 
     // Only a spilling source has a value inside its own span.
     if (overflowInfo.colIn) {
-        // Last column of overflow range: render overflow cell content
         if (
             overflowInfo.colLast &&
             overflowInfo.rowIndex != null &&
@@ -307,25 +281,15 @@ export function cellRender(
             drawRightGridLine = false;
         }
     }
-    // Data validation tick box
-    else if (rule?.type === 'checkbox') {
+    // A tick box stands in for a value its rule names. Any other value fails the rule and is painted as text.
+    else if (rule?.type === 'checkbox' && !invalid) {
         renderCtx.save();
         renderCtx.beginPath();
         renderCtx.rect(box.left, box.top, box.width, box.height);
         renderCtx.clip();
-
-        const rect = checkboxRect(box, checkboxAlign(cell, rule, value), verticalAlign);
-        drawTickBox(renderCtx, rect, isCheckboxChecked(rule, value));
-
-        if (showsCheckboxLabel(rule, value)) {
-            renderCtx.textBaseline = 'middle';
-            renderCtx.fillStyle = normalizedAttr(flowdata, r, c, 'fc');
-            renderCtx.fillText(String(value ?? ''), rect.x + rect.size + CHECKBOX_LABEL_GAP, rect.y + rect.size / 2);
-        }
-
+        drawTickBox(renderCtx, checkboxRect(box, checkboxAlign(cell), verticalAlign), isCheckboxChecked(rule, value));
         renderCtx.restore();
     } else {
-        // Conditional formatting data bar
         if (checksCF?.dataBar?.valueLen && checksCF?.dataBar?.valueLen?.toString() !== 'NaN') {
             drawDataBar(
                 renderCtx,
@@ -356,14 +320,13 @@ export function cellRender(
               })
             : undefined;
 
-        // Cell text color
         renderCtx.fillStyle = normalizedAttr(flowdata, r, c, 'fc');
 
         if (checksCF?.textColor) {
             renderCtx.fillStyle = checksCF.textColor;
         }
 
-        // Custom number format [Red]: set text color to red
+        // A [Red] number format colors a negative number.
         if ((cell?.ct?.fa?.indexOf('[Red]') ?? -1) > -1 && cell?.ct?.t === 'n' && (cell?.v as number) < 0) {
             renderCtx.fillStyle = '#ff0000';
         }

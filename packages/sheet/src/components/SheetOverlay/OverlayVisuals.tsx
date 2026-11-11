@@ -16,11 +16,8 @@ type Props = {
 export function OverlayVisuals({ containerRef }: Props) {
     const { context, setContext, refs } = useContext(WorkbookContext);
 
-    // The one entry for the selection's two DOM drag targets, the move band and
-    // the fill handle. A painted cell glyph under the pointer outranks either:
-    // the press is left to bubble to the cell area, whose mousedown opens the
-    // list, toggles the box or selects the marked cell instead of starting a drag.
-    // Decided outside the recipe, since stopPropagation has to happen now.
+    // A list chevron or a tick box under the pointer outranks the move band and the fill handle: the press bubbles to
+    // the cell area, which opens the list or toggles the box. Decided outside the recipe, as stopPropagation can't wait.
     const onHandleMouseDown = (e: React.MouseEvent<HTMLDivElement>, handle: 'move' | 'fill') => {
         const { nativeEvent } = e;
         const cellArea = refs.cellArea.current;
