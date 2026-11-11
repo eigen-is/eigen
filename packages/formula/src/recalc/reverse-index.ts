@@ -157,9 +157,10 @@ export class ReverseIndex {
         });
     }
 
-    // Flags every formula that reads a seed or a formula flagged here, each once, and every formula that reads
-    // cells it does not name. A seed is a span of rows of one column: sheet, column, first and last row.
+    // Flags every formula that reads a seed or a formula flagged here, each once, and with any seed at all every
+    // formula that reads cells it does not name. A seed is a span of rows: sheet, column, first and last row.
     public mark(workbook: Workbook, seeds: readonly number[]): void {
+        if (seeds.length === 0) return;
         const { sheets } = workbook;
         const { unnamed } = this;
         const work = seeds.slice();

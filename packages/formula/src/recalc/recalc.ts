@@ -21,7 +21,7 @@ export type CellAddress = { readonly sheet: string; readonly row: number; readon
 export type RecalcResult = {
     // Every cell of the workbook that is on a circular reference, in sheet, column, row order.
     readonly loops: readonly CellAddress[];
-    // True when the pass read more cells than its cap. What it computed stays, and the next pass goes on.
+    // True when the pass met its cap with formulas still to compute. What it computed stays, and the next goes on.
     readonly stopped: boolean;
 };
 
@@ -30,7 +30,7 @@ export type RecalcResult = {
 const BUDGET = 400;
 
 const UNWIND = Object.freeze({ reason: 'the evaluation nests too deep' });
-const STOP = Object.freeze({ reason: 'the recalc read more cells than its cap' });
+const STOP = Object.freeze({ reason: 'the recalc computed as many formulas as its cap' });
 
 export class Recalc {
     private readonly workbook: Workbook;
@@ -52,9 +52,8 @@ export class Recalc {
     private readonly rows: number[] = [];
     // The cell whose formula was reading when this one was entered, or -1.
     private readonly parents: number[] = [];
-    // A cell in the list this one is on a loop with, at or before the cell itself, and the cell itself while it is
-    // on none. It can lag behind the loop's first cell once two loops have joined: it says only that a first cell
-    // is not this one, and how far up the chain the loop is known to go.
+    // A cell of the list this one is on a loop with, at or before it: itself while it is on none. Once two loops
+    // have joined it can lag behind the first cell of the loop, which no reader of it needs to be exact.
     private readonly lows: number[] = [];
     // Where in the list a cell that is on a loop sits, which the chain alone does not tell once its formula ran.
     private readonly looped = new Map<Column, Map<number, number>>();
@@ -62,7 +61,8 @@ export class Recalc {
     // The innermost cell whose formula is running, or -1.
     private current = -1;
     private depth = 0;
-    private reads = 0;
+    // What the pass has cost so far, in formulas computed and array elements made, and how much it may.
+    private cost = 0;
     private cap = 0;
 
     public constructor(workbook: Workbook, functions: Registry) {
@@ -99,7 +99,7 @@ export class Recalc {
         }
         this.index.mark(workbook, this.seeds);
         this.seeds.length = 0;
-        this.reads = 0;
+        this.cost = 0;
         this.cap = cap;
         let stopped = false;
         try {
@@ -154,7 +154,6 @@ export class Recalc {
         const column = sheet.columns[c];
         if (column === undefined || row >= column.length) return null;
         if (column.kind[row] > SETTLED) this.resolve(sheet, column, c, row);
-        this.count(1);
         return this.workbook.value(column, row);
     }
 
@@ -162,16 +161,18 @@ export class Recalc {
     public settleArea(area: Reference): void {
         const { sheet, top } = area;
         const right = Math.min(area.right, sheet.columns.length - 1);
-        let cells = 0;
         for (let c = area.left; c <= right; c += 1) {
             const column = sheet.columns[c];
             const end = Math.min(area.bottom + 1, column.length);
-            if (end > top) cells += end - top;
             for (let row = top; column.pending > 0 && row < end; row += 1) {
                 if (column.kind[row] > SETTLED) this.resolve(sheet, column, c, row);
             }
         }
-        this.count(cells);
+    }
+
+    // Adds the elements of an array that a formula made to what the pass costs.
+    public count(elements: number): void {
+        this.cost += elements;
     }
 
     private seed(sheet: number, c: number, row: number): void {
@@ -181,11 +182,6 @@ export class Recalc {
         if (last >= 0 && seeds[last] === sheet && seeds[last + 1] === c && seeds[last + 3] === row - 1) {
             seeds[last + 3] = row;
         } else seeds.push(sheet, c, row, row);
-    }
-
-    private count(cells: number): void {
-        this.reads += cells;
-        if (this.reads > this.cap) throw STOP;
     }
 
     // Computes a cell that a formula in progress reads.
@@ -223,8 +219,8 @@ export class Recalc {
     private close(column: Column, row: number): void {
         let found = this.looped.get(column)?.get(row);
         if (found === undefined) {
-            // A cell on no loop yet is on the chain above the running one. A cell of the chain that is not it is
-            // skipped with its whole loop, which ends at its low or before it, and the search goes on at the reader.
+            // A cell on no loop yet is on the chain above the running one, and no loop on the way up holds it: so
+            // each cell that is not it is skipped with its loop, down to its low, and the search goes on at the reader.
             found = this.current;
             while (this.columns[found] !== column || this.rows[found] !== row) found = this.parents[this.lows[found]];
         }
@@ -271,6 +267,9 @@ export class Recalc {
         this.current = this.parents[at];
         // On a loop that an earlier cell has still to close: it stays in the list for whoever reads it.
         if (this.lows[at] < at) return;
+        // The cap is met before a formula is stored, never inside a loop that is being stored.
+        if (this.cost >= this.cap) throw STOP;
+        this.cost += this.size - at;
         if ((column.kind[row] & LOOP) === 0 && !kept) this.workbook.put(column, row, value);
         for (let i = at; i < this.size; i += 1) this.columns[i].computed(this.rows[i]);
         this.size = at;

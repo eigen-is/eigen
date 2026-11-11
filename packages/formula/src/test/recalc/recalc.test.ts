@@ -220,12 +220,12 @@ describe('depth', () => {
 describe('the cap', () => {
     const cells: Cells = { A1: 1, A2: 2, A3: 3, B1: '=SUM(A1:A3)', B2: '=B1+A1', B3: '=NA()' };
 
-    test('a pass that reads more cells than its cap stops, and the next one goes on', () => {
+    test('a pass that has more formulas to compute than its cap stops, and the next one goes on', () => {
         const engine = engineOf({ s1: cells });
         expect(engine.recalc(NO_CAP).stopped).toBe(false);
         engine.setValue('s1', 0, 0, 100);
         engine.setFormula('s1', 3, 1, '=R[-3]C*2');
-        expect(engine.recalc(5)).toEqual({ loops: [], stopped: true });
+        expect(engine.recalc(2)).toEqual({ loops: [], stopped: true });
         expect(['B1', 'B2', 'B3', 'B4'].map((label) => valueAt(engine, label))).toEqual([105, 205, NA, null]);
         expect(engine.recalc(1)).toEqual({ loops: [], stopped: false });
         expect(valueAt(engine, 'B4')).toBe(210);
@@ -233,30 +233,71 @@ describe('the cap', () => {
 
     test('a formula that was never computed is still to be computed after a pass that stopped before it', () => {
         const engine = engineOf({ s1: cells });
-        expect(engine.recalc(2).stopped).toBe(true);
-        expect(valueAt(engine, 'B2')).toBe(null);
+        expect(engine.recalc(1).stopped).toBe(true);
+        expect([valueAt(engine, 'B1'), valueAt(engine, 'B2')]).toEqual([6, null]);
         expect(engine.recalc(NO_CAP).stopped).toBe(false);
         expect(valueAt(engine, 'B2')).toBe(7);
     });
 
-    test('the cap counts the cells of a range up to the end of its column', () => {
-        const engine = engineOf({ s1: { A1: 1, A2: 2, B1: '=SUM(A:A)' } });
-        expect(engine.recalc(1).stopped).toBe(true);
-        expect(engine.recalc(2).stopped).toBe(false);
-        expect(valueAt(engine, 'B1')).toBe(3);
+    test('a cap of 3 stops after 3 formulas, and passes of 3 end where one full pass does', () => {
+        const engine = sheetOf((cell) => {
+            for (let row = 0; row < 10; row += 1) cell(row, 0, null, '=SUM(R1C2:R100C2)+ROW()');
+            for (let row = 0; row < 100; row += 1) cell(row, 1, 1, null);
+        });
+        const done = () =>
+            Array.from({ length: 10 }, (_, row) => engine.valueOf('s1', row, 0)).filter((v) => v !== null);
+        const passes: [boolean, number][] = [];
+        for (let pass = 0; pass < 4; pass += 1) passes.push([engine.recalc(3).stopped, done().length]);
+        expect(passes).toEqual([
+            [true, 3],
+            [true, 6],
+            [true, 9],
+            [false, 10],
+        ]);
+        expect(done()).toEqual([101, 102, 103, 104, 105, 106, 107, 108, 109, 110]);
+    });
+
+    test('a cap smaller than a chain is deep computes the far end first, pass by pass', () => {
+        const engine = sheetOf((cell) => {
+            for (let row = 0; row < 9; row += 1) cell(row, 0, null, '=R[1]C+1');
+            cell(9, 0, 1, null);
+        });
+        expect(engine.recalc(3).stopped).toBe(true);
+        expect([5, 6, 7, 8].map((row) => engine.valueOf('s1', row, 0))).toEqual([null, 4, 3, 2]);
+        expect([engine.recalc(3).stopped, engine.recalc(3).stopped, engine.recalc(3).stopped]).toEqual([
+            true,
+            false,
+            false,
+        ]);
+        expect(engine.valueOf('s1', 0, 0)).toBe(10);
+    });
+
+    test('a cap that is exactly the formulas to compute does not stop', () => {
+        const engine = engineOf({ s1: cells });
+        expect(engine.recalc(3)).toEqual({ loops: [], stopped: false });
+        expect(engineOf({ s1: cells }).recalc(0).stopped).toBe(true);
+        expect(engineOf({ s1: { A1: 1 } }).recalc(0).stopped).toBe(false);
     });
 
     test('a pass that stops after a loop keeps the loop', () => {
         const engine = engineOf({ s1: { A1: '=B1', B1: '=A1', C1: '=SUM(D1:D9)', D1: 1, D9: 2 } });
-        const { loops, stopped } = engine.recalc(3);
+        const { loops, stopped } = engine.recalc(1);
         expect([stopped, loops.length, valueAt(engine, 'A1'), valueAt(engine, 'C1')]).toEqual([true, 2, REF, null]);
         expect(loopsOf(engine)).toEqual(['A1', 'B1']);
         expect(valueAt(engine, 'C1')).toBe(3);
     });
 
+    test('a loop costs as many formulas as it has cells', () => {
+        const engine = engineOf({ s1: { A1: '=B1', B1: '=C1', C1: '=A1', D1: '=1+1' } });
+        const { loops, stopped } = engine.recalc(2);
+        expect([stopped, loops.length, valueAt(engine, 'D1')]).toEqual([true, 3, null]);
+        expect(engine.recalc(2).stopped).toBe(false);
+        expect(valueAt(engine, 'D1')).toBe(2);
+    });
+
     test('a pass that stops inside a loop leaves no cell in progress and no loop half found', () => {
-        const engine = engineOf({ s1: { A1: '=B1', B1: '=C1', C1: '=A1+D1', D1: 1, E1: '=IFERROR(A1,"loop")' } });
-        expect(engine.recalc(2)).toEqual({ loops: [], stopped: true });
+        const engine = engineOf({ s1: { A1: '=B1', B1: '=C1', C1: '=A1+D1', D1: '=1+1', E1: '=IFERROR(A1,"loop")' } });
+        expect(engine.recalc(0)).toEqual({ loops: [], stopped: true });
         expect(loopsOf(engine)).toEqual(['A1', 'B1', 'C1']);
         expect(valueAt(engine, 'E1')).toBe('loop');
         engine.setValue('s1', 0, 1, 5);

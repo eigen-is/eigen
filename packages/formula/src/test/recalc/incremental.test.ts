@@ -238,7 +238,7 @@ describe('the hosts of a filled formula that read a written cell', () => {
 });
 
 describe('a formula that reads cells its references do not name', () => {
-    test('is computed by every recalc, with its readers', () => {
+    test('is computed by every recalc after a write, with its readers', () => {
         const { engine, computed, write } = opened({
             s1: { A1: 1, B2: 2, C3: 3, E1: '=SUM(A1:INDEX(C1:C3,3))', F1: '=E1+1', G1: '=A1+1' },
         });
@@ -250,10 +250,22 @@ describe('a formula that reads cells its references do not name', () => {
         expect(valueAt(engine, 'F1')).toBe(125);
     });
 
-    test('also when nothing was written', () => {
-        const { computed } = opened({
-            s1: { A1: 1, 'E1:F2': '=SUM($A$1:INDEX($C$1:$C$3,3))', G1: '=F2+1', H1: '=A1' },
+    test('a function that reads past the range it names is one', () => {
+        const { engine, computed, write } = opened({
+            s1: { B1: 1, B2: 1, B3: 1, C1: 1, C2: 2, C3: 3, A1: '=SUMIF(B1:B3,">0",C1)', A2: '=A1+1', A3: '=C1' },
         });
+        write('C3', 10);
+        expect(computed()).toEqual(['A1', 'A2']);
+        expect(valueAt(engine, 'A1')).toBe(13);
+    });
+
+    test('whatever cell was written, and not when none was', () => {
+        const { computed, write } = opened({
+            s1: { A1: 1, 'E1:F2': '=SUM($A$1:INDEX($C$1:$C$3,3))', G1: '=F2+1', H1: '=A1' },
+            s2: { A1: 1 },
+        });
+        expect(computed()).toEqual([]);
+        write('Z9', 1, 's2');
         expect(computed()).toEqual(['E1', 'E2', 'F1', 'F2', 'G1']);
     });
 });
@@ -306,10 +318,10 @@ describe('the cap of an edit', () => {
             },
         ]);
 
-    test('an edit reads the cells of its cone, not of the workbook', () => {
+    test('an edit computes the formulas of its cone, not of the workbook', () => {
         const engine = filled();
         engine.setValue('s1', 499, 1, 7);
-        expect(engine.recalc(2)).toEqual({ loops: [], stopped: false });
+        expect(engine.recalc(1)).toEqual({ loops: [], stopped: false });
         expect(engine.valueOf('s1', 499, 3)).toBe(14);
     });
 
@@ -318,11 +330,11 @@ describe('the cap of an edit', () => {
         engine.setValue('s1', 499, 1, 7);
         engine.setFormula('s1', 0, 4, '=R[499]C[-1]+R[500]C[-1]');
         engine.setValue('s1', 500, 1, 1);
-        expect(engine.recalc(3).stopped).toBe(true);
+        expect(engine.recalc(1).stopped).toBe(true);
         expect([499, 500].map((row) => engine.valueOf('s1', row, 3))).toEqual([14, 1000]);
-        expect(engine.recalc(3).stopped).toBe(true);
+        expect(engine.recalc(1).stopped).toBe(true);
         expect([engine.valueOf('s1', 500, 3), engine.valueOf('s1', 0, 4)]).toEqual([2, null]);
-        expect(engine.recalc(2)).toEqual({ loops: [], stopped: false });
+        expect(engine.recalc(1)).toEqual({ loops: [], stopped: false });
         expect(engine.valueOf('s1', 0, 4)).toBe(16);
         expect(engine.recalc(0).stopped).toBe(false);
     });

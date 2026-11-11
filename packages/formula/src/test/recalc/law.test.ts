@@ -56,7 +56,7 @@ function generator(next: () => number) {
     const cell = () => `${sheet()}${end('R', ROWS)}${end('C', COLUMNS)}`;
     const range = () => `${cell()}:${end('R', ROWS)}${end('C', COLUMNS)}`;
     const formula = (): string => {
-        switch (pick(14)) {
+        switch (pick(15)) {
             case 0:
                 return `=${cell()}+${cell()}`;
             case 1:
@@ -83,6 +83,8 @@ function generator(next: () => number) {
                 return `=SUMPRODUCT(${range()},${range()})`;
             case 12:
                 return `='Nope'!R1C1+${cell()}`;
+            case 13:
+                return `=SUMIF(${range()},">2",${cell()})`;
             default:
                 return `=SUM(${range()} ${range()})+${pick(5)}`;
         }
@@ -133,12 +135,13 @@ function run(seed: number, steps: number): { compared: number; stops: number } {
             }
         }
         if (pick(5) < 3) continue;
-        let result = engine.recalc(pick(4) === 0 ? pick(40) : NO_CAP);
+        let result = engine.recalc(pick(4) === 0 ? pick(12) : NO_CAP);
         if (result.stopped) {
             stops += 1;
             // More writes land before the stopped pass goes on, or it goes on in small steps.
             if (pick(2) === 0) continue;
-            for (let cap = 10; result.stopped; cap += 10) result = engine.recalc(cap);
+            const cap = 1 + pick(6);
+            while (result.stopped) result = engine.recalc(cap);
         }
         const fresh = new Engine(sources(model, null));
         const expected = fresh.recalc(NO_CAP);

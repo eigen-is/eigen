@@ -39,7 +39,7 @@ export class Engine {
     }
 
     // Computes the formulas that the writes since the last recalc reach: one that came with a value and reads
-    // nothing written keeps it. Past `cap` cells read the pass stops, and the next recalc goes on from there.
+    // nothing written keeps it. After `cap` formulas the pass stops, and the next recalc goes on from there.
     public recalc(cap: number): RecalcResult {
         return this.calc.pass(cap);
     }
