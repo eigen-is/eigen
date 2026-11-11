@@ -4,9 +4,9 @@
 
 import type { Evaluator } from '../eval/evaluator';
 import type { FormulaError } from '../values/errors';
-import { NA, REF, VALUE } from '../values/errors';
+import { CALC, NA, REF, VALUE } from '../values/errors';
 import type { Reference, Value } from '../values/value';
-import { elementAt, isArray, isError, isReference, numbersOf, OMITTED, partOf } from '../values/value';
+import { arrayOf, elementAt, isArray, isError, isReference, MOST_ELEMENTS, OMITTED, partOf } from '../values/value';
 import type { FunctionBody } from './registry';
 import {
     BOOLEAN,
@@ -31,10 +31,10 @@ function position(ctx: Evaluator, reference: Value, own: number, rows: boolean):
     const first = rows ? reference.top : reference.left;
     const count = (rows ? reference.bottom : reference.right) - first + 1;
     // Every number is one of its own, so this array is as large as the reference, up to a whole column.
-    ctx.recalc.count(count);
+    if (!ctx.recalc.room(count, MOST_ELEMENTS)) return CALC;
     const numbers = new Float64Array(count);
     for (let i = 0; i < count; i += 1) numbers[i] = first + 1 + i;
-    return rows ? numbersOf(count, 1, numbers) : numbersOf(1, count, numbers);
+    return rows ? arrayOf(count, 1, numbers) : arrayOf(1, count, numbers);
 }
 
 const index: FunctionBody = (args, _ctx, node) => {

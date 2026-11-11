@@ -25,9 +25,10 @@ export type RecalcResult = {
     readonly stopped: boolean;
 };
 
-// How deep cells and tree nodes may nest, together, before the calls in progress are dropped. It has to stay well
-// under what the smallest stack an engine runs on holds, and a worker's stack is smaller than a page's.
+// How deep cells and tree nodes may nest, together, before the calls in progress are dropped. A cell counts CELL
+// on top of its nodes, since reading it takes more calls than a node does, and a worker's stack is small.
 const BUDGET = 400;
+const CELL = 6;
 
 const UNWIND = Object.freeze({ reason: 'the evaluation nests too deep' });
 const STOP = Object.freeze({ reason: 'the recalc computed as many formulas as its cap' });
@@ -121,7 +122,7 @@ export class Recalc {
                         this.enter(sheet, column, c, row);
                         // After a throw for depth the innermost cell in progress goes first, with no call above it.
                         while (this.current >= 0) {
-                            this.depth = 0;
+                            this.depth = this.nesting(this.columns[this.current].shape[this.rows[this.current]]);
                             this.evaluator.calls = 0;
                             try {
                                 this.compute();
@@ -136,18 +137,20 @@ export class Recalc {
                 }
             }
         } catch (thrown) {
-            if (thrown !== STOP) throw thrown;
-            stopped = true;
-            // The cells in progress are still to be computed, loops and all.
+            // The cells in progress are still to be computed, loops and all, whatever was thrown: the next pass
+            // starts clean.
             for (let i = 0; i < this.size; i += 1) {
                 const column = this.columns[i];
                 const kind = column.kind[this.rows[i]];
+                if (kind <= SETTLED) continue;
                 column.setLoop(this.rows[i], false);
                 column.kind[this.rows[i]] = (kind & KIND_MASK) | DIRTY;
             }
             this.size = 0;
             this.current = -1;
             this.looped.clear();
+            if (thrown !== STOP) throw thrown;
+            stopped = true;
         }
         const loops: CellAddress[] = [];
         for (const sheet of workbook.sheets) {
@@ -182,9 +185,12 @@ export class Recalc {
         }
     }
 
-    // Adds the elements of an array that a formula made to what the pass costs.
-    public count(elements: number): void {
-        this.made[this.current] += elements;
+    // Asks for what the running formula is about to make, such as the elements of an array, before it makes them:
+    // false when that is more than `most`, and else it is added to what the pass costs.
+    public room(units: number, most: number): boolean {
+        if (units > most) return false;
+        this.made[this.current] += units;
+        return true;
     }
 
     private seed(sheet: number, c: number, row: number): void {
@@ -203,7 +209,7 @@ export class Recalc {
             return;
         }
         this.enter(sheet, column, c, row);
-        const cost = this.factsOf(column.shape[row]) >> FACT_BITS;
+        const cost = this.nesting(column.shape[row]);
         this.depth += cost;
         if (this.depth > BUDGET) throw UNWIND;
         this.compute();
@@ -288,6 +294,11 @@ export class Recalc {
             this.columns[i].computed(this.rows[i]);
         }
         this.size = at;
+    }
+
+    // What one cell of a shape adds to the nesting.
+    private nesting(shape: number): number {
+        return (this.factsOf(shape) >> FACT_BITS) + CELL;
     }
 
     private factsOf(shape: number): number {

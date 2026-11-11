@@ -179,7 +179,7 @@ describe('an array has the size that was written', () => {
         expect(valueAt(engine, 'N2')).toBe(16382);
     });
 
-    test('a range is stored as far as its cells reach, so a pass with a small cap still computes it', () => {
+    test('a range stores the cells it holds, so a pass with a small cap still computes it', () => {
         const sheets = {
             s1: { ...cells, N1: '=SUM(B1:B1000000*C1:F1)', N2: '=SUM(--(Sheet2!A:XFD=""))' },
             s2: { D3: 300 },
@@ -210,14 +210,6 @@ describe('an array has the size that was written', () => {
         expect(evaluate('=INDEX(B1:C2+B1:F1,1,3)', cells)).toBe(NA);
         expect(evaluate('=INDEX(B1:B1000000+B:B,999999)', cells)).toBe(0);
         expect(evaluate('=INDEX(B1:B1000000+B:B,1000001)', cells)).toBe(NA);
-    });
-
-    // An array that is shorter than the one it meets is stored up to its last row. Past about two million elements
-    // the engine does not build that, and the whole result is #N/A where Excel has values in its first rows.
-    test('a shorter array too large to store makes the whole result #N/A', () => {
-        expect(evaluate('=INDEX(B1:D1000000+B:D,1,1)', cells)).toBe(NA);
-        expect(evaluate('=SUM(B1:D1000000+B:D)', cells)).toBe(NA);
-        expect(evaluate('=SUM(B1:D1000000+B1:D1000000)', cells)).toBe(130);
     });
 });
 

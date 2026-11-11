@@ -6,7 +6,7 @@
 // with a coercer's `read` and answers `refusal` when that fails.
 
 import type { Evaluator } from '../eval/evaluator';
-import type { Walk } from '../eval/walk';
+import type { Take, Walk } from '../eval/walk';
 import type { Sheet } from '../store/sheet';
 import type { FormulaNode } from '../text/tree';
 import { toBoolean, toNumber, toText } from '../values/coerce';
@@ -183,7 +183,7 @@ export function scalar4<A, B, C, D>(
 
 // A function of any number of values, references and arrays. `take` says which of their cells count, and the body
 // loops over the spans of numbers the walk hands out. An error the walk met is the result, whatever the body says.
-export function aggregate(name: string, take: number, body: (walk: Walk) => Scalar): FunctionEntry {
+export function aggregate(name: string, take: Take, body: (walk: Walk) => Scalar): FunctionEntry {
     return define(
         name,
         [RANGE],
