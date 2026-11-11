@@ -6,6 +6,7 @@ export {
     cutGuestCopy,
     guestCutOf,
     isNewerRevision,
+    keepOrganizers,
     keepProperties,
     newVCalendar,
     PRODID,

@@ -41,15 +41,8 @@ import { occurrenceStart } from './wall-clock';
 export const PRODID = '-//Eigen//CalDAV//EN';
 
 // Who acts, as the caller says, and the revision a message states for the item its edit names. A local write states
-// no revision, and the clock stands in for its stamp. `organizer` is the saver an organizer's own write names as the
-// ORGANIZER of a file that names none yet.
-export type WriteContext = {
-    now: Date;
-    actorIsOrganizer: boolean;
-    sequence?: number;
-    dtstamp?: Date | null;
-    organizer?: Organizer;
-};
+// no revision, and the clock stands in for its stamp.
+export type WriteContext = { now: Date; actorIsOrganizer: boolean; sequence?: number; dtstamp?: Date | null };
 
 export type EventPatch = Omit<UpdateEventInput, 'calendarId' | 'id' | 'etag'>;
 
@@ -79,7 +72,7 @@ const STAMP_HORIZON_MS = 24 * 60 * 60 * 1000;
 
 type Exclusion = { key: string; exclusion: CalendarEvent };
 
-type BuildOptions = { master?: ICAL.Component; exclusions?: Exclusion[]; organizer?: ICAL.Property };
+type BuildOptions = { master?: ICAL.Component; exclusions?: Exclusion[] };
 
 export type Revision = { sequence: number; dtstamp?: Date | null };
 
@@ -87,10 +80,8 @@ export type Revision = { sequence: number; dtstamp?: Date | null };
 // stated, since it holds no master to name its occurrence through.
 export type EventToBuild = CalendarEvent & { recurrenceId?: RecurrenceId | null };
 
-// `organizer` is the saver a new file of the organizer's own names on each VEVENT with guests.
-export function buildResource(events: readonly EventToBuild[], organizer?: Organizer): ICAL.Component {
+export function buildResource(events: readonly EventToBuild[]): ICAL.Component {
     const vcalendar = newVCalendar();
-    const line = organizer && addressProperty('organizer', organizer.email, organizer.name);
 
     // The master leads its group, because every override's RECURRENCE-ID is computed from it.
     const groups = new Map<string, EventToBuild[]>();
@@ -113,9 +104,9 @@ export function buildResource(events: readonly EventToBuild[], organizer?: Organ
                 overrides.push(event);
             }
         }
-        const master = lead && buildVEvent(lead, { exclusions, organizer: line });
+        const master = lead && buildVEvent(lead, { exclusions });
         if (master) vcalendar.addSubcomponent(master);
-        for (const event of overrides) vcalendar.addSubcomponent(buildVEvent(event, { master, organizer: line }));
+        for (const event of overrides) vcalendar.addSubcomponent(buildVEvent(event, { master }));
     }
 
     syncVTimezones(vcalendar);
@@ -198,11 +189,7 @@ export function applyEdits(resource: ICAL.Component, edits: ReadonlyMap<string |
         // cancelled row for the same key.
         unexcluded.add(key);
         const { sequence, dtstamp } = heldFor(key);
-        const organizer = edit.ctx.organizer && organizerLine(resource, edit.ctx.organizer);
-        const override = buildVEvent(
-            { ...edit.event, sequence, updatedAt: dtstamp ?? edit.ctx.now },
-            { master, organizer },
-        );
+        const override = buildVEvent({ ...edit.event, sequence, updatedAt: dtstamp ?? edit.ctx.now }, { master });
         // A date reschedules against what its guests held there: its own VEVENT, else the occurrence its master yields
         // where the master doesn't exclude it.
         const before = vevent
@@ -238,6 +225,26 @@ export function patchEvent(
     ctx: WriteContext,
 ): boolean {
     return applyEdits(resource, new Map([[recurrenceKey, { kind: 'patch', patch, ctx }]]));
+}
+
+// Guests answer the ORGANIZER (RFC 5546), and RFC 5545 gives an event on one person's calendar none. So after an
+// organizer's save every VEVENT of the file names one ORGANIZER exactly while it has guests: the line the file holds,
+// else the saver's. A saver with no address, such as a script on a team calendar, names none.
+export function keepOrganizers(resource: ICAL.Component, saver: Organizer, ctx: WriteContext): boolean {
+    const vevents = resource.getAllSubcomponents('vevent');
+    const held = vevents.find((vevent) => vevent.hasProperty('organizer'))?.getFirstProperty('organizer');
+    const line = held ?? (saver.email ? addressProperty('organizer', saver.email, saver.name) : undefined);
+    let changed = false;
+    for (const vevent of vevents) {
+        const guests = vevent.hasProperty('attendee');
+        if (guests === vevent.hasProperty('organizer')) continue;
+        if (!guests) clearProperty(vevent, 'organizer');
+        else if (line) vevent.addProperty(new ICAL.Property(structuredClone(line.toJSON())));
+        else continue;
+        touch(vevent, ctx, null);
+        changed = true;
+    }
+    return changed;
 }
 
 // A guest's "delete this and following" from `fromKey` keeps no override or exclusion from that date on, or a moved
@@ -473,7 +480,6 @@ function buildVEvent(event: EventToBuild, options: BuildOptions = {}): ICAL.Comp
     if (organizer) vevent.addProperty(addressProperty('organizer', organizer.email, organizer.name));
 
     for (const attendee of event.data?.attendees ?? []) vevent.addProperty(attendeeProperty(attendee));
-    if (options.organizer) keepOrganizer(vevent, options.organizer);
 
     // Eigen's own lines come last, in restampResource's order, so re-stamping a freshly built resource produces the
     // same bytes.
@@ -486,7 +492,7 @@ function buildVEvent(event: EventToBuild, options: BuildOptions = {}): ICAL.Comp
         vevent.addProperty(exclusionStamp(key, exclusion.id, exclusion.sequence, null));
     }
 
-    const recipient = calAddress(vevent.getFirstPropertyValue('organizer'));
+    const recipient = organizer?.email ?? '';
     for (const reminder of event.data?.reminders ?? []) {
         vevent.addSubcomponent(alarmComponent(reminder, event.title, recipient));
     }
@@ -509,9 +515,8 @@ function patchVEvent(
     const storedStart = dtstart?.getFirstValue();
     const allDay = patch.allDay ?? (storedStart instanceof ICAL.Time && storedStart.isDate);
     const scheduled = scheduleOf(vevent);
-    const organizer = ctx.organizer && organizerLine(resource, ctx.organizer);
 
-    let changed = isMaster && followMaster(resource, vevent, patch, ctx, raised, organizer);
+    let changed = isMaster && followMaster(resource, vevent, patch, ctx, raised);
 
     changed = setOptional(vevent, 'summary', patch.title) || changed;
     changed = setOptional(vevent, 'description', patch.description) || changed;
@@ -554,9 +559,8 @@ function patchVEvent(
                 setProperty(vevent, addressProperty('organizer', data.organizer.email, data.organizer.name)) || changed;
         }
         if (data.attendees) changed = patchAttendees(vevent, data.attendees) || changed;
+        if (data.reminders) changed = patchReminders(vevent, data.reminders) || changed;
     }
-    if (organizer) changed = keepOrganizer(vevent, organizer) || changed;
-    if (data?.reminders) changed = patchReminders(vevent, data.reminders) || changed;
 
     if (ctx.sequence !== undefined && sequenceOf(vevent) !== ctx.sequence) changed = true;
 
@@ -641,7 +645,6 @@ function followMaster(
     patch: EventPatch,
     ctx: WriteContext,
     raised: number,
-    organizer: ICAL.Property | undefined,
 ): boolean {
     const fields: Array<[string, string, string]> = [];
     for (const [name, value] of [
@@ -675,7 +678,6 @@ function followMaster(
                 ({ email }) => !wasGuest.has(email.toLowerCase()) && !own.has(email.toLowerCase()),
             );
             followed = patchAttendees(vevent, [...kept.map(projectAttendee), ...joined]) || followed;
-            if (organizer) followed = keepOrganizer(vevent, organizer) || followed;
         }
         if (!followed) continue;
         touch(vevent, ctx, scheduleOf(vevent) === scheduled ? null : raised);
@@ -704,21 +706,6 @@ function scheduleOf(vevent: ICAL.Component, start?: Date | null): string {
         String(vevent.getFirstPropertyValue('status') ?? 'CONFIRMED').toUpperCase(),
         vevent.getAllProperties('attendee').map(addressOf).toSorted(),
     ]);
-}
-
-// The organizer's file names one ORGANIZER for good: the line it already holds, and the saver's only when it holds none.
-function organizerLine(resource: ICAL.Component, saver: Organizer): ICAL.Property {
-    const named = resource.getAllSubcomponents('vevent').find((vevent) => vevent.hasProperty('organizer'));
-    return named?.getFirstProperty('organizer') ?? addressProperty('organizer', saver.email, saver.name);
-}
-
-// Guests answer the ORGANIZER (RFC 5546), and RFC 5545 gives an event on one person's calendar none, so an organizer's
-// VEVENT names `line` exactly while it has guests.
-function keepOrganizer(vevent: ICAL.Component, line: ICAL.Property): boolean {
-    if (!vevent.hasProperty('attendee')) return clearProperty(vevent, 'organizer');
-    if (vevent.hasProperty('organizer')) return false;
-    vevent.addProperty(new ICAL.Property(structuredClone(line.toJSON())));
-    return true;
 }
 
 function addressOf(prop: ICAL.Property): string {

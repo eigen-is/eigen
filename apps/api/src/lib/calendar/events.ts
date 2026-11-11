@@ -12,6 +12,7 @@ import { ApiError } from '../core';
 import {
     applyEdits,
     buildResource,
+    keepOrganizers,
     parseResource,
     patchEvent,
     raisedSequence,
@@ -76,8 +77,10 @@ export async function createEvent(
         const uri = `${crypto.randomUUID()}.ics`;
         const uid = args.uid || crypto.randomUUID();
         if (uidHolder(calendar, calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
-        const event = eventForResource({ id: crypto.randomUUID(), calendarId, uid, input: args, now: new Date() });
-        const resource = buildResource([event], user && organizerOf(calendar.home, user));
+        const ctx = writeContext(true);
+        const event = eventForResource({ id: crypto.randomUUID(), calendarId, uid, input: args, now: ctx.now });
+        const resource = buildResource([event]);
+        keepOrganizers(resource, organizerOf(calendar.home, user), ctx);
         const prepared = prepareResource(calendarId, resource, null);
         await calendar.writeResource({ calendarId, uri, prepared, creditBytes: 0 });
         return { created: requireEvent(calendar, event.id), replaced: null };
@@ -426,9 +429,10 @@ async function patchStoredEvent(
     const endMoved = input.endTime !== undefined && input.endTime.getTime() !== existing.endTime.getTime();
     const allDayMoved = input.allDay !== undefined && input.allDay !== existing.allDay;
 
-    await patchResource(
-        calendar,
-        resource,
+    const ctx = writeContext(!!user && organizer);
+    const component = storedComponent(calendar, resource);
+    const patched = patchEvent(
+        component,
         existing.recurrenceDate,
         {
             title: input.title?.trim(),
@@ -442,8 +446,10 @@ async function patchStoredEvent(
             status: input.status,
             data: input.data ?? undefined,
         },
-        saveContext(calendar, !!user && organizer, user),
+        ctx,
     );
+    const organized = organizer && keepOrganizers(component, organizerOf(calendar.home, user), ctx);
+    if (patched || organized) await writeComponent(calendar, resource, component);
 
     return { updated: requireEvent(calendar, id), existing };
 }
@@ -475,8 +481,12 @@ async function writeOverride(
     };
     const organizer = !isInvitationFromOthers(parent, calendar.home.user.email);
     const own = organizer ? input : { ...replaced, data: guestData(replaced.data, input.data) };
-    const edit = exceptionEdit(parent, own, saveContext(calendar, organizer, user));
-    await editResource(calendar, resource, (component) => applyEdits(component, new Map([[key, edit]])));
+    const ctx = writeContext(organizer);
+    const edit = exceptionEdit(parent, own, ctx);
+    await editResource(calendar, resource, (component) => {
+        applyEdits(component, new Map([[key, edit]]));
+        if (organizer) keepOrganizers(component, organizerOf(calendar.home, user), ctx);
+    });
     const created = exceptionOf(calendar, parent.id, key) ?? requireEvent(calendar, parent.id);
     return { created, replaced };
 }
@@ -484,11 +494,6 @@ async function writeOverride(
 // On a linked copy the guest's own reminders and color are theirs to change, and the rest stays the organizer's.
 function guestData(held: EventData | null, edit: EventData | null | undefined): EventData {
     return { ...held, reminders: edit?.reminders ?? held?.reminders, color: edit?.color ?? held?.color };
-}
-
-// An organizer's save names whoever saves as the ORGANIZER of a file that names none yet.
-function saveContext(calendar: Calendar, organizes: boolean, user: User | undefined): WriteContext {
-    return { ...writeContext(organizes), organizer: organizes && user ? organizerOf(calendar.home, user) : undefined };
 }
 
 // An event a write under the lock just stored or read through its series, so only a delete since then misses it.

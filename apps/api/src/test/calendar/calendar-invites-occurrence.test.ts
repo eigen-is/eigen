@@ -39,7 +39,9 @@ describe('Occurrence edits of an invited series', () => {
         ).id;
     });
 
-    const guests = () => [{ email: ctx.bob.user.email, name: 'Bob', status: 'pending' as const, role: 'required' }];
+    const guests = () => [
+        { email: ctx.bob.user.email, name: 'Bob', status: 'pending' as const, role: 'required' as const },
+    ];
 
     async function createSeries(title: string, attendees: object[] = guests()): Promise<CalendarEvent> {
         const res = await authedRequest(
@@ -802,6 +804,87 @@ describe('Occurrence edits of an invited series', () => {
         const vevents = await aliceVEvents(series.uid);
         expect(vevents).toHaveLength(2);
         for (const vevent of vevents) expect(vevent).toMatch(organizerLine());
+    });
+
+    // An older build stored a date with guests and no ORGANIZER, and the rule holds across the whole file.
+    test("an organizer's save gives an older date with guests the ORGANIZER it lacks", async () => {
+        const uid = crypto.randomUUID();
+        const GUEST = `older-dates-${uid}@example.org`;
+        const { calendar } = await getHome(ctx.alice.user.id);
+        const vevent = (lines: string[]) => [
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            ...lines,
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${GUEST}`,
+            'END:VEVENT',
+        ];
+        const body = vcal([
+            ...vevent(['DTSTART:20270202T090000Z', 'DTEND:20270202T100000Z', 'RRULE:FREQ=WEEKLY;COUNT=4']),
+            ...vevent(['RECURRENCE-ID:20270209T090000Z', 'DTSTART:20270209T100000Z', 'DTEND:20270209T110000Z']),
+        ]);
+        const put = await calendar.putResource(aliceCalendarId, `${uid}.ics`, body, {
+            ifMatch: null,
+            ifNoneMatch: null,
+        });
+        expect(put.ok).toBe(true);
+        const master = findOrFail(await calendar.getEventsByUid(uid), (e) => !e.recurrenceDate);
+
+        // A color save carries no guest list, so it reaches no date of the series.
+        expect((await putEvent(master.id, { data: { color: '#2563eb' } })).status).toBe(200);
+        const vevents = await aliceVEvents(uid);
+        expect(vevents).toHaveLength(2);
+        for (const stored of vevents) expect(stored).toMatch(organizerLine());
+        expect(vevents[1]).not.toContain('SEQUENCE:1');
+    });
+
+    // The ORGANIZER is the file's to keep. A body naming someone else would make the owner's own event an invitation
+    // from that stranger.
+    test("a save that names another organizer keeps the saver's ORGANIZER", async () => {
+        const organizer = { userId: '', email: 'mallory.organizer@example.org', name: 'Mallory' };
+        const created = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Weekly Foreign Organizer',
+                    startTime: SERIES_START,
+                    endTime: SERIES_END,
+                    allDay: false,
+                    rrule: 'FREQ=WEEKLY;COUNT=4',
+                    timezone: TZ,
+                    data: { attendees: guests(), organizer },
+                }),
+            },
+        );
+        const series = await assertJson<CalendarEvent>(created);
+        const renamed = { title: 'Foreign Organizer Renamed', data: { ...series.data, organizer } };
+        expect((await putEvent(series.id, renamed)).status).toBe(200);
+        await editOccurrence(series.id, '2027-02-09', {
+            title: 'Foreign Organizer Date',
+            data: { attendees: guests(), organizer },
+        });
+
+        const vevents = await aliceVEvents(series.uid);
+        expect(vevents).toHaveLength(2);
+        for (const stored of vevents) {
+            expect(stored).toMatch(organizerLine());
+            expect(stored).not.toContain(organizer.email);
+        }
+    });
+
+    // A write with no user, such as a script's, on a personal calendar is the owner's.
+    test("a write with no user names the calendar's owner as the ORGANIZER", async () => {
+        const { calendar } = await getHome(ctx.alice.user.id);
+        const event = await calendar.createEvent(aliceCalendarId, {
+            title: 'Scripted Guests',
+            startTime: new Date(SERIES_START),
+            endTime: new Date(SERIES_END),
+            allDay: false,
+            data: { attendees: guests() },
+        });
+        expect((await aliceVEvents(event.uid))[0]).toMatch(organizerLine());
     });
 
     // A guest may re-alarm their copy and nothing more, one date included.
