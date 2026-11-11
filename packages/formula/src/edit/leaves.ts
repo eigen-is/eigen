@@ -4,7 +4,7 @@
 
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { FormulaNode } from '../text/tree';
-import { branch, RefFlag } from '../text/tree';
+import { branch, RefFlag, SheetKind } from '../text/tree';
 
 export function mapLeaves(node: FormulaNode, map: (leaf: FormulaNode) => FormulaNode): FormulaNode {
     const { children } = node;
@@ -17,6 +17,12 @@ export function mapLeaves(node: FormulaNode, map: (leaf: FormulaNode) => Formula
         mapped[i] = child;
     }
     return mapped ? branch(node.kind, node.op, node.text, mapped, node.space, node.spaceEnd) : node;
+}
+
+// The id of the sheet a reference reads from a host on `hostSheet`, or null when it names no sheet of this workbook.
+export function sheetOf(reference: FormulaNode, hostSheet: string): string | null {
+    if (reference.sheetKind === SheetKind.Host) return hostSheet;
+    return reference.sheetKind === SheetKind.Id ? reference.sheet : null;
 }
 
 // Whether a reference names cells off the grid at this host, where it reads as #REF!. A copy, a fill and a sort keep

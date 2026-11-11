@@ -159,6 +159,7 @@ describe('what a move leaves alone', () => {
             tree: before,
             lossy: false,
             recompute: false,
+            resized: false,
         });
     });
     test('a reference off the grid at its host', () => {

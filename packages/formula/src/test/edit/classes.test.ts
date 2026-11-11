@@ -1,214 +1,308 @@
-// The fast path held against a slow version that knows nothing of offsets: it resolves every end of every reference
-// to the line it names at a host, sends the lines of a range through the edit one by one, and prints what is left.
-// The transform is held to it host by host, and the classes of hosts for every host of a run.
+// The fast path held against a slow version that shares nothing with it: on an axis of a few lines it writes the axis
+// out as a list, applies the edit to the list, and reads off where each line of a range went. The transform is held
+// to it host by host, in the cells it names, its three flags and the edit that takes it back, and the classes of
+// hosts are held to the transform for every host of a run.
 
 import { describe, expect, test } from 'bun:test';
-import type { LineEdit } from '../../text';
+import type { FormulaNode, LineEdit } from '../../text';
 import {
-    columnLabel,
-    GONE,
-    GRID_COLUMNS,
     GRID_ROWS,
     hostClasses,
-    mapIndex,
+    NodeKind,
     parseStored,
     printStored,
+    RefFlag,
+    RefKind,
     ShapeTable,
-    toA1,
     transformLines,
 } from '../../text';
-import { random, shown, tree } from './support';
+import { deleteRows, insertRows, random, tree } from './support';
 
-type End = { absolute: boolean; at: number };
+type End = { absolute: boolean; value: number };
 
-// One reference as typed at the base host. `ends` are its one or two lines on the edited axis, none for a whole
-// column under a row edit; `cross` its lines on the other axis, none for a whole row under a row edit.
-type Reference = { prefix: string; sheet: string | null; ends: End[]; cross: End[] };
+// One reference in stored terms. `ends` are its one or two indexes or offsets on the edited axis, none for a whole
+// column under a row edit. `sheet` is null for the host's own sheet.
+type Reference = { prefix: string; sheet: string | null; whole: boolean; ends: End[] };
 
 const PREFIXES: [string, string | null][] = [
     ['', null],
     ['', null],
-    ['Sheet1!', 's1'],
-    ['Sheet2!', 's2'],
-    ['Later!', 'later'],
+    ['[s1]!', 's1'],
+    ['[s2]!', 's2'],
+    ["'Later'!", 'later'],
 ];
 
-function leg(rows: boolean, line: End | undefined, cross: End | undefined): string {
-    const column = rows ? cross : line;
-    const row = rows ? line : cross;
-    return (
-        (column ? (column.absolute ? '$' : '') + columnLabel(column.at) : '') +
-        (row ? (row.absolute ? '$' : '') + (row.at + 1) : '')
-    );
+function index({ absolute, value }: End): string {
+    return absolute ? String(value + 1) : value === 0 ? '' : `[${value}]`;
 }
 
-function ordered(ends: End[]): End[] {
-    return ends.length === 2 && ends[0].at > ends[1].at ? [ends[1], ends[0]] : ends;
+// The stored text of a reference: its ends on the edited axis, and on the other axis a fixed line and an offset.
+function storedText(rows: boolean, { prefix, whole, ends }: Reference): string {
+    const [along, across] = rows ? ['R', 'C'] : ['C', 'R'];
+    if (ends.length === 0) return `${prefix}${across}1:${across}[2]`;
+    if (whole) return `${prefix}${along}${index(ends[0])}:${along}${index(ends[1])}`;
+    const corner = (end: End, other: string) => (rows ? `R${index(end)}C${other}` : `R${other}C${index(end)}`);
+    return prefix + (ends.length === 1 ? corner(ends[0], '2') : `${corner(ends[0], '2')}:${corner(ends[1], '[1]')}`);
 }
 
-// A reference as the formula bar shows it: the corners in order, each coordinate with its own $.
-function print(rows: boolean, reference: Reference, ends: End[]): string {
-    const lines = ordered(ends);
-    const cross = ordered(reference.cross);
-    const first = leg(rows, lines[0], cross[0]);
-    const two = Math.max(lines.length, cross.length) === 2;
-    return reference.prefix + (two ? `${first}:${leg(rows, lines[1] ?? lines[0], cross[1] ?? cross[0])}` : first);
+// The axis after the edit as a list: every line that is left, by the number it had, and null for a new line.
+function axisAfter(edit: LineEdit): (number | null)[] {
+    const axis: (number | null)[] = Array.from({ length: edit.lines }, (_, line) => line);
+    if (edit.insert) axis.splice(edit.index, 0, ...Array.from({ length: edit.count }, () => null));
+    else axis.splice(edit.index, edit.count);
+    return axis.slice(0, edit.lines);
 }
 
-// The text a reference typed at line `base` reads at the host on line `host` once the edit is done.
-function slow(edit: LineEdit, hostSheet: string, reference: Reference, base: number, host: number): string {
-    const { ends } = reference;
-    if (ends.length === 0) return print(edit.rows, reference, ends);
-    const targets = ends.map((end) => (end.absolute ? end.at : end.at + host - base));
-    if (targets.some((target) => target < 0 || target >= edit.lines)) return `${reference.prefix}#REF!`;
-    let low = Math.min(...targets);
-    let high = Math.max(...targets);
-    if ((reference.sheet ?? hostSheet) === edit.sheet) {
-        // A new line joins the range when the lines on both sides of it belonged to it.
-        const between = edit.insert && low < edit.index && edit.index <= high;
-        while (low <= high && mapIndex(edit, low) === GONE) low += 1;
-        if (low > high) return `${reference.prefix}#REF!`;
-        while (mapIndex(edit, high) === GONE) high -= 1;
-        low = mapIndex(edit, low);
-        high = mapIndex(edit, high);
-        if (between) high = Math.max(high, Math.min(edit.index + edit.count, edit.lines) - 1);
-    }
-    const flipped = targets.length === 2 && targets[0] > targets[1];
-    return print(
-        edit.rows,
-        reference,
-        ends.map((end, i) => ({ absolute: end.absolute, at: (i === 0) === flipped ? high : low })),
-    );
+type Expected = { gone: boolean; first: number; second: number; lost: boolean; cut: boolean; resized: boolean };
+
+// What a reference names after the edit, from a host on line `host` before it.
+function slow(
+    edit: LineEdit,
+    axis: (number | null)[],
+    hostSheet: string,
+    reference: Reference,
+    host: number,
+): Expected {
+    const [first, second = first] = reference.ends.map((end) => (end.absolute ? end.value : host + end.value));
+    const low = Math.min(first, second);
+    const high = Math.max(first, second);
+    const same = { gone: false, first, second, lost: false, cut: false, resized: false };
+    if ((reference.sheet ?? hostSheet) !== edit.sheet || low < 0 || high >= edit.lines) return same;
+    // A new line joins the range when the lines on both sides of it belonged to it.
+    const joins = edit.insert && low < edit.index && edit.index <= high;
+    const held: number[] = [];
+    axis.forEach((line, position) => {
+        if (line === null ? joins : line >= low && line <= high) held.push(position);
+    });
+    let lost = false;
+    for (let line = low; line <= high; line += 1) if (!axis.includes(line)) lost = true;
+    if (held.length === 0) return { ...same, gone: true, lost: true, cut: true };
+    const [start, end] = [held[0], held[held.length - 1]];
+    return {
+        gone: false,
+        first: first <= second ? start : end,
+        second: first <= second ? end : start,
+        lost,
+        cut: !axis.includes(low) || !axis.includes(high),
+        resized: end - start !== high - low,
+    };
 }
 
-type Sample = { edit: LineEdit; hostSheet: string; references: Reference[]; base: number; cross: number; text: string };
+type Sample = { edit: LineEdit; hostSheet: string; references: Reference[]; tree: FormulaNode };
 
-// A formula of one to three references typed at a host, and an edit, with the lines drawn from the top of the grid,
-// from around the edit and from the bottom of the grid.
+// A formula of one to three references and an edit, on an axis of 6 to 13 lines, with targets on and off the grid.
 function sample(pick: (below: number) => number): Sample {
     const rows = pick(2) === 0;
-    const lines = rows ? GRID_ROWS : GRID_COLUMNS;
-    const count = 1 + pick(4);
-    const index = [pick(12), lines - count - pick(8), lines - 1 - pick(3), 40 + pick(8)][pick(4)];
-    const line = (): number =>
-        Math.min(lines - 1, Math.max(0, [pick(14), index - 6 + pick(14), lines - 1 - pick(14)][pick(3)]));
-    const end = (at: number): End => ({ absolute: pick(2) === 0, at });
+    const lines = 6 + pick(8);
+    const insert = pick(2) === 0;
+    const at = pick(lines);
     const edit: LineEdit = {
-        insert: pick(2) === 0,
-        index,
-        count,
+        insert,
+        index: at,
+        count: 1 + pick(insert ? (pick(4) === 0 ? lines + 2 : 3) : lines - at),
         lines,
         sheet: ['s1', 's1', 's2', 's3'][pick(4)],
         rows,
     };
+    const end = (): End => {
+        const absolute = pick(2) === 0;
+        return { absolute, value: absolute ? pick(lines) : pick(lines + 4) - (lines >> 1) - 2 };
+    };
     const references: Reference[] = [];
     for (let n = 1 + pick(3); n > 0; n -= 1) {
         const [prefix, sheet] = PREFIXES[pick(PREFIXES.length)];
-        const kind = pick(8);
-        const two = kind >= 3;
-        references.push({
-            prefix,
-            sheet,
-            ends: kind === 6 ? [] : two ? [end(line()), end(line())] : [end(line())],
-            cross: kind === 7 ? [] : two ? [end(pick(6)), end(pick(6))] : [end(pick(6))],
-        });
+        const kind = pick(10);
+        const ends = kind === 9 ? [] : kind < 3 ? [end()] : [end(), end()];
+        references.push({ prefix, sheet, whole: kind === 8, ends });
     }
-    const text = `=SUM(${references.map((reference) => leg2(rows, reference)).join(',')})`;
-    return { edit, hostSheet: ['s1', 's1', 's2'][pick(3)], references, base: line(), cross: 6 + pick(3), text };
+    const text = `=SUM(${references.map((reference) => storedText(rows, reference)).join(',')})`;
+    const parsed = parseStored(text);
+    if ('reason' in parsed) throw new Error(`${text}: ${parsed.reason}`);
+    return { edit, hostSheet: ['s1', 's1', 's2'][pick(3)], references, tree: parsed };
 }
 
-// As typed: the corners in the order they were drawn, which the tree keeps.
-function leg2(rows: boolean, { prefix, ends, cross }: Reference): string {
-    const first = leg(rows, ends[0], cross[0]);
-    return prefix + (Math.max(ends.length, cross.length) === 2 ? `${first}:${leg(rows, ends[1], cross[1])}` : first);
+// The two lines a reference leaf names on the edited axis at a host, read from its fields.
+function named(rows: boolean, leaf: FormulaNode, host: number): [number, number] {
+    const absolute = leaf.flags & (rows ? RefFlag.RowAbsolute : RefFlag.ColumnAbsolute);
+    const absolute2 = leaf.flags & (rows ? RefFlag.Row2Absolute : RefFlag.Column2Absolute);
+    const first = (rows ? leaf.row : leaf.column) + (absolute ? 0 : host);
+    return [first, leaf.op === RefKind.Cell ? first : (rows ? leaf.row2 : leaf.column2) + (absolute2 ? 0 : host)];
 }
 
-function place(rows: boolean, line: number, cross: number): string {
-    return rows ? toA1(line, cross) : toA1(cross, line);
-}
-
-function expected({ edit, hostSheet, references, base }: Sample, host: number): string {
-    return `=SUM(${references.map((reference) => slow(edit, hostSheet, reference, base, host)).join(',')})`;
+function reread(node: FormulaNode): string {
+    const back = parseStored(printStored(node));
+    return 'reason' in back ? back.reason : printStored(back);
 }
 
 describe('the fast path against the slow version', () => {
-    test('the transform at the host a formula was typed at', () => {
+    test('the transform: the cells it names, its flags and the edit that takes it back', () => {
         const pick = random(20261111);
-        let changed = 0;
-        for (let run = 0; run < 30000; run += 1) {
-            const drawn = sample(pick);
-            const { edit, hostSheet, base, cross, text } = drawn;
-            const after = hostSheet === edit.sheet ? mapIndex(edit, base) : base;
-            if (after === GONE) continue;
-            const before = tree(text, place(edit.rows, base, cross));
-            const result = transformLines(before, edit, hostSheet, base);
-            if (result.tree !== before) changed += 1;
-            const stored = printStored(result.tree);
-            const reread = parseStored(stored);
-            expect('reason' in reread ? reread.reason : printStored(reread)).toBe(stored);
-            expect(`${text} → ${shown(result.tree, place(edit.rows, after, cross))}`).toBe(
-                `${text} → ${expected(drawn, base)}`,
-            );
+        const seen = { changed: 0, gone: 0, lossy: 0, recompute: 0, resized: 0, offGrid: 0, undone: 0 };
+        for (let run = 0; run < 20000; run += 1) {
+            const { edit, hostSheet, references, tree: before } = sample(pick);
+            const { rows, lines } = edit;
+            const axis = axisAfter(edit);
+            const text = printStored(before);
+            for (let host = 0; host < lines; host += 1) {
+                const hostAfter = hostSheet === edit.sheet ? axis.indexOf(host) : host;
+                if (hostAfter === -1) continue;
+                const where = `${text} on ${hostSheet} at line ${host}, ${JSON.stringify(edit)}`;
+                const result = transformLines(before, edit, hostSheet, host);
+                const stored = printStored(result.tree);
+                expect(`${where}: ${result.tree === before}`).toBe(`${where}: ${stored === text}`);
+                expect(`${where}: ${reread(result.tree)}`).toBe(`${where}: ${stored}`);
+                const flags = { lossy: false, recompute: false, resized: false };
+                references.forEach((reference, i) => {
+                    const leaf = result.tree.children[i];
+                    const was = before.children[i];
+                    if (reference.ends.length === 0) {
+                        if ((reference.sheet ?? hostSheet) === edit.sheet) flags.recompute = true;
+                        expect(leaf).toBe(was);
+                        return;
+                    }
+                    const expected = slow(edit, axis, hostSheet, reference, host);
+                    if (expected.lost) flags.recompute = true;
+                    if (expected.cut) flags.lossy = true;
+                    if (expected.resized) flags.resized = true;
+                    if (expected.gone) {
+                        seen.gone += 1;
+                        expect(`${where}: ${leaf.kind}`).toBe(`${where}: ${NodeKind.Error}`);
+                        expect([leaf.sheetKind, leaf.sheet]).toEqual([was.sheetKind, was.sheet]);
+                        return;
+                    }
+                    if (Math.min(expected.first, expected.second) < 0) seen.offGrid += 1;
+                    expect(`${where}: ${leaf.kind} ${named(rows, leaf, hostAfter)}`).toBe(
+                        `${where}: ${NodeKind.Ref} ${[expected.first, expected.second]}`,
+                    );
+                    expect([leaf.op, leaf.flags, leaf.sheetKind, leaf.sheet]).toEqual([
+                        was.op,
+                        was.flags,
+                        was.sheetKind,
+                        was.sheet,
+                    ]);
+                    expect(rows ? [leaf.column, leaf.column2] : [leaf.row, leaf.row2]).toEqual(
+                        rows ? [was.column, was.column2] : [was.row, was.row2],
+                    );
+                });
+                const { lossy, recompute, resized } = result;
+                expect(`${where}: ${JSON.stringify({ lossy, recompute, resized })}`).toBe(
+                    `${where}: ${JSON.stringify(flags)}`,
+                );
+                if (result.tree !== before) seen.changed += 1;
+                if (lossy) seen.lossy += 1;
+                if (recompute) seen.recompute += 1;
+                if (resized) seen.resized += 1;
+                // The edit that takes this one back gives every formula that lost nothing its stored text again.
+                const back: LineEdit = { ...edit, insert: !edit.insert };
+                const returns = hostSheet !== edit.sheet || axisAfter(back).indexOf(hostAfter) === host;
+                if (lossy || !returns) continue;
+                seen.undone += 1;
+                const undone = transformLines(result.tree, back, hostSheet, hostAfter);
+                expect(`${where}: ${printStored(undone.tree)}`).toBe(`${where}: ${text}`);
+            }
         }
-        expect(changed).toBeGreaterThan(6000);
+        expect(seen.changed).toBeGreaterThan(30000);
+        expect(seen.gone).toBeGreaterThan(5000);
+        expect(seen.lossy).toBeGreaterThan(10000);
+        expect(seen.recompute).toBeGreaterThan(20000);
+        expect(seen.resized).toBeGreaterThan(10000);
+        expect(seen.offGrid).toBeGreaterThan(5000);
+        expect(seen.undone).toBeGreaterThan(40000);
     });
 
-    test('the classes for every host of a run', () => {
+    test('the classes give every host of a run what the transform gives it', () => {
         const pick = random(7);
         const table = new ShapeTable();
         let split = 0;
         let single = 0;
-        for (let run = 0; run < 6000; run += 1) {
-            const drawn = sample(pick);
-            const { edit, hostSheet, base, cross, text } = drawn;
-            const { rows, lines } = edit;
-            const shape = table.shape(table.internTree(tree(text, place(rows, base, cross))));
-            if (shape.tree === null) throw new Error(text);
-            const from = Math.max(0, Math.min(base, lines - 1 - pick(60)) - pick(30));
-            const to = Math.min(lines - 1, from + 20 + pick(60));
+        let stretches = 0;
+        for (let run = 0; run < 12000; run += 1) {
+            const { edit, hostSheet, tree: parsed } = sample(pick);
+            const { lines } = edit;
+            const axis = axisAfter(edit);
+            const shape = table.shape(table.internTree(parsed));
+            if (shape.tree === null) throw new Error(shape.text);
+            const from = pick(3) === 0 ? pick(lines) : 0;
+            const to = pick(3) === 0 ? from + pick(lines - from) : lines - 1;
             const classes = hostClasses(shape.tree, shape.refs, edit, hostSheet, from, to);
             if (classes.length > 1) split += 1;
+            const where = `${shape.text} on ${hostSheet} over ${from} to ${to}, ${JSON.stringify(edit)}`;
             let next = 0;
-            let covered = from - 1;
             for (let host = from; host <= to; host += 1) {
-                const after = hostSheet === edit.sheet ? mapIndex(edit, host) : host;
                 while (next < classes.length && classes[next].end < host) next += 1;
                 const found = next < classes.length && classes[next].start <= host ? classes[next] : undefined;
-                if (after === GONE) {
-                    expect(found).toBeUndefined();
+                if (hostSheet === edit.sheet && !axis.includes(host)) {
+                    expect(`${where}: line ${host} ${found === undefined}`).toBe(`${where}: line ${host} true`);
                     continue;
                 }
-                if (found === undefined) throw new Error(`${text}: no class for the host on line ${host}`);
-                expect(found.start).toBeGreaterThan(covered);
-                if (found.end === host) covered = host;
-                if (found.start === found.end) single += 1;
-                const where = `${text} from line ${base} at line ${host}`;
-                expect(`${where} → ${shown(found.tree, place(rows, after, cross))}`).toBe(
-                    `${where} → ${expected(drawn, host)}`,
-                );
+                if (found === undefined) throw new Error(`${where}: no class for the host on line ${host}`);
                 const direct = transformLines(shape.tree, edit, hostSheet, host);
-                expect(printStored(found.tree)).toBe(printStored(direct.tree));
-                expect(found.tree === shape.tree).toBe(direct.tree === shape.tree);
-                expect([found.lossy, found.recompute]).toEqual([direct.lossy, direct.recompute]);
+                const flags = [found.lossy, found.recompute, found.resized];
+                const same = found.tree === shape.tree;
+                expect(`${where}: line ${host} ${printStored(found.tree)} ${flags} ${same}`).toBe(
+                    `${where}: line ${host} ${printStored(direct.tree)} ${[direct.lossy, direct.recompute, direct.resized]} ${direct.tree === shape.tree}`,
+                );
+            }
+            classes.forEach(({ start, end }, i) => {
+                expect(Object.is(start, -0)).toBe(false);
+                expect(start >= from && start <= end && end <= to).toBe(true);
+                if (i > 0) expect(start).toBeGreaterThan(classes[i - 1].end);
+                if (start === end) single += 1;
+                else stretches += 1;
+            });
+        }
+        expect(split).toBeGreaterThan(3000);
+        expect(single).toBeGreaterThan(2000);
+        expect(stretches).toBeGreaterThan(8000);
+    });
+});
+
+describe('a column filled down splits into few classes, not one per cell', () => {
+    const classesOf = (text: string, host: string, edit: LineEdit, from: number, to: number) => {
+        const table = new ShapeTable();
+        const shape = table.shape(table.internTree(tree(text, host)));
+        if (shape.tree === null) throw new Error('unparsed');
+        const classes = hostClasses(shape.tree, shape.refs, edit, 's1', from, to);
+        // The whole run for a short one, and for a long one both ends of every class.
+        for (const { start, end, tree: mapped, lossy, recompute, resized } of classes) {
+            const step = Math.max(1, end - start);
+            for (let line = start; line <= end; line += to - from > 200000 ? step : 1) {
+                const direct = transformLines(shape.tree, edit, 's1', line);
+                expect([line, printStored(mapped), lossy, recompute, resized]).toEqual([
+                    line,
+                    printStored(direct.tree),
+                    direct.lossy,
+                    direct.recompute,
+                    direct.resized,
+                ]);
             }
         }
-        expect(split).toBeGreaterThan(2000);
-        expect(single).toBeGreaterThan(500);
+        return classes.map(({ start, end, tree: mapped }) => [start, end, printStored(mapped)]);
+    };
+
+    test('a row inserted above a mix of references', () => {
+        expect(classesOf('=A1+$B$9+SUM(C$1:C5)+Sheet2!A5', 'D5', insertRows(3), 4, 10003)).toEqual([
+            [4, 5, '=R[-5]C[-3]+R10C2+SUM(R1C[-1]:RC[-1])+[s2]!R[-1]C[-3]'],
+            [6, 10003, '=R[-4]C[-3]+R10C2+SUM(R1C[-1]:RC[-1])+[s2]!R[-1]C[-3]'],
+        ]);
     });
 
-    test('a column filled down splits into few classes, not one per cell', () => {
-        const table = new ShapeTable();
-        const shape = table.shape(table.internTree(tree('=A1+$B$9+SUM(C$1:C5)+Sheet2!A5', 'D5')));
-        if (shape.tree === null) throw new Error('unparsed');
-        const rows: LineEdit = { insert: true, index: 2, count: 1, lines: GRID_ROWS, sheet: 's1', rows: true };
-        const classes = hostClasses(shape.tree, shape.refs, rows, 's1', 4, 10003);
-        expect(classes.map(({ start, end }) => [start, end])).toEqual([
-            [4, 5],
-            [6, 10003],
+    test('a running total whose fixed end is deleted is one class', () => {
+        expect(classesOf('=SUM(A$2:A2)', 'B2', deleteRows(2), 1, 99999)).toEqual([[2, 99999, '=SUM(R2C[-1]:RC[-1])']]);
+    });
+
+    test('only the hosts whose own end falls in the deleted rows get a class each', () => {
+        expect(classesOf('=SUM(A$1:A2)', 'B5', deleteRows(5, 7), 3, GRID_ROWS - 1)).toEqual([
+            [3, 3, '=SUM(R1C[-1]:R[-3]C[-1])'],
+            [7, 7, '=SUM(R1C[-1]:R[-1]C[-1])'],
+            [8, 8, '=SUM(R1C[-1]:R[-2]C[-1])'],
+            [9, 9, '=SUM(R1C[-1]:R[-3]C[-1])'],
+            [10, GRID_ROWS - 1, '=SUM(R1C[-1]:R[-3]C[-1])'],
         ]);
-        expect(classes.map(({ tree: mapped }) => printStored(mapped))).toEqual([
-            '=R[-5]C[-3]+R10C2+SUM(R1C[-1]:RC[-1])+[s2]!R[-1]C[-3]',
-            '=R[-4]C[-3]+R10C2+SUM(R1C[-1]:RC[-1])+[s2]!R[-1]C[-3]',
-        ]);
+    });
+
+    test('a class that starts on the first line starts on 0', () => {
+        const [[start]] = classesOf('=A1', 'B1', insertRows(50), 0, 99);
+        expect(Object.is(start, 0)).toBe(true);
     });
 });

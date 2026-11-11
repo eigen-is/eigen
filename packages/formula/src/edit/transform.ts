@@ -5,8 +5,8 @@
 // stretches with one outcome each and the store transforms a filled column once per stretch, not once per cell.
 
 import type { FormulaNode } from '../text/tree';
-import { leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from '../text/tree';
-import { mapLeaves } from './leaves';
+import { leaf, NodeKind, RefFlag, RefKind, referenceNode } from '../text/tree';
+import { mapLeaves, sheetOf } from './leaves';
 import type { Edit, Span } from './map';
 import { GONE, mapIndex, mapSpan } from './map';
 
@@ -18,8 +18,13 @@ export type Transformed = {
     readonly tree: FormulaNode;
     // The old text cannot be derived back from the new: undo must keep it.
     readonly lossy: boolean;
-    // The value can change though no cell the formula reads was written: the formula is a seed of the recompute.
+    // A cell the formula read is gone, or lines shifted inside a whole column or row it reads: the value can change
+    // whatever the formula computes, so it is a seed of the recompute.
     readonly recompute: boolean;
+    // A range that is still a range spans another number of lines at this host than it did. Every cell it reads kept
+    // its value, so the formula is a seed only when its shape depends on the size of a range, as ROWS, MATCH and
+    // INDEX do and a sum does not. That, and a formula that reads its own position, is the caller's to decide.
+    readonly resized: boolean;
 };
 
 // The hosts on the lines `start` to `end`, counted before the edit, which all get this outcome.
@@ -28,8 +33,8 @@ export type HostClass = Transformed & { readonly start: number; readonly end: nu
 // `host` is the formula's own row for a row edit and its column for a column edit, before the edit. The host
 // itself must survive the edit.
 export function transformLines(tree: FormulaNode, edit: LineEdit, hostSheet: string, host: number): Transformed {
-    const { tree: mapped, lossy, recompute } = shift(tree, edit, hostSheet, host);
-    return { tree: mapped, lossy, recompute };
+    const { tree: mapped, lossy, recompute, resized } = shift(tree, edit, hostSheet, host);
+    return { tree: mapped, lossy, recompute, resized };
 }
 
 // The outcomes for the hosts of one formula on the lines `from` to `to` of one sheet, in order. Lines whose host
@@ -45,24 +50,19 @@ export function hostClasses(
     const { rows, index, lines } = edit;
     const second = edit.insert ? lines - edit.count : index + edit.count;
     const hostOnSheet = hostSheet === edit.sheet;
+    const absolute = rows ? RefFlag.RowAbsolute : RefFlag.ColumnAbsolute;
+    const absolute2 = rows ? RefFlag.Row2Absolute : RefFlag.Column2Absolute;
     // A class starts where the host, or a target that travels with it, crosses a line the edit treats differently.
     const starts = [from];
     if (hostOnSheet) starts.push(index, second);
     for (const reference of references) {
-        const { op, flags, sheetKind } = reference;
-        if (op === (rows ? RefKind.Columns : RefKind.Rows)) continue;
-        const onSheet =
-            sheetKind === SheetKind.Host ? hostOnSheet : sheetKind === SheetKind.Id && reference.sheet === edit.sheet;
-        const absolute = rows ? RefFlag.RowAbsolute : RefFlag.ColumnAbsolute;
-        if ((flags & absolute) === 0) {
-            const offset = rows ? reference.row : reference.column;
-            starts.push(-offset, lines - offset);
-            if (onSheet) starts.push(index - offset, second - offset);
-        }
-        if (op !== RefKind.Cell && (flags & (absolute << 2)) === 0) {
-            const offset = rows ? reference.row2 : reference.column2;
-            starts.push(-offset, lines - offset);
-            if (onSheet) starts.push(index - offset, second - offset);
+        const { op, flags } = reference;
+        if (op === (rows ? RefKind.Columns : RefKind.Rows) || sheetOf(reference, hostSheet) !== edit.sheet) continue;
+        for (const line of [0, lines, index, second]) {
+            if ((flags & absolute) === 0) starts.push(line - (rows ? reference.row : reference.column));
+            if (op !== RefKind.Cell && (flags & absolute2) === 0) {
+                starts.push(line - (rows ? reference.row2 : reference.column2));
+            }
         }
     }
     starts.sort((a, b) => a - b);
@@ -73,29 +73,29 @@ export function hostClasses(
         if (hostOnSheet && mapIndex(edit, start) === GONE) continue;
         const end = i + 1 < starts.length ? Math.min(to, starts[i + 1] - 1) : to;
         for (let host = start; host <= end; ) {
-            const { tree: mapped, lossy, recompute, perHost } = shift(tree, edit, hostSheet, host);
+            const { tree: mapped, lossy, recompute, resized, perHost } = shift(tree, edit, hostSheet, host);
             const last = perHost ? host : end;
-            classes.push({ start: host, end: last, tree: mapped, lossy, recompute });
+            classes.push({ start: host, end: last, tree: mapped, lossy, recompute, resized });
             host = last + 1;
         }
     }
     return classes;
 }
 
-// `perHost` says a range end was clamped to a fixed line and written as an offset, so the next host differs.
+// `perHost` says an end that travels with the host was cut off at a fixed line, so the next host differs.
 function shift(tree: FormulaNode, edit: LineEdit, hostSheet: string, host: number) {
     const { rows, index, count, lines } = edit;
-    const hostOnSheet = hostSheet === edit.sheet;
-    const hostAfter = hostOnSheet ? mapIndex(edit, host) : host;
+    const after = index + count;
+    const hostAfter = hostSheet === edit.sheet ? mapIndex(edit, host) : host;
     const span: Span = { start: 0, end: 0 };
     let lossy = false;
     let recompute = false;
+    let resized = false;
     let perHost = false;
     const mapped = mapLeaves(tree, (node) => {
         if (node.kind !== NodeKind.Ref) return node;
         const { op, flags, sheetKind } = node;
-        const onSheet =
-            sheetKind === SheetKind.Host ? hostOnSheet : sheetKind === SheetKind.Id && node.sheet === edit.sheet;
+        const onSheet = sheetOf(node, hostSheet) === edit.sheet;
         if (op === (rows ? RefKind.Columns : RefKind.Rows)) {
             if (onSheet) recompute = true;
             return node;
@@ -106,8 +106,9 @@ function shift(tree: FormulaNode, edit: LineEdit, hostSheet: string, host: numbe
         const stored2 = rows ? node.row2 : node.column2;
         const target = absolute ? stored : host + stored;
         const target2 = op === RefKind.Cell ? target : absolute2 ? stored2 : host + stored2;
-        const low = Math.min(target, target2);
-        const high = Math.max(target, target2);
+        const inOrder = target <= target2;
+        const low = inOrder ? target : target2;
+        const high = inOrder ? target2 : target;
         let moved = target;
         let moved2 = target2;
         // A target off the grid reads as #REF! at this host and stays where it is, so that it never comes back.
@@ -117,20 +118,20 @@ function shift(tree: FormulaNode, edit: LineEdit, hostSheet: string, host: numbe
                 recompute = true;
                 return leaf(NodeKind.Error, 0, '#REF!', node.space, sheetKind, node.sheet);
             }
-            const after = index + count;
-            if (
-                edit.insert
-                    ? high >= index && high + count >= lines
-                    : (low >= index && low < after) || (high >= index && high < after)
-            ) {
+            const lowCut = !edit.insert && low >= index && low < after;
+            const highCut = edit.insert ? high >= index && high + count >= lines : high >= index && high < after;
+            if (lowCut || highCut) {
                 lossy = true;
                 recompute = true;
-                if (!absolute || !absolute2) perHost = true;
+                if ((lowCut && !(inOrder ? absolute : absolute2)) || (highCut && !(inOrder ? absolute2 : absolute))) {
+                    perHost = true;
+                }
             } else if (!edit.insert && index > low && index < high) {
                 recompute = true;
             }
-            moved = target <= target2 ? span.start : span.end;
-            moved2 = target <= target2 ? span.end : span.start;
+            if (span.end - span.start !== high - low) resized = true;
+            moved = inOrder ? span.start : span.end;
+            moved2 = inOrder ? span.end : span.start;
         }
         const next = absolute ? moved : moved - hostAfter;
         const next2 = op === RefKind.Cell ? 0 : absolute2 ? moved2 : moved2 - hostAfter;
@@ -139,5 +140,5 @@ function shift(tree: FormulaNode, edit: LineEdit, hostSheet: string, host: numbe
             ? referenceNode(op, node.space, sheetKind, node.sheet, next, node.column, next2, node.column2, flags)
             : referenceNode(op, node.space, sheetKind, node.sheet, node.row, next, node.row2, next2, flags);
     });
-    return { tree: mapped, lossy, recompute, perHost };
+    return { tree: mapped, lossy, recompute, resized, perHost };
 }

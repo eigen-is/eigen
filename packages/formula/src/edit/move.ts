@@ -86,7 +86,7 @@ export function transformMove(
         }
         return referenceNode(op, node.space, nextKind, nextSheet, nextRow, nextColumn, nextRow2, nextColumn2, flags);
     });
-    return { tree: mapped, lossy, recompute: lossy };
+    return { tree: mapped, lossy, recompute: lossy, resized: false };
 }
 
 // Whether the block of the move's size at `row`, `column` holds the whole rectangle.
