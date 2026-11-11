@@ -2,9 +2,8 @@
 // chevron, a data bar, its text and its grid lines. The grid's paint phases call cellRender for a cell with a value
 // and nullCellRender for one without, once per visible cell. The text layout is getCellTextInfo's.
 
-import { commentIndicatorColor, INDICATOR_RED } from '@workspace/lib/constants/comment-indicator';
+import { CELL_INDICATOR_SIZE, commentIndicatorColor, INDICATOR_RED } from '@workspace/lib/constants/comment-indicator';
 import { isForcedStringNumber, normalizedAttr } from '../modules/cell';
-import { cellIndicatorRect } from '../modules/cell-glyph';
 import { checkCF } from '../modules/condition-format';
 import type { CellGlyphRect } from '../modules/data-validation';
 import {
@@ -28,9 +27,17 @@ const CHECKBOX_STROKE = '#5f6368';
 
 const FORCED_STRING_INDICATOR_COLOR = '#487f1e';
 
+// What Excel paints a number whose format says [Red].
+const NUMBER_FORMAT_RED = '#ff0000';
+
+// The square a corner triangle is drawn in, anchored on the cell corner itself (the 1px is the grid line).
+function cellIndicatorRect(corner: 'left' | 'right', left: number, top: number, right: number): CellGlyphRect {
+    return { x: (corner === 'left' ? left : right - CELL_INDICATOR_SIZE) - 1, y: top, size: CELL_INDICATOR_SIZE };
+}
+
 // A right-angled triangle filling half of its cellIndicatorRect, anchored on the cell corner: one leg along the top
 // edge, one down the side.
-export function drawCellIndicator(
+function drawCellIndicator(
     renderCtx: CanvasRenderingContext2D,
     corner: 'left' | 'right',
     rect: CellGlyphRect,
@@ -328,8 +335,8 @@ export function cellRender(
         }
 
         // A [Red] number format colors a negative number.
-        if ((cell?.ct?.fa?.indexOf('[Red]') ?? -1) > -1 && cell?.ct?.t === 'n' && (cell?.v as number) < 0) {
-            renderCtx.fillStyle = '#ff0000';
+        if (cell?.ct?.fa?.includes('[Red]') && cell.ct.t === 'n' && Number(cell.v) < 0) {
+            renderCtx.fillStyle = NUMBER_FORMAT_RED;
         }
 
         cellTextRender(textInfo, renderCtx, { pos_x, pos_y, origin: pass.origin });

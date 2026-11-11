@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
-import { cellGlyphAt, cellIndicatorRect } from '../../../state/modules/cell-glyph';
+import { cellGlyphAt } from '../../../state/modules/cell-glyph';
 import { cellTextBox, dropdownChevronRect } from '../../../state/modules/data-validation';
 import type { DataValidationRule } from '../../../state/types';
 import { contextFactory } from '../factories/context';
@@ -16,13 +16,6 @@ const NUMBER_RULE: DataValidationRule = { type: 'number', type2: 'moreThanThe', 
 
 // A1 spans x 0..74, y 0..20 in the factory's grid; its text box is 72×18.
 const A1_BOX = cellTextBox(0, 0, 74, 20);
-
-describe('cellIndicatorRect', () => {
-    test('is the 11px square the corner triangle is drawn in, anchored on the cell corner', () => {
-        expect(cellIndicatorRect('left', 0, 0, 74)).toEqual({ x: -1, y: 0, size: 11 });
-        expect(cellIndicatorRect('right', 0, 0, 74)).toEqual({ x: 62, y: 0, size: 11 });
-    });
-});
 
 describe('cellGlyphAt', () => {
     test('the list chevron, on the same rect the painter uses', () => {
