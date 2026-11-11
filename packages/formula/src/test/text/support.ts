@@ -195,6 +195,8 @@ export function formulas(seed: number, ordered: boolean): () => string {
         const row = () => Array.from({ length: columns }, element).join(',');
         return `{${Array.from({ length: small() }, row).join(';')}${space()}}`;
     };
+    const region = (depth: number) =>
+        space() + pick([reference, reference, () => 'Rate', () => '#REF!', () => call(depth)])();
     const primary = (depth: number): string => {
         const leaves = [
             () => space() + constant(),
@@ -208,7 +210,7 @@ export function formulas(seed: number, ordered: boolean): () => string {
             () => space() + call(depth),
             () => space() + call(depth) + list(depth),
             () => `${space()}(${expression(depth - 1)}${space()})${chance(0.1) ? list(depth) : ''}`,
-            () => `${space()}(${expression(depth - 1)},${expression(depth - 1)}${space()})`,
+            () => `${space()}(${region(depth)},${region(depth)}${space()})`,
             () => space() + array(),
             () => space() + reference() + pick([' ', '  ', '\n']) + pick([reference, () => call(depth)])(),
             () => `${space()}${pick([cell, () => call(depth)])()}${space()}:${space()}${call(depth)}`,
@@ -373,6 +375,7 @@ const TYPED_WORDS = [
     ...['(', ')', '(', ')', '(', ')', ',', ':', ':', ':'],
     ...['SUM (', 'TRUE (', 'F  (', 'RC (', 'A1 (', 'Rate\n('],
     ...['Sheet2!A', 'Sheet2!A', 'Sheet2!$B', 'Sheet2!1', 'Sheet2!$2', 'Sheet2!A1', "'No Such'!B", 'NoSuch!B'],
+    ...['A1 TRUE', 'A1 5', 'A1 "x"', '(1,2)', '(A1,2)', '(A1,B1)', 'A1 B1', 'A1##'],
     ...['#REF!A1', '#REF!$B$2', '#ref!A', '#REF!1', '#REF!A1:B2', '#N/AA1'],
     ...[
         '\u3000',
@@ -400,6 +403,7 @@ const STORED_WORDS = [
     ...['(', ')', '(', ')', '(', ')', ',', ':', ':', ':', '!', '$'],
     ...['SUM (', 'TRUE (', 'F  (', 'RC (', 'A1 (', 'rc (', 'Rate\n('],
     ...['[s2]!C1', '[s2]!C[2]', '[s2]!R', '[s2]!R2', '[s2]!A', '[s2]!B', '[s2]!RC', "'x'!C"],
+    ...['RC TRUE', 'RC 5', 'RC "x"', '(1,2)', '(RC,2)', '(RC,R1C1)', 'RC R1C1', 'RC##'],
     ...['#REF!RC', '#REF!R1C1', '#REF!A1', '#REF!C'],
     ...[
         '\u3000',

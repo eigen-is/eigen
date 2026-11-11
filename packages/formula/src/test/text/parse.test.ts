@@ -112,6 +112,27 @@ describe('reference operators (parsing.md 2.2)', () => {
         expect(failure('="a" A1')).toBe('syntax');
     });
 
+    test.each([
+        ...['=A1 TRUE', '=A1 false', '=NOT TRUE', '=A1 5', '=A1 "x"', '=A1 #N/A', '=A1 {1}', '=A1:B2 TRUE C1'],
+        ...['=(1,2)', '=(A1,2)', '=(1,A1)', '=("a",A1)', '=(A1,TRUE)', '=SUM((A1,1))', '=(A1,B1,3)', '=(A1,{1})'],
+    ])('an intersection and a union take only what may yield a reference: %s does not parse', (text) => {
+        expect(failure(text)).toBe('syntax');
+        expect(parseStored(text.replaceAll(/[A-C]\d/g, 'RC'))).toMatchObject({ reason: 'syntax' });
+    });
+
+    test.each([
+        ['=A1 (1+2)', '(RC [(1+2)])'],
+        ['=A1 SUM(1)', '(RC SUM(1))'],
+        ['=A1 Rate', '(RC Rate)'],
+        ['=A1 TRUE()', '(RC TRUE())'],
+        ['=(A1,Rate)', '[(RC,Rate)]'],
+        ['=(A1,#REF!,C1)', '[((RC,#REF!),RC[2])]'],
+        ['=(A1,(B1))', '[(RC,[RC[1]])]'],
+        ['=(IF(1,A1),B1#)', '[(IF(1,RC),(RC[1]#))]'],
+    ])('and cannot know more than that: %s', (text, expected) => {
+        expect(group(text)).toBe(expected);
+    });
+
     test('an error literal ends where it ends, and # before / is the spill operator', () => {
         expect(group('=#N/A/2')).toBe('(#N/A/2)');
         expect(group('=#GETTING_DATA/#DIV/0!')).toBe('(#GETTING_DATA/#DIV/0!)');

@@ -259,6 +259,8 @@ class Parser {
             else this.next();
             const right = this.expression(power + 1, union);
             height = Math.max(height, this.height);
+            const joinsReferences = op === Token.Space || op === Token.Comma;
+            if (joinsReferences && !(yieldsReference(left) && yieldsReference(right))) return this.fail();
             left =
                 op === Token.Colon
                     ? this.colon(left, right, space)
@@ -688,7 +690,7 @@ class Parser {
     }
 }
 
-// What a space between two operands can intersect: whatever may yield a reference.
+// What a colon, a space or a union's comma can join: whatever may yield a reference.
 function yieldsReference(node: FormulaNode): boolean {
     switch (node.kind) {
         case NodeKind.Ref:
