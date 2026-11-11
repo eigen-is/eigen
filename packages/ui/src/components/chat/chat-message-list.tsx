@@ -13,6 +13,7 @@ import { Download, Pencil, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { cn } from '../../lib/utils';
 import { AttachmentChip } from '../attachment/attachment-chip';
+import { AttachmentStrip } from '../attachment/attachment-strip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
 import { useAttachmentChipMenu } from '../attachment/use-attachment-chip-menu';
 import { EigenLoader } from '../braket/eigen-loader';
@@ -170,7 +171,7 @@ export function ChatMessageList({
         if (fileNames.length === 0 && references.length === 0) return null;
 
         return (
-            <div className="flex flex-wrap gap-2 mt-1">
+            <AttachmentStrip className="mt-1">
                 {ownerId &&
                     mountId &&
                     mediaFolderId &&
@@ -187,7 +188,7 @@ export function ChatMessageList({
                 {references.map((ref) => (
                     <ReferenceAttachmentChip key={ref.id} reference={ref} />
                 ))}
-            </div>
+            </AttachmentStrip>
         );
     };
 

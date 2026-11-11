@@ -14,6 +14,7 @@ import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { Check, RotateCcw } from 'lucide-react';
 import { useMemo } from 'react';
 import { AttachmentChip } from '../attachment/attachment-chip';
+import { AttachmentStrip } from '../attachment/attachment-strip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
 import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
 import { useAttachmentChipMenu } from '../attachment/use-attachment-chip-menu';
@@ -216,28 +217,30 @@ export function CardDialog({
             onDescriptionChange={onUpdate ? (html) => onUpdate({ description: html }) : undefined}
             attachments={
                 card.attachments && card.attachments.length > 0 ? (
-                    <div className="flex flex-wrap gap-2" {...bind()}>
-                        {card.attachments.map((attachment) =>
-                            isAttachmentReference(attachment) ? (
-                                <ReferenceAttachmentChip key={`ref-${attachment.id}`} reference={attachment} />
-                            ) : mediaFolderId ? (
-                                <AttachmentChip
-                                    key={`name-${attachment}`}
-                                    fileName={attachment}
-                                    ownerId={ownerId}
-                                    mountId={mountId}
-                                    mediaFolderId={mediaFolderId}
-                                    siblingFileNames={attachmentNames}
-                                />
-                            ) : (
-                                <SimpleAttachmentChip key={`name-${attachment}`} filename={attachment} />
-                            ),
-                        )}
+                    <>
+                        <AttachmentStrip {...bind()}>
+                            {card.attachments.map((attachment) =>
+                                isAttachmentReference(attachment) ? (
+                                    <ReferenceAttachmentChip key={`ref-${attachment.id}`} reference={attachment} />
+                                ) : mediaFolderId ? (
+                                    <AttachmentChip
+                                        key={`name-${attachment}`}
+                                        fileName={attachment}
+                                        ownerId={ownerId}
+                                        mountId={mountId}
+                                        mediaFolderId={mediaFolderId}
+                                        siblingFileNames={attachmentNames}
+                                    />
+                                ) : (
+                                    <SimpleAttachmentChip key={`name-${attachment}`} filename={attachment} />
+                                ),
+                            )}
+                        </AttachmentStrip>
                         <ContextMenuAnchor contextMenu={chipMenu} className="min-w-48">
                             <FileActionMenuItems runner={runner} />
                         </ContextMenuAnchor>
                         {runner.dialogs}
-                    </div>
+                    </>
                 ) : undefined
             }
             {...action}
