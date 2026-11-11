@@ -52,9 +52,9 @@ If you own the presentation, you can stop editors from re-sharing it. In the sha
 
 ## Comment on an object
 
-Comments attach to individual text boxes or images. You need editor access to add a comment.
+Comments attach to a single object on a slide, such as a text box, an image, a shape, or an arrow. You need editor access to add a comment.
 
-1. Right-click a text box or image on the canvas.
+1. Right-click the object on the canvas.
 2. Choose **Add comment** from the context menu.
 3. A **New comment** dialog appears. Give the comment a title and, optionally, a description and color.
 4. Click **Add comment**.
