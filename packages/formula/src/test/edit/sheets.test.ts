@@ -21,6 +21,15 @@ describe('remapSheets', () => {
         const before = treeStored("=RC+'s1'!RC+'[1]s1'!RC+[s9]!RC+\"[s1]!RC\"");
         expect(remapSheets(before, ids)).toBe(before);
     });
+    test('maps every id once, so two sheets can swap ids', () => {
+        const swap = new Map([
+            ['s1', 's2'],
+            ['s2', 's1'],
+        ]);
+        expect(printStored(remapSheets(treeStored('=[s1]!RC+[s2]!R1C1:R2C2+[s2]!Rate+[s1]!#REF!'), swap))).toBe(
+            '=[s2]!RC+[s1]!R1C1:R2C2+[s1]!Rate+[s2]!#REF!',
+        );
+    });
     test('a duplicated tab points its references to itself at the copy', () => {
         const copy = remapSheets(tree('=A1+Sheet1!B1+Sheet2!C1', 'D1'), new Map([['s1', 'copy']]));
         const names = (id: string) => (id === 'copy' ? 'Sheet1 (2)' : sheetName(id));
@@ -83,6 +92,12 @@ describe('offGrid: a copy keeps the stored text and only checks where it lands',
         ['=SUM(A:B)+SUM(1:2)', 'D4', [2, 9], [false, true]],
         ['=XFD1+A1048576', 'A1', [0, 1], [true, false]],
         ['=XFD1+A1048576', 'A1', [1, 0], [false, true]],
+        ['=SUM(A1:A2)', 'A1', [1048575, 0], [true]],
+        ['=SUM(A2:A1)', 'A1', [1048575, 0], [true]],
+        ['=SUM(A1:A2)', 'A1', [1048574, 0], [false]],
+        ['=SUM(A1:B1)', 'A1', [0, 16383], [true]],
+        ['=SUM(B1:A1)', 'A1', [0, 16383], [true]],
+        ['=SUM(A1:B1)', 'A1', [0, 16382], [false]],
         ['=Sheet2!A1', 'B2', [0, 0], [true]],
     ])('%s typed at %s and copied to %p', (text, host, [row, column], expected) => {
         const found = refs(text, host);

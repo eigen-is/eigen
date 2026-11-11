@@ -1,6 +1,6 @@
 // The structural cases of the reference research, as the oracle's cases.json holds them, cut down to what a test at
 // the text boundary reads: the formula and its host, the edit as flat steps, where the oracle reads the result, and
-// the text Excel shows there. Written by a script from the oracle; the test beside it says which it does not run.
+// the text Excel shows there. Plain case data, kept by hand; the test beside it says which cases it does not run.
 
 export type Step =
     | { kind: 'lines'; insert: boolean; rows: boolean; sheet: string; index: number; count: number }

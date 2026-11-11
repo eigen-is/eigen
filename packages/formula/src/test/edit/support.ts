@@ -1,3 +1,6 @@
+// What the tests of the edit transforms share: three sheets, a formula typed at a cell and read back at one, edits
+// named as a person names them, and a seeded generator.
+
 import type { FormulaNode, LineEdit } from '../../text';
 import { GRID_COLUMNS, GRID_ROWS, parseA1, printA1, sheetFinder } from '../../text';
 import { at } from '../text/support';
