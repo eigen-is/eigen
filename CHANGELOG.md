@@ -61,6 +61,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **End dates of repeating events** — the event card, the Repeat menu and invitation emails write a series' end as "until 15 December 2026", on its last day in the event's own time zone
 - **Guests of moved dates in Calendar** — calendar apps syncing your calendar show each moved date of a repeating event with its guests and you as organizer. Clearing one date's guests cancels it for them. A date moved before this update has no guests until you add them again
 - **Organizer of team events** — the person who first adds guests to a team event stays its organizer, so invitations and replies name them, whoever edits the event later
+- **You in your guest lists in Calendar** — an event of yours with guests lists you first, marked Organizer, as your guests already saw it
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
 
 ### Fixed
