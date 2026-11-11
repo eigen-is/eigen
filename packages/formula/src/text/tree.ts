@@ -18,6 +18,8 @@ export const NodeKind = {
     Invoke: 8,
     Prefix: 9,
     Postfix: 10,
+    // A long sum is a chain thousands of nodes deep down its left operands, so a walker reads that side in a loop.
+    // By any other way down, a tree is at most a few hundred nodes deep.
     Binary: 11,
     Paren: 12,
     // An array constant, its elements row by row, with the column count in `op`.

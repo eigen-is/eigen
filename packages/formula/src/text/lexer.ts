@@ -45,6 +45,32 @@ export const Token = {
 
 export type TokenKind = (typeof Token)[keyof typeof Token];
 
+// The characters the lexer and the parser look for, as the codes charCodeAt gives.
+export const Char = {
+    Bang: 33,
+    DoubleQuote: 34,
+    Hash: 35,
+    Dollar: 36,
+    Quote: 39,
+    Open: 40,
+    Plus: 43,
+    Minus: 45,
+    Dot: 46,
+    Zero: 48,
+    Nine: 57,
+    Colon: 58,
+    Less: 60,
+    Equals: 61,
+    Greater: 62,
+    UpperC: 67,
+    UpperR: 82,
+    BracketOpen: 91,
+    BracketClose: 93,
+    LowerA: 97,
+    LowerE: 101,
+    LowerZ: 122,
+} as const;
+
 // The error literals a formula may hold. An error leaf holds the place of its literal here, from 1, and the first
 // ten are the errors the engine computes, in the order of their codes.
 export const ERROR_LITERALS = [
@@ -85,19 +111,28 @@ for (const [chars, charClass] of [
     for (let i = 0; i < chars.length; i += 1) CLASS[chars.charCodeAt(i)] = charClass;
 }
 
+// The one table of operators: the lexer reads a character by it and the printers write a kind by SYMBOLS. An
+// intersection has no symbol, as its whitespace is the operator.
 const OPERATORS = new Uint8Array(128);
-for (const [char, kind] of [
+const symbols = new Array<string>(Token.Bang + 1).fill('');
+for (const [symbol, kind] of [
     [':', Token.Colon],
     [',', Token.Comma],
     ['+', Token.Plus],
     ['-', Token.Minus],
     ['@', Token.At],
     ['%', Token.Percent],
+    ['#', Token.Hash],
     ['^', Token.Power],
     ['*', Token.Multiply],
     ['/', Token.Divide],
     ['&', Token.Concat],
     ['=', Token.Equal],
+    ['<>', Token.NotEqual],
+    ['<', Token.Less],
+    ['<=', Token.LessEqual],
+    ['>', Token.Greater],
+    ['>=', Token.GreaterEqual],
     [';', Token.Semicolon],
     ['(', Token.Open],
     [')', Token.Close],
@@ -105,28 +140,10 @@ for (const [char, kind] of [
     ['}', Token.BraceClose],
     ['!', Token.Bang],
 ] as const) {
-    OPERATORS[char.charCodeAt(0)] = kind;
+    symbols[kind] = symbol;
+    if (symbol.length === 1) OPERATORS[symbol.charCodeAt(0)] = kind;
 }
-
-// Every character past the no-break space may be part of a name, as a sheet or a defined name can be in any script.
-// The no-break space itself is refused, as Excel does: as a name it would be invisible. Past the end is NaN.
-function classOf(code: number): number {
-    if (code < 128) return CLASS[code];
-    return code > 0xa0 ? WORD_START : OTHER;
-}
-
-// Whether a word that ends before this character would in fact run on, so what was read is only its start.
-export function continuesWord(code: number): boolean {
-    return classOf(code) >= DIGIT;
-}
-
-export function tokenKind(token: number): number {
-    return token & 63;
-}
-
-export function tokenEnd(token: number): number {
-    return token >>> 6;
-}
+export const SYMBOLS: readonly string[] = symbols;
 
 // The token at `pos` as one number, its end and its kind, so the parser's inner loop allocates nothing.
 export function lexAt(text: string, pos: number): number {
@@ -145,54 +162,89 @@ export function lexAt(text: string, pos: number): number {
         default:
     }
     switch (code) {
-        case 46: // .
+        case Char.Dot:
             return classOf(text.charCodeAt(end)) === DIGIT
                 ? (numberEnd(text, pos) << 6) | Token.Number
                 : (end << 6) | Token.Bad;
-        case 34: // "
+        case Char.DoubleQuote:
             return quotedEnd(text, pos, '"', Token.String);
-        case 39: // '
+        case Char.Quote:
             return quotedEnd(text, pos, "'", Token.Quote);
-        case 91: {
+        case Char.BracketOpen: {
             const close = text.indexOf(']', end);
             return close === -1 ? (length << 6) | Token.Bad : ((close + 1) << 6) | Token.Bracket;
         }
-        case 35: {
-            // Any # that starts no error literal is the spill operator, so A1#/Sheet2!B1 divides.
+        case Char.Hash: {
+            // A # that starts no error literal is the spill operator, so A1#/Sheet2!B1 divides.
             const error = errorCode(text, pos);
-            return error === 0
-                ? (end << 6) | Token.Hash
-                : ((pos + ERROR_LITERALS[error - 1].length) << 6) | Token.Error;
+            if (error !== 0) end = pos + ERROR_LITERALS[error - 1].length;
+            return (end << 6) | (error !== 0 ? Token.Error : Token.Hash);
         }
-        case 60: {
+        case Char.Less: {
             const next = text.charCodeAt(end);
-            if (next === 61) return ((end + 1) << 6) | Token.LessEqual;
-            if (next === 62) return ((end + 1) << 6) | Token.NotEqual;
+            if (next === Char.Equals) return ((end + 1) << 6) | Token.LessEqual;
+            if (next === Char.Greater) return ((end + 1) << 6) | Token.NotEqual;
             return (end << 6) | Token.Less;
         }
-        case 62:
-            return text.charCodeAt(end) === 61 ? ((end + 1) << 6) | Token.GreaterEqual : (end << 6) | Token.Greater;
+        case Char.Greater:
+            return text.charCodeAt(end) === Char.Equals
+                ? ((end + 1) << 6) | Token.GreaterEqual
+                : (end << 6) | Token.Greater;
         default:
             return (end << 6) | (code < 128 && OPERATORS[code] !== 0 ? OPERATORS[code] : Token.Bad);
     }
 }
 
+export function tokenKind(token: number): number {
+    return token & 63;
+}
+
+export function tokenEnd(token: number): number {
+    return token >>> 6;
+}
+
+// Whether a word that ends before this character would in fact run on, so what was read is only its start.
+export function continuesWord(code: number): boolean {
+    return classOf(code) >= DIGIT;
+}
+
+// The code of the error literal at `pos`, in any letter case, or 0 when the # there starts none.
+export function errorCode(text: string, pos: number): number {
+    for (let index = 0; index < ERROR_LITERALS.length; index += 1) {
+        const literal = ERROR_LITERALS[index];
+        let i = 1;
+        for (; i < literal.length; i += 1) {
+            const code = text.charCodeAt(pos + i);
+            if ((code >= Char.LowerA && code <= Char.LowerZ ? code - 32 : code) !== literal.charCodeAt(i)) break;
+        }
+        if (i === literal.length) return index + 1;
+    }
+    return 0;
+}
+
+// Every character past the no-break space may be part of a name, as a sheet or a defined name can be in any script.
+// The no-break space itself is refused, as Excel does: as a name it would be invisible. Past the end is NaN.
+function classOf(code: number): number {
+    if (code < 128) return CLASS[code];
+    return code > 0xa0 ? WORD_START : OTHER;
+}
+
 function isDigit(code: number): boolean {
-    return code >= 48 && code <= 57;
+    return code >= Char.Zero && code <= Char.Nine;
 }
 
 // Digits, an optional fraction and an optional exponent. A sign is an operator, never part of the number.
 function numberEnd(text: string, pos: number): number {
     let end = pos;
     while (isDigit(text.charCodeAt(end))) end += 1;
-    if (text.charCodeAt(end) === 46) {
+    if (text.charCodeAt(end) === Char.Dot) {
         end += 1;
         while (isDigit(text.charCodeAt(end))) end += 1;
     }
-    if ((text.charCodeAt(end) | 32) === 101) {
+    if ((text.charCodeAt(end) | 32) === Char.LowerE) {
         let exponent = end + 1;
         const sign = text.charCodeAt(exponent);
-        if (sign === 43 || sign === 45) exponent += 1;
+        if (sign === Char.Plus || sign === Char.Minus) exponent += 1;
         if (isDigit(text.charCodeAt(exponent))) {
             end = exponent + 1;
             while (isDigit(text.charCodeAt(end))) end += 1;
@@ -206,12 +258,12 @@ function wordEnd(text: string, pos: number): number {
     let end = pos;
     for (;;) {
         while (classOf(text.charCodeAt(end)) >= DIGIT) end += 1;
-        if (text.charCodeAt(end) !== 91) return end;
+        if (text.charCodeAt(end) !== Char.BracketOpen) return end;
         let digits = end + 1;
-        if (text.charCodeAt(digits) === 45) digits += 1;
+        if (text.charCodeAt(digits) === Char.Minus) digits += 1;
         let close = digits;
         while (isDigit(text.charCodeAt(close))) close += 1;
-        if (close === digits || text.charCodeAt(close) !== 93) return end;
+        if (close === digits || text.charCodeAt(close) !== Char.BracketClose) return end;
         end = close + 1;
     }
 }
@@ -221,18 +273,4 @@ function quotedEnd(text: string, pos: number, quote: string, kind: number): numb
     let close = text.indexOf(quote, pos + 1);
     while (close !== -1 && text.charCodeAt(close + 1) === quote.charCodeAt(0)) close = text.indexOf(quote, close + 2);
     return close === -1 ? (text.length << 6) | Token.Bad : ((close + 1) << 6) | kind;
-}
-
-// The code of the error literal at `pos`, in any letter case, or 0 when the # there starts none.
-export function errorCode(text: string, pos: number): number {
-    for (let index = 0; index < ERROR_LITERALS.length; index += 1) {
-        const literal = ERROR_LITERALS[index];
-        let i = 1;
-        for (; i < literal.length; i += 1) {
-            const code = text.charCodeAt(pos + i);
-            if ((code >= 97 && code <= 122 ? code - 32 : code) !== literal.charCodeAt(i)) break;
-        }
-        if (i === literal.length) return index + 1;
-    }
-    return 0;
 }

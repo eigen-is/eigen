@@ -4,34 +4,12 @@
 // #REF! for a reference that falls off the grid there or names a sheet that is gone.
 
 import { columnLabel, GRID_COLUMNS, GRID_ROWS } from './a1';
-import { ERROR_LITERALS, Token } from './lexer';
+import { ERROR_LITERALS, SYMBOLS } from './lexer';
 import { quotedSheetName, quoteSheetName } from './sheet-name';
 import type { FormulaNode } from './tree';
 import { NodeKind, RefFlag, RefKind, SheetKind } from './tree';
 
 export type SheetNames = (id: string) => string | undefined;
-
-// An intersection has no symbol: its whitespace is the operator.
-const SYMBOLS: Record<number, string> = {
-    [Token.Space]: '',
-    [Token.Colon]: ':',
-    [Token.Comma]: ',',
-    [Token.Plus]: '+',
-    [Token.Minus]: '-',
-    [Token.At]: '@',
-    [Token.Percent]: '%',
-    [Token.Hash]: '#',
-    [Token.Power]: '^',
-    [Token.Multiply]: '*',
-    [Token.Divide]: '/',
-    [Token.Concat]: '&',
-    [Token.Equal]: '=',
-    [Token.NotEqual]: '<>',
-    [Token.Less]: '<',
-    [Token.LessEqual]: '<=',
-    [Token.Greater]: '>',
-    [Token.GreaterEqual]: '>=',
-};
 
 export function printStored(tree: FormulaNode): string {
     return `=${print(tree, true, 0, 0, noName)}`;
