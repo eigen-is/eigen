@@ -966,6 +966,7 @@ describe('Occurrence edits of an invited series', () => {
             for (const vevent of vevents) expect(vevent).toContain(`:mailto:${ERIN}\r\n`);
         } finally {
             mail.restore();
+            setSystemTime();
         }
 
         const mine = await aliceOccurrences(series.uid);
