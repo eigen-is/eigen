@@ -9,9 +9,11 @@ import {
     cloneSides,
     freezesColumns,
     freezesRows,
+    MAX_GRID_SLOTS,
     parseCellKey,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
+    sheetFitsGrid,
 } from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { sheetFinder } from './a1-notation';
@@ -36,7 +38,7 @@ export type DeleteRowColOp = {
     id: string;
 };
 
-// An insert past the sheet's size limit throws this, and every reader skips its whole batch.
+// An insert past a size limit throws this, and every reader skips its whole batch. Its message is the editor's notice.
 export class RowColError extends Error {}
 
 type InsertLines = Pick<InsertRowColOp, 'index' | 'count' | 'direction'>;
@@ -244,8 +246,19 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     const data = target.data;
     if (!data) return sheets;
 
-    if (op.type === 'row' && data.length + op.count > MAX_SHEET_ROW_COUNT) throw new RowColError();
-    if (op.type === 'column' && data[0] && data[0].length + op.count > MAX_SHEET_COLUMN_COUNT) throw new RowColError();
+    const rows = data.length + (op.type === 'row' ? op.count : 0);
+    const columns = (data[0]?.length ?? 0) + (op.type === 'column' ? op.count : 0);
+    if (op.type === 'row' && rows > MAX_SHEET_ROW_COUNT) {
+        throw new RowColError(`${MAX_SHEET_ROW_COUNT} row limit exceeded`);
+    }
+    if (op.type === 'column' && data[0] && columns > MAX_SHEET_COLUMN_COUNT) {
+        throw new RowColError(`${MAX_SHEET_COLUMN_COUNT} column limit exceeded`);
+    }
+    // An imported sheet may be taller or wider than an insert's limits, so a line on its other axis can pass the
+    // bound on the grid a reader may build, and a sheet stored past it fails every later open.
+    if (!sheetFitsGrid({ row: rows, column: columns })) {
+        throw new RowColError(`${MAX_GRID_SLOTS.toLocaleString('en-US')} cell limit exceeded`);
+    }
 
     const { count } = op;
     const newTarget = { ...target };

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { Cell, CellLink, Sheet, SheetChart, SheetConfig } from '@workspace/lib/sheets';
-import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import { MAX_GRID_SLOTS, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { createCfFormulaEvaluator, evaluateConditionalFormat } from '../../engine/conditional-format';
@@ -650,6 +650,26 @@ describe('applySheetsInsertRowCol/Delete — guards', () => {
                 id: 's1',
             });
         expect(run).toThrow(RowColError);
+    });
+
+    // An import may leave a sheet as tall or as wide as Excel's, far past the insert's own ceilings, and one more line
+    // on its other axis is a grid no reader may build. The rows share one array, which a refused insert never writes.
+    test('an insert that takes the grid past the slot bound throws', () => {
+        const blank = (rows: number, columns: number) =>
+            makeSheet('s1', 'Sheet1', new Array(rows).fill(new Array(columns).fill(null)));
+        const insert = (type: 'row' | 'column') =>
+            ({ type, index: 0, count: 1, direction: 'lefttop', id: 's1' }) as const;
+
+        const widest = Math.floor(MAX_GRID_SLOTS / REFERENCE_ROW_COUNT);
+        const tall = blank(REFERENCE_ROW_COUNT, widest);
+        expect(() => applySheetsInsertRowCol([tall], insert('column'))).toThrow(RowColError);
+
+        const tallest = Math.floor(MAX_GRID_SLOTS / REFERENCE_COLUMN_COUNT);
+        expect(() => applySheetsInsertRowCol([blank(tallest, REFERENCE_COLUMN_COUNT)], insert('row'))).toThrow(
+            RowColError,
+        );
+        const [fits] = applySheetsInsertRowCol([blank(tallest - 1, REFERENCE_COLUMN_COUNT)], insert('row'));
+        expect(fits.data).toHaveLength(tallest);
     });
 });
 

@@ -1,7 +1,6 @@
 // A row or column insert or delete from a menu, such as the context menu or the add-rows button. Each runs the op, or
 // leaves the notice that says why it is refused, so every surface words a refusal alike.
 
-import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { RowColError } from '../../engine/rowcol';
 import type { Context } from '../context';
 import { deleteRowCol, insertRowCol } from '../modules/rowcol';
@@ -16,10 +15,7 @@ export function tryInsertRowCol(
         insertRowCol(ctx, op, changeSelection);
     } catch (e) {
         if (!(e instanceof RowColError)) throw e;
-        ctx.warnDialog =
-            op.type === 'row'
-                ? `${MAX_SHEET_ROW_COUNT} row limit exceeded`
-                : `${MAX_SHEET_COLUMN_COUNT} column limit exceeded`;
+        ctx.warnDialog = e.message;
     }
 }
 
