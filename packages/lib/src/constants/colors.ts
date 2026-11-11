@@ -9,7 +9,7 @@ export type EigenColor = {
     label: string;
     // The hue a person reads, such as "Orange", without the step.
     name: string;
-    value: string; // hex value
+    value: string;
 };
 
 const EIGEN_COLOR_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
@@ -274,7 +274,7 @@ export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map((col) => col[EIGEN_ACCENT_CO
 // The order calendars, labels, chart series and presence hand the accents out in. Pink, Eigen's accent, comes first;
 // each next one is the furthest (CIEDE2000) from those before it for normal vision and simulated deuteranopia, then
 // protanopia and tritanopia. Yellow and lime (under 2:1 on white) sit past the eighth, and rose and fuchsia, which sit
-// close to pink, come late. colors.test.ts pins it.
+// close to pink, come late.
 const EIGEN_ACCENT_ORDER = [
     'pink',
     'green',
@@ -298,9 +298,7 @@ export const EIGEN_ACCENT_COLORS_SHUFFLED = EIGEN_ACCENT_ORDER.map(
     (name) => EIGEN_ACCENT_COLORS[EIGEN_COLOR_NAMES.indexOf(name)],
 );
 
-// Deterministic accent color (hex) for a user id. Stable across sessions and
-// editors so a collaborator keeps one color everywhere (docs carets, sheet
-// cursors). Same hash the docs presence caret has always used.
+// A collaborator's accent color from a hash of their id, so they keep one color in every session and editor.
 export function userColor(userId: string): string {
     const hash = Math.abs([...userId].reduce((h, c) => (h << 5) - h + c.charCodeAt(0), 0));
     return EIGEN_ACCENT_COLORS_SHUFFLED[hash % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
