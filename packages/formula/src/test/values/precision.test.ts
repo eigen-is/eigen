@@ -105,55 +105,74 @@ describe('compare15 and equal15', () => {
 });
 
 describe('snapSum', () => {
-    test('the four sums Excel answers with 0', () => {
-        expect(snapSum(0.1 + 0.2 - 0.3, 0.1 + 0.2, 0.3)).toBe(0);
-        expect(snapSum(1 - 0.9 - 0.1, 1 - 0.9, 0.1)).toBe(0);
-        expect(snapSum(1.333 + 1.225 - 1.333 - 1.225, 1.333 + 1.225 - 1.333, 1.225)).toBe(0);
-        expect(snapSum(0.1 + 0.2 + -0.3, 0.1 + 0.2, -0.3)).toBe(0);
+    test('the sums Excel answers with 0', () => {
+        expect(snapSum(0.1 + 0.2 - 0.3, 0.1 + 0.2)).toBe(0);
+        expect(snapSum(1 - 0.9 - 0.1, 1 - 0.9)).toBe(0);
+        expect(snapSum(1.333 + 1.225 - 1.333 - 1.225, 1.333 + 1.225 - 1.333)).toBe(0);
+        expect(snapSum(0.1 + 0.2 + -0.3, 0.1 + 0.2)).toBe(0);
+        expect(snapSum(1e15 + 0.3 - 1e15, 1e15 + 0.3)).toBe(0);
+        expect(snapSum(1 + 2 ** -50 - 1, 1 + 2 ** -50)).toBe(0);
     });
 
     // x is `steps` last bits above `base`; Excel answers x - base and base - x with 0 up to 7 steps, at 1, 1E10
     // and 1E-10, and with the difference from 8 steps on.
-    test("Excel's limit: a result 50 bits or more under its operands is 0", () => {
+    test("Excel's limit: a result 50 bits or more under its left operand is 0", () => {
         for (const base of [1, 1e10, 1e-10]) {
             const bit = 2 ** (Math.floor(Math.log2(base)) - 52);
             for (const steps of [1, 2, 3, 4, 5, 6, 7, 8, 9, 16, 23, 64, 4096]) {
                 const x = base + steps * bit;
                 const kept = steps >= 8;
-                expect([base, steps, snapSum(x - base, x, base)]).toEqual([base, steps, kept ? steps * bit : 0]);
-                expect([base, steps, snapSum(base - x, base, x)]).toEqual([base, steps, kept ? -steps * bit : 0]);
+                expect([base, steps, snapSum(x - base, x)]).toEqual([base, steps, kept ? steps * bit : 0]);
+                expect([base, steps, snapSum(base - x, base)]).toEqual([base, steps, kept ? -steps * bit : 0]);
             }
         }
-        expect(snapSum(1 + 2 ** -50 - 1, 1 + 2 ** -50, 1)).toBe(0);
-        expect(snapSum(1 + 2 ** -40 - 1, 1 + 2 ** -40, 1)).toBe(2 ** -40);
-        expect(snapSum(1e15 + 0.3 - 1e15, 1e15 + 0.3, 1e15)).toBe(0);
-        expect(snapSum(1e15 + 1 - 1e15, 1e15 + 1, 1e15)).toBe(1);
+        expect(snapSum(1 + 2 ** -40 - 1, 1 + 2 ** -40)).toBe(2 ** -40);
+        expect(snapSum(1e15 + 1 - 1e15, 1e15 + 1)).toBe(1);
     });
 
-    test('the limit follows the larger operand, whichever side it is on, and its sign does not matter', () => {
-        expect(snapSum(7 * 2 ** -52, -1, 1 + 7 * 2 ** -52)).toBe(0);
-        expect(snapSum(2 ** -49, -1, 1 + 2 ** -49)).toBe(2 ** -49);
-        expect(snapSum(-(2 ** -50), -1.9999, 1.9999 - 2 ** -50)).toBe(0);
-        expect(snapSum(2 ** -49, 1.9999, -1.9999 + 2 ** -49)).toBe(2 ** -49);
-        expect(snapSum(1.5 * 2 ** -49, 2, -2 + 1.5 * 2 ** -49)).toBe(0);
-        expect(snapSum(2 ** -48, 2, -2 + 2 ** -48)).toBe(2 ** -48);
-        expect(snapSum(5e-324, 5e-324, 0)).toBe(5e-324);
-        expect(snapSum(1e-320, 1e-305, 1e-320)).toBe(0);
-        expect(snapSum(1e300, 1e300, 1e300)).toBe(1e300);
+    test('only the left operand decides: 2 - x is 0 at 15 last bits of x, x - 2 stays at 8', () => {
+        const bit = 2 ** -52;
+        expect(snapSum(2 - (2 - 15 * bit), 2)).toBe(0);
+        expect(snapSum(2 - (2 - 16 * bit), 2)).toBe(16 * bit);
+        expect(snapSum(2 - 8 * bit - 2, 2 - 8 * bit)).toBe(-8 * bit);
+        expect(snapSum(2 - 7 * bit - 2, 2 - 7 * bit)).toBe(0);
+        expect(snapSum(-(2 - 7 * bit) + 2, -(2 - 7 * bit))).toBe(0);
     });
 
-    test('a result that is not tiny against its operands stays', () => {
-        expect(snapSum(30.2 - 30, 30.2, 30)).toBe(0.1999999999999993);
-        expect(snapSum(43.1 - 43.2, 43.1, 43.2)).toBe(43.1 - 43.2);
-        expect(snapSum(43.1 - 43.2 + 1, 43.1 - 43.2, 1)).toBe(0.8999999999999986);
-        expect(snapSum(4.1 - 4, 4.1, 4)).toBe(4.1 - 4);
-        expect(snapSum(0.000123456789012345 + 1, 0.000123456789012345, 1)).toBe(1.0001234567890123);
-        expect(snapSum(1e-20, 1e-20, 0)).toBe(1e-20);
-        expect(snapSum(1e-20, 0, 1e-20)).toBe(1e-20);
-        expect(snapSum(1 + 1e-9 - 1, 1 + 1e-9, 1)).toBe(1 + 1e-9 - 1);
-        expect(snapSum(3, 1, 2)).toBe(3);
-        expect(snapSum(-3, -1, -2)).toBe(-3);
-        expect(snapSum(0, 0, 0)).toBe(0);
+    test('the limit steps at a power of two, down to the smallest numbers', () => {
+        for (const exponent of [-960, -300, -1, 0, 1, 52, 300, 1023]) {
+            const power = 2 ** exponent;
+            const limit = 2 ** (exponent - 49);
+            const under = power * (1 - 2 ** -53);
+            const over = power * (1 + 2 ** -52);
+            const most = power * (2 - 2 ** -52);
+            for (const left of [power, over, most, -power]) {
+                expect([left, snapSum(limit, left)]).toEqual([left, limit]);
+                expect([left, snapSum(-limit, left)]).toEqual([left, -limit]);
+                expect([left, snapSum(limit * (1 - 2 ** -53), left)]).toEqual([left, 0]);
+            }
+            expect([under, snapSum(limit / 2, under)]).toEqual([under, limit / 2]);
+            expect([under, snapSum((limit / 2) * (1 - 2 ** -53), under)]).toEqual([under, 0]);
+        }
+        expect(snapSum(5e-324, 5e-324)).toBe(5e-324);
+        expect(snapSum(5e-324, 2 ** -1030)).toBe(5e-324);
+        expect(snapSum(5e-324, 2 ** -1024)).toBe(0);
+        expect(snapSum(2 ** -1074, 2 ** -1025)).toBe(2 ** -1074);
+        expect(snapSum(2 ** -1074, 1.5 * 2 ** -1025)).toBe(2 ** -1074);
+    });
+
+    test('a result that is not tiny against its left operand stays', () => {
+        expect(snapSum(30.2 - 30, 30.2)).toBe(0.1999999999999993);
+        expect(snapSum(43.1 - 43.2 + 1, 43.1 - 43.2)).toBe(0.8999999999999986);
+        expect(snapSum(4.1 - 4, 4.1)).toBe(4.1 - 4);
+        expect(snapSum(0.1 + 0.2 - 0.3 + 0, 0.1 + 0.2 - 0.3)).toBe(0.1 + 0.2 - 0.3);
+        expect(snapSum(1e-20, 0)).toBe(1e-20);
+        expect(snapSum(1e-20, 1e-20)).toBe(1e-20);
+        expect(snapSum(0, 0)).toBe(0);
+        expect(snapSum(0, 5)).toBe(0);
+        expect(snapSum(3, 1)).toBe(3);
+        expect(snapSum(1e300, 1e300)).toBe(1e300);
+        expect(snapSum(1e308, 1e308)).toBe(1e308);
     });
 });
 
