@@ -6,7 +6,7 @@ category: Sharing
 tags: [slides, sharing, permissions, comments, collaboration]
 related: [slides/get-started, drive/share-a-file]
 order: 80
-updated: 2026-11-04
+updated: 2026-11-09
 ---
 
 Presentations are private to you until you share them. You can share with specific people, with a team, or with anyone who has a link, and choose whether they can view or edit. If you have editor access, you can also leave comments tied to specific objects on a slide.
@@ -64,6 +64,8 @@ A small colored triangle appears in the top-right corner of the object to show i
 ### Open and reply to a comment
 
 Click the colored triangle on an object to open that comment's thread. You can read the messages, add a reply, and mark the comment as resolved.
+
+To read a comment without opening it, rest your mouse on the triangle. The comment's card appears beside it, and a click on the card opens the thread.
 
 ### View all comments
 

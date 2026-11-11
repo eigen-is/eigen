@@ -2,7 +2,6 @@
 // parse table and actions are the source of the formula grammar. The .jison grammar beside it is the readable copy,
 // and an edit here is made there too. Its parse turns a formula into a thunk, so one parse serves many evaluations.
 
-import { ERROR_VALUE } from "../error";
 import { OMITTED } from "../omitted";
 
 const simpleSheetName = "[A-Za-z0-9_\u00C0-\u02AF]+";
@@ -22,9 +21,8 @@ const RELATIVE_CELL = new RegExp(
 );
 const NUMONLY = /^(?:[0-9]+$)/;
 
-// The actions compile rather than evaluate: every expression reduces to a thunk, so one parse
-// serves any number of evaluations (Parser.compile). A thunk runs its operands left to right,
-// the order the parser reduces them in. Terminals and literal pieces stay plain values.
+// A thunk runs its operands left to right, the order the parser reduces them in. Terminals and literal pieces stay
+// plain values.
 const run = (value: any): any => (typeof value === "function" ? value() : value);
 const operator = (yy: any, op: string, left: any, right: any) => () =>
     yy.evaluateByOperator(op, [run(left), run(right)]);
@@ -193,6 +191,8 @@ const productions_: (number | number[])[] = [
     [22, 0],
     [22, 2],
     [22, 2],
+    // A percent sign after any expression (hand-added, as is its state below): `A1%`.
+    [4, 2],
 ];
 
 const table: any[] = [
@@ -360,13 +360,25 @@ const table: any[] = [
     }),
 ];
 
+// `%` binds tighter than every operator, so it shifts wherever an expression just ended, and a complete operand reduces
+// to one first. `number '%'` keeps its own state, because a literal folds at parse time.
+const ENDS_IN_EXPRESSION = new Set([5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+const PERCENT_STATE = table.length;
+for (const state of table) {
+    const onAmpersand = state[9];
+    if (onAmpersand == null || state[34] != null) continue;
+    const shifts = onAmpersand[0] === 1 || ENDS_IN_EXPRESSION.has(onAmpersand[1]);
+    state[34] = shifts ? [1, PERCENT_STATE] : onAmpersand;
+}
+table.push(o([...$Vl, 34], [2, 51]));
+
 const defaultActions: Record<number, any> = {18: [2, 1]};
 
 const lexerRules: RegExp[] = [
     /^(?:\s+)/,
     /^(?:"(\\["]|[^"])*")/,
     /^(?:'(\\[']|[^'])*'[^'!])/,
-    /^(?:[A-Za-z_][A-Za-z_0-9\.]+(?=[(]))/,
+    /^(?:[A-Za-z_][A-Za-z_0-9\.]*(?=[(]))/,
     /^(?:#[A-Z0-9\/]+(!|\?)?)/,
     ABSOLUTE_CELL,
     MIXED_CELL_COL,
@@ -870,11 +882,8 @@ export class Parser {
         const $0 = $$.length - 1;
         switch (yystate) {
             case 1: {
-                // Top-level Formula production. A bare reference to an empty cell
-                // (e.g. `='Sheet'!B13` when B13 has no value) produces `undefined`
-                // here; if we returned that, Jison would fall through to the
-                // accept-state below and surface its `return true` sentinel as the
-                // formula's value. Excel treats empty cells as 0 in value context.
+                // A bare reference to an empty cell is undefined, which would reach the accept state's `true`. Excel
+                // shows 0.
                 const expression = $$[$0 - 1];
                 return () => {
                     const v = run(expression);
@@ -938,27 +947,13 @@ export class Parser {
             case 18:
                 this.$ = operator(yy, "^", $$[$0 - 2], $$[$0]);
                 break;
+            // A sign is its operator applied to 0, so its operand coerces as a binary operator's does.
             case 19:
-            case 20: {
-                // A blank operand coerces to 0 (undefined from the helper), but an Error
-                // operand must propagate and an unparseable string must surface as #VALUE!,
-                // the way the binary operators do — `-NA()` or `-"a"` returning 0 is a
-                // silent wrong answer.
-                const operand = $$[$0];
-                const sign = yystate === 19 ? yy.invertNumber : yy.toNumber;
-                this.$ = () => {
-                    const value = run(operand);
-                    if (value instanceof Error) {
-                        return value;
-                    }
-                    const n1 = sign(value);
-                    if (n1 !== undefined && isNaN(n1)) {
-                        throw Error(ERROR_VALUE);
-                    }
-                    return n1 ?? 0;
-                };
+                this.$ = operator(yy, "-", 0, $$[$0]);
                 break;
-            }
+            case 20:
+                this.$ = operator(yy, "+", 0, $$[$0]);
+                break;
             case 21: {
                 const name = $$[$0 - 2];
                 this.$ = () => yy.callFunction(name);
@@ -1028,6 +1023,9 @@ export class Parser {
             case 50:
                 $$[$0 - 1].push(OMITTED);
                 this.$ = $$[$0 - 1];
+                break;
+            case 51:
+                this.$ = operator(yy, "/", $$[$0 - 1], 100);
                 break;
         }
     }

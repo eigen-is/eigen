@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { dateToSerial, invertNumber, toNumber } from '../../../../../engine/parser/helper/number';
+import { dateToSerial, toNumber } from '../../../../../engine/parser/helper/number';
 
 describe('.toNumber()', () => {
     test('should correctly convert passed value into number', () => {
@@ -50,21 +50,5 @@ describe('.toNumber()', () => {
             // bun test runs in UTC with TZ unset, and neither deleting TZ nor assigning undefined brings UTC back.
             process.env.TZ = tz ?? 'UTC';
         }
-    });
-});
-
-describe('.invertNumber()', () => {
-    test('should correctly invert number', () => {
-        expect(invertNumber(-100)).toBe(100);
-        expect(invertNumber(-1)).toBe(1);
-        expect(invertNumber(19)).toBe(-19);
-        expect(invertNumber(19.9)).toBe(-19.9);
-        expect(invertNumber(0.9)).toBe(-0.9);
-        expect(invertNumber('0.9')).toBe(-0.9);
-        expect(invertNumber('0')).toBe(-0);
-        expect(invertNumber('-10')).toBe(10);
-        expect(invertNumber(' -10 ')).toBe(10);
-        const result2 = invertNumber('foo');
-        expect(result2 === undefined || Number.isNaN(result2)).toBe(true);
     });
 });

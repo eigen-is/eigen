@@ -1482,7 +1482,10 @@ describe('.parse() math-trig formulas', () => {
             return [[1, 2, 3]];
         };
 
-        expect(parser!.parse('SUMIFS(A1:C1, ">1", "<3")', { readRange })).toMatchObject({ error: null, result: 2 });
+        expect(parser!.parse('SUMIFS(A1:C1, A1:C1, ">1", A1:C1, "<3")', { readRange })).toMatchObject({
+            error: null,
+            result: 2,
+        });
     });
 
     it('SUMPRODUCT', () => {

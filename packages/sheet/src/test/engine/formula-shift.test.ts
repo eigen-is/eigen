@@ -4,6 +4,7 @@ import {
     functionCopy,
     functionStrChange,
     inlineNames,
+    mayShiftOffSheet,
     moveFormulaRefs,
     renameSheetRefs,
     walkFormulaRefs,
@@ -257,6 +258,67 @@ describe('functionStrChange — sheet names on both legs', () => {
     });
 });
 
+// A row op rewrites the refs it moves and leaves every other character of the formula as it was typed.
+describe('functionStrChange — text no ref of which moves', () => {
+    const sheets = sheetFinder([{ name: 'Sheet1' }, { name: 'Sheet2' }, { name: "It's" }, { name: 'My Sheet' }]);
+    const insert = (txt: string, target: string, onTarget: boolean) =>
+        `=${functionStrChange(txt, 'add', 'row', 'lefttop', 0, 1, target, onTarget, sheets)}`;
+    const remove = (txt: string, target: string, onTarget: boolean) =>
+        `=${functionStrChange(txt, 'del', 'row', null, 0, 1, target, onTarget, sheets)}`;
+    const unmoved = [
+        '=SUM(\n  A2,\tB3 )',
+        '=SUM(A2 : B3)',
+        '=SUM(A2 :B3)+C2  ',
+        '=\'My Sheet\'!A2 & "A1"',
+        "='It''s'!A2+1",
+        '=Sheet1!A2:Sheet2!B3',
+        "=A2&'x  ",
+        '=b3:a2',
+    ];
+
+    test.each(unmoved)('an op on another sheet keeps %j byte for byte', (formula) => {
+        expect(insert(formula, 'Sheet2', false)).toBe(formula);
+        expect(remove(formula, 'Sheet2', false)).toBe(formula);
+    });
+
+    test('an op past every ref on its own sheet keeps the text byte for byte', () => {
+        const past = (txt: string) =>
+            `=${functionStrChange(txt, 'add', 'row', 'lefttop', 9, 1, 'Sheet1', true, sheets)}`;
+        for (const formula of unmoved) expect(past(formula)).toBe(formula);
+    });
+
+    test('an op on the sheet moves its refs and leaves the rest of the text', () => {
+        expect(insert('=SUM(\n  A2,\tB3 )', 'Sheet1', true)).toBe('=SUM(\n  A3,\tB4 )');
+        expect(remove('=SUM(\n  A2,\tB3 )', 'Sheet1', true)).toBe('=SUM(\n  A1,\tB2 )');
+        expect(insert('=SUM(A2 :B3)+C2  ', 'Sheet1', true)).toBe('=SUM(A3:B4)+C3  ');
+        expect(insert('=\'My Sheet\'!A2 & "A1"', 'My Sheet', false)).toBe('=\'My Sheet\'!A3 & "A1"');
+        expect(insert("='It''s'!A2+A2", "It's", false)).toBe("='It''s'!A3+A2");
+        expect(remove("='It''s'!A2+A2", 'Sheet1', true)).toBe("='It''s'!A2+A1");
+        expect(insert("=A2&'x  ", 'Sheet1', true)).toBe("=A3&'x  ");
+        expect(insert('=b3:a2', 'Sheet1', true)).toBe('=A3:B4');
+    });
+
+    // The engine reads a range whose legs name two sheets as #VALUE!, so no op gives it a meaning.
+    test('a range whose legs name two sheets stays as written', () => {
+        for (const target of ['Sheet1', 'Sheet2']) {
+            expect(insert('=Sheet1!A2:Sheet2!B3', target, false)).toBe('=Sheet1!A2:Sheet2!B3');
+            expect(remove('=Sheet1!A2:Sheet2!B3', target, true)).toBe('=Sheet1!A2:Sheet2!B3');
+        }
+        expect(insert("=Sheet1!A2:'Sheet1'!B3", 'Sheet1', false)).toBe('=Sheet1!A3:Sheet1!B4');
+    });
+
+    test('the prefilter skips only text the walk keeps', () => {
+        const formulas = [...unmoved, "='It''s'!A2", "=SUM('my sheet'!A2)", '=sheet2!A1', '="Sheet2!A1"'];
+        for (const target of ['Sheet1', 'Sheet2', "It's", 'My Sheet']) {
+            const mayShift = mayShiftOffSheet(target);
+            for (const formula of formulas) {
+                if (!mayShift(formula)) expect(insert(formula, target, false)).toBe(formula);
+                if (insert(formula, target, false) !== formula) expect(mayShift(formula)).toBe(true);
+            }
+        }
+    });
+});
+
 describe('engine/formula-shift — detectAbsolute', () => {
     test('detects no $ for plain ref', () => {
         expect(detectAbsolute('A1')).toEqual([false, false]);
@@ -506,7 +568,7 @@ describe('engine/formula-shift — walkFormulaRefs', () => {
     // A leading colon is read off once. Off every colon, a formula of them overflowed the stack.
     test('reads a 1 MB run of colons without overflowing the stack', () => {
         expect(refs(`=${':'.repeat(1_000_000)}`)).toEqual([]);
-        expect(functionCopy(`=${' :'.repeat(10)}A1`, 1, 0)).toBe(`${':'.repeat(10)}A1`);
+        expect(functionCopy(`=${' :'.repeat(10)}A1`, 1, 0)).toBe(`${' :'.repeat(10)}A1`);
     });
 });
 
@@ -549,6 +611,14 @@ describe('engine/formula-shift — renameSheetRefs', () => {
 
     test('a ref without its `=` comes back without one', () => {
         expect(renameSheetRefs('Data!$A$1:$A$5', sheets, renames)).toBe("'Data(Copy)'!$A$1:$A$5");
+    });
+
+    test('a chained range keeps every leg whatever the new name is long', () => {
+        const two = sheetFinder([{ name: 'Two' }]);
+        const renamedTo = (name: string) => renameSheetRefs('=SUM(Two!A1:A2:A3)', two, new Map([['Two', name]]));
+        expect(renamedTo('Z')).toBe('=SUM(Z!A1:A2:A3)');
+        expect(renamedTo('Zebra')).toBe('=SUM(Zebra!A1:A2:A3)');
+        expect(renamedTo('My sheet')).toBe("=SUM('My sheet'!A1:A2:A3)");
     });
 
     test('a ref spelling the name in another case is renamed too, as Excel reads it', () => {

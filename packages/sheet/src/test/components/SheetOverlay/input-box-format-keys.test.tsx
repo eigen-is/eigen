@@ -188,6 +188,26 @@ test('⌘B in a formula bolds the cell and leaves the formula text alone', async
     expect(cell()?.bl).toBe(1);
 });
 
+test("Escape during a composition is the IME's, and the next one closes the cell", async () => {
+    const { input, update } = await openEditor('日本語');
+    const pressEscape = (init: KeyboardEventInit) =>
+        act(() => {
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, ...init }));
+        });
+    const isOpen = () => {
+        let open = false;
+        update((ctx) => {
+            open = ctx.editingCellPosition.length > 0;
+        });
+        return open;
+    };
+    pressEscape({ keyCode: 229, isComposing: true });
+    expect(isOpen()).toBe(true);
+    expect(input.textContent).toBe('日本語');
+    pressEscape({ keyCode: 27 });
+    expect(isOpen()).toBe(false);
+});
+
 test('a caret format does not carry into the next cell the editor opens on', async () => {
     const { input, update } = await openEditor('hello world');
     select(input, 6);

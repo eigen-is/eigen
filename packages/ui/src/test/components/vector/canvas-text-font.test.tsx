@@ -123,6 +123,7 @@ async function render(canEdit = true): Promise<HTMLElement> {
         const [editable, setEditable] = useState(canEdit);
         setCanEdit = setEditable;
         return createElement(CanvasEditor, {
+            onCommentHover: () => {},
             doc: canvas,
             viewport: 'infinite',
             styleDefaults: VECTOR_STYLE_DEFAULTS,

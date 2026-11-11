@@ -60,11 +60,16 @@ function makeImportRequest(directive: TestDirective = {}, data: ArrayBuffer = ne
     return { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets', maxMediaBytes: 0, data, test: directive };
 }
 
+function makeCompactRequest(directive: TestDirective = {}): TestRequest {
+    return { kind: 'compact', documentType: 'eigensheets', snapshot: null, batches: '[]', test: directive };
+}
+
 // The production limits per kind. Tests about lifecycle rather than admission run
 // under them unchanged.
 const PREVIEW_OPTIONS = { ...TRANSFORM_LIMITS.preview, priority: 'foreground' } as const;
 const EXPORT_OPTIONS = { ...TRANSFORM_LIMITS.export, priority: 'foreground' } as const;
 const BACKGROUND_OPTIONS = { ...PREVIEW_OPTIONS, priority: 'background' } as const;
+const COMPACT_OPTIONS = { ...TRANSFORM_LIMITS.compact, priority: 'background' } as const;
 
 // The production queue holds 16 jobs, 8 of them background, and a foreground job is refused past 120 s of predicted
 // wait. A test fills it with jobs that cost 1 ms each, so only the bound it means is reached, and aborts them after.
@@ -90,7 +95,7 @@ function fillQueue(runner: DocumentTransformRunner, foreground: number, backgrou
     };
 }
 
-function timings(response: DocumentTransformResponse): { startedAt: number; endedAt: number } {
+function timings(response: DocumentTransformResponse): { startedAt: number; endedAt: number; deadlineAt: number } {
     return JSON.parse(previewBody(response));
 }
 
@@ -117,6 +122,15 @@ describe('DocumentTransformRunner', () => {
         // Concurrency 1: execution windows never overlap.
         expect(spans[1].startedAt).toBeGreaterThanOrEqual(spans[0].endedAt);
         expect(spans[2].startedAt).toBeGreaterThanOrEqual(spans[1].endedAt);
+        await runner.close();
+    });
+
+    test('hands the child the wall-clock time it is killed at', async () => {
+        const runner = makeRunner();
+        const before = Date.now();
+        const { deadlineAt } = timings(await runner.run(makeRequest(), PREVIEW_OPTIONS));
+        expect(deadlineAt).toBeGreaterThanOrEqual(before + PREVIEW_OPTIONS.deadlineMs);
+        expect(deadlineAt).toBeLessThanOrEqual(Date.now() + PREVIEW_OPTIONS.deadlineMs);
         await runner.close();
     });
 
@@ -209,6 +223,19 @@ describe('DocumentTransformRunner', () => {
         expect(() => runner.run(makeExportRequest({ behavior: 'export-ok' }), EXPORT_OPTIONS)).toThrow(ApiError);
         const results = await Promise.all(jobs);
         expect(results.every((result) => result.ok)).toBe(true);
+        await runner.close();
+    });
+
+    test('a running compaction is priced at its whole deadline, which a heavy fold can use', async () => {
+        const runner = makeRunner();
+        const compaction = runner.run(makeCompactRequest({ behavior: 'sleep', ms: 100 }), COMPACT_OPTIONS);
+        const exports = Array.from({ length: 3 }, () =>
+            runner.run(makeExportRequest({ behavior: 'export-ok' }), EXPORT_OPTIONS),
+        );
+        // 60_000 for the compaction and 2 × 30_000 queued is 120_000, the bound, so a third export still admits and a
+        // fourth predicts 150_000.
+        expect(() => runner.run(makeExportRequest({ behavior: 'export-ok' }), EXPORT_OPTIONS)).toThrow(ApiError);
+        await Promise.all([compaction, ...exports]);
         await runner.close();
     });
 

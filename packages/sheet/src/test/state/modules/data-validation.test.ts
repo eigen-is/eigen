@@ -667,8 +667,7 @@ describe('getValidationHint', () => {
         expect(hint).toEqual({
             kind: 'invalid',
             text: 'Input must be a number between 1 and 10.',
-            left: 74,
-            top: 40,
+            position: { left: 74, top: 20, right: 148, bottom: 40 },
         });
     });
 
@@ -680,8 +679,7 @@ describe('getValidationHint', () => {
         expect(getValidationHint(hintContext({ ...rule, hintShow: true }), 1, 1)).toEqual({
             kind: 'prompt',
             text: 'Pick an item from the list.',
-            left: 74,
-            top: 40,
+            position: { left: 74, top: 20, right: 148, bottom: 40 },
         });
     });
 
@@ -758,8 +756,7 @@ describe('getValidationHint', () => {
         expect(getValidationHint(hintContext(rule), 1, 1)).toEqual({
             kind: 'prompt',
             text: '<img src=x onerror=alert(1)>',
-            left: 74,
-            top: 40,
+            position: { left: 74, top: 20, right: 148, bottom: 40 },
         });
     });
 

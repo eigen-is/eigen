@@ -1,5 +1,6 @@
 // A sheet tab's Hide hides its sheet, unless it is the last one shown: the workbook always shows one, so Hide then
-// shows a notice that says so and leaves the sheet as it was. A name the rename refuses, such as an empty one, shows
+// shows a notice that says so and leaves the sheet as it was. Delete refuses the same way, also when a peer's delete
+// made its sheet the last one shown while its confirm was open. A name the rename refuses, such as an empty one, shows
 // a notice with the reason and puts the old name back.
 
 import { expect, test } from 'bun:test';
@@ -10,6 +11,7 @@ installHappyDom();
 const { act, createElement } = await import('react');
 const { renderSheetDialog } = await import('../sheet-dialog');
 const { SheetItem } = await import('../../../components/SheetTab/SheetItem');
+const { applyBatch } = await import('../../../state/modules/apply-ops');
 
 type Sheet = import('../../../state').Sheet;
 
@@ -46,9 +48,8 @@ test('Hide hides a sheet while another one is shown', async () => {
 test('Hide on the last shown sheet shows a notice and keeps the sheet', async () => {
     const dialog = await openTabMenu([sheet('a', 'Only')]);
     expect(dialog.context().sheets[0]?.hide).toBeUndefined();
-    expect(dialog.title()).toBe('Notice');
-    expect(dialog.dialogs()[0]?.textContent).toContain('To hide this sheet');
-    expect(dialog.dialogs()[0]?.textContent).not.toContain('delete');
+    expect(dialog.context().warnDialog).toContain('To hide this sheet');
+    expect(dialog.context().warnDialog).not.toContain('delete');
 });
 
 test('an empty name shows a notice with the reason and keeps the old name', async () => {
@@ -90,4 +91,17 @@ test('Rename puts the focus in the name with the name selected, so typing replac
     await pick('Rename');
     expect(document.activeElement).toBe(document.querySelector('[role="button"] span'));
     expect(window.getSelection()?.toString()).toBe('First');
+});
+
+test('a delete confirmed after a peer deleted the other sheet refuses with the reason, and the confirm closes', async () => {
+    const dialog = await renderTabs([sheet('a', 'First'), sheet('b', 'Second')]);
+    await pick('Delete');
+    expect(dialog.dialogs()[0]?.textContent).toContain('Delete the sheet "First"?');
+    await dialog.setContext((ctx) => {
+        applyBatch(ctx, [{ op: 'deleteSheet', id: 'b', path: [], value: { id: 'b' } }]);
+    });
+    await dialog.click('OK');
+    expect(dialog.context().sheets.map((s) => s.id)).toEqual(['a']);
+    expect(dialog.context().warnDialog).toContain('To delete this sheet');
+    expect(dialog.dialogs()).toHaveLength(0);
 });

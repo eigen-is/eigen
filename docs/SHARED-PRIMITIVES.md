@@ -5,13 +5,13 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2143 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2158 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (194)
+## Components (199)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -54,6 +54,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Ket` | `@workspace/ui` | packages/ui/src/components/braket/ket.tsx |
 | `KetTile` | `@workspace/ui` | packages/ui/src/components/braket/ket-tile.tsx |
 | `LeaveGuard` | `@workspace/ui` | packages/ui/src/components/layout/app/leave-guard.tsx |
+| `LinkAddressField` | `@workspace/ui` | packages/ui/src/components/link-fields.tsx |
+| `LinkTextField` | `@workspace/ui` | packages/ui/src/components/link-fields.tsx |
 | `ListDetailLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/list-detail-layout.tsx |
 | `LoadingState` | `@workspace/ui` | packages/ui/src/components/layout/app/loading-state.tsx |
 | `ObjectTransform` | `@workspace/ui` | packages/ui/src/components/transform/object-transform.tsx |
@@ -106,13 +108,16 @@ rather than inlining `queryClient.invalidateQueries`.
 | `AssigneePicker` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/assignee-picker.tsx |
 | `CommentContextMenu` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-context-menu.tsx |
 | `CommentFilterMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-filter-menu-items.tsx |
+| `CommentHoverCard` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-hover-card.tsx |
 | `CommentIndicator` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-indicator.tsx |
 | `CommentLifecycleDialogs` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-lifecycle-dialogs.tsx |
 | `CommentLifecycleMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-lifecycle-menu-items.tsx |
 | `CommentMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-menu-items.tsx |
+| `CommentNoteCard` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-note-card.tsx |
 | `CommentPanel` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-panel.tsx |
 | `CommentThread` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-thread.tsx |
 | `CreatedByMeta` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/created-by-meta.tsx |
+| `DeleteCommentDialog` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-lifecycle-dialogs.tsx |
 | `FilterSummary` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-filter-summary.tsx |
 | `MemberAvatar` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/member-avatar.tsx |
 | `MemberCommandList` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/member-command-list.tsx |
@@ -245,7 +250,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (304)
+## Hooks (305)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -355,6 +360,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useAssignedCommentCount` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-assigned-comment-count.ts |
 | `useCommentCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `useCommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
+| `useCommentHover` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-hover.ts |
 | `useCommentLifecycle` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-lifecycle.ts |
 | `useCreateCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `useDocumentPanels` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-document-panels.ts |
@@ -554,7 +560,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (449)
+## Types (453)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -612,6 +618,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BorderType` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Cell` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `CellLink` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `CellLinkType` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellMatrix` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellStyle` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellType` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
@@ -855,6 +863,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CardAttachmentDraft` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CardFormPatch` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentCard` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
+| `CommentHover` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
+| `CommentHoverTarget` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentMapName` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `DocumentPanel` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `DocCommentMatch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
@@ -1008,7 +1018,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1171)
+## Utilities & constants (1176)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1635,8 +1645,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `forEachInRect` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `freezesColumns` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `freezesRows` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `isCellLinkType` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isCurrentSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `isExcelFunction` | `@workspace/lib/sheets` | packages/lib/src/sheets/excel-functions.ts |
+| `isPatchOp` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `isStructuralBatch` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `MAX_VALIDATION_RANGES` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
 | `MAX_VALIDATIONS` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
 | `mergedBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
@@ -1660,6 +1673,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `sheetDefaultRowHeight` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `sheetFloatingBox` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
 | `sheetRowsHeight` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `sheetsLogStartsWith` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetsOpLog` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetsStateMap` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetTrackAt` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
@@ -1807,6 +1821,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseServerArchiveSidecar` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `parseStringRecord` | `@workspace/lib/validation` | packages/lib/src/validation/json.ts |
 | `PRE_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
+| `resolveWebLink` | `@workspace/lib/validation` | packages/lib/src/validation/web-link.ts |
 | `RESTART_MESSAGE_PATTERN` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
 | `RESTART_NOTICE_EXPIRY_MS` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
 | `ROLE_MAILBOX_LOCAL_PARTS` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
@@ -1818,6 +1833,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `validateEmailTarget` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `validatePasswordStrength` | `@workspace/lib/validation` | packages/lib/src/validation/password.ts |
 | `validateUsername` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
+| `webLinkHref` | `@workspace/lib/validation` | packages/lib/src/validation/web-link.ts |
 | `activeCommentCardIds` | `@workspace/lib/vector` | packages/lib/src/vector/comments.ts |
 | `anchorToScene` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
 | `ARROW_LABEL_PAD` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1851,7 +1867,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `chromeTransform` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `clamp` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `clampFrameViewport` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
-| `commentAnchorTexts` | `@workspace/lib/vector` | packages/lib/src/vector/comments.ts |
 | `computeArrange` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `computeSnapTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `convertToShapes` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |

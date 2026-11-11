@@ -16,6 +16,8 @@ export type ConfirmDialogProps = {
     cancelText?: string;
     confirmText?: string;
     destructive?: boolean;
+    // Where the focus goes as the dialog closes, for a host with no trigger to hand it back to.
+    onCloseAutoFocus?: (event: Event) => void;
 };
 
 export function ConfirmDialog({
@@ -27,12 +29,13 @@ export function ConfirmDialog({
     cancelText = 'Cancel',
     confirmText = 'Confirm',
     destructive = false,
+    onCloseAutoFocus,
 }: ConfirmDialogProps) {
     const { pending, run, handleOpenChange } = useDialogPending(onOpenChange, { closeOnRefusal: true });
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent>
+            <DialogContent onCloseAutoFocus={onCloseAutoFocus}>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>{description}</DialogDescription>

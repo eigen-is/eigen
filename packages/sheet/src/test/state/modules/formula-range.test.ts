@@ -24,6 +24,8 @@ g.window = win;
 g.document = win.document;
 g.HTMLElement = win.HTMLElement;
 g.DOMParser = win.DOMParser;
+g.NodeFilter = win.NodeFilter;
+g.Text = win.Text;
 
 // The span index and the caret are module/window state: each case starts clean.
 beforeEach(() => {
@@ -65,8 +67,7 @@ describe('rangeSetValue — inserting a new reference', () => {
         const $editor = editor();
         rangeSetValue(editorContext(MARKUP_NAME), $editor, { row: [1, 1], column: [1, 1] });
 
-        // Past the rendered length setCaretPosition throws IndexSizeError, and its
-        // catch then throws again on an undefined rangeResizeTo.
+        // Past the rendered length the caret would throw IndexSizeError.
         expect(win.getSelection()?.anchorOffset).toBe(MARKUP_REF.length);
     });
 

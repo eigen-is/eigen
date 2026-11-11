@@ -9,19 +9,16 @@ import { boardCardIds, getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@wo
 import { matchesCommentFilter, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
 import { useRecordHistory } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
-import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import { commentMapName } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_STICKIES } from '@workspace/lib/types/drive';
 import { CollabDocumentGate, ColumnLayout, Column as LayoutColumn, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
-import { useAttachmentMeta } from '@workspace/ui/components/attachment';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
-import { CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
+import { CommentLifecycleDialogs, CommentNoteCard, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
-import { NoteCard } from '@workspace/ui/components/notes';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { useCallback, useMemo, useRef, useState } from 'react';
@@ -33,35 +30,6 @@ import { useDragAndDrop } from './hooks/use-drag-and-drop';
 import { useStickiesDocSearch } from './hooks/use-stickies-doc-search';
 import { useCardPresence, useStickiesPresence } from './hooks/use-stickies-presence';
 import { Toolbar } from './toolbar';
-
-// The card a drag carries, in the DragOverlay. useAttachmentMeta reads its cover through the document's media resolver.
-function OverlayNoteCard({
-    card,
-    entry,
-    unread,
-    isMobile,
-}: {
-    card: CommentCard;
-    entry?: CommentEntry;
-    unread: boolean;
-    isMobile: boolean;
-}) {
-    const { coverThumbnailUrl, attachmentCount } = useAttachmentMeta(card.attachments);
-    return (
-        <NoteCard
-            title={card.title}
-            description={card.description}
-            color={card.color}
-            replyCount={entry?.messageCount}
-            unread={unread}
-            resolved={entry?.status === 'resolved'}
-            coverThumbnailUrl={coverThumbnailUrl}
-            attachmentCount={attachmentCount}
-            assigneeEmail={entry?.assignee}
-            className={isMobile ? 'w-full' : 'w-[254px]'}
-        />
-    );
-}
 
 const NO_CARDS: ReadonlySet<string> = new Set();
 
@@ -151,6 +119,10 @@ export function StickiesBoard({
     });
 
     const entryByChatName = useMemo(() => new Map(allComments.map((entry) => [entry.chatName, entry])), [allComments]);
+    const entryOf = useCallback(
+        (card: CommentCard) => (card.chatName ? entryByChatName.get(card.chatName) : undefined),
+        [entryByChatName],
+    );
     const unreadChatNames = useUnreadCommentChatNames(user?.id ?? '', path.id);
 
     // The card this user works on: the card open in the dialog, else the card being dragged. Peers see it outlined
@@ -170,14 +142,8 @@ export function StickiesBoard({
     const commentFilter = useCommentFilter({ status: 'all' });
     const currentUserEmail = user?.email ?? '';
     const isCardVisible = useCallback(
-        (card: CommentCard) =>
-            matchesCommentFilter(
-                card,
-                card.chatName ? entryByChatName.get(card.chatName) : undefined,
-                commentFilter.filter,
-                currentUserEmail,
-            ),
-        [entryByChatName, commentFilter.filter, currentUserEmail],
+        (card: CommentCard) => matchesCommentFilter(card, entryOf(card), commentFilter.filter, currentUserEmail),
+        [entryOf, commentFilter.filter, currentUserEmail],
     );
     const [activityPanelOpen, setActivityPanelOpen] = useState(false);
     const cardContextMenu = useContextMenu<CommentContextMenuItem>();
@@ -234,20 +200,16 @@ export function StickiesBoard({
     const { handleContextMenu, openAt: openCardContextMenuAt } = cardContextMenu;
     const handleCardContextMenu = useCallback(
         (e: React.MouseEvent, card: CommentCard) => {
-            handleContextMenu(e, { card, entry: card.chatName ? entryByChatName.get(card.chatName) : undefined });
+            handleContextMenu(e, { card, entry: entryOf(card) });
         },
-        [handleContextMenu, entryByChatName],
+        [handleContextMenu, entryOf],
     );
     // A long-press opens the same card menu on touch, because a `touch-none` card gets no native context menu.
     const handleCardLongPress = useCallback(
         (card: CommentCard, x: number, y: number) => {
-            openCardContextMenuAt(
-                { card, entry: card.chatName ? entryByChatName.get(card.chatName) : undefined },
-                x,
-                y,
-            );
+            openCardContextMenuAt({ card, entry: entryOf(card) }, x, y);
         },
-        [openCardContextMenuAt, entryByChatName],
+        [openCardContextMenuAt, entryOf],
     );
 
     // Each column keeps its card array while its cards and the filter stay the same, so a memoized column renders
@@ -274,9 +236,15 @@ export function StickiesBoard({
     const getActiveComponent = () => {
         if (dragState.activeType === 'task') {
             const card = dragState.activeItem;
-            const entry = card.chatName ? entryByChatName.get(card.chatName) : undefined;
-            const unread = !!card.chatName && unreadChatNames.has(card.chatName);
-            return <OverlayNoteCard card={card} entry={entry} unread={unread} isMobile={isMobile} />;
+            return (
+                <CommentNoteCard
+                    card={card}
+                    entry={entryOf(card)}
+                    title={card.title}
+                    unread={!!card.chatName && unreadChatNames.has(card.chatName)}
+                    className={isMobile ? 'w-full' : 'w-[254px]'}
+                />
+            );
         }
 
         if (dragState.activeType === 'column') {

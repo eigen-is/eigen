@@ -1,19 +1,21 @@
-// Formula execution in the editor: evaluating a formula, building the formula map from the cells, and recomputing the
-// cells an edit affects (execFunctionGroup). These read and write the workbook context, so they live in the state
-// layer, while the parsing and evaluating they call into is the engine's.
+// Formula execution in the editor: evaluating a formula, building the formula graph and recomputing what an edit
+// affects (execFunctionGroup). These read and write the workbook context, so they live in the state layer, while the
+// parsing and evaluating they call into is the engine's. A sheet, row or column op recomputes in the engine's own
+// batch, as every reader's does.
 
 import { findSheetByName } from '../../engine/a1-notation';
-import { computedKey, createArrayResolver, withComputedValues } from '../../engine/cell-resolver';
-import { getCalculationOrder } from '../../engine/dependency-graph';
+import { createArrayResolver } from '../../engine/cell-resolver';
+import { holdsFormulaResult } from '../../engine/format';
+import { FormulaGraph } from '../../engine/formula-graph';
 import { checkBracketNum, LAST_COLUMN, LAST_ROW, matrixWidth, resolveCellRange } from '../../engine/formula-utils';
-import type { Cell, CellResolver, FormulaCellInfo, FormulaCellInfoMap, FormulaDependency } from '../../engine/types';
+import { evaluateFormulas } from '../../engine/recalc';
+import type { Cell, FormulaDependency } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { FormulaCell } from '../types';
 import { getSheetIndex } from '../utils';
 import { setCellValue } from './cell';
-import { registerFormulas, snapshotContext } from './formula-cache';
-import { error } from './validation';
+import { snapshotContext } from './formula-cache';
 
 // The cells a reference in the grid's UI covers, such as a link or a highlighted range: a whole column or row stops at
 // its sheet's end. null when it covers none, or names a sheet with no matrix to show them on.
@@ -34,42 +36,17 @@ export function getcellrange(ctx: Context, txt: string): FormulaDependency | nul
     return { row: [range.row[0], lastRow], column: [range.column[0], lastColumn], sheetId: range.sheetId };
 }
 
-type ComputeFormulaOptions = {
-    id?: string;
-    // A pass over many formulas shares one, so no formula takes its own snapshot of the workbook.
-    resolver?: CellResolver;
-};
-
-// A formula's value, and its text with a missing closing bracket added.
-export function computeFormula(
-    ctx: Context,
-    txt: string,
-    {
-        id = ctx.currentSheetId,
-        resolver = createArrayResolver(snapshotContext(ctx).sheets),
-    }: ComputeFormulaOptions = {},
-): [Cell['v'], string] {
-    if (txt.indexOf(error.r) > -1) return [error.r, txt];
+// A formula's value on the current sheet, and its text with a missing closing bracket added.
+export function computeFormula(ctx: Context, txt: string): [Cell['v'], string] {
     const formula = checkBracketNum(txt) ? txt : `${txt})`;
-    return [ctx.formulaCache.engine.evaluate(formula, id, resolver).value, formula];
+    const resolver = createArrayResolver(snapshotContext(ctx).sheets);
+    return [ctx.formulaCache.engine.evaluate(formula, ctx.currentSheetId, resolver).value, formula];
 }
 
-export function warmFormulaCellInfoMap(ctx: Context): FormulaCellInfoMap {
-    if (ctx.formulaCache.formulaCellInfoMap != null) return ctx.formulaCache.formulaCellInfoMap;
-    // Inside an edit ctx is an immer draft, and reading every formula through it is slow.
-    const snap = snapshotContext(ctx);
-    const map: FormulaCellInfoMap = {};
-    ctx.formulaCache.formulaCellInfoMap = map;
-    for (const { id, data } of snap.sheets) {
-        if (data) registerFormulas(snap, id, data);
-    }
-    return map;
-}
-
-// Builds the formula map while the browser is idle, such as after a load or a replay of the op log, so neither waits
+// Builds the formula graph while the browser is idle, such as after a load or a replay of the op log, so neither waits
 // for it and the next formula edit finds it ready. Returns the cancel.
-export function warmFormulaCellInfoMapOnIdle(getContext: () => Context): () => void {
-    const run = () => warmFormulaCellInfoMap(getContext());
+export function warmFormulaGraphOnIdle(getContext: () => Context): () => void {
+    const run = () => warmFormulaGraph(getContext());
     if (typeof requestIdleCallback === 'function') {
         const id = requestIdleCallback(run, { timeout: 2000 });
         return () => cancelIdleCallback(id);
@@ -78,55 +55,35 @@ export function warmFormulaCellInfoMapOnIdle(getContext: () => Context): () => v
     return () => clearTimeout(id);
 }
 
-// Recomputes every formula that reads a cell in `changedCells`, directly or through another formula, and writes the
-// values that changed. The cells are already written, and the formula map already knows them.
-export function execFunctionGroup(ctx: Context, changedCells: readonly FormulaCell[]): void {
-    const formulaCellInfoMap = warmFormulaCellInfoMap(ctx);
-    const { dependencyIndex } = ctx.formulaCache;
-
-    // Each affected formula's `dependents` is refilled so the sort below sees fresh edges.
-    const affected: FormulaCellInfo[] = [];
-    const affectedKeys = new Set<string>();
-    const collect = (key: string) => {
-        const info = formulaCellInfoMap[key];
-        if (info == null || affectedKeys.has(key)) return;
-        affectedKeys.add(key);
-        affected.push(info);
-    };
-
-    for (const cell of changedCells) {
-        for (const key of dependencyIndex.dependentsOf(cell.id, cell.r, cell.c)) collect(key);
-    }
-
-    for (let i = 0; i < affected.length; i += 1) {
-        const node = affected[i];
-        node.dependents = dependencyIndex.dependentsOf(node.id, node.r, node.c);
-        for (const key of node.dependents) collect(key);
-    }
-
-    const runList = getCalculationOrder(affected, formulaCellInfoMap);
+// Recomputes `formulasAt` and every formula reading `changedCells`, directly or not, once the graph knows the written
+// cells. A clock or a random number recomputes here, since its author's value goes out on the wire.
+export function execFunctionGroup(
+    ctx: Context,
+    changedCells: readonly FormulaCell[],
+    formulasAt: readonly FormulaCell[] = [],
+): void {
+    const graph = warmFormulaGraph(ctx);
+    const formulas = formulasAt.flatMap(({ r, c, id }) => graph.formulaAt(id, r, c) ?? []);
+    // Reading cells through immer drafts is slow, so the pass reads a plain view it can't write.
+    const snapshot = snapshotContext(ctx);
+    const runList = graph.affected(snapshot.sheets, changedCells, formulas);
     if (runList.length === 0) return;
 
-    // Reading cells through immer drafts is slow, so the pass reads a plain view it can't write. Each value it computes
-    // reaches the next formula through `computed`.
-    const snapshot = snapshotContext(ctx);
-    const computed = new Map<string, Cell>();
-    const resolver = withComputedValues(createArrayResolver(snapshot.sheets), computed);
-    const results = runList.map(({ formula, r, c, id }) => {
-        const [v, f] = computeFormula(ctx, formula, { id, resolver });
-        const value: Cell = { v, f };
-        computed.set(computedKey(r, c, id), value);
-        return { r, c, id, value };
-    });
+    const results = evaluateFormulas(runList, snapshot.sheets, ctx.formulaCache.engine, false);
 
-    // Most recomputed formulas land on their previous value, and a draft write is what immer's finalize pays for.
-    for (const { r, c, id, value } of results) {
+    // Most recomputed formulas land on what they hold, and a draft write is what immer's finalize pays for.
+    for (const { r, c, id, formula, result } of results) {
         const idx = getSheetIndex(snapshot, id);
-        // A deleted sheet's formula-map entries linger until the next rebuild; this skip makes them harmless.
         if (idx == null) continue;
         const before = snapshot.sheets[idx].data?.[r]?.[c];
-        if (before != null && before.v === value.v && before.f === value.f) continue;
+        if (before != null && holdsFormulaResult(before, result.value)) continue;
         const { data } = ctx.sheets[idx];
-        if (data != null) setCellValue(ctx, r, c, data, value);
+        if (data != null) setCellValue(ctx, r, c, data, { v: result.value, f: formula });
     }
+}
+
+function warmFormulaGraph(ctx: Context): FormulaGraph {
+    // Inside an edit ctx is an immer draft, and reading every formula through it is slow.
+    ctx.formulaCache.graph ??= new FormulaGraph(snapshotContext(ctx).sheets);
+    return ctx.formulaCache.graph;
 }

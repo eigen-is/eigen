@@ -4,9 +4,8 @@
 // error keep their status. An import out of memory is a file too large, and so is an export or a search extract that
 // ran out of memory or time. Any other failure throws.
 
-import { readSheetsSnapshotJson, sheetsOpLog } from '@workspace/lib/sheets';
+import type { Op } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type * as Y from 'yjs';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError } from '../../core/errors';
 import { IMPORT_MESSAGES } from '../../import/messages';
@@ -24,7 +23,7 @@ import type {
     PreviewResult,
     ReferencesJob,
     SheetsImportJob,
-    SheetsWeight,
+    SheetsInsertJob,
     SlidesImportJob,
     SlidesImportTransformResult,
     TransformError,
@@ -194,13 +193,10 @@ export async function runBytesTransformToText(
 }
 
 // An import returns what the caller commits, the media it extracted and its warnings. A workbook comes back as snapshot
-// JSON the main thread never parses, and a document or a deck as a ready Yjs update.
-export type SheetsImportSnapshot = {
-    snapshotJson: string;
-    weight: SheetsWeight;
-    images: TransformMedia[];
-    warnings: TransformWarning[];
-};
+// JSON the main thread never parses, or for an insert as the batch that adds its tabs, and a document or a deck as a
+// ready Yjs update.
+export type SheetsImportSnapshot = { snapshotJson: string; images: TransformMedia[]; warnings: TransformWarning[] };
+export type SheetsInsertBatch = { batch: Op[]; images: TransformMedia[]; warnings: TransformWarning[] };
 
 export async function runImportToSnapshotJson(
     job: SheetsImportJob,
@@ -208,8 +204,16 @@ export async function runImportToSnapshotJson(
     opts: TransformOptions,
 ): Promise<SheetsImportSnapshot> {
     const { result, warnings } = await runTransformRequest({ ...job, data }, opts);
-    const snapshotJson = new TextDecoder().decode(result.snapshotJson);
-    return { snapshotJson, weight: result.weight, images: result.images, warnings };
+    return { snapshotJson: new TextDecoder().decode(result.snapshotJson), images: result.images, warnings };
+}
+
+export async function runInsertToSheetsBatch(
+    job: SheetsInsertJob,
+    data: ArrayBuffer,
+    opts: TransformOptions,
+): Promise<SheetsInsertBatch> {
+    const { result, warnings } = await runTransformRequest({ ...job, data }, opts);
+    return { batch: JSON.parse(new TextDecoder().decode(result.batch)), images: result.images, warnings };
 }
 
 export async function runImportToDocumentUpdate(
@@ -230,19 +234,18 @@ export async function runImportToSlidesUpdate(
     return { ...result, warnings };
 }
 
-// A workbook's op log folded into its snapshot, read from the live doc in one step, as data.db can lag behind. The
-// signal ends the job queued or running, so the caller bounds the whole wait with it.
+// A workbook's log folded into its snapshot, as many of its first batches as the fold takes in its time. The signal
+// ends the job queued or running, so the caller bounds the whole wait with it.
 export async function runSheetsCompaction(
-    doc: Y.Doc,
+    snapshot: string | null,
+    batches: readonly Op[][],
     signal: AbortSignal,
-): Promise<{ snapshot: string; dropped: number }> {
-    const snapshot = readSheetsSnapshotJson(doc) ?? null;
-    const batches = JSON.stringify(sheetsOpLog(doc).toArray());
+): Promise<{ snapshot: string; dropped: number; folded: number }> {
     const { result } = await runTransformRequest(
-        { kind: 'compact', documentType: 'eigensheets', snapshot, batches },
+        { kind: 'compact', documentType: 'eigensheets', snapshot, batches: JSON.stringify(batches) },
         { priority: 'background', signal },
     );
-    return { snapshot: new TextDecoder().decode(result.snapshot), dropped: result.dropped };
+    return { ...result, snapshot: new TextDecoder().decode(result.snapshot) };
 }
 
 // The parts one document's state names.

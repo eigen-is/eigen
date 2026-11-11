@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { Selection } from '../../../state';
-import { initFreeze, scrollToFrozenRowCol } from '../../../state/modules/freeze';
+import { scrollToFrozenRowCol } from '../../../state/modules/freeze';
 import { workbookContextFactory } from '../factories/context';
 
 const COLUMNS = 26;
@@ -26,9 +26,7 @@ function dragTo(selections: Selection[], scrollLeft: number, scrollTop: number) 
         scrollLeft,
         scrollTop,
     });
-    const cache = ctx.getRefs().globalCache;
-    initFreeze(ctx, cache, 'one');
-    scrollToFrozenRowCol(ctx, cache.freezen?.one);
+    scrollToFrozenRowCol(ctx);
     return ctx.scrollRequest;
 }
 
@@ -63,6 +61,20 @@ describe('scrollToFrozenRowCol', () => {
 
     test('a far cell inside the frozen band scrolls both axes back', () => {
         expect(dragTo([range([20, 6], [1, 1])], 300, 200)).toEqual({ left: 0, top: 0 });
+    });
+
+    test('a drag that stays in a frozen column leaves the scroll, as a click does', () => {
+        expect(dragTo([range([20, 1], [20, 1])], 300, 200)).toBeUndefined();
+        expect(dragTo([range([20, 0], [20, 2])], 300, 200)).toBeUndefined();
+    });
+
+    test('a drag that stays in a frozen row leaves the scroll, as a click does', () => {
+        expect(dragTo([range([1, 8], [1, 8])], 300, 200)).toBeUndefined();
+        expect(dragTo([range([0, 8], [2, 8])], 300, 200)).toBeUndefined();
+    });
+
+    test('a drag from a frozen column to a far end behind the band scrolls back', () => {
+        expect(dragTo([range([20, 1], [20, 4])], 300, 200)).toEqual({ left: 0 });
     });
 
     test('the range being dragged decides, not an earlier one of several', () => {

@@ -160,13 +160,13 @@ async function open(cells: Record<string, string> = {}, { stamped = true } = {})
 
 const peerSends = (ops: Op[]) => peer.getArray<Op[]>('ops').push([ops]);
 
-// The server's compaction: the log replayed over the snapshot, swapped in with a base that names the one it folded, and
-// the folded batches deleted, all in one transaction.
-function compact() {
-    const batches = peer.getArray<Op[]>('ops').toArray();
+// The server's compaction: the log's first `folded` batches replayed over the snapshot, swapped in with a base that
+// names the one it folded, and those batches deleted, all in one transaction.
+function compact(folded = peer.getArray<Op[]>('ops').length) {
+    const batches = peer.getArray<Op[]>('ops').slice(0, folded);
     const stored = decodeSheetsSnapshot(readSheetsSnapshotJson(peer) ?? '');
     const json = encodeSheetsSnapshot(replaySheetsOps(stored, batches), { computed: true });
-    writeSheetsSnapshot(peer, json, readSheetsBase(peer)?.id ?? null);
+    writeSheetsSnapshot(peer, json, { compactedFrom: readSheetsBase(peer)?.id ?? null, folded: batches.length });
 }
 
 // The tab is back online: it takes what the server holds that it lacks in one update, and sends what it wrote.
@@ -258,6 +258,28 @@ test("a compaction that arrives with a peer's new batch keeps the grid and appli
     await reconnect();
     expect(seen.version).toBe(0);
     expect([cell(1, 1)?.v, cell(0, 0)?.v, cell(0, 1)?.v, cell(2, 2)?.bl]).toEqual(['stored', 'folded', 'live', 1]);
+    await act(async () => workbookRef.current?.undo());
+    expect(cell(2, 2)?.bl).toBeUndefined();
+});
+
+test("a compaction of the log's first batches keeps the grid, and the batches after them stay in the log", async () => {
+    const { workbookRef, cell, seen } = await open({ '1_1': 'stored' });
+    peerSends(typed(0, 0, 'folded'));
+    peerSends(typed(0, 1, 'kept'));
+    await act(async () => workbookRef.current?.setCellFormat(2, 2, 'bl', 1));
+    linked = false;
+    compact(1);
+    await reconnect();
+    expect(seen.version).toBe(0);
+    expect(doc.getArray('ops').length).toBe(2);
+    await act(async () => peerSends(typed(0, 2, 'after')));
+    expect([cell(1, 1)?.v, cell(0, 0)?.v, cell(0, 1)?.v, cell(0, 2)?.v, cell(2, 2)?.bl]).toEqual([
+        'stored',
+        'folded',
+        'kept',
+        'after',
+        1,
+    ]);
     await act(async () => workbookRef.current?.undo());
     expect(cell(2, 2)?.bl).toBeUndefined();
 });

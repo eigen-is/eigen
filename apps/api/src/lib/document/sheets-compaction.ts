@@ -1,8 +1,9 @@
-// The main thread's side of a workbook's compaction, which folds the op log into a new snapshot when the collab document
-// closes. It decides whether a close compacts, runs the compaction in the transform process under a time budget, and
-// stops trying a workbook whose compactions keep failing. The collab document asks for it at the end of its linger, and
-// swaps the new snapshot in only while nothing changed during the run.
+// The main thread's side of a workbook's compaction, which folds the head of the op log into a new snapshot when the
+// collab document closes. It decides whether a close compacts, runs the fold in the transform process, and stops
+// trying a workbook whose compactions keep failing. The collab document asks for it at the end of its linger, and swaps
+// the new snapshot in only while the log still opens with the batches it folded.
 
+import type { Op } from '@workspace/lib/sheets';
 import { isCurrentSheetsSnapshot, readSheetsSnapshotJson, sheetsOpLog } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_SHEETS } from '@workspace/lib/types/drive';
@@ -29,19 +30,29 @@ export function sheetsNeedCompaction(path: DrivePath, doc: Y.Doc): boolean {
     return (compactionFailures.get(path.id) ?? 0) < MAX_COMPACTION_FAILURES;
 }
 
-// Resolves to the new snapshot JSON, or to null when the run ended without one. Only a run that failed on the workbook
-// counts toward giving up. A busy runner, a canceled run or a shutdown says nothing about the workbook.
-export async function compactSheets(path: DrivePath, doc: Y.Doc, signal: AbortSignal): Promise<string | null> {
+// Null when the run ended without a snapshot. Only a run that failed on the workbook counts toward giving up, never a
+// busy runner, a canceled run or a shutdown.
+export async function compactSheets(
+    path: DrivePath,
+    doc: Y.Doc,
+    signal: AbortSignal,
+): Promise<{ snapshot: string; folded: readonly Op[][] } | null> {
+    // Read from the live doc in one step, as data.db can lag behind.
+    const log = sheetsOpLog(doc).toArray();
     try {
         const budget = AbortSignal.any([signal, AbortSignal.timeout(COMPACTION_BUDGET_MS)]);
-        const { snapshot, dropped } = await runSheetsCompaction(doc, budget);
+        const { snapshot, dropped, folded } = await runSheetsCompaction(
+            readSheetsSnapshotJson(doc) ?? null,
+            log,
+            budget,
+        );
         compactionFailures.delete(path.id);
         if (dropped > 0) {
             console.warn(
                 `[sheets] compaction dropped ${dropped} op ${dropped === 1 ? 'batch' : 'batches'} path=${path.id}`,
             );
         }
-        return snapshot;
+        return { snapshot, folded: log.slice(0, folded) };
     } catch (err) {
         if (err instanceof ApiError && err.status === 503) return null;
         if (err instanceof TransformFailedError && (err.code === 'canceled' || err.code === 'shutdown')) return null;

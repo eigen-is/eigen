@@ -11,8 +11,8 @@ import { applyPatches, produce, produceWithPatches } from 'immer';
 import { setColumnWidth, setRowHeight } from '../../../state/api/rowcol';
 import type { Context } from '../../../state/context';
 import type { Op } from '../../../state/types';
-import { filterPatch, opToPatch } from '../../../state/utils/patch';
-import { syncablePaths } from '../factories/collab';
+import { filterPatch } from '../../../state/utils/patch';
+import { receive, syncablePaths } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 import { mouseUpAt, withGridGeometry } from '../factories/grid-dom';
 
@@ -76,14 +76,9 @@ describe('a resize round-trips through undo', () => {
 });
 
 describe("a peer's resize reaches the sheet", () => {
-    // Mirrors Workbook applyOp: opToPatch turns the remote op into a `sheets[*]` patch.
     test('a remote config op lands on the sheet', () => {
-        const base = resizeContext();
         const op: Op = { op: 'replace', id: 'id_1', path: ['config'], value: { columnlen: { 2: 153 } } };
-        const applied = produce(base, (ctx: Context) => {
-            const [patches] = opToPatch(ctx, [op]);
-            applyPatches(ctx, patches);
-        });
+        const applied = receive(resizeContext(), [op]);
         expect(applied.sheets[0].config?.columnlen?.[2]).toBe(153);
     });
 });

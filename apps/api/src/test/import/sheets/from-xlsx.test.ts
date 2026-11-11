@@ -6,6 +6,7 @@ import { ApiError } from '../../../lib/core/errors';
 import { readXlsx, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_GRID_SLOTS, MAX_SHARED_FORMULA_TEXT, MAX_TEXT } from '../../../lib/import/sheets/limits';
 import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../../lib/ooxml/zip';
+import { cellLinks } from '../../fixtures/cell-links';
 import { ruleAt, rulesByCell } from '../../fixtures/validations';
 import { OFFICE_COLORS, rowsXml, styleSheet, xlsxFixture } from '../../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../../fixtures/zip-bomb';
@@ -364,13 +365,13 @@ describe('the reader', () => {
                 parts: [{ name: 'xl/worksheets/_rels/sheet1.xml.rels', data: SHEET_RELS }],
             }),
         );
-        expect(sheet.hyperlink).toEqual({
-            '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/a?b=1&c=2' },
-            '0_1': { linkType: 'webpage', linkAddress: 'mailto:someone@example.com' },
-            '0_2': { linkType: 'cellrange', linkAddress: "'Second sheet'!B2" },
-            '0_3': { linkType: 'cellrange', linkAddress: 'Data!A1' },
-            '1_0': { linkType: 'sheet', linkAddress: 'Data' },
-            '1_1': { linkType: 'sheet', linkAddress: 'Second sheet' },
+        expect(cellLinks(sheet)).toEqual({
+            '0_0': { type: 'webpage', address: 'https://example.com/a?b=1&c=2' },
+            '0_1': { type: 'webpage', address: 'mailto:someone@example.com' },
+            '0_2': { type: 'cellrange', address: "'Second sheet'!B2" },
+            '0_3': { type: 'cellrange', address: 'Data!A1' },
+            '1_0': { type: 'sheet', address: 'Data' },
+            '1_1': { type: 'sheet', address: 'Second sheet' },
         });
     });
 
@@ -628,7 +629,7 @@ describe("the reader's rules", () => {
             { cellrange: [{ row: [0, 9], column: [2, 2] }], conditionValue: ['=MOD(C1,2)=0'] },
             { cellrange: [{ row: [0, 9], column: [0, 3] }], conditionName: 'greaterThan', conditionValue: ['20'] },
         ]);
-        expect(sheet.hyperlink).toEqual({ '1_2': { linkType: 'cellrange', linkAddress: "'Second sheet'!A1" } });
+        expect(cellLinks(sheet)).toEqual({ '1_2': { type: 'cellrange', address: "'Second sheet'!A1" } });
         expect(sheet.config?.merge).toMatchObject({ '0_0': { rs: 1, cs: 2 }, '11_4': { rs: 2, cs: 2 } });
         expect(Object.values(sheet.dataValidations ?? {}).map(({ ranges }) => ranges)).toEqual([
             [{ row: [0, 1999], column: [3, 3] }],
@@ -747,6 +748,25 @@ describe("the reader's errors", () => {
             false,
         ]);
         expect(cellsOf(second)['0_0']?.v).toBe(true);
+    });
+
+    test('a formula whose cached result is empty text keeps it, and one with no result has none', () => {
+        const data = [
+            '<row r="1"><c r="A1" t="str"><f>IFERROR(SUM(OFFSET(B1,0,-1)),"")</f><v/></c>',
+            '<c r="B1" t="str"><f>IF(1=1,"",1)</f><v></v></c>',
+            '<c r="C1" t="str"><f>OFFSET(B1,0,1)</f></c>',
+            '<c r="D1" t="str"><v></v></c></row>',
+        ].join('');
+        const cells = cellsOf(xlsxToSheets(xlsxFixture({ sheets: [{ data }] }))[0]);
+        expect(cells['0_0']).toEqual({
+            v: '',
+            m: '',
+            f: '=IFERROR(SUM(OFFSET(B1,0,-1)),"")',
+            ct: { fa: 'General', t: 's' },
+        });
+        expect(cells['0_1']?.v).toBe('');
+        expect(cells['0_2']?.v).toBeUndefined();
+        expect(cells['0_3']).toBeUndefined();
     });
 
     test('a formula reading an error computes as Excel would after an edit', () => {

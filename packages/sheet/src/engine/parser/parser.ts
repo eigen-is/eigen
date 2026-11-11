@@ -4,14 +4,26 @@
 // server. The FormulaEngine owns one, for example, and turns each result into a value or an error string.
 
 import type { CompiledFormula, FormulaArg, FormulaValue, ParseResult, ParserOptions, RangeCell } from '../types';
-import errorParser, { ERROR, ERROR_NAME, ERROR_REF, ERROR_VALUE, toFormulaError } from './error';
+import errorParser, {
+    ERROR,
+    ERROR_CALC,
+    ERROR_NAME,
+    ERROR_REF,
+    ERROR_VALUE,
+    toFormulaError,
+    UNSUPPORTED_ARRAY_OPERATION,
+} from './error';
 import { callFunction, evaluateByOperator } from './evaluate-by-operator/evaluate-by-operator';
 import { Parser as GrammarParser } from './grammar-parser/grammar-parser';
 import { extractLabel, offsetCoordinate, offsetRange, toLabel } from './helper/cell';
-import { invertNumber, toNumber } from './helper/number';
+import { toNumber } from './helper/number';
 import { trimEdges } from './helper/string';
 
 type GrammarParserInstance = { parse: (expression: string) => CompiledFormula; yy: Record<string, unknown> };
+
+// Excel's limit. The lexer and its error recovery cost a forged text its length squared, such as `a.a.a.…`, and every
+// reader parses what a recompute reaches.
+const MAX_FORMULA_LENGTH = 8192;
 
 export class Parser {
     private parser: GrammarParserInstance;
@@ -23,7 +35,6 @@ export class Parser {
         this.parser.yy = {
             toNumber,
             trimEdges,
-            invertNumber,
             // An error typed into a formula, such as `#N/A`, is a value like a computed one, so ISERROR,
             // ERROR.TYPE or IFERROR around it can inspect it, as in Excel.
             errorValue: (errorName: string) => toFormulaError(Error(errorName)),
@@ -49,11 +60,22 @@ export class Parser {
             return () => '';
         }
         try {
-            return this.parser.parse(expression);
+            return this.parseWithinLimit(expression);
         } catch (ex) {
+            // A row delete writes #REF! where a reference stood, which not every place in the grammar takes.
+            const failure = String(expression).includes(errorParser(ERROR_REF)) ? Error(ERROR_REF) : ex;
             return () => {
-                throw ex;
+                throw failure;
             };
+        }
+    }
+
+    public parses(expression: string): boolean {
+        try {
+            this.parseWithinLimit(expression);
+            return true;
+        } catch {
+            return false;
         }
     }
 
@@ -69,6 +91,10 @@ export class Parser {
             error = message ?? errorParser(ERROR);
         }
 
+        if (result === UNSUPPORTED_ARRAY_OPERATION) {
+            return { error: errorParser(ERROR_CALC), result: null, arrayOperation: true };
+        }
+
         if (result instanceof Error) {
             error = errorParser(result.message) ?? errorParser(ERROR);
             result = null;
@@ -77,19 +103,19 @@ export class Parser {
         return { error, result };
     }
 
-    // Folded like function names (evaluate-by-operator) and cell labels (helper/cell):
-    // Excel writes bare TRUE/FALSE/NULL lower-cased into xlsx formula text, and both Excel
-    // and Sheets resolve them case-insensitively.
+    // Excel writes TRUE, FALSE and NULL lower-cased into xlsx formula text, and reads a name in any case.
     public setVariable(name: string, value: FormulaArg): Parser {
         this.variables[name.toUpperCase()] = value;
         return this;
     }
 
-    // `FormulaArg` because variables feed directly into the grammar's arithmetic/comparison
-    // pipelines, which expect scalars or arrays (e.g. `setVariable('range', [1, 2, 3])` for
-    // CORREL-style formulas).
     public getVariable(name: string): FormulaArg {
         return this.variables[name.toUpperCase()];
+    }
+
+    private parseWithinLimit(expression: string): CompiledFormula {
+        if (expression.length > MAX_FORMULA_LENGTH) throw Error(ERROR);
+        return this.parser.parse(expression);
     }
 
     // An unknown name is #NAME? in-band, like an unknown function, so IFERROR can trap it.

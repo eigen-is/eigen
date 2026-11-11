@@ -145,3 +145,28 @@ test('Alt+Enter leaves the edit open', async () => {
     await act(async () => root.unmount());
     container.remove();
 });
+
+test("the Enter that confirms a composition in the box is the IME's, and the next one reaches the grid", async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    let recipes = 0;
+
+    await render(root, contextShowing({ v: 2, m: '2' }, true), () => {
+        recipes += 1;
+    });
+    const box = container.querySelector('#sheet-functionbox-cell');
+    if (!box) throw new Error('fx box did not render');
+
+    const enter = (init: KeyboardEventInit) =>
+        act(() => {
+            box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, ...init }));
+        });
+    enter({ keyCode: 229, isComposing: true });
+    expect(recipes).toBe(0);
+    enter({ keyCode: 13 });
+    expect(recipes).toBe(1);
+
+    await act(async () => root.unmount());
+    container.remove();
+});

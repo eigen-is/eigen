@@ -9,12 +9,13 @@ import { ChevronDown } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import type { Freezen } from '../../state';
+import type { Freeze } from '../../state';
 import {
     autoFitColumnWidth,
     colLocation,
     colLocationByIndex,
     computeColumnHeaderRegions,
+    freezeOf,
     getFrozenHandleLeft,
     handleColFreezeHandleMouseDown,
     handleColSizeHandleMouseDown,
@@ -127,10 +128,8 @@ export const ColumnHeader: React.FC = () => {
     );
 
     useEffect(() => {
-        if (context.selections == null) return;
-
         let columnTitleMap: Record<number, number> = {};
-        for (const selection of context.selections) {
+        for (const selection of context.selections ?? []) {
             columnTitleMap = selectTitlesMap(columnTitleMap, selection.column[0], selection.column[1]);
         }
         const selects: { col: number; col_pre: number; c1: number; c2: number }[] = [];
@@ -164,8 +163,8 @@ export const ColumnHeader: React.FC = () => {
     // The header splits into the body's panes on its own axis: a frozen band that stays put and a main band that
     // scrolls. Each band's clip cuts the highlights at the freeze boundary.
     const headerHeight = SHEET_COLUMN_HEADER_HEIGHT - 1.5;
-    const freeze = refs.globalCache.freezen?.[context.currentSheetId];
-    const colFreeze: Freezen | undefined = freeze?.vertical ? { vertical: freeze.vertical } : undefined;
+    const freeze = freezeOf(context);
+    const colFreeze: Freeze | undefined = freeze?.columns ? { columns: freeze.columns } : undefined;
     const regions = computeColumnHeaderRegions(colFreeze, context.cellmainWidth, headerHeight);
     const hoverRegion = overlayRegionForCell(regions, colFreeze, 0, hoverLocation.col_index);
 
@@ -248,9 +247,9 @@ export const ColumnHeader: React.FC = () => {
                         </div>
                     ) : null}
                 </OverlayRegion>
-                {/* The freeze handle's position adds the scroll offset, so it stays put in the viewport while the content
-                    scrolls. It sits outside the panes, so no clip cuts it, as none cuts the body's drag lines. A freeze
-                    drag moves it directly. */}
+                {/* The freeze handle's position adds the scroll offset, so it stays put while the content scrolls. It
+                    sits outside the panes, so no clip cuts it, as none cuts the body's drag lines. A freeze drag moves
+                    it directly. */}
                 <div ref={contentRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
                     <div
                         className="sheet-cols-freeze-handle"

@@ -10,8 +10,9 @@ import {
     ONE_AREA_ONLY,
     showSelectedRowCol,
 } from '../../../state/modules/rowcol';
-import { receiveOps } from '../factories/collab';
-import { contextFactory } from '../factories/context';
+import { moveHighlightCell } from '../../../state/modules/selection';
+import { receive } from '../factories/collab';
+import { contextFactory, workbookContextFactory } from '../factories/context';
 
 describe('the filter follows a row or column op', () => {
     const filtered = (): Context =>
@@ -161,7 +162,7 @@ describe('hidden rows and columns under the selection', () => {
     // A peer's replace can set the hidden map to any value. The cell editors ask on every selection change, so a
     // throw there would crash them.
     test('a hidden map that is no map counts as nothing hidden, and a hide starts a new map', () => {
-        const forged = receiveOps(hiddenSheet(at(1, 0)), [
+        const forged = receive(hiddenSheet(at(1, 0)), [
             { op: 'replace', id: 'id_1', path: ['config', 'rowhidden'], value: 5 },
         ]);
         expect(isSelectionOnHiddenRowCol(forged)).toBe(false);
@@ -181,5 +182,64 @@ describe('hidden rows and columns under the selection', () => {
             showSelectedRowCol(ctx, 'column');
         });
         expect(columns.sheets[0].config?.colhidden).toEqual({});
+    });
+});
+
+// A tab's own delete leaves a cursor, so the name box, the status bar and the arrow keys keep working.
+describe("a tab's own delete", () => {
+    const selected = (selection: NonNullable<Context['selections']>[number]): Context =>
+        workbookContextFactory({
+            currentSheetId: 'id_1',
+            sheets: [
+                {
+                    name: 'sheet',
+                    id: 'id_1',
+                    order: 0,
+                    config: {},
+                    data: Array.from({ length: 6 }, () => Array.from({ length: 6 }, () => null)),
+                },
+            ],
+            selections: [selection],
+        });
+    const cell = (r: number, c: number) => ({ row: [r, r], column: [c, c], row_focus: r, column_focus: c });
+    const remove = (ctx: Context, type: 'row' | 'column', start: number, end = start) =>
+        produce(ctx, (draft: Context) => deleteRowCol(draft, { type, start, end, id: 'id_1' }));
+
+    test('of the selected row lands on the row that took its place', () => {
+        expect(remove(selected(cell(2, 3)), 'row', 2).selections).toEqual([cell(2, 3)]);
+    });
+
+    test('of the selected column lands on the column that took its place', () => {
+        expect(remove(selected(cell(2, 3)), 'column', 3).selections).toEqual([cell(2, 3)]);
+    });
+
+    test('of the last row or column lands on the one before it', () => {
+        expect(remove(selected(cell(5, 3)), 'row', 5).selections).toEqual([cell(4, 3)]);
+        expect(remove(selected(cell(2, 5)), 'column', 5).selections).toEqual([cell(2, 4)]);
+    });
+
+    test('of several selected rows lands on one, and a header selection stays one', () => {
+        const header = { row: [1, 3], column: [0, 5], row_focus: 1, column_focus: 0, row_select: true };
+        expect(remove(selected(header), 'row', 1, 3).selections).toEqual([{ ...header, row: [1, 1] }]);
+    });
+
+    test('of the rows to the end of the grid lands on the new last one', () => {
+        expect(remove(selected(cell(4, 1)), 'row', 3, 5).selections).toEqual([cell(2, 1)]);
+    });
+
+    test('of part of a selection shrinks it', () => {
+        const range = { row: [1, 4], column: [3, 4], row_focus: 1, column_focus: 3 };
+        expect(remove(selected(range), 'row', 2, 3).selections).toEqual([{ ...range, row: [1, 2] }]);
+    });
+
+    test('above a selection moves it with its cells', () => {
+        expect(remove(selected(cell(4, 1)), 'row', 0).selections).toEqual([cell(3, 1)]);
+    });
+
+    test('leaves a selection the arrow keys can move', () => {
+        const moved = produce(remove(selected(cell(2, 3)), 'row', 2), (draft: Context) => {
+            moveHighlightCell(draft, 'down', 1, 'rangeOfSelect');
+        });
+        expect(moved.selections?.[0].row).toEqual([3, 3]);
     });
 });

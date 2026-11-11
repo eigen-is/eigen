@@ -3,29 +3,32 @@
 // restores what the marker alone can't.
 
 import { describe, expect, test } from 'bun:test';
-import type { Sheet as LibSheet, MergeCell } from '@workspace/lib/sheets';
+import type { CellLink, Sheet as LibSheet, MergeCell } from '@workspace/lib/sheets';
 import { REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import { replaySheetsOps, withMaterializedData } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Cell, ShiftedSheet } from '../../../engine/types';
 import type { Context } from '../../../state/context';
+import { freezeOf } from '../../../state/modules/freeze';
 import { undoEntry } from '../../../state/modules/history';
 import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
+import { renameSheet } from '../../../state/modules/sheet';
 import type { Op } from '../../../state/types';
 import type { PatchOptions } from '../../../state/utils/patch';
 import { filterPatch, patchToOp } from '../../../state/utils/patch';
-import { author, join, receive } from '../factories/collab';
+import { author, join, receive, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { contextFactory } from '../factories/context';
+import { cellLinks } from '../factories/links';
 
 enablePatches();
 
 const INSERT_OP = { type: 'row', index: 1, count: 1, direction: 'lefttop', id: 'id_1' } as const;
 const DELETE_OP = { type: 'row', start: 1, end: 2, id: 'id_1' } as const;
 const SIDE = { style: 1, color: '#000' };
-const LINK = { linkType: 'webpage', linkAddress: 'https://eigen.is' };
-const PEER_LINK = { linkType: 'webpage', linkAddress: 'https://peer.example' };
+const LINK: CellLink = { type: 'webpage', address: 'https://eigen.is' };
+const PEER_LINK: CellLink = { type: 'webpage', address: 'https://peer.example' };
 
 function richContext(): Context {
     const cell = (v: number) => ({ v, m: String(v) });
@@ -37,7 +40,12 @@ function richContext(): Context {
                 data: [
                     [cell(1), cell(2), null, null],
                     [cell(3), null, null, null],
-                    [cell(4), { v: 4, m: '4', f: '=A1+A2', ct: { fa: 'General', t: 'n' } }, null, null],
+                    [
+                        { ...cell(4), link: LINK },
+                        { v: 4, m: '4', f: '=A1+A2', ct: { fa: 'General', t: 'n' } },
+                        null,
+                        null,
+                    ],
                     [null, null, { v: 6, mc: { r: 3, c: 2, rs: 1, cs: 2 } }, { mc: { r: 3, c: 2 } }],
                 ],
                 config: {
@@ -46,8 +54,7 @@ function richContext(): Context {
                     merge: { '3_2': { r: 3, c: 2, rs: 1, cs: 2 } },
                     borderInfo: { '1_0': { t: SIDE }, '2_1': { b: SIDE }, '3_3': { l: SIDE } },
                 },
-                // The links and the validation rules ship nothing, so they prove the replay moves them itself.
-                hyperlink: { '2_0': LINK },
+                // The validation rules ship nothing, so they prove the replay moves them itself.
                 dataValidations: {
                     v: {
                         ranges: [{ row: [1, 2], column: [1, 1] }],
@@ -79,10 +86,10 @@ function richContext(): Context {
     return ctx;
 }
 
-function emittedOps(recipe: (ctx: Context) => void, options: Parameters<typeof patchToOp>[2]): [Op[], Context] {
+function emittedOps(recipe: (ctx: Context) => void, options: Parameters<typeof patchToOp>[3]): [Op[], Context] {
     const base = richContext();
     const [next, patches] = produceWithPatches(base, recipe);
-    return [patchToOp(next, filterPatch(patches), options), next];
+    return [patchToOp(base, next, filterPatch(patches), options), next];
 }
 
 function run(ctx: Context, { insertRowColOp, deleteRowColOp }: PatchOptions) {
@@ -92,9 +99,14 @@ function run(ctx: Context, { insertRowColOp, deleteRowColOp }: PatchOptions) {
 
 // The sheet on the author's tab, the peer's tab and a joiner, where the log holds the peer's batch first. The author's
 // tab then applies the log again in that order.
-function race(peer: (ctx: Context) => void, options: PatchOptions, base = richContext()) {
+function race(
+    peer: (ctx: Context) => void,
+    options: PatchOptions,
+    base = richContext(),
+    peerOptions: PatchOptions = {},
+) {
     const op = author(base, (ctx) => run(ctx, options), options);
-    const fromPeer = author(base, peer);
+    const fromPeer = author(base, peer, peerOptions);
     const onAuthor = receive(receive(base, fromPeer.ops), op.ops).sheets[0];
     const onPeer = receive(fromPeer.next, op.ops).sheets[0];
     const [joined] = join(base, [fromPeer.ops, op.ops]).map(withMaterializedData);
@@ -132,7 +144,6 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
         for (const [i, sheet] of replayed.entries()) {
             expect(sheet.data).toEqual(next.sheets[i].data);
             expect(sheet.config ?? {}).toEqual(next.sheets[i].config ?? {});
-            expect(sheet.hyperlink ?? {}).toEqual(next.sheets[i].hyperlink ?? {});
             expect(sheet.dataValidations ?? {}).toEqual(next.sheets[i].dataValidations ?? {});
         }
     }
@@ -141,7 +152,7 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
         const base = richContext();
         const baseSheets = structuredClone(base.sheets);
         const [next, patches] = produceWithPatches(base, (ctx: Context) => insertRowCol(ctx, INSERT_OP));
-        const ops = patchToOp(next, filterPatch(patches), { insertRowColOp: INSERT_OP });
+        const ops = patchToOp(base, next, filterPatch(patches), { insertRowColOp: INSERT_OP });
         expectConverged(replaySheetsOps(baseSheets, [ops]), next);
     });
 
@@ -150,7 +161,7 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
         const base = richContext();
         const baseSheets = structuredClone(base.sheets);
         const [next, patches] = produceWithPatches(base, (ctx: Context) => insertRowCol(ctx, op));
-        const ops = patchToOp(next, filterPatch(patches), { insertRowColOp: op });
+        const ops = patchToOp(base, next, filterPatch(patches), { insertRowColOp: op });
         expect(next.sheets[0].data?.[2]?.[3]?.f).toBe('=C1+C2');
         expectConverged(replaySheetsOps(baseSheets, [ops]), next);
     });
@@ -159,7 +170,7 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
         const base = richContext();
         const baseSheets = structuredClone(base.sheets);
         const [next, patches] = produceWithPatches(base, (ctx: Context) => deleteRowCol(ctx, DELETE_OP));
-        const ops = patchToOp(next, filterPatch(patches), { deleteRowColOp: DELETE_OP });
+        const ops = patchToOp(base, next, filterPatch(patches), { deleteRowColOp: DELETE_OP });
         expectConverged(replaySheetsOps(baseSheets, [ops]), next);
     });
 
@@ -187,15 +198,13 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
         base.sheets[0].data![3]![3] = { mc: { r: 2, c: 2 } };
         const baseSheets = structuredClone(base.sheets);
         const [next, patches] = produceWithPatches(base, (ctx: Context) => insertRowCol(ctx, op));
-        const ops = patchToOp(next, filterPatch(patches), { insertRowColOp: op });
+        const ops = patchToOp(base, next, filterPatch(patches), { insertRowColOp: op });
         expectConverged(replaySheetsOps(baseSheets, [ops]), next);
     });
 });
 
-// The engine inserts blank rows/columns and seeds no styles (engine/rowcol.ts applyInsert);
-// the clone rule below comes from shiftCellKeyedForInsert: the row/column at
-// `index` is the template in both directions, so insert-above at the top of a bordered
-// block repeats that row's top edge on the new row.
+// The engine inserts blank rows and columns and seeds no styles, but the row or column at `index` lends its borders
+// in both directions, so an insert above the top of a bordered block repeats that row's top edge on the new row.
 describe('borders follow their cells through inserts and deletes', () => {
     test('inserting above shifts the template row down and clones its borders onto the new row', () => {
         const [, next] = emittedOps((ctx) => insertRowCol(ctx, INSERT_OP), { insertRowColOp: INSERT_OP });
@@ -502,6 +511,76 @@ describe("a row op sent with a peer's freeze or filter", () => {
     });
 });
 
+// A row or column that was never frozen must not stay pinned once the frozen ones are gone, on the author's tab, a
+// peer's tab and a joiner alike.
+describe('a delete of the whole frozen band', () => {
+    const paneOf = (frozen: LibSheet['frozen']) =>
+        produce(richContext(), (ctx: Context) => {
+            ctx.sheets[0].frozen = frozen;
+        });
+    const pane = (type: NonNullable<LibSheet['frozen']>['type'], row_focus: number, column_focus: number) => ({
+        type,
+        range: { row_focus, column_focus },
+    });
+    const rows = (start: number, end: number) => ({ type: 'row', start, end, id: 'id_1' }) as const;
+    const columns = (start: number, end: number) => ({ type: 'column', start, end, id: 'id_1' }) as const;
+
+    test.each([
+        ['the rows of a row pane', pane('rangeRow', 1, 0), rows(0, 1), undefined],
+        ['the columns of a column pane', pane('rangeColumn', 0, 1), columns(0, 1), undefined],
+        ['more rows than the band', pane('rangeRow', 1, 0), rows(0, 2), undefined],
+        ['the rows of a pane on both axes', pane('rangeBoth', 1, 1), rows(0, 1), pane('rangeColumn', 0, 1)],
+        ['the columns of a pane on both axes', pane('rangeBoth', 1, 1), columns(0, 1), pane('rangeRow', 1, 0)],
+        ['the rows of a bare pane on both axes', pane('both', 1, 1), rows(0, 1), pane('rangeColumn', 0, 1)],
+        ['the columns of a bare column pane', pane('column', 0, 1), columns(0, 1), undefined],
+    ] as const)('%s leaves what is left of the pane on every reader', (_, frozen, deleted, after) => {
+        for (const sheet of race(() => {}, { deleteRowColOp: deleted }, paneOf(frozen))) {
+            expect(sheet.frozen).toEqual(after);
+        }
+    });
+
+    test('a delete that leaves part of the band keeps the pane', () => {
+        for (const sheet of race(() => {}, { deleteRowColOp: rows(0, 0) }, paneOf(pane('rangeRow', 1, 0)))) {
+            expect(sheet.frozen).toEqual(pane('rangeRow', 0, 0));
+        }
+    });
+
+    test('the second of two deletes unfreezes both tabs, which pin nothing', () => {
+        const base = paneOf(pane('rangeRow', 1, 0));
+        const [a, b] = [tab(base), tab(base)];
+        const remove = () => tabEdit(b, (ctx) => deleteRowCol(ctx, rows(0, 0)), { deleteRowColOp: rows(0, 0) });
+        const batches = [remove(), remove()];
+        for (const batch of batches) tabReceive(a, batch);
+        for (const { ctx } of [a, b]) {
+            expect(ctx.sheets[0].frozen).toBeUndefined();
+            expect(freezeOf(ctx)).toBeUndefined();
+        }
+        expect(join(base, batches)[0].frozen).toBeUndefined();
+    });
+
+    test.each([
+        ['row', pane('rangeRow', 1, 0), rows(0, 1)],
+        ['column', pane('rangeColumn', 0, 1), columns(0, 1)],
+        ['both', pane('rangeBoth', 1, 1), rows(0, 1)],
+    ] as const)('its undo brings a %s pane back on every reader, and its redo takes it again', (_, frozen, deleted) => {
+        const base = paneOf(frozen);
+        const [writer, peer] = [tab(base), tab(base)];
+        const removed = tabEdit(writer, (ctx) => deleteRowCol(ctx, deleted), { deleteRowColOp: deleted });
+        tabReceive(peer, removed);
+        const left = peer.ctx.sheets[0].frozen;
+        const undone = tabUndo(writer);
+        tabReceive(peer, undone);
+        for (const sheet of [writer.ctx.sheets[0], peer.ctx.sheets[0], join(base, [removed, undone])[0]]) {
+            expect(sheet.frozen).toEqual(frozen);
+        }
+        const redone = tabRedo(writer);
+        tabReceive(peer, redone);
+        for (const sheet of [writer.ctx.sheets[0], peer.ctx.sheets[0], join(base, [removed, undone, redone])[0]]) {
+            expect(sheet.frozen).toEqual(left);
+        }
+    });
+});
+
 // The op ships none of its sheet's other fields, so what the log puts before it stays as the peer left it.
 describe("a row or column op after a peer's edit of the sheet", () => {
     const rows = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: 'id_1' } as const;
@@ -514,10 +593,9 @@ describe("a row or column op after a peer's edit of the sheet", () => {
     ] as const;
 
     test.each(ops)("%s keeps the peer's rename", (_, options) => {
-        const rename = (ctx: Context) => {
-            ctx.sheets[0].name = 'Renamed';
-        };
-        for (const sheet of race(rename, options)) expect(sheet.name).toBe('Renamed');
+        const rename = (ctx: Context) => renameSheet(ctx, { id: 'id_1', name: 'Renamed' });
+        const renamed = race(rename, options, richContext(), { renameSheetOp: { id: 'id_1' } });
+        for (const sheet of renamed) expect(sheet.name).toBe('Renamed');
     });
 
     // A sheet with a colour already, so a batch that wrote its fields whole would overwrite the peer's.
@@ -542,8 +620,8 @@ describe("a row or column op after a peer's edit of the sheet", () => {
     });
 
     test.each(ops)("%s moves the peer's new link", (_, options, links) => {
-        const link = (ctx: Context) => saveHyperlink(ctx, 3, 1, 'peer', PEER_LINK.linkType, PEER_LINK.linkAddress);
-        for (const sheet of race(link, options)) expect(sheet.hyperlink).toEqual(links);
+        const link = (ctx: Context) => saveHyperlink(ctx, 3, 1, 'peer', PEER_LINK.type, PEER_LINK.address);
+        for (const sheet of race(link, options)) expect(cellLinks(sheet)).toEqual(links);
     });
 });
 
@@ -644,4 +722,139 @@ test('a row insert on Data moves =Data!A1 and leaves =data!A1 alone', () => {
         expect(data.data?.[1]?.[1]?.f).toBe('=Data!A2+data!A1');
         expect(other.data?.[0]?.[1]?.f).toBe('=Data!A2+data!A1');
     }
+});
+
+// An undo sends the row op a peer would, so it lands the selection by the same rule, on the tab and on its peer.
+describe('undo and redo of a row op land the selection', () => {
+    const rowOf = ({ ctx }: { ctx: Context }) => ctx.selections?.[0].row;
+    const selected = (r: number) =>
+        produce(richContext(), (draft: Context) => {
+            draft.currentSheetId = 'id_1';
+            draft.selections = [{ row: [r, r], column: [1, 1], row_focus: r, column_focus: 1 }];
+        });
+    const inserted = (index: number, direction: 'lefttop' | 'rightbottom') =>
+        ({ type: 'row', index, count: 1, direction, id: 'id_1' }) as const;
+
+    test('the undo of my insert stays on its row, and the redo keeps the cell it found', () => {
+        const base = selected(1);
+        const [mine, peer] = [tab(base), tab(base)];
+        const op = inserted(2, 'lefttop');
+        tabReceive(
+            peer,
+            tabEdit(mine, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op }),
+        );
+        expect(rowOf(mine)).toEqual([2, 2]);
+        tabReceive(peer, tabUndo(mine));
+        expect(rowOf(mine)).toEqual([2, 2]);
+        expect(mine.ctx.selections?.[0].column).toEqual([0, 3]);
+        tabReceive(peer, tabRedo(mine));
+        expect(rowOf(mine)).toEqual([3, 3]);
+        expect(rowOf(peer)).toEqual([1, 1]);
+    });
+
+    test('the undo of my insert below the last row clamps to the grid', () => {
+        const mine = tab(selected(3));
+        const op = inserted(3, 'rightbottom');
+        tabEdit(mine, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+        expect(rowOf(mine)).toEqual([4, 4]);
+        tabUndo(mine);
+        expect(rowOf(mine)).toEqual([3, 3]);
+    });
+
+    test('a peer on the row my undo takes lands too', () => {
+        const base = selected(0);
+        const [mine, peer] = [tab(base), tab(base)];
+        const op = inserted(2, 'lefttop');
+        tabReceive(
+            peer,
+            tabEdit(mine, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op }),
+        );
+        peer.ctx = produce(peer.ctx, (draft: Context) => {
+            draft.selections = [{ row: [2, 2], column: [1, 1], row_focus: 2, column_focus: 1 }];
+        });
+        tabReceive(peer, tabUndo(mine));
+        expect(rowOf(peer)).toEqual([2, 2]);
+    });
+
+    test('delete, undo, a click on the restored row and redo keep a selection', () => {
+        const mine = tab(selected(1));
+        const op = { type: 'row', start: 1, end: 1, id: 'id_1' } as const;
+        tabEdit(mine, (ctx) => deleteRowCol(ctx, op), { deleteRowColOp: op });
+        expect(rowOf(mine)).toEqual([1, 1]);
+        tabUndo(mine);
+        mine.ctx = produce(mine.ctx, (draft: Context) => {
+            draft.selections = [{ row: [1, 1], column: [1, 1], row_focus: 1, column_focus: 1 }];
+        });
+        tabRedo(mine);
+        expect(rowOf(mine)).toEqual([1, 1]);
+    });
+
+    test('my own delete with the cell editor open on a row below moves the editor with its cell', () => {
+        const base = produce(selected(3), (draft: Context) => {
+            draft.editingCellPosition = [3, 1];
+        });
+        const mine = tab(base);
+        const op = { type: 'row', start: 1, end: 1, id: 'id_1' } as const;
+        tabEdit(mine, (ctx) => deleteRowCol(ctx, op), { deleteRowColOp: op });
+        expect(mine.ctx.editingCellPosition).toEqual([2, 1]);
+        expect(rowOf(mine)).toEqual([2, 2]);
+    });
+
+    test('my own insert above the open cell editor moves the editor with its cell', () => {
+        const base = produce(selected(3), (draft: Context) => {
+            draft.editingCellPosition = [3, 1];
+        });
+        const mine = tab(base);
+        const op = inserted(1, 'lefttop');
+        tabEdit(mine, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+        expect(mine.ctx.editingCellPosition).toEqual([4, 1]);
+        expect(rowOf(mine)).toEqual([1, 1]);
+    });
+
+    test('my own insert below the open cell editor leaves it, and a column insert left of it moves it', () => {
+        const base = produce(selected(1), (draft: Context) => {
+            draft.editingCellPosition = [1, 1];
+        });
+        const below = tab(base);
+        const row = inserted(2, 'lefttop');
+        tabEdit(below, (ctx) => insertRowCol(ctx, row), { insertRowColOp: row });
+        expect(below.ctx.editingCellPosition).toEqual([1, 1]);
+        const left = tab(base);
+        const column = { type: 'column', index: 0, count: 1, direction: 'lefttop', id: 'id_1' } as const;
+        tabEdit(left, (ctx) => insertRowCol(ctx, column), { insertRowColOp: column });
+        expect(left.ctx.editingCellPosition).toEqual([1, 2]);
+    });
+
+    // The fixture's D4 is covered by the merge at C4:D4.
+    test('my own delete that lands on a covered cell takes the merge head', () => {
+        const mine = tab(
+            produce(selected(2), (draft: Context) => {
+                draft.selections = [{ row: [2, 2], column: [3, 3], row_focus: 2, column_focus: 3 }];
+            }),
+        );
+        const op = { type: 'row', start: 2, end: 2, id: 'id_1' } as const;
+        tabEdit(mine, (ctx) => deleteRowCol(ctx, op), { deleteRowColOp: op });
+        expect(mine.ctx.selections?.[0]).toMatchObject({
+            row: [2, 2],
+            column: [2, 3],
+            row_focus: 2,
+            column_focus: 2,
+        });
+    });
+
+    test('the undo of my insert that lands on a covered cell takes the merge head', () => {
+        const mine = tab(selected(1));
+        const op = inserted(3, 'lefttop');
+        tabEdit(mine, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+        mine.ctx = produce(mine.ctx, (draft: Context) => {
+            draft.selections = [{ row: [3, 3], column: [3, 3], row_focus: 3, column_focus: 3 }];
+        });
+        tabUndo(mine);
+        expect(mine.ctx.selections?.[0]).toMatchObject({
+            row: [3, 3],
+            column: [2, 3],
+            row_focus: 3,
+            column_focus: 2,
+        });
+    });
 });

@@ -1,6 +1,7 @@
-// A cell's value as text: what the grid shows, how General aligns it, and the type and format that typed input
-// infers, such as "25%" read as 0.25 in a percent format. Its callers include the grid, recalc and the xlsx
-// import. The number format itself is lib's numberDisplay, which a chart's ticks share, passed on from here.
+// A cell's value as text: what the grid shows, how General aligns it, the type and format that typed input infers,
+// such as "25%" read as 0.25 in a percent format, and the type and display a formula's result writes. Its callers
+// include the grid, recalc and the xlsx import. The number format itself is lib's numberDisplay, which a chart's ticks
+// share, passed on from here.
 
 import { numberDisplay } from '@workspace/lib/charts';
 import numeral from 'numeral';
@@ -14,8 +15,9 @@ export function booleanDisplay(value: boolean): string {
     return value ? 'TRUE' : 'FALSE';
 }
 
-// Excel's General alignment, for a cell without its own, as the editor and the HTML export draw it: numbers and dates right, booleans and errors centred, text
-// left. A snapshot may hold an error with a text type, as the xlsx import once stored one, so its value decides too.
+// Excel's General alignment, for a cell without its own, as the editor and the HTML export draw it: numbers and dates
+// right, booleans and errors centred, text left. A snapshot may hold an error with a text type, as the xlsx import once
+// stored one, so its value decides too.
 export function generalAlign(cell: Cell | null | undefined): '0' | '1' | '2' {
     const value = cell?.v;
     if (typeof value === 'number') return '2';
@@ -44,11 +46,35 @@ export function valueText(value: FormulaArg | Date): string {
 
 // The value type a formula's result gives its cell, in the format a person chose. A number in a date format is a date,
 // and a text format holds every result but an error as text.
-export function formulaResultType(fa: CellType['fa'], value: Cell['v']): CellType['t'] {
+function formulaResultType(fa: CellType['fa'], value: Cell['v']): CellType['t'] {
     if (typeof value === 'string' && valueIsError(value)) return 'e';
     if (fa === '@') return 's';
     if (typeof value === 'number') return fa != null && is_date(fa) ? 'd' : 'n';
     return typeof value === 'boolean' ? 'b' : 'g';
+}
+
+// A formula's result takes the value's type and shows in the cell's format, which outlives it. Text stays text however
+// it reads (=TEXT(5,"000") is "005"), and a blank result leaves no value for JSON to turn into another shape.
+export function writeFormulaResult(cell: Cell, value: Cell['v']) {
+    const ct = (cell.ct ??= { fa: 'General' });
+    ct.t = formulaResultType(ct.fa, value);
+    if (value == null) {
+        delete cell.v;
+        delete cell.m;
+        return;
+    }
+    cell.v = value;
+    if (typeof value === 'number') cell.m = numberDisplay(value, ct.fa);
+    else if (typeof value === 'boolean') cell.m = booleanDisplay(value);
+    else cell.m = String(value);
+}
+
+// The cell already holds what writeFormulaResult writes for the value: its value, type and display, so a recompute
+// that lands on it writes nothing.
+export function holdsFormulaResult(cell: Cell, value: Cell['v']): boolean {
+    const written: Cell = { ...cell, ct: cell.ct && { ...cell.ct } };
+    writeFormulaResult(written, value);
+    return written.v === cell.v && written.m === cell.m && written.ct?.t === cell.ct?.t;
 }
 
 // Wrap breaks text only; the value decides too, since a formula typed into a text cell keeps its ct.t.

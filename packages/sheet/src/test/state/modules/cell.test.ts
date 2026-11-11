@@ -125,6 +125,13 @@ describe('state/modules/cell — getCellValue / getFormulaHtml', () => {
         expect(getCellValue(0, 1, data, 'f')).toBeNull();
     });
 
+    test("getCellValue(…, 'f') on a date cell is its formula, and 'v' and 'm' its date", () => {
+        const dated = [[{ f: '=DATE(2026,1,4)', v: 46026, m: '04/01/2026', ct: { fa: 'dd/MM/yyyy', t: 'd' } }]];
+        expect(getCellValue(0, 0, dated, 'f')).toBe('=DATE(2026,1,4)');
+        expect(getCellValue(0, 0, dated)).toBe('04/01/2026');
+        expect(getCellValue(0, 0, dated, 'm')).toBe('04/01/2026');
+    });
+
     test('getFormulaHtml renders the formula as coloured spans', () => {
         const html = getFormulaHtml(0, 0, data);
         expect(html).toStartWith('<span');
@@ -323,6 +330,14 @@ describe('state/modules/cell — setCellValue formula results', () => {
             v: '2024-05-06',
             m: '2024-05-06',
         });
+    });
+
+    test('an empty-text result is stored, and a blank one holds no value and no type its last one left', () => {
+        expect(computed('')).toMatchObject({ v: '', m: '', ct: { fa: 'General', t: 'g' } });
+        const ctx = contextFactory({}) as Context;
+        const data: CellMatrix = [[{ f: '=X', v: '#N/A', m: '#N/A', ct: { fa: 'General', t: 'e' } }]];
+        setCellValue(ctx, 0, 0, data, { f: '=X' });
+        expect(data[0][0]).toEqual({ f: '=X', ct: { fa: 'General', t: 'g' } });
     });
 
     test('a number result stays a number in the cell format', () => {

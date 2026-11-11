@@ -78,6 +78,9 @@ export function buildGoldenSheets(): Sheet[] {
     // Style + rotation coverage on fixed cells.
     data[2][7] = { ...textCell('styled'), bl: 1, it: 1, fc: '#7a1f1f', bg: '#fff4cc' };
     data[3][7] = { ...textCell('tilted'), rt: 45 };
+    // One link the export keeps and one it blocks.
+    data[1][0] = { ...textCell('Region 1'), link: { type: 'webpage', address: 'https://example.com/report' } };
+    data[2][0] = { ...textCell('Region 2'), link: { type: 'webpage', address: 'javascript:alert(1)' } };
 
     const sheet1: Sheet = {
         id: 'sheet-1',
@@ -113,10 +116,6 @@ export function buildGoldenSheets(): Sheet[] {
                 conditionValue: ['=Data!A1>10'],
             },
         ],
-        hyperlink: {
-            '1_0': { linkType: 'webpage', linkAddress: 'https://example.com/report' },
-            '2_0': { linkType: 'webpage', linkAddress: 'javascript:alert(1)' },
-        },
     };
 
     const sheet2: Sheet = {

@@ -86,7 +86,7 @@ describe('an imported rich-text cell', () => {
         const xlsx = xlsxFixture({
             sheets: [
                 {
-                    data: '<row r="1"><c r="A1" t="inlineStr"><is><r><rPr><b/></rPr><t>Rich</t></r><r><t> text</t></r></is></c><c r="B1" t="str"><f>A1&amp;"!"</f><v>stale</v></c></row>',
+                    data: '<row r="1"><c r="A1" t="inlineStr"><is><r><rPr><b/></rPr><t>Rich</t></r><r><t> text</t></r></is></c><c r="B1" t="str"><f>A1&amp;"!"</f></c></row>',
                 },
             ],
         });

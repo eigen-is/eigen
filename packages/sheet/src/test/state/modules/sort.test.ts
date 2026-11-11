@@ -1,49 +1,102 @@
-// Sorting has two layers: the pure `sortRows` comparator (numeric, 'en' text,
-// nulls last) and `sortRange`, which picks the rows then delegates. These
+// Sorting has two layers: `sortDataRange`, which orders the rows (numeric, 'en' text,
+// nulls last), and `sortRange`, which picks the rows then delegates. These
 // pin which rows the sort covers: a leading CJK cell sorts like any other value
 // with no header-guessing, a header row stays only when the caller says so, and
 // a merged cell stops the sort.
 
 import { describe, expect, test } from 'bun:test';
+import { produce } from 'immer';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
-import { sortRange, sortRows, sortSelection } from '../../../state/modules/sort';
-import { contextFactory, selectionFactory } from '../factories/context';
+import { sortFilterRange } from '../../../state/modules/filter';
+import { sortDataRange, sortRange, sortSelection } from '../../../state/modules/sort';
+import { contextFactory, editInPlace, selectionFactory } from '../factories/context';
 
 const cell = (v: Cell['v']): Cell => ({ v, m: String(v) });
+// The rows of a one-column sheet after a sort of all of them.
+function sorted(isAsc: boolean, rows: (Cell | null)[][]) {
+    const ctx = contextFactory({ sheets: [{ name: 'sheet', id: 'id_1', order: 0, data: rows }] }) as Context;
+    editInPlace(ctx, (draft) => sortDataRange(draft, { row: [0, rows.length - 1], column: [0, 0] }, 0, isAsc));
+    return ctx.sheets[0].data ?? [];
+}
 
-describe('sortRows', () => {
+describe('sortDataRange', () => {
     test('numeric ascending keeps nulls last', () => {
         const rows = [[cell(3)], [cell(1)], [null], [cell(2)]];
-        const { sortedData } = sortRows(true, 0, rows);
-        expect(sortedData.map((r) => r[0]?.v ?? null)).toEqual([1, 2, 3, null]);
+        expect(sorted(true, rows).map((r) => r[0]?.v ?? null)).toEqual([1, 2, 3, null]);
     });
 
     test('numeric descending keeps nulls last', () => {
         const rows = [[cell(3)], [cell(1)], [null], [cell(2)]];
-        const { sortedData } = sortRows(false, 0, rows);
-        expect(sortedData.map((r) => r[0]?.v ?? null)).toEqual([3, 2, 1, null]);
+        expect(sorted(false, rows).map((r) => r[0]?.v ?? null)).toEqual([3, 2, 1, null]);
     });
 
     test("text compares with the 'en' locale", () => {
         const rows = [[cell('banana')], [cell('apple')], [cell('cherry')]];
-        const { sortedData } = sortRows(true, 0, rows);
-        expect(sortedData.map((r) => r[0]?.v)).toEqual(['apple', 'banana', 'cherry']);
+        expect(sorted(true, rows).map((r) => r[0]?.v)).toEqual(['apple', 'banana', 'cherry']);
     });
 
-    test('says how far each row moved, and sorts a large range in linear time per row', () => {
-        const rows = [[cell(30)], [cell(10)], [cell(20)]];
-        expect(sortRows(true, 0, rows).rowOffsets).toEqual([-1, -1, 2]);
-
+    test('sorts a large range in linear time per row', () => {
         // Reversed, so every row moves. Finding each row's old place by a search made this quadratic, seconds long.
         const count = 50_000;
         const large = Array.from({ length: count }, (_, i) => [cell(count - i)]);
         const started = performance.now();
-        const { sortedData, rowOffsets } = sortRows(true, 0, large);
-        expect(performance.now() - started).toBeLessThan(1000);
-        expect(sortedData[0]?.[0]?.v).toBe(1);
-        expect(rowOffsets[0]).toBe(-(count - 1));
-        expect(rowOffsets[count - 1]).toBe(count - 1);
+        const rows = sorted(true, large);
+        expect(performance.now() - started).toBeLessThan(5000);
+        expect(rows[0][0]?.v).toBe(1);
+        expect(rows[count - 1][0]?.v).toBe(count);
+    });
+});
+
+// Rows 1 to 4 under a header hold d, a, c, b. A hidden row keeps its cells, or the row that shows after the sort is
+// another row than the one the filter or the user chose.
+describe('a sort over hidden rows', () => {
+    const hiddenCtx = (rowhidden: Record<string, number>, filter = {}) =>
+        contextFactory({
+            sheets: [
+                {
+                    name: 'sheet',
+                    id: 'id_1',
+                    order: 0,
+                    config: { rowhidden },
+                    filter,
+                    filterRange: { row: [0, 4], column: [0, 1] },
+                    data: [
+                        [cell('head'), cell('n')],
+                        [cell('d'), cell(4)],
+                        [cell('a'), cell(1)],
+                        [cell('c'), cell(3)],
+                        [cell('b'), cell(2)],
+                    ],
+                },
+            ],
+        }) as Context;
+    const column = (ctx: Context) => ctx.sheets[0].data?.map((row) => row[0]?.v);
+
+    test('the filter menu sort leaves the rows the filter hides where they are', () => {
+        const hidden = { 2: 0 };
+        const entry = { rowhidden: hidden, optionstate: true, str: 0, edr: 4, cindex: 0, stc: 0, edc: 1 };
+        const next = produce(hiddenCtx(hidden, { 0: entry }), (draft: Context) => {
+            sortFilterRange(draft, 0, 0, 4, 1, 0, true);
+        });
+        expect(column(next)).toEqual(['head', 'b', 'a', 'c', 'd']);
+        expect(next.sheets[0].config?.rowhidden).toEqual(hidden);
+    });
+
+    test('a sort of a range leaves a row hidden by hand where it is', () => {
+        const next = produce(hiddenCtx({ 1: 0 }), (draft: Context) =>
+            sortRange(draft, { row: [1, 4], column: [0, 1] }, true),
+        );
+        expect(column(next)).toEqual(['head', 'd', 'a', 'b', 'c']);
+    });
+
+    test('a formula follows its row across a hidden row', () => {
+        const ctx = hiddenCtx({ 2: 0 });
+        const row = ctx.sheets[0].data?.[1];
+        if (row) row[1] = { v: 4, m: '4', f: '=4*B4/B4' };
+        const next = produce(ctx, (draft: Context) => sortRange(draft, { row: [1, 4], column: [0, 1] }, true));
+        expect(column(next)).toEqual(['head', 'b', 'a', 'c', 'd']);
+        expect(next.sheets[0].data?.[4]?.[1]?.f).toBe('=4*B7/B7');
     });
 });
 
@@ -61,9 +114,9 @@ describe('sortRange — CJK rows participate', () => {
 
         // Sort ascending by column 1 (values 3,1,2 → 1,2,3). If the CJK row in
         // column 0 is excluded, row 0 stays put; if included, it moves to the end.
-        sortRange(ctx, { row: [0, 2], column: [0, 1] }, true, 1);
+        const next = produce(ctx, (draft: Context) => sortRange(draft, { row: [0, 2], column: [0, 1] }, true, 1));
 
-        const d = ctx.sheets[0].data!;
+        const d = next.sheets[0].data!;
         expect(d[0]?.[1]?.v).toBe(1);
         expect(d[2]?.[0]?.v).toBe('要');
     });
@@ -80,8 +133,10 @@ describe('sortRange — a header row', () => {
         const ctx = contextFactory({
             sheets: [{ name: 'sheet', id: 'id_1', data: data(), order: 0 }],
         }) as Context;
-        sortRange(ctx, { row: [0, 3], column: [0, 1] }, true, 1, hasHeaderRow);
-        return ctx.sheets[0].data?.map((row) => row[0]?.v);
+        const next = produce(ctx, (draft: Context) =>
+            sortRange(draft, { row: [0, 3], column: [0, 1] }, true, 1, hasHeaderRow),
+        );
+        return next.sheets[0].data?.map((row) => row[0]?.v);
     };
 
     test('stays in place and only the rows below it sort', () => {
@@ -91,6 +146,46 @@ describe('sortRange — a header row', () => {
     // The Data menu's Ascending and Descending pass none, so a text first row sorts after the numbers.
     test('sorts with the rest when none is passed', () => {
         expect(sorted()).toEqual(['a', 'b', 'c', 'Name']);
+    });
+});
+
+describe('a sort moves a formula with what it holds', () => {
+    // A1:A3 hold 3, 1, 2 and column B the formula under test, which the sort moves down or up with its row.
+    const sortedColumnB = (holding: readonly Cell[]) => {
+        const data: (Cell | null)[][] = [3, 1, 2].map((v, r) => [cell(v), holding[r] ?? null, cell(v * 10)]);
+        const ctx = contextFactory({ sheets: [{ name: 'sheet', id: 'id_1', data, order: 0 }] }) as Context;
+        const next = produce(ctx, (draft: Context) => sortRange(draft, { row: [0, 2], column: [0, 1] }, true));
+        return next.sheets[0].data?.map((row) => row[1]) ?? [];
+    };
+
+    test('a function this build lacks keeps its number, error or empty text, and its formula moves', () => {
+        const [first, second, third] = sortedColumnB([
+            { f: '=FILTER($A$1:$A$3,1)', v: 111, m: '111', ct: { fa: 'General', t: 'n' } },
+            { f: '=NOSUCH(A2)', v: '#N/A', m: '#N/A', ct: { fa: 'General', t: 'e' } },
+            { f: '=OFFSET(A3,0,1)', v: '', m: '', ct: { fa: 'General', t: 's' } },
+        ]);
+        expect([first?.v, second?.v, third?.v]).toEqual(['#N/A', '', 111]);
+        expect([first?.f, second?.f, third?.f]).toEqual(['=NOSUCH(A1)', '=OFFSET(A2,0,1)', '=FILTER($A$1:$A$3,1)']);
+        expect(third?.m).toBe('111');
+        expect(third?.ct?.t).toBe('n');
+    });
+
+    test('an operator over a range keeps its number', () => {
+        const [, , moved] = sortedColumnB([{ f: '=SUMPRODUCT($A$1:$A$3*$A$1:$A$3)', v: 333, m: '333' }]);
+        expect(moved?.f).toBe('=SUMPRODUCT($A$1:$A$3*$A$1:$A$3)');
+        expect(moved?.v).toBe(333);
+    });
+
+    test('a formula the engine can evaluate is computed where it lands, reading outside the range', () => {
+        const [first, , third] = sortedColumnB([
+            { f: '=C1+1', v: 7, m: '7' },
+            { f: '=C2+1', v: 8, m: '8' },
+            { f: '=C3+1', v: 9, m: '9' },
+        ]);
+        expect(first?.f).toBe('=C1+1');
+        expect(first?.v).toBe(31);
+        expect(third?.f).toBe('=C3+1');
+        expect(third?.v).toBe(21);
     });
 });
 

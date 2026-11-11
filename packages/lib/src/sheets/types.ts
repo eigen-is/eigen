@@ -37,13 +37,21 @@ export type Cell = CellStyle & {
     ct?: CellType;
     qp?: number;
     bg?: string;
-    // Text rotation: signed degrees in [-90, 90] (positive = counter-clockwise / "up",
-    // negative = clockwise / "down"), or 'vertical' for stacked top-to-bottom characters.
-    // Matches Excel/OOXML's textRotation. Undefined or 0 = no rotation.
+    // Signed degrees in [-90, 90], positive counter-clockwise, or 'vertical' for stacked characters, as Excel's
+    // textRotation.
     rt?: number | 'vertical';
-    hl?: { r: number; c: number; id: string };
+    link?: CellLink;
     commentCardIds?: string[];
 };
+
+// A link belongs to its cell, so whatever moves the cell moves it.
+export type CellLink = { type: CellLinkType; address: string };
+
+export type CellLinkType = 'webpage' | 'cellrange' | 'sheet';
+
+export function isCellLinkType(value: unknown): value is CellLinkType {
+    return value === 'webpage' || value === 'cellrange' || value === 'sheet';
+}
 
 export type CellMatrix = (Cell | null)[][];
 
@@ -53,9 +61,8 @@ export type CellWithRowAndCol = {
     v: Cell | null;
 };
 
-// One edit to a workbook, made by the editor from immer's patches and replayed by the editor and the API.
-// `value` stays `any` because the editor passes a cell, a sheet or a row or column op through it, with no field that
-// says which.
+// One edit to a workbook, made by the editor from immer's patches and replayed by every reader. `value` stays `any`
+// because it carries a cell, a sheet or a row or column op, with no field that says which.
 export type Op = {
     op: 'replace' | 'remove' | 'add' | 'insertRowCol' | 'deleteRowCol' | 'addSheet' | 'deleteSheet' | 'renameSheet';
     id?: string;
@@ -64,17 +71,25 @@ export type Op = {
     value?: any;
 };
 
+// A batch with a row or column op, or a sheet's add, delete or rename. Such an op ships no values, so every reader's
+// replay rewrites the formulas it moves or renames and recomputes what it can affect, which a cell edit never costs.
+export function isStructuralBatch(batch: readonly Op[]): boolean {
+    return batch.some((op) => !isPatchOp(op));
+}
+
+// A cell or field write, which every reader applies as an immer patch. A row, column or sheet op runs its own code.
+export function isPatchOp(op: Op): op is Op & { op: 'add' | 'remove' | 'replace' } {
+    return op.op === 'add' || op.op === 'remove' || op.op === 'replace';
+}
+
 // Single rectangular range in row/column coordinates. Used both as a CF rule's
 // `cellrange` element and as the engine's range descriptor.
 export type SingleRange = { row: number[]; column: number[] };
 export type Range = SingleRange[];
 
 export type BorderSide = { style: number; color: string };
-// One cell's own borders, keyed `${row}_${col}` in `SheetConfig.borderInfo` like
-// `merge`. A border belongs to the cell it was drawn on — nothing is mirrored onto
-// the neighbor across the shared edge — and a side that is absent has no border.
-// `s` is the editor's diagonal slash (painted top-left → bottom-right); it round-trips to
-// xlsx's diagonalDown border.
+// A border belongs to the cell it was drawn on and is never mirrored onto the neighbor across the edge. `s` is the
+// diagonal slash from top left to bottom right, xlsx's diagonalDown.
 export type CellBorderSides = {
     l?: BorderSide;
     r?: BorderSide;
@@ -115,9 +130,8 @@ export type BorderStyleName =
 
 export type MergeCell = { r: number; c: number; rs: number; cs: number };
 
-// An image or a chart floating over a sheet: unzoomed grid pixels from A1's top-left, rotated about its center by
-// `angle` degrees clockwise, absent reading as 0. `index` orders images and charts together for painting, a
-// fractional key with ties broken by id (floatingItems).
+// Unzoomed grid pixels from A1's top-left, rotated about the center by `angle` degrees clockwise. `index` is a
+// fractional key that orders images and charts together for painting, ties broken by id.
 export type SheetFloatingObject = {
     id: string;
     index: string;
@@ -132,27 +146,12 @@ export type SheetFloatingObject = {
 // render time.
 export type SheetImage = SheetFloatingObject & { mediaName: string };
 
-// The spec is stored a field per part, a keyed part a record of an entry's JSON per key, read only through readChartSpec
-// (@workspace/lib/charts); its range refs name sheets by id. The look is a canvas chart's own fields, each written apart
-// and read through readChartLook, flat where unset.
+// The spec is stored a field per part and read only through readChartSpec, its range refs naming sheets by id. The
+// look is a canvas chart's own fields, each written apart and read through readChartLook.
 export type SheetChart = SheetFloatingObject & Partial<ChartLook> & SheetChartSpecParts;
 
-// A data-validation rule, such as a list or a number check. A sheet holds each one with the ranges it covers
-// (SheetValidation). The editor writes it, and the canvas painter reads it for the list chevron and the tick box.
-//
-// `value1` is a string whatever the type: the list's items, comma-separated, or a range, for a dropdown, a number for
-// the number and text-length checks, the checked value for a tick box and a YYYY-MM-DD date for a date check.
-// `value2` holds the upper bound of a between or not-between check, and a tick box's unchecked value. A tick box
-// stores no checked flag: the cell's value says whether it is checked (isCheckboxChecked). `hintShow` and `hintValue`
-// make the prompt a selected cell shows, and `prohibitInput` refuses a value that fails the check (updateCell).
-//
-// `type` and `type2` are `string` rather than a narrow union: the `DataValidation` dialog assigns them from Radix
-// Select's `onValueChange(value: string)`, and a union would need narrowing at every callback. Known values:
-// type  ∈ dropdown | checkbox | number | number_integer | number_decimal |
-//         text_content | text_length | date
-// type2 ∈ between | notBetween | equal | notEqualTo | moreThanThe | lessThan |
-//         greaterOrEqualTo | lessThanOrEqualTo | include | exclude |
-//         earlierThan | noEarlierThan | laterThan | noLaterThan | true | ''
+// A data-validation rule, such as a list or a number check, which a sheet holds over its ranges. `type` and `type2` are
+// plain strings because the dialog sets them from a Select's string value.
 export type DataValidationRule = {
     type: string;
     type2: string;
@@ -218,7 +217,7 @@ export type Sheet = {
     order?: number;
     // 1 hides the tab (View > Hidden sheets shows it again); the editor opens on a sheet it shows.
     hide?: number;
-    // The tab's colour, a CSS colour.
+    // The tab's color, a CSS color.
     color?: string;
     // The CSS pixels of a column or row with no stored size, read through sheetDefaultColWidth/RowHeight.
     defaultColWidth?: number;
@@ -237,16 +236,11 @@ export type Sheet = {
         range?: { row_focus: number; column_focus: number };
     };
     // The autofilter's range, whose header row shows the filter buttons. Each column's criteria live on the
-    // editor-only `filter` field. A filter without criteria, which a fresh enable and the xlsx importer write, is
-    // only this range.
+    // editor-only `filter` field.
     filterRange?: SingleRange;
     // The data-validation rules by id, each over its ranges. Materialized like the config collections, so a new rule
     // or a changed one is written under its own id and two peers editing different rules don't overwrite each other.
     dataValidations?: Record<string, SheetValidation>;
-    // Hyperlinks keyed "r_c" (0-based). The editor's `saveHyperlink` and the xlsx importer write them, and the link
-    // card and `goToLink` read them. The linked cell carries the `hl` backref. `linkType` is webpage, sheet or
-    // cellrange.
-    hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
     // Floating images and charts by id. Materialized like the config collections, because each object is
     // written as its own key and a first write to a missing map would ship the whole map.
     images?: Record<string, SheetImage>;

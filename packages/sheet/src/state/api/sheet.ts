@@ -1,24 +1,25 @@
-// The sheet calls on the workbook's context, such as hiding, copying or ordering a sheet. Most of them write the
-// context they are given, so a caller runs them inside an edit's recipe.
+// The sheet calls on the workbook's context, such as hiding, copying or ordering a sheet from its tab. Each writes the
+// context it is given, so a caller runs it inside an edit's recipe.
 
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { cloneDeep, sortBy } from 'es-toolkit/compat';
 import { mapChartRefs } from '../../engine/chart-data';
 import { copySheetName } from '../../engine/sheet-name';
 import type { Context } from '../context';
-import { addSheet, leaveCurrentSheet } from '../modules';
+import { addSheet, lastShownSheetRefusal, settleCurrentSheet } from '../modules';
 import { getSheetIndex, sheetOrder } from '../utils';
-
-export function getAllSheets(ctx: Context) {
-    return ctx.sheets;
-}
 
 export function hideSheet(ctx: Context, sheetId: string) {
     if (ctx.allowEdit === false) return;
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return;
-    if (sheetId === ctx.currentSheetId && !leaveCurrentSheet(ctx, sheetId)) return;
+    const refusal = lastShownSheetRefusal(ctx, sheetId, 'hide');
+    if (refusal) {
+        ctx.warnDialog = refusal;
+        return;
+    }
     ctx.sheets[index].hide = 1;
+    settleCurrentSheet(ctx);
 }
 
 export function showSheet(ctx: Context, sheetId: string) {
@@ -32,12 +33,13 @@ export function copySheet(ctx: Context, sheetId: string) {
     if (ctx.allowEdit === false) return;
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return;
-    const order = sheetOrder(ctx.sheets[index]) + 1;
+    const source = ctx.sheets[index];
+    const order = sheetOrder(source) + 1;
     const sheetName = copySheetName(
-        ctx.sheets[index].name,
+        source.name,
         ctx.sheets.map((sheet) => sheet.name),
     );
-    const sheetData = cloneDeep(ctx.sheets[index]);
+    const sheetData = cloneDeep(source);
     const copyId = crypto.randomUUID();
     sheetData.id = copyId;
     // A copy starts without comments, as a duplicated canvas element does: a card stays on the cells it was put on.
@@ -57,9 +59,6 @@ export function copySheet(ctx: Context, sheetId: string) {
     );
     addSheet(ctx, copyId, sheetName, sheetData);
     setSheetOrder(ctx, { [copyId]: order });
-    // A formula map built before the copy, such as while the browser was idle after a load, lacks the copy's formulas.
-    // A peer's add reads them into the map once its batch applied; here the next edit builds the map again.
-    ctx.formulaCache.formulaCellInfoMap = null;
 }
 
 // Sets the given sheets' orders and renumbers every sheet from 0, so the tab strip and the sheet list agree.

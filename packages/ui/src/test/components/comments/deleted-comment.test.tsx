@@ -168,14 +168,13 @@ test('the pane card of a re-anchored comment whose thread was swept shows the de
             cards: { [card.id]: card },
             entries: [entry],
             activeCardIds: new Set([card.id]),
-            anchorTexts: new Map([[card.id, 'Hello']]),
             isCardDeleted: () => true,
             pathId: 'doc-1',
             currentUserEmail: 'ada@example.com',
             filter,
         }),
     ));
-    expect(text()).toContain('Hello');
+    expect(text()).toContain('Check this');
     expect(text()).toContain('This comment was deleted');
     expect(text()).not.toContain('3 replies');
     expect(text()).not.toContain('The second paragraph');

@@ -92,7 +92,7 @@ export function cloneSides({ l, r, t, b, s }: CellBorderSides): CellBorderSides 
     };
 }
 
-// The "r_c" key every cell-keyed map shares, such as the merges, the borders and the hyperlinks.
+// The "r_c" key every cell-keyed map shares, such as the merges and the borders.
 export function parseCellKey(key: string): [row: number, col: number] {
     const sep = key.indexOf('_');
     return [Number(key.substring(0, sep)), Number(key.substring(sep + 1))];

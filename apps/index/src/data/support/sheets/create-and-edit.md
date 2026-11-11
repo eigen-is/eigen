@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, spreadsheet, create, edit, cells, data]
 related: [sheets/get-started, sheets/enter-and-edit-data]
 order: 20
-updated: 2026-11-08
+updated: 2026-11-09
 ---
 
 You can create a spreadsheet directly in Drive or from inside Sheets, then enter data and edit it using the toolbar menus and keyboard shortcuts.
@@ -59,9 +59,9 @@ Use the standard keyboard shortcuts:
 
 You can also use **Edit → Copy**, **Edit → Cut**, and **Edit → Paste** from the menu bar. If your browser doesn't let a menu read the clipboard, **Paste** shows a notice that says to press **Ctrl+V** (Mac: **⌘V**) instead.
 
-A copy takes hidden rows and columns along, as in Excel. The one exception is a filter: a copy leaves out the rows a filter hides, and a cut moves them too. The rows and columns you paste over stay hidden or shown as they were.
+A copy takes hidden rows and columns along, as in Excel. The one exception is a filter: a copy leaves out the rows a filter hides. A cut or a drag can't leave them behind, so over such rows it moves nothing and a notice says to clear the filter first. A copy of a merged cell that a filter partly hides shows a notice too. The rows and columns you paste over stay hidden or shown as they were.
 
-When you paste in the same browser tab, the pasted cells bring their dropdowns, other data validation, and links. They replace the ones on the cells they land on, so a copied cell without a link or a rule removes the destination's. If you edit the copied cells before you paste, the paste brings them as they are now.
+When you paste in the same browser tab, the pasted cells bring their dropdowns, other data validation, conditional formatting, and links. They replace the ones on the cells they land on, so a copied cell without a link or a rule removes the destination's, and a rule can end up with a gap in it. A table pasted from another app removes the links of the cells it lands on. If you edit the copied cells before you paste, the paste brings them as they are now.
 
 Copied cells paste into other apps as rows and columns, the same ones a paste in Sheets gets, for example into a text editor or a chart's **Edit data** grid.
 
@@ -87,7 +87,7 @@ The **Format** menu covers all formatting options:
 - **Font size**: pick from the list.
 - **Fill color** and **Borders**: set a background color or draw borders around cells.
 - **Merge cells**: combine a selection into one cell.
-- **Clear formatting**: remove all formatting from the selected cells without deleting their values.
+- **Clear formatting**: remove text styles, colors, alignment and borders from the selected cells. Values and number formats stay.
 
 Quick buttons for the font, font size, **Bold**, **Italic**, **Text color**, **Fill color**, and horizontal alignment sit in the center of the menu bar. As the bar gets narrower, for example when a side panel is open, they fold away from the right, alignment first, until none are left. Everything they do stays in the **Format** menu.
 

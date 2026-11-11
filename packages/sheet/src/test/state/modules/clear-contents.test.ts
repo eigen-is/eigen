@@ -2,17 +2,17 @@
 // the format is the separate Clear formatting command.
 
 import { describe, expect, test } from 'bun:test';
+import type { CellLink } from '@workspace/lib/sheets';
 import type { Context } from '../../../state/context';
 import { deleteSelectedCellText } from '../../../state/modules/selection';
 import type { Cell } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 
-function deleteA1(cell: Cell, hyperlink?: Context['sheets'][number]['hyperlink']) {
+function deleteA1(cell: Cell) {
     const ctx = contextFactory({
         selections: [{ row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0 }],
     }) as Context;
     ctx.sheets[0].data = [[cell, null]];
-    ctx.sheets[0].hyperlink = hyperlink;
     return { ctx, changed: deleteSelectedCellText(ctx) };
 }
 
@@ -45,12 +45,9 @@ describe('deleteSelectedCellText keeps the format', () => {
     });
 
     test("a link goes with the link's look, and the cell's other format stays", () => {
-        const { ctx } = deleteA1(
-            { v: 'site', m: 'site', fc: 'rgb(0, 0, 255)', un: 1, hl: { r: 0, c: 0, id: 'id_1' }, bl: 1 },
-            { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
-        );
+        const link: CellLink = { type: 'webpage', address: 'https://example.com' };
+        const { ctx } = deleteA1({ v: 'site', m: 'site', fc: 'rgb(0, 0, 255)', un: 1, link, bl: 1 });
         expect(ctx.sheets[0].data?.[0][0]).toEqual({ bl: 1 });
-        expect(ctx.sheets[0].hyperlink?.['0_0']).toBeUndefined();
     });
 
     test('a comment stays on the cell', () => {

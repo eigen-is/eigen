@@ -43,13 +43,13 @@ afterEach(async () => {
     cleanup = undefined;
 });
 
-async function mountWorkbook(): Promise<WorkbookInstance> {
+async function mountWorkbook(data = sheets()): Promise<WorkbookInstance> {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
     const ref = createRef<WorkbookInstance>();
     await act(async () => {
-        root.render(createElement(Workbook, { ref, data: sheets() }));
+        root.render(createElement(Workbook, { ref, data }));
     });
     cleanup = async () => {
         await act(async () => root.unmount());
@@ -63,29 +63,63 @@ const idsAt = (workbook: WorkbookInstance, sheetId: string, r: number, c: number
     workbook.getFlowdata(sheetId)?.[r]?.[c]?.commentCardIds;
 
 describe('anchoredComments', () => {
-    test('a card anchored only on a tab that is not open is in use, labeled with its tab', async () => {
+    test('a jump to a card on a hidden tab stays on the open tab', async () => {
+        const [first, second] = sheets();
+        const workbook = await mountWorkbook([first, { ...second, hide: 1 }]);
+        const cell = anchoredComments(workbook.getAllSheets(), 's1').firstCells.get('c3');
+        expect(cell?.sheetId).toBe('s2');
+        await act(async () => {
+            if (cell) workbook.revealSearchMatch(cell);
+        });
+        expect(workbook.getFlowdata()).toBe(workbook.getFlowdata('s1'));
+    });
+
+    test('a card anchored only on a tab that is not open is in use, prefixed with its tab', async () => {
         const workbook = await mountWorkbook();
         const active = anchoredComments(workbook.getAllSheets(), 's1');
         expect([...active.ids].sort()).toEqual(['c1', 'c2', 'c3']);
-        expect(active.anchorTexts.get('c3')).toBe('Two · A1');
-        // A card on several cells takes the first sheet's cell as its anchor text.
-        expect(active.anchorTexts.get('c1')).toBe('Cell B2');
+        expect([...active.titlePrefixes.entries()]).toEqual([['c3', 'Two']]);
     });
 
-    test('the labels follow the open tab, a renamed tab and an edited cell', async () => {
+    test('a card on several tabs takes its prefix from the same first cell a jump goes to', async () => {
         const workbook = await mountWorkbook();
-        expect(anchoredComments(workbook.getAllSheets(), 's2').anchorTexts.get('c2')).toBe('One · B2');
-        expect(anchoredComments(workbook.getAllSheets(), 's2').anchorTexts.get('c3')).toBe('Cell A1');
+        const onSecondTab = anchoredComments(workbook.getAllSheets(), 's2');
+        expect(onSecondTab.firstCells.get('c1')?.sheetId).toBe('s1');
+        expect(onSecondTab.titlePrefixes.get('c1')).toBe('One');
+    });
+
+    test('the prefixes follow the open tab, a renamed tab and an edited cell', async () => {
+        const workbook = await mountWorkbook();
+        expect(anchoredComments(workbook.getAllSheets(), 's2').titlePrefixes.get('c2')).toBe('One');
+        expect(anchoredComments(workbook.getAllSheets(), 's2').titlePrefixes.has('c3')).toBe(false);
 
         const renamed = workbook
             .getAllSheets()
             .map((sheet) => (sheet.id === 's1' ? { ...sheet, name: 'First' } : sheet));
-        expect(anchoredComments(renamed, 's2').anchorTexts.get('c2')).toBe('First · B2');
+        expect(anchoredComments(renamed, 's2').titlePrefixes.get('c2')).toBe('First');
 
         await act(async () => workbook.setCellFormat(4, 4, 'commentCardIds', ['c4'], { id: 's2' }));
         const edited = anchoredComments(workbook.getAllSheets(), 's1');
         expect(edited.ids.has('c4')).toBe(true);
-        expect(edited.anchorTexts.get('c4')).toBe('Two · E5');
+        expect(edited.titlePrefixes.get('c4')).toBe('Two');
+    });
+
+    test('each card names its first cell, top to bottom and then left to right', async () => {
+        const workbook = await mountWorkbook();
+        await act(async () => workbook.setCellFormat(0, 4, 'commentCardIds', ['c2'], { id: 's1' }));
+        const { firstCells } = anchoredComments(workbook.getAllSheets(), 's1');
+        expect(firstCells.get('c1')).toEqual({ sheetId: 's1', r: 1, c: 1 });
+        expect(firstCells.get('c2')).toEqual({ sheetId: 's1', r: 0, c: 4 });
+        expect(firstCells.get('c3')).toEqual({ sheetId: 's2', r: 0, c: 0 });
+    });
+
+    // Dragging a tab rewrites its order and leaves the workbook's array of sheets as it was.
+    test('the first cell follows the order of the tabs, not the order of the array', async () => {
+        const workbook = await mountWorkbook();
+        const dragged = workbook.getAllSheets().map((sheet) => ({ ...sheet, order: sheet.id === 's1' ? 1 : 0 }));
+        const active = anchoredComments(dragged, 's1');
+        expect(active.firstCells.get('c1')).toEqual({ sheetId: 's2', r: 2, c: 2 });
+        expect(active.titlePrefixes.get('c1')).toBe('Two');
     });
 });
 

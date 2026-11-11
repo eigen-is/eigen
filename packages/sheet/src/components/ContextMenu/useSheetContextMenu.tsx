@@ -2,7 +2,7 @@
 // and deleting rows and columns, hiding, sorting and filters. useSheetContextMenu selects what was clicked and opens
 // the menu for one area, on a right click or a long press on touch.
 
-import { CommentLifecycleMenuItems } from '@workspace/ui/components/comments';
+import { CommentLifecycleMenuItems, DeleteCommentDialog } from '@workspace/ui/components/comments';
 import {
     ClipboardMenuItems,
     ContextMenuAnchor,
@@ -30,7 +30,7 @@ import { useCallback, useContext } from 'react';
 import type { SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
 import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
-import { useDialog } from '../../hooks/useDialog';
+import { useDialog, useDialogProps } from '../../hooks/useDialog';
 import {
     clearSelectedContents,
     createFilter,
@@ -257,8 +257,14 @@ function TickBoxItem() {
     );
 }
 
+// A dialog of the sheet's slot, which outlives the menu and hands the focus back to the grid as it closes.
+function DeleteCommentAsk({ onDelete }: { onDelete: () => void }) {
+    return <DeleteCommentDialog {...useDialogProps()} onDelete={onDelete} />;
+}
+
 function CommentItems({ part }: { part: 'rows' | 'delete' }) {
     const { context, refs } = useContext(WorkbookContext);
+    const { showDialog } = useDialog();
     const { getCommentInfo, onAddComment, onDeleteComment, commentLifecycle } = refs.hooks.current;
     const last = context.selections?.[context.selections.length - 1];
     const row = last ? (last.row_focus ?? last.row[0]) : 0;
@@ -275,7 +281,10 @@ function CommentItems({ part }: { part: 'rows' | 'delete' }) {
             item={info ? { card: info.card, entry: info.entry } : null}
             canWrite={context.allowEdit}
             onAddComment={onAddComment && (() => onAddComment(row, col))}
-            onDelete={onDeleteComment && (() => onDeleteComment(row, col))}
+            onDelete={
+                onDeleteComment &&
+                ((cardId) => showDialog(<DeleteCommentAsk onDelete={() => onDeleteComment(cardId)} />))
+            }
             part={part}
         />
     );

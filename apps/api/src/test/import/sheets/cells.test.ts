@@ -354,7 +354,7 @@ describe('the grid', () => {
             placed: [
                 { r: 0, c: 0, v: { mc: { r: 0, c: 0, rs: 1, cs: 2 } } },
                 { r: 0, c: 1, v: { mc: { r: 0, c: 0 } } },
-                { r: 4, c: 2, v: { hl: { r: 4, c: 2, id: 'sheet-0' } } },
+                { r: 4, c: 2, v: { link: { type: 'sheet', address: 'Other' } } },
             ],
         });
         expect(cell('A1')).toEqual({
@@ -364,7 +364,7 @@ describe('the grid', () => {
             mc: { r: 0, c: 0, rs: 1, cs: 2 },
         });
         expect(cell('B1')).toEqual({ mc: { r: 0, c: 0 } });
-        expect(cell('C5')).toEqual({ hl: { r: 4, c: 2, id: 'sheet-0' } });
+        expect(cell('C5')).toEqual({ link: { type: 'sheet', address: 'Other' } });
         expect(grid.celldata).toHaveLength(3);
         expect([grid.rows, grid.columns]).toEqual([5, 3]);
         expect(charged).toEqual([

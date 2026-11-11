@@ -11,7 +11,7 @@ import {
     MAX_VALIDATIONS,
     rangesOverlap,
 } from '@workspace/lib/sheets';
-import { cfSplitRange } from '../../engine/conditional-format';
+import { rangeWithout } from '../../engine/conditional-format';
 import type { DataValidationRule, Sheet, SheetValidation, SingleRange } from '../types';
 
 // The rule over one cell, with its id. Two peers putting rules on one cell at once can leave the cell in two rules,
@@ -65,13 +65,13 @@ export function validationLookup(
     };
 }
 
-// Takes an area out of every rule on the sheet, and drops a rule left with no cell or split past the range cap.
-// A changed rule is written whole under its id: a write into its ranges alone fails if a peer deleted the rule.
+// Takes an area out of every rule on the sheet, and drops a rule left with no cell or split past the range cap. A
+// changed rule is written whole under its id: a write into its ranges alone fails if a peer deleted the rule.
 export function clearValidations(sheet: Sheet, area: SingleRange) {
     const validations = (sheet.dataValidations ??= {});
     for (const [id, entry] of Object.entries(validations)) {
         if (!entry.ranges.some((range) => rangesOverlap(range, area))) continue;
-        const ranges = entry.ranges.flatMap((range) => cfSplitRange(range, area, area, 'restPart'));
+        const ranges = entry.ranges.flatMap((range) => rangeWithout(range, area));
         if (ranges.length > 0 && ranges.length <= MAX_VALIDATION_RANGES) validations[id] = { ...entry, ranges };
         else delete validations[id];
     }

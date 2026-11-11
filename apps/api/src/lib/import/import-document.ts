@@ -3,7 +3,7 @@
 // Parsing, guards, recalc and serialization run in the transform process, so an import whose transform fails creates
 // and changes nothing. Drive's import and convert routes, for example, call it.
 
-import { writeSheetsSnapshot } from '@workspace/lib/sheets';
+import { readSheetsSnapshotJson, sheetsOpLog, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { ConvertTarget, DocumentImportOptions, DrivePath } from '@workspace/lib/types/drive';
 import {
     CONVERT_SOURCES,
@@ -21,7 +21,6 @@ import { getPublicOrigin } from '../config/server-config';
 import { getMaxUploadSize } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { commitEigendocImport } from '../document/doc';
-import { appendSheetsToYjs, readLiveSheets } from '../document/sheets';
 import { resetSheetsCompactionFailures } from '../document/sheets-compaction';
 import { insertSlidesIntoYjs, readSlidesUpdate, replaceSlidesInYjs } from '../document/slides';
 import { lossSummary } from '../document/transform/losses';
@@ -36,11 +35,12 @@ import type {
     TransformWarning,
 } from '../document/transform/protocol';
 import { toTransferableBuffer } from '../document/transform/protocol';
-import type { SheetsImportSnapshot } from '../document/transform/run-transform';
+import type { SheetsImportSnapshot, SheetsInsertBatch } from '../document/transform/run-transform';
 import {
     runImportToDocumentUpdate,
     runImportToSlidesUpdate,
     runImportToSnapshotJson,
+    runInsertToSheetsBatch,
 } from '../document/transform/run-transform';
 import { documentTransformRunner } from '../document/transform/runner';
 import type { DriveLike } from '../drive/get-drive';
@@ -49,7 +49,6 @@ import { CONTAINER_MEDIA_FOLDER } from '../mount/container-dbs';
 import { MAX_DECOMPRESSED_BYTES } from '../ooxml/zip';
 import type { User } from '../user';
 import { IMPORT_MESSAGES, PRESENTATION_EMPTY } from './messages';
-import { assertInsertFits } from './sheets/limits';
 
 // No signal parameter by design: a conversion detaches from the request, so a page reload can't kill a minute of
 // transform progress.
@@ -129,21 +128,15 @@ export async function importIntoDocument(
     const containerMime = isCollabType(path.type) ? path.mimeType : '';
     const commit = { drive, path, user, signal };
     if (containerMime === DRIVE_MIME_SHEETS) {
-        const { snapshotJson, weight, images, warnings } = await importXlsxSnapshot(buffer, signal);
-        // An insert is weighed with the workbook before its pictures are saved, so a refused one leaves none behind.
-        // The write weighs it again, because another insert may have grown the workbook in the meantime.
-        if (mode === 'insert' && images.length > 0) {
-            assertInsertFits(readLiveSheets((await drive.getCollabDocument(path.mountId, path.id)).doc), weight);
+        if (mode === 'insert') {
+            const { batch, images, warnings } = await insertXlsxSheets(drive, path, buffer, signal);
+            await commitImport(commit, images, false, (doc) => sheetsOpLog(doc).push([batch]));
+            return lossSummary(warnings, 'import');
         }
-        await commitImport(commit, images, mode === 'replace', (doc) => {
-            if (mode === 'replace') {
-                writeSheetsSnapshot(doc, snapshotJson, null);
-                resetSheetsCompactionFailures(path);
-                return;
-            }
-            const current = readLiveSheets(doc);
-            assertInsertFits(current, weight);
-            appendSheetsToYjs(doc, snapshotJson, current);
+        const { snapshotJson, images, warnings } = await importXlsxSnapshot(buffer, signal);
+        await commitImport(commit, images, true, (doc) => {
+            writeSheetsSnapshot(doc, snapshotJson, null);
+            resetSheetsCompactionFailures(path);
         });
         return lossSummary(warnings, 'import');
     }
@@ -209,6 +202,34 @@ function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<Sheet
         maxMediaBytes: getMaxUploadSize(),
     };
     return runImportToSnapshotJson(job, toTransferableBuffer(buffer), { signal });
+}
+
+// The workbook is read only once the job would be admitted. The transform replays its log, weighs the file with it and
+// builds the tabs, so the replay never holds the main thread.
+async function insertXlsxSheets(
+    drive: DriveLike,
+    path: DrivePath,
+    buffer: Buffer,
+    signal?: AbortSignal,
+): Promise<SheetsInsertBatch> {
+    documentTransformRunner.assertAdmissible('foreground');
+    assertWithinByteCap(buffer.byteLength, 'xlsx');
+    const { doc } = await drive.getCollabDocument(path.mountId, path.id);
+    const workbook = {
+        snapshot: readSheetsSnapshotJson(doc) ?? null,
+        batches: JSON.stringify(sheetsOpLog(doc).toArray()),
+    };
+    return runInsertToSheetsBatch(
+        {
+            kind: 'import',
+            sourceFormat: 'xlsx',
+            targetType: 'eigensheets',
+            maxMediaBytes: getMaxUploadSize(),
+            workbook,
+        },
+        toTransferableBuffer(buffer),
+        { signal },
+    );
 }
 
 function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImportResult> {

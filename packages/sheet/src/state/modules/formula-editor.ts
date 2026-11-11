@@ -1,14 +1,16 @@
-// Editing a formula as text: functionHTMLGenerate colors its references, numbers and strings as spans, the caret
-// helpers read and restore the selection in the editor, and handleFormulaInput reruns that on each keystroke in
-// the cell editor or the formula bar, so the reference highlights on the grid follow.
+// Editing a formula as text: functionHTMLGenerate colors its references, numbers and strings as spans, and
+// handleFormulaInput rebuilds them on each keystroke in the cell editor or the formula bar, puts the caret back and
+// updates the reference highlights on the grid. The helpers here also read the token at the caret, for the function
+// suggestions and the hint of the function the caret is in.
 
-import { escapeHtml, unescapeHtml } from '@workspace/lib/html';
+import { escapeHtml } from '@workspace/lib/html';
 import { indexOf, isEmpty, isNil, last, startsWith, trim } from 'es-toolkit/compat';
 import { formulaOperators, iscelldata } from '../../engine/formula-utils';
 import type { Context } from '../context';
 
 import { cancelFunctionrangeSelected } from '.';
 import { rangeColor } from './color';
+import { selectionTextOffsets, selectTextOffsets } from './cursor';
 import {
     formulaUIState,
     resetFunctionHTMLIndex,
@@ -16,7 +18,7 @@ import {
     setFunctionHTMLIndex,
     setRangeIndexes,
 } from './formula-cache';
-import { createRangeHightlight, setCaretPosition } from './formula-range';
+import { createRangeHighlight } from './formula-range';
 import type { FormulaFunctionEntry } from './function-list';
 import { FUNCTION_LIST } from './function-list';
 
@@ -202,10 +204,7 @@ function getRangeIndexes($editor: HTMLDivElement) {
     const res: number[] = [];
     for (const ele of $editor.querySelectorAll('span.sheet-formula-functionrange-cell')) {
         const indexStr = ele.getAttribute('rangeindex');
-        if (indexStr) {
-            const rangeIndex = parseInt(indexStr, 10);
-            res.push(rangeIndex);
-        }
+        if (indexStr) res.push(parseInt(indexStr, 10));
     }
     return res;
 }
@@ -245,7 +244,7 @@ function searchFunction(ctx: Context, searchtxt: string) {
 }
 
 export function insertFormulaFunctionDom(target: HTMLElement, formulaName: string): boolean {
-    const searchTxt = getrangeseleciton()?.textContent || '';
+    const searchTxt = tokenAtCaret()?.textContent || '';
     const deleteCount = searchTxt.length;
     target.focus();
 
@@ -277,7 +276,7 @@ export function insertFormulaFunctionDom(target: HTMLElement, formulaName: strin
     return true;
 }
 
-export function getrangeseleciton() {
+function tokenAtCaret() {
     const currSelection = window.getSelection();
     if (!currSelection) return null;
     const { anchorNode, anchorOffset } = currSelection;
@@ -315,14 +314,14 @@ export function getrangeseleciton() {
     return null;
 }
 
-function helpFunctionExe($editer: HTMLDivElement, currSelection: Node, ctx: Context) {
+function enclosingFunctionName($editor: HTMLDivElement, currSelection: Node, ctx: Context) {
     if (isEmpty(ctx.formulaCache.functionlistMap)) {
         for (const fn of FUNCTION_LIST) {
             ctx.formulaCache.functionlistMap[fn.n] = fn;
         }
     }
 
-    const $span = $editer.querySelectorAll('span');
+    const $span = $editor.querySelectorAll('span');
     const currentIndex = indexOf(currSelection.parentNode?.childNodes, currSelection);
     if (currentIndex < 0 || !$span[currentIndex]) return null;
 
@@ -359,8 +358,8 @@ function helpFunctionExe($editer: HTMLDivElement, currSelection: Node, ctx: Cont
     return null;
 }
 
-export function rangeHightlightselected(ctx: Context, $editor: HTMLDivElement) {
-    const currSelection = getrangeseleciton();
+export function updateFunctionHint(ctx: Context, $editor: HTMLDivElement) {
+    const currSelection = tokenAtCaret();
     if (!currSelection) return;
 
     const currText = trim(currSelection.textContent || '');
@@ -368,25 +367,21 @@ export function rangeHightlightselected(ctx: Context, $editor: HTMLDivElement) {
         searchFunction(ctx, currText.toUpperCase());
         ctx.functionHint = null;
     } else {
-        const funcName = helpFunctionExe($editor, currSelection, ctx);
+        const funcName = enclosingFunctionName($editor, currSelection, ctx);
         ctx.functionHint = funcName?.toUpperCase();
         ctx.functionCandidates = [];
     }
 }
 
-export function israngeseleciton(ctx: Context, istooltip?: boolean) {
-    if (istooltip == null) {
-        istooltip = false;
-    }
-
+// Whether the caret sits where a picked range goes, after an opening bracket, a comma or an operator. It also notes
+// the span the range goes after.
+export function caretTakesRange(ctx: Context) {
     const currSelection = window.getSelection();
     if (currSelection == null) return false;
     let anchor = currSelection.anchorNode;
     if (!anchor?.textContent) return false;
     const { anchorOffset } = currSelection;
-    const anchorElement = anchor as HTMLElement;
-    const parentElement = anchor.parentNode as HTMLElement;
-    if (anchor?.parentNode?.nodeName.toLowerCase() === 'span' && anchorOffset !== 0) {
+    if (anchor.parentNode?.nodeName.toLowerCase() === 'span' && anchorOffset !== 0) {
         let txt = trim(anchor.textContent);
         let lasttxt = '';
 
@@ -400,293 +395,43 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
             ctx.formulaCache.rangeSetValueTo = anchor.parentNode;
         }
 
-        if (
-            (istooltip && (lasttxt === '(' || lasttxt === ',')) ||
-            (!istooltip &&
-                (lasttxt === '(' ||
-                    lasttxt === ',' ||
-                    lasttxt === '=' ||
-                    formulaOperators.has(lasttxt) ||
-                    lasttxt === '&'))
-        ) {
-            return true;
-        }
-    } else if (anchorElement.id === 'sheet-rich-text-editor' || anchorElement.id === 'sheet-functionbox-cell') {
-        let txt = trim(last(anchorElement.querySelectorAll('span'))?.innerText);
+        return opensRange(lasttxt);
+    } else if (
+        anchor instanceof HTMLElement &&
+        (anchor.id === 'sheet-rich-text-editor' || anchor.id === 'sheet-functionbox-cell')
+    ) {
+        const spans = anchor.querySelectorAll('span');
+        let txt = trim(last(spans)?.innerText);
 
-        ctx.formulaCache.rangeSetValueTo = last(anchorElement.querySelectorAll('span'));
+        ctx.formulaCache.rangeSetValueTo = last(spans);
 
-        if (txt.length === 0 && anchorElement.querySelectorAll('span').length > 1) {
-            const ahr = anchorElement.querySelectorAll('span');
-            const prev = ahr[ahr.length - 2];
+        if (txt.length === 0 && spans.length > 1) {
+            const prev = spans[spans.length - 2];
             txt = trim(prev.innerText);
             ctx.formulaCache.rangeSetValueTo = prev;
         }
 
-        const lasttxt = txt.substring(txt.length - 1, 1);
-
-        if (
-            (istooltip && (lasttxt === '(' || lasttxt === ',')) ||
-            (!istooltip &&
-                (lasttxt === '(' ||
-                    lasttxt === ',' ||
-                    lasttxt === '=' ||
-                    formulaOperators.has(lasttxt) ||
-                    lasttxt === '&'))
-        ) {
-            return true;
-        }
+        return opensRange(txt.substring(txt.length - 1, 1));
     } else if (
-        parentElement.id === 'sheet-rich-text-editor' ||
-        parentElement.id === 'sheet-functionbox-cell' ||
+        anchor.parentElement?.id === 'sheet-rich-text-editor' ||
+        anchor.parentElement?.id === 'sheet-functionbox-cell' ||
         anchorOffset === 0
     ) {
         if (anchorOffset === 0) {
             anchor = anchor.parentNode;
         }
-        if (!anchor) return false;
-        if (anchor.previousSibling?.textContent == null) return false;
-        if (anchor.previousSibling) {
-            const txt = trim(anchor.previousSibling.textContent);
-            const lasttxt = txt.substring(txt.length - 1, 1);
-
-            ctx.formulaCache.rangeSetValueTo = anchor.previousSibling;
-
-            if (
-                (istooltip && (lasttxt === '(' || lasttxt === ',')) ||
-                (!istooltip &&
-                    (lasttxt === '(' ||
-                        lasttxt === ',' ||
-                        lasttxt === '=' ||
-                        formulaOperators.has(lasttxt) ||
-                        lasttxt === '&'))
-            ) {
-                return true;
-            }
-        }
+        const previous = anchor?.previousSibling;
+        if (previous?.textContent == null) return false;
+        const txt = trim(previous.textContent);
+        ctx.formulaCache.rangeSetValueTo = previous;
+        return opensRange(txt.substring(txt.length - 1, 1));
     }
 
     return false;
 }
 
-function functionRange(ctx: Context, obj: HTMLDivElement, v: string, vp: string) {
-    const currSelection = window.getSelection();
-    if (!currSelection) return;
-    const fri = findrangeindex(ctx, v, vp);
-
-    if (isNil(fri)) {
-        currSelection.selectAllChildren(obj);
-        currSelection.collapseToEnd();
-    } else {
-        setCaretPosition(ctx, obj.querySelectorAll('span')[fri[0]], 0, fri[1]);
-    }
-}
-
-// Caret restore reads these segments as the text the browser renders: their lengths become
-// text-node offsets, and they are probed for quotes and braces. Tokens are escaped on the way
-// into the markup, so `&` is five characters here and one on screen — decode before measuring.
-function toRenderedSegments(html: string): string[] {
-    return html
-        .replace(/<span.*?>/g, '')
-        .split('</span>')
-        .map(unescapeHtml);
-}
-
-function findrangeindex(ctx: Context, v: string, vp: string) {
-    const v_a = toRenderedSegments(v);
-    const vp_a = toRenderedSegments(vp);
-    v_a.pop();
-    if (vp_a[vp_a.length - 1] === '') vp_a.pop();
-
-    let pfri = ctx.formulaCache.functionRangeIndex;
-    if (pfri == null) return [];
-
-    const vplen = vp_a.length;
-    const vlen = v_a.length;
-    // No element added to input
-    if (vplen === vlen) {
-        const i = pfri[0];
-        const p = vp_a[i];
-        const n = v_a[i];
-
-        if (isNil(p)) {
-            if (vp_a.length <= i) {
-                pfri = [vp_a.length - 1, vp_a.length - 1];
-            } else if (v_a.length <= i) {
-                pfri = [v_a.length - 1, v_a.length - 1];
-            }
-
-            return pfri;
-        }
-        if (p.length === n.length) {
-            if (!isNil(vp_a[i + 1]) && !isNil(v_a[i + 1]) && vp_a[i + 1].length < v_a[i + 1].length) {
-                pfri[0] += 1;
-                pfri[1] = 1;
-            }
-
-            return pfri;
-        }
-        if (p.length > n.length) {
-            if (
-                !isNil(p) &&
-                !isNil(v_a[i + 1]) &&
-                v_a[i + 1].substring(0, 1) === '"' &&
-                (p.indexOf('{') > -1 || p.indexOf('}') > -1)
-            ) {
-                pfri[0] += 1;
-                pfri[1] = 1;
-            }
-
-            return pfri;
-        }
-        if (p.length < n.length) {
-            if (pfri[1] > n.length) {
-                pfri[1] = n.length;
-            }
-
-            return pfri;
-        }
-    }
-    // Element removed from input
-    else if (vplen > vlen) {
-        const i = pfri[0];
-        const p = vp_a[i];
-        const n = v_a[i];
-
-        if (isNil(n)) {
-            if (v_a[i - 1].indexOf('{') > -1) {
-                pfri[0] -= 1;
-                const start = v_a[i - 1].search('{');
-                pfri[1] += start;
-            } else {
-                pfri[0] = 0;
-                pfri[1] = 0;
-            }
-        } else if (p.length === n.length) {
-            if (
-                !isNil(v_a[i + 1]) &&
-                (v_a[i + 1].substring(0, 1) === '"' ||
-                    v_a[i + 1].substring(0, 1) === '{' ||
-                    v_a[i + 1].substring(0, 1) === '}')
-            ) {
-                pfri[0] += 1;
-                pfri[1] = 1;
-            } else if (!isNil(p) && p.length > 2 && p.substring(0, 1) === '"' && p.substring(p.length - 1, 1) === '"') {
-                // A quoted string leaves the position as it is.
-            } else if (!isNil(v_a[i]) && v_a[i] === '")') {
-                pfri[1] = 1;
-            } else if (!isNil(v_a[i]) && v_a[i] === '"}') {
-                pfri[1] = 1;
-            } else if (!isNil(v_a[i]) && v_a[i] === '{)') {
-                pfri[1] = 1;
-            } else {
-                pfri[1] = n.length;
-            }
-
-            return pfri;
-        } else if (p.length > n.length) {
-            if (
-                !isNil(v_a[i + 1]) &&
-                (v_a[i + 1].substring(0, 1) === '"' ||
-                    v_a[i + 1].substring(0, 1) === '{' ||
-                    v_a[i + 1].substring(0, 1) === '}')
-            ) {
-                pfri[0] += 1;
-                pfri[1] = 1;
-            }
-
-            return pfri;
-        } else if (p.length < n.length) {
-            return pfri;
-        }
-
-        return pfri;
-    }
-    // Element added to input
-    else if (vplen < vlen) {
-        const i = pfri[0];
-        const p = vp_a[i];
-        const n = v_a[i];
-
-        if (isNil(p)) {
-            pfri[0] = v_a.length - 1;
-
-            if (!isNil(n)) {
-                pfri[1] = n.length;
-            } else {
-                pfri[1] = 1;
-            }
-        } else if (p.length === n.length) {
-            if (
-                vp_a[i + 1] != null &&
-                (vp_a[i + 1].substring(0, 1) === '"' ||
-                    vp_a[i + 1].substring(0, 1) === '{' ||
-                    vp_a[i + 1].substring(0, 1) === '}')
-            ) {
-                pfri[1] = n.length;
-            } else if (
-                !isNil(v_a[i + 1]) &&
-                v_a[i + 1].substring(0, 1) === '"' &&
-                (v_a[i + 1].substring(0, 1) === '{' || v_a[i + 1].substring(0, 1) === '}')
-            ) {
-                pfri[0] += 1;
-                pfri[1] = 1;
-            } else if (
-                !isNil(n) &&
-                n.substring(0, 1) === '"' &&
-                n.substring(n.length - 1, 1) === '"' &&
-                p.substring(0, 1) === '"' &&
-                p.substring(p.length - 1, 1) === ')'
-            ) {
-                pfri[1] = n.length;
-            } else if (
-                !isNil(n) &&
-                n.substring(0, 1) === '{' &&
-                n.substring(n.length - 1, 1) === '}' &&
-                p.substring(0, 1) === '{' &&
-                p.substring(p.length - 1, 1) === ')'
-            ) {
-                pfri[1] = n.length;
-            } else {
-                pfri[0] = pfri[0] + vlen - vplen;
-                if (v_a.length > vp_a.length) {
-                    pfri[1] = v_a[i + 1].length;
-                } else {
-                    pfri[1] = 1;
-                }
-            }
-
-            return pfri;
-        } else if (p.length > n.length) {
-            if (!isNil(p) && p.substring(0, 1) === '"') {
-                pfri[1] = n.length;
-            } else if (isNil(v_a[i + 1]) && /{.*?}/.test(v_a[i + 1])) {
-                pfri[0] += 1;
-                pfri[1] = v_a[i + 1].length;
-            } else if (
-                !isNil(p) &&
-                v_a[i + 1].substring(0, 1) === '"' &&
-                (p.indexOf('{') > -1 || p.indexOf('}') > -1)
-            ) {
-                pfri[0] += 1;
-                pfri[1] = 1;
-            } else if (!isNil(p) && (p.indexOf('{') > -1 || p.indexOf('}') > -1)) {
-            } else if (!isNil(p) && !startsWith(p[0], '=') && startsWith(n, '=')) {
-                return [vlen - 1, v_a[vlen - 1].length];
-            } else {
-                pfri[0] = pfri[0] + vlen - vplen - 1;
-                pfri[1] = v_a[(i || 1) - 1].length;
-            }
-
-            return pfri;
-        } else if (p.length < n.length) {
-            return pfri;
-        }
-
-        return pfri;
-    }
-
-    return null;
+function opensRange(text: string) {
+    return text === '(' || text === ',' || text === '=' || text === '&' || formulaOperators.has(text);
 }
 
 // What a formula opens with in the editor: `=NAME(`, each part in the color of plain formula text.
@@ -702,7 +447,6 @@ export function handleFormulaInput(
     preText?: string,
     refreshRangeSelect = true,
 ) {
-    let value1: string;
     const value1txt = preText ?? $editor.innerText;
     let value = $editor.innerText;
     if (value.length > 0 && value.substring(0, 1) === '=' && (kcode !== 229 || value.length === 1)) {
@@ -710,48 +454,29 @@ export function handleFormulaInput(
         value = functionHTMLGenerate(value);
         if (!refreshRangeSelect && formulaUIState.functionHTMLIndex < formulaUIState.rangeIndexes.length)
             refreshRangeSelect = true;
-        value1 = functionHTMLGenerate(value1txt);
+        // Counting the text before the key sets functionHTMLIndex, the index the next picked reference takes.
+        functionHTMLGenerate(value1txt);
 
         resetRangeIndexes();
 
-        const currSelection = window.getSelection();
-        if (!currSelection) return;
-        if (currSelection.anchorNode?.nodeName.toLowerCase() === 'div') {
-            const editorlen = $editor.querySelectorAll('span').length;
-            if (editorlen > 0)
-                ctx.formulaCache.functionRangeIndex = [
-                    editorlen - 1,
-                    $editor.querySelectorAll('span').item(editorlen - 1).textContent?.length ?? 0,
-                ];
-        } else {
-            const childNodes = currSelection.anchorNode?.parentNode?.parentNode?.childNodes;
-            const parentNode = currSelection.anchorNode?.parentNode;
-            ctx.formulaCache.functionRangeIndex = [
-                childNodes && parentNode ? Array.prototype.indexOf.call(childNodes, parentNode) : -1,
-                currSelection.anchorOffset,
-            ];
-        }
-
+        const caret = selectionTextOffsets($editor)?.end ?? value1txt.length;
         $editor.innerHTML = value;
         if ($copyTo) $copyTo.innerHTML = value;
-
-        // the cursor will be set to the beginning of input box after set innerHTML,
-        // restoring it to the correct position
-        functionRange(ctx, $editor, value, value1);
+        selectTextOffsets($editor, caret, caret);
 
         if (refreshRangeSelect) {
             cancelFunctionrangeSelected(ctx);
 
             if (kcode !== 46) {
                 // Do not execute this function on delete
-                createRangeHightlight(ctx, value);
+                createRangeHighlight(ctx, value);
             }
 
             ctx.formulaCache.rangestart = false;
             ctx.formulaCache.rangedrag_column_start = false;
             ctx.formulaCache.rangedrag_row_start = false;
 
-            rangeHightlightselected(ctx, $editor);
+            updateFunctionHint(ctx, $editor);
         }
     } else if (startsWith(value1txt, '=') && !startsWith(value, '=')) {
         if ($copyTo) $copyTo.innerHTML = escapeHtml(value);

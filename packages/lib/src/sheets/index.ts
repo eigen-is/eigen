@@ -53,6 +53,7 @@ export {
 export {
     readSheetsBase,
     readSheetsSnapshotJson,
+    sheetsLogStartsWith,
     sheetsOpLog,
     sheetsStateMap,
     stampSheetsBase,

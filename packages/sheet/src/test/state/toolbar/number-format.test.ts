@@ -5,10 +5,11 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
+import { updateCell } from '../../../state/modules/cell';
 import { NUMBER_MENU_PRESETS } from '../../../state/modules/format-presets';
 import { updateFormat } from '../../../state/modules/toolbar';
 import type { Cell } from '../../../state/types';
-import { contextFactory } from '../factories/context';
+import { contextFactory, selectionFactory } from '../factories/context';
 
 // updateFormat only reads the input element for inline-style attrs, never for 'ct'.
 const cellInput = {} as HTMLDivElement;
@@ -146,5 +147,91 @@ describe('Format → Number menu presets', () => {
         const cell = applyFormat(1.000694444444, presetValue('Duration'));
         expect(cell.ct).toEqual({ fa: '[h]:mm:ss', t: 'd' });
         expect(cell.m).toBe('24:01:00');
+    });
+});
+
+// B1 holds the formula and A1 what it reads, so a test moves the result as a person does, by typing in A1.
+function formulaUnder(formula: string, fa: string, a1 = 2) {
+    const ctx = contextFactory({
+        selections: selectionFactory([0, 0], [1, 1], 0, 1),
+        editingCellPosition: [],
+    }) as Context;
+    const data = ctx.sheets[0].data;
+    if (!data) throw new Error('no data');
+    data[0][0] = { v: a1, m: String(a1), ct: { fa: 'General', t: 'n' } };
+    updateCell(ctx, 0, 1, null, formula);
+    updateFormat(ctx, cellInput, data, 'ct', fa);
+    return { ctx, data, cell: () => data[0][1], type: (a: number) => updateCell(ctx, 0, 0, null, a) };
+}
+
+describe('a formula under a number format', () => {
+    const NUMBER = '#,##0.00';
+
+    test('a text result shows as text the moment the format lands, and the format stays', () => {
+        const { cell } = formulaUnder('=IF(A1>1,"005",5)', NUMBER);
+        expect(cell()?.m).toBe('005');
+        expect(cell()?.ct).toEqual({ fa: NUMBER, t: 'g' });
+    });
+
+    test('it shows the same however the result got there', () => {
+        const { cell, type } = formulaUnder('=IF(A1>1,"005",5)', NUMBER);
+        type(3);
+        expect(cell()?.m).toBe('005');
+        type(1);
+        expect(cell()?.m).toBe('5.00');
+        expect(cell()?.ct).toEqual({ fa: NUMBER, t: 'n' });
+        type(6);
+        expect(cell()?.m).toBe('005');
+        expect(cell()?.ct).toEqual({ fa: NUMBER, t: 'g' });
+    });
+
+    test('a text constant in a formula shows as text too', () => {
+        expect(formulaUnder('="005"', NUMBER).cell()?.m).toBe('005');
+    });
+
+    test('a formula reading it reads text, not the number 5', () => {
+        const { ctx, data, type } = formulaUnder('=IF(A1>1,"005",5)', NUMBER);
+        updateCell(ctx, 0, 2, null, '=ISTEXT(B1)');
+        expect(data[0][2]?.v).toBe(true);
+        type(3);
+        expect(data[0][2]?.v).toBe(true);
+    });
+
+    test('a number stays formatted', () => {
+        for (const formula of ['=2+3', '=A1', '=IF(A1>1,5,"x")', '=VALUE("5")']) {
+            const { cell } = formulaUnder(formula, NUMBER, 5);
+            expect(cell()?.m).toBe('5.00');
+            expect(cell()?.ct).toEqual({ fa: NUMBER, t: 'n' });
+        }
+    });
+
+    test('a date format makes a date of a number and leaves text alone', () => {
+        const date = formulaUnder('=DATE(2026,1,4)', 'dd/MM/yyyy').cell();
+        expect(date?.ct?.t).toBe('d');
+        expect(date?.m).toBe('04/01/2026');
+        const text = formulaUnder('="005"', 'dd/MM/yyyy').cell();
+        expect(text?.m).toBe('005');
+        expect(text?.ct).toEqual({ fa: 'dd/MM/yyyy', t: 'g' });
+    });
+
+    test('an error and a boolean keep their own type and text', () => {
+        const error = formulaUnder('=1/0', NUMBER).cell();
+        expect(error?.m).toBe('#DIV/0!');
+        expect(error?.ct?.t).toBe('e');
+        const boolean = formulaUnder('=1>0', NUMBER).cell();
+        expect(boolean?.m).toBe('TRUE');
+        expect(boolean?.ct?.t).toBe('b');
+    });
+
+    test('a formula with no value shows nothing', () => {
+        const { cell } = formulaUnder('=D4', NUMBER);
+        expect(cell()?.f).toBe('=D4');
+        expect(cell()?.m ?? '').not.toContain('undefined');
+    });
+
+    test('Plain text holds a number as text', () => {
+        const { cell } = formulaUnder('=2+3', '@');
+        expect(cell()?.m).toBe('5');
+        expect(cell()?.ct).toEqual({ fa: '@', t: 's' });
     });
 });

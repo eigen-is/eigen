@@ -12,6 +12,7 @@ import { useDialog } from '../../hooks/useDialog';
 import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
 import {
     cancelNormalSelected,
+    caretTakesRange,
     forgetEditorSelection,
     getFlowdata,
     getStyleByCell,
@@ -19,7 +20,7 @@ import {
     handleFormulaInput,
     handleItalic,
     handleUnderline,
-    israngeseleciton,
+    imeOwnsKey,
     isSelectionOnHiddenRowCol,
     loadCellFont,
     moveHighlightCell,
@@ -110,6 +111,7 @@ export const InputBox: React.FC = () => {
             if (!input) return;
             lastKeyDownEventRef.current = new KeyboardEvent(e.type, e.nativeEvent);
             preText.current = input.innerText;
+            if (imeOwnsKey(e.nativeEvent, context.editingCellPosition.length > 0)) return;
 
             // Alt or Meta with Enter inserts a newline, whether or not the suggestions show.
             if (e.key === 'Enter' && (e.altKey || e.metaKey) && context.editingCellPosition.length > 0) {
@@ -136,8 +138,8 @@ export const InputBox: React.FC = () => {
                 });
                 e.preventDefault();
             } else if (e.key === 'F4' && context.editingCellPosition.length > 0) {
-                // Cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1); keep the
-                // browser default suppressed even when the caret isn't on a reference.
+                // Cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1). The browser's default stays suppressed
+                // even when the caret isn't on a reference.
                 e.preventDefault();
                 cycleReferenceInEditor(input, refs.fxInput.current, setContext);
             } else if (
@@ -161,7 +163,7 @@ export const InputBox: React.FC = () => {
                     (draftCtx.formulaCache.rangestart ||
                         draftCtx.formulaCache.rangedrag_column_start ||
                         draftCtx.formulaCache.rangedrag_row_start ||
-                        israngeseleciton(draftCtx)) &&
+                        caretTakesRange(draftCtx)) &&
                     isBlur
                 )
                     return;

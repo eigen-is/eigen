@@ -4,7 +4,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Window } from 'happy-dom';
-import type { Context, Freezen } from '../../../state';
+import type { Context, Sheet } from '../../../state';
 import {
     handleCellAreaDoubleClick,
     handleCellAreaMouseDown,
@@ -32,14 +32,7 @@ const HEIGHT = 500;
 const COLUMN = 74;
 const ROW = 20;
 
-const FROZEN: Freezen = {
-    vertical: {
-        freezenverticaldata: { pos: COLUMN, boundary: 1, scroll: 0 },
-    },
-    horizontal: {
-        freezenhorizontaldata: { pos: 2 * ROW, boundary: 2, scroll: 0 },
-    },
-};
+const FROZEN = { type: 'rangeBoth', range: { row_focus: 1, column_focus: 0 } } as const;
 
 function cellAreaAt(scrollLeft = 0, scrollTop = 0) {
     const { scrollEl } = gridElements();
@@ -49,14 +42,14 @@ function cellAreaAt(scrollLeft = 0, scrollTop = 0) {
     return scrollEl;
 }
 
-function grid(freeze?: Freezen): Context {
+function grid(frozen?: Sheet['frozen']): Context {
     const size = 40;
     const ctx = workbookContextFactory({
         visibledatarow: Array.from({ length: size }, (_, i) => (i + 1) * ROW),
         visibledatacolumn: Array.from({ length: size }, (_, i) => (i + 1) * COLUMN),
     });
     ctx.sheets[0].data = Array.from({ length: size }, () => Array.from({ length: size }, () => null));
-    if (freeze) ctx.getRefs().globalCache.freezen = { [ctx.currentSheetId]: freeze };
+    ctx.sheets[0].frozen = frozen;
     return ctx;
 }
 
@@ -110,7 +103,7 @@ describe('sheetPoint', () => {
 
     test('a sheet frozen elsewhere reads as the sheet the pointer is on', () => {
         const ctx = grid();
-        ctx.getRefs().globalCache.freezen = { other_sheet: FROZEN };
+        ctx.sheets.push({ ...ctx.sheets[0], id: 'other_sheet', frozen: FROZEN });
         expect(sheetPoint(ctx, at(30, 30), cellAreaAt(148, 400)).pane).toBe('main');
     });
 
@@ -129,6 +122,14 @@ describe('sheetPoint', () => {
 describe('the link card', () => {
     test('over a frozen column of a scrolled sheet reads the frozen cell, not the one scrolled under it', () => {
         expect(getCellRowColumn(grid(FROZEN), at(30, 50), cellAreaAt(148, 400))).toEqual({ r: 22, c: 0 });
+    });
+
+    test('past the last column or below the last row reads no cell, not the last one', () => {
+        const end = cellAreaAt(40 * COLUMN - WIDTH, 40 * ROW - HEIGHT + 100);
+        expect(getCellRowColumn(grid(), at(WIDTH - 5, HEIGHT - 105), end)).toEqual({ r: 39, c: 39 });
+        expect(getCellRowColumn(grid(), at(WIDTH - 5, HEIGHT - 95), end)).toBeUndefined();
+        const wide = cellAreaAt(40 * COLUMN - WIDTH + 100);
+        expect(getCellRowColumn(grid(), at(WIDTH - 95, 5), wide)).toBeUndefined();
     });
 });
 
@@ -169,13 +170,13 @@ describe('a formula range drag', () => {
     });
 
     test('over frozen rows picks the frozen row, not the one scrolled under it', () => {
-        ctx.getRefs().globalCache.freezen = { [ctx.currentSheetId]: FROZEN };
+        ctx.sheets[0].frozen = FROZEN;
         rangeDragRow(ctx, at(-10, ROW + 5), noInput(), cellAreaAt(0, 10 * ROW), noElements());
         expect(selected()?.row).toEqual([0, 1]);
     });
 
     test('over a frozen column picks the frozen column, not the one scrolled under it', () => {
-        ctx.getRefs().globalCache.freezen = { [ctx.currentSheetId]: FROZEN };
+        ctx.sheets[0].frozen = FROZEN;
         rangeDrag(ctx, at(5, 100), noInput(), cellAreaAt(3 * COLUMN), noElements());
         expect(selected()?.column).toEqual([0, 0]);
     });
@@ -195,9 +196,50 @@ describe('a cell move', () => {
         expect(dropped?.row).toEqual([24, 24]);
     });
 
-    test('below the grid lands on the last row', () => {
+    test('below the grid lands on the last row in view, not the last of the sheet', () => {
+        expect(moved(grid(), at(10 * COLUMN + 5, HEIGHT + 1), cellAreaAt())?.row).toEqual([24, 24]);
+    });
+
+    test('above the grid lands on the first row in view, not the first of the sheet', () => {
+        expect(moved(grid(), at(10 * COLUMN + 5, -10), cellAreaAt(0, 10 * ROW))?.row).toEqual([10, 10]);
+    });
+
+    test('near the right edge lands on the column under the pointer, not the last one', () => {
+        expect(moved(grid(), at(WIDTH - 5, 5), cellAreaAt())?.column).toEqual([9, 9]);
+    });
+
+    test('past the right edge lands on the last column in view, not the last of the sheet', () => {
+        expect(moved(grid(), at(WIDTH + 200, 5), cellAreaAt(148))?.column).toEqual([11, 11]);
+    });
+
+    test('left of the grid lands on the first column in view, not the first of the sheet', () => {
+        expect(moved(grid(), at(-10, 5), cellAreaAt(5 * COLUMN))?.column).toEqual([5, 5]);
+    });
+
+    test('at the sheet end keeps the whole range on the sheet', () => {
         const ctx = grid();
-        expect(moved(ctx, at(10 * COLUMN + 5, HEIGHT + 1), cellAreaAt())?.row).toEqual([39, 39]);
+        ctx.cellSelectMoving = true;
+        ctx.cellSelectMoveIndex = [0, 0];
+        ctx.selections = [{ row: [0, 0], column: [0, 2], row_focus: 0, column_focus: 0 }];
+        onCellsMoveEnd(ctx, ctx.getRefs().globalCache, at(WIDTH - 5, 5), cellAreaAt(40 * COLUMN), noElements());
+        expect(ctx.selections?.[0].column).toEqual([37, 39]);
+    });
+
+    test('the preview near an edge draws the range where the drop lands it', () => {
+        const ctx = grid();
+        ctx.cellSelectMoving = true;
+        ctx.cellSelectMoveIndex = [0, 10];
+        ctx.selections = [
+            { row: [5, 5], column: [0, 0], row_focus: 5, column_focus: 0 },
+            { row: [0, 0], column: [10, 11], row_focus: 0, column_focus: 10 },
+        ];
+        const container = noElements();
+        const preview = container.ownerDocument.createElement('div');
+        preview.className = 'sheet-cell-selected-move';
+        container.append(preview);
+        onCellsMove(ctx, ctx.getRefs().globalCache, at(WIDTH - 5, 5), cellAreaAt(), container);
+        expect(preview.style.left).toBe(`${9 * COLUMN}px`);
+        expect(preview.style.width).toBe(`${2 * COLUMN - 2}px`);
     });
 
     test('dropped on a frozen column of a scrolled sheet lands in that column', () => {
@@ -250,27 +292,24 @@ describe('a freeze line drop', () => {
         handleOverlayMouseUp(ctx, ctx.getRefs().globalCache, drop, cellArea, noElements(), null, null);
         return ctx.sheets[0].frozen;
     };
-    const frozenTwoColumns: Freezen = {
-        vertical: { freezenverticaldata: { pos: 2 * COLUMN, boundary: 2, scroll: 0 } },
-    };
     const twoColumns = { type: 'rangeColumn', range: { row_focus: 0, column_focus: 1 } } as const;
 
     test('inside the frozen pane of a scrolled sheet ends the pane where it was dropped', () => {
-        const ctx = grid(frozenTwoColumns);
+        const ctx = grid(twoColumns);
         ctx.sheets[0].frozen = { ...twoColumns };
         ctx.colsFreezeDragging = true;
         expect(released(ctx, at(COLUMN + 5, 100), cellAreaAt(10 * COLUMN))?.range?.column_focus).toBe(0);
     });
 
     test('at the header edge of a scrolled sheet stops freezing', () => {
-        const ctx = grid(frozenTwoColumns);
+        const ctx = grid(twoColumns);
         ctx.sheets[0].frozen = { ...twoColumns };
         ctx.colsFreezeDragging = true;
         expect(released(ctx, at(-20, 100), cellAreaAt(10 * COLUMN))).toBeUndefined();
     });
 
     test('past the pane on a scrolled sheet freezes up to the column in view there', () => {
-        const ctx = grid(frozenTwoColumns);
+        const ctx = grid(twoColumns);
         ctx.sheets[0].frozen = { ...twoColumns };
         ctx.colsFreezeDragging = true;
         expect(released(ctx, at(3 * COLUMN + 5, 100), cellAreaAt(10 * COLUMN))?.range?.column_focus).toBe(12);
@@ -442,6 +481,16 @@ describe('the frozen and scrolled cases of each remaining handler', () => {
         container.append(preview);
         onCellsMove(ctx, ctx.getRefs().globalCache, at(5, 5), scrolled(), container);
         expect(preview.style.left).toBe('0px');
+    });
+
+    test('a freeze drop on a sheet that is gone still ends the other drags', () => {
+        const ctx = grid(FROZEN);
+        ctx.currentSheetId = 'gone';
+        ctx.colsFreezeDragging = true;
+        ctx.rowsFreezeDragging = true;
+        handleOverlayMouseUp(ctx, ctx.getRefs().globalCache, at(0, 0), cellAreaAt(), noElements(), null, null);
+        expect(ctx.colsFreezeDragging).toBe(false);
+        expect(ctx.rowsFreezeDragging).toBe(false);
     });
 
     test('a frozen row drop on a scrolled sheet ends the pane where it was dropped', () => {

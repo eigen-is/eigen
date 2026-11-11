@@ -9,9 +9,10 @@ import type { FormulaArg, FormulaOutput } from '../../../types';
 import { ERROR_NAME, ERROR_NUM, ERROR_VALUE } from '../../error';
 import { errorType, iserr, iserror } from '../../functions/information';
 import { iferror, ifs, switchValue } from '../../functions/logical';
-import { index, xlookup, xmatch } from '../../functions/lookup';
-import { aggregate, errorsAsText, maxifs, minifs } from '../../functions/statistical';
+import { columns, hlookup, index, match, rows, vlookup, xlookup, xmatch } from '../../functions/lookup';
+import { aggregate, averageif, averageifs, errorsAsText, maxifs, minifs } from '../../functions/statistical';
 import { concatenate, textjoin } from '../../functions/text';
+import { referenceGrid } from '../../helper/array';
 import { toNumber } from '../../helper/number';
 import type { FunctionArg } from '../../omitted';
 import { OMITTED } from '../../omitted';
@@ -92,10 +93,8 @@ export const DOTTED_FUNCTIONS = [
     'Z.TEST',
 ];
 
-// Resolve a dotted symbol like `NORM.S.DIST` to `[receiver, method]`. The
-// receiver is the object on which the method must be invoked — formulajs methods
-// use `this` internally (e.g. IMSUM calls this.IMREAL), so preserving the owning
-// object is required for correct behavior.
+// A name, dotted ones such as `NORM.S.DIST` included, as its method and the object that owns it, which the call needs:
+// formulajs's methods call each other through `this`, as IMSUM calls this.IMREAL.
 function resolveFormula(symbolParts: string[]): [object, FormulajsMethod] | null {
     let receiver: FormulajsBranch = root;
     let node: FormulajsNode | undefined = receiver[symbolParts[0]];
@@ -107,18 +106,16 @@ function resolveFormula(symbolParts: string[]): [object, FormulajsMethod] | null
     return typeof node === 'function' ? [receiver, node] : null;
 }
 
-// Excel-correct overrides for formulajs functions whose behavior diverges from
-// Excel in ways that real-world spreadsheets depend on. Each takes the raw
-// `params` array and returns either a value (used directly), an Error (in-band
-// error), or `undefined` to fall through to the formulajs implementation.
 // formulajs reads an omitted significance as 0 and answers 0, where Excel's default is 1.
 function withSignificance(method: FormulajsMethod) {
     return (params: FormulaArg[]) => (params.length === 1 ? method(params[0], 1) : undefined);
 }
 
-// formulajs's COUNTIF family, with each error cell as the text it shows, which a criterion such as "#N/A" matches.
-function byText(method: FormulajsMethod) {
-    return (params: FormulaArg[]) => method(...params.map(errorsAsText));
+// formulajs's COUNTIF family, with each error cell as the text it shows, which a criterion such as "#N/A" matches. It
+// answers 0 over a range a delete cut to one cell, so `isRange`'s arguments reach it as rows of cells.
+function byText(method: FormulajsMethod, isRange: (position: number) => boolean) {
+    return (params: FormulaArg[]) =>
+        method(...params.map((param, i) => errorsAsText(isRange(i) ? referenceGrid(param) : param)));
 }
 
 // formulajs reads a start_num below 1 as 1, where Excel's is #VALUE!, an empty one too.
@@ -129,11 +126,9 @@ function startAboveZero(params: FormulaArg[]): FormulaOutput | undefined {
     return undefined;
 }
 
+// Where formulajs's answer differs from Excel's. A result of `undefined` falls through to formulajs.
 const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefined> = {
-    // formulajs.VALUE rejects numbers with #VALUE!. Excel accepts numbers as a
-    // pass-through (and booleans as 1/0). Without this fix, calendar templates
-    // like `IF(VALUE(prev) > daysInMonth, "", prev+1)` are #VALUE! on every
-    // numeric cell.
+    // formulajs's VALUE is #VALUE! for a number, which Excel hands through, and a boolean as 1 or 0.
     VALUE(params) {
         const v = params[0];
         if (typeof v === 'number') return v;
@@ -141,9 +136,8 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
         return undefined;
     },
 
-    // formulajs ships TEXT as `throw new Error('TEXT is not implemented')`, so every
-    // `=TEXT(...)` was #ERROR!. Format through `update()` — the same numfmt masks the
-    // grid renders cells with, so `TEXT(x, fa)` reads like the formatted cell it mimics.
+    // formulajs leaves TEXT unimplemented. It formats through the numfmt masks the grid renders with, so `TEXT(x, fa)`
+    // reads like a cell under that format.
     TEXT(params) {
         const [value, mask] = params;
         if (params.length < 2) throw Error(ERROR_VALUE);
@@ -173,12 +167,10 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
     INDEX: index,
 
     AGGREGATE: aggregate,
-    COUNTIF: byText(formulajs.COUNTIF),
-    COUNTIFS: byText(formulajs.COUNTIFS),
-    SUMIF: byText(formulajs.SUMIF),
-    SUMIFS: byText(formulajs.SUMIFS),
-    AVERAGEIF: byText(formulajs.AVERAGEIF),
-    AVERAGEIFS: byText(formulajs.AVERAGEIFS),
+    COUNTIF: byText(formulajs.COUNTIF, (i) => i === 0),
+    COUNTIFS: byText(formulajs.COUNTIFS, (i) => i % 2 === 0),
+    SUMIF: byText(formulajs.SUMIF, (i) => i !== 1),
+    SUMIFS: byText(formulajs.SUMIFS, (i) => i === 0 || i % 2 === 1),
 
     'CEILING.MATH': withSignificance(formulajs.CEILING.MATH),
     'CEILING.PRECISE': withSignificance(formulajs.CEILING.PRECISE),
@@ -195,15 +187,22 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
 // of `undefined` is a blank, not a fall-through, and an empty argument arrives as OMITTED, for each to read as Excel
 // reads that parameter.
 const FUNCTIONS: Record<string, (params: FunctionArg[]) => FormulaOutput> = {
+    AVERAGEIF: averageif,
+    AVERAGEIFS: averageifs,
+    COLUMNS: columns,
     'ERROR.TYPE': errorType,
+    HLOOKUP: hlookup,
     IFERROR: iferror,
     IFS: ifs,
     ISERR: iserr,
     ISERROR: iserror,
+    MATCH: match,
     MAXIFS: maxifs,
     MINIFS: minifs,
+    ROWS: rows,
     SWITCH: switchValue,
     TEXTJOIN: textjoin,
+    VLOOKUP: vlookup,
     XLOOKUP: xlookup,
     XMATCH: xmatch,
 };

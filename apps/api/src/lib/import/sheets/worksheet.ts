@@ -5,7 +5,7 @@
 // range's columns after they are, and each column once.
 
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
-import type { Sheet, SheetConfig } from '@workspace/lib/sheets';
+import type { CellLink, Sheet, SheetConfig } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { parseA1Range, unquoteSheetName } from '@workspace/sheet/engine';
 import type { XmlElement } from '../../core/xml';
@@ -32,10 +32,7 @@ export type WorksheetContext = {
 
 export type Worksheet = {
     config: Pick<SheetConfig, 'merge' | 'columnlen' | 'colhidden'>;
-    sheet: Pick<
-        Sheet,
-        'defaultColWidth' | 'defaultRowHeight' | 'color' | 'hyperlink' | 'frozen' | 'showGridLines' | 'filterRange'
-    >;
+    sheet: Pick<Sheet, 'defaultColWidth' | 'defaultRowHeight' | 'color' | 'frozen' | 'showGridLines' | 'filterRange'>;
     // By cellKey, already charged.
     placed: Map<number, PlacedCell>;
 };
@@ -176,7 +173,6 @@ function readMerges(rest: XmlElement, context: WorksheetContext, worksheet: Work
 // workbook; with an external relationship it is the target's fragment.
 function readHyperlinks(rest: XmlElement, context: WorksheetContext, worksheet: Worksheet): void {
     const hyperlinks = xmlChild(rest, SML_NS, 'hyperlinks');
-    const hyperlink: NonNullable<Sheet['hyperlink']> = {};
     for (const element of hyperlinks ? xmlChildren(hyperlinks, SML_NS, 'hyperlink') : []) {
         const range = parseA1Range(xmlAttr(element, '', 'ref') ?? '');
         const location = xmlAttr(element, '', 'location');
@@ -195,21 +191,17 @@ function readHyperlinks(rest: XmlElement, context: WorksheetContext, worksheet: 
         if (r >= REFERENCE_ROW_COUNT || c >= REFERENCE_COLUMN_COUNT) continue;
         const key = cellKey(r, c);
         const placed = worksheet.placed.get(key);
-        context.charge(placed ? 0 : 1, link.linkAddress.length);
-        hyperlink[`${r}_${c}`] = link;
-        // The linked cell carries a backref to its link, which the editor's cell edits look up.
-        const hl = { r, c, id: context.id };
-        if (placed) placed.v.hl = hl;
-        else worksheet.placed.set(key, { r, c, v: { hl } });
+        context.charge(placed ? 0 : 1, link.address.length);
+        if (placed) placed.v.link = link;
+        else worksheet.placed.set(key, { r, c, v: { link } });
     }
-    if (Object.keys(hyperlink).length > 0) worksheet.sheet.hyperlink = hyperlink;
 }
 
 // A target is a web or mail address as written, or `#` and a place in the workbook. A web address's scheme is checked
 // where it is followed or exported, by resolveWebLink.
-function hyperlinkOf(target: string | undefined): { linkType: string; linkAddress: string } | undefined {
+function hyperlinkOf(target: string | undefined): CellLink | undefined {
     if (target === undefined || target.trim().length === 0) return undefined;
-    if (!target.startsWith('#')) return { linkType: 'webpage', linkAddress: target };
+    if (!target.startsWith('#')) return { type: 'webpage', address: target };
     const location = target.slice(1);
     if (location.length === 0) return undefined;
     // Quoted sheet name ('My Sheet', 'It''s') with an optional !ref tail. Sheet names may legally contain '!', so
@@ -219,10 +211,8 @@ function hyperlinkOf(target: string | undefined): { linkType: string; linkAddres
         // The editor reads a sheet link's address as a sheet's name, unquoted, so the quotes go. A cell range keeps them,
         // as the editor's range parser reads the quoted form.
         return quoted[2]
-            ? { linkType: 'cellrange', linkAddress: location }
-            : { linkType: 'sheet', linkAddress: unquoteSheetName(quoted[1]) };
+            ? { type: 'cellrange', address: location }
+            : { type: 'sheet', address: unquoteSheetName(quoted[1]) };
     }
-    return location.includes('!')
-        ? { linkType: 'cellrange', linkAddress: location }
-        : { linkType: 'sheet', linkAddress: location };
+    return location.includes('!') ? { type: 'cellrange', address: location } : { type: 'sheet', address: location };
 }

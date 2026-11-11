@@ -25,14 +25,9 @@ import {
     deselectFloatingObject,
     editSheetName,
     getSheetIndex,
+    lastShownSheetRefusal,
     sheetOrder,
 } from '../../state';
-
-// The workbook always shows one sheet, so its last shown sheet can't be hidden or deleted.
-const LAST_SHEET_DELETE =
-    'A workbook always shows at least one sheet. To delete this sheet, add a sheet or show a hidden one first.';
-const LAST_SHEET_HIDE =
-    'A workbook always shows at least one sheet. To hide this sheet, add a sheet or show a hidden one first.';
 
 type Props = {
     id: string;
@@ -156,8 +151,6 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
         [context.allowEdit, setContext, id],
     );
 
-    const isLastShownSheet = context.sheets.filter((s) => s.hide !== 1).length < 2;
-
     const menuItems = (
         <MenuSections
             create={
@@ -199,13 +192,7 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                             });
                         }}
                     />
-                    <DropdownMenuItem
-                        onClick={() => {
-                            if (context.allowEdit === false) return;
-                            if (isLastShownSheet) showNotice(LAST_SHEET_HIDE);
-                            else setContext((ctx) => api.hideSheet(ctx, id));
-                        }}
-                    >
+                    <DropdownMenuItem onClick={() => setContext((ctx) => api.hideSheet(ctx, id))}>
                         Hide
                     </DropdownMenuItem>
                 </>
@@ -220,8 +207,9 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                 <DropdownMenuItem
                     variant="destructive"
                     onClick={() => {
-                        if (isLastShownSheet) {
-                            showNotice(LAST_SHEET_DELETE);
+                        const refusal = lastShownSheetRefusal(context, id, 'delete');
+                        if (refusal) {
+                            showNotice(refusal);
                             return;
                         }
                         showNotice(`Delete the sheet "${sheet.name}"?`, 'yesno', () => {

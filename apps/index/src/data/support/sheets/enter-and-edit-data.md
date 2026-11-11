@@ -6,7 +6,7 @@ category: Basics
 tags: [sheets, cells, data, editing, keyboard, formula-bar]
 related: [sheets/get-started, sheets/create-and-edit, sheets/formulas]
 order: 30
-updated: 2026-11-08
+updated: 2026-11-09
 ---
 
 You can enter text, numbers, and formulas into any cell in Sheets, then edit or clear them at any time. Changes are saved automatically.
@@ -18,6 +18,8 @@ You can enter text, numbers, and formulas into any cell in Sheets, then edit or 
 3. Press **Enter** to confirm and move to the next row.
 
 To cancel what you have typed before confirming, press **Escape**. The cell returns to its previous contents.
+
+With an input method, such as for Japanese or Chinese, the first **Enter** confirms what you are composing and the cell stays open. Press **Enter** again to confirm the cell.
 
 ## Edit a cell you have already filled in
 
@@ -41,7 +43,7 @@ Press **Alt+Enter** (Mac: **⌥+Enter**) while a cell is open for editing. The c
 
 ## Clear cell contents
 
-Select one or more cells, then press **Delete** or **Backspace**. The values, formulas and links are removed, and the cells keep their formatting, such as colors, bold and number format. To remove the formatting too, use **Format → Clear formatting**.
+Select one or more cells, then press **Delete** or **Backspace**. The values, formulas and links are removed, and the cells keep their formatting, such as colors, bold and number format. To remove the formatting too, apart from the number format, use **Format → Clear formatting**.
 
 To clear contents from the right-click menu, right-click the selection and choose **Clear contents**. The same option is available under **Edit → Delete → Clear contents**.
 
@@ -59,9 +61,9 @@ To copy the top row of a selection into the rows below it, or its left column in
 - Press **Ctrl+D** (Mac: **⌘D**) to fill down through the selected rows.
 - Press **Ctrl+R** (Mac: **⌘R**) to fill right across the selected columns.
 
-Sheets copies each cell's value or formula, formatting, and borders. When filling formulas, Sheets adjusts relative cell references automatically. An empty source cell clears the value, formatting, and borders of the cells it fills.
+Sheets copies each cell's value or formula, formatting, borders, and link. When filling formulas, Sheets adjusts relative cell references automatically. An empty source cell clears the value, formatting, borders, and link of the cells it fills.
 
-A filled cell also takes the data validation of its source cell. Where the source cell has none, the filled cell keeps its own. Conditional formatting on the source cells spreads over the cells you fill.
+A filled cell also takes the data validation and conditional formatting of its source cell. Where the source cell has none, the filled cell loses its own, so a rule can end up with a gap in it.
 
 ## Undo and redo
 

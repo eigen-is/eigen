@@ -146,3 +146,39 @@ test('a sheet opened for the first time has a cursor the arrows move', async () 
     await press('ArrowDown');
     expect(seen.selections.map((selection) => selection.row)).toEqual([[1, 1]]);
 });
+
+// The host publishes what this reports as the tab's cursor, so a peer's box of this tab follows the landing.
+test("a peer's delete of the last row reports the selection where it landed, for the cursor peers see", async () => {
+    const { workbook, seen } = await mountHost();
+    await act(async () => {
+        workbook.current?.revealSearchMatch({ sheetId: 's1', r: 19, c: 2 });
+        await nextFrame();
+    });
+    seen.selections.length = 0;
+    await act(async () => {
+        workbook.current?.applyOp([
+            { op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row', start: 19, end: 19 } },
+        ]);
+        await nextFrame();
+    });
+    expect(seen.selections.map(({ row, column }) => [row, column])).toEqual([
+        [
+            [18, 18],
+            [2, 2],
+        ],
+    ]);
+});
+
+// A comment pane's jump, whose row took the focus, so the thread it opens gives the focus back to the grid.
+test('focusGrid hands the keys back to the grid', async () => {
+    const { container, workbook, press, seen } = await mountHost();
+    const pane = document.createElement('button');
+    document.body.append(pane);
+    pane.focus();
+    await act(async () => workbook.current?.focusGrid());
+    pane.remove();
+    expect(document.activeElement).toBe(container.querySelector('#sheet-rich-text-editor'));
+    seen.selections.length = 0;
+    await press('ArrowDown');
+    expect(seen.selections.map((selection) => selection.row)).toEqual([[1, 1]]);
+});

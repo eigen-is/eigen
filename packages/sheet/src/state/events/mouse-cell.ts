@@ -8,19 +8,19 @@ import { isNil, last } from 'es-toolkit/compat';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import {
+    caretTakesRange,
     cellFocus,
     cellTextBox,
     checkboxChange,
     createFormulaRangeSelect,
-    createRangeHightlight,
+    createRangeHighlight,
     deselectFloatingObject,
     functionHTMLGenerate,
     getCellDataValidation,
     isCheckboxClick,
     isDropdownChevronClick,
-    israngeseleciton,
-    rangeHightlightselected,
     rangeSetValue,
+    updateFunctionHint,
 } from '../modules';
 import { cancelFunctionrangeSelected, mergeBorder, mergeMoveMain, updateCell } from '../modules/cell';
 import { openCellEditor } from '../modules/cell-editor';
@@ -48,7 +48,7 @@ function takesFormulaReference(ctx: Context): boolean {
             ctx.formulaCache.rangestart ||
                 ctx.formulaCache.rangedrag_column_start ||
                 ctx.formulaCache.rangedrag_row_start ||
-                israngeseleciton(ctx),
+                caretTakesRange(ctx),
         )
     );
 }
@@ -262,19 +262,10 @@ export function handleCellAreaMouseDown(
                 if (vText.length > 0 && vText.substring(0, 1) === '=') {
                     vText = functionHTMLGenerate(vText);
 
-                    const currSelection = window.getSelection();
-                    if (currSelection == null) return;
-                    // `parentNode` resolves to `ParentNode | null` in lib.dom while childNodes are
-                    // `ChildNode`; widening to `Node` lets indexOf match the same DOM reference.
-                    const anchorParent: Node | null = currSelection.anchorNode?.parentNode ?? null;
-                    const siblings = anchorParent?.parentNode?.childNodes;
-                    const rangeIndex = anchorParent && siblings ? Array.from<Node>(siblings).indexOf(anchorParent) : -1;
-                    ctx.formulaCache.functionRangeIndex = [rangeIndex, currSelection.anchorOffset];
-
                     cellInput.innerHTML = vText;
 
                     cancelFunctionrangeSelected(ctx);
-                    createRangeHightlight(ctx, vText);
+                    createRangeHighlight(ctx, vText);
                 }
 
                 ctx.formulaCache.rangestart = false;
@@ -283,9 +274,9 @@ export function handleCellAreaMouseDown(
 
                 if (fxInput) fxInput.innerHTML = vText;
 
-                rangeHightlightselected(ctx, cellInput);
+                updateFunctionHint(ctx, cellInput);
 
-                israngeseleciton(ctx);
+                caretTakesRange(ctx);
                 ctx.formulaCache.func_selectedrange = {
                     left,
                     width,
@@ -334,7 +325,7 @@ export function handleCellAreaMouseDown(
             const rangeIndex = ctx.formulaCache.rangechangeindex ?? 0;
             ctx.formulaCache.selectingRangeIndex = rangeIndex;
             if (rangeIndex > ctx.formulaRangeHighlight.length) {
-                createRangeHightlight(ctx, cellInput.innerHTML, rangeIndex);
+                createRangeHighlight(ctx, cellInput.innerHTML, rangeIndex);
             }
             createFormulaRangeSelect(ctx, {
                 rangeIndex,
@@ -456,7 +447,7 @@ export function handleCellAreaDoubleClick(ctx: Context, e: MouseEvent, cellArea:
         (ctx.editingCellPosition.length > 0 && ctx.formulaCache.rangestart) ||
         ctx.formulaCache.rangedrag_column_start ||
         ctx.formulaCache.rangedrag_row_start ||
-        israngeseleciton(ctx)
+        caretTakesRange(ctx)
     ) {
         return;
     }

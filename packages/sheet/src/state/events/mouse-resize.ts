@@ -5,7 +5,7 @@
 import { cellDisplay } from '../../engine/format';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
-import { deselectFloatingObject, israngeseleciton } from '../modules';
+import { caretTakesRange, deselectFloatingObject } from '../modules';
 import { colLocation, rowLocation, sheetPoint } from '../modules/location';
 import { getFontSet, measuringContext } from '../modules/text';
 import { getSheetIndex } from '../utils';
@@ -49,7 +49,7 @@ export function handleRowSizeHandleMouseDown(
         ctx.formulaCache.rangestart ||
         ctx.formulaCache.rangedrag_column_start ||
         ctx.formulaCache.rangedrag_row_start ||
-        israngeseleciton(ctx)
+        caretTakesRange(ctx)
     )
         return;
     ctx.editingCellPosition = [];

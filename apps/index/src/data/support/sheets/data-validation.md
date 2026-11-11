@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, data-validation, dropdown, rules]
 related: [sheets/enter-and-edit-data, sheets/conditional-formatting]
 order: 50
-updated: 2026-11-08
+updated: 2026-11-09
 ---
 
 Data validation lets you control what goes into a cell. You can add a dropdown list so people pick from a fixed set of options, or write a rule that rejects a value if it falls outside a range, does not match a pattern, or fails another condition.
@@ -68,7 +68,7 @@ Two checkboxes at the bottom of the dialog apply to every validation type:
 - **Prohibit input when input data is invalid**: blocks the entry and shows a failure notice if someone types a value that fails the rule.
 - **Show prompt when the cell is selected**: displays a hint message when the cell receives focus. When this is ticked, a text field appears where you can write the hint.
 
-Without **Prohibit input when input data is invalid**, a value that fails the rule is kept, and its cell shows a red triangle in the top-left corner. This goes for values already in the cells when you add the rule, too. Select the cell to see a card that starts with "Invalid:" and says what the rule expects.
+Without **Prohibit input when input data is invalid**, a value that fails the rule is kept, and its cell shows a red triangle in the top-left corner. This goes for values already in the cells when you add the rule, too. Select the cell to see a card that starts with "Invalid:" and says what the rule expects. The card opens under the cell, or above it near the bottom of the sheet.
 
 ## Remove a rule
 
@@ -80,7 +80,7 @@ The rule is removed from those cells.
 
 ## Rules when you paste or insert
 
-When you copy or cut cells and paste them in the same browser tab, their rules come along. They replace the rules of the cells you paste over, and a copied cell without a rule removes the rule where it lands.
+When you copy or cut cells and paste them in the same browser tab, their rules come along. They replace the rules of the cells you paste over, and a copied cell without a rule removes the rule where it lands. Filling cells works the same way. A sort leaves rules where they are.
 
 A row or column you insert inside a rule's range gets the rule. One you insert above or right below the range doesn't.
 

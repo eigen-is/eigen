@@ -5,10 +5,10 @@ type: how-to
 tags: [sheets, links, hyperlinks, cells]
 related: [sheets/enter-and-edit-data, sheets/multiple-tabs]
 order: 140
-updated: 2026-11-02
+updated: 2026-11-09
 ---
 
-A cell can carry a link to a web page, to a range of cells, or to another sheet tab in the same spreadsheet. The cell shows the text you choose for it, in blue with an underline.
+A cell can carry a link to a web page, to a range of cells, or to another sheet tab in the same spreadsheet. The cell shows the text you choose for it, in blue with an underline. The link stays with the cell when you move, sort, or fill it.
 
 ## Add a link
 
@@ -21,11 +21,11 @@ A cell can carry a link to a web page, to a range of cells, or to another sheet 
    - **Sheet**: choose a tab from the **Worksheet** list.
 5. Click **OK**, or press Enter in a field.
 
-If you leave **Display text** empty, the cell shows the address instead. If the address is not one Sheets can open, a short message appears under the field and **OK** stays grayed out until you correct it.
+If you leave **Display text** empty, the cell shows the address instead. If the cell held a formula, new display text replaces it. If the address is not one Sheets can open, a short message appears under the field and **OK** stays grayed out until you correct it.
 
 ## Open a link
 
-Hover over a cell that has a link. A small card appears under it.
+Hover over a cell that has a link. A small card appears under it, or above it near the bottom of the sheet.
 
 - For a web page, click **Open link**. The page opens in a new browser tab.
 - For a cell range or another sheet, the card reads **Go to** followed by the address. Click it to jump there.
