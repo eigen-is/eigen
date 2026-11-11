@@ -1,22 +1,19 @@
-// Applies one op batch to the editor's context, as replaySheetsOps applies it to a joiner's sheets: the sheet, row and
-// column ops first, then the cell and field patches, whole or not at all. An op the replay's shape check refuses is
-// skipped. A batch that changes the open workbook outside an edit's own recipe comes through here, such as a peer's
-// batch, a log replay or a structural undo, so every tab ends the same. It reports the ops that moved rows, which the
-// undo stacks follow, and a batch new to the tab moves the tab's view too, such as the cell editor and the selections.
+// Applies one op batch to the editor's context. applySheetsBatch, which the replay applies a joiner's batches with,
+// runs on the plain sheets outside immer, and one recipe writes what changed into the context. Every sheet, row or
+// column change of the open workbook comes through here, such as a peer's batch, an undo step or the author's own row
+// op, so every tab ends the same. It reports the ops that moved rows, which the undo stacks follow, and a batch new to
+// the tab moves its view too.
 
-import { cloneDeep } from 'es-toolkit/compat';
-import type { Patch } from 'immer';
-import { applyPatches, current, produce } from 'immer';
-import { deleteRowColOf, insertRowColOf, isNewSheet, isRowColOp, renameSheetOf } from '../../engine/replay-ops';
+import { isRecord } from '@workspace/lib/guards';
+import { produce } from 'immer';
+import { applySheetsBatch } from '../../engine/replay-ops';
 import type { Context } from '../context';
-import type { Op, Selection, Sheet } from '../types';
-import { opToPatch } from '../utils';
-import { cancelNormalSelected } from './cell';
-import { registerSheetFormulas } from './formula-cache';
+import type { Op, Sheet } from '../types';
+import { snapshotContext } from './formula-cache';
 import type { RowColMove } from './history-shift';
 import { deleteMove, insertMove } from './history-shift';
-import { deleteRowCol, insertRowCol } from './rowcol';
-import { addSheet, deleteSheet, leaveCurrentSheet, renameSheet } from './sheet';
+import { followView } from './rowcol';
+import { initSheetData, settleCurrentSheet } from './sheet';
 
 // A row or column op the batch applied, with the sheets it was applied to.
 type AppliedRowCol = { move: RowColMove; sheets: Sheet[] };
@@ -28,94 +25,91 @@ export function applyOpBatch(
     ops: Op[],
     moveView = true,
 ): { ctx: Context; moved: AppliedRowCol[] } | null {
-    let patches: Patch[] = [];
-    // The sheets this batch adds, whose formulas the formula map learns once the batch applied.
-    const added: string[] = [];
-    const moved: AppliedRowCol[] = [];
-    let next: Context;
+    let moved: AppliedRowCol[] = [];
     try {
-        next = produce(ctx, (draft: Context) => {
-            for (const op of ops) {
-                const { id } = op;
-                // A row or column op lands for a read-only viewer too, or the grid and the metadata patches part ways.
-                // One the shape check or the sheet refuses throws, and the whole batch is skipped.
-                if (isRowColOp(op)) {
-                    const sheets = current(draft.sheets);
-                    let move: RowColMove;
-                    if (op.op === 'insertRowCol') {
-                        const insert = insertRowColOf(op);
-                        insertRowCol(draft, insert, false, true);
-                        move = insertMove(insert);
-                    } else {
-                        const remove = deleteRowColOf(op);
-                        deleteRowCol(draft, remove, true);
-                        move = deleteMove(remove);
-                    }
-                    moved.push({ move, sheets });
-                    if (moveView) followView(draft, move);
-                } else if (op.op === 'addSheet') {
-                    if (!isNewSheet(op.value, draft.sheets)) continue;
-                    // addSheet keeps the value it is given, so the op itself never ends up in the frozen context.
-                    const value = cloneDeep(op.value);
-                    addSheet(draft, value.id, undefined, value, true);
-                    added.push(value.id);
-                } else if (op.op === 'deleteSheet' && id) {
-                    deleteSheet(draft, id, true);
-                    if (moveView && id === draft.currentSheetId) leaveCurrentSheet(draft);
-                } else if (op.op === 'renameSheet') {
-                    renameSheet(draft, renameSheetOf(op));
-                }
-            }
-            [patches] = opToPatch(draft, ops);
-            const [first] = ops;
-            if (moveView && first?.path[0] === 'hide' && first.id === draft.currentSheetId) {
-                leaveCurrentSheet(draft, first.id);
-            }
-            if (patches.length > 0) applyPatches(draft, patches);
+        const next = produce(ctx, (draft: Context) => {
+            moved = applyBatch(draft, ops, moveView);
         });
+        return { ctx: next, moved };
     } catch (e) {
         console.warn('[sheet] op batch failed to apply, skipping batch:', e);
+        // The formula graph lives outside immer, so it may have followed part of the batch.
+        ctx.formulaCache.forgetGraph();
         return null;
     }
-    // The formula map lives outside immer, so it follows the batch only once the batch applied.
-    for (const id of added) {
-        const data = next.sheets.find((sheet) => sheet.id === id)?.data;
-        if (data) registerSheetFormulas(next, id, data);
-    }
-    if (patches.length > 0) next.formulaCache.updateFormulaCache(next, patches);
-    return { ctx: next, moved };
 }
 
-// The open cell editor and the selections move with their cells, so a commit lands where the person chose, not in the
-// row that slid under it. A delete of the editor's cell closes the editor without writing.
-function followView(draft: Context, move: RowColMove) {
-    if (move.id !== draft.currentSheetId) {
-        const left = draft.sheetViewRecord[move.id];
-        if (left) left.selections = movedSelections(left.selections, move);
-        return;
+// The batch inside a recipe, applied to the plain sheets first so a refused op throws before any write. A row op lands
+// for a read-only viewer too, or the grid and the metadata patches part ways.
+export function applyBatch(ctx: Context, ops: Op[], moveView = true): AppliedRowCol[] {
+    const { formulaCache } = ctx;
+    const { sheets } = snapshotContext(ctx);
+    const applied = applySheetsBatch(sheets, ops, formulaCache.graph, {});
+    // A new graph means the sheets' names may read other sheets now, so the references resolved by name go too.
+    if (applied.graph !== formulaCache.graph) formulaCache.forgetGraph();
+    formulaCache.graph = applied.graph;
+    if (applied.skipped) console.warn('[sheet] op batch skipped its recompute:', applied.skipped);
+    writeSheets(ctx, ops, sheets, applied.sheets);
+    const moved = applied.moved.map(({ op, sheets: before }) => ({
+        move: 'index' in op ? insertMove(op) : deleteMove(op),
+        sheets: before,
+    }));
+    if (!moveView) return moved;
+    // Each op moves the view on the grid it left, which the next op starts from.
+    for (const [i, { move }] of moved.entries()) {
+        const after = moved[i + 1]?.sheets ?? applied.sheets;
+        const data = after.find(({ id }) => id === move.id)?.data;
+        if (data) followView(ctx, move, data);
     }
-    const row = move.type === 'row';
-    const [r, c] = draft.editingCellPosition;
-    if (r != null && c != null) {
-        const moved = move.to(row ? r : c);
-        if (moved == null) cancelNormalSelected(draft);
-        else draft.editingCellPosition = row ? [moved, c] : [r, moved];
-    }
-    draft.selections = movedSelections(draft.selections, move);
+    settleCurrentSheet(ctx);
+    return moved;
 }
 
-// A selected range the op's delete takes whole goes.
-function movedSelections(selections: Selection[] | undefined, move: RowColMove): Selection[] | undefined {
-    if (!selections) return undefined;
-    const row = move.type === 'row';
-    const moved: Selection[] = [];
-    for (const selection of selections) {
-        const shifted = move.range(selection);
-        if (!shifted) continue;
-        const [start] = row ? shifted.row : shifted.column;
-        const focus = row ? selection.row_focus : selection.column_focus;
-        const at = focus == null ? start : (move.to(focus) ?? start);
-        moved.push(row ? { ...shifted, row_focus: at } : { ...shifted, column_focus: at });
+// The sheet fields written entry by entry, with how many levels down; every other field is written whole.
+const WRITTEN_BY_ENTRY: ReadonlyMap<string, number> = new Map([
+    ['charts', 3],
+    ['dataValidations', 1],
+]);
+
+// Writes what the batch changed into the context field by field, so the undo entry immer records puts back only that
+// and leaves a peer's later changes alone. A sheet it deleted is replaced, never written into, even under its old id.
+function writeSheets(ctx: Context, ops: readonly Op[], before: readonly Sheet[], after: readonly Sheet[]) {
+    const deleted = new Set(ops.flatMap(({ op, id }) => (op === 'deleteSheet' && id ? [id] : [])));
+    const was = new Map(before.filter(({ id }) => !deleted.has(id)).map((sheet) => [sheet.id, sheet]));
+    const now = new Map(after.map((sheet) => [sheet.id, sheet]));
+    for (let i = ctx.sheets.length - 1; i >= 0; i -= 1) {
+        const target = ctx.sheets[i];
+        const old = was.get(target.id);
+        const next = now.get(target.id);
+        if (old && next) writeChanges(target, old, next, WRITTEN_BY_ENTRY);
+        else ctx.sheets.splice(i, 1);
     }
-    return moved.length > 0 ? moved : undefined;
+    for (const sheet of after) {
+        if (was.has(sheet.id)) continue;
+        const added = { ...sheet };
+        initSheetData(added);
+        ctx.sheets.push(added);
+    }
+}
+
+// Writes into `target` what `next` holds other than `was`, its plain value before the batch, and deletes what `next`
+// lacks. Compared with the draft instead, an unchanged value would be written back, which immer records as a removal.
+function writeChanges(
+    target: Record<string, unknown>,
+    was: Readonly<Record<string, unknown>>,
+    next: Readonly<Record<string, unknown>>,
+    depth: ReadonlyMap<string, number> | number,
+) {
+    for (const [key, value] of Object.entries(next)) {
+        const old = was[key];
+        if (old === value) continue;
+        const below = typeof depth === 'number' ? depth : (depth.get(key) ?? 0);
+        const held = target[key];
+        if (below > 0 && isRecord(held) && isRecord(old) && isRecord(value)) {
+            writeChanges(held, old, value, below - 1);
+        } else {
+            target[key] = value;
+        }
+    }
+    for (const key of Object.keys(was)) if (!Object.hasOwn(next, key)) delete target[key];
 }

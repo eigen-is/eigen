@@ -5,13 +5,9 @@
 
 import { getMarkRange } from '@tiptap/core';
 import type { Editor } from '@tiptap/react';
-import { webLinkHref } from '@workspace/lib/sheets/web-link';
-import { FormDialog, FormDialogForm } from '@workspace/ui';
-import { FieldError } from '@workspace/ui/components/field';
-import { Input } from '@workspace/ui/components/input';
-import { Label } from '@workspace/ui/components/label';
-import { cn } from '@workspace/ui/lib/utils';
-import { useId, useState } from 'react';
+import { webLinkHref } from '@workspace/lib/validation';
+import { FormDialog, FormDialogForm, LinkAddressField, LinkTextField } from '@workspace/ui';
+import { useState } from 'react';
 
 // href is the link being edited, or empty for a new one. The selection stays as it is until OK.
 export type LinkDialogTarget = { editor: Editor; from: number; to: number; href: string };
@@ -51,8 +47,6 @@ function LinkForm({ editor, from, to, href }: LinkDialogTarget) {
     const [text, setText] = useState(() => editor.state.doc.textBetween(from, to, ' '));
     const [address, setAddress] = useState(href);
     const linkHref = webLinkHref(address);
-    const refused = address.trim() !== '' && linkHref == null;
-    const refusalId = useId();
 
     return (
         <FormDialogForm
@@ -80,29 +74,8 @@ function LinkForm({ editor, from, to, href }: LinkDialogTarget) {
             }}
         >
             <div className="space-y-3">
-                <div className="space-y-1.5">
-                    <Label htmlFor="link-text">Display text</Label>
-                    <Input
-                        id="link-text"
-                        spellCheck="false"
-                        disabled={!atCaret}
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                    />
-                </div>
-                <div className="space-y-1.5">
-                    <Label htmlFor="link-address">Link address</Label>
-                    <Input
-                        id="link-address"
-                        autoFocus
-                        aria-describedby={refused ? refusalId : undefined}
-                        className={cn(refused && 'border-destructive')}
-                        spellCheck="false"
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
-                    />
-                    {refused && <FieldError id={refusalId}>Please enter a valid link</FieldError>}
-                </div>
+                <LinkTextField value={text} onValueChange={setText} disabled={!atCaret} />
+                <LinkAddressField value={address} onValueChange={setAddress} autoFocus />
             </div>
         </FormDialogForm>
     );

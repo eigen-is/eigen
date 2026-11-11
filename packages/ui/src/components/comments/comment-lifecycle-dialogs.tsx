@@ -1,7 +1,7 @@
 // The card dialog and the comment right-click menu every editor mounts, driven by the comment lifecycle bundle. The
 // editor owns the context menu's state and supplies the delete that strips its own anchor, such as a mark in docs or a
-// cell's card ids in sheets. A delete from the dialog's edit form or that menu asks first, here, so every editor asks
-// the same way. Everything else, the deleted state included, comes from the bundle.
+// cell's card ids in sheets. A delete from the dialog's edit form or that menu asks first, through DeleteCommentDialog,
+// so every editor asks the same way. Everything else, the deleted state included, comes from the bundle.
 
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
@@ -10,6 +10,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { useEffect, useRef, useState } from 'react';
 import { CardDialog } from '../cards/card-dialog';
 import type { useContextMenu } from '../context-menu';
+import type { DeleteDialogProps } from '../delete/delete-dialog';
 import { DeleteDialog } from '../delete/delete-dialog';
 import { CommentContextMenu } from './comment-context-menu';
 import type { CommentContextMenuItem } from './comment-menu-items';
@@ -91,11 +92,10 @@ export function CommentLifecycleDialogs({
                 onDelete={setDeleteCardId}
             />
 
-            <DeleteDialog
+            <DeleteCommentDialog
                 open={!!deleteCardId}
                 onOpenChange={(open) => !open && setDeleteCardId(null)}
-                title={`Delete ${noun}`}
-                description={`This deletes the ${noun} and its replies.`}
+                noun={noun}
                 onDelete={() => {
                     if (deleteCardId) onDelete(deleteCardId);
                     // In a host that keeps a deleted card, the dialog would stay open on the deleted state.
@@ -103,5 +103,15 @@ export function CommentLifecycleDialogs({
                 }}
             />
         </>
+    );
+}
+
+type DeleteCommentDialogProps = Omit<DeleteDialogProps, 'title' | 'description'> & { noun?: string };
+
+// The ask before a comment and its replies go, in the words every editor uses. A host that opens it from a menu of
+// its own, such as a sheet's cell menu, mounts it there and says where the focus goes as it closes.
+export function DeleteCommentDialog({ noun = 'comment', ...props }: DeleteCommentDialogProps) {
+    return (
+        <DeleteDialog {...props} title={`Delete ${noun}`} description={`This deletes the ${noun} and its replies.`} />
     );
 }

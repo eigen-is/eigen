@@ -2,10 +2,17 @@ import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { FormulaEngine } from '../../engine/formula-engine';
-import { sheetFinder } from '../../engine/parser/helper/cell';
-import { extractDependencies, recalcSheets } from '../../engine/recalc';
+import { FormulaGraph } from '../../engine/formula-graph';
+import type { RecalcBudgets, RecomputeSeeds } from '../../engine/recalc';
+import { recalcSheets, recomputeAfter } from '../../engine/recalc';
 
 // ── Builders ────────────────────────────────────────────────────────────────
+
+// A recompute over a graph built for it, as the replay's first one is.
+function recompute<S extends Sheet>(sheets: S[], seeds: RecomputeSeeds, budgets: RecalcBudgets = {}): S[] {
+    const graph = new FormulaGraph(sheets, budgets);
+    return recomputeAfter(sheets, seeds, graph, new FormulaEngine({ maxCellsRead: budgets.maxCellsRead }));
+}
 
 function num(v: number): Cell {
     return { v, m: String(v), ct: { fa: 'General', t: 'n' } };
@@ -22,6 +29,9 @@ function formula(f: string, cached?: Partial<Cell>): Cell {
 function sheet(id: string, name: string, data: (Cell | null)[][], extra: Partial<Sheet> = {}): Sheet {
     return { id, name, order: 0, config: {}, data, ...extra };
 }
+
+// A recompute reached every formula, which is what the guard answers for.
+const everyFormula = { cells: [], lines: [], reads: () => true };
 
 // ── recalcSheets ────────────────────────────────────────────────────────────
 
@@ -52,6 +62,23 @@ describe('engine/recalc — recalcSheets', () => {
         const out = recalcSheets(sheets);
         expect(performance.now() - started).toBeLessThan(2_000);
         expect(out[0].data?.[0][0]?.f).toBe(f);
+    });
+
+    // An import trusts Excel: only a formula with no value, or an error, is evaluated.
+    test('a value Excel stored stays, and an empty or error one is computed', () => {
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [
+                    formula('=1+1', num(5)),
+                    formula('=1+1'),
+                    formula('=1+1', { v: '#N/A', ct: { fa: 'General', t: 'e' } }),
+                ],
+                [formula('=A1*2')],
+            ]),
+        ];
+        const row = recalcSheets(sheets)[0].data!;
+        expect(row[0].map((cell) => cell?.v)).toEqual([5, 2, 2]);
+        expect(row[1][0]?.v).toBe(10);
     });
 
     test('chained dependencies evaluate in order', () => {
@@ -85,41 +112,38 @@ describe('engine/recalc — recalcSheets', () => {
     });
 
     test("a quoted sheet name with an operator in it, as in ='1-2'!A1+5, orders its formula after that cell", () => {
-        // Sheet1 is scanned first, so only a recorded dependency makes it read the fresh 6 over the cached 0.
-        const sheets = [
-            sheet('s1', 'Sheet1', [[formula("='1-2'!A1+5")]]),
-            sheet('s2', '1-2', [[formula('=2*3', { v: 0 })]]),
-        ];
+        // Sheet1 is scanned first, so only a recorded dependency makes it read the fresh 6.
+        const sheets = [sheet('s1', 'Sheet1', [[formula("='1-2'!A1+5")]]), sheet('s2', '1-2', [[formula('=2*3')]])];
         const out = recalcSheets(sheets);
         expect(out[0].data?.[0][0]?.v).toBe(11);
     });
 
     test('a formula that starts and ends with a string, as ="x"&B1&"y" does, still reads the cells between', () => {
-        // A1 is scanned first, so only a recorded dependency makes it read B1's fresh 6 over the cached 0.
-        const sheets = [sheet('s1', 'Sheet1', [[formula('="x"&B1&"y"'), formula('=2*3', { v: 0 })]])];
+        // A1 is scanned first, so only a recorded dependency makes it read B1's fresh 6.
+        const sheets = [sheet('s1', 'Sheet1', [[formula('="x"&B1&"y"'), formula('=2*3')]])];
         const out = recalcSheets(sheets);
         expect(out[0].data?.[0][0]?.v).toBe('x6y');
     });
 
     test("a formula orders after the cells an INDEX's range argument reads", () => {
-        // A1 is scanned first, so only a recorded dependency makes it read C1's fresh 6 over the cached 0.
-        const sheets = [sheet('s1', 'Sheet1', [[formula('=INDEX(B1:C1,1,2)'), num(10), formula('=2*3', { v: 0 })]])];
+        // A1 is scanned first, so only a recorded dependency makes it read C1's fresh 6.
+        const sheets = [sheet('s1', 'Sheet1', [[formula('=INDEX(B1:C1,1,2)'), num(10), formula('=2*3')]])];
         const out = recalcSheets(sheets);
         expect(out[0].data![0][0]?.v).toBe(6);
     });
 
     test('a formula orders after the cells a whole column or row reads, on its sheet or another', () => {
-        // Each formula is scanned before the cell it reads, whose cached 0 is stale.
+        // Each formula is scanned before the cell it reads.
         const sheets = [
             sheet('s1', 'Sheet1', [
-                [formula('=SUM(B:B)'), formula('=2*3', { v: 0 }), formula('=SUM(Data!A:A)')],
+                [formula('=SUM(B:B)'), formula('=2*3'), formula('=SUM(Data!A:A)')],
                 [null, null, formula('=SUM(Data!2:2)')],
                 [null, null, formula('=SUM(4:4)')],
-                [formula('=4*5', { v: 0 })],
+                [formula('=4*5')],
             ]),
             sheet('s2', 'Data', [
-                [formula('=7*1', { v: 0 }), null],
-                [num(1), formula('=8*1', { v: 0 })],
+                [formula('=7*1'), null],
+                [num(1), formula('=8*1')],
             ]),
         ];
         const out = recalcSheets(sheets);
@@ -164,28 +188,23 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![0][1]?.v).toBe(43999);
     });
 
-    test('engine error does not clobber a non-error cached value', () => {
-        // Functions this build lacks (LET, FILTER, …) return
-        // #NAME?. At import, Excel's correct cached value must survive — same
-        // freeze-is-safe rationale as volatiles.
+    test('a function this build lacks leaves a stored value as it is', () => {
         const sheets = [
             sheet('s1', 'Sheet1', [[formula('=FILTER(1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } })]]),
         ];
-        const out = recalcSheets(sheets);
+        const out = recompute(sheets, everyFormula);
         expect(out[0].data![0][0]?.v).toBe(7);
         expect(out[0].data![0][0]?.m).toBe('7');
         expect(out[0].data![0][0]?.ct?.t).not.toBe('e');
     });
 
-    test('downstream formula reads the cached value, not the engine error', () => {
-        // B1 is an unsupported function with a cached 7; =B1+1 must see 7 → 8,
-        // proving the #NAME? never reached the formulas downstream.
+    test('a formula reading a kept value reads the number, not the #NAME?', () => {
         const sheets = [
             sheet('s1', 'Sheet1', [
                 [null, formula('=FILTER(1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } }), formula('=B1+1')],
             ]),
         ];
-        const out = recalcSheets(sheets);
+        const out = recompute(sheets, everyFormula);
         expect(out[0].data![0][1]?.v).toBe(7);
         expect(out[0].data![0][2]?.v).toBe(8);
     });
@@ -199,7 +218,7 @@ describe('engine/recalc — recalcSheets', () => {
                 [num(3), formula('=B1+1')],
             ]),
         ];
-        const out = recalcSheets(sheets);
+        const out = recompute(sheets, everyFormula);
         expect(out[0].data![0][1]?.v).toBe(2);
         expect(out[0].data![1][1]?.v).toBe(1);
         // A cell that reads it sees the cached value, not the fallback.
@@ -216,7 +235,7 @@ describe('engine/recalc — recalcSheets', () => {
             sheet('s2', 'Sheet2', [[num(10)]]),
             sheet('s3', 'Sheet 3', [[num(2)]]),
         ];
-        const out = recalcSheets(sheets);
+        const out = recompute(sheets, everyFormula);
         expect(out[0].data![0][1]?.v).toBe('FILTER( Rate');
         expect(out[0].data![1][1]?.v).toBe(13);
     });
@@ -224,7 +243,7 @@ describe('engine/recalc — recalcSheets', () => {
     // Excel never evaluates the branch IF skips, so the engine computes what Excel did.
     test('a function the engine lacks in a branch IF skips recalculates past a stale cached value', () => {
         const sheets = [sheet('s1', 'Sheet1', [[num(1), formula('=IF(A1>0,A1+1,FILTER(A1:A3,TRUE))', num(5))]])];
-        const out = recalcSheets(sheets);
+        const out = recompute(sheets, everyFormula);
         expect(out[0].data![0][1]?.v).toBe(2);
     });
 
@@ -239,7 +258,7 @@ describe('engine/recalc — recalcSheets', () => {
                 [num(3), formula('=IFERROR(Sheet1!Discount,7)', num(5)), formula('=B1*100')],
             ]),
         ];
-        const out = recalcSheets(sheets);
+        const out = recompute(sheets, everyFormula);
         expect(out[0].data![0][1]?.v).toBe(0.21);
         expect(out[0].data![1][1]?.v).toBe(3.6);
         expect(out[0].data![2][1]?.v).toBe(5);
@@ -269,7 +288,7 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[1].data![0][0]?.v).toBe(0);
     });
 
-    // A #NAME? stands in for the value of a function the engine lacks, so the guard keeps the reader's cached value.
+    // An import keeps what Excel computed. With no value of its own, a formula reading such a function shows #NAME?.
     test("a formula reading a function the engine lacks keeps its cached value, or shows #NAME?, never IFERROR's fallback", () => {
         const sheets = [
             sheet('s1', 'Sheet1', [
@@ -283,10 +302,45 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![1][2]?.v).toBe('#NAME?');
     });
 
+    test('a formula this build cannot evaluate keeps the error or empty text the file holds', () => {
+        const error = (v: string): Partial<Cell> => ({ v, m: v, ct: { fa: 'General', t: 'e' } });
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [num(1), formula('=FILTER(A1:A2,1)', error('#N/A')), formula('=B1', error('#N/A'))],
+                [num(2), formula('=NOSUCH(A1)', error('#DIV/0!')), formula('=SUMPRODUCT(A1:A2*A1:A2)', error('#N/A'))],
+                [num(3), formula('=IFERROR(SUM(OFFSET(A1,0,-1)),"")', str('')), formula('=OFFSET(A1,0,1)')],
+                [formula('=1/0', error('#N/A')), formula('=TaxRate', error('#REF!')), formula('=IFERROR(C3,"none")')],
+            ]),
+        ];
+        const values = recalcSheets(sheets)[0].data!.map((row) => row.map((cell) => cell?.v));
+        expect(values).toEqual([
+            [1, '#N/A', '#N/A'],
+            [2, '#DIV/0!', '#N/A'],
+            [3, '', '#NAME?'],
+            // The engine can evaluate the first, so its error is no longer the file's. The last reads C3's #NAME?.
+            ['#DIV/0!', '#REF!', '#NAME?'],
+        ]);
+    });
+
+    test('a recompute keeps the error or empty text a formula it cannot evaluate holds', () => {
+        const error = (v: string): Partial<Cell> => ({ v, m: v, ct: { fa: 'General', t: 'e' } });
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [formula('=FILTER(1,2)', error('#N/A')), formula('=A1:A2*2', error('#VALUE!'))],
+                [formula('=OFFSET(B1,0,1)', str('')), formula('=A1', error('#N/A'))],
+            ]),
+        ];
+        const values = recompute(sheets, everyFormula)[0].data!.map((row) => row.map((cell) => cell?.v));
+        expect(values).toEqual([
+            ['#N/A', '#VALUE!'],
+            ['', '#N/A'],
+        ]);
+    });
+
     // Only an error string is an error: a cached text that starts with # is a value the guard keeps.
     test('a cached text that starts with # is kept over a function the engine lacks', () => {
         const sheets = [sheet('s1', 'Sheet1', [[num(1), formula('=FILTER(A1:A2,A1:A2>0)', str('#tag'))]])];
-        expect(recalcSheets(sheets)[0].data![0][1]?.v).toBe('#tag');
+        expect(recompute(sheets, everyFormula)[0].data![0][1]?.v).toBe('#tag');
     });
 
     test('imported VLOOKUP with a lower-case FALSE resolves against the looked-up sheet', () => {
@@ -310,15 +364,14 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![1][1]?.v).toBe('No input yet');
     });
 
-    test('an imported XLOOKUP recalculates after its input changed', () => {
-        // Excel's cached 2 predates the edit of B2 to 5.
+    test('a recompute reads a stale XLOOKUP again', () => {
         const sheets = [
             sheet('s1', 'Sheet1', [
                 [str('a'), num(1), num(10), formula('=XLOOKUP("b",A1:A2,B1:B2)', num(2))],
                 [str('b'), num(5), num(50), formula('=XLOOKUP("b",A1:A2,B1:C2)', num(2))],
             ]),
         ];
-        const out = recalcSheets(sheets);
+        const out = recompute(sheets, everyFormula);
         expect(out[0].data![0][3]?.v).toBe(5);
         // A row-wide return is a spill anchor, which holds the row's first value.
         expect(out[0].data![1][3]?.v).toBe(5);
@@ -364,12 +417,12 @@ describe('engine/recalc — recalcSheets', () => {
                 ],
             ]),
         ];
-        const [one, two, three, four, five] = recalcSheets(sheets)[0].data![0];
+        const [one, two, three, four, five] = recompute(sheets, everyFormula)[0].data![0];
         expect(one).toMatchObject({ v: '005', ct: { fa: '0.00', t: 'g' } });
         expect(two).toMatchObject({ v: 4, m: '4.00', ct: { fa: '0.00', t: 'n' } });
         expect(three).toMatchObject({ v: true, ct: { fa: 'General', t: 'b' } });
         expect(four).toMatchObject({ v: 4, ct: { fa: 'yyyy-mm-dd', t: 'd' } });
-        expect(five?.ct).toBeUndefined();
+        expect(five?.ct).toEqual({ fa: 'General', t: 'n' });
     });
 
     test('a malformed number format shows the result as General', () => {
@@ -460,8 +513,8 @@ describe('engine/recalc — recalcSheets', () => {
     });
 
     // Excel ignores a space that isn't between two references. A zenodo workbook writes =IF((AN38+ AO38         )<>0,…)
-    // over a number and the empty text another formula gives, and caches #VALUE!, as 1 + "" is in Excel.
-    test('spaces around an operand change nothing, and a number plus empty text is #VALUE!', () => {
+    // over a number and the empty text another formula gives. Excel caches #VALUE!; the engine reads the empty text as 0.
+    test('spaces around an operand change nothing, and a number plus empty text is the number', () => {
         const spaced = '=IF((A1+ B1         )<>0,A1,    "")';
         const sheets = [
             sheet('s1', 'Sheet1', [
@@ -471,7 +524,7 @@ describe('engine/recalc — recalcSheets', () => {
         ];
         const [out] = recalcSheets(sheets);
         expect(out.data![0].slice(2).map((cell) => cell?.v)).toEqual([1, 3, 3]);
-        expect(out.data![1][2]?.v).toBe('#VALUE!');
+        expect(out.data![1][2]?.v).toBe(1);
     });
 
     test('one poisoned formula does not kill the pass', () => {
@@ -485,7 +538,7 @@ describe('engine/recalc — recalcSheets', () => {
     test('past its dependency budget a recalc throws before it computes', () => {
         // On a sheet 129 rows deep, A1:A128 meets 2 blocks of 64 × 16, D1:D2 one.
         const rows = Array.from({ length: 129 }, (): (Cell | null)[] => [null, null, null, null]);
-        rows[0] = [num(1), formula('=SUM(A1:A128)', num(7)), formula('=SUM(D1:D2)'), null];
+        rows[0] = [num(1), formula('=SUM(A1:A128)'), formula('=SUM(D1:D2)'), null];
         const sheets = [sheet('s1', 'Sheet1', rows)];
         expect(() => recalcSheets(sheets, { maxDependencySlots: 2 })).toThrow(RangeError);
         expect(recalcSheets(sheets, { maxDependencySlots: 3 })[0].data![0][1]?.v).toBe(1);
@@ -531,14 +584,13 @@ describe('engine/recalc — recalcSheets', () => {
             ]),
         ];
         expect(() => recalcSheets(sheets, { maxCellsRead: 4 })).toThrow(RangeError);
-        // A formula failing on the budget keeps its cached value, which must not let the pass carry on.
         const cached = [
             sheet('s1', 'Sheet1', [
                 [num(1), formula('=SUM(A1:A2)', num(9))],
                 [num(2), null],
             ]),
         ];
-        expect(() => recalcSheets(cached, { maxCellsRead: 1 })).toThrow(RangeError);
+        expect(() => recompute(cached, everyFormula, { maxCellsRead: 1 })).toThrow(RangeError);
         const out = recalcSheets(sheets, { maxCellsRead: 5 });
         expect([out[0].data![0][1]?.v, out[0].data![1][1]?.v]).toEqual([6, 3]);
     });
@@ -552,33 +604,42 @@ describe('engine/recalc — recalcSheets', () => {
     });
 });
 
-describe('engine/recalc — extractDependencies', () => {
-    const walkOver = (sheets: Pick<Sheet, 'id' | 'name' | 'data'>[]) => ({
-        findSheet: sheetFinder(sheets),
-        cellTextToIndexList: {},
-    });
+describe('engine/recalc — the cells a formula reads', () => {
+    type Grid = { id: string; name: string; data: (Cell | null)[][] };
+    // The cells of `sheets` a change in which reaches `formula`, held at a cell of s1 no range here reaches.
+    const reached = (sheets: Grid[], formula: string, sheetId = 's1') => {
+        const graph = new FormulaGraph(sheets);
+        graph.set(sheetId, 99, 99, formula);
+        const cells: string[] = [];
+        for (const { id, data } of sheets) {
+            for (const [r, row] of data.entries()) {
+                for (const c of row.keys()) {
+                    if (graph.affected(sheets, [{ id, r, c }]).length > 0) cells.push(`${id} ${r} ${c}`);
+                }
+            }
+        }
+        return cells;
+    };
 
     // The walk is linear in the text, so a crafted file can't make it quadratic.
     test('walks a 2 MB formula of quoted sheet names in well under a second', () => {
-        const g = walkOver([{ id: 's2', name: 'My Data', data: [[num(1)]] }]);
+        const sheets = [{ id: 's2', name: 'My Data', data: [[num(1)]] }];
         const f = `=${"'My Data'!A1+".repeat(160_000)}1`;
         expect(f.length).toBeGreaterThan(2_000_000);
         const start = performance.now();
-        const deps = extractDependencies(g, f, 's1');
+        expect(reached(sheets, f)).toEqual(['s2 0 0']);
         expect(performance.now() - start).toBeLessThan(1_000);
-        expect(deps).toHaveLength(160_000);
-        expect(deps[0]).toEqual({ row: [0, 0], column: [0, 0], sheetId: 's2' });
     });
 
     test('walks a 1 MB run of letters in well under a second', () => {
-        const g = walkOver([{ id: 's1', name: 'Sheet1', data: [[num(1)]] }]);
+        const sheets = [{ id: 's1', name: 'Sheet1', data: [[num(1)]] }];
         const start = performance.now();
-        expect(extractDependencies(g, `=${'A'.repeat(1_000_000)}`, 's1')).toEqual([]);
+        expect(reached(sheets, `=${'A'.repeat(1_000_000)}`)).toEqual([]);
         expect(performance.now() - start).toBeLessThan(1_000);
     });
 
     // Whatever the engine reads must be listed, or a change in that cell leaves the formula stale. So each formula runs
-    // through the engine over a resolver that records the cells, and the walk has to cover them.
+    // through the engine over a resolver that records the cells, and the graph has to reach the formula from them.
     test.each([
         '=A1 + B1',
         '=SUM(A1 : B2)',
@@ -615,35 +676,22 @@ describe('engine/recalc — extractDependencies', () => {
             data: grid(),
         }));
         const resolver = createArrayResolver(sheets);
-        const read: string[] = [];
+        const read = new Set<string>();
         new FormulaEngine().evaluate(text, 's0', {
             ...resolver,
             getCell(sheetId, row, col) {
-                read.push(`${sheetId} ${row} ${col}`);
+                read.add(`${sheetId} ${row} ${col}`);
                 return resolver.getCell(sheetId, row, col);
             },
         });
-        expect(read.length).toBeGreaterThan(0);
-
-        const listed = new Set<string>();
-        for (const { sheetId, row, column } of extractDependencies(walkOver(sheets), text, 's0')) {
-            for (let r = row[0]; r <= row[1]; r += 1) {
-                for (let c = column[0]; c <= column[1]; c += 1) listed.add(`${sheetId} ${r} ${c}`);
-            }
-        }
-        expect(read.filter((cell) => !listed.has(cell))).toEqual([]);
+        expect(read.size).toBeGreaterThan(0);
+        const listed = new Set(reached(sheets, text, 's0'));
+        expect([...read].filter((cell) => !listed.has(cell))).toEqual([]);
     });
 
     test("a function's name reads as no cell, after an operator or a colon", () => {
-        const data = [[num(1), num(2)]];
-        const g = walkOver([{ id: 's1', name: 'Sheet1', data }]);
-        expect(extractDependencies(g, '=LOG10(A1)+ATAN2(B2,1)', 's1')).toEqual([
-            { row: [0, 0], column: [0, 0], sheetId: 's1' },
-            { row: [1, 1], column: [1, 1], sheetId: 's1' },
-        ]);
-        expect(extractDependencies(g, '=A1:INDEX(B:B,1)', 's1')).toEqual([
-            { row: [0, 0], column: [0, 0], sheetId: 's1' },
-            { row: [0, 1_048_575], column: [1, 1], sheetId: 's1' },
-        ]);
+        const sheets = [{ id: 's1', name: 'Sheet1', data: [0, 1, 2].map(() => [num(1), num(2), num(3)]) }];
+        expect(reached(sheets, '=LOG10(A1)+ATAN2(B2,1)')).toEqual(['s1 0 0', 's1 1 1']);
+        expect(reached(sheets, '=A1:INDEX(B:B,1)')).toEqual(['s1 0 0', 's1 0 1', 's1 1 1', 's1 2 1']);
     });
 });

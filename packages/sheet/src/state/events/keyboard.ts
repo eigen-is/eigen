@@ -1,7 +1,8 @@
 // The grid's keyboard. The Workbook hands each keydown to handleGlobalKeyDown, which moves the selection, commits an
 // open edit on Enter or Tab, runs the ⌘ shortcuts and opens a cell when a key types into it. While a cell is open,
-// the in-cell editor handles every other key. SHEET_HOTKEYS defines every letter shortcut once: the key handlers
-// match against it through TanStack's hotkey matcher, as the other apps' shortcuts do, and the menus show it.
+// the in-cell editor handles every other key, and a key during an IME composition is the IME's. SHEET_HOTKEYS defines
+// every letter shortcut once: the key handlers match against it through TanStack's hotkey matcher, as the other apps'
+// shortcuts do, and the menus show it.
 
 import type { Hotkey } from '@tanstack/react-hotkeys';
 import { matchesKeyboardEvent } from '@tanstack/react-hotkeys';
@@ -17,10 +18,8 @@ import { cancelNormalSelected, updateCell } from '../modules/cell';
 import { openCellEditor } from '../modules/cell-editor';
 import { cellFocus, checkboxChange, getCellDataValidation } from '../modules/data-validation';
 import { fillFromEdge } from '../modules/drop-cell';
-import { handleFormulaInput } from '../modules/formula-editor';
-import { moveHighlightCell, moveHighlightRange, selectAll } from '../modules/selection';
+import { moveHighlightCell, moveHighlightRange, normalizeSelection, selectAll } from '../modules/selection';
 import { handleBold, handleItalic, handleUnderline } from '../modules/toolbar';
-import type { Selection } from '../types';
 import { getSheetIndex } from '../utils';
 import { clearSelectedContents } from './clear';
 import { handleCopy, handleCut } from './copy';
@@ -47,14 +46,7 @@ export const SHEET_HOTKEYS = {
 function commitEdit(ctx: Context, cellInput: HTMLDivElement) {
     const [r, c] = ctx.editingCellPosition;
     updateCell(ctx, r, c, cellInput);
-    ctx.selections = [
-        {
-            row: [r, r],
-            column: [c, c],
-            row_focus: r,
-            column_focus: c,
-        },
-    ];
+    ctx.selections = normalizeSelection(ctx, [{ row: [r, r], column: [c, c], row_focus: r, column_focus: c }]);
 }
 
 // Whether a key changes an editor's text, or only moves or commands: Backspace, Space and Delete do, and so does a
@@ -64,6 +56,12 @@ export function typesIntoEditor(e: KeyboardEvent) {
     if (key === 8 || key === 32 || key === 46) return true;
     if (e.ctrlKey) return key === 86;
     return !e.altKey && key > 46 && !(key >= 112 && key <= 123) && key !== 144 && key !== 108;
+}
+
+// A key the IME is taking: anything during a composition, or a 229 in an open cell, because Safari fires the Enter that
+// confirms a composition just after compositionend. On a closed cell a 229 is the key that starts typing, and opens it.
+export function imeOwnsKey(e: KeyboardEvent, editing: boolean) {
+    return e.isComposing || (editing && e.keyCode === 229);
 }
 
 export function handleGlobalEnter(ctx: Context, cellInput: HTMLDivElement, e: KeyboardEvent) {
@@ -129,8 +127,7 @@ function handleControlPlusArrowKey(ctx: Context, e: KeyboardEvent, shiftPressed:
     if (!sheetData?.length) return;
     const maxRow = sheetData.length;
     const maxCol = sheetData[0]?.length ?? 0;
-    const last: Selection | undefined =
-        ctx.selections && ctx.selections.length > 0 ? ctx.selections[ctx.selections.length - 1] : undefined;
+    const last = ctx.selections?.at(-1);
     if (!last) return;
 
     const currR = last.row_focus;
@@ -191,21 +188,15 @@ function handleControlPlusArrowKey(ctx: Context, e: KeyboardEvent, shiftPressed:
 
 const floatingObjectSelected = (ctx: Context) => ctx.activeObject != null;
 
-export function handleWithCtrlOrMetaKey(
-    ctx: Context,
-    e: KeyboardEvent,
-    cellInput: HTMLDivElement,
-    fxInput: HTMLDivElement | null | undefined,
-) {
+function handleWithCtrlOrMetaKey(ctx: Context, e: KeyboardEvent, cellInput: HTMLDivElement) {
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
     if (e.shiftKey) {
-        ctx.shiftAnchor = cloneDeep(ctx.selections?.[ctx.selections.length - 1]);
+        ctx.shiftAnchor = cloneDeep(ctx.selections?.at(-1));
         ctx.shiftKeyDown = true;
 
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-            // Ctrl + Shift + Arrow: extend selection toward next edge
             handleControlPlusArrowKey(ctx, e, true);
         } else if ([';', '"', ':', "'"].includes(e.key)) {
             const last = ctx.selections?.at(-1);
@@ -213,7 +204,6 @@ export function handleWithCtrlOrMetaKey(
 
             const html = dayjs().format('YYYY-MM-DD HH:mm:ss');
             openCellEditor(ctx, last.row_focus, last.column_focus, { html, caret: 'end' });
-            handleFormulaInput(ctx, fxInput, cellInput, e.keyCode);
         }
     } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         handleControlPlusArrowKey(ctx, e, false);
@@ -256,10 +246,9 @@ export function handleWithCtrlOrMetaKey(
 function handleShiftWithArrowKey(ctx: Context, e: KeyboardEvent) {
     if (ctx.editingCellPosition.length > 0) return;
 
-    ctx.shiftAnchor = cloneDeep(ctx.selections?.[ctx.selections.length - 1]);
+    ctx.shiftAnchor = cloneDeep(ctx.selections?.at(-1));
     ctx.shiftKeyDown = true;
 
-    // Shift + Arrow: extend selection by one cell
     switch (e.key) {
         case 'ArrowUp':
             moveHighlightRange(ctx, 'down', -1, 'rangeOfSelect');
@@ -304,25 +293,22 @@ export function handleArrowKey(ctx: Context, e: KeyboardEvent) {
     }
 }
 
-// Space/Enter toggle the focused tick box — Google's keyboard route to the box
-// the mousedown hit-test reaches. Returns false for every other cell, so the
-// normal Enter/printable-input handling runs unchanged.
+// Space and Enter toggle the focused tick box, as in Google Sheets. Returns false for every other cell, so Enter and
+// typing work as usual.
 function toggleFocusedCheckbox(ctx: Context, kstr: string) {
     if (kstr !== ' ' && kstr !== 'Enter') return false;
     if (ctx.editingCellPosition.length > 0) return false;
-    const selection = ctx.selections?.[ctx.selections.length - 1];
+    const selection = ctx.selections?.at(-1);
     if (selection?.row_focus == null || selection.column_focus == null) return false;
     return checkboxChange(ctx, selection.row_focus, selection.column_focus);
 }
 
-// Alt+Down opens the focused cell's list — Excel's and Google's shortcut, and the
-// keyboard's only route to the chevron the canvas paints on every list cell.
-// cellFocus is what positions the hidden Radix anchor, so it runs first, exactly as
-// the mousedown path does. Returns false for every other cell and key.
+// Alt+Down opens the focused cell's list, as in Excel and Google Sheets. cellFocus positions the hidden Radix anchor,
+// so it runs first, as on a mousedown. Returns false for every other cell and key.
 function openFocusedDropdown(ctx: Context, e: KeyboardEvent) {
     if (!e.altKey || e.key !== 'ArrowDown') return false;
     if (ctx.editingCellPosition.length > 0 || ctx.allowEdit === false) return false;
-    const selection = ctx.selections?.[ctx.selections.length - 1];
+    const selection = ctx.selections?.at(-1);
     if (selection?.row_focus == null || selection.column_focus == null) return false;
     const { row_focus: r, column_focus: c } = selection;
     if (getCellDataValidation(ctx, r, c)?.type !== 'dropdown') return false;
@@ -331,14 +317,10 @@ function openFocusedDropdown(ctx: Context, e: KeyboardEvent) {
     return true;
 }
 
-export function handleGlobalKeyDown(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    fxInput: HTMLDivElement | null | undefined,
-    e: KeyboardEvent,
-) {
+export function handleGlobalKeyDown(ctx: Context, cellInput: HTMLDivElement, e: KeyboardEvent) {
+    if (imeOwnsKey(e, ctx.editingCellPosition.length > 0)) return;
+
     ctx.selectionActive = false;
-    const kcode = e.keyCode;
     const kstr = e.key;
     if (ctx.filterContextMenu) {
         return;
@@ -362,10 +344,8 @@ export function handleGlobalKeyDown(
         return;
     }
 
-    // SHEET_HOTKEYS.focusLock toggles the sheet's focus lock: released, keys fall through to the host
-    // app so a keyboard user can tab out of the grid. Runs independently of sheetFocused so the
-    // lock can be re-taken from anywhere inside the workbook — the keydown listener is on the
-    // workbook container, so focus that has left it can't come back this way.
+    // A released focus lock lets keys fall through to the host app, so a keyboard user can tab out of the grid. This
+    // runs whatever sheetFocused says, so the lock can be re-taken from anywhere inside the workbook.
     if (matchesKeyboardEvent(e, SHEET_HOTKEYS.focusLock)) {
         ctx.sheetFocused = !ctx.sheetFocused;
         e.preventDefault();
@@ -407,11 +387,10 @@ export function handleGlobalKeyDown(
         moveHighlightCell(ctx, 'down', 0, 'rangeOfSelect');
         e.preventDefault();
     } else if (kstr === 'Escape') {
-        // Not editing: bubble to document (skip the tail's focus-steal + stopPropagation) so the
-        // shared find bar's document-level Escape hotkey can dismiss it.
+        // Not editing: the key bubbles to the document, where the find bar's Escape hotkey dismisses it.
         return;
     } else if (e.ctrlKey || e.metaKey) {
-        handleWithCtrlOrMetaKey(ctx, e, cellInput, fxInput);
+        handleWithCtrlOrMetaKey(ctx, e, cellInput);
         return;
     } else if (
         e.shiftKey &&
@@ -424,7 +403,7 @@ export function handleGlobalKeyDown(
         e.preventDefault();
     } else if (kstr === 'ArrowUp' || kstr === 'ArrowDown' || kstr === 'ArrowLeft' || kstr === 'ArrowRight') {
         handleArrowKey(ctx, e);
-    } else if (typesIntoEditor(e) || kcode === 0) {
+    } else if (typesIntoEditor(e) || e.keyCode === 0) {
         if (!allowEdit) return;
         // With no selection a typed key has no cell to open, so it must not land in the hidden editor either. A key
         // typed into another field of the workbook, such as a toolbar input, still reaches that field.
@@ -434,7 +413,6 @@ export function handleGlobalKeyDown(
             const last = ctx.selections?.at(-1);
             if (last?.row_focus == null || last.column_focus == null) return;
             openCellEditor(ctx, last.row_focus, last.column_focus, { html: '' });
-            handleFormulaInput(ctx, fxInput, cellInput, kcode);
         }
     }
 

@@ -115,6 +115,7 @@ async function render(canEdit: boolean, selected: string[] = []) {
         const canvas = useCanvasDoc('owner', 'mount', 'drawing', VECTOR_STYLE_DEFAULTS);
         const [selectedIds, setSelectedIds] = useState(selected);
         return createElement(CanvasEditor, {
+            onCommentHover: () => {},
             doc: canvas,
             viewport: 'infinite',
             styleDefaults: VECTOR_STYLE_DEFAULTS,

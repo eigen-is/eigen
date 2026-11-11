@@ -43,3 +43,4 @@ export {
 } from './restart';
 export { CONTROL_CHARS, NO_CONTROL_PATTERN } from './text';
 export { ROLE_MAILBOX_LOCAL_PARTS, validateUsername } from './username';
+export { resolveWebLink, webLinkHref } from './web-link';

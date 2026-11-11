@@ -49,7 +49,7 @@ import {
     settleCurrentSheet,
     shiftEntries,
     updateFloatingBox,
-    warmFormulaCellInfoMapOnIdle,
+    warmFormulaGraphOnIdle,
 } from '../../state';
 
 type Stacks = Pick<GlobalCache, 'undoList' | 'redoList' | 'cutByPeer'>;
@@ -76,11 +76,11 @@ export function generateAPIs(
         applyOp: (ops: Op[]): boolean => {
             let accepted = false;
             setContext(
-                (ctx_) => {
-                    const applied = applyOpBatch(current(ctx_), ops);
+                (draftCtx) => {
+                    const applied = applyOpBatch(current(draftCtx), ops);
                     if (!applied) return;
                     accepted = true;
-                    Object.assign(ctx_, applied.ctx);
+                    Object.assign(draftCtx, applied.ctx);
                     // An entry holds formula text naming tabs, so a peer's rename empties both stacks. It is rare.
                     if (ops.some(({ op }) => op === 'renameSheet')) {
                         setStacksAfterPeer(history, [], []);
@@ -110,31 +110,31 @@ export function generateAPIs(
                 return firstMove !== -1 && batches.slice(firstMove).some((ops) => !fresh.has(ops) && movesRows(ops));
             };
             const lost = overtaken(currentSheetId);
-            // The formula engine starts empty, so the replay skips the formula map, and it is built once the browser
-            // is idle.
+            // The formula engine starts empty, so a replay of cell edits builds no formula graph, and it is built once
+            // the browser is idle. A batch with a sheet or row op builds it for its recompute.
             getContext().formulaCache.resetEngine();
             setContext(
-                (ctx_) => {
+                (draftCtx) => {
                     if (lost) {
-                        cancelNormalSelected(ctx_);
-                        ctx_.selections = undefined;
+                        cancelNormalSelected(draftCtx);
+                        draftCtx.selections = undefined;
                     }
-                    for (const [sheetId, left] of Object.entries(ctx_.sheetViewRecord)) {
+                    for (const [sheetId, left] of Object.entries(draftCtx.sheetViewRecord)) {
                         if (overtaken(sheetId)) left.selections = undefined;
                     }
-                    let next: Context = { ...current(ctx_), sheets: base };
+                    let next: Context = { ...current(draftCtx), sheets: base };
                     for (const ops of batches) {
                         const applied = applyOpBatch(next, ops, fresh.has(ops));
                         if (applied) next = applied.ctx;
                         else accepted = false;
                     }
-                    Object.assign(ctx_, next);
-                    settleCurrentSheet(ctx_);
+                    Object.assign(draftCtx, next);
+                    settleCurrentSheet(draftCtx);
                 },
                 { noHistory: true },
             );
             if (lost) getContext().getRefs().cellInput.current?.blur();
-            warmFormulaCellInfoMapOnIdle(getContext);
+            warmFormulaGraphOnIdle(getContext);
             setStacksAfterPeer(history, [], []);
             return accepted;
         },
@@ -147,28 +147,12 @@ export function generateAPIs(
             options: api.SheetLookup = {},
         ) => setContext((draftCtx) => api.setCellFormat(draftCtx, row, column, attr, value, options)),
 
-        getAllSheets: () => api.getAllSheets(getContext()),
+        getAllSheets: () => getContext().sheets,
 
-        addPresences: (newPresences: Presence[]) => {
+        // The live set, whole each time, so a window that left is gone and a remount gets every peer back.
+        setPresences: (presences: Presence[]) => {
             setContext((draftCtx) => {
-                const newKeys = new Set(newPresences.map(presenceKey));
-                draftCtx.presences = (draftCtx.presences ?? [])
-                    .filter((v) => !newKeys.has(presenceKey(v)))
-                    .concat(newPresences);
-            });
-        },
-
-        removePresences: (
-            arr: {
-                username: string;
-                userId?: string;
-            }[],
-        ) => {
-            setContext((draftCtx) => {
-                if (draftCtx.presences != null) {
-                    const removeKeys = new Set(arr.map(presenceKey));
-                    draftCtx.presences = draftCtx.presences.filter((v) => !removeKeys.has(presenceKey(v)));
-                }
+                draftCtx.presences = presences;
             });
         },
 
@@ -239,6 +223,9 @@ export function generateAPIs(
         revealSearchMatch: (cell: SearchHighlight) =>
             setContext((draftCtx) => revealSearchMatch(draftCtx, cell), { noHistory: true }),
 
+        // Gives the keys back to the grid after a control outside it took the focus.
+        focusGrid: () => getContext().getRefs().cellInput.current?.focus({ preventScroll: true }),
+
         // Replace rewrites every occurrence in one cell, and replaceAll every match. Each is one recipe, so one undo
         // step and one op batch. Both return the matches the edit leaves, which the provider adopts without a search.
         replace: (
@@ -248,8 +235,8 @@ export function generateAPIs(
             opts: DocSearchOptions,
             preserveCase: boolean,
         ): SearchResult[] => {
-            setContext((ctx_) => {
-                replaceSearchMatch(ctx_, cell, query, replacement, opts, preserveCase);
+            setContext((draftCtx) => {
+                replaceSearchMatch(draftCtx, cell, query, replacement, opts, preserveCase);
             });
             return collectMatches(getContext(), query, opts);
         },
@@ -261,13 +248,10 @@ export function generateAPIs(
             preserveCase: boolean,
         ): { replaced: number; matches: SearchResult[] } => {
             let replaced = 0;
-            setContext((ctx_) => {
-                replaced = replaceAllMatches(ctx_, query, replacement, opts, preserveCase);
+            setContext((draftCtx) => {
+                replaced = replaceAllMatches(draftCtx, query, replacement, opts, preserveCase);
             });
             return { replaced, matches: collectMatches(getContext(), query, opts) };
         },
     };
 }
-
-// A collaborator's key: the user id, or the name for a presence that has none.
-const presenceKey = (presence: { username: string; userId?: string }) => presence.userId ?? presence.username;

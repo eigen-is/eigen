@@ -1,65 +1,62 @@
-// Row and column inserts, deletes, hides and unhides on the open workbook. The engine shifts what every reader of the
-// workbook sees, such as the cells, the formulas and the links (applySheetsInsertRowCol). This module writes that result
-// back into the editor's draft, then moves what only this tab holds, such as the selection. A local edit, a peer's op
-// and an undo all come through here. It also tells the editors and the arrow keys where the hidden rows and columns are.
+// Row and column inserts, deletes, hides and unhides on the open workbook. An insert or a delete is its marker op,
+// applied through applyBatch as a peer's batch is, so the engine shifts what every reader sees, such as the cells, the
+// formulas and the links, and every reader recomputes the same. followView moves what only this tab holds, such as the
+// selection, for the author's op, a peer's and an undo alike. It also tells the editors and the arrow keys where the
+// hidden rows and columns are.
 
 import { isRecord } from '@workspace/lib/guards';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
-import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../engine/rowcol';
+import { lineMove } from '../../engine/rowcol';
+import type { CellMatrix } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
-import type { Sheet } from '../types';
+import type { Selection } from '../types';
+import { deleteMarker, insertMarker } from '../utils';
+import { applyBatch } from './apply-ops';
+import { cancelNormalSelected } from './cell';
+import type { RowColMove } from './history-shift';
 
 export const ONE_AREA_ONLY = 'Cannot perform this operation on multiple selection areas, please select a single area';
 
-export function insertRowCol(
-    ctx: Context,
-    op: InsertRowColOp,
-    changeSelection = true,
-    // A batch applies for a read-only viewer too, so the permission check stops only a viewer's own insert.
-    fromBatch = false,
-) {
-    if (!fromBatch && ctx.allowEdit === false) return;
-    const { type, index, count, direction } = op;
-
-    writeBackSheets(ctx, applySheetsInsertRowCol(ctx.sheets, op));
-
+export function insertRowCol(ctx: Context, op: InsertRowColOp, changeSelection = true) {
+    if (ctx.allowEdit === false) return;
+    applyBatch(ctx, [insertMarker(op)]);
     const data = getFlowdata(ctx, op.id);
     if (changeSelection && data) {
-        const insertAt = direction === 'lefttop' ? index : index + 1;
-        const span = [insertAt, insertAt + count - 1];
+        const { at } = lineMove(op);
+        const span = [at, at + op.count - 1];
         ctx.selections =
-            type === 'row'
+            op.type === 'row'
                 ? [{ row: span, column: [0, data[0].length - 1] }]
                 : [{ row: [0, data.length - 1], column: span }];
     }
-
-    ctx.formulaCache.formulaCellInfoMap = null;
 }
 
-export function deleteRowCol(
-    ctx: Context,
-    op: DeleteRowColOp,
-    // A batch applies for a read-only viewer too and moves the selection itself, so the permission check and the
-    // selection reset are for a tab's own delete.
-    fromBatch = false,
-) {
-    if (!fromBatch && ctx.allowEdit === false) return;
-    writeBackSheets(ctx, applySheetsDeleteRowCol(ctx.sheets, op));
-
-    if (!fromBatch) ctx.selections = undefined;
-
-    ctx.formulaCache.formulaCellInfoMap = null;
+export function deleteRowCol(ctx: Context, op: DeleteRowColOp) {
+    if (ctx.allowEdit === false) return;
+    applyBatch(ctx, [deleteMarker(op)]);
 }
 
-// The selection a hide or a show acts on. More than one gets the notice instead.
-function soleSelection(ctx: Context) {
-    if ((ctx.selections?.length ?? 0) > 1) {
-        ctx.warnDialog = ONE_AREA_ONLY;
-        return undefined;
+// The open cell editor and the selections move with their cells, so a commit lands where the person chose, not in the
+// row that slid under it, and a delete of the editor's cell closes it without writing. `data` is the grid the op left.
+export function followView(ctx: Context, move: RowColMove, data: CellMatrix) {
+    const row = move.type === 'row';
+    const last = (row ? data.length : data[0].length) - 1;
+    const moved = (selections: Selection[] | undefined) =>
+        selections?.map((selection) => movedSelection(selection, move, data, last));
+    if (move.id !== ctx.currentSheetId) {
+        const left = ctx.sheetViewRecord[move.id];
+        if (left) left.selections = moved(left.selections);
+        return;
     }
-    return ctx.selections?.[0];
+    const [r, c] = ctx.editingCellPosition;
+    if (r != null && c != null) {
+        const to = move.to(row ? r : c);
+        if (to == null) cancelNormalSelected(ctx);
+        else ctx.editingCellPosition = row ? [to, c] : [r, to];
+    }
+    ctx.selections = moved(ctx.selections);
 }
 
 // Hiding moves the selection one step off the rows or columns it hid: up when they end the sheet or a hidden one
@@ -124,36 +121,41 @@ export function moveCountPastHiddenRowCol(ctx: Context, key: string): number {
     return count;
 }
 
-// Writes the engine's result back one sheet and one field at a time, a chart and a validation rule one at a time, so
-// the undo entry immer records puts back only what the op moved and leaves a peer's later changes alone.
-export function writeBackSheets(ctx: Context, sheets: Sheet[]) {
-    for (const [i, next] of sheets.entries()) {
-        const sheet: Record<string, unknown> = ctx.sheets[i];
-        for (const [key, value] of Object.entries(next)) {
-            if (key !== 'charts' && key !== 'dataValidations' && sheet[key] !== value) sheet[key] = value;
-        }
-        const { dataValidations } = ctx.sheets[i];
-        const shifted = next.dataValidations ?? {};
-        if (dataValidations) {
-            for (const [id, entry] of Object.entries(shifted)) {
-                if (dataValidations[id] !== entry) dataValidations[id] = entry;
-            }
-            for (const id of Object.keys(dataValidations)) if (!Object.hasOwn(shifted, id)) delete dataValidations[id];
-        }
-        const { charts } = ctx.sheets[i];
-        for (const chart of Object.values(next.charts ?? {})) {
-            const stored: Record<string, unknown> | undefined = charts?.[chart.id];
-            if (!stored || stored === chart) continue;
-            for (const [field, value] of Object.entries(chart)) {
-                const record = stored[field];
-                if (record === value) continue;
-                if (!isRecord(record) || !isRecord(value)) {
-                    stored[field] = value;
-                    continue;
-                }
-                for (const [entry, part] of Object.entries(value)) if (record[entry] !== part) record[entry] = part;
-                for (const entry of Object.keys(record)) if (!Object.hasOwn(value, entry)) delete record[entry];
-            }
-        }
+// A selection moves with its cells. One a delete takes whole stays at that position, on what took its place or on the
+// grid's new last line, whoever deleted it, as in Google Sheets and Excel.
+function movedSelection(selection: Selection, move: RowColMove, data: CellMatrix, last: number): Selection {
+    const row = move.type === 'row';
+    const line = Math.min(move.at, last);
+    const shifted =
+        move.range(selection) ?? (row ? { ...selection, row: [line, line] } : { ...selection, column: [line, line] });
+    const focus = row ? selection.row_focus : selection.column_focus;
+    const to = focus == null ? null : move.to(focus);
+    if (to != null) return row ? { ...shifted, row_focus: to } : { ...shifted, column_focus: to };
+    const [start] = row ? shifted.row : shifted.column;
+    return onMergeHead(row ? { ...shifted, row_focus: start } : { ...shifted, column_focus: start }, data);
+}
+
+// A focus a delete moved into a merge takes its head, with the box over the merge, as a click does. It reads the cells'
+// `mc`, since mergeBorder reads the geometry as drawn, which the op has just changed or which is another sheet's.
+function onMergeHead(selection: Selection, data: CellMatrix): Selection {
+    const { row, column } = selection;
+    const mc = data[selection.row_focus ?? row[0]]?.[selection.column_focus ?? column[0]]?.mc;
+    const head = mc && data[mc.r]?.[mc.c]?.mc;
+    if (!head?.rs || !head.cs) return selection;
+    return {
+        ...selection,
+        row: [Math.min(row[0], head.r), Math.max(row[1], head.r + head.rs - 1)],
+        column: [Math.min(column[0], head.c), Math.max(column[1], head.c + head.cs - 1)],
+        row_focus: head.r,
+        column_focus: head.c,
+    };
+}
+
+// The selection a hide or a show acts on. More than one gets the notice instead.
+function soleSelection(ctx: Context) {
+    if ((ctx.selections?.length ?? 0) > 1) {
+        ctx.warnDialog = ONE_AREA_ONLY;
+        return undefined;
     }
+    return ctx.selections?.[0];
 }

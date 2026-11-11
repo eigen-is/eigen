@@ -1,16 +1,15 @@
-// Converts between the editor's immer patches and the ops it sends to peers. patchToOp names each sheet by id. A row or
-// column op or a rename ships its marker alone, since every receiver's engine makes the same writes. addSheetOps and
+// Turns the editor's immer patches into the ops it sends to peers. patchToOp names each sheet by id. A sheet, row or
+// column op ships its marker alone, since every receiver's engine makes the same writes. addSheetOps and
 // deleteSheetOps build a sheet's add and delete batches, the add with the sheet's cells as stored. filterPatch keeps
-// what belongs on the wire, and opToPatch turns a peer's ops back into patches on this client's sheet indices.
+// what belongs on the wire.
 
-import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { cloneDeep, isNumber } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { dataToCelldata } from '../../engine/celldata';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
+import { lineMove } from '../../engine/rowcol';
 import type { Context } from '../context';
 import type { Op, Sheet } from '../types';
-import { sheetOrder } from '.';
 
 type RowColOptions = {
     insertRowColOp?: InsertRowColOp;
@@ -44,10 +43,12 @@ export function renameSheetOps(id: string, name: string): Op[] {
     return [{ op: 'renameSheet', id, path: [], value: { name } }];
 }
 
-// The batch an edit sends. A row or column op ships its marker instead of the sheets it rewrote.
-export function patchToOp(ctx: Context, patches: Patch[], options: EntryOptions = {}): Op[] {
+// The batch an edit sends. A sheet or row op ships its marker instead of the sheets it rewrote, because every reader
+// recomputes, and a value it shipped could land on a cell a peer has since moved or written.
+export function patchToOp(base: Context, ctx: Context, patches: Patch[], options: EntryOptions = {}): Op[] {
     if (options.renamedSheet) return renameSheetOps(options.renamedSheet.id, options.renamedSheet.to);
-    if (options.deletedSheet) return deleteSheetOps(options.deletedSheet, ctx.sheets);
+    if (options.deletedSheet) return deleteSheetOps(options.deletedSheet, base.sheets, ctx.sheets);
+    if (options.addedSheet) return addSheetOps(options.addedSheet, base.sheets, ctx.sheets);
     const marker = rowColMarker(options);
     if (marker) return [marker];
     const ops = patches.map((p) => {
@@ -62,46 +63,39 @@ export function patchToOp(ctx: Context, patches: Patch[], options: EntryOptions 
         }
         return op;
     });
-    // A linked cell written whole ships its link. The link sits under the cell's own key: the cell's `hl` keeps the
-    // place the link was made at, which a row or column op does not move.
-    for (const op of [...ops]) {
-        const [field, r, c] = op.path;
-        if (op.op !== 'replace' || op.value?.hl == null || op.path.length !== 3 || field !== 'data') continue;
-        const key = `${r}_${c}`;
-        const link = ctx.sheets.find((s) => s.id === op.id)?.hyperlink?.[key];
-        // A filled cell carries the `hl` of the cell it came from, and no link of its own.
-        if (link) ops.push({ id: op.id, op: 'replace', path: ['hyperlink', key], value: link });
-    }
-    if (options.addedSheet) {
-        // A copy moves the sheets after it, and the batch carries their orders. The rest of the recipe still ships.
-        const rest = ops.filter((op) => op.path.length > 0 && op.path[0] !== 'order');
-        return [...rest, ...addSheetOps(options.addedSheet, ctx.sheets)];
-    }
     return ops;
 }
 
 // The op a row or column edit ships in place of the sheets it rewrote.
 export function rowColMarker({ insertRowColOp, deleteRowColOp }: RowColOptions): Op | undefined {
-    if (insertRowColOp) return { op: 'insertRowCol', id: insertRowColOp.id, path: [], value: insertRowColOp };
-    if (deleteRowColOp) return { op: 'deleteRowCol', id: deleteRowColOp.id, path: [], value: deleteRowColOp };
-    return undefined;
+    if (insertRowColOp) return insertMarker(insertRowColOp);
+    return deleteRowColOp && deleteMarker(deleteRowColOp);
 }
 
-// A sheet add as a batch: the sheet as stored, then the order of each sheet at or past its place. A peer and a joiner's
-// replay only add the sheet, so the orders come from the batch.
-export function addSheetOps(added: Sheet, sheets: readonly Sheet[]): Op[] {
-    return [{ op: 'addSheet', id: added.id, path: [], value: storedCopy(added) }, ...orderOps(added, sheets)];
+export function insertMarker(op: InsertRowColOp): Op {
+    return { op: 'insertRowCol', id: op.id, path: [], value: op };
 }
 
-// A sheet delete as a batch, for the same reason with the orders `sheets` hold once it was deleted.
-export function deleteSheetOps(deleted: Sheet, sheets: readonly Sheet[]): Op[] {
-    return [{ op: 'deleteSheet', id: deleted.id, path: [], value: { id: deleted.id } }, ...orderOps(deleted, sheets)];
+export function deleteMarker(op: DeleteRowColOp): Op {
+    return { op: 'deleteRowCol', id: op.id, path: [], value: op };
 }
 
-function orderOps(changed: Sheet, sheets: readonly Sheet[]): Op[] {
-    const from = sheetOrder(changed);
-    return sheets
-        .filter((sheet) => sheet.id !== changed.id && sheetOrder(sheet) >= from)
+// A sheet add as a batch: the sheet as stored, then the order of each other sheet the add changed from `before` to
+// `after`. A peer and a joiner's replay only add the sheet, so the orders come from the batch.
+export function addSheetOps(added: Sheet, before: readonly Sheet[], after: readonly Sheet[]): Op[] {
+    return [{ op: 'addSheet', id: added.id, path: [], value: storedCopy(added) }, ...orderOps(before, after)];
+}
+
+// A sheet delete as a batch, for the same reason with the orders the delete changed.
+export function deleteSheetOps(deleted: Sheet, before: readonly Sheet[], after: readonly Sheet[]): Op[] {
+    return [{ op: 'deleteSheet', id: deleted.id, path: [], value: { id: deleted.id } }, ...orderOps(before, after)];
+}
+
+// Every order that changed and no other: an unchanged order it sent would undo a peer's move sent at the same time.
+function orderOps(before: readonly Sheet[], after: readonly Sheet[]): Op[] {
+    const was = new Map(before.map((sheet) => [sheet.id, sheet.order]));
+    return after
+        .filter((sheet) => was.has(sheet.id) && was.get(sheet.id) !== sheet.order)
         .map((sheet): Op => ({ op: 'replace', id: sheet.id, path: ['order'], value: sheet.order }));
 }
 
@@ -113,16 +107,11 @@ export function storedCopy(sheet: Sheet): Sheet {
     return value;
 }
 
-export function opToPatch(ctx: Context, ops: Op[]): [Patch[], Op[]] {
-    const [pure, specialOps] = opToPatchOnSheets(ctx.sheets, ops);
-    return [pure.map((p) => ({ ...p, path: ['sheets', ...p.path] })), specialOps];
-}
-
 export function inverseRowColOptions({ insertRowColOp, deleteRowColOp }: RowColOptions): RowColOptions {
     if (insertRowColOp) {
-        const { type, id, index, count, direction } = insertRowColOp;
-        const start = direction === 'rightbottom' ? index + 1 : index;
-        return { deleteRowColOp: { type, id, start, end: start + count - 1 } };
+        const { type, id, count } = insertRowColOp;
+        const { at } = lineMove(insertRowColOp);
+        return { deleteRowColOp: { type, id, start: at, end: at + count - 1 } };
     }
     if (deleteRowColOp) {
         const { type, id, start, end } = deleteRowColOp;

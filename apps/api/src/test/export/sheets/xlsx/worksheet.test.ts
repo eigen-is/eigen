@@ -27,10 +27,19 @@ describe('a worksheet part', () => {
                 id: 'fixture-8',
                 name: 'Sheet1',
                 color: '#FF0000',
-                celldata: [{ r: 0, c: 0, v: { v: 'x', mc: { r: 0, c: 0, rs: 1, cs: 2 } } }],
+                celldata: [
+                    {
+                        r: 0,
+                        c: 0,
+                        v: {
+                            v: 'x',
+                            mc: { r: 0, c: 0, rs: 1, cs: 2 },
+                            link: { type: 'webpage', address: 'https://example.com' },
+                        },
+                    },
+                ],
                 config: { columnlen: { 0: 90 }, merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 2 } } },
                 filterRange: { row: [0, 4], column: [0, 1] },
-                hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
                 frozen: { type: 'row' },
             },
             { drawing: '../drawings/drawing1.xml' },
@@ -142,20 +151,26 @@ describe('a worksheet part', () => {
                 id: 'fixture-3',
                 name: 'Sheet1',
                 celldata: [
-                    { r: 0, c: 0, v: { v: 'web', m: 'web' } },
-                    { r: 1, c: 0, v: { v: 6, f: '=SUM(B1:B3)' } },
-                    { r: 2, c: 0, v: { v: 'R&D "stuff"', m: 'R&D "stuff"' } },
-                    { r: 3, c: 0, v: { v: 'range' } },
+                    {
+                        r: 0,
+                        c: 0,
+                        v: { v: 'web', m: 'web', link: { type: 'webpage', address: 'https://example.com/a b' } },
+                    },
+                    {
+                        r: 1,
+                        c: 0,
+                        v: { v: 6, f: '=SUM(B1:B3)', link: { type: 'webpage', address: 'https://example.com/x!B2' } },
+                    },
+                    {
+                        r: 2,
+                        c: 0,
+                        v: { v: 'R&D "stuff"', m: 'R&D "stuff"', link: { type: 'sheet', address: 'My/Sheet' } },
+                    },
+                    { r: 3, c: 0, v: { v: 'range', link: { type: 'cellrange', address: 'Sheet2!B2:C3' } } },
+                    { r: 4, c: 0, v: { link: { type: 'cellrange', address: 'D4' } } },
+                    { r: 5, c: 0, v: { link: { type: 'webpage', address: 'javascript:alert(1)' } } },
+                    { r: 6, c: 0, v: { link: { type: 'cellrange', address: 'not a ref' } } },
                 ],
-                hyperlink: {
-                    '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/a b' },
-                    '1_0': { linkType: 'webpage', linkAddress: 'https://example.com/x!B2' },
-                    '2_0': { linkType: 'sheet', linkAddress: 'My/Sheet' },
-                    '3_0': { linkType: 'cellrange', linkAddress: 'Sheet2!B2:C3' },
-                    '4_0': { linkType: 'cellrange', linkAddress: 'D4' },
-                    '5_0': { linkType: 'webpage', linkAddress: 'javascript:alert(1)' },
-                    '6_0': { linkType: 'cellrange', linkAddress: 'not a ref' },
-                },
             },
             { names: new Map([['My/Sheet', 'My_Sheet']]) },
         );
@@ -182,8 +197,7 @@ describe('a worksheet part', () => {
             {
                 id: 'fixture-2',
                 name: 'Sheet1',
-                celldata: [],
-                hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
+                celldata: [{ r: 0, c: 0, v: { link: { type: 'webpage', address: 'https://example.com' } } }],
             },
             { drawing: '../drawings/drawing1.xml' },
         );
@@ -193,10 +207,20 @@ describe('a worksheet part', () => {
         ]);
     });
 
+    test("a peer's address and text can't break out of the XML", () => {
+        const location = '"/><evil a="';
+        const { xml } = partOf({
+            id: 'fixture-1',
+            name: 'Sheet1',
+            celldata: [{ r: 0, c: 0, v: { v: '<evil/>', m: '<evil/>', link: { type: 'sheet', address: location } } }],
+        });
+        expect(xml).not.toContain('<evil');
+    });
+
     test("past Excel's 65,530 links a sheet's further links are left out, counted", () => {
-        const hyperlink: NonNullable<Sheet['hyperlink']> = {};
-        for (let r = 0; r < 65_532; r++) hyperlink[`${r}_0`] = { linkType: 'cellrange', linkAddress: 'B1' };
-        const { xml, lost } = partOf({ id: 'fixture-1', name: 'Sheet1', celldata: [], hyperlink });
+        const celldata: NonNullable<Sheet['celldata']> = [];
+        for (let r = 0; r < 65_532; r++) celldata.push({ r, c: 0, v: { link: { type: 'cellrange', address: 'B1' } } });
+        const { xml, lost } = partOf({ id: 'fixture-1', name: 'Sheet1', celldata });
         expect(xml.match(/<hyperlink /g)).toHaveLength(65_530);
         expect(lost).toEqual(['links-dropped', 'links-dropped']);
     });

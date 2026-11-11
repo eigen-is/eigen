@@ -10,6 +10,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Install line on the landing page** — the owner can show the one-line install command, with a copy button, from **Show install section** under **Landing page** in Admin's server settings. It is off until turned on
 - **Covers on the blog** — a blog post can have a cover image, shown big under its title
 - **Delete history** — in Docs, Sheets, Slides, Vector and Stickies, File › Version history › **Delete history…** deletes every earlier version of a document, and the images and comments deleted from it, to free space. It keeps what was added or replied to in the last three days. Only an owner of the drive sees it
+- **Comments on hover** — in Docs, Sheets, Slides and Vector, rest the mouse on a comment to read its card, then click to open it. The pane lists comments by title, and in Sheets a click there jumps to the cell
 - **Assignment emails** — assigning a comment or card in Docs, Sheets, Slides, Vector or Stickies emails a guest a link to it, at most once an hour per document. Admin's server settings have a toggle for guests (on) and one for users (off)
 - **Recent files in Drive** — **Recent files** lists the files you lately opened or were notified about, from any drive, newest first. The sidebars of Drive, the document apps, Chat, Calendar, Mail and Contacts link to it
 
@@ -32,13 +33,26 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Deleted comments** — a link, notification, activity entry or search result for a deleted comment opens it as "This comment was deleted" under its grayed title, with nothing to reply to, resolve or assign
 - **Copies in Drive** — a copy or Duplicate of a document leaves out the images and comments deleted from the original
 - **Folder depth in Drive** — folders nest at most 256 levels deep, in Drive and over WebDAV. A deeper tree you already have stays readable
-- **Comments in Sheets** — the comments pane lists the comments on every tab, with the tab's name, such as Sheet2 · B2. Deleting a comment removes it from every cell it sits on, and a duplicated tab starts without comments
+- **Comments in Sheets** — the comments pane lists the comments on every tab, with another tab's name first. Deleting a comment removes it from every cell it sits on, and a duplicated tab starts without comments
 - **Undo in Sheets** — once someone else edits the spreadsheet, you can no longer undo or redo your last insert or delete of rows or columns, your last added, duplicated, deleted or renamed tab, or anything before it. What you did after it still undoes. When someone else renames a tab, you can no longer undo or redo anything before that. Pressing undo or redo with nothing left for this reason shows a notice that says so
 - **Renaming a tab in Sheets** — formulas, formula rules, dropdown lists and links that name the tab follow its new name, as in Excel, and undo renames it back
 - **Paste from a menu in Sheets** — **Edit › Paste** and the right-click **Paste** paste what is on the clipboard, from any app. Where the browser blocks that, a notice says to press ⌘V (Ctrl+V on Windows and Linux)
 - **Pasting edited cells in Sheets** — if you edit cells after copying them, a paste in the same tab brings them as they are now
 - **Validation limits in Sheets** — an edit that would push a validation rule past its limit goes through, and the cells past it get no rule
 - **Speed in Sheets** — editing a cell in a workbook of 100,000 formulas takes milliseconds, where it took over a tenth of a second, and a cell that 100,000 formulas read no longer stalls a sheet for a minute
+- **Large spreadsheets after row edits** — opening, exporting and searching a large workbook after many row or column inserts and deletes takes about half as long as before
+- **Formula text in Sheets** — inserting or deleting a row or column changes only the references it moves, so a formula keeps its line breaks and spaces, on every tab
+- **Links in Sheets (breaking)** — an existing spreadsheet opens without its cell links, and their text keeps its blue underline. Add them again, or import the Excel file again. A link now moves with its cell through a sort or a fill
+- **Deleting a tab in Sheets** — formulas that name the tab show `#REF!`, as after deleting a row, and dropdown lists and links that name it stop working. A new tab with that name doesn't bring them back. Undo does, until someone else edits
+- **Sorting in Sheets** — a sort moves a cell's contents, formatting and link, and leaves borders, data validation and conditional formatting where they are. Hidden rows stay put, whether you hid them or a filter did
+- **Pasting and filling rules in Sheets** — a paste or fill from a cell with no rule takes the rule off the cell it lands on, so a rule can get a gap. A fill also copies links and replaces the data validation it lands on
+- **Cutting filtered rows in Sheets** — a cut or a drag over rows a filter hides moves nothing and says to clear the filter first. So does a copy of a merged cell a filter partly hides
+- **Filling in Sheets** — Chinese number and weekday series copy, and 1, 2, 4 fills as a straight line
+- **Formulas Sheets can't calculate** — a function it doesn't have, such as `FILTER`, `ROW` or `FIXED`, keeps what the cell holds, an error included, when its inputs change or you sort or cut it. Typed new, copied or filled, it shows `#NAME?`
+- **Pasted errors in Sheets** — a copied formula that lands on an error, such as `#DIV/0!`, is an error to the formulas that read it, so `ISERROR` and `IFERROR` see it. A formula pasted as text, or under the format painter, keeps the type of its own result
+- **Empty results in Sheets** — a formula that gives empty text, such as `=IF(A1=1,"",5)`, plus 1 is `#VALUE!` as in Excel, whether you typed it or imported it
+- **Excel files in Sheets** — an import keeps what Excel saved, and calculates only a formula saved with no result or with an error, where Sheets can calculate it
+- **Large PDFs from Sheets** — a tall or chart-heavy spreadsheet prints up to the export's limit of 250,000 cells, or fails if it takes too long. The page count no longer cuts it. PDFs and web pages draw at most 1,000 images and charts, and about 200 MB of images
 - **Deleted invitations in Calendar** — an invitation from someone on your server that you deleted comes back, faded as declined and with its moved and cancelled dates, when its organizer changes the event. So does a date you removed
 - **Large invites in Mail** — a calendar invite over 1 MiB shows "This calendar invitation could not be read" instead of a preview, and no longer changes your calendar by itself
 - **Unusual repeat rules in Calendar** — an event whose repeat rule would take the server too long to work out shows on its first date only, and calendar apps still get the whole rule. An invite whose rule names no frequency arrives as one event instead of getting lost
@@ -48,12 +62,30 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Formulas after a row or column change in Sheets** — inserting or deleting rows or columns updates what formulas show, for everyone: `=SUM(A1:A3)` follows its shrunk range, and `=A2*2` over a deleted row shows `#REF!` instead of its old number
+- **Links while others edit in Sheets** — two people adding or removing links at once no longer overwrite each other's or put them a row off
+- **The link card in Sheets** — it no longer covers a linked cell's fill handle or gets in the way of a drag, and it goes when a paste takes the link off its cell. Near the bottom or right edge of the grid it opens above the cell or further left, so its buttons stay in reach, and the validation card does the same. On a merged cell both cards open under the whole merge. The blank margin past the last row or column shows no card of the last cell
+- **Merge, link and split in Sheets** — formulas reading those cells update, and a link's new text or a split piece replaces a formula instead of the formula's result coming back
+- **More formulas in Sheets** — `=A1%` works, `T` and `N` work, `ROWS` and `COLUMNS` count one cell, `AVERAGEIF` skips blanks instead of going blank, and a result such as `STDEV(5)` shows `#NUM!`
+- **The name box in Sheets** — the box left of the formula bar that names the selection, such as A1, no longer looks like a field you can type in, and clicking it leaves your keys with the selected cell
+- **Moving cells in Sheets** — cells dragged to the edge of the view land where you drop them, or on the last row or column you can see, not at the far end of the sheet over what was there
+- **Fills in Sheets** — a block dragged up or left lands in step with its source, and a date series counts by the date, not the text it shows
+- **Frozen panes in Sheets** — a press in a frozen cell that moves a pixel no longer throws the view back to the start
+- **Frozen panes and selection while others edit in Sheets** — a row someone inserts or a freeze someone sets moves your selection and panes at once
+- **Deleting frozen rows in Sheets** — deleting every frozen row or column ends the freeze on that side, for everyone, instead of pinning a row that was never frozen. Undo brings it back, until someone else edits
+- **Format painter in Sheets** — text such as `'005` stays text under a number format, and a number stays a number under a text cell's format. Painting from an empty cell shows numbers as General and leaves rich text in place
+- **Deleting rows and columns in Sheets** — when a delete takes what you selected, yours, someone else's or an undo, your selection stays at that position, on the row or column that took its place. The name box, the arrow keys and typing work from there, and a place inside a merged cell selects the merged cell, so what you type shows
+- **Inserting rows and columns in Sheets** — inserting above or left of a cell you are editing moves the edit with its cell, so it no longer writes into the row that slid under it
+- **Comments in Sheets** — **Clear formatting** keeps a cell's link and comment, and **Delete comment** in a cell's menu asks first
+- **Typing a formula in Sheets** — a formula with a quoted text or a line break (Alt+Enter) types as you type it, instead of the rest landing at its start, such as `=VLOOKUP("k3",A1:B4,2)`
+- **Array formulas in Sheets** — a formula such as `SUMPRODUCT(A1:A3*B1:B3)`, which Sheets can't calculate yet, keeps the number it has when you edit around it, instead of turning into 0. Typed new, it shows `#CALC!`
 - **Drafts in Mail** — a save that fails, or a crash during one, no longer loses the draft. An attached email stays an attachment, and removing an attachment never takes another with it
 - **Older drafts in Mail** — a draft saved before this update loses its Bcc and its links to Drive documents, whose pills stay plain links in the text
 - **Drafts in other mail apps** — a mail app reading over IMAP gets each save as a new message, with its links to Drive documents and its Bcc. Bcc also stays on the copy in **Sent**. A mail app's own send of the draft carries a hidden comment naming those links to its recipients
 - **Editing a draft in a mail app** — while Eigen's composer holds the draft, the next auto-save makes two drafts, with neither's text lost. Eigen's copy keeps its links but not its attachments, and the mail app's keeps both
 - **A draft left open** — opened from Drafts and left idle while a mail app edits it, it says the message is gone, and one draft remains. In two Eigen tabs, the last save wins
 - **Sent mail** — a tab left open after a send can no longer pull the message back into Drafts or mail it twice. A collapsed message keeps Bcc off its To line, and shows Bcc on its summary line only when it went to nobody else
+- **Comments on a text box in Docs** — **Add comment** on a text box opens the new comment form, where it did nothing
 - **Resolved comments in Docs** — resolving a comment removes its highlight from the text, which used to stay yellow
 - **Merged cells in Sheets** — pasting text over a merged cell replaces the merge, and wrapped text in a merged cell no longer makes its row very tall
 - **Restoring in Slides and Vector** — restoring an earlier version of a deck or drawing brings back the comments deleted since, as Docs and Sheets do. Their replies stay as they are now
@@ -61,6 +93,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pictures cropped in Google Slides** — a picture that Google Slides cropped to fit its box, such as a logo, no longer comes in squashed when you convert or import the deck
 - **Validation rules and formats in Sheets** — a rule checks a cell's value, not its text: a date shown in another format, a number shown as 50% and an unchanged formula pass, and an imported "any date" rule no longer refuses every date
 - **Row and column changes while others edit in Sheets** — a rename, tab color or link someone sets while you insert or delete rows stays
+- **Tabs while others edit in Sheets** — a tab added at the same moment as another of its name is kept as "Name (2)" instead of vanishing. Two people deleting or hiding the last two visible tabs at once leave one showing, and Duplicate works on a tab whose old name breaks the naming rules
 - **Filters while others edit in Sheets** — a filter someone else changes no longer leaves rows hidden for good after your next filter edit
 - **Refused edits in Sheets** — Delete on part of a merged cell shows a notice, a paste past the sheet's size limit says so, and a paste over part of a merge says it can't and changes nothing
 - **Long text in Sheets** — wrapped text grows its row to fit every line, however you confirm it, from the formula bar or by clicking elsewhere too
@@ -78,6 +111,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Excel downloads from Sheets** — a tab named like a cell, such as Q1, gets the quotes Excel expects in formulas, a formula follows a tab the file has to rename, and a fill down from a linked cell no longer makes the download fail
 - **Tab names from a file in Sheets** — an import repairs a tab name Sheets would refuse, such as one past 31 characters, and the formulas naming it follow
 - **Paste past the last row in Sheets** — a paste that adds rows to a workbook full of formulas no longer pauses to read them all again
+- **Dates from a formula in Sheets** — a formula formatted as a date shows its formula in the formula bar and the open cell. Editing the date it showed there used to replace the formula with a typed date
+- **Text from a formula under a number format in Sheets** — a formula that gives the text `005` shows `005` under any number format, as in Excel, and the format applies again when it gives a number
+- **Insert function and autosum in Sheets** — what they put in the cell shows in the formula bar at once, also over a formula you were still typing. Autosum on a selection that reaches the sheet's last row or column does nothing, where it failed or wrote past the grid
+- **Typing with an input method in Sheets** — the Enter that confirms what you compose, such as Japanese or Chinese, leaves the cell open. The next Enter confirms the cell
 - **A tab opened for the first time in Sheets** — arrow keys and typing work at once, on A1, without a click first
 - **Downloading an empty spreadsheet** — a spreadsheet nobody edited downloads with its blank sheet
 - **Downloads that fail** — downloading or printing a document from Docs, Sheets, Slides or Vector that is too big, or whose PDF takes too long to make, says "Export failed: the document is too big, or it used too much memory" instead of a server error or a timeout

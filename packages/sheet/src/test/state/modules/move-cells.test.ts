@@ -3,11 +3,14 @@
 // where the source has none.
 
 import { describe, expect, test } from 'bun:test';
+import type { CellLink } from '@workspace/lib/sheets';
+import { produce } from 'immer';
 import type { Context } from '../../../state/context';
 import { onCellsMoveEnd } from '../../../state/modules/move-cells';
 import type { Cell, GlobalCache } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 import { gridElements, withGridGeometry } from '../factories/grid-dom';
+import { cellLinks } from '../factories/links';
 
 const SIDE = { style: 1, color: '#000' };
 
@@ -20,14 +23,13 @@ function grid(): (Cell | null)[][] {
 function moveTopLeftToRowTwo(
     seed: (data: (Cell | null)[][]) => void,
     config: Context['sheets'][0]['config'],
-    hyperlink?: Context['sheets'][0]['hyperlink'],
     column = [0, 0],
 ) {
     const data = grid();
     seed(data);
     const ctx = withGridGeometry(
         contextFactory({
-            sheets: [{ name: 'sheet', id: 'id_1', order: 0, data, config, hyperlink }],
+            sheets: [{ name: 'sheet', id: 'id_1', order: 0, data, config }],
             selections: [{ row: [0, 0], column, row_focus: 0, column_focus: 0 }],
             visibledatarow: [20, 40, 60, 80, 100, 120],
             visibledatacolumn: [74, 148, 222, 296, 370, 444],
@@ -37,8 +39,7 @@ function moveTopLeftToRowTwo(
     ctx.cellSelectMoveIndex = [0, 0];
     const { container, scrollEl } = gridElements();
     const event = { clientX: 50, clientY: 70 } as MouseEvent;
-    onCellsMoveEnd(ctx, {} as GlobalCache, event, scrollEl, container);
-    return ctx;
+    return produce(ctx, (draft: Context) => onCellsMoveEnd(draft, {} as GlobalCache, event, scrollEl, container));
 }
 
 describe('onCellsMoveEnd carries borders', () => {
@@ -66,15 +67,11 @@ describe('onCellsMoveEnd carries borders', () => {
 
 describe('onCellsMoveEnd carries links', () => {
     test('a linked source moves its link to the destination', () => {
-        const link = { linkType: 'webpage', linkAddress: 'https://eigen.is' };
-        const ctx = moveTopLeftToRowTwo(
-            (data) => {
-                data[0][0] = { v: 'site', m: 'site' };
-            },
-            {},
-            { '0_0': link },
-        );
-        expect(ctx.sheets[0].hyperlink).toEqual({ '2_0': link });
+        const link: CellLink = { type: 'webpage', address: 'https://eigen.is' };
+        const ctx = moveTopLeftToRowTwo((data) => {
+            data[0][0] = { v: 'site', m: 'site', link };
+        }, {});
+        expect(cellLinks(ctx.sheets[0])).toEqual({ '2_0': link });
     });
 });
 
@@ -86,7 +83,6 @@ describe('a formula a move carries', () => {
                 data[0][1] = { v: 10, m: '10', f: '=A1*2', ct: { fa: 'General', t: 'n' } };
             },
             {},
-            undefined,
             [0, 1],
         );
         expect(ctx.sheets[0].data?.[2][1]?.f).toBe('=A3*2');

@@ -2,20 +2,20 @@
 // rename or a paste that grew the grid, and with them everything older (dropStructuralEntries). A row or column op then
 // moves what is left, the cell and field entries: shiftEntries moves their paths and values as the op moves the live
 // sheets, so an undo lands where its cell now is. The Workbook's applyOp runs both, and a RowColMove also moves the
-// open editor along an op.
+// open editor and the selection along an op.
 
 import type { MergeCell, SheetChart } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
 import { sheetFinder } from '../../engine/a1-notation';
 import { mapChartRefs } from '../../engine/chart-data';
-import { functionStrChange } from '../../engine/formula-shift';
+import { functionStrChange, mayShiftOffSheet } from '../../engine/formula-shift';
 import { isFormula } from '../../engine/formula-utils';
-import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
+import type { DeleteRowColOp, InsertRowColOp, LineMove } from '../../engine/rowcol';
 import {
-    shiftCellKeyedForDelete,
-    shiftCellKeyedForInsert,
-    shiftKeyedMapForDelete,
-    shiftKeyedMapForInsert,
+    LINE_MAPS,
+    lineMove,
+    shiftCellKeyed,
+    shiftKeyedMap,
     shiftMergeForDelete,
     shiftMergeForInsert,
     shiftRangeForDelete,
@@ -26,11 +26,9 @@ import type { Cell, SingleRange } from '../../engine/types';
 import type { History, Sheet } from '../types';
 
 // What one row or column op does to the indices on its axis, with the engine's shifter for each kind of map.
-export type RowColMove = {
+export type RowColMove = LineMove & {
     id: string;
     type: 'row' | 'column';
-    // Where an index ends up, or null for a row or column the op deletes.
-    to: (index: number) => number | null;
     formula: (
         text: string,
         sheetName: string,
@@ -38,24 +36,19 @@ export type RowColMove = {
         findSheet: (name: string) => Sheet | undefined,
     ) => string;
     merge: (merge: Record<string, MergeCell>) => Record<string, MergeCell>;
-    keyed: (map: Record<string, number>) => Record<string, number>;
-    cellKeyed: <T>(map: Record<string, T>) => Record<string, T>;
     // Where a range ends up, or null for one the op deletes.
     range: (range: SingleRange) => SingleRange | null;
 };
 
 export function insertMove(op: InsertRowColOp): RowColMove {
     const { id, type, index, count, direction } = op;
-    const at = direction === 'lefttop' ? index : index + 1;
     return {
         id,
         type,
-        to: (i) => (i < at ? i : i + count),
+        ...lineMove(op),
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'add', axisName(type), direction, index, count, name, onTargetSheet, findSheet),
         merge: (merge) => shiftMergeForInsert({ merge }, type, index, count, direction),
-        keyed: (map) => shiftKeyedMapForInsert(map, index, count, direction),
-        cellKeyed: (map) => shiftCellKeyedForInsert(map, type, index, count, direction),
         range: (range) => shiftRangeForInsert(range, op),
     };
 }
@@ -66,12 +59,10 @@ export function deleteMove(op: DeleteRowColOp): RowColMove {
     return {
         id,
         type,
-        to: (i) => (i < start ? i : i > end ? i - count : null),
+        ...lineMove(op),
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'del', axisName(type), null, start, count, name, onTargetSheet, findSheet),
         merge: (merge) => shiftMergeForDelete({ merge }, type, start, count),
-        keyed: (map) => shiftKeyedMapForDelete(map, start, end),
-        cellKeyed: (map) => shiftCellKeyedForDelete(map, type, start, end),
         range: (range) => shiftRangeForDelete(range, op),
     };
 }
@@ -99,14 +90,13 @@ export function namesStructuralOp({ options }: History): boolean {
     );
 }
 
-// Immer records a list that grew or shrank, such as the grid in a paste past its edge or the conditional format rules,
-// as a write of its `length`. Stepping that back cuts off what a peer appended, and no per-target check can see it. A
-// list inside one target, such as a rule's ranges, is that target's write.
+// Immer records a list that grew or shrank as a write of its `length`, and stepping that back cuts off what a peer
+// appended. A list inside one target, such as a rule's ranges, is that target's write.
 function writesListLength({ path }: Patch): boolean {
     return path.at(-1) === 'length' && path.length === unitOf(path).length;
 }
 
-// A cell, a config map's entry, or one link, rule, image or chart: what a peer's write and yours collide on.
+// A cell, a config map's entry, or one rule, image or chart: what a peer's write and yours collide on.
 export function unitOf(path: (string | number)[]) {
     return path.slice(0, path[2] === 'data' || path[2] === 'config' ? 5 : 4);
 }
@@ -131,6 +121,7 @@ class Shifter {
     private readonly name: string;
     private readonly sheets: Sheet[];
     private readonly findSheet: (name: string) => Sheet | undefined;
+    private readonly mayShift: (txt: string) => boolean;
 
     public constructor(move: RowColMove, name: string, sheets: Sheet[]) {
         this.id = move.id;
@@ -138,6 +129,7 @@ class Shifter {
         this.name = name;
         this.sheets = sheets;
         this.findSheet = sheetFinder(sheets);
+        this.mayShift = mayShiftOffSheet(name);
     }
 
     public entry(entry: History): History | null {
@@ -162,7 +154,6 @@ class Shifter {
         if (sheet !== this.id) return field === 'data' ? this.otherSheetData(patch, rest.length) : patch;
         if (field === 'data') return this.dataPatch(patch, rest);
         if (field === 'config') return this.configPatch(patch, rest);
-        if (field === 'hyperlink') return this.cellKeyed(patch, rest);
         if (field === 'dataValidations') return this.validations(patch, rest);
         return POSITION_FREE_FIELDS.has(field) ? patch : null;
     }
@@ -253,24 +244,18 @@ class Shifter {
             return { ...patch, path: [...head, entry[0]], value: entry[1] };
         }
         if (map === 'borderInfo') return this.cellKeyed(patch, [key, ...below]);
-        const axis = this.move.type === 'row' ? ROW_MAPS : COLUMN_MAPS;
-        if (axis.has(String(map))) {
-            const [moved] = Object.keys(this.move.keyed({ [key]: 0 }));
+        const { type } = this.move;
+        if (LINE_MAPS[type].some((name) => name === map)) {
+            const [moved] = Object.keys(shiftKeyedMap({ [key]: 0 }, this.move));
             return moved == null ? null : { ...patch, path: [...head, moved, ...below] };
         }
-        return (this.move.type === 'row' ? COLUMN_MAPS : ROW_MAPS).has(String(map)) ? patch : null;
+        return LINE_MAPS[type === 'row' ? 'column' : 'row'].some((name) => name === map) ? patch : null;
     }
 
-    // An "r_c" key at the head of `rest`, such as a border or a link, or a whole map of them, such as a sheet's first
-    // link.
+    // An "r_c" key at the head of `rest`, such as a border.
     private cellKeyed(patch: Patch, [key, ...below]: (string | number)[]): Patch | null {
-        if (key == null) {
-            if (!('value' in patch) || patch.value == null) return patch;
-            const moved = this.move.cellKeyed(patch.value);
-            return Object.keys(moved).length === Object.keys(patch.value).length ? { ...patch, value: moved } : null;
-        }
         if (typeof key !== 'string') return null;
-        const [moved] = Object.keys(this.move.cellKeyed({ [key]: true }));
+        const [moved] = Object.keys(shiftCellKeyed({ [key]: true }, this.move.type, this.move));
         if (moved == null) return null;
         const depth = patch.path.length - below.length - 1;
         return { ...patch, path: [...patch.path.slice(0, depth), moved, ...below] };
@@ -286,6 +271,7 @@ class Shifter {
     }
 
     private formula(f: string, onTargetSheet: boolean): string {
+        if (!onTargetSheet && !this.mayShift(f)) return f;
         return `=${this.move.formula(f.slice(1), this.name, onTargetSheet, this.findSheet)}`;
     }
 
@@ -338,6 +324,3 @@ const POSITION_FREE_FIELDS = new Set<string | number>([
     'defaultColWidth',
     'images',
 ]);
-
-const ROW_MAPS = new Set(['rowlen', 'rowhidden', 'customHeight']);
-const COLUMN_MAPS = new Set(['columnlen', 'colhidden', 'customWidth']);

@@ -5,7 +5,7 @@
 
 import { cloneDeep } from 'es-toolkit/compat';
 import { cellDisplay, cellValue, parseCellInput, update } from '../../engine/format';
-import type { Cell, CellMatrix } from '../../engine/types';
+import type { Cell } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
@@ -17,8 +17,7 @@ import { normalizeSelection } from './selection';
 import { sortDataRange } from './sort';
 import { isRealNull, isRealNum } from './validation';
 
-// Sorts the rows below the header row by column col. Returns the message to show when a merge
-// in the range makes the sort impossible.
+// Sorts the rows below the header row by column col. Returns the message to show when a merge blocks it.
 export function sortFilterRange(
     ctx: Context,
     startRow: number,
@@ -31,30 +30,23 @@ export function sortFilterRange(
     const d = getFlowdata(ctx);
     if (d == null) return null;
 
-    const data: CellMatrix = [];
     for (let r = startRow + 1; r <= endRow; r += 1) {
-        const row: (Cell | null)[] = [];
         for (let c = startCol; c <= endCol; c += 1) {
             if (d[r][c]?.mc != null) {
                 return 'There are merged cells in the filter selection, this operation cannot be performed!';
             }
-            row.push(d[r][c]);
         }
-        data.push(row);
     }
 
-    sortDataRange(ctx, d, data, col - startCol, asc, startRow + 1, endRow, startCol, endCol);
+    sortDataRange(ctx, { row: [startRow + 1, endRow], column: [startCol, endCol] }, col - startCol, asc);
     return null;
 }
 
-// The per-column autofilter button: 20×15, its right edge on the column's right edge, at the top of
-// the filter header row. A column narrower than that gets a button as wide as the column, so it
-// never reaches over its neighbor's.
+// A column narrower than the button gets one as wide as the column, so it never reaches over its neighbor's.
 const FILTER_BUTTON_WIDTH = 20;
 const FILTER_BUTTON_HEIGHT = 15;
 
-// x/y are freeze-corrected sheet coordinates, the space sheetPoint produces in the
-// mouse handlers. The rect is the one the canvas paints the button in.
+// x and y are freeze-corrected sheet coordinates, as the mouse handlers produce them.
 export function getFilterButtonAtPosition(ctx: Context, x: number, y: number) {
     return ctx.filterOptions?.items.find(
         (item) => x >= item.left && x < item.left + item.width && y >= item.top && y < item.top + item.height,
@@ -62,7 +54,7 @@ export function getFilterButtonAtPosition(ctx: Context, x: number, y: number) {
 }
 
 // The current sheet's filter range as border and button rects, in sheet coordinates. Every canvas pass and every
-// mouse move reads them, so they are built once, when the range or the grid geometry changes.
+// mouse move reads them, so deriveView builds them once, when the range or the grid geometry changes.
 export function createFilterOptions(ctx: Context) {
     delete ctx.filterOptions;
     if (ctx.allowEdit === false) return;
@@ -70,8 +62,7 @@ export function createFilterOptions(ctx: Context) {
     const filterRange = sheet?.filterRange;
     if (!filterRange) return;
 
-    // An imported xlsx range can reach past the grid and is stored as it is, so the export writes it back. The view is
-    // clamped, because the menu's scans, the sort and the condition apply read flowdata[r] for every row.
+    // An imported range can reach past the grid and is stored as it is; the view is clamped because the scans read flowdata[r].
     const lastRow = (sheet.data?.length ?? 0) - 1;
     const lastCol = ctx.visibledatacolumn.length - 1;
     const r1 = filterRange.row[0];
@@ -113,10 +104,8 @@ export function createFilterOptions(ctx: Context) {
 export function clearFilter(ctx: Context) {
     if (ctx.allowEdit === false) return;
     const sheet = getSheet(ctx);
-    ctx.filterOptions = undefined;
     ctx.filterContextMenu = undefined;
-    // Delete in place. A fresh object would replace the whole rowhidden map on the wire, even when the filter had
-    // hidden nothing.
+    // Delete in place: a fresh object would replace the whole rowhidden map on the wire.
     const rowhidden = sheet.config?.rowhidden;
     if (rowhidden) {
         for (const entry of Object.values(sheet.filter ?? {})) {
@@ -127,8 +116,8 @@ export function clearFilter(ctx: Context) {
     sheet.filterRange = undefined;
 }
 
-// Toggles the filter: clears the one there is, else filters the selection. A single selected cell
-// widens to the first run of filled cells in its row.
+// Toggles the filter: clears the one there is, else filters the selection. A single cell widens to the first run of
+// filled cells in its row.
 export function createFilter(ctx: Context) {
     if (ctx.allowEdit === false) return;
     if ((ctx.selections?.length ?? 0) > 1) return;
@@ -166,7 +155,6 @@ export function createFilter(ctx: Context) {
     }
 
     sheet.filterRange = cloneDeep(filterSave?.[0] || ctx.selections?.[0]);
-    createFilterOptions(ctx);
 }
 
 export type FilterDate = {
@@ -196,8 +184,7 @@ function getFilterHiddenRows(ctx: Context, col: number, startCol: number) {
     return { otherHiddenRows, hiddenRows: filter[col - startCol]?.rowhidden ?? {} };
 }
 
-// Ordered condition list for the filter menu's Select; arity is the number of
-// operand inputs the condition needs.
+// The filter menu's conditions in menu order; arity is the number of operand inputs a condition needs.
 export const FILTER_CONDITION_ITEMS: {
     name: FilterConditionName;
     label: string;
@@ -228,8 +215,7 @@ export function filterConditionArity(name: FilterConditionName): 0 | 1 | 2 {
     return FILTER_CONDITION_ITEMS.find((item) => item.name === name)?.arity ?? 0;
 }
 
-// -1/0/1 ordering: numeric when both sides parse as numbers, case-insensitive
-// string compare otherwise.
+// Numeric when both sides parse as numbers, a case-insensitive string compare otherwise.
 function compareFilterValues(cellValue: string, input: string): number {
     if (isRealNum(cellValue) && isRealNum(input)) {
         const a = Number(cellValue);
@@ -241,7 +227,6 @@ function compareFilterValues(cellValue: string, input: string): number {
     return a < b ? -1 : a > b ? 1 : 0;
 }
 
-// Condition input → canonical YYYY-MM-DD, or null when it doesn't parse as a date.
 function toIsoDay(input: string): string | null {
     const [, ct, v] = parseCellInput(input);
     if (ct.t !== 'd') return null;
@@ -337,9 +322,7 @@ export function getFilterConditionHiddenRows(
     const matches = buildFilterConditionMatcher(condition);
     for (let r = startRow + 1; r <= endRow; r += 1) {
         if (r in otherHiddenRows) continue;
-        if (!matches(flowdata[r][col])) {
-            rowhidden[r] = 0;
-        }
+        if (!matches(flowdata[r][col])) rowhidden[r] = 0;
     }
     return rowhidden;
 }
@@ -372,14 +355,12 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
         };
 
     for (let r = startRow + 1; r <= endRow; r += 1) {
-        if (r in otherHiddenRows) {
-            continue;
-        }
+        if (r in otherHiddenRows) continue;
         visibleRows.push(r);
 
         const cell = flowdata[r][col];
 
-        if (cell != null && !isRealNull(cell.v) && cell.ct != null && cell.ct.t === 'd') {
+        if (cell != null && !isRealNull(cell.v) && cell.ct?.t === 'd') {
             const dateStr: string = update('YYYY-MM-DD', cell.v);
             const [y, m, d] = dateStr.split('-');
 
@@ -497,8 +478,7 @@ export type FilterColor = {
     rows: number[];
 };
 
-// The cell and text colors a column's rows show, conditional formats included, for the menu's
-// filter by color. A column with only one color of a kind offers none of that kind.
+// The cell and text colors a column's rows show, conditional formats included. A kind with one color offers none.
 export function getFilterColumnColors(ctx: Context, col: number, startRow: number, endRow: number) {
     const bgMap: Map<string, FilterColor> = new Map();
     const fcMap: Map<string, FilterColor> = new Map();

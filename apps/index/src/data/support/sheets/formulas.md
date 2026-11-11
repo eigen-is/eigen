@@ -6,7 +6,7 @@ category: Formulas
 tags: [sheets, formulas, functions, autocomplete]
 related: [sheets/get-started, sheets/enter-and-edit-data]
 order: 40
-updated: 2026-11-02
+updated: 2026-11-09
 ---
 
 Formulas let you calculate values from other cells. You type them directly in the grid or in the formula bar, and Sheets updates the result whenever the referenced cells change.
@@ -62,3 +62,9 @@ To find a function you do not know by name:
 To edit a formula you have already entered, double-click the cell or click it and then click the **formula bar**. The referenced cells are highlighted again so you can see the range. Edit the text, then press **Enter** to save.
 
 To delete a formula, select the cell and press **Backspace** or **Delete**.
+
+## When a formula shows an error
+
+A formula that names a deleted cell or sheet shows `#REF!`. A new sheet with the old name doesn't bring it back, but **Undo** does, until someone else edits the spreadsheet.
+
+Some formulas Sheets can't calculate yet: one with a function it doesn't have, such as `FILTER` or `ROW`, or one that applies an operator to a whole range, such as `SUMPRODUCT(A1:A3*B1:B3)`. If such a formula already holds a result, for example from an Excel file, it keeps that result, even when it is an error or empty. The result doesn't change when its cells do, or when you sort the formula or cut it to another cell. Typed new, or copied or filled to another cell, it shows `#NAME?` or `#CALC!`.

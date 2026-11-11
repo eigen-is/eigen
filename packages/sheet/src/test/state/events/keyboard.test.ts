@@ -11,7 +11,7 @@ import { Window } from 'happy-dom';
 import type { Context } from '../../../state/context';
 import { handleGlobalKeyDown, typesIntoEditor } from '../../../state/events/keyboard';
 import type { Cell, DataValidationRule, SingleRange } from '../../../state/types';
-import { contextFactory } from '../factories/context';
+import { contextFactory, selectionFactory } from '../factories/context';
 import { validationsByCell } from '../factories/validations';
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
@@ -69,7 +69,7 @@ function keyDown(
         },
         stopPropagation() {},
     } as unknown as KeyboardEvent;
-    handleGlobalKeyDown(ctx, input, null, e);
+    handleGlobalKeyDown(ctx, input, e);
     return prevented;
 }
 
@@ -303,6 +303,99 @@ describe('handleGlobalKeyDown — the date shortcut', () => {
 
 // A peer's row delete can take the selection away. A key typed then has no cell to open, so it must not pile up in the
 // hidden editor, and Enter and Tab do nothing.
+// A browser reports a key an IME takes as keyCode 229. Chrome sends isComposing with it, and Safari sends the Enter that
+// confirms a composition after compositionend, so with isComposing false.
+describe('handleGlobalKeyDown — a key during a composition', () => {
+    function closedOn(cell: Cell | null) {
+        const ctx = contextFactory({ selections: selectionFactory([1, 1], [1, 1], 1, 1) }) as Context;
+        ctx.sheetFocused = true;
+        ctx.editingCellPosition = [];
+        const data = ctx.sheets[0].data;
+        if (!data) throw new Error('no data');
+        data[1][1] = cell;
+        const cellInput = win.document.createElement('div') as unknown as HTMLDivElement;
+        ctx.getRefs().cellInput.current = cellInput;
+        return { ctx, cellInput, cell: () => data[1][1] };
+    }
+
+    function imeKey(ctx: Context, cellInput: HTMLDivElement, key: string, isComposing: boolean) {
+        let prevented = false;
+        const e = {
+            target: cellInput,
+            key,
+            code: key,
+            keyCode: 229,
+            isComposing,
+            altKey: false,
+            ctrlKey: false,
+            metaKey: false,
+            shiftKey: false,
+            preventDefault() {
+                prevented = true;
+            },
+            stopPropagation() {},
+        } as unknown as KeyboardEvent;
+        handleGlobalKeyDown(ctx, cellInput, e);
+        return prevented;
+    }
+
+    test('the 229 key on a closed filled cell opens it empty, for the composition to type into', () => {
+        const { ctx, cellInput, cell } = closedOn({ v: 'old', m: 'old' });
+        cellInput.textContent = 'stale';
+        imeKey(ctx, cellInput, 'Process', false);
+        expect(ctx.editingCellPosition).toEqual([1, 1]);
+        expect(cellInput.textContent).toBe('');
+        expect(cell()?.v).toBe('old');
+    });
+
+    test('an Android key on a closed cell opens it too', () => {
+        const { ctx, cellInput } = closedOn({ v: 'old', m: 'old' });
+        imeKey(ctx, cellInput, 'Unidentified', false);
+        expect(ctx.editingCellPosition).toEqual([1, 1]);
+    });
+
+    for (const key of ['Enter', 'Tab', 'ArrowDown', 'ArrowRight']) {
+        test(`${key} that the IME takes leaves the cell open and the selection where it is`, () => {
+            const { ctx, cellInput, cell } = closedOn({ v: 'old', m: 'old' });
+            imeKey(ctx, cellInput, 'Process', false);
+            cellInput.textContent = '日本語';
+            expect(imeKey(ctx, cellInput, key, true)).toBe(false);
+            expect(ctx.editingCellPosition).toEqual([1, 1]);
+            expect(ctx.selections?.[0].row_focus).toBe(1);
+            expect(ctx.selections?.[0].column_focus).toBe(1);
+            expect(cellInput.textContent).toBe('日本語');
+            expect(cell()?.v).toBe('old');
+        });
+    }
+
+    test("Safari's confirming Enter, after compositionend, leaves the cell open too", () => {
+        const { ctx, cellInput, cell } = closedOn(null);
+        imeKey(ctx, cellInput, 'Process', false);
+        cellInput.textContent = '日本語';
+        imeKey(ctx, cellInput, 'Enter', false);
+        expect(ctx.editingCellPosition).toEqual([1, 1]);
+        expect(cell()).toBeNull();
+    });
+
+    test('a composing key on a closed cell does nothing', () => {
+        const { ctx, cellInput } = closedOn({ v: 'old', m: 'old' });
+        imeKey(ctx, cellInput, 'Enter', true);
+        expect(ctx.editingCellPosition).toEqual([]);
+        expect(ctx.selections?.[0].row_focus).toBe(1);
+    });
+
+    test('the real Enter after the composition commits and moves down', () => {
+        const { ctx, cellInput, cell } = closedOn(null);
+        imeKey(ctx, cellInput, 'Process', false);
+        cellInput.textContent = '日本語';
+        imeKey(ctx, cellInput, 'Enter', true);
+        keyDown(ctx, 'Enter', { cellInput });
+        expect(ctx.editingCellPosition).toEqual([]);
+        expect(cell()?.v).toBe('日本語');
+        expect(ctx.selections?.[0].row_focus).toBe(2);
+    });
+});
+
 describe('handleGlobalKeyDown — no selection', () => {
     function unselected() {
         const ctx = listContext(null);

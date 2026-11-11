@@ -2,11 +2,11 @@
 // its data.db, saves every edit back to it, and relays edits and cursors between the sockets that have it open.
 // Server-side writers, such as an import or a version restore, edit the same Y.Doc, so every editor sees them. Drive
 // opens each document once and closes it a while after the last socket leaves or after an open that no socket joins,
-// holding its Home while it waits. Before that close, a workbook saves a version and folds its op log.
+// holding its Home while it waits. Before that close, a workbook saves a version and folds the head of its op log.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
-import { readSheetsBase, writeSheetsSnapshot } from '@workspace/lib/sheets';
+import { readSheetsBase, sheetsLogStartsWith, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_STICKIES, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'elysia/ws/bun';
@@ -73,9 +73,6 @@ export class CollabDocument {
     // read keeps its Modified time, and the linger never shows as the time of the last edit.
     private untouchedUpdateAt: number | null = null;
     private readonly editRecordedAtByUser = new Map<string, number>();
-    // Moves with every update, not with a subscribe. A compaction swaps its result in only while it hasn't moved since
-    // the compaction read the document.
-    private generation = 0;
     // The compaction in flight, which a destruct aborts.
     private compaction: AbortController | null = null;
 
@@ -93,7 +90,6 @@ export class CollabDocument {
         this.awareness = new awarenessProtocol.Awareness(doc);
 
         this.doc.on('update', (update: Uint8Array, origin: unknown) => {
-            this.generation++;
             const conn = isConnection(origin) ? origin : null;
             this.broadcastMessage(
                 conn,
@@ -325,18 +321,21 @@ export class CollabDocument {
         this.releaseHome = null;
     }
 
-    // A workbook folds its op log into its snapshot first. The registry still holds the document meanwhile, so a
-    // socket that connects reattaches to it, and then the document stays open until the next linger.
+    // The registry still holds the document while a workbook folds its log, so a socket that connects reattaches to it.
     private async closeAfterLinger(): Promise<void> {
         if (sheetsNeedCompaction(this.path, this.doc)) {
-            const generation = this.generation;
             this.compaction = new AbortController();
             // It resolves whatever the run's outcome, with null when there is no snapshot to swap in.
-            const snapshot = await compactSheets(this.path, this.doc, this.compaction.signal);
-            // The swap deletes the log, so a current result first gets a version that keeps it. Its wait for the
-            // container lock while this holds data.db is safe, as every closer of a live document destructs it first.
+            const compacted = await compactSheets(this.path, this.doc, this.compaction.signal);
+            // The swap deletes the folded batches, so a version keeps them first. It waits for the container lock while
+            // this holds data.db, which is safe: the hold is outside the slot chain, and every closer destructs it first.
             let saved = false;
-            if (snapshot !== null && !this.closed && this.connections.size === 0 && this.generation === generation) {
+            if (
+                compacted !== null &&
+                !this.closed &&
+                this.connections.size === 0 &&
+                sheetsLogStartsWith(this.doc, compacted.folded)
+            ) {
                 try {
                     await this.drive.saveVersion(this.path.mountId, this.path.id);
                     saved = true;
@@ -349,18 +348,22 @@ export class CollabDocument {
             }
             this.compaction = null;
             if (this.closed || this.connections.size > 0) return;
-            if (snapshot !== null) {
-                // An update since the read, one during the version included, makes the result stale. The document
-                // lingers again, and the next close tries again.
-                if (this.generation !== generation) {
+            if (compacted !== null) {
+                // A batch that landed among the folded ones, or a new snapshot since the read, makes the result stale,
+                // even during the version. The document lingers again, and the next close tries again.
+                if (!sheetsLogStartsWith(this.doc, compacted.folded)) {
                     this.scheduleClose();
                     return;
                 }
-                // Nothing changed, so the op log holds just the batches the snapshot folded, and the swap drops them.
-                // A version that failed stops the swap, and the document closes with its log, as after a failed run.
+                // Batches that arrived after the folded ones stay in the log. A version that failed stops the swap,
+                // and the document closes with its log, as after a failed run.
                 if (saved) {
+                    const compaction = {
+                        compactedFrom: readSheetsBase(this.doc)?.id ?? null,
+                        folded: compacted.folded.length,
+                    };
                     this.doc.transact(
-                        () => writeSheetsSnapshot(this.doc, snapshot, readSheetsBase(this.doc)?.id ?? null),
+                        () => writeSheetsSnapshot(this.doc, compacted.snapshot, compaction),
                         COMPACTION_ORIGIN,
                     );
                     // The version is the session's only one. A final version of the folded state would be newer, so

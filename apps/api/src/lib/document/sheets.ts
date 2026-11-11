@@ -1,7 +1,7 @@
 // A workbook's Yjs doc, read and written on the server. The transform process reads it as Sheet[], for example for an
-// export or a preview, and replays the pending ops over the snapshot as a browser does. It also folds the ops into a
-// new snapshot when the document closes. Some writers change the doc through it, such as an import that adds tabs or
-// a version restore that stamps a fresh base.
+// export or a preview, and replays the pending ops over the snapshot as a browser does. It also folds the head of the
+// ops into a new snapshot when the document closes, and builds the addSheet ops an Import… as new tabs pushes. Some
+// writers change the doc through it, such as a version restore that stamps a fresh base.
 
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import {
@@ -21,11 +21,16 @@ import {
     recalcSheets,
     renameSheetTexts,
     replaySheetsOps,
+    replaySheetsSteps,
+    SkippedRecompute,
     sheetFinder,
     sheetNameKey,
     withMaterializedData,
 } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
+import type { SheetsWeight } from '../import/sheets/limits';
+import { assertInsertFits } from '../import/sheets/limits';
+import type { SheetsWorkbookJson } from './transform/protocol';
 
 // What the server's recalc lets an untrusted workbook's formulas cost. Past any bound the recalc fails like any other,
 // and the sheets keep the values they hold.
@@ -43,6 +48,10 @@ export const SERVER_RECALC_BUDGET = {
     maxCellsRead: 32_000_000,
 };
 
+// What a compaction's run keeps after its fold's deadline: the encode and the reply, and the part of the last batch no
+// check reaches, such as a row op's shift and formula rewrite.
+const FOLD_MARGIN_MS = 5_000;
+
 // A stored workbook is read in the transform process, which loads the Yjs doc first. `recalcError` is set when the
 // recalc failed and the sheets keep their replayed values.
 export function readSheetsFromDoc(
@@ -52,7 +61,9 @@ export function readSheetsFromDoc(
     const { sheets, computed } = decodeOrDefault(readSheetsSnapshotJson(doc));
     // The snapshot stores cells as a list, but conditional formats and the cross-sheet formula resolver read the dense
     // `data` matrix. One far-flung cell makes a huge grid, which the transform's deadline bounds.
-    const replayed = replaySheetsOps(sheets, sheetsOpLog(doc).toArray()).map(withMaterializedData);
+    const replayed = replaySheetsOps(sheets, sheetsOpLog(doc).toArray(), undefined, SERVER_RECALC_BUDGET).map(
+        withMaterializedData,
+    );
 
     // Only a workbook nobody computed is recalculated, and only for an export: a recalc can outlast a preview or a
     // search extract. A recalc that fails leaves the replayed values, because an export must not fail on it.
@@ -67,39 +78,45 @@ export function readSheetsFromDoc(
     }
 }
 
-// A compaction in the transform process: it replays the log over the snapshot and encodes the result as an import does.
-// The batches come as JSON text, which crosses to the process much faster than objects.
+// A compaction folds the head of the log, the batches it replays before `deadlineAt`, the wall-clock time its job is
+// killed at. A batch past the deadline or a budget would store values a browser computes differently, so it waits.
 export function compactSheetsSnapshot(
     snapshotJson: string | null,
     batchesJson: string,
-): { snapshot: string; dropped: number } {
+    deadlineAt: number,
+): { snapshot: string; dropped: number; folded: number } {
+    // The child's own clock from here, since the wall clock is the one both processes share but can be set.
+    const deadline = performance.now() + deadlineAt - Date.now() - FOLD_MARGIN_MS;
     const { sheets, computed } = decodeOrDefault(snapshotJson);
+    // Time bounds the fold, not the cells it reads, whose cost varies with the formulas.
+    const budgets = { ...SERVER_RECALC_BUDGET, maxCellsRead: Number.POSITIVE_INFINITY, deadline };
+    let replayed = sheets;
+    let folded = 0;
     let dropped = 0;
-    const replayed = replaySheetsOps(sheets, JSON.parse(batchesJson), () => dropped++);
+    for (const step of replaySheetsSteps(sheets, JSON.parse(batchesJson), budgets)) {
+        if (step.dropped instanceof SkippedRecompute) {
+            if (folded === 0) throw step.dropped;
+            break;
+        }
+        if (step.dropped !== null) dropped += 1;
+        replayed = step.sheets;
+        folded += 1;
+        if (performance.now() > deadline) break;
+    }
     // The compaction never recalculates, so a workbook nobody computed stays uncomputed, and an export computes it.
-    return { snapshot: encodeSheetsSnapshot(replayed, { computed }), dropped };
+    return { snapshot: encodeSheetsSnapshot(replayed, { computed }), dropped, folded };
 }
 
-// The workbook as a tab opening the doc shows it, with every pending op replayed.
-export function readLiveSheets(doc: Y.Doc): Sheet[] {
-    return replaySheetsOps(decodeOrDefault(readSheetsSnapshotJson(doc)).sheets, sheetsOpLog(doc).toArray());
-}
-
-// A workbook opened without a base, such as a new one or one stored before bases existed, gets one. Then its first
-// compaction names the base an open tab already holds, and the tab keeps its grid.
-export function stampMissingSheetsBase(type: DrivePathType, doc: Y.Doc): void {
-    if (type === DRIVE_TYPE_SHEETS && readSheetsBase(doc) === null) stampSheetsBase(doc, null);
-}
-
-// A version restore puts back the base the version was saved with. A workbook gets a fresh one, so an open tab can't
-// take the restored snapshot for a compaction of the one it holds.
-export function restampRestoredSheetsBase(type: DrivePathType, doc: Y.Doc): void {
-    if (type === DRIVE_TYPE_SHEETS) stampSheetsBase(doc, null);
-}
-
-// Import… as new tabs: addSheet ops after the workbook's own, so an open tab adds them live as a peer's and keeps its
-// view and its undo. `current` is the workbook as readLiveSheets reads it in the same write.
-export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: Sheet[]): void {
+// Import… as new tabs: one batch of addSheet ops, which an open tab adds live as a peer's and keeps its undo. The
+// workbook is replayed as a tab opening it shows it, so a sheet an earlier insert added holds its name.
+export function addSheetsBatch(workbook: SheetsWorkbookJson, snapshotJson: string, weight: SheetsWeight): Op[] {
+    const current = replaySheetsOps(
+        decodeOrDefault(workbook.snapshot).sheets,
+        JSON.parse(workbook.batches),
+        undefined,
+        SERVER_RECALC_BUDGET,
+    );
+    assertInsertFits(current, weight);
     const imported = decodeSheetsSnapshot(snapshotJson);
     const taken = current.map((sheet) => sheet.name);
     const renames = new Map<string, string>();
@@ -113,12 +130,9 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
     const ids = new Map(imported.map((sheet, i) => [sheet.id, fresh[i].id]));
     const findImported = sheetFinder(imported);
 
-    const added = imported.map((source, i): Op => {
+    return imported.map((source, i): Op => {
         const { id, name } = fresh[i];
         const sheet = renameSheetTexts(source, findImported, renames);
-        for (const { v } of sheet.celldata ?? []) {
-            if (v?.hl) v.hl.id = id;
-        }
         const charts = Object.fromEntries(
             Object.entries(sheet.charts ?? {}).map(([key, chart]) => [
                 key,
@@ -131,5 +145,16 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
         const value: Sheet = { ...sheet, id, name, order: current.length + i, charts };
         return { op: 'addSheet', id, path: [], value };
     });
-    sheetsOpLog(doc).push([added]);
+}
+
+// A workbook opened without a base, such as a new one or one stored before bases existed, gets one. Then its first
+// compaction names the base an open tab already holds, and the tab keeps its grid.
+export function stampMissingSheetsBase(type: DrivePathType, doc: Y.Doc): void {
+    if (type === DRIVE_TYPE_SHEETS && readSheetsBase(doc) === null) stampSheetsBase(doc, null);
+}
+
+// A version restore puts back the base the version was saved with. A workbook gets a fresh one, so an open tab can't
+// take the restored snapshot for a compaction of the one it holds.
+export function restampRestoredSheetsBase(type: DrivePathType, doc: Y.Doc): void {
+    if (type === DRIVE_TYPE_SHEETS) stampSheetsBase(doc, null);
 }

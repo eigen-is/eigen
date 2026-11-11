@@ -14,7 +14,6 @@ import { member as memberSchema, teamMember as teamMemberSchema, user as userSch
 import { app } from '../app';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { getServerSettings, updateServerSettings } from '../lib/config/server-settings';
-import type { MediaPixels } from '../lib/export/sheets/render';
 import { getHome } from '../lib/home';
 import { drainHomeDeliveries } from '../lib/home/home-relay';
 import { createSetupToken } from '../lib/setup/setup-token';
@@ -514,9 +513,6 @@ export const TEST_PNG_BYTES = new Uint8Array([
 
 // Nothing to resolve: a document with no media, a workbook with no floating images.
 export const NO_MEDIA = new Map<string, string>();
-
-// No raster whose decoded pixels the export charges.
-export const NO_PIXELS: MediaPixels = new Map();
 
 export { app, TEST_DATA_DIR };
 

@@ -1,14 +1,10 @@
 // The types of the sheet engine: the cell and range shapes it shares with the rest of Eigen, the editor's extra
 // sheet settings and filter criteria, and the engine's own types for formulas, their dependencies and the parser.
 
-import type { Sheet, SheetConfig } from '@workspace/lib/sheets';
-import type { DependencyIndex } from './dependency-index';
+import type { Cell, CellMatrix, Sheet, SheetConfig } from '@workspace/lib/sheets';
 import type { CellCoordinate } from './parser/helper/cell';
 
-// Sheet data shapes (Cell, CellMatrix, SingleRange, ConditionalFormatRule, …) live
-// in `@workspace/lib/sheets` to avoid a workspace cycle (sheet depends on lib,
-// not vice versa). Re-exported here so engine code keeps importing from `./types`
-// without churning every file.
+// The stored sheet shapes live in lib, which can't import this package, and the engine reads them from here.
 export type {
     Cell,
     CellMatrix,
@@ -22,8 +18,6 @@ export type {
     SingleRange,
 } from '@workspace/lib/sheets';
 
-import type { Cell, CellMatrix } from '@workspace/lib/sheets';
-
 // Row and column size overrides the state layer writes and the engine's row and column shifter moves, on top of the
 // config lib stores.
 export type EditorSheetConfigExtras = {
@@ -31,15 +25,9 @@ export type EditorSheetConfigExtras = {
     customWidth?: Record<string, number>;
 };
 
-// The config shape the editor and the op replay actually operate on: the wire shape plus the
-// editor-only per-row/col flags above.
 export type ExtendedSheetConfig = SheetConfig & EditorSheetConfigExtras;
 
-// Filter-by-condition rule names. The names overlapping conditional formatting
-// reuse the CF conditionNames (greaterThan, lessThan, equal, between, …); each
-// maps 1:1 onto a label in `FILTER_CONDITION_ITEMS`.
-// `values` carries the rule's operands: none for is(Not)Empty, one for
-// text/date/compare rules, two for (not)between.
+// A filter-by-condition rule. A name it shares with conditional formatting, such as greaterThan, means the same there.
 export type FilterConditionName =
     | 'isEmpty'
     | 'isNotEmpty'
@@ -62,13 +50,13 @@ export type FilterConditionName =
 
 export type FilterCondition = {
     conditionName: FilterConditionName;
+    // The rule's operands: none for isEmpty and isNotEmpty, two for between and notBetween, one for the rest.
     values: string[];
 };
 
-// One column's filter. Every writer sets every field. `byCondition` is set when the column
-// filters by a condition instead of by values or color. Fields an older snapshot stored, which
-// nothing reads any more, pass through the index signature.
+// One column's filter. Fields an older snapshot stored, which nothing reads any more, pass through the index signature.
 export type FilterEntry = {
+    // Set when the column filters by a condition instead of by values or color.
     byCondition?: FilterCondition;
     // Legacy data and a peer's op can leave it out on an entry that hides no rows.
     rowhidden?: Record<string, number>;
@@ -93,8 +81,7 @@ export type CellInfo = {
     sheetName: string | null;
 };
 
-// Cell reference used as an endpoint of a range (`A1:B3`). The sheet name lives
-// on the start endpoint only — the end inherits it.
+// An endpoint of a range such as `A1:B3`. Only the start carries the sheet name, and the end reads the same sheet.
 export type RangeCell = {
     row: CellCoordinate;
     column: CellCoordinate;
@@ -114,12 +101,10 @@ export type FormulaCellInfo = {
     r: number;
     c: number;
     id: string;
-    // The keys of the formulas that read this cell.
-    dependents: readonly string[];
 };
 
 export type FormulaCellInfoMap = {
-    [rxcxix: string]: FormulaCellInfo;
+    [key: string]: FormulaCellInfo;
 };
 
 export type CellResolver = {
@@ -131,41 +116,25 @@ export type CellResolver = {
 
 export type EvaluationResult = {
     value: Cell['v'];
-    display: string;
-    type: 'number' | 'string' | 'boolean' | 'date' | 'error';
+    // The error is an operator applied to an array, which this build can't evaluate.
+    arrayOperation?: boolean;
 };
 
-export type FormulaEngineState = {
-    formulaCellInfoMap: FormulaCellInfoMap | null;
-    // Reverse lookup cell → formulas reading it; mirrors formulaCellInfoMap
-    // and must reset with it.
-    dependencyIndex: DependencyIndex;
-};
-
-// Scalar value that can appear in a formula expression or as a cell value, an error a cell holds included.
-// Range/array shapes are expressed via `FormulaArg`.
+// A scalar in a formula or a cell, an error a cell holds included.
 export type FormulaValue = string | number | boolean | null | undefined | Error;
 
-// Arguments accepted by formula operators and functions. Scalars for single cells,
-// 1D arrays for row/column ranges, 2D arrays for rectangular ranges. A scalar may
-// be an Error because an operator's output (which may be an in-band Error from a
-// short-circuit branch or a formulajs error sentinel) becomes the input of its
-// parent in the grammar — short-circuit functions like IF/IFERROR/AND/OR
-// inspect Error operands directly to decide what to return.
+// What an operator or function takes: a scalar for a cell, an array for a range. A scalar may be an Error, since an
+// operand is another operator's output, which IF, IFERROR, AND and OR inspect to decide what to return.
 export type FormulaArg = FormulaValue | FormulaValue[] | FormulaValue[][];
 
-// Return shape produced by operators and formula functions — same shape space
-// as `FormulaArg`, an Error included for in-band error propagation. formulajs returns
-// Error sentinels (e.g. `error.value`) and our short-circuit logic relies on
-// arithmetic operators returning Error rather than throwing so the grammar can
-// keep reducing (an untaken IF branch may discard the Error). The top-level
-// `parse()` unwraps any Error result into a `{error}` field for callers.
+// What an operator or function returns. An error is returned rather than thrown, so an untaken IF branch drops it.
 export type FormulaOutput = FormulaArg;
 
 export type ParseResult = {
     error: string | null;
-    // biome-ignore lint/suspicious/noExplicitAny: formula result is dynamic (scalar, array, Date, error) — consumers narrow at use, tightening forces ~70 test casts with no safety gain
+    // biome-ignore lint/suspicious/noExplicitAny: a scalar, an array, a Date or an error, which each reader narrows
     result: any;
+    arrayOperation?: boolean;
 };
 
 export type ParserOptions = {

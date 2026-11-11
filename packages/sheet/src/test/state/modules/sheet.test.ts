@@ -3,6 +3,7 @@ import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/li
 import { hideSheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { firstVisibleSheetId } from '../../../state/context';
+import { applyOpBatch } from '../../../state/modules/apply-ops';
 import { changeSheet, deleteSheet, settleCurrentSheet } from '../../../state/modules/sheet';
 import { contextFactory } from '../factories/context';
 
@@ -160,12 +161,30 @@ describe('leaving a sheet that goes away', () => {
         expect(ctx.currentSheetId).toBe('a');
     });
 
+    test('hiding or deleting the last shown sheet, such as after a peer hid the others, refuses with the reason', () => {
+        const ctx = tabOrderContext();
+        hideSheet(ctx, 'b');
+        hideSheet(ctx, 'd');
+        expect(ctx.warnDialog).toBeUndefined();
+        hideSheet(ctx, 'a');
+        expect(ctx.warnDialog).toContain('To hide this sheet');
+        deleteSheet(ctx, 'a');
+        expect(ctx.warnDialog).toContain('To delete this sheet');
+        expect(ctx.sheets.map((sheet) => [sheet.id, sheet.hide])).toEqual([
+            ['a', undefined],
+            ['b', 1],
+            ['c', 1],
+            ['d', 1],
+        ]);
+        expect(ctx.currentSheetId).toBe('a');
+    });
+
     test('a peer deleting a sheet applies for a viewer', () => {
         const ctx = tabOrderContext();
         ctx.allowEdit = false;
         deleteSheet(ctx, 'a');
         expect(ctx.sheets.map((sheet) => sheet.id)).toContain('a');
-        deleteSheet(ctx, 'a', true);
-        expect(ctx.sheets.map((sheet) => sheet.id)).not.toContain('a');
+        const applied = applyOpBatch(ctx, [{ op: 'deleteSheet', id: 'a', path: [], value: { id: 'a' } }]);
+        expect(applied?.ctx.sheets.map((sheet) => sheet.id)).not.toContain('a');
     });
 });

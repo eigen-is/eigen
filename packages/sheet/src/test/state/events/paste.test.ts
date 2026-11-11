@@ -9,13 +9,14 @@
 // stays DOM-free.
 
 import { describe, expect, it } from 'bun:test';
+import type { CellLink } from '@workspace/lib/sheets';
 import type { Cell, DefaultConditionalFormatRule } from '../../../engine/types';
 import type { Context } from '../../../state/context';
-import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
-import { copy } from '../../../state/modules/selection';
+import { copy } from '../../../state/modules/clipboard';
 import { pasteCopy, pasteText } from '../factories/clipboard';
-import { contextFactory } from '../factories/context';
+import { contextFactory, editInPlace, heldGraph } from '../factories/context';
 import { edit, typed } from '../factories/edit-cycle';
+import { cellLinks } from '../factories/links';
 
 // Explicit selection builders. selectionFactory takes (row, column, ...) as
 // [start, end] pairs; hand-writing those inline is error-prone, so name the two
@@ -50,10 +51,12 @@ function copyThenPaste(
     dest: ReturnType<typeof single>,
     { cut = false }: { cut?: boolean } = {},
 ) {
-    ctx.selections = source;
-    copy(ctx, { cut });
-    ctx.selections = dest;
-    pasteCopy(ctx);
+    editInPlace(ctx, (draft) => {
+        draft.selections = source;
+        copy(draft, { cut });
+        draft.selections = dest;
+        pasteCopy(draft);
+    });
 }
 
 // A paste past the last row or column grows the grid, and the sheet's size grows with it: a stored snapshot keeps the
@@ -364,11 +367,13 @@ describe('cut/paste — cross-range move', () => {
         }) as Context;
 
         // copy from sheet two, switch to sheet one, cut-paste
-        ctx.selections = single(0, 0);
-        copy(ctx, { cut: true });
-        ctx.currentSheetId = 'id_1';
-        ctx.selections = single(2, 2);
-        pasteCopy(ctx);
+        editInPlace(ctx, (draft) => {
+            draft.selections = single(0, 0);
+            copy(draft, { cut: true });
+            draft.currentSheetId = 'id_1';
+            draft.selections = single(2, 2);
+            pasteCopy(draft);
+        });
 
         // destination on sheet one filled
         expect(ctx.sheets[0].data![2][2]?.v).toBe('Z');
@@ -377,7 +382,7 @@ describe('cut/paste — cross-range move', () => {
     });
 });
 
-describe('conditional-format migration on cut/paste (cfSplitRange contract)', () => {
+describe('conditional-format migration on cut/paste', () => {
     it('drops the cut cells from a same-sheet CF rule range', () => {
         const ctx = makeCtx(8, 8, (d) => {
             d[1][1] = { v: 'C', m: 'C' };
@@ -396,7 +401,7 @@ describe('conditional-format migration on cut/paste (cfSplitRange contract)', ()
             cut: true,
         });
 
-        // same-sheet cut uses cfSplitRange 'allPart': the rule range MOVES with
+        // same-sheet cut: the rule range MOVES with
         // the cells — exactly the destination cell, nothing at the source. A
         // refactor that reached for 'restPart' here (empty cellrange = CF
         // silently deleted) must fail this.
@@ -431,13 +436,20 @@ describe('conditional-format migration on cut/paste (cfSplitRange contract)', ()
         pasteCopy(ctx);
     };
 
-    it('keeps the target sheet rules when the copied cells carry none', () => {
+    it('takes only the pasted cells out of the target sheet rules when the copied cells carry none', () => {
         const ctx = twoSheets();
-        ctx.sheets[0].conditionalFormatRules = [formulaRule()];
+        const far = { ...formulaRule(), cellrange: [{ row: [9, 9], column: [3, 3] }] };
+        ctx.sheets[0].conditionalFormatRules = [
+            { ...formulaRule(), cellrange: [{ row: [1, 7], column: [1, 1] }] },
+            far,
+        ];
 
         crossSheetPaste(ctx, false);
 
-        expect(ctx.sheets[0].conditionalFormatRules).toEqual([formulaRule()]);
+        expect(ctx.sheets[0].conditionalFormatRules).toEqual([
+            { ...formulaRule(), cellrange: [{ row: [6, 7], column: [1, 1] }], conditionValue: ['=B7>1'] },
+            far,
+        ]);
     });
 
     it('moves a whole rule cut to a sheet without rules, leaving no empty rule behind', () => {
@@ -468,17 +480,22 @@ describe('conditional-format migration on cut/paste (cfSplitRange contract)', ()
         ]);
     });
 
-    it('re-expresses a formula rule copied from the middle of its range', () => {
+    it('joins a copy from the middle of a formula rule, so each cell reads as it did', () => {
         const ctx = makeCtx(12, 8);
         ctx.sheets[0].conditionalFormatRules = [formulaRule()];
 
         copyThenPaste(ctx, single(2, 1), single(5, 4));
 
-        expect(ctx.sheets[0].conditionalFormatRules?.[1]).toEqual({
-            ...formulaRule(),
-            cellrange: [{ row: [5, 5], column: [4, 4] }],
-            conditionValue: ['=E6>1'],
-        });
+        // The rule keeps its corner and its text: at E6 it reads E6, four rows down and three across from B2.
+        expect(ctx.sheets[0].conditionalFormatRules).toEqual([
+            {
+                ...formulaRule(),
+                cellrange: [
+                    { row: [1, 5], column: [1, 1] },
+                    { row: [5, 5], column: [4, 4] },
+                ],
+            },
+        ]);
     });
 });
 
@@ -541,6 +558,34 @@ describe('copy/paste round-trip (item 6)', () => {
     });
 });
 
+describe('a formula this build cannot evaluate, carried', () => {
+    const holding = (data: (Cell | null)[][]) => {
+        data[0][0] = { f: '=FILTER($B$1:$B$3,1)', v: 111, m: '111', ct: { fa: 'General', t: 'n' } };
+        data[1][0] = { f: '=SUMPRODUCT($B$1:$B$3*$B$1:$B$3)', v: '#N/A', m: '#N/A', ct: { fa: 'General', t: 'e' } };
+    };
+    const at = (ctx: Context, r: number, c: number) => ctx.sheets[0].data?.[r]?.[c];
+
+    it('a cut keeps what it holds', () => {
+        const ctx = makeCtx(8, 8, holding);
+        copyThenPaste(ctx, rangeSel(0, 1, 0, 0), single(4, 2), { cut: true });
+        expect([at(ctx, 4, 2)?.v, at(ctx, 5, 2)?.v]).toEqual([111, '#N/A']);
+    });
+
+    it('a copy is a new formula with no number of its own', () => {
+        const ctx = makeCtx(8, 8, holding);
+        copyThenPaste(ctx, rangeSel(0, 1, 0, 0), single(4, 2));
+        expect([at(ctx, 4, 2)?.v, at(ctx, 5, 2)?.v]).toEqual(['#NAME?', '#CALC!']);
+        expect([at(ctx, 0, 0)?.v, at(ctx, 1, 0)?.v]).toEqual([111, '#N/A']);
+    });
+
+    it('a copy landing on its own cell leaves it as it is', () => {
+        const ctx = makeCtx(8, 8, holding);
+        copyThenPaste(ctx, rangeSel(0, 1, 0, 0), rangeSel(0, 3, 0, 0));
+        expect([at(ctx, 0, 0)?.v, at(ctx, 1, 0)?.v]).toEqual([111, '#N/A']);
+        expect([at(ctx, 2, 0)?.v, at(ctx, 3, 0)?.v]).toEqual(['#NAME?', '#CALC!']);
+    });
+});
+
 describe('pasted formulas and the dependency map', () => {
     const pasteTextAt = (text: string, r: number, c: number) => (d: Context) => {
         d.selections = single(r, c);
@@ -552,7 +597,7 @@ describe('pasted formulas and the dependency map', () => {
             let ctx = makeCtx(6, 6, (d) => {
                 d[0][0] = { v: 5, m: '5' };
             });
-            if (warm) warmFormulaCellInfoMap(ctx);
+            if (warm) heldGraph(ctx);
 
             [ctx] = edit(ctx, pasteTextAt('=A1*3', 0, 2));
             expect(ctx.sheets[0].data![0][2]?.v).toBe(15);
@@ -577,7 +622,7 @@ describe('pasted formulas and the dependency map', () => {
                 { name: 'Two', id: 'id_2', order: 1, data: two },
             ],
         }) as Context;
-        warmFormulaCellInfoMap(base);
+        heldGraph(base);
         const [ctx] = edit(base, (d) => {
             d.selections = single(0, 1);
             copy(d, { cut: true });
@@ -615,7 +660,7 @@ describe('pasted formulas and the dependency map', () => {
             d[0][1] = { f: '=A1*2', v: 10, m: '10' };
             d[0][2] = { f: '=B1+1', v: 11, m: '11' };
         });
-        warmFormulaCellInfoMap(base);
+        heldGraph(base);
         const [ctx] = edit(base, (d) => copyThenPaste(d, single(0, 1), single(3, 3), { cut: true }));
 
         const data = ctx.sheets[0].data!;
@@ -638,25 +683,23 @@ describe('pasted formulas and the dependency map', () => {
 });
 
 describe('hyperlinks travel with an internal paste', () => {
-    const link = { linkType: 'webpage', linkAddress: 'https://eigen.is' };
+    const link: CellLink = { type: 'webpage', address: 'https://eigen.is' };
     function linkedCtx() {
-        const ctx = makeCtx(6, 6, (d) => {
-            d[0][0] = { v: 'site', m: 'site', hl: { r: 0, c: 0, id: 'id_1' } };
+        return makeCtx(6, 6, (d) => {
+            d[0][0] = { v: 'site', m: 'site', link };
         });
-        ctx.sheets[0].hyperlink = { '0_0': link };
-        return ctx;
     }
 
     it('a copied link lands on the pasted cell', () => {
         const ctx = linkedCtx();
         copyThenPaste(ctx, single(0, 0), single(2, 2));
-        expect(ctx.sheets[0].hyperlink?.['2_2']).toEqual(link);
+        expect(cellLinks(ctx.sheets[0])['2_2']).toEqual(link);
     });
 
     it('a cut link lands on the pasted cell and leaves the vacated one', () => {
         const ctx = linkedCtx();
         copyThenPaste(ctx, single(0, 0), single(2, 2), { cut: true });
-        expect(ctx.sheets[0].hyperlink?.['2_2']).toEqual(link);
-        expect(ctx.sheets[0].hyperlink?.['0_0']).toBeUndefined();
+        expect(cellLinks(ctx.sheets[0])['2_2']).toEqual(link);
+        expect(cellLinks(ctx.sheets[0])['0_0']).toBeUndefined();
     });
 });

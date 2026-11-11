@@ -12,7 +12,7 @@ import {
 } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { ChartType } from '@workspace/lib/types/chart';
-import type { CommentCard } from '@workspace/lib/types/comments';
+import type { CommentCard, CommentHoverTarget } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type {
@@ -65,7 +65,7 @@ import { sealed } from '@workspace/ui/components/properties-panel';
 import { cn } from '@workspace/ui/lib/utils';
 import { ImageIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { isTypingTarget } from '../../hooks/is-typing-target';
 import { useDialogOpen, useMenuOpen } from '../../hooks/use-dialog-open';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
@@ -198,6 +198,7 @@ type CanvasEditorProps = {
     // The document's cards, for the mark's color, which is the card's own, as on a commented sheet cell.
     commentCards?: Readonly<Record<string, CommentCard>>;
     onAddComment?: (elementId: string) => void;
+    onCommentHover: (target: CommentHoverTarget | null) => void;
     // ⌘F: every match rings, and the one stepped to rings brighter and flashes. Both come from the host's
     // useCanvasDocSearch, and the canvas only paints them.
     searchMatchedIds?: ReadonlySet<string>;
@@ -232,6 +233,7 @@ export function CanvasEditor({
     onOpenCard,
     commentCards,
     onAddComment,
+    onCommentHover,
     searchMatchedIds,
     searchActiveId,
     onSwipeFrame,
@@ -1412,9 +1414,8 @@ export function CanvasEditor({
             }}
             {...fileDropProps}
         >
-            {/* The scene, in scene units, one layer div per element. It takes no pointer events, because the hit test
-                is geometry on the container, never a DOM hit test. The viewport writes the transform of this node, and
-                of the two below, itself, so a pan or zoom moves them without a React render. */}
+            {/* It takes no pointer events, because the hit test is geometry on the container. The viewport writes this
+                node's transform and those of the two below itself, so a pan or zoom costs no React render. */}
             <div ref={sceneRef} className="pointer-events-none absolute inset-0 origin-top-left">
                 {frameLayers}
             </div>
@@ -1431,10 +1432,8 @@ export function CanvasEditor({
                     {drawing.focusIndicators}
                 </g>
             </svg>
-            {/* The screen-space chrome, laid out by boxToStyle at the viewport React last rendered. A live gesture
-                moves the whole layer with one transform, chromeTransform, instead. It dresses the page, so it takes the
-                page's palette and not the app's: the paper pin keeps a resize grip white on a white slide in dark mode.
-                The infinite canvas is paper already. */}
+            {/* Laid out at the viewport React last rendered, and a live gesture moves the whole layer with one transform.
+                It dresses the page, so the paper pin keeps a resize grip white on a white slide in dark mode. */}
             <div
                 ref={chromeRef}
                 className={cn(CANVAS_PAPER_CLASS, 'pointer-events-none absolute inset-0 origin-top-left')}
@@ -1521,38 +1520,20 @@ export function CanvasEditor({
                         }}
                     />
                 )}
-                {/* Comment marks, last in the chrome layer, so the transform box's top-right grip, which sits on the
-                    corner a mark claims, never covers one. They are in screen space like the selection ring, so they
-                    keep their size at any zoom. */}
+                {/* Last in the chrome layer, so the transform box's top-right grip, which sits on the corner a mark
+                    claims, never covers one. Screen space keeps them one size at any zoom. */}
                 {onOpenCard &&
                     commentedElements.map(({ id, cardId, color, corner }) => {
                         const { left, top } = boxToStyle(corner);
                         return (
-                            <button
+                            <CommentMark
                                 key={id}
-                                type="button"
-                                // -translate-x-full hangs the triangle inside the box, off the exact corner.
-                                className="pointer-events-auto absolute -translate-x-full"
+                                cardId={cardId}
+                                color={color}
                                 style={{ left, top }}
-                                // The container captures the pointer on pointerdown, so no click lands here. The mark
-                                // opens from the pointer event and keeps the press off the canvas.
-                                onPointerDown={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    onOpenCard(cardId);
-                                }}
-                                // The pointerdown above swallows the click it would become, so the keyboard needs its
-                                // own opener. preventDefault keeps Enter and Space from making a second one.
-                                onKeyDown={(e) => {
-                                    if (e.key !== 'Enter' && e.key !== ' ') return;
-                                    e.preventDefault();
-                                    onOpenCard(cardId);
-                                }}
-                                aria-label="Open comment"
-                                title="Open comment"
-                            >
-                                <CommentIndicator color={color} className="block" />
-                            </button>
+                                onOpenCard={onOpenCard}
+                                onCommentHover={onCommentHover}
+                            />
                         );
                     })}
                 {/* Round vertex handles: over the box for a line of three or more points, and the only chrome for one
@@ -1602,9 +1583,8 @@ export function CanvasEditor({
                     isPeerVisible={isPeerVisible}
                 />
             </div>
-            {/* The OS-file drag-over hint, shown only when a drop would insert, though the drop target stays enabled
-                when it wouldn't. It is paper-pinned like the chrome layer: its border and label are `primary`, which in
-                dark mode is near white, and over a framed canvas's light page that is white on white. */}
+            {/* Paper-pinned like the chrome layer: its border and label are `primary`, which in dark mode is near white,
+                and over a framed canvas's light page that is white on white. */}
             <FileDropOverlay
                 visible={isDragging && imagesEnabled}
                 label="Drop images to add"
@@ -1618,9 +1598,8 @@ export function CanvasEditor({
                     Enter or double-click to finish · Esc to cancel
                 </HintPill>
             )}
-            {/* The zoom readout. A click resets it to 100% about the viewport center. It sits bottom right, because the
-                router devtools badge owns the bottom left in dev. A framed page always shows the whole page, so it has
-                no zoom and no readout. */}
+            {/* Bottom right, because the router devtools badge owns the bottom left in dev. A framed page always shows
+                the whole page, so it has no zoom and no readout. */}
             {viewport === 'infinite' && (
                 <HintPill className={cn(CANVAS_PAPER_CLASS, 'bottom-3 right-3')} title="Reset zoom" onClick={resetZoom}>
                     {Math.round(zoom * 100)}%
@@ -1664,5 +1643,62 @@ export function CanvasEditor({
                 </div>
             )}
         </div>
+    );
+}
+
+// An element's comment, in the canvas' chrome. A mark that unmounts under the pointer gets no pointer leave, such as on
+// a peer's delete or a slide change, so its unmount reports that instead.
+function CommentMark({
+    cardId,
+    color,
+    style,
+    onOpenCard,
+    onCommentHover,
+}: {
+    cardId: string;
+    color: string | undefined;
+    style: React.CSSProperties;
+    onOpenCard: (cardId: string) => void;
+    onCommentHover: CanvasEditorProps['onCommentHover'];
+}) {
+    const pointerOnMark = useRef(false);
+    const reportGone = useEffectEvent(() => {
+        if (pointerOnMark.current) onCommentHover(null);
+    });
+    useEffect(() => () => reportGone(), []);
+
+    return (
+        <button
+            type="button"
+            // -translate-x-full hangs the triangle inside the box, off the exact corner.
+            className="pointer-events-auto absolute -translate-x-full"
+            style={style}
+            onPointerEnter={(e) => {
+                pointerOnMark.current = true;
+                onCommentHover({ cardId, rect: e.currentTarget.getBoundingClientRect() });
+            }}
+            onPointerLeave={() => {
+                pointerOnMark.current = false;
+                onCommentHover(null);
+            }}
+            // The container captures the pointer on pointerdown, so no click lands here. The mark opens from the
+            // pointer event and keeps the press off the canvas.
+            onPointerDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                onCommentHover(null);
+                onOpenCard(cardId);
+            }}
+            // The pointerdown above swallows the click it would become, so the keyboard needs its own opener.
+            // preventDefault keeps Enter and Space from making a second one.
+            onKeyDown={(e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                onOpenCard(cardId);
+            }}
+            aria-label="Open comment"
+        >
+            <CommentIndicator color={color} className="block" />
+        </button>
     );
 }

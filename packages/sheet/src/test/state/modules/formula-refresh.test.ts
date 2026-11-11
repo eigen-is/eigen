@@ -1,7 +1,7 @@
 // Regression: refreshing the grid must not crash when a *non-active* sheet has
 // a formula at a row beyond the active sheet's bounds. Repro: select-all +
 // delete on a small sheet while a taller sheet holds a formula in, say, column
-// E. The delete clears the active sheet's formulaCellInfoMap entries, forcing
+// E. The delete clears the active sheet's formulas from the graph, forcing
 // execFunctionGroup to rebuild the map over every sheet's cells. getcellFormula
 // then indexed the active sheet's data with the *other* sheet's (r,c), throwing
 // "Cannot read properties of undefined (reading '4')".
@@ -53,7 +53,7 @@ describe('a delete with formulas on several sheets', () => {
 
         // The other sheet's formula must still be resolved against *its own*
         // data, not silently dropped.
-        expect(ctx.formulaCache.formulaCellInfoMap?.['r10c4iid_2']).toBeDefined();
+        expect(ctx.formulaCache.graph?.formulaAt('id_2', 10, 4)).toBeDefined();
     });
 });
 

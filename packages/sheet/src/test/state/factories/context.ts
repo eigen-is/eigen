@@ -1,5 +1,21 @@
+import { produce } from 'immer';
+import type { FormulaGraph } from '../../../engine/formula-graph';
 import type { Context, SheetConfig } from '../../../state/index';
 import { defaultContext, FormulaCache } from '../../../state/index';
+import { execFunctionGroup } from '../../../state/modules/formula-exec';
+
+// The formula graph the editor holds, built as the first recompute builds it.
+export function heldGraph(ctx: Context): FormulaGraph {
+    execFunctionGroup(ctx, []);
+    const { graph } = ctx.formulaCache;
+    if (graph == null) throw new Error('no formula graph');
+    return graph;
+}
+
+// Runs an edit as the app runs it, in a recipe, and leaves the next state in ctx for the test to read.
+export function editInPlace(ctx: Context, recipe: (draft: Context) => void) {
+    Object.assign(ctx, produce(ctx, recipe));
+}
 
 export function selectionFactory(row: number[], column: number[], row_focus: number, column_focus: number) {
     return [

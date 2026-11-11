@@ -93,8 +93,8 @@ export type ExtractTextJob = {
     documentType: 'eigensheets' | 'eigendoc' | 'eigenslides' | 'eigenvector';
 };
 
-// A pure conversion of uploaded bytes, which learns nothing of its destination. There is one arm per source format, so
-// an impossible pairing, such as xlsx into an eigendoc, does not compile.
+// A conversion of uploaded bytes, which learns of its destination only what an insert fits into. There is one arm per
+// source format, so an impossible pairing, such as xlsx into an eigendoc, does not compile.
 export type SheetsImportJob = {
     kind: 'import';
     sourceFormat: 'xlsx';
@@ -102,6 +102,8 @@ export type SheetsImportJob = {
     // The upload cap, which bounds the pictures' inflated bytes too; the transform reads no config.
     maxMediaBytes: number;
 };
+// An inserting Import… carries the open workbook it adds the file's tabs to, and gets back the batch that adds them.
+export type SheetsInsertJob = SheetsImportJob & { workbook: SheetsWorkbookJson };
 export type DocImportJob = {
     kind: 'import';
     sourceFormat: 'docx';
@@ -121,20 +123,19 @@ export type SlidesImportJob = {
     // The upload cap, which bounds the pictures' inflated bytes too; the transform reads no config.
     maxMediaBytes: number;
 };
-export type ImportTransformJob = SheetsImportJob | DocImportJob | SlidesImportJob;
+export type ImportTransformJob = SheetsImportJob | SheetsInsertJob | DocImportJob | SlidesImportJob;
 
 // Preview, export and search extraction read the persisted collaborative document; the
 // bytes-sourced jobs (the vCard, message and calendar previews, both imports) carry their own input instead.
 export type CollabTransformJob = CollabPreviewJob | ExportTransformJob | ExtractTextJob;
 export type BytesTransformJob = BytesPreviewJob | ImportTransformJob;
 
-// A workbook's op log folded into its snapshot when the document closes. The batches are the log's JSON text.
-export type SheetsCompactionJob = {
-    kind: 'compact';
-    documentType: 'eigensheets';
-    snapshot: string | null;
-    batches: string;
-};
+// A workbook read from the live doc: its snapshot and op batches as JSON text, which crosses to the child much faster
+// than objects.
+export type SheetsWorkbookJson = { snapshot: string | null; batches: string };
+
+// A workbook's op log folded into its snapshot when the document closes.
+export type SheetsCompactionJob = { kind: 'compact'; documentType: 'eigensheets' } & SheetsWorkbookJson;
 
 // The parts one document's state names.
 export type ReferencesJob = { kind: 'references'; documentType: DriveCollabType; source: YjsStatePayload };
@@ -243,11 +244,11 @@ export type PreviewResult = Omit<TextPreviewResult, 'mode'>;
 export type ExtractTextResult = { text: string };
 // `zoom` is the one htmlToPdf hands WeasyPrint for a PDF document laid out at 1:1: a deck's, from its width.
 export type ExportTransformResult = { data: ArrayBuffer; zoom?: number };
-// A workbook's stored cells and the characters of their text, as sheetsWeight counts them.
-export type SheetsWeight = { cells: number; text: number };
-// The lean Sheet[] JSON as UTF-8 bytes, which the main thread commits without parsing it, and its weight, which an
-// insert adds to the open workbook's. The pictures it names come beside it.
-export type SheetsImportTransformResult = { snapshotJson: ArrayBuffer; weight: SheetsWeight; images: TransformMedia[] };
+// The lean Sheet[] JSON as UTF-8 bytes, which the main thread commits without parsing it, and the pictures it names.
+export type SheetsImportTransformResult = { snapshotJson: ArrayBuffer; images: TransformMedia[] };
+// An insert's one batch of addSheet ops as JSON in UTF-8 bytes, which the main thread pushes onto the log, and the
+// pictures its sheets name.
+export type SheetsInsertTransformResult = { batch: ArrayBuffer; images: TransformMedia[] };
 // A ready Yjs update plus the images extracted from the docx, its page and its Normal: the main thread
 // only commits the update, the page and the Normal and writes the media through Mount.
 export type DocImportTransformResult = {
@@ -260,8 +261,9 @@ export type DocImportTransformResult = {
 export type DocImportResult = DocImportTransformResult & { warnings: TransformWarning[] };
 // A pptx's update plus its pictures: the main thread only applies the update and writes the media through Mount.
 export type SlidesImportTransformResult = { update: ArrayBuffer; images: TransformMedia[] };
-// The compacted snapshot's JSON as UTF-8 bytes, and how many op batches the replay dropped because they failed to apply.
-export type SheetsCompactionResult = { snapshot: ArrayBuffer; dropped: number };
+// The compacted snapshot's JSON as UTF-8 bytes, how many op batches the replay dropped because they failed to apply,
+// and how many of the log's first batches it folded.
+export type SheetsCompactionResult = { snapshot: ArrayBuffer; dropped: number; folded: number };
 // The media files and comment threads the job's document names.
 export type ReferencesResult = { references: DocumentReferences };
 
@@ -270,6 +272,7 @@ export type TransformResult =
     | ExtractTextResult
     | ExportTransformResult
     | SheetsImportTransformResult
+    | SheetsInsertTransformResult
     | DocImportTransformResult
     | SlidesImportTransformResult
     | SheetsCompactionResult
@@ -288,19 +291,22 @@ export type TransformResultFor<R extends CollabTransformJob | BytesTransformJob 
               ? SheetsCompactionResult
               : R extends { kind: 'references' }
                 ? ReferencesResult
-                : R extends { targetType: 'eigensheets' }
-                  ? SheetsImportTransformResult
-                  : R extends { targetType: 'eigendoc' }
-                    ? DocImportTransformResult
-                    : R extends { targetType: 'eigenslides' }
-                      ? SlidesImportTransformResult
-                      : never;
+                : R extends SheetsInsertJob
+                  ? SheetsInsertTransformResult
+                  : R extends { targetType: 'eigensheets' }
+                    ? SheetsImportTransformResult
+                    : R extends { targetType: 'eigendoc' }
+                      ? DocImportTransformResult
+                      : R extends { targetType: 'eigenslides' }
+                        ? SlidesImportTransformResult
+                        : never;
 
 export type DocumentTransformResponse =
     | { ok: true; result: TransformResult; warnings: TransformWarning[] }
     | { ok: false; error: TransformError };
 
-export type ChildRequestEnvelope = { jobId: number; request: DocumentTransformRequest };
+// `deadlineAt` is the wall-clock time the runner kills the child at, which a compaction folds up to.
+export type ChildRequestEnvelope = { jobId: number; request: DocumentTransformRequest; deadlineAt: number };
 // The child's first message: the job arrived, so a death from here on is the job's.
 export type ChildAck = { jobId: number; ack: true };
 // An export's child asks for the media its document names; the runner answers with them prepared.
@@ -316,12 +322,17 @@ export type ChildResponseEnvelope = {
 // The input bytes a job copies to the child, for its log line. A future request kind
 // with a different payload fails to compile here until it is handled.
 export function inputBytesOf(request: DocumentTransformRequest): number {
-    if ('data' in request) return request.data.byteLength;
-    if (request.kind === 'compact')
-        return Buffer.byteLength(request.snapshot ?? '') + Buffer.byteLength(request.batches);
+    if ('data' in request) {
+        return request.data.byteLength + ('workbook' in request ? workbookBytes(request.workbook) : 0);
+    }
+    if (request.kind === 'compact') return workbookBytes(request);
     let bytes = request.source.snapshot?.data.byteLength ?? 0;
     for (const update of request.source.updates) bytes += update.data.byteLength;
     return bytes;
+}
+
+function workbookBytes({ snapshot, batches }: SheetsWorkbookJson): number {
+    return Buffer.byteLength(snapshot ?? '') + Buffer.byteLength(batches);
 }
 
 export function resultBytes(result: TransformResult): number {
@@ -330,7 +341,7 @@ export function resultBytes(result: TransformResult): number {
     if ('data' in result) return result.data.byteLength;
     if ('snapshot' in result) return result.snapshot.byteLength;
     if ('references' in result) return Buffer.byteLength(JSON.stringify(result.references));
-    const main = 'snapshotJson' in result ? result.snapshotJson : result.update;
+    const main = 'snapshotJson' in result ? result.snapshotJson : 'batch' in result ? result.batch : result.update;
     return result.images.reduce((sum, image) => sum + image.data.byteLength, main.byteLength);
 }
 

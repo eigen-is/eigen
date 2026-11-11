@@ -6,11 +6,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
 import { getRangetxt } from '../../../state/modules/cell';
-import { consumePendingCopy } from '../../../state/modules/clipboard';
-import { copy, normalizeSelection, rangeValueToClipboard } from '../../../state/modules/selection';
+import { consumePendingCopy, copy } from '../../../state/modules/clipboard';
+import { moveHighlightRange, normalizeSelection } from '../../../state/modules/selection';
+import { copied } from '../factories/clipboard';
 import { contextFactory } from '../factories/context';
 
-describe('state/modules/selection — rangeValueToClipboard', () => {
+describe('state/modules/selection — what a copy puts on the clipboard', () => {
     function styledContext(fc: string) {
         const ctx = contextFactory() as Context;
         ctx.sheets[0].data = [[{ v: 'x', m: 'x', fc }, null, null, null]];
@@ -18,9 +19,7 @@ describe('state/modules/selection — rangeValueToClipboard', () => {
     }
 
     test('a style value cannot close its own attribute', () => {
-        const html = rangeValueToClipboard(styledContext('red" onload="alert(1)'), 'id_1', [
-            { row: [0, 0], column: [0, 0] },
-        ])?.html;
+        const html = copied(styledContext('red" onload="alert(1)'), [{ row: [0, 0], column: [0, 0] }])?.html;
         const styleValue = /<td[^>]*style="([^"]*)"/.exec(html ?? '')?.[1];
         expect(styleValue).toBeDefined();
         // What matters is that nothing escapes the quotes; the text left inside the
@@ -29,7 +28,7 @@ describe('state/modules/selection — rangeValueToClipboard', () => {
     });
 
     test('a plain colour still serialises as CSS', () => {
-        const html = rangeValueToClipboard(styledContext('#ff0000'), 'id_1', [{ row: [0, 0], column: [0, 0] }])?.html;
+        const html = copied(styledContext('#ff0000'), [{ row: [0, 0], column: [0, 0] }])?.html;
         expect(html).toContain('color:#ff0000;');
     });
 
@@ -49,7 +48,7 @@ describe('state/modules/selection — rangeValueToClipboard', () => {
                     columnlen: { 0: '50" onclick="alert(1)', 1: '60px;background:url(//tracker)' },
                 }),
             );
-            const html = rangeValueToClipboard(ctx, 'id_1', [{ row: [0, 0], column: [0, 1] }])?.html ?? '';
+            const html = copied(ctx, [{ row: [0, 0], column: [0, 1] }])?.html ?? '';
             expect(html).not.toMatch(/url|onmouseover|onclick/);
             expect(html).toContain('border-bottom:1px solid transparent;');
             expect(html).toContain('height:19px;');
@@ -65,7 +64,7 @@ describe('state/modules/selection — rangeValueToClipboard', () => {
             rowlen: { 0: 30 },
             columnlen: { 0: 50, 1: 60 },
         };
-        const html = rangeValueToClipboard(ctx, 'id_1', [{ row: [0, 0], column: [0, 1] }])?.html ?? '';
+        const html = copied(ctx, [{ row: [0, 0], column: [0, 1] }])?.html ?? '';
         expect(html).toContain('<colgroup width="50px"></colgroup><colgroup width="60px"></colgroup>');
         expect(html).toContain('rowspan="1" colspan="2"');
         expect(html).toContain('height:30px;');
@@ -108,4 +107,19 @@ test('normalizeSelection backfills a one-element range, so the name box reads A1
     const ctx = contextFactory() as Context;
     const [selection] = normalizeSelection(ctx, [{ row: [0], column: [0] }]);
     expect(getRangetxt(ctx, ctx.currentSheetId, selection)).toBe('A1');
+});
+
+describe('state/modules/selection — shift and arrow', () => {
+    // A1:B1 is merged, and the selection A1:D1 has its focus on the far end, so shift and right shrinks it from the left.
+    test('shrinking past a merge stops on the next column, as shrinking down does', () => {
+        const row = () => [{ mc: { r: 0, c: 0, rs: 1, cs: 2 } }, { mc: { r: 0, c: 0 } }, {}, {}, {}, {}];
+        const ctx = contextFactory() as Context;
+        ctx.sheets[0].data = [row(), [null, null, null, null, null, null]];
+        ctx.sheets[0].config = { merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 2 } } };
+        ctx.visibledatarow = [20, 40];
+        ctx.visibledatacolumn = [100, 200, 300, 400, 500, 600];
+        ctx.selections = [{ row: [0, 0], column: [0, 3], row_focus: 0, column_focus: 3 }];
+        moveHighlightRange(ctx, 'right', 1, 'rangeOfSelect');
+        expect(ctx.selections[0].column).toEqual([2, 3]);
+    });
 });

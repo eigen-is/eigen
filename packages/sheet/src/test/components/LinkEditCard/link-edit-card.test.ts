@@ -4,6 +4,7 @@
 // picker takes the dialog's place, and its OK, Cancel or Escape brings it back with the draft, on the link's sheet.
 
 import { describe, expect, mock, test } from 'bun:test';
+import type { CellLinkType } from '@workspace/lib/sheets';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 
@@ -21,14 +22,30 @@ const SHEETS = [
     { id: 'id_2', name: 'Sheet2', order: 1, config: {}, data: [[null, null]] },
 ];
 
+const linkedSheet = (type: CellLinkType, address: string) => ({
+    ...SHEETS[0],
+    data: [[{ v: 'go', link: { type, address } }, null]],
+});
+
 // The link card on A1, inside a stand-in for the grid that listens as cellArea does: editing for Insert link, or the
 // hover card of a link already there.
-const openCard = async ({ isEditing = true, originType = 'webpage', originAddress = '' } = {}) => {
+const openCard = async ({
+    isEditing = true,
+    originType = 'webpage',
+    originAddress = '',
+    scrolling = false,
+}: {
+    isEditing?: boolean;
+    originType?: CellLinkType;
+    originAddress?: string;
+    scrolling?: boolean;
+} = {}) => {
     gridMouseDown.mockClear();
     const dialog = await renderSheetDialog(
         () => {},
         {
-            sheets: SHEETS,
+            sheets: isEditing ? SHEETS : [linkedSheet(originType, originAddress), SHEETS[1]],
+            scrolling,
             linkCard: {
                 sheetId: 'id_1',
                 r: 0,
@@ -37,7 +54,7 @@ const openCard = async ({ isEditing = true, originType = 'webpage', originAddres
                 originText: '',
                 originType,
                 originAddress,
-                position: { cellLeft: 0, cellBottom: 20 },
+                position: { left: 0, top: 0, right: 74, bottom: 20 },
                 isEditing,
             },
         },
@@ -85,7 +102,63 @@ const pressEscape = () =>
         );
     });
 
-const link = (context: Context) => context.sheets[0].hyperlink?.['0_0'];
+const link = (context: Context) => context.sheets[0].data?.[0][0]?.link;
+
+const hoverCard = (scrolling = false) => openCard({ isEditing: false, originAddress: 'https://eigen.is', scrolling });
+const shownCard = () => document.querySelector('button[aria-label="Edit link"]')?.parentElement;
+
+// The anchor spans the cell, so a card with no room below goes above the cell rather than over it, and one in column A
+// isn't taken for clipped by the cell area's left edge.
+test('the card hangs from its whole cell', async () => {
+    await hoverCard();
+    const anchor = document.querySelector('.absolute');
+    if (!(anchor instanceof HTMLElement)) throw new Error('no anchor');
+    expect([anchor.style.left, anchor.style.top, anchor.style.width, anchor.style.height]).toEqual([
+        '0px',
+        '0px',
+        '74px',
+        '20px',
+    ]);
+});
+
+test('the pointer moving on to the next link gets the card a new anchor, which Radix places afresh', async () => {
+    const dialog = await hoverCard();
+    const first = document.querySelector('.absolute');
+    await dialog.setContext((ctx) => {
+        const row = ctx.sheets[0].data?.[0];
+        if (row) row[1] = { v: 'next', link: { type: 'webpage', address: 'https://eigen.is/next' } };
+        if (ctx.linkCard) ctx.linkCard = { ...ctx.linkCard, c: 1, rc: '0_1' };
+    });
+    expect(document.querySelector('.absolute')).not.toBe(first);
+});
+
+test('the card stays away during a drag, or the pointer over it would never reach the document', async () => {
+    await hoverCard(true);
+    expect(shownCard()).toBeUndefined();
+});
+
+test('the pointer on the card holds it open, until the card goes from under the pointer', async () => {
+    const dialog = await hoverCard();
+    const { globalCache } = dialog.context().getRefs();
+    await act(async () => {
+        shownCard()?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    });
+    expect(globalCache.linkCard?.mouseEnter).toBe(true);
+    await dialog.setContext((ctx) => {
+        ctx.scrolling = true;
+    });
+    expect(globalCache.linkCard).toBeUndefined();
+});
+
+test('the card goes when its cell loses the link, such as under a paste', async () => {
+    const dialog = await hoverCard();
+    expect(shownCard()).not.toBeUndefined();
+    await dialog.setContext((ctx) => {
+        const cell = ctx.sheets[0].data?.[0][0];
+        if (cell) delete cell.link;
+    });
+    expect(shownCard()).toBeUndefined();
+});
 
 test('OK saves the link, writes the display text and closes', async () => {
     const dialog = await openCard();
@@ -97,7 +170,7 @@ test('OK saves the link, writes the display text and closes', async () => {
     await dialog.type('Display text', 'Eigen');
     await dialog.type('Link address', 'https://eigen.is');
     await dialog.click('OK');
-    expect(link(dialog.context())).toEqual({ linkType: 'webpage', linkAddress: 'https://eigen.is' });
+    expect(link(dialog.context())).toEqual({ type: 'webpage', address: 'https://eigen.is' });
     expect(dialog.context().sheets[0].data?.[0]?.[0]?.v).toBe('Eigen');
     expect(dialog.context().linkCard).toBeUndefined();
     expect(dialog.dialogs()).toHaveLength(0);
@@ -107,7 +180,7 @@ test('Enter in the address submits', async () => {
     const dialog = await openCard();
     await dialog.type('Link address', 'https://eigen.is');
     await act(async () => pressEnter(dialog.field('Link address')));
-    expect(link(dialog.context())).toEqual({ linkType: 'webpage', linkAddress: 'https://eigen.is' });
+    expect(link(dialog.context())).toEqual({ type: 'webpage', address: 'https://eigen.is' });
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
@@ -241,14 +314,16 @@ describe('the range picker', () => {
         c: 0,
         rc: '0_0',
         originText: '',
-        originType: 'webpage',
+        originType: 'webpage' as const,
         originAddress: 'https://eigen.is',
-        position: { cellLeft: 0, cellBottom: 20 },
+        position: { left: 0, top: 0, right: 74, bottom: 20 },
     };
 
     test('the link card stays away until a notice takes its place', async () => {
         const dialog = await openPicker();
         await dialog.setContext((ctx) => {
+            const cell = ctx.sheets[0].data?.[0];
+            if (cell) cell[0] = { link: { type: 'webpage', address: HOVER_CARD.originAddress } };
             ctx.linkCard = { ...HOVER_CARD, isEditing: false };
         });
         expect(document.querySelector('button[aria-label="Edit link"]')).toBeNull();
@@ -274,6 +349,6 @@ describe('the range picker', () => {
         await dialog.click('OK');
         expect(dialog.context().currentSheetId).toBe('id_1');
         await dialog.click('OK');
-        expect(link(dialog.context())).toEqual({ linkType: 'cellrange', linkAddress: 'Sheet2!A1' });
+        expect(link(dialog.context())).toEqual({ type: 'cellrange', address: 'Sheet2!A1' });
     });
 });

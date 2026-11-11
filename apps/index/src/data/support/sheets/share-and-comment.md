@@ -71,13 +71,13 @@ You need write access to add comments. If you only have view access, the option 
 3. In the **New comment** dialog, the **Title** is pre-filled with the cell address (for example, "Cell B3"). Edit it if you like, and add a longer note in the **Description** field. Pick a color for the comment marker.
 4. Click **Add comment**.
 
-A small triangle appears in the corner of the cell to show it has a comment attached.
+A small triangle appears in the corner of the cell to show it has a comment attached. Rest your mouse on the cell to read the comment's card, and click the card to open the thread.
 
 ## Open the comments panel
 
-Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number badge shows how many open comments the spreadsheet has.
+Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number badge shows how many open comments are assigned to you.
 
-The panel slides open on the right and lists every comment, on every tab. Each comment shows the cell it sits on, such as "Cell B2". A comment on another tab shows that tab's name first, such as "Sheet2 · B2". Click a comment to open its thread.
+The panel slides open on the right and lists every comment, on every tab. Each comment shows its title. A comment on another tab shows that tab's name first, such as "Sheet2 · Cell B2". Click a comment to jump to its cell and open its thread.
 
 A red dot on a comment means it has something new for you: a reply in a thread you've written in, a mention, or an assignment. Opening the comment clears the dot.
 
@@ -105,7 +105,7 @@ Right-click a cell that has a comment to see its options:
 - **View comment**: opens the comment thread.
 - **Comment color**: change the color of the cell marker.
 - **Resolve comment** / **Reopen comment**: toggle the status.
-- **Delete comment**: removes the comment from the cell. If you opened the menu on a comment in the comments pane, it asks you to confirm first. To bring it back, press **Ctrl+Z** (Mac: **⌘Z**) before you close the spreadsheet.
+- **Delete comment**: removes the comment from the cell, once you confirm. To bring it back, press **Ctrl+Z** (Mac: **⌘Z**) before you close the spreadsheet.
 
 To edit the title or description of an existing comment, open the thread and click the pencil icon (**Edit**) near the top of the dialog. The trash icon (**Delete**) at the bottom of the edit form deletes the comment, after you confirm.
 

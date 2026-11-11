@@ -5,9 +5,15 @@ import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/li
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { FormulaEngine } from '@workspace/sheet/engine';
 import * as Y from 'yjs';
-import { PREVIEW_SHEET_BUDGET, renderSheetsHtml, renderSheetsPreviewHtml } from '../../lib/export/sheets/render';
+import {
+    MAX_PREVIEW_FLOATING,
+    PREVIEW_SHEET_BUDGET,
+    renderSheetsHtml,
+    renderSheetsPreviewHtml,
+} from '../../lib/export/sheets/render';
 import { getHome } from '../../lib/home/get-home';
 import { renderEigensheetsPreviewBody } from '../../lib/preview/eigensheets-render';
+import { renderPreviewTruncatedMarker } from '../../lib/preview/preview-marker';
 import { cpuClock } from '../cpu-time';
 import {
     buildGoldenOps,
@@ -20,8 +26,9 @@ import {
     GOLDEN_SHEET2_MARKER,
     HEAVY_FAR_CORNER,
     seedSheetsDoc,
+    writeSheetsToYjs,
 } from '../fixtures/heavy-sheets';
-import { authedRequest, driveGet, drivePost, getTestContext, NO_MEDIA, NO_PIXELS } from '../setup';
+import { authedRequest, driveGet, drivePost, getTestContext, NO_MEDIA } from '../setup';
 
 // Golden output assertions for the eigensheets preview pipeline. The hash at
 // the bottom pins the exact sanitized body for the deterministic golden fixture —
@@ -204,7 +211,7 @@ describe('eigensheets preview (floating images)', () => {
         seedSheetsDoc(doc, [sheet], []);
         expect(renderEigensheetsPreviewBody(doc, media).body).toContain(`style="${geometry}"`);
         // The full export interns the very same declaration into its stylesheet.
-        expect(renderSheetsHtml([sheet], media, 'screen', NO_PIXELS).css).toContain(`{${geometry}}`);
+        expect(renderSheetsHtml([sheet], media, 'screen').css).toContain(`{${geometry}}`);
         doc.destroy();
     });
 
@@ -381,6 +388,43 @@ describe('eigensheets preview (charts)', () => {
         const { html } = renderSheetsPreviewHtml([chartBelow(bottom - 100)], NO_MEDIA);
         expect(html).toContain(`min-height:${bottom}px;overflow:hidden`);
     });
+
+    // The floating cap counts charts, not bytes, so a forged preview of full charts ends at the byte guard's notice.
+    test('a preview of as many full charts as the cap holds is the truncated notice, not a failure', () => {
+        const points = 2000;
+        const charts: NonNullable<Sheet['charts']> = {};
+        for (let i = 0; i < MAX_PREVIEW_FLOATING; i++) {
+            const spec = sampleChartSpec('line');
+            charts[`c${i}`] = {
+                id: `c${i}`,
+                index: `a${String(i).padStart(3, '0')}`,
+                x: 0,
+                y: 0,
+                width: 200,
+                height: 100,
+                ...newSheetChartSpecParts({
+                    ...spec,
+                    data: {
+                        source: 'range',
+                        categories: null,
+                        series: [
+                            {
+                                id: 's-1',
+                                name: 'n',
+                                values: { sheetId: 'full', row: [0, points - 1], column: [0, 0] },
+                            },
+                        ],
+                    },
+                }),
+            };
+        }
+        const celldata = Array.from({ length: points }, (_, r) => ({ r, c: 0, v: { v: r, m: String(r) } }));
+        const doc = new Y.Doc();
+        writeSheetsToYjs(doc, [{ id: 'full', name: 'Full', order: 0, celldata, charts }], { computed: true });
+        const { body, warnings } = renderEigensheetsPreviewBody(doc, new Map());
+        expect(body).toBe(renderPreviewTruncatedMarker());
+        expect(warnings).toEqual([expect.objectContaining({ code: 'byte-guard-truncated' })]);
+    }, 60_000);
 });
 
 describe('eigensheets preview (heavy fixture)', () => {
@@ -577,7 +621,7 @@ describe('eigensheets export and preview (hidden sheets)', () => {
             return { id, name: id, ...(hide && { hide }), celldata: [{ r: 0, c: 0, v: cell }], data: [[cell]] };
         };
         const sheets = [sheetOf('First', 'secret', 1), sheetOf('Second', 'shown'), sheetOf('Third', 'unseen', 1)];
-        const { html } = renderSheetsHtml(sheets, NO_MEDIA, 'screen', NO_PIXELS);
+        const { html } = renderSheetsHtml(sheets, NO_MEDIA, 'screen');
         expect(html).toContain('shown');
         expect(html).not.toContain('secret');
         expect(html).not.toContain('unseen');

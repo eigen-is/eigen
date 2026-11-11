@@ -1,20 +1,24 @@
 // Where a sheet's comment cards sit: the card ids in a cell's `commentCardIds`, on any sheet of the workbook. The
-// editor asks two things of them: which cards are anchored, for the comments pane and its counts, and how a delete
-// takes a card off its cells. Both read every sheet, because a card on a tab that is not open is still in use.
+// editor asks two things of them: which cards are anchored and where, for the comments pane and its counts, and how a
+// delete takes a card off its cells. Both read every sheet, because a card on a tab that is not open is still in use.
 
-import { columnIndexToLabel } from '@workspace/lib/sheets';
 import type { ActiveComments } from '@workspace/lib/types/comments';
-import type { Sheet, WorkbookInstance } from '@workspace/sheet';
+import type { SearchHighlight, Sheet, WorkbookInstance } from '@workspace/sheet';
+import { sheetOrder } from '@workspace/sheet';
 
-// A card on several cells takes the first one as its anchor text, in the order the workbook lists its sheets. A card
-// on the open tab reads as "Cell B2", and one on another tab names that tab, as "Sheet2 · B2". A large sheet has many
-// cells and few comments, so the walk skips a cell with none before anything else.
-export function anchoredComments(sheets: readonly Sheet[], currentSheetId: string): ActiveComments {
+type AnchoredComments = ActiveComments & {
+    titlePrefixes: ReadonlyMap<string, string>;
+    firstCells: ReadonlyMap<string, SearchHighlight>;
+};
+
+// A card on several cells counts as being on the first, in tab order, so a prefix names the sheet a jump goes to. A
+// large sheet has many cells and few comments, so the walk skips a cell with none before anything else.
+export function anchoredComments(sheets: readonly Sheet[], currentSheetId: string): AnchoredComments {
     const ids = new Set<string>();
-    const anchorTexts = new Map<string, string>();
-    for (const sheet of sheets) {
+    const titlePrefixes = new Map<string, string>();
+    const firstCells = new Map<string, SearchHighlight>();
+    for (const sheet of [...sheets].sort((a, b) => sheetOrder(a) - sheetOrder(b))) {
         if (!sheet.data) continue;
-        const tab = sheet.id === currentSheetId ? 'Cell ' : `${sheet.name} · `;
         for (let r = 0; r < sheet.data.length; r++) {
             const row = sheet.data[r];
             if (!row) continue;
@@ -23,12 +27,14 @@ export function anchoredComments(sheets: readonly Sheet[], currentSheetId: strin
                 if (!cellCardIds?.length) continue;
                 for (const cardId of cellCardIds) {
                     ids.add(cardId);
-                    if (!anchorTexts.has(cardId)) anchorTexts.set(cardId, `${tab}${columnIndexToLabel(c)}${r + 1}`);
+                    if (firstCells.has(cardId)) continue;
+                    firstCells.set(cardId, { sheetId: sheet.id, r, c });
+                    if (sheet.id !== currentSheetId) titlePrefixes.set(cardId, sheet.name);
                 }
             }
         }
     }
-    return { ids, anchorTexts };
+    return { ids, titlePrefixes, firstCells };
 }
 
 // The delete is one undo step, so one ⌘Z puts the card back on every cell it was on. A write that throws still ends

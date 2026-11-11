@@ -5,27 +5,21 @@ import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import { produce, produceWithPatches } from 'immer';
 import { celldataToData, dataToCelldata } from '../../../engine/celldata';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../../../engine/defaults';
-import { copySheet, getAllSheets, setSheetOrder } from '../../../state/api/sheet';
+import { copySheet, setSheetOrder } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { setCellValue } from '../../../state/modules/cell';
-import { execFunctionGroup, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { execFunctionGroup } from '../../../state/modules/formula-exec';
 import { addSheet, deleteSheet } from '../../../state/modules/sheet';
 import type { Sheet } from '../../../state/types';
 import { filterPatch, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
-import { contextFactory, selectionFactory, workbookContextFactory } from '../factories/context';
+import { contextFactory, heldGraph, selectionFactory, workbookContextFactory } from '../factories/context';
 
 describe('sheet/core/api/sheet', () => {
     const getContext = () =>
         contextFactory({
             selections: selectionFactory([0, 0], [0, 0], 0, 0),
         }) as Context;
-    test('getAllSheets', () => {
-        const ctx = getContext();
-        expect(getAllSheets(ctx).length).toBe(2);
-        expect(getAllSheets(ctx)).toMatchObject([{ id: 'id_1' }, { id: 'id_2' }]);
-    });
-
     test('setSheetOrder renumbers every sheet from 0', () => {
         const ctx = getContext();
         setSheetOrder(ctx, { id_1: 2, id_2: 1 });
@@ -140,7 +134,7 @@ describe('sheet/core/api/sheet', () => {
 
     // The map may be built before the copy, such as while the browser is idle after a load, and the add must not leave
     // the copy out of it.
-    test("a copy's formula follows an edit of the copy's cells once the formula map is built", () => {
+    test("a copy's formula follows an edit of the copy's cells once the formula graph is built", () => {
         const base = workbookContextFactory({
             currentSheetId: 'id_1',
             sheets: [
@@ -160,7 +154,7 @@ describe('sheet/core/api/sheet', () => {
             ],
         });
         const copied = produce(base, (draft: Context) => {
-            warmFormulaCellInfoMap(draft);
+            heldGraph(draft);
             copySheet(draft, 'id_1');
         });
         const copyId = copied.sheets[1].id ?? '';
@@ -248,12 +242,13 @@ describe('sheet order on a copy, an add and a delete', () => {
     });
 
     test("a blank sheet has its cell matrix inside the add's own recipe, and its add sends none", () => {
-        const [next, patches] = produceWithPatches(threeSheets(), (draft: Context) => addSheet(draft));
+        const base = threeSheets();
+        const [next, patches] = produceWithPatches(base, (draft: Context) => addSheet(draft));
         const added = next.sheets[3];
         expect(next.currentSheetId).toBe(added.id);
         expect(added.data).toHaveLength(DEFAULT_SHEET_ROW_COUNT);
         expect(added.data?.[0]).toHaveLength(DEFAULT_SHEET_COLUMN_COUNT);
-        const [{ value }] = patchToOp(next, filterPatch(patches), { addedSheet: added });
+        const [{ value }] = patchToOp(base, next, filterPatch(patches), { addedSheet: added });
         expect(value.data).toBeUndefined();
         expect(value.celldata).toEqual([]);
     });

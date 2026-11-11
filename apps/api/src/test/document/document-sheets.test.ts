@@ -6,6 +6,8 @@ import {
     decodeSheetsWorkbook,
     encodeSheetsSnapshot,
     readSheetsBase,
+    readSheetsSnapshotJson,
+    sheetsOpLog,
     sheetsStateMap,
     writeSheetsSnapshot,
 } from '@workspace/lib/sheets';
@@ -13,15 +15,17 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
 import { normalizeSheetConfig } from '@workspace/sheet/engine';
 import * as Y from 'yjs';
-import { appendSheetsToYjs, compactSheetsSnapshot, readLiveSheets, readSheetsFromDoc } from '../../lib/document/sheets';
+import { addSheetsBatch, compactSheetsSnapshot, readSheetsFromDoc } from '../../lib/document/sheets';
+import { TRANSFORM_LIMITS } from '../../lib/document/transform/runner';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
 import type { Mount } from '../../lib/mount';
+import { cellLinks } from '../fixtures/cell-links';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
 import { readPersistedDoc } from '../fixtures/transform-results';
 import { rowsXml, xlsxFixture } from '../fixtures/xlsx';
-import { driveGet, drivePost, getTestContext, NO_MEDIA, NO_PIXELS } from '../setup';
+import { driveGet, drivePost, getTestContext, NO_MEDIA } from '../setup';
 
 // Persisted workbook → Sheet[] plus whether recalc fell back, the way every reader
 // gets one now.
@@ -87,13 +91,10 @@ describe('document/sheets', () => {
         );
 
         const home = await getHome(ctx.alice.user.id);
-        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
-
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
         const { sheets: result } = await readSheets(mount, path);
 
         expect(result.map((sheet) => sheet.id)).toEqual(['sheet-1']);
-        expect(readLiveSheets(collab.doc).map((sheet) => sheet.id)).toEqual(['sheet-1']);
     });
 
     test('reads snapshot-only doc → returns parsed Sheet[]', async () => {
@@ -257,9 +258,7 @@ describe('document/sheets — patch op replay', () => {
         const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
 
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
-        const batch: Op[] = [
-            { op: 'replace', id: 'sheet-1', path: ['celldata'], value: [{ r: 0, c: 0, v: { v: 7 } }] },
-        ];
+        const batch: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 0], value: { v: 7 } }];
         collab.doc.transact(() => {
             collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
             collab.doc.getArray<Op[]>('ops').push([batch]);
@@ -335,7 +334,6 @@ describe('document/sheets — patch op replay', () => {
                 title: 'first-formula',
                 sheets: result,
                 mediaUrls: NO_MEDIA,
-                mediaPixels: NO_PIXELS,
                 mode: 'screen',
                 lost: () => {},
             }),
@@ -355,12 +353,8 @@ describe('document/sheets — patch op replay', () => {
         const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
 
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
-        const batch1: Op[] = [
-            { op: 'replace', id: 'sheet-1', path: ['celldata'], value: [{ r: 0, c: 0, v: { v: 1 } }] },
-        ];
-        const batch2: Op[] = [
-            { op: 'replace', id: 'sheet-1', path: ['celldata'], value: [{ r: 0, c: 0, v: { v: 2 } }] },
-        ];
+        const batch1: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 0], value: { v: 1 } }];
+        const batch2: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 0], value: { v: 2 } }];
         collab.doc.transact(() => {
             collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
             collab.doc.getArray<Op[]>('ops').push([batch1, batch2]);
@@ -752,7 +746,16 @@ describe('document/sheets — patch op replay', () => {
     });
 });
 
-describe('document/sheets — appendSheetsToYjs', () => {
+// As an insert builds the batch from the workbook it read and pushes it.
+function append(doc: Y.Doc, snapshotJson: string): void {
+    const workbook = {
+        snapshot: readSheetsSnapshotJson(doc) ?? null,
+        batches: JSON.stringify(sheetsOpLog(doc).toArray()),
+    };
+    sheetsOpLog(doc).push([addSheetsBatch(workbook, snapshotJson, { cells: 0, text: 0 })]);
+}
+
+describe('document/sheets — addSheetsBatch', () => {
     const range = (sheetId: string) => ({
         sheetId,
         row: [0, 2] as [number, number],
@@ -777,7 +780,8 @@ describe('document/sheets — appendSheetsToYjs', () => {
             order: 1,
             celldata: [
                 { r: 0, c: 0, v: { f: '=Data!A1*2', v: 10, m: '10' } },
-                { r: 1, c: 0, v: { v: 'Go', m: 'Go', hl: { r: 1, c: 0, id: 'sheet-1' } } },
+                { r: 1, c: 0, v: { v: 'Go', m: 'Go', link: { type: 'sheet', address: 'Data' } } },
+                { r: 1, c: 1, v: { link: { type: 'cellrange', address: 'Data!B2' } } },
             ],
             config: {},
             conditionalFormatRules: [
@@ -796,10 +800,6 @@ describe('document/sheets — appendSheetsToYjs', () => {
                     rule: { type: 'dropdown', type2: '', value1: 'Data!A1:A3', value2: '' },
                 },
             },
-            hyperlink: {
-                '1_0': { linkType: 'sheet', linkAddress: 'Data' },
-                '1_1': { linkType: 'cellrange', linkAddress: 'Data!B2' },
-            },
             charts: {
                 c1: { id: 'c1', index: 'a0', x: 0, y: 0, width: 300, height: 200, ...newSheetChartSpecParts(spec) },
             },
@@ -813,11 +813,6 @@ describe('document/sheets — appendSheetsToYjs', () => {
         ];
         doc.getMap('state').set('snapshot', encodeSheetsSnapshot(own, { computed: true }));
         return doc;
-    }
-
-    // As the import's write calls it, with the workbook it has just read.
-    function append(doc: Y.Doc, snapshotJson: string): void {
-        appendSheetsToYjs(doc, snapshotJson, readLiveSheets(doc));
     }
 
     test('a taken name with a ! in it is renamed, and the formula naming it follows', () => {
@@ -836,7 +831,7 @@ describe('document/sheets — appendSheetsToYjs', () => {
 
     test("the sheets arrive as one batch of addSheet ops under fresh ids, after the workbook's own", () => {
         const doc = workbook();
-        const pending: Op[] = [{ op: 'replace', id: 'own', path: ['name'], value: 'Data' }];
+        const pending: Op[] = [{ op: 'renameSheet', id: 'own', path: [], value: { name: 'Data' } }];
         doc.getArray('ops').push([pending]);
         const snapshot = doc.getMap('state').get('snapshot');
 
@@ -865,13 +860,12 @@ describe('document/sheets — appendSheetsToYjs', () => {
         const cell = (r: number, c: number) => summary.celldata?.find((e) => e.r === r && e.c === c)?.v;
 
         expect(cell(0, 0)?.f).toBe("='Data(Copy)'!A1*2");
-        expect(cell(1, 0)?.hl?.id).toBe(summary.id);
         const rule = summary.conditionalFormatRules?.[0];
         expect(rule?.type === 'default' && rule.conditionValue).toEqual(["=A1>'Data(Copy)'!A1"]);
         expect(summary.dataValidations?.['v1']?.rule.value1).toBe("'Data(Copy)'!A1:A3");
-        expect(summary.hyperlink).toEqual({
-            '1_0': { linkType: 'sheet', linkAddress: 'Data(Copy)' },
-            '1_1': { linkType: 'cellrange', linkAddress: "'Data(Copy)'!B2" },
+        expect(cellLinks(summary)).toEqual({
+            '1_0': { type: 'sheet', address: 'Data(Copy)' },
+            '1_1': { type: 'cellrange', address: "'Data(Copy)'!B2" },
         });
         const stored = summary.charts?.['c1'];
         const chart = stored ? readChartSpec(stored).spec : null;
@@ -888,10 +882,13 @@ describe('document/sheets — appendSheetsToYjs', () => {
 
     test('a link to a renamed sheet that spells its name in another case follows the new name', () => {
         const doc = workbook();
-        const link = { linkType: 'sheet', linkAddress: 'DATA' };
-        append(doc, encodeSheetsSnapshot([{ ...file[0], hyperlink: { '0_1': link } }], { computed: true }));
+        const celldata = [
+            ...(file[0].celldata ?? []),
+            { r: 0, c: 1, v: { link: { type: 'sheet' as const, address: 'DATA' } } },
+        ];
+        append(doc, encodeSheetsSnapshot([{ ...file[0], celldata }], { computed: true }));
         const { sheets } = readSheetsFromDoc(doc, { recalc: false });
-        expect(sheets[1].hyperlink).toEqual({ '0_1': { linkType: 'sheet', linkAddress: 'Data(Copy)' } });
+        expect(cellLinks(sheets[1])).toEqual({ '0_1': { type: 'sheet', address: 'Data(Copy)' } });
     });
 
     test('a workbook never compacted takes the file beside the default sheet the editor opens on', () => {
@@ -913,6 +910,8 @@ describe('document/sheets — appendSheetsToYjs', () => {
 });
 
 describe('document/sheets — compactSheetsSnapshot', () => {
+    // The time a compaction's job is killed at, as the runner gives it to the child.
+    const jobDeadline = () => Date.now() + TRANSFORM_LIMITS.compact.deadlineMs;
     const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
     const edit = (c: number, v: string): Op[] => [
         { op: 'replace', id: 'sheet-1', path: ['data', 0, c], value: { v, m: v } },
@@ -931,6 +930,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         const { snapshot: compacted } = compactSheetsSnapshot(
             encodeSheetsSnapshot(sheets, { computed: true }),
             JSON.stringify([edit(0, 'a'), edit(1, 'b')]),
+            jobDeadline(),
         );
         expect(decodeSheetsWorkbook(compacted).computed).toBe(true);
         expect(values(compacted)).toEqual([
@@ -956,6 +956,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
             const { snapshot: compacted } = compactSheetsSnapshot(
                 encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: false }),
                 JSON.stringify([typed]),
+                jobDeadline(),
             );
             const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
             expect(computed).toBe(false);
@@ -970,13 +971,14 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         const { snapshot: compacted } = compactSheetsSnapshot(
             encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: true }),
             JSON.stringify([edit(1, 'a')]),
+            jobDeadline(),
         );
         const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
         expect(computed).toBe(true);
         expect(result[0].celldata?.[0]?.v?.v).toBe(99);
     });
 
-    test('a formula typed on an uncomputed workbook leaves its stale neighbours for the export read', () => {
+    test('a formula typed on an uncomputed workbook leaves its neighbours as stored', () => {
         const doc = new Y.Doc();
         sheetsStateMap(doc).set('snapshot', encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: false }));
         const typed: Op[] = [
@@ -984,7 +986,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
             { op: 'add', id: 'sheet-1', path: ['calcChain', 0], value: { r: 0, c: 1, id: 'sheet-1' } },
         ];
         doc.getArray<Op[]>('ops').push([typed]);
-        expect(readSheetsFromDoc(doc).sheets[0].celldata?.[0]?.v?.v).toBe(2);
+        expect(readSheetsFromDoc(doc).sheets[0].celldata?.[0]?.v?.v).toBe(99);
         expect(readSheetsFromDoc(doc, { recalc: false }).sheets[0].celldata?.[0]?.v?.v).toBe(99);
         doc.destroy();
     });
@@ -997,16 +999,88 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         const { snapshot } = compactSheetsSnapshot(
             encodeSheetsSnapshot(sheets, { computed: true }),
             JSON.stringify(batches),
+            jobDeadline(),
         );
         expect(decodeSheetsWorkbook(snapshot).computed).toBe(true);
     });
 
     test('a workbook with no snapshot compacts over the default sheets, computed', () => {
-        const { snapshot: compacted } = compactSheetsSnapshot(null, JSON.stringify([edit(0, 'a')]));
+        const { snapshot: compacted } = compactSheetsSnapshot(null, JSON.stringify([edit(0, 'a')]), jobDeadline());
         const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
         expect(computed).toBe(true);
         expect(result.map((sheet) => sheet.id)).toEqual(['sheet-1']);
         expect(values(compacted)).toEqual([[0, 0, 'a']]);
+    });
+
+    // Each of the 6,400 formulas in column A holds #REF!, so a row op recomputes it, and each is read by the 6,400
+    // COUNT(A:A) in column B: 41 million links, past the server's 40 million.
+    test('a batch whose recompute passes the budget fails the fold, so the log stays', () => {
+        const rows = 6_400;
+        const celldata = Array.from({ length: rows }, (_, r) => [
+            { r, c: 0, v: { f: '=#REF!', v: '#REF!' } },
+            { r, c: 1, v: { f: '=COUNT(A:A)', v: 0 } },
+        ]).flat();
+        const wide: Sheet = { id: 'sheet-1', name: 'Sheet1', order: 0, row: rows + 1, column: 2, celldata, config: {} };
+        const deleteLast: Op[] = [
+            { op: 'deleteRowCol', id: 'sheet-1', path: [], value: { type: 'row', start: rows, end: rows } },
+        ];
+        expect(() =>
+            compactSheetsSnapshot(
+                encodeSheetsSnapshot([wide], { computed: true }),
+                JSON.stringify([deleteLast]),
+                jobDeadline(),
+            ),
+        ).toThrow(engine.SkippedRecompute);
+    }, 60_000);
+
+    test('a batch past the budget after the first ends the fold, which stores the batches before it', () => {
+        const rows = 6_400;
+        const celldata = Array.from({ length: rows }, (_, r) => [
+            { r, c: 0, v: { f: '=#REF!', v: '#REF!' } },
+            { r, c: 1, v: { f: '=COUNT(A:A)', v: 0 } },
+        ]).flat();
+        const wide: Sheet = { id: 'sheet-1', name: 'Sheet1', order: 0, row: rows + 1, column: 2, celldata, config: {} };
+        const typed: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['data', rows, 0], value: { v: 'a', m: 'a' } }];
+        const deleteLast: Op[] = [
+            { op: 'deleteRowCol', id: 'sheet-1', path: [], value: { type: 'row', start: rows, end: rows } },
+        ];
+        const { snapshot, folded } = compactSheetsSnapshot(
+            encodeSheetsSnapshot([wide], { computed: true }),
+            JSON.stringify([typed, deleteLast, edit(0, 'b')]),
+            jobDeadline(),
+        );
+        expect(folded).toBe(1);
+        expect(values(snapshot)).toContainEqual([rows, 0, 'a']);
+        expect(values(snapshot)).not.toContainEqual([0, 0, 'b']);
+    }, 60_000);
+
+    test('a batch that ends past the deadline is folded, and the next is not started', () => {
+        const { snapshot, folded } = compactSheetsSnapshot(
+            encodeSheetsSnapshot(sheets, { computed: true }),
+            JSON.stringify([edit(0, 'a'), edit(1, 'b')]),
+            Date.now(),
+        );
+        expect(folded).toBe(1);
+        expect(values(snapshot)).toEqual([[0, 0, 'a']]);
+    });
+
+    test("a forged write of a sheet's id or name folds into a snapshot every reader opens", () => {
+        const two: Sheet[] = [...sheets, { id: 'sheet-2', name: 'Sheet2', order: 1, celldata: [], config: {} }];
+        const forged: Op[] = [
+            { op: 'replace', id: 'sheet-2', path: ['id'], value: 'sheet-1' },
+            { op: 'replace', id: 'sheet-2', path: ['name'], value: 7 },
+        ];
+        const { snapshot } = compactSheetsSnapshot(
+            encodeSheetsSnapshot(two, { computed: true }),
+            JSON.stringify([forged, edit(0, 'a')]),
+            jobDeadline(),
+        );
+        const folded = decodeSheetsWorkbook(snapshot).sheets;
+        expect(folded.map(({ id, name }) => [id, name])).toEqual([
+            ['sheet-1', 'Sheet1'],
+            ['sheet-2', 'Sheet2'],
+        ]);
+        expect(values(snapshot)).toEqual([[0, 0, 'a']]);
     });
 
     test('a batch the replay rejects is dropped and counted, and the others still apply', () => {
@@ -1016,6 +1090,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
             const { snapshot, dropped } = compactSheetsSnapshot(
                 encodeSheetsSnapshot(sheets, { computed: true }),
                 JSON.stringify([edit(0, 'a'), poison, edit(1, 'b'), poison]),
+                jobDeadline(),
             );
             expect(values(snapshot)).toEqual([
                 [0, 0, 'a'],
@@ -1035,7 +1110,7 @@ describe('document/sheets — the base a snapshot starts', () => {
 
     test('a replacing import stamps a fresh base without compactedFrom, in the same transaction', () => {
         const doc = new Y.Doc();
-        writeSheetsSnapshot(doc, encodeSheetsSnapshot([], { computed: true }), 'older');
+        writeSheetsSnapshot(doc, encodeSheetsSnapshot([], { computed: true }), { compactedFrom: 'older', folded: 0 });
         const old = readSheetsBase(doc);
         expect(old?.compactedFrom).toBe('older');
         doc.getArray<Op[]>('ops').push([[{ op: 'replace', path: ['x'], value: 1 }]]);
@@ -1055,7 +1130,7 @@ describe('document/sheets — the base a snapshot starts', () => {
         const doc = new Y.Doc();
         writeSheetsSnapshot(doc, encodeSheetsSnapshot(sheets(), { computed: true }), null);
         const base = readSheetsBase(doc);
-        appendSheetsToYjs(doc, encodeSheetsSnapshot(sheets(), { computed: true }), readLiveSheets(doc));
+        append(doc, encodeSheetsSnapshot(sheets(), { computed: true }));
         expect(readSheetsBase(doc)).toEqual(base);
         doc.destroy();
     });

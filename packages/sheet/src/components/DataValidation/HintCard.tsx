@@ -1,14 +1,17 @@
 // The data-validation card beside the focus cell: the prompt a validated cell carries, or the reason the value in it
-// was refused. It renders from the focus cell, so arrowing onto a cell shows it and arrowing away clears it. The
-// selection overlay mounts it, and getValidationHint says what it shows and where.
+// was refused. It renders from the focus cell, so arrowing onto a cell shows it and arrowing away clears it. A popover
+// anchored on the cell holds it under the cell, and flips or shifts it to stay inside the grid. The selection overlay
+// mounts it, and getValidationHint says what it shows and where.
 
+import { Popover, PopoverContent } from '@workspace/ui/components/popover';
 import { cn } from '@workspace/ui/lib/utils';
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
 import { getValidationHint } from '../../state';
+import { CellAnchor } from '../SheetOverlay/cell-anchor';
 
 export function ValidationHintCard() {
-    const { context } = useContext(WorkbookContext);
+    const { context, refs } = useContext(WorkbookContext);
 
     const hint = useMemo(() => {
         // The open list hangs over the same corner the card does.
@@ -23,26 +26,30 @@ export function ValidationHintCard() {
     if (!hint) return null;
 
     return (
-        <div
-            // sheet-mousedown-cancel: clicking the card must not reselect the
-            // cell underneath it. eigen-paper-chrome: popup chrome re-themes with
-            // the app inside the light-pinned workbook surface (RENDERING.md
-            // § Theming). pointer-events-auto: the pane region wrapper has none.
-            // w-max: the pane region this renders into is a 0x0 anchor, so an
-            // auto-width absolute box would wrap at min-content.
-            className={cn(
-                'sheet-mousedown-cancel eigen-paper-chrome pointer-events-auto absolute z-30 w-max max-w-64',
-                'cursor-default select-none rounded-md border bg-popover px-2.5 py-1.5',
-                'text-xs leading-relaxed text-popover-foreground shadow-md',
-                hint.kind === 'invalid' && 'border-destructive/50',
-            )}
-            style={{ left: hint.left, top: hint.top }}
-            // Announced when the selection lands on the cell, so the explanation
-            // reaches a screen-reader user as well as a sighted one.
-            role="status"
-        >
-            {hint.kind === 'invalid' && <span className="font-medium text-destructive">{'Invalid: '}</span>}
-            {hint.text}
-        </div>
+        // Radix places the card again only for a new anchor element, so each cell gets its own.
+        <Popover key={`${hint.position.left}_${hint.position.top}`} open>
+            <CellAnchor {...hint.position} />
+            <PopoverContent
+                // A press on the card bubbles through React into the grid, and the class keeps it from reselecting.
+                className={cn(
+                    'sheet-mousedown-cancel w-max max-w-64 cursor-default select-none px-2.5 py-1.5',
+                    'text-xs leading-relaxed',
+                    hint.kind === 'invalid' && 'border-destructive/50',
+                )}
+                // Announced when the selection lands on the cell, so the explanation reaches a screen-reader user as
+                // well as a sighted one.
+                role="status"
+                side="bottom"
+                align="start"
+                sideOffset={0}
+                collisionBoundary={refs.cellArea.current}
+                hideWhenDetached
+                onOpenAutoFocus={(event) => event.preventDefault()}
+                onCloseAutoFocus={(event) => event.preventDefault()}
+            >
+                {hint.kind === 'invalid' && <span className="font-medium text-destructive">{'Invalid: '}</span>}
+                {hint.text}
+            </PopoverContent>
+        </Popover>
     );
 }

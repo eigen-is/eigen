@@ -622,3 +622,21 @@ describe('engine/conditional-format edges — formula scan', () => {
         expect(styles).toEqual({ '0_0': RED });
     });
 });
+
+describe('a rule of many ranges', () => {
+    test('finds the width of the matrix once, however many ranges it holds', () => {
+        const data: CellMatrix = Array.from({ length: 100 }, () => [null, null]);
+        const walk = data[Symbol.iterator].bind(data);
+        let walks = 0;
+        data[Symbol.iterator] = () => {
+            walks += 1;
+            return walk();
+        };
+        const cellrange = Array.from({ length: 50 }, (_, i) => ({ row: [i * 2, i * 2], column: [0, 0] }));
+        evaluateConditionalFormat(
+            [{ type: 'default', cellrange, format: {}, conditionName: 'greaterThan', conditionValue: [1] }],
+            data,
+        );
+        expect(walks).toBe(1);
+    });
+});

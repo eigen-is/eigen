@@ -1,14 +1,7 @@
 // Audits an xlsx importer on a corpus. For each file it records the outcome, the import's time and peak memory, what
 // the imported sheets hold per feature beside what the package's XML holds, and a fingerprint per cell, so compare can
-// set two runs side by side. Every import runs in a child process of its own, so a hang or a blow-up is cut and
-// recorded. The roundtrip command is the xlsx writer's gate: each file is imported, written and imported again, and the
-// two imports are compared key by key.
-//
-// Usage:
-//   bun apps/api/src/scripts/xlsx-audit.ts run <corpus dir...> --out <dir> [--importer <module>] [--name <label>] [--timeout <s>] [--max-rss <MB>]
-//   bun apps/api/src/scripts/xlsx-audit.ts compare <runA> <runB> [--heldout <list> --set tuned|heldout]
-//   bun apps/api/src/scripts/xlsx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--dump <dir>] [--timeout <s>] [--max-rss <MB>]
-//   bun apps/api/src/scripts/xlsx-audit.ts split <corpus dir...> --out <list> [--real <key prefix>...] [--count <n>] [--seed <s>]
+// set two runs side by side. Its roundtrip command is the xlsx writer's gate. Every import runs in a child process of
+// its own, so a hang or a blow-up is cut and recorded. A run with no valid arguments prints its usage.
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -23,7 +16,7 @@ import {
     SHEET_DEFAULT_FONT,
     SHEET_DEFAULT_FONT_SIZE,
 } from '@workspace/lib/sheets';
-import { resolveWebLink } from '@workspace/lib/sheets/web-link';
+import { resolveWebLink } from '@workspace/lib/validation';
 import { parseA1Range, rangeToA1, toA1, unquoteSheetName, valueIsError } from '@workspace/sheet/engine';
 import { peakRss } from '../lib/document/transform/peak-rss';
 import { lossCounter } from '../lib/document/transform/protocol';
@@ -119,7 +112,6 @@ const SHEET_FIELDS = [
     'frozen',
     'showGridLines',
     'filterRange',
-    'hyperlink',
     'dataValidations',
     'conditionalFormatRules',
     'images',
@@ -250,6 +242,7 @@ export function tallySheets(sheets: Sheet[]): Snapshot {
             if (cell.ht !== undefined || cell.vt !== undefined) bump(counts, 'alignment');
             if (cell.tb === '2') bump(counts, 'wrap');
             if (cell.rt) bump(counts, 'rotation');
+            if (cell.link) bump(counts, 'hyperlinks');
             if (cell.ct?.fa && cell.ct.fa !== 'General') bump(counts, 'numberFormats');
             const text = typeof value === 'string' ? value.length : 0;
             bump(counts, 'text', text || runs.reduce((sum, run) => sum + (run.v?.length ?? 0), 0));
@@ -265,7 +258,6 @@ export function tallySheets(sheets: Sheet[]): Snapshot {
         if (sheet.filterRange) bump(counts, 'filters');
         bump(counts, 'conditionalFormats', sheet.conditionalFormatRules?.length ?? 0);
         bump(counts, 'validations', size(sheet.dataValidations));
-        bump(counts, 'hyperlinks', size(sheet.hyperlink));
         bump(counts, 'images', size(sheet.images));
         bump(counts, 'charts', size(sheet.charts));
         const hashes = Object.fromEntries([
@@ -458,11 +450,8 @@ async function importOne(
     };
 }
 
-// The importer module exports `xlsxToSheets` with the signature of ours. The child is handed the file's path as an
-// argument, so its peak memory is that import's alone, and nothing in a corpus is ever run. A file is keyed by its
-// corpus folder's name and its path inside it. The cell fingerprints go to a gzipped file per file, and the text of each
-// sheet's top-left corner to its result, so compare can show what differs. A run of a private corpus stays out of the
-// repo.
+// The child is handed only the file's path, so its peak memory is that import's alone and nothing in a corpus is ever
+// run. The importer module exports `xlsxToSheets` with the signature of ours.
 export async function runAudit(options: {
     corpora: string[];
     out: string;
@@ -987,7 +976,7 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
                 const configB = new Map<string, unknown>(Object.entries(sheetB.config ?? {}));
                 for (const key of new Set([...configA.keys(), ...configB.keys()]))
                     keyed(key, sheet, configA.get(key), configB.get(key));
-            } else if (field === 'hyperlink' || field === 'conditionalFormatRules') keyed(field, sheet, x, y);
+            } else if (field === 'conditionalFormatRules') keyed(field, sheet, x, y);
             else if (field === 'dataValidations') {
                 for (const difference of validationDifferences(sheetA.dataValidations, sheetB.dataValidations))
                     note(field, sheet, difference.at, difference.a, difference.b);
@@ -1023,11 +1012,8 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
     return differences;
 }
 
-// The cells whose rule two sheets' validations give differently, one difference for each pair of rules. Each side is
-// read as the editor reads a cell: of the rules that cover it, the highest id wins. Each import numbers its rules
-// afresh, so the sides compare by the rule each cell gets, never by ids or ranges. The walk starts from the block
-// around every range and cuts a block in two at a range's edge until each side gives the whole block one rule. So a
-// large block no edge crosses, such as most of a sheet-wide rule, is read once.
+// Each import numbers its rules afresh, so the sides compare by the rule each cell gets, never by ids or ranges. A block
+// is cut in two at a range's edge until each side gives it one rule, so a large block no edge crosses is read once.
 function validationDifferences(
     a: Sheet['dataValidations'],
     b: Sheet['dataValidations'],
@@ -1072,9 +1058,8 @@ function validationDifferences(
 
 type RankedRange = { range: SingleRange; rank: number; rule: DataValidationRule };
 
-// The rule one side gives every cell of a block, with no rule when no range meets it, or undefined when its cells get
-// different rules. Every range given meets the block. The highest place wins a cell, so the block is one rule's when a
-// range of the highest place covers it whole.
+// Undefined when the block's cells get different rules. The highest place wins a cell, so the block is one rule's when
+// a range of the highest place covers it whole.
 function blockRule(block: SingleRange, ranked: readonly RankedRange[]): { rule?: DataValidationRule } | undefined {
     if (ranked.length === 0) return {};
     let top = 0;
@@ -1172,27 +1157,24 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
         kind: 'web links resolved',
         why: "A web link is written as resolveWebLink makes it, the address the editor opens, and as a relationship's URI, so a bare host gains its https:// and a character a URI can't hold its escape",
         matches: ({ feature, a, b }) =>
-            feature === 'hyperlink' &&
+            feature === 'cell link' &&
             isRecord(a) &&
             isRecord(b) &&
-            a['linkType'] === 'webpage' &&
-            b['linkType'] === 'webpage' &&
-            typeof a['linkAddress'] === 'string' &&
-            b['linkAddress'] === uriReference(resolveWebLink(a['linkAddress']) ?? ''),
+            a['type'] === 'webpage' &&
+            b['type'] === 'webpage' &&
+            typeof a['address'] === 'string' &&
+            b['address'] === uriReference(resolveWebLink(a['address']) ?? ''),
     },
     {
         kind: 'unwritable links dropped',
-        why: "A web link resolveWebLink refuses (a script's address), which the editor never opens, or a cell link to no range (a defined name's Print_Area), which it can't follow, is left out and counted (links-dropped), its cell's backref with it",
-        matches: ({ feature, sheet, at, a, b }, { warnings, a: sheets }) => {
-            if (!warnings.has('links-dropped') || b !== undefined) return false;
-            const links = sheets.find((candidate) => candidate.name === sheet)?.hyperlink ?? {};
-            const key =
-                feature === 'hyperlink' ? at : feature === 'cell hl' && isRecord(a) ? `${a['r']}_${a['c']}` : '';
-            const link = links[key];
-            if (link?.linkType === 'webpage') return resolveWebLink(link.linkAddress) === null;
+        why: "A web link resolveWebLink refuses (a script's address), which the editor never opens, or a cell link to no range (a defined name's Print_Area), which it can't follow, is left out and counted (links-dropped)",
+        matches: ({ feature, a, b }, { warnings }) => {
+            if (!warnings.has('links-dropped') || b !== undefined || feature !== 'cell link') return false;
+            if (!isRecord(a) || typeof a['address'] !== 'string') return false;
+            if (a['type'] === 'webpage') return resolveWebLink(a['address']) === null;
             return (
-                link?.linkType === 'cellrange' &&
-                parseA1Range(link.linkAddress.slice(link.linkAddress.lastIndexOf('!') + 1)) === null
+                a['type'] === 'cellrange' &&
+                parseA1Range(a['address'].slice(a['address'].lastIndexOf('!') + 1)) === null
             );
         },
     },
@@ -1200,15 +1182,15 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
         kind: 'sheet links as cell links',
         why: "A link to a sheet is written as a location, which names a cell, so it comes back a link to the sheet's A1",
         matches: ({ feature, a, b }) =>
-            feature === 'hyperlink' &&
+            feature === 'cell link' &&
             isRecord(a) &&
             isRecord(b) &&
-            a['linkType'] === 'sheet' &&
-            b['linkType'] === 'cellrange' &&
-            typeof a['linkAddress'] === 'string' &&
-            typeof b['linkAddress'] === 'string' &&
-            b['linkAddress'].endsWith('!A1') &&
-            unquoteSheetName(b['linkAddress'].slice(0, -3)) === a['linkAddress'],
+            a['type'] === 'sheet' &&
+            b['type'] === 'cellrange' &&
+            typeof a['address'] === 'string' &&
+            typeof b['address'] === 'string' &&
+            b['address'].endsWith('!A1') &&
+            unquoteSheetName(b['address'].slice(0, -3)) === a['address'],
     },
     {
         kind: 'list ranges absolute',
@@ -1322,10 +1304,8 @@ async function xlsxRoundtripChild(
     });
 }
 
-// The writer module (`--writer`) exports writeXlsx's signature. A difference is listed when LISTED explains it, and
-// unlisted otherwise. The run passes with no crash, no cut and no unlisted difference, so every width and height came
-// back to the pixel. A file the first import refuses is skipped, so a reader that newly refuses one still passes here,
-// and a compare of two corpus runs catches that.
+// A file the first import refuses is skipped, so a reader that newly refuses one passes here, and a compare of two
+// corpus runs catches it. The writer module (`--writer`) exports writeXlsx's signature.
 export function runRoundtrip(options: RoundtripOptions): Promise<RoundtripMeta> {
     return runGate(XLSX_GATE, options);
 }

@@ -15,7 +15,7 @@ import { produce } from 'immer';
 import type { Context } from '../../../state/context';
 import { mergeCells } from '../../../state/modules/merge';
 import { initSheetData } from '../../../state/modules/sheet';
-import { emitOps, receiveOps, syncablePaths } from '../factories/collab';
+import { emitOps, receive, syncablePaths } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 import { mouseUpAt, withGridGeometry } from '../factories/grid-dom';
 
@@ -49,7 +49,7 @@ function dragRowTaller(ctx: Context) {
 describe('two clients editing different keys of one config', () => {
     test('a merge survives a peer resizing a row', () => {
         const base = sharedDocument();
-        const final = receiveOps(receiveOps(base, emitOps(base, mergeTwoCells)), emitOps(base, dragRowTaller));
+        const final = receive(receive(base, emitOps(base, mergeTwoCells)), emitOps(base, dragRowTaller));
 
         expect(final.sheets[0].config?.merge).toEqual({ '1_1': { r: 1, c: 1, rs: 1, cs: 2 } });
         expect(final.sheets[0].config?.rowlen?.[2]).toBe(73);
@@ -57,7 +57,7 @@ describe('two clients editing different keys of one config', () => {
 
     test('a row resize survives a peer merging cells', () => {
         const base = sharedDocument();
-        const final = receiveOps(receiveOps(base, emitOps(base, dragRowTaller)), emitOps(base, mergeTwoCells));
+        const final = receive(receive(base, emitOps(base, dragRowTaller)), emitOps(base, mergeTwoCells));
 
         expect(final.sheets[0].config?.merge).toEqual({ '1_1': { r: 1, c: 1, rs: 1, cs: 2 } });
         expect(final.sheets[0].config?.rowlen?.[2]).toBe(73);
@@ -108,8 +108,8 @@ describe('two clients writing a config key for the first time', () => {
         const a = dragRow(2);
         const b = dragRow(3);
 
-        const onA = receiveOps(produce(base, a), emitOps(base, b));
-        const onB = receiveOps(produce(base, b), emitOps(base, a));
+        const onA = receive(produce(base, a), emitOps(base, b));
+        const onB = receive(produce(base, b), emitOps(base, a));
 
         expect(onA.sheets[0].config?.rowlen).toEqual(onB.sheets[0].config?.rowlen ?? {});
         expect(Object.keys(onA.sheets[0].config?.rowlen ?? {}).sort()).toEqual(['2', '3']);

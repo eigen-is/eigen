@@ -38,6 +38,23 @@ function clearFormatContext(): Context {
     return ctx;
 }
 
+describe('handleClearFormat keeps what is no format', () => {
+    test('a comment stays on its cell, and only the format goes', () => {
+        const ctx = clearFormatContext();
+        ctx.sheets[0].data![0][0] = { ...styled(), commentCardIds: ['card'] };
+        const [cleared] = produceWithPatches(ctx, (c: Context) => {
+            handleClearFormat(c);
+        });
+
+        expect(cleared.sheets[0].data![0][0]).toEqual({
+            v: 1,
+            m: '1',
+            ct: { fa: 'General', t: 'n' },
+            commentCardIds: ['card'],
+        });
+    });
+});
+
 describe('handleClearFormat clears borders on the sheet config', () => {
     test('drops the borders inside the rect, keeps the ones outside it', () => {
         const [cleared] = produceWithPatches(clearFormatContext(), (ctx: Context) => {

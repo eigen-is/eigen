@@ -3,17 +3,19 @@
 // writer that writes plain text drops the runs, which would otherwise outrank what it wrote.
 
 import { describe, expect, test } from 'bun:test';
+import { produce } from 'immer';
 import { evaluateConditionalFormat } from '../../engine/conditional-format';
 import { cellDisplay, cellValue } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../../state/context';
+import { autoSelectionFormula } from '../../state/modules/autosum';
 import { getCellValue, getRealCellValue, setCellValue, updateCell } from '../../state/modules/cell';
 import { getDropdownList, validateCellData } from '../../state/modules/data-validation';
 import { buildFilterConditionMatcher, getFilterColumnValues } from '../../state/modules/filter';
 import { removeHyperlink, saveHyperlink, showLinkCard } from '../../state/modules/hyperlink';
 import { calcSelectionInfo } from '../../state/modules/selection';
-import { sortRows, sortSelection } from '../../state/modules/sort';
-import { autoSelectionFormula, handleMerge } from '../../state/modules/toolbar';
+import { sortSelection } from '../../state/modules/sort';
+import { handleMerge } from '../../state/modules/toolbar';
 import { contextFactory, selectionFactory } from './factories/context';
 
 function rich(text: string): Cell {
@@ -101,15 +103,12 @@ describe('readers of a rich cell', () => {
     });
 
     test('sort orders rich cells by their text and takes a rich first row into the range', () => {
-        const { sortedData } = sortRows(true, 0, [[rich('Cherry')], [plain('apple')], [rich('Banana')]]);
-        expect(sortedData.map((row) => cellValue(row[0]))).toEqual(['apple', 'Banana', 'Cherry']);
-
         const ctx = sheetContext(
             [[rich('Cherry')], [plain('apple')], [rich('Banana')]],
             selectionFactory([0, 2], [0, 0], 0, 0),
         );
-        sortSelection(ctx, true);
-        expect(ctx.sheets[0].data!.map((row) => cellValue(row[0]))).toEqual(['apple', 'Banana', 'Cherry']);
+        const next = produce(ctx, (draft: Context) => sortSelection(draft, true));
+        expect(next.sheets[0].data!.map((row) => cellValue(row[0]))).toEqual(['apple', 'Banana', 'Cherry']);
     });
 
     test('filter conditions and the value list read the text', () => {
@@ -131,8 +130,7 @@ describe('readers of a rich cell', () => {
     });
 
     test('the link card shows the text', () => {
-        const ctx = sheetContext([[rich('Docs')]]);
-        ctx.sheets[0].hyperlink = { '0_0': { linkType: 'webpage', linkAddress: 'https://eigen.is' } };
+        const ctx = sheetContext([[{ ...rich('Docs'), link: { type: 'webpage', address: 'https://eigen.is' } }]]);
         showLinkCard(ctx, 0, 0);
         expect(ctx.linkCard?.originText).toBe('Docs');
     });
@@ -207,7 +205,7 @@ describe('writers over a rich cell', () => {
         const cell = ctx.sheets[0].data![0][0];
         expect(cell?.v).toBe(5);
         expect(cell?.ct?.t).toBe('n');
-        expect(cell?.hl).toBeDefined();
+        expect(cell?.link).toBeDefined();
     });
 
     test('removing a link keeps the rich text', () => {
@@ -216,7 +214,7 @@ describe('writers over a rich cell', () => {
         removeHyperlink(ctx, 0, 0);
         const cell = ctx.sheets[0].data![0][0];
         expect(cellValue(cell)).toBe('Docs');
-        expect(cell?.hl).toBeUndefined();
+        expect(cell?.link).toBeUndefined();
         expect(cell?.un).toBeUndefined();
     });
 });

@@ -9,10 +9,32 @@ const SHEETS: Sheet[] = [
 ];
 
 describe('opToPatchOnSheets', () => {
+    test('drops a write to the stored cell list or the whole sheet, which only a reader without a matrix would apply', () => {
+        const link = { type: 'sheet', address: 5 };
+        const ops: Op[] = [
+            { op: 'replace', id: SHEETS[0].id, path: ['celldata'], value: [{ r: 0, c: 0, v: { link } }] },
+            { op: 'add', id: SHEETS[0].id, path: ['celldata', 0], value: { r: 0, c: 0, v: { link } } },
+            { op: 'replace', id: SHEETS[0].id, path: ['celldata', 0, 'v', 'link'], value: link },
+            { op: 'replace', id: SHEETS[0].id, path: [], value: { id: SHEETS[0].id, celldata: [] } },
+        ];
+        expect(opToPatchOnSheets(SHEETS, ops)).toEqual([[], []]);
+    });
+
+    test('drops a link of a kind no reader follows, and keeps the kinds they do', () => {
+        const write = (type: string): Op => ({
+            op: 'replace',
+            id: SHEETS[0].id,
+            path: ['data', 0, 0, 'link'],
+            value: { type, address: 'Sheet1!A1' },
+        });
+        const [patches] = opToPatchOnSheets(SHEETS, ['file', 'webpage', 'cellrange', 'sheet'].map(write));
+        expect(patches.map((patch) => patch.value.type)).toEqual(['webpage', 'cellrange', 'sheet']);
+    });
+
     test('replace op on existing sheet → patch with [i, ...path]', () => {
-        const ops: Op[] = [{ op: 'replace', id: 'sheet-2', path: ['celldata', 0, 'v'], value: 42 }];
+        const ops: Op[] = [{ op: 'replace', id: 'sheet-2', path: ['data', 0, 0, 'v'], value: 42 }];
         const [patches, special] = opToPatchOnSheets(SHEETS, ops);
-        expect(patches).toEqual([{ op: 'replace', value: 42, path: [1, 'celldata', 0, 'v'] }]);
+        expect(patches).toEqual([{ op: 'replace', value: 42, path: [1, 'data', 0, 0, 'v'] }]);
         expect(special).toEqual([]);
     });
 
@@ -38,12 +60,12 @@ describe('opToPatchOnSheets', () => {
 
     test('special ops are partitioned out', () => {
         const ops: Op[] = [
-            { op: 'replace', id: 'sheet-1', path: ['name'], value: 'Renamed' },
+            { op: 'replace', id: 'sheet-1', path: ['color'], value: 'red' },
             { op: 'addSheet', path: [], value: { id: 'sheet-3', name: 'Sheet3' } },
             { op: 'deleteSheet', path: [], value: { id: 'sheet-2' } },
         ];
         const [patches, special] = opToPatchOnSheets(SHEETS, ops);
-        expect(patches).toEqual([{ op: 'replace', value: 'Renamed', path: [0, 'name'] }]);
+        expect(patches).toEqual([{ op: 'replace', value: 'red', path: [0, 'color'] }]);
         expect(special).toHaveLength(2);
         expect(special[0].op).toBe('addSheet');
         expect(special[1].op).toBe('deleteSheet');

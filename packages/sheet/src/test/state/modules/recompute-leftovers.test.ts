@@ -3,13 +3,12 @@
 import { describe, expect, test } from 'bun:test';
 import { produce } from 'immer';
 import type { Context } from '../../../state/context';
+import { autoSelectionFormula } from '../../../state/modules/autosum';
 import { updateCell } from '../../../state/modules/cell';
-import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { replaceSearchMatch } from '../../../state/modules/search-replace';
 import { sortRange } from '../../../state/modules/sort';
-import { autoSelectionFormula } from '../../../state/modules/toolbar';
 import { tab, tabEdit, tabUndo } from '../factories/collab';
-import { contextFactory, selectionFactory } from '../factories/context';
+import { contextFactory, heldGraph, selectionFactory } from '../factories/context';
 
 function withDependent(a1: number | string, selections = selectionFactory([0, 0], [0, 0], 0, 0)): Context {
     const ctx = contextFactory({
@@ -32,14 +31,14 @@ function withDependent(a1: number | string, selections = selectionFactory([0, 0]
             },
         ],
     }) as Context;
-    warmFormulaCellInfoMap(ctx);
+    heldGraph(ctx);
     return ctx;
 }
 
 describe('a recompute leaves nothing behind', () => {
     test('undoing a replace gives a dependent the old text back', () => {
         const t = tab(withDependent('foo'));
-        warmFormulaCellInfoMap(t.ctx);
+        heldGraph(t.ctx);
         tabEdit(t, (draft) => {
             replaceSearchMatch(
                 draft,
@@ -78,9 +77,11 @@ describe('a writer recomputes after it writes', () => {
         const data = ctx.sheets[0].data;
         if (!data) throw new Error('no data');
         data[1][0] = { v: 1, m: '1' };
-        sortRange(ctx, selectionFactory([0, 1], [0, 0], 0, 0)[0], true);
-        expect(ctx.sheets[0].data?.[0][0]?.v).toBe(1);
-        expect(ctx.sheets[0].data?.[0][1]?.v).toBe(1);
+        const next = produce(ctx, (draft: Context) =>
+            sortRange(draft, selectionFactory([0, 1], [0, 0], 0, 0)[0], true),
+        );
+        expect(next.sheets[0].data?.[0][0]?.v).toBe(1);
+        expect(next.sheets[0].data?.[0][1]?.v).toBe(1);
     });
 
     test('a second edit in one recipe reads what the first recomputed', () => {

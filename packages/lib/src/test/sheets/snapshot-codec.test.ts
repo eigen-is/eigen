@@ -43,7 +43,7 @@ const WORKBOOK: Sheet[] = [
             },
             { r: 4, c: 0, v: { v: 'Merged', m: 'Merged', mc: { r: 4, c: 0, rs: 2, cs: 2 } } },
             { r: 4, c: 1, v: { mc: { r: 4, c: 0 } } },
-            { r: 5, c: 0, v: { v: 'link', m: 'link', hl: { r: 5, c: 0, id: 'link-1' } } },
+            { r: 5, c: 0, v: { v: 'link', m: 'link', link: { type: 'webpage', address: 'https://example.com' } } },
             { r: 5, c: 1, v: { v: 'noted', m: 'noted', commentCardIds: ['card-a', 'card-b'] } },
             { r: 6, c: 0, v: { v: 'spilled', m: 'spilled', spl: [[{ v: 1 }]] } as Cell },
             { r: 6, c: 1, v: { v: 'future', m: 'future', futureCellKey: 'kept' } as Cell },
@@ -67,7 +67,6 @@ const WORKBOOK: Sheet[] = [
                 rule: { type: 'dropdown', type2: '', value1: 'a,b,c', value2: '' },
             },
         },
-        hyperlink: { '5_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
         conditionalFormatRules: [
             {
                 type: 'default',
@@ -415,7 +414,21 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         const encoded = encodeSheetsSnapshot(WORKBOOK, { computed: true });
         const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded));
         const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-        expect(hex).toBe('0e352cbab7206951a95446a0374d3c34a169e0595ed19631b7b1d0773b66f2b7');
+        expect(hex).toBe('8de41024dbd14655d7bfa937f39463bebc4ca1bf7c75fd91d1a3c4a1d4d1c7ec');
+    });
+
+    test('a link stays out of the style dictionary, so cells of one look share an entry', () => {
+        const cell = (i: number): Cell => ({
+            v: 'x',
+            m: 'x',
+            un: 1,
+            link: { type: 'webpage', address: `https://e/${i}` },
+        });
+        const celldata = [0, 1, 2].map((r) => ({ r, c: 0, v: cell(r) }));
+        const sheets: Sheet[] = [{ id: 's', name: 'S', celldata }];
+        const encoded = encodeSheetsSnapshot(sheets, { computed: true });
+        expect(JSON.parse(encoded).styles).toHaveLength(1);
+        expect(decodeSheetsSnapshot(encoded)[0].celldata?.map(({ v }) => v)).toEqual(celldata.map(({ v }) => v));
     });
 
     test('data never reaches the snapshot', () => {

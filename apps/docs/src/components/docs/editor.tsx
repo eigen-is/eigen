@@ -11,7 +11,7 @@ import { EditorContent } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { useAuth } from '@workspace/lib/auth';
 import { useCollabDoc, useYjsUndoState } from '@workspace/lib/collab';
-import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
+import { useCommentFilter, useCommentHover, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
 import { useDocsTextWidth } from '@workspace/lib/docs';
 import type { BandEdge, BandRoot, PageSetup, StoryNode } from '@workspace/lib/docs/eigendoc';
 import {
@@ -39,6 +39,7 @@ import { CardFormDialog } from '@workspace/ui/components/cards';
 import { downloadChartImage } from '@workspace/ui/components/charts';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import {
+    CommentHoverCard,
     CommentLifecycleDialogs,
     CommentLifecycleMenuItems,
     CommentMenuItems,
@@ -78,6 +79,7 @@ import {
     commentCardIdAt,
     nodeCommentCardId,
     removeCommentAnchors,
+    reportCommentHover,
     selectCommentAnchor,
     updateCommentDecorations,
 } from './extensions/comment-mark';
@@ -297,8 +299,7 @@ const TiptapEditor = ({
         };
     }, []);
 
-    // Same split as openCard below: the mobile pane hides the document, so a mark tap only opens the
-    // card dialog over it.
+    // The mobile pane hides the document, so a mark tap only opens the card dialog over it.
     const handleCommentClick = useCallback(
         (cardId: string) => {
             if (!isMobile) openComments();
@@ -357,10 +358,8 @@ const TiptapEditor = ({
     const editorRef = useRef<Editor | null>(null);
     editorRef.current = editor;
 
-    // The band being edited in place, by a writer on a desktop or a tablet. It is kept in state rather than read from
-    // the focused editor, because a menu takes the focus when it opens. Losing write access or the desktop leaves the
-    // band. When Different first page goes off, even by a collaborator, the first page's band hands over to the band
-    // of the other pages.
+    // The band being edited in place, kept in state rather than read from the focused editor, because a menu takes the
+    // focus when it opens. When Different first page goes off, the first page's band hands over to the other pages'.
     const bandsAllowed = canWrite && !isMobile;
     const [editingBand, setEditingBand] = useState<BandRoot | null>(null);
     // A page-less doc draws no bands, so a switch to it, a collaborator's too, leaves the one being edited.
@@ -384,8 +383,7 @@ const TiptapEditor = ({
         table: { onContextMenu: (...args) => tableContextMenuRef.current(...args) },
     });
     // One live editor for each kind of story, kept as long as the doc is open. The footnote's holds whichever note is
-    // open, and the text box's draws in the box itself. A story opens for a writer on a desktop or a tablet, as a band
-    // does.
+    // open, and the text box's draws in the box itself.
     const storyEditorOptions = (story: StoryNode) => ({
         media,
         yDoc,
@@ -433,10 +431,8 @@ const TiptapEditor = ({
     const openBox = story.anchor?.type === 'textBox' ? story.anchor : null;
     const textBoxContext = useMemo(() => ({ anchor: openBox, editor: boxEditor }), [openBox, boxEditor]);
     const activeEditor = editingBand ? bands[editingBand] : (storyEditor ?? editor);
-    // A jump from the outline or a table of contents leaves a band or a note and puts the caret at the start of the
-    // heading, which scrolls to a small margin below the top of the view: the selection's own scroll stops as soon as
-    // the heading shows, at the bottom. The margin keeps a note number above the heading's line in view. A phone's pane
-    // closes first, and the scroll waits a frame for the editor the pane hid to be drawn again.
+    // The selection's own scroll stops as soon as the heading shows, at the bottom, so this scrolls to a small margin
+    // below the top of the view. It waits a frame for the editor a phone's pane hid to be drawn again.
     const jumpToHeading = (pos: number) => {
         setEditingBand(null);
         story.close();
@@ -517,6 +513,7 @@ const TiptapEditor = ({
         lifecycle;
     // The page owns the filter, so it survives when the comments panel closes and opens again.
     const commentFilter = useCommentFilter();
+    const commentHover = useCommentHover();
     allCommentsRef.current = allComments;
     cardsRef.current = cards;
 
@@ -649,10 +646,8 @@ const TiptapEditor = ({
     // A page-less doc never scales: its column is laid out at the reader's width instead.
     const needsScale = !pageless && canvasScale < 1;
 
-    // A page-less column is the reader's text width, centered, or the screen on a phone. An open panel narrows it to
-    // end at the panel's edge, and the outline to start at its edge, then the panel moves it left below the floor. The
-    // room right of it, to the scroll box's edge or the panel's, is the breakout strip a wide table scrolls in and a
-    // wide image grows into (--breakout).
+    // An open panel or the outline narrows a page-less column, then the panel moves it left below the floor. The room
+    // right of it is the breakout strip a wide table scrolls in and a wide image grows into (--breakout).
     const room = scrollSize.width;
     const widest = isMobile ? room : (TEXT_WIDTHS[textWidth].px ?? room - 2 * FULL_WIDTH_GUTTER_PX);
     // The outline is an absolute overlay too. It covers the scroll box's p-4 gutter as well, which a page-less column
@@ -880,12 +875,8 @@ const TiptapEditor = ({
                                             editor.commands.blur();
                                         }
                                     }}
-                                    // While a band is edited, a press in the body leaves the band and puts
-                                    // the caret where it landed, as in Google. A press in another band moves
-                                    // there, because that band is read-only until entered. A press anywhere
-                                    // else keeps the caret: it would focus nothing, and Esc and typing would
-                                    // then reach nothing. A portaled menu or dialog belongs to the band. An
-                                    // open story is left or kept the same way, and another story opens itself.
+                                    // A press outside an edited band or an open story keeps the caret, as it would
+                                    // focus nothing and Esc and typing would reach nothing. One in the body leaves.
                                     onMouseDown={
                                         story.anchor && !editingBand
                                             ? (e) => {
@@ -929,8 +920,7 @@ const TiptapEditor = ({
                                         data-document="true"
                                         data-pageless={pageless || undefined}
                                         className={cn(
-                                            // eigen-paper keeps the page light, in dark mode too. The rows are the
-                                            // header band, the body, the notes and the footer band. isolate makes
+                                            // eigen-paper keeps the page light, in dark mode too, and isolate makes
                                             // the figures behind the text draw on the paper, at every scale.
                                             'eigen-paper isolate grid grid-rows-[auto_1fr_auto_auto] bg-white',
                                             pageless
@@ -970,11 +960,20 @@ const TiptapEditor = ({
                                             />
                                         )}
                                         <TextBoxContext.Provider value={textBoxContext}>
-                                            <EditorContent
-                                                editor={editor}
-                                                data-page-body
-                                                className="row-start-2 h-full min-w-0 tiptap-wrapper"
-                                            />
+                                            {/* On a parent, as EditorContent draws its node views' portals beside its
+                                                own div, where a React event from a figure's mark never reaches it. */}
+                                            <div
+                                                className="contents"
+                                                onMouseOver={(e) => reportCommentHover(editor, commentHover, e)}
+                                                onMouseLeave={() => commentHover.report(null)}
+                                                onMouseDown={() => commentHover.report(null)}
+                                            >
+                                                <EditorContent
+                                                    editor={editor}
+                                                    data-page-body
+                                                    className="row-start-2 h-full min-w-0 tiptap-wrapper"
+                                                />
+                                            </div>
                                         </TextBoxContext.Provider>
                                         <FootnoteList
                                             body={editor}
@@ -998,9 +997,8 @@ const TiptapEditor = ({
                                         )}
                                     </div>
                                 </div>
-                                {/* Unmounted when closed. The stable gutter ends the panel left of the scrollbar. The
-                                    outline lies over the page's left side, so like a panel it moves no page; a
-                                    page-less column keeps clear of both. */}
+                                {/* The stable gutter ends the panel left of the scrollbar. The outline lies over the
+                                    page's left side, so like a panel it moves no page. */}
                                 {(showSidebar || outlineOverlayShown) && (
                                     <div className="pointer-events-none absolute inset-0 overflow-hidden [scrollbar-gutter:stable]">
                                         {outlineOverlayShown && (
@@ -1080,6 +1078,15 @@ const TiptapEditor = ({
                 currentUserEmail={auth.user?.email}
                 dialogTitle="New comment"
                 submitLabel="Add comment"
+            />
+
+            <CommentHoverCard
+                hover={commentHover}
+                cards={cards}
+                entries={allComments}
+                side="bottom"
+                isCardDeleted={isCardDeleted}
+                onOpenCard={handleCommentClick}
             />
 
             <CommentLifecycleDialogs

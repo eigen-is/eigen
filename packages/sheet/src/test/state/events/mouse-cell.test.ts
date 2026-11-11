@@ -25,6 +25,8 @@ g.window = win;
 g.document = win.document;
 g.HTMLElement = win.HTMLElement;
 g.DOMParser = win.DOMParser;
+g.NodeFilter = win.NodeFilter;
+g.Text = win.Text;
 
 const TICK_BOX: DataValidationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
 

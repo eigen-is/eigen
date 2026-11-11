@@ -402,13 +402,9 @@ describe('.parse() text formulas', () => {
     });
 
     it('T', () => {
-        expect(parser!.parse('T()')).toMatchObject({ error: '#ERROR!', result: null });
-        expect(parser!.parse('T(TRUE)')).toMatchObject({ error: '#ERROR!', result: null });
-        expect(parser!.parse('T(9.887)')).toMatchObject({ error: '#ERROR!', result: null });
-        expect(parser!.parse('T("foo bar baz")')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
+        expect(parser!.parse('T(TRUE)')).toMatchObject({ error: null, result: '' });
+        expect(parser!.parse('T(9.887)')).toMatchObject({ error: null, result: '' });
+        expect(parser!.parse('T("foo bar baz")')).toMatchObject({ error: null, result: 'foo bar baz' });
     });
 
     // formulajs ships TEXT as `throw new Error('TEXT is not implemented')`, so every

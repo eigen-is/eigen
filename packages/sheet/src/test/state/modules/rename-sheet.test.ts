@@ -9,6 +9,7 @@ installHappyDom();
 const { SHEET_NAME_FORBIDDEN } = await import('../../../engine/a1-notation');
 const { defaultContext } = await import('../../../state/context');
 const { editSheetName } = await import('../../../state/modules/sheet');
+const { heldGraph } = await import('../factories/context');
 type Context = import('../../../state/context').Context;
 
 function workbook(): Context {
@@ -92,17 +93,17 @@ describe('a tab rename', () => {
         expect(rename("Q1's").name).toBe("Q1's");
     });
 
-    // A formula's sheet name may read another sheet now, so the formula map is built again on the next edit.
-    test('resets the formula map, unless the name stays', () => {
+    // A formula's sheet name may read another sheet now, so the formula graph is built again on the next edit.
+    test('builds the formula graph again, unless the name stays', () => {
         const ctx = workbook();
         const tab = document.createElement('span');
         tab.innerText = 'One';
-        ctx.formulaCache.formulaCellInfoMap = {};
+        const stays = heldGraph(ctx);
         editSheetName(ctx, 's1', tab);
-        expect(ctx.formulaCache.formulaCellInfoMap).toEqual({});
+        expect(ctx.formulaCache.graph).toBe(stays);
         tab.innerText = 'Old';
         editSheetName(ctx, 's1', tab);
-        expect(ctx.formulaCache.formulaCellInfoMap).toBeNull();
+        expect(ctx.formulaCache.graph).not.toBe(stays);
     });
 
     test('refuses an empty name, and a name another tab has in any case, and says so', () => {

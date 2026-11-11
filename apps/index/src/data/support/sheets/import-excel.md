@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, import, excel, xlsx, spreadsheet]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 110
-updated: 2026-10-28
+updated: 2026-11-09
 ---
 
 You can bring an Excel workbook into Sheets in two ways: import it into a spreadsheet you have open, as new sheets or in place of its content, or convert an `.xlsx` file stored in Drive into a new spreadsheet.
@@ -61,6 +61,8 @@ The import reads every sheet in the workbook and preserves:
 
 A chart reads its cells, so it changes when you edit them. A chart whose data comes from a named range, from several separate ranges, or from another workbook shows the numbers saved in the file instead, and doesn't change with the cells.
 
+Formulas come in with the results Excel saved. Sheets calculates a formula again when you edit a cell it reads, or when the file holds an error or no result for it. A formula Sheets can't calculate keeps Excel's result, error or not, even when you sort it or cut it to another cell. Copied or filled to another cell, the copy shows `#NAME?` or `#CALC!`.
+
 Fonts from Excel are mapped to the four fonts Sheets supports. Common sans-serif fonts (such as Calibri, Arial, and Verdana) map to Inter; serif fonts (such as Times New Roman and Georgia) map to Source Serif 4; monospace fonts (such as Courier New and Consolas) map to JetBrains Mono; Comic Sans maps to Excalifont.
 
 ## What does not carry over
@@ -72,7 +74,7 @@ The following are not imported:
 - Charts Sheets can't draw the way Excel does, such as area, scatter, doughnut, combo, and waterfall charts. A chart sheet holding one comes in as an empty sheet.
 - Conditional formatting rules Sheets has no rule for, such as icon sets
 - Data validation rules Sheets has no rule for, such as a custom formula
-- Named ranges that point at another workbook, at several separate ranges, or at cells that depend on where the formula is. A formula that uses one keeps the name, and shows an error once it recalculates.
+- Named ranges that point at another workbook, at several separate ranges, or at cells that depend on where the formula is. A formula that uses one keeps the name and the number Excel saved, and the number doesn't change when its cells do.
 - Images placed inside cells, and shapes such as text boxes
 - Comments and notes
 

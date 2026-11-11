@@ -85,10 +85,10 @@ describe('read-only (allowEdit === false) state guards', () => {
 describe('remote-op mirror (applyOp) still applies to viewers', () => {
     // Build the wire ops an editor would emit for a row insert/delete, then apply the
     // exact same ops through the real applyOp on a read-only viewer context.
-    function mirrorToViewer(recipe: (ctx: Context) => void, options: Parameters<typeof patchToOp>[2]) {
-        const editorNext = produceWithPatches(contextFactory({ allowEdit: true }) as Context, recipe);
-        const [next, patches] = editorNext;
-        const ops = patchToOp(next, filterPatch(patches), options);
+    function mirrorToViewer(recipe: (ctx: Context) => void, options: Parameters<typeof patchToOp>[3]) {
+        const editor = contextFactory({ allowEdit: true }) as Context;
+        const [next, patches] = produceWithPatches(editor, recipe);
+        const ops = patchToOp(editor, next, filterPatch(patches), options);
 
         let vctx = contextFactory({ allowEdit: false }) as Context;
         const setContext = (r: (c: Context) => void) => {

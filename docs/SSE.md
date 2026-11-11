@@ -26,6 +26,10 @@ Every keepalive also reads the stream's session with `getSessionUser`, the read 
 
 `useSSE` reconnects after a stream closes on an HTTP error such as a 502, or the 503 of a home a restore is replacing, which `EventSource` does not do on its own: from 1 s, doubling up to 30 s, with up to 20% jitter so a restarted server is not hit by every tab at once. While the tab holds a restart notice the delay stops at 5 s, because that server said it would be back within minutes and the tab should find the new version soon after it starts.
 
+## Six tabs on plain http fill the browser's connections
+
+Every signed-in tab holds one stream open (`useSSE`), and over plain http Chrome allows six connections per host. So on the dev stack a sixth Eigen tab's requests wait until another tab closes or reloads: Drive hangs on its root listing, a sheet stays blank. Behind Caddy, over HTTPS, HTTP/2 carries every request on one connection and the limit doesn't apply. When the dev app stalls for no reason, count the open tabs first.
+
 ## An event carries only what invalidation needs
 
 An event holds ids, never display text or a domain object: a drive event its path's owner, mount, id and parent, a mail event its message and mailbox, and so on. The handler invalidates the queries those ids name and refetches the truth. A fat event would be a second copy of the data that drifts from the one the query returns. The shapes are in `packages/lib/src/types/sse.ts`. A whole-file contacts import sends one `contacts:changed` in place of one event per card, since a card change invalidates the whole list anyway ([CONTACTS.md](CONTACTS.md)).

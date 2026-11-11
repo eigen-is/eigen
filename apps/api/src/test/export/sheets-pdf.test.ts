@@ -5,7 +5,7 @@ import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
 import { htmlToPdf } from '../../lib/export/weasyprint';
 import type { Raster } from '../pdf-test-helpers';
 import { pageCount, pixelAt, rasterize, rasterizer, weasyPrintPython } from '../pdf-test-helpers';
-import { NO_MEDIA, NO_PIXELS } from '../setup';
+import { NO_MEDIA } from '../setup';
 
 // The page margin the export sets, in CSS px, and the points a CSS px prints at.
 const MARGIN = 40;
@@ -36,14 +36,13 @@ const suite = weasyPrint && rasterizer ? describe : describe.skip;
             title: 'Rows',
             sheets: [sheet],
             mediaUrls: NO_MEDIA,
-            mediaPixels: NO_PIXELS,
             mode: 'pdf',
             lost: () => {},
         });
         return pageCount(await htmlToPdf(html));
     };
 
-    // The editor clips a cell to its row, so a row as tall as its text would print pages the cap never charged.
+    // The editor clips a cell to its row, so a row as tall as its text would print pages of its own.
     test('a wrapped cell of 600 lines prints on the one page its row takes', async () => {
         const text = Array.from({ length: 600 }, (_, i) => `line ${i}`).join('\n');
         const sheet: Sheet = { name: 'Tall', id: 's1', celldata: [{ r: 0, c: 0, v: { v: text, m: text, tb: '2' } }] };
@@ -116,7 +115,6 @@ suite('sheets PDF — a cell draws its text as the editor does', () => {
             title: 'Look',
             sheets: [sheet],
             mediaUrls: NO_MEDIA,
-            mediaPixels: NO_PIXELS,
             mode: 'pdf',
             lost: () => {},
         });
@@ -158,7 +156,6 @@ suite('sheets PDF — a rotated chart', () => {
             title: 'Chart',
             sheets: [sheet],
             mediaUrls: NO_MEDIA,
-            mediaPixels: NO_PIXELS,
             mode: 'pdf',
             lost: () => {},
         });

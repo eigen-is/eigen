@@ -1,6 +1,7 @@
 export * from '../../engine/format';
 export { functionCopy } from '../../engine/formula-shift';
 export * from './apply-ops';
+export * from './autosum';
 export * from './border';
 export * from './cell';
 export * from './cell-editor';
@@ -8,6 +9,7 @@ export * from './cell-glyph';
 export * from './chart';
 export * from './clipboard';
 export * from './color';
+export * from './comment-hover';
 export * from './condition-format';
 export * from './currencies';
 export * from './cursor';
