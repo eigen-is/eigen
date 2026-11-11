@@ -48,7 +48,9 @@ export function edgeOf(ctx: Evaluator, range: Value, down: boolean): Vector {
         ctx.recalc.settleArea({ ...range, right: range.left, next: null });
         const column = range.sheet.columns[range.left];
         const length = range.bottom - range.top + 1;
-        const used = column === undefined ? 0 : Math.max(0, Math.min(length, column.length - range.top));
+        // The blanks at the end of the range take no part, whatever cells the column holds below it.
+        let used = column === undefined ? 0 : Math.max(0, Math.min(length, column.length - range.top));
+        while (used > 0 && (column.kind[range.top + used - 1] & KIND_MASK) === CellKind.Empty) used -= 1;
         return { workbook, column: column ?? null, items: [], start: range.top, step: 1, length, used, stored: used };
     }
     const values = isReference(range) ? toArray(ctx, { ...range, bottom: range.top, next: null }) : ctx.read(range);

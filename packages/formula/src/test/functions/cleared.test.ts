@@ -130,7 +130,7 @@ function run(seed: number): number {
     return compared;
 }
 
-test.each([[1], [2], [3], [4], [5], [6], [7], [8]])(
+test.each(Array.from({ length: 60 }, (_, i) => [i + 1]))(
     'after writes and clears every lookup and criterion equals a fresh load: seed %i',
     (seed) => {
         expect(run(seed)).toBeGreaterThan(60);
