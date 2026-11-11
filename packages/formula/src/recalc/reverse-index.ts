@@ -343,19 +343,20 @@ export class ReverseIndex {
     private flag(sheet: number, column: number, held: Column, top: number, bottom: number): void {
         const { work } = this;
         const { kind } = held;
-        let row = top;
-        while (row <= bottom) {
-            if (kind[row] > SETTLED) {
-                row += 1;
-                continue;
+        let first = -1;
+        // One row past the last closes a run that goes on to the end.
+        for (let row = top; row <= bottom + 1; row += 1) {
+            if (row <= bottom && kind[row] <= SETTLED) {
+                held.markDirty(row);
+                if (first < 0) first = row;
+            } else if (first >= 0) {
+                const last = work.length - 4;
+                // A run that goes on where the span on top ends is one span with it.
+                if (last >= 0 && work[last] === sheet && work[last + 1] === column && work[last + 3] === first - 1) {
+                    work[last + 3] = row - 1;
+                } else work.push(sheet, column, first, row - 1);
+                first = -1;
             }
-            const first = row;
-            for (; row <= bottom && kind[row] <= SETTLED; row += 1) held.markDirty(row);
-            const last = work.length - 4;
-            // A run that goes on where the span on top ends is one span with it.
-            if (last >= 0 && work[last] === sheet && work[last + 1] === column && work[last + 3] === first - 1) {
-                work[last + 3] = row - 1;
-            } else work.push(sheet, column, first, row - 1);
         }
     }
 }
