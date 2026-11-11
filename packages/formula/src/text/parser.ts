@@ -4,7 +4,7 @@
 // Text that does not parse is a result, never a throw, and the limits on length, nesting and arguments are kept here.
 
 import { GRID_COLUMNS, GRID_ROWS } from './a1';
-import { continuesWord, errorCode, lexAt, Token, tokenEnd, tokenKind } from './lexer';
+import { continuesWord, ERROR_LITERALS, errorCode, lexAt, Token, tokenEnd, tokenKind } from './lexer';
 import type { FormulaNode } from './tree';
 import { branch, EMPTY, leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from './tree';
 
@@ -48,6 +48,9 @@ for (const [power, ...operators] of [
     for (const operator of operators) BINDING[operator] = power;
 }
 
+// What is left of a reference whose cells or sheet are gone. It stands wherever a reference may.
+const REF_ERROR = ERROR_LITERALS.indexOf('#REF!') + 1;
+
 const LEG_CELL = 1;
 const LEG_COLUMN = 2;
 const LEG_ROW = 3;
@@ -61,6 +64,8 @@ function yieldsReference(node: FormulaNode): boolean {
         case NodeKind.Invoke:
         case NodeKind.Paren:
             return true;
+        case NodeKind.Error:
+            return node.value === REF_ERROR;
         case NodeKind.Postfix:
             return node.op === Token.Hash;
         case NodeKind.Binary:
@@ -231,6 +236,7 @@ class Parser {
     private startsReference(): boolean {
         const { kind } = this;
         if (kind === Token.Number) return this.text.charCodeAt(this.end) === 58;
+        if (kind === Token.Error) return errorCode(this.text, this.pos) === REF_ERROR;
         return kind === Token.Word || kind === Token.Quote || kind === Token.Bracket || kind === Token.Open;
     }
 
@@ -443,10 +449,9 @@ class Parser {
         this.end = bang + 1;
         this.next();
         if (this.space !== '') return this.fail();
-        if (this.kind === Token.Error) {
-            const error = errorCode(this.text, this.pos);
+        if (this.kind === Token.Error && errorCode(this.text, this.pos) === REF_ERROR) {
             this.next();
-            return leaf(NodeKind.Error, error, '', space, sheetKind, sheet);
+            return leaf(NodeKind.Error, REF_ERROR, '', space, sheetKind, sheet);
         }
         if (this.kind !== Token.Word && this.kind !== Token.Number) return this.fail();
         const reference = this.reference(space, sheetKind, sheet);

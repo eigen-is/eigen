@@ -448,6 +448,43 @@ describe('references and sheets (parsing.md 2.4)', () => {
         expect(stored('=SUM(Sheet2!#REF!)')).toBe('=SUM([s2]!#REF!)');
     });
 
+    test.each([
+        ['=A1 #REF!', '(RC[-13] #REF!)'],
+        ['=#REF! A1', '(#REF! RC[-13])'],
+        ['=#REF!  #REF!', '(#REF! #REF!)'],
+        ['=SUM(A1:B2 #REF!)', 'SUM((RC[-13]:R[1]C[-12] #REF!))'],
+        ['=SUM(A1:B2 Sheet2!#REF!)', 'SUM((RC[-13]:R[1]C[-12] [s2]!#REF!))'],
+        ['=#REF!#', '(#REF!#)'],
+        ['=Sheet2!#REF!#', '([s2]!#REF!#)'],
+        ['=A1:#REF!', '(RC[-13]:#REF!)'],
+        ['=#REF!:A1', '(#REF!:RC[-13])'],
+        ['=(#REF!,A1)', '[(#REF!,RC[-13])]'],
+        ['=Sheet2!A1:Sheet2!#REF!', '([s2]!RC[-13]:[s2]!#REF!)'],
+        ['=#ref! (A1)', '(#REF! [RC[-13]])'],
+    ])('#REF! stands where a reference may: %s', (text, expected) => {
+        const tree = treeA1(text);
+        expect(grouped(tree)).toBe(expected);
+        expect(treeStored(printStored(tree))).toEqual(tree);
+        expect(treeA1(shown(text))).toEqual(tree);
+    });
+
+    test('a reference that left the grid or lost its sheet shows as text that parses', () => {
+        const tree = treeA1('=SUM(A1:B2 C1)+A1#+Sheet2!A1', 'C3');
+        const gone = treeStored('=SUM([gone]!RC [gone]!R1C1:R2C2)+[gone]!RC#');
+        for (const a1 of [printA1(tree, 0, 0, sheetName), printA1(gone, 0, 0, sheetName)]) {
+            expect(a1).toContain('#REF!');
+            const back = treeA1(a1, 'A1');
+            expect(treeStored(printStored(back))).toEqual(back);
+        }
+    });
+
+    test.each(['=1 #REF!', '=A1 #N/A', '=#N/A#', '=Sheet2!#N/A', '=#N/A A1', '="a" #REF!'])(
+        'no other error does: %s does not parse',
+        (text) => {
+            expect(failure(text)).toBe('syntax');
+        },
+    );
+
     test('a reference off the grid at its host prints #REF!', () => {
         const tree = treeA1('=A1+Sheet2!B2+C$3', 'B2');
         expect(printStored(tree)).toBe('=R[-1]C[-1]+[s2]!RC+R3C[1]');
