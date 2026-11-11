@@ -19,10 +19,8 @@ export function mapIndex(edit: Edit, i: number): number {
     return i < edit.index + edit.count ? GONE : i - edit.count;
 }
 
-// Writes where the lines `start` to `end` are after the edit into `into`, or returns false when none is left. An
-// insert at or before the start moves the span and one after the start, up to its end, grows it; an end pushed past
-// the last line stops there. A deleted start moves to the first line left after it and a deleted end to the last
-// line left before it.
+// Writes where the lines `start` to `end` are after the edit into `into`, or returns false when none is left. An end
+// stops where a lone index would be gone: at the last line of the axis, or at the edge of the deleted lines.
 export function mapSpan(edit: Edit, start: number, end: number, into: Span): boolean {
     const { index, count } = edit;
     if (edit.insert) {

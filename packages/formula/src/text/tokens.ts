@@ -3,22 +3,25 @@
 // It reads text that may not parse, as it does while someone types. A word comes out as what the parser would take
 // it for, and a whole reference, sheet prefix and both corners, is one token.
 
+import type { TokenKind } from './lexer';
 import { lexAt, Token, tokenEnd, tokenKind } from './lexer';
 import { referenceAt } from './parser';
 
 export type FormulaToken = {
-    // One of Token.
-    readonly kind: number;
+    readonly kind: TokenKind;
     readonly start: number;
     readonly end: number;
 };
+
+// The lexer packs a kind into a plain number, and its place here gives it back its type.
+const KINDS = Object.values(Token);
 
 export function tokens(text: string): FormulaToken[] {
     const list: FormulaToken[] = [];
     let start = 0;
     while (start < text.length) {
         const token = lexAt(text, start);
-        let kind = tokenKind(token);
+        let kind = KINDS[tokenKind(token)];
         let end = tokenEnd(token);
         if (kind === Token.Word && text.charCodeAt(end) === 40) {
             kind = Token.Function;

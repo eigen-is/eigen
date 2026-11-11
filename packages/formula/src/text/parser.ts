@@ -3,12 +3,39 @@
 // relative references into offsets from that cell; parseStored reads the stored shape text, where they already are.
 // Text that does not parse is a result, never a throw, and the limits on length, nesting and arguments are kept here.
 
-import { GRID_COLUMNS, GRID_ROWS } from './a1';
-import { continuesWord, lexAt, Token, tokenEnd, tokenKind } from './lexer';
+import { columnIndex, GRID_ROWS } from './a1';
+import {
+    BANG,
+    BRACKET_CLOSE,
+    BRACKET_OPEN,
+    COLON,
+    continuesWord,
+    DOLLAR,
+    DOT,
+    EQUALS,
+    ERROR_LITERALS,
+    errorCode,
+    LOWER_A,
+    LOWER_E,
+    lexAt,
+    MINUS,
+    OPEN,
+    Token,
+    tokenEnd,
+    tokenKind,
+    UPPER_C,
+    UPPER_R,
+    ZERO,
+} from './lexer';
 import type { FormulaNode } from './tree';
 import { branch, EMPTY, leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from './tree';
 
+// Excel's limit on what a person types.
 export const MAX_FORMULA_LENGTH = 8192;
+// Stored text also arrives from a peer, so it has a cap of its own. A typed formula grows at most twelvefold when
+// stored, as a!A1 does with a uuid for the sheet and offsets that span the grid.
+export const MAX_STORED_LENGTH = 16 * MAX_FORMULA_LENGTH;
+// Brackets and prefix or postfix operators, one inside the other. A chain of binary operators is not nesting.
 export const MAX_NESTING = 64;
 export const MAX_ARGUMENTS = 255;
 
@@ -24,6 +51,50 @@ export type A1Range = {
     readonly start: { readonly col: number; readonly row: number };
     readonly end: { readonly col: number; readonly row: number };
 };
+
+// Whether stored text is typed text that did not parse, kept behind a second =. No printed shape starts with two,
+// so the mark alone says the text is no formula, whatever the stored grammar would make of the rest.
+export function isUnparsed(stored: string): boolean {
+    return stored.charCodeAt(0) === EQUALS && stored.charCodeAt(1) === EQUALS;
+}
+
+// A formula as typed at a cell, such as =SUM(A1:B2)*Sheet2!$C$1, with the row and column from 0.
+export function parseA1(
+    text: string,
+    hostRow: number,
+    hostColumn: number,
+    findSheet: SheetFinder,
+): FormulaNode | ParseFailure {
+    return new Parser(text, false, hostRow, hostColumn, findSheet).formula();
+}
+
+// A formula in its stored form, such as =SUM(R[-3]C:R[-1]C)*[k3f9]!R2C1.
+export function parseStored(text: string): FormulaNode | ParseFailure {
+    return new Parser(text, true, 0, 0, noSheet).formula();
+}
+
+function noSheet(): undefined {
+    return undefined;
+}
+
+// The reference that starts at `from` in typed text, and where it ends. Its sheet, if any, stays a name.
+export function referenceAt(text: string, from: number): { readonly node: FormulaNode; readonly end: number } | null {
+    return new Parser(text, false, 0, 0, noSheet).referenceFrom(from);
+}
+
+// A cell or a rectangle with an optional sheet, such as Sheet1!$A$1:B3, as indexes from 0. Null for anything else.
+export function parseA1Range(range: string): A1Range | null {
+    const found = referenceAt(range, 0);
+    if (!found || found.end !== range.length) return null;
+    const { node } = found;
+    if (node.op > RefKind.Range || node.sheetKind > SheetKind.Name) return null;
+    const start = { col: node.column, row: node.row };
+    return {
+        sheet: node.sheetKind === SheetKind.Name ? node.sheet : undefined,
+        start,
+        end: node.op === RefKind.Cell ? { ...start } : { col: node.column2, row: node.row2 },
+    };
+}
 
 // How tightly each operator holds its operands, tightest first. A prefix operator sits between union and %, so
 // -2^2 is 4, and every binary operator groups to the left, ^ included.
@@ -44,31 +115,12 @@ for (const [power, ...operators] of [
     for (const operator of operators) BINDING[operator] = power;
 }
 
+// What is left of a reference whose cells or sheet are gone. It stands wherever a reference may.
+const REF_ERROR = ERROR_LITERALS.indexOf('#REF!') + 1;
+
 const LEG_CELL = 1;
 const LEG_COLUMN = 2;
 const LEG_ROW = 3;
-
-// What a space between two operands can intersect: whatever may yield a reference.
-function yieldsReference(node: FormulaNode): boolean {
-    switch (node.kind) {
-        case NodeKind.Ref:
-        case NodeKind.Name:
-        case NodeKind.Call:
-        case NodeKind.Invoke:
-        case NodeKind.Paren:
-            return true;
-        case NodeKind.Postfix:
-            return node.op === Token.Hash;
-        case NodeKind.Binary:
-            return node.op === Token.Colon || node.op === Token.Space || node.op === Token.Comma;
-        default:
-            return false;
-    }
-}
-
-function returnsFunction(node: FormulaNode): boolean {
-    return node.kind === NodeKind.Call || node.kind === NodeKind.Invoke || node.kind === NodeKind.Paren;
-}
 
 class Parser {
     private readonly text: string;
@@ -82,17 +134,17 @@ class Parser {
     private end = 0;
     private space = '';
     private depth = 0;
+    // How many brackets and prefix or postfix operators deep the operand or expression read last is.
+    private height = 0;
     private reason: ParseFailure['reason'] | '' = '';
     private failedAt = 0;
-    // What the leg and sheet readers found last: they return a position, so their findings land here.
+    // What the leg readers found last: they return a position, so their findings land here.
     private legKind = 0;
     private legRow = 0;
     private legColumn = 0;
     private legFlags = 0;
     private index = 0;
     private absolute = false;
-    private sheetKind: FormulaNode['sheetKind'] = SheetKind.Host;
-    private sheet = '';
 
     public constructor(text: string, stored: boolean, hostRow: number, hostColumn: number, findSheet: SheetFinder) {
         this.text = text;
@@ -103,8 +155,10 @@ class Parser {
     }
 
     public formula(): FormulaNode | ParseFailure {
-        if (this.text.length > MAX_FORMULA_LENGTH) return { reason: 'too-long', at: MAX_FORMULA_LENGTH };
-        if (this.text.charCodeAt(0) === 61) {
+        const limit = this.stored ? MAX_STORED_LENGTH : MAX_FORMULA_LENGTH;
+        if (this.text.length > limit) return { reason: 'too-long', at: limit };
+        if (isUnparsed(this.text)) return { reason: 'syntax', at: 1 };
+        if (this.text.charCodeAt(0) === EQUALS) {
             this.end = 1;
             this.next();
         }
@@ -159,73 +213,119 @@ class Parser {
 
     private expression(minPower: number, union: boolean): FormulaNode {
         let left = this.operand(union);
+        let height = this.height;
         for (;;) {
             let op = this.kind;
             const { space } = this;
             let power = BINDING[op];
             // A comma is a union only inside parentheses of its own, and ( calls only what can return a function.
             if (op === Token.Comma && !union) power = 0;
-            if (op === Token.Open && (space !== '' || !returnsFunction(left))) power = 0;
+            const callable =
+                left.kind === NodeKind.Call || left.kind === NodeKind.Invoke || left.kind === NodeKind.Paren;
+            if (op === Token.Open && (space !== '' || !callable)) power = 0;
             if (power === 0) {
-                if (space === '' || !this.startsReference() || !yieldsReference(left)) return left;
+                if (space === '' || !this.startsReference() || !yieldsReference(left)) break;
                 op = Token.Space;
                 power = BINDING[op];
             }
-            if (power < minPower) return left;
+            if (power < minPower) break;
             if (op === Token.Hash && !yieldsReference(left)) return this.fail();
             if (op === Token.Hash || op === Token.Percent) {
                 this.next();
                 left = branch(NodeKind.Postfix, op, '', [left], space, '');
+                height += 1;
                 continue;
             }
             if (op === Token.Open) {
                 const called = [left];
                 left = branch(NodeKind.Invoke, 0, '', called, '', this.argumentList(called));
+                height = Math.max(height, this.height) + 1;
                 continue;
             }
             // An intersection is written as the whitespace itself, so its right operand starts with none.
             if (op === Token.Space) this.space = '';
             else this.next();
-            left = branch(NodeKind.Binary, op, '', [left, this.expression(power + 1, union)], space, '');
+            const right = this.expression(power + 1, union);
+            height = Math.max(height, this.height);
+            left =
+                op === Token.Colon
+                    ? this.colon(left, right, space)
+                    : branch(NodeKind.Binary, op, '', [left, right], space, '');
         }
+        // A postfix operator wraps what was already read, so the limit on nesting is checked on the way out too.
+        if (height > MAX_NESTING) return this.fail('too-deep');
+        this.height = height;
+        return left;
+    }
+
+    // The node of a colon between two operands, which is where a range that was not read as one reference is built.
+    // Each operand must be able to yield a reference, so a number never stands beside a colon as a row would.
+    private colon(left: FormulaNode, right: FormulaNode, space: string): FormulaNode {
+        if (!yieldsReference(left) || !yieldsReference(right)) return this.fail();
+        if (right.sheetKind !== SheetKind.Host) {
+            // A second corner may repeat the sheet of the first, as in HR!B9:HR!M9, and name no other.
+            if (left.sheetKind !== right.sheetKind || left.sheet !== right.sheet) return this.fail();
+            if (space === '' && right.space === '' && isCell(left) && isCell(right)) {
+                const { sheetKind, sheet, row, column } = left;
+                const flags = left.flags | (right.flags << 2);
+                const { row: row2, column: column2 } = right;
+                return referenceNode(RefKind.Range, left.space, sheetKind, sheet, row, column, row2, column2, flags);
+            }
+        } else if (space === '') {
+            // A name that is a column label, a colon and a column would show as text that reads as one range. Typed
+            // text never gets here that way, so this refuses only stored text.
+            const before = left.kind === NodeKind.Binary ? left.children[1] : left;
+            let after = right;
+            while (after.kind === NodeKind.Postfix) after = after.children[0];
+            const column = after.kind === NodeKind.Ref ? after.op === RefKind.Columns : isColumnName(after);
+            if (isColumnName(before) && column && after.space === '') return this.fail();
+        }
+        return branch(NodeKind.Binary, Token.Colon, '', [left, right], space, '');
     }
 
     private startsReference(): boolean {
         const { kind } = this;
-        if (kind === Token.Number) return this.text.charCodeAt(this.end) === 58;
+        if (kind === Token.Number) return this.text.charCodeAt(this.end) === COLON;
+        if (kind === Token.Error) return errorCode(this.text, this.pos) === REF_ERROR;
         return kind === Token.Word || kind === Token.Quote || kind === Token.Bracket || kind === Token.Open;
     }
 
     private operand(union: boolean): FormulaNode {
         const { text, kind, pos, end, space } = this;
+        this.height = 0;
         switch (kind) {
             case Token.Number: {
-                if (text.charCodeAt(end) === 58) {
+                if (text.charCodeAt(end) === COLON) {
                     const rows = this.reference(space, SheetKind.Host, '');
                     if (rows) return rows;
                 }
-                let value = Number(text.slice(pos, end));
-                // A literal keeps 15 digits, as Excel stores it.
-                if (end - pos > 15) value = Number(value.toPrecision(15));
+                let literal = text.slice(pos, end);
+                if (end - pos > 15) {
+                    // A literal keeps its first 15 significant digits and the rest count as zeros, as Excel reads it.
+                    let significant = 0;
+                    let at = pos;
+                    literal = '';
+                    for (; at < end && (text.charCodeAt(at) | 32) !== LOWER_E; at += 1) {
+                        const code = text.charCodeAt(at);
+                        if (code !== DOT && (significant > 0 || code !== ZERO)) significant += 1;
+                        literal += significant > 15 && code !== DOT ? '0' : text.charAt(at);
+                    }
+                    literal += text.slice(at, end);
+                }
+                const value = Number(literal);
                 if (value === Infinity) return this.fail();
                 this.next();
                 return leaf(NodeKind.Number, value, '', space, SheetKind.Host, '');
             }
             case Token.String: {
-                const content = text.slice(pos + 1, end - 1);
+                const quoted = text.slice(pos + 1, end - 1);
+                const content = quoted.includes('"') ? quoted.replaceAll('""', '"') : quoted;
                 this.next();
-                return leaf(
-                    NodeKind.String,
-                    0,
-                    content.includes('"') ? content.replaceAll('""', '"') : content,
-                    space,
-                    SheetKind.Host,
-                    '',
-                );
+                return leaf(NodeKind.String, 0, content, space, SheetKind.Host, '');
             }
             case Token.Error:
                 this.next();
-                return leaf(NodeKind.Error, 0, text.slice(pos, end).toUpperCase(), space, SheetKind.Host, '');
+                return leaf(NodeKind.Error, errorCode(text, pos), '', space, SheetKind.Host, '');
             case Token.Plus:
             case Token.Minus:
             case Token.At: {
@@ -233,6 +333,7 @@ class Parser {
                 this.next();
                 const child = this.expression(PREFIX_POWER, union);
                 this.depth -= 1;
+                this.height += 1;
                 return branch(NodeKind.Prefix, kind, '', [child], space, '');
             }
             case Token.Open: {
@@ -243,25 +344,27 @@ class Parser {
                 const spaceEnd = this.space;
                 this.next();
                 this.depth -= 1;
+                this.height += 1;
                 return branch(NodeKind.Paren, 0, '', [child], space, spaceEnd);
             }
             case Token.BraceOpen:
                 return this.array(space);
             case Token.Word:
                 return this.word(space);
-            case Token.Quote:
-                if (text.charCodeAt(end) !== 33) return this.fail();
-                this.nameSheet(this.unquoted(pos, end));
-                return this.prefixed(space, end, this.sheetKind, this.sheet);
+            case Token.Quote: {
+                if (text.charCodeAt(end) !== BANG) return this.fail();
+                const quoted = text.slice(pos + 1, end - 1);
+                return this.named(space, end, quoted.includes("'") ? quoted.replaceAll("''", "'") : quoted);
+            }
             case Token.Bracket: {
                 if (this.stored) {
-                    if (text.charCodeAt(end) !== 33) return this.fail();
+                    if (text.charCodeAt(end) !== BANG) return this.fail();
                     return this.prefixed(space, end, SheetKind.Id, text.slice(pos + 1, end - 1));
                 }
                 // Another workbook as a file writes it: its index, then the sheet, if any.
                 const sheet = lexAt(text, end);
                 const bang = tokenKind(sheet) === Token.Word ? tokenEnd(sheet) : end;
-                if (text.charCodeAt(bang) !== 33) return this.fail();
+                if (text.charCodeAt(bang) !== BANG) return this.fail();
                 return this.prefixed(space, bang, SheetKind.External, text.slice(pos, bang));
             }
             default:
@@ -274,16 +377,15 @@ class Parser {
     private word(space: string): FormulaNode {
         const { text, pos, end } = this;
         const after = text.charCodeAt(end);
-        if (after === 40) {
+        if (after === OPEN) {
             const name = text.slice(pos, end).toUpperCase();
             this.next();
             const args: FormulaNode[] = [];
-            return branch(NodeKind.Call, 0, name, args, space, this.argumentList(args));
+            const spaceEnd = this.argumentList(args);
+            this.height += 1;
+            return branch(NodeKind.Call, 0, name, args, space, spaceEnd);
         }
-        if (after === 33) {
-            this.nameSheet(text.slice(pos, end));
-            return this.prefixed(space, end, this.sheetKind, this.sheet);
-        }
+        if (after === BANG) return this.bare(space, end);
         const reference = this.reference(space, SheetKind.Host, '');
         if (reference) return reference;
         if (end - pos === 4 || end - pos === 5) {
@@ -293,10 +395,10 @@ class Parser {
                 return leaf(NodeKind.Boolean, upper === 'TRUE' ? 1 : 0, '', space, SheetKind.Host, '');
             }
         }
-        if (after === 58 && !this.stored) {
+        if (after === COLON) {
             const last = lexAt(text, end + 1);
-            if (tokenKind(last) === Token.Word && text.charCodeAt(tokenEnd(last)) === 33) {
-                return this.prefixed(space, tokenEnd(last), SheetKind.Span, text.slice(pos, tokenEnd(last)));
+            if (tokenKind(last) === Token.Word && text.charCodeAt(tokenEnd(last)) === BANG) {
+                return this.bare(space, tokenEnd(last));
             }
         }
         return this.name(space, SheetKind.Host, '');
@@ -309,6 +411,7 @@ class Parser {
         let name = this.text.slice(pos, end);
         if (name.includes('$') || name.includes('[')) return this.fail();
         if (this.stored) {
+            if (this.storedLeg(pos) === end) return this.fail();
             if (this.a1Leg(pos) === end && this.legKind === LEG_CELL) return this.fail();
         } else if (this.storedLeg(pos) === end) {
             name = name.toLowerCase();
@@ -317,15 +420,21 @@ class Parser {
         return leaf(NodeKind.Name, 0, name, space, sheetKind, sheet);
     }
 
-    // The arguments from the current ( to its ), appended to `list`. Returns the whitespace before the ).
+    // The arguments from the current ( to its ), appended to `list`, and the height of the tallest into `height`.
+    // Returns the whitespace before the ).
     private argumentList(list: FormulaNode[]): string {
         const before = list.length;
+        let height = 0;
         if (!this.enter()) return '';
         this.next();
         if (this.kind !== Token.Close) {
             for (;;) {
-                const empty = this.kind === Token.Comma || this.kind === Token.Close;
-                list.push(empty ? EMPTY : this.expression(0, false));
+                if (this.kind === Token.Comma || this.kind === Token.Close) {
+                    list.push(EMPTY);
+                } else {
+                    list.push(this.expression(0, false));
+                    height = Math.max(height, this.height);
+                }
                 if (this.kind !== Token.Comma) break;
                 this.next();
             }
@@ -335,6 +444,7 @@ class Parser {
         const spaceEnd = this.space;
         this.next();
         this.depth -= 1;
+        this.height = height;
         return spaceEnd;
     }
 
@@ -344,9 +454,11 @@ class Parser {
         const elements: FormulaNode[] = [];
         let columns = 0;
         let rowStart = 0;
+        let height = 0;
         for (;;) {
             this.next();
             const element = this.operand(false);
+            height = Math.max(height, this.height);
             const constant =
                 element.kind === NodeKind.Prefix
                     ? element.op !== Token.At && element.children[0].kind === NodeKind.Number
@@ -363,27 +475,25 @@ class Parser {
         const spaceEnd = this.space;
         this.next();
         this.depth -= 1;
+        this.height = height + 1;
         return branch(NodeKind.Array, columns, '', elements, space, spaceEnd);
     }
 
-    // The name inside a quoted token, where a quote is written twice.
-    private unquoted(start: number, end: number): string {
-        const name = this.text.slice(start + 1, end - 1);
-        return name.includes("'") ? name.replaceAll("''", "'") : name;
+    // A sheet prefix written without quotes, from the current word to `bang`: one name, or the two of a 3-D
+    // reference. Another workbook's bracket needs quotes, or it would read as a stored offset.
+    private bare(space: string, bang: number): FormulaNode {
+        const name = this.text.slice(this.pos, bang);
+        return name.includes('[') ? this.fail() : this.named(space, bang, name);
     }
 
-    // Which sheet a prefix names, into sheetKind and sheet. Only typed text is looked up: stored text names by id.
-    private nameSheet(name: string): void {
-        this.sheet = name;
-        if (name.includes('[')) {
-            this.sheetKind = SheetKind.External;
-        } else if (name.includes(':')) {
-            this.sheetKind = SheetKind.Span;
-        } else {
-            const found = this.stored ? undefined : this.findSheet(name);
-            this.sheetKind = found ? SheetKind.Id : SheetKind.Name;
-            if (found) this.sheet = found.id;
-        }
+    // What follows the sheet prefix that ends at `bang`, on the sheet its name stands for. Only typed text is looked
+    // up: stored text names a sheet by id.
+    private named(space: string, bang: number, name: string): FormulaNode {
+        if (name.includes('[')) return this.prefixed(space, bang, SheetKind.External, name);
+        if (name.includes(':')) return this.prefixed(space, bang, SheetKind.Span, name);
+        const found = this.stored ? undefined : this.findSheet(name);
+        if (found) return this.prefixed(space, bang, SheetKind.Id, found.id);
+        return this.prefixed(space, bang, SheetKind.Name, name);
     }
 
     // What follows the ! of a sheet prefix: a reference, a name scoped to the sheet, or the #REF! a deletion left.
@@ -391,10 +501,9 @@ class Parser {
         this.end = bang + 1;
         this.next();
         if (this.space !== '') return this.fail();
-        if (this.kind === Token.Error) {
-            const error = this.text.slice(this.pos, this.end).toUpperCase();
+        if (this.kind === Token.Error && errorCode(this.text, this.pos) === REF_ERROR) {
             this.next();
-            return leaf(NodeKind.Error, 0, error, space, sheetKind, sheet);
+            return leaf(NodeKind.Error, REF_ERROR, '', space, sheetKind, sheet);
         }
         if (this.kind !== Token.Word && this.kind !== Token.Number) return this.fail();
         const reference = this.reference(space, sheetKind, sheet);
@@ -403,7 +512,7 @@ class Parser {
     }
 
     // A reference at the current token: a cell, or two legs of one kind around a colon, such as A1:B2, A:C or 1:5.
-    // Null when the token is none. A second sheet prefix must repeat the first.
+    // Null when the token is none.
     private reference(space: string, sheetKind: FormulaNode['sheetKind'], sheet: string): FormulaNode | null {
         const { text } = this;
         const end = this.leg(this.pos);
@@ -412,24 +521,11 @@ class Parser {
         const row = this.legRow;
         const column = this.legColumn;
         const flags = this.legFlags;
-        if (text.charCodeAt(end) === 58) {
-            let second = end + 1;
-            let legEnd = this.leg(second);
-            if (legEnd === -1 || text.charCodeAt(legEnd) === 33) {
-                const prefix = lexAt(text, second);
-                const quoted = tokenKind(prefix) === Token.Quote;
-                legEnd = -1;
-                if ((quoted || tokenKind(prefix) === Token.Word) && text.charCodeAt(tokenEnd(prefix)) === 33) {
-                    this.nameSheet(
-                        quoted ? this.unquoted(second, tokenEnd(prefix)) : text.slice(second, tokenEnd(prefix)),
-                    );
-                    if (this.sheetKind !== sheetKind || this.sheet !== sheet) return this.fail();
-                    second = tokenEnd(prefix) + 1;
-                    legEnd = this.leg(second);
-                }
-            }
+        if (text.charCodeAt(end) === COLON) {
+            const legEnd = this.leg(end + 1);
             const after = text.charCodeAt(legEnd);
-            if (legEnd !== -1 && this.legKind === kind && after !== 40 && after !== 33 && !continuesWord(after)) {
+            const whole = after !== OPEN && after !== BANG && !continuesWord(after);
+            if (legEnd !== -1 && this.legKind === kind && whole) {
                 this.end = legEnd;
                 this.next();
                 const op = kind === LEG_CELL ? RefKind.Range : kind === LEG_COLUMN ? RefKind.Columns : RefKind.Rows;
@@ -452,42 +548,40 @@ class Parser {
         const { text } = this;
         let at = pos;
         let flags = 0;
-        if (text.charCodeAt(at) === 36) {
+        if (text.charCodeAt(at) === DOLLAR) {
             flags = RefFlag.ColumnAbsolute;
             at += 1;
         }
         const lettersAt = at;
-        let column = 0;
         for (;;) {
-            const letter = (text.charCodeAt(at) | 32) - 96;
-            if (!(letter >= 1 && letter <= 26)) break;
-            column = column * 26 + letter;
+            const letter = (text.charCodeAt(at) | 32) - LOWER_A;
+            if (!(letter >= 0 && letter < 26)) break;
             at += 1;
         }
         const letters = at - lettersAt;
+        const column = columnIndex(text, lettersAt, at);
         if (letters === 0) {
             if (flags !== 0) flags = RefFlag.RowAbsolute;
-        } else if (text.charCodeAt(at) === 36) {
+        } else if (text.charCodeAt(at) === DOLLAR) {
             flags |= RefFlag.RowAbsolute;
             at += 1;
         }
         const digitsAt = at;
         let row = 0;
         for (;;) {
-            const digit = text.charCodeAt(at) - 48;
+            const digit = text.charCodeAt(at) - ZERO;
             if (!(digit >= 0 && digit <= 9)) break;
             row = row * 10 + digit;
             at += 1;
         }
         const digits = at - digitsAt;
         this.legKind = 0;
-        if (letters > 3 || digits > 7 || letters + digits === 0) return -1;
-        if (letters > 0 && column > GRID_COLUMNS) return -1;
+        if (digits > 7 || letters + digits === 0 || (letters > 0 && column === -1)) return -1;
         if (digits > 0 ? row < 1 || row > GRID_ROWS : (flags & RefFlag.RowAbsolute) !== 0) return -1;
         this.legKind = digits === 0 ? LEG_COLUMN : letters === 0 ? LEG_ROW : LEG_CELL;
         this.legFlags = flags;
         this.legRow = digits === 0 ? 0 : flags & RefFlag.RowAbsolute ? row - 1 : row - 1 - this.hostRow;
-        this.legColumn = letters === 0 ? 0 : flags & RefFlag.ColumnAbsolute ? column - 1 : column - 1 - this.hostColumn;
+        this.legColumn = letters === 0 ? 0 : flags & RefFlag.ColumnAbsolute ? column : column - this.hostColumn;
         return at;
     }
 
@@ -499,14 +593,14 @@ class Parser {
         let row = 0;
         let column = 0;
         this.legKind = 0;
-        if (text.charCodeAt(at) === 82) {
+        if (text.charCodeAt(at) === UPPER_R) {
             at = this.storedIndex(at + 1);
             if (at === -1) return -1;
             row = this.index;
             if (this.absolute) flags = RefFlag.RowAbsolute;
             this.legKind = LEG_ROW;
         }
-        if (text.charCodeAt(at) === 67) {
+        if (text.charCodeAt(at) === UPPER_C) {
             at = this.storedIndex(at + 1);
             if (at === -1) return -1;
             column = this.index;
@@ -524,14 +618,14 @@ class Parser {
     private storedIndex(pos: number): number {
         const { text } = this;
         let at = pos;
-        const bracket = text.charCodeAt(at) === 91;
+        const bracket = text.charCodeAt(at) === BRACKET_OPEN;
         if (bracket) at += 1;
-        const negative = bracket && text.charCodeAt(at) === 45;
+        const negative = bracket && text.charCodeAt(at) === MINUS;
         if (negative) at += 1;
         const digitsAt = at;
         let value = 0;
         for (;;) {
-            const digit = text.charCodeAt(at) - 48;
+            const digit = text.charCodeAt(at) - ZERO;
             if (!(digit >= 0 && digit <= 9)) break;
             value = value * 10 + digit;
             at += 1;
@@ -540,7 +634,7 @@ class Parser {
         if (digits > 7) return -1;
         this.absolute = !bracket && digits > 0;
         if (bracket) {
-            if (digits === 0 || text.charCodeAt(at) !== 93) return -1;
+            if (digits === 0 || text.charCodeAt(at) !== BRACKET_CLOSE) return -1;
             this.index = negative ? -value : value;
             return at + 1;
         }
@@ -550,40 +644,30 @@ class Parser {
     }
 }
 
-// A formula as typed at a cell, such as =SUM(A1:B2)*Sheet2!$C$1, with the row and column from 0.
-export function parseA1(
-    text: string,
-    hostRow: number,
-    hostColumn: number,
-    findSheet: SheetFinder,
-): FormulaNode | ParseFailure {
-    return new Parser(text, false, hostRow, hostColumn, findSheet).formula();
+// What a space between two operands can intersect: whatever may yield a reference.
+function yieldsReference(node: FormulaNode): boolean {
+    switch (node.kind) {
+        case NodeKind.Ref:
+        case NodeKind.Name:
+        case NodeKind.Call:
+        case NodeKind.Invoke:
+        case NodeKind.Paren:
+            return true;
+        case NodeKind.Error:
+            return node.value === REF_ERROR;
+        case NodeKind.Postfix:
+            return node.op === Token.Hash;
+        case NodeKind.Binary:
+            return node.op === Token.Colon || node.op === Token.Space || node.op === Token.Comma;
+        default:
+            return false;
+    }
 }
 
-// A formula in its stored form, such as =SUM(R[-3]C:R[-1]C)*[k3f9]!R2C1.
-export function parseStored(text: string): FormulaNode | ParseFailure {
-    return new Parser(text, true, 0, 0, noSheet).formula();
+function isColumnName(node: FormulaNode): boolean {
+    return node.kind === NodeKind.Name && columnIndex(node.text) !== -1;
 }
 
-function noSheet(): undefined {
-    return undefined;
-}
-
-// The reference that starts at `from` in typed text, and where it ends. Its sheet, if any, stays a name.
-export function referenceAt(text: string, from: number): { readonly node: FormulaNode; readonly end: number } | null {
-    return new Parser(text, false, 0, 0, noSheet).referenceFrom(from);
-}
-
-// A cell or a rectangle with an optional sheet, such as Sheet1!$A$1:B3, as indexes from 0. Null for anything else.
-export function parseA1Range(range: string): A1Range | null {
-    const found = referenceAt(range, 0);
-    if (!found || found.end !== range.length) return null;
-    const { node } = found;
-    if (node.op > RefKind.Range || node.sheetKind > SheetKind.Name) return null;
-    const start = { col: node.column, row: node.row };
-    return {
-        sheet: node.sheetKind === SheetKind.Name ? node.sheet : undefined,
-        start,
-        end: node.op === RefKind.Cell ? { ...start } : { col: node.column2, row: node.row2 },
-    };
+function isCell(node: FormulaNode): boolean {
+    return node.kind === NodeKind.Ref && node.op === RefKind.Cell;
 }

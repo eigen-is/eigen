@@ -27,11 +27,13 @@ describe('column labels', () => {
         expect(columnIndex(label.toLowerCase())).toBe(index);
     });
 
-    test('text that is no label is -1', () => {
+    test('text that names no column of the grid is -1', () => {
         expect(columnIndex('')).toBe(-1);
         expect(columnIndex('A1')).toBe(-1);
         expect(columnIndex('ABCD')).toBe(-1);
         expect(columnIndex('$A')).toBe(-1);
+        expect(columnIndex('XFE')).toBe(-1);
+        expect(columnIndex('ZZZ')).toBe(-1);
     });
 
     test("the grid is Excel's", () => {

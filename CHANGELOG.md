@@ -104,6 +104,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Comments on a text box in Docs** — **Add comment** on a text box opens the new comment form, where it did nothing
 - **Resolved comments in Docs** — resolving a comment removes its highlight from the text, which used to stay yellow
 - **Merged cells in Sheets** — pasting text over a merged cell replaces the merge, and wrapped text in a merged cell no longer makes its row very tall
+- **Merged cells and row changes in Sheets** — a row inserted right below a merged cell one row high stays out of the merge, and a merge that a delete leaves with one cell becomes a plain cell
 - **Restoring in Slides and Vector** — restoring an earlier version of a deck or drawing brings back the comments deleted since, as Docs and Sheets do. Their replies stay as they are now
 - **Version history in other tabs** — after a restore or a Delete history, another tab open on the same document shows the new list of versions at once
 - **Pictures cropped in Google Slides** — a picture that Google Slides cropped to fit its box, such as a logo, no longer comes in squashed when you convert or import the deck
@@ -111,6 +112,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Row and column changes while others edit in Sheets** — a rename, tab color or link someone sets while you insert or delete rows stays
 - **Tabs while others edit in Sheets** — a tab added at the same moment as another of its name is kept as "Name (2)" instead of vanishing. Two people deleting or hiding the last two visible tabs at once leave one showing, and Duplicate works on a tab whose old name breaks the naming rules
 - **Filters while others edit in Sheets** — a filter someone else changes no longer leaves rows hidden for good after your next filter edit
+- **Filters and deleted rows in Sheets** — deleting rows keeps a column's filter set, also when they are the last rows it hides
 - **Refused edits in Sheets** — Delete on part of a merged cell shows a notice, a paste past the sheet's size limit says so, and a paste over part of a merge says it can't and changes nothing
 - **Long text in Sheets** — wrapped text grows its row to fit every line, however you confirm it, from the formula bar or by clicking elsewhere too
 - **Clicks and drags in Sheets** — the link card over a frozen pane shows the link you point at, dragging a formula's range picks the right rows, and a move near the bottom of the grid no longer snaps to the last row
@@ -125,6 +127,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Undo while others type formulas in Sheets** — two people typing formulas at once no longer lose their undo
 - **Undo of an image or chart in Sheets** — undoing a step that edited an image or chart and then deleted it brings it back, and redoing one that added and then edited it adds it again. Both did nothing
 - **Rules while others edit in Sheets** — two people adding conditional formats at once both keep theirs, and deleting a rule no longer hits another one when someone else just removed a rule before it
+- **Whole-column rules in Sheets** — a conditional format or validation rule on a whole column, such as `B:B`, still covers the whole column after you insert or delete rows
 - **Undo after a paste or a new rule in Sheets** — undoing a paste that added rows or columns, or a conditional format rule you added, no longer deletes what someone else put there. Once someone else edits, you can't undo such a paste or anything before it
 - **Excel downloads from Sheets** — a tab named like a cell, such as Q1, gets the quotes Excel expects in formulas, a formula follows a tab the file has to rename, and a fill down from a linked cell no longer makes the download fail
 - **Tab names from a file in Sheets** — an import repairs a tab name Sheets would refuse, such as one past 31 characters, and the formulas naming it follow

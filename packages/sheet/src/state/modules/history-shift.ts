@@ -4,40 +4,38 @@
 // sheets, so an undo lands where its cell now is. The Workbook's applyOp runs both, and a RowColMove also moves the
 // open editor and the selection along an op.
 
+import type { Edit } from '@workspace/formula/text';
+import { GONE, mapIndex } from '@workspace/formula/text';
 import type { ConditionalFormatRule, MergeCell, SheetChart } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
 import { sheetFinder } from '../../engine/a1-notation';
 import { mapChartRefs } from '../../engine/chart-data';
 import { functionStrChange, mayShiftOffSheet } from '../../engine/formula-shift';
 import { isFormula } from '../../engine/formula-utils';
-import type { DeleteRowColOp, InsertRowColOp, LineMove } from '../../engine/rowcol';
+import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
 import {
     LINE_MAPS,
-    lineMove,
+    lineEdit,
     shiftCellKeyed,
     shiftKeyedMap,
-    shiftMergeForDelete,
-    shiftMergeForInsert,
-    shiftRangeForDelete,
-    shiftRangeForInsert,
+    shiftMerges,
+    shiftRange,
     shiftRules,
 } from '../../engine/rowcol';
-import type { Cell, SingleRange } from '../../engine/types';
+import type { Cell } from '../../engine/types';
 import type { History, Sheet } from '../types';
 
-// What one row or column op does to the indices on its axis, with the engine's shifter for each kind of map.
-export type RowColMove = LineMove & {
+// One row or column op: the sheet and axis it names, its edit of that axis's lines, and its rewrite of a formula.
+export type RowColMove = {
     id: string;
     type: 'row' | 'column';
+    edit: Edit;
     formula: (
         text: string,
         sheetName: string,
         onTargetSheet: boolean,
         findSheet: (name: string) => Sheet | undefined,
     ) => string;
-    merge: (merge: Record<string, MergeCell>) => Record<string, MergeCell>;
-    // Where a range ends up, or null for one the op deletes.
-    range: (range: SingleRange) => SingleRange | null;
 };
 
 export function insertMove(op: InsertRowColOp): RowColMove {
@@ -45,11 +43,9 @@ export function insertMove(op: InsertRowColOp): RowColMove {
     return {
         id,
         type,
-        ...lineMove(op),
+        edit: lineEdit(op),
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'add', axisName(type), direction, index, count, name, onTargetSheet, findSheet),
-        merge: (merge) => shiftMergeForInsert({ merge }, type, index, count, direction),
-        range: (range) => shiftRangeForInsert(range, op),
     };
 }
 
@@ -59,11 +55,9 @@ export function deleteMove(op: DeleteRowColOp): RowColMove {
     return {
         id,
         type,
-        ...lineMove(op),
+        edit: lineEdit(op),
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'del', axisName(type), null, start, count, name, onTargetSheet, findSheet),
-        merge: (merge) => shiftMergeForDelete({ merge }, type, start, count),
-        range: (range) => shiftRangeForDelete(range, op),
     };
 }
 
@@ -178,11 +172,11 @@ class Shifter {
     }
 
     private dataPatch(patch: Patch, [r, c, ...below]: (string | number)[]): Patch | null {
-        const { type, to } = this.move;
+        const { type, edit } = this.move;
         const position = type === 'row' ? r : c;
         if (typeof r !== 'number' || typeof position !== 'number') return null;
-        const moved = to(position);
-        if (moved == null) return null;
+        const moved = mapIndex(edit, position);
+        if (moved === GONE) return null;
         const keys = c == null ? [r] : [r, c, ...below];
         keys[type === 'row' ? 0 : 1] = moved;
         const path = [...patch.path.slice(0, 3), ...keys];
@@ -230,24 +224,24 @@ class Shifter {
     }
 
     private offset(index: number) {
-        const moved = this.move.to(index);
-        return moved == null ? null : moved - index;
+        const moved = mapIndex(this.move.edit, index);
+        return moved === GONE ? null : moved - index;
     }
 
     private configPatch(patch: Patch, [map, key, ...below]: (string | number)[]): Patch | null {
         // Every sheet the editor holds has its config maps, so only a peer's forged map leaves a write of a whole one.
         if (key == null) return null;
         const head = patch.path.slice(0, 4);
+        const { type, edit } = this.move;
         if (map === 'merge') {
             if (below.length > 0 || !patch.value) return this.cellKeyed(patch, [key, ...below]);
-            const [entry] = Object.entries(this.move.merge({ [key]: patch.value }));
+            const [entry] = Object.entries(shiftMerges({ merge: { [key]: patch.value } }, type, edit).merges);
             if (!entry || !sameSize(entry[1], patch.value)) return null;
             return { ...patch, path: [...head, entry[0]], value: entry[1] };
         }
         if (map === 'borderInfo') return this.cellKeyed(patch, [key, ...below]);
-        const { type } = this.move;
         if (LINE_MAPS[type].some((name) => name === map)) {
-            const [moved] = Object.keys(shiftKeyedMap({ [key]: 0 }, this.move));
+            const [moved] = Object.keys(shiftKeyedMap({ [key]: 0 }, edit));
             return moved == null ? null : { ...patch, path: [...head, moved, ...below] };
         }
         return LINE_MAPS[type === 'row' ? 'column' : 'row'].some((name) => name === map) ? patch : null;
@@ -256,7 +250,7 @@ class Shifter {
     // An "r_c" key at the head of `rest`, such as a border.
     private cellKeyed(patch: Patch, [key, ...below]: (string | number)[]): Patch | null {
         if (typeof key !== 'string') return null;
-        const [moved] = Object.keys(shiftCellKeyed({ [key]: true }, this.move.type, this.move));
+        const [moved] = Object.keys(shiftCellKeyed({ [key]: true }, this.move.type, this.move.edit));
         if (moved == null) return null;
         const depth = patch.path.length - below.length - 1;
         return { ...patch, path: [...patch.path.slice(0, depth), moved, ...below] };
@@ -267,7 +261,8 @@ class Shifter {
     private rule(patch: Patch, [id, ...below]: (string | number)[]): Patch | null {
         if (!('value' in patch) || patch.value == null) return patch;
         if (id == null || below.length > 0) return null;
-        const value = shiftRules({ [id]: patch.value }, this.move.range)[id];
+        const { type, edit } = this.move;
+        const value = shiftRules({ [id]: patch.value }, (range) => shiftRange(range, type, edit))[id];
         return value ? { ...patch, value } : null;
     }
 

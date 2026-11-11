@@ -1,5 +1,20 @@
 import type { FormulaNode } from '../../text';
-import { NodeKind, parseA1, parseStored, printA1, printStored, sheetFinder, Token } from '../../text';
+import {
+    ERROR_LITERALS,
+    NodeKind,
+    parseA1,
+    parseStored,
+    printA1,
+    printStored,
+    RefFlag,
+    RefKind,
+    ShapeTable,
+    SheetKind,
+    sheetFinder,
+    storedText,
+    Token,
+    typedText,
+} from '../../text';
 
 export const SHEETS = [
     { id: 's1', name: 'Sheet1' },
@@ -54,6 +69,20 @@ export function failure(text: string, host = 'N1'): string {
     return 'reason' in parsed ? parsed.reason : 'parsed';
 }
 
+// Seeded dice, so a run that fails fails again.
+export function dice(seed: number) {
+    let state = seed;
+    const random = () => {
+        state = (state + 0x6d2b79f5) | 0;
+        let t = Math.imul(state ^ (state >>> 15), 1 | state);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const chance = (p: number) => random() < p;
+    const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)];
+    return { random, chance, pick };
+}
+
 const SYMBOLS: Record<number, string> = {
     [Token.Space]: ' ',
     [Token.Colon]: ':',
@@ -105,15 +134,7 @@ export function grouped(node: FormulaNode): string {
 // is canonical, so printing its tree must give it back to the character. With `ordered`, the two corners of a range
 // are in order at every host, so the A1 text at a host parses back to the same tree.
 export function formulas(seed: number, ordered: boolean): () => string {
-    let state = seed;
-    const random = () => {
-        state = (state + 0x6d2b79f5) | 0;
-        let t = Math.imul(state ^ (state >>> 15), 1 | state);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-    const chance = (p: number) => random() < p;
-    const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)];
+    const { random, chance, pick } = dice(seed);
     const small = () => Math.floor(random() * 3) + 1;
     const space = () => (chance(0.75) ? '' : pick([' ', '  ', '\n', '\t ', ' \r\n']));
 
@@ -208,4 +229,223 @@ export function formulas(seed: number, ordered: boolean): () => string {
         return text;
     };
     return () => `=${expression(4)}`;
+}
+
+// A seeded generator of formula text as a person types it, written from the grammar: every text it makes parses.
+// It reaches what the stored generator cannot: labels up to the last cell of the grid, a sheet prefix on the second
+// corner, 3-D names that read as columns, names that read as stored references, every error and long chains.
+export function typedFormulas(seed: number): () => string {
+    const { random, chance, pick } = dice(seed);
+    const space = () => (chance(0.8) ? '' : pick([' ', '  ', '\n']));
+    const dollar = () => (chance(0.3) ? '$' : '');
+    const column = () => dollar() + pick(['A', 'B', 'C', 'N', 'Z', 'AA', 'XFC', 'XFD', 'a', 'xfd']);
+    const row = () => dollar() + pick(['1', '2', '5', '14', '1000', '1048575', '1048576']);
+    const cell = () => column() + row();
+    const sheet = () =>
+        pick([
+            'Sheet2!',
+            'sheet1!',
+            "'My Sheet'!",
+            "'Bob''s'!",
+            "'A1'!",
+            'NoSuch!',
+            "'No Such'!",
+            'Sheet1:Sheet3!',
+            'Jan:Dec!',
+            'Q:FY!',
+            'Rate:Sheet2!',
+            "'A 1:B 2'!",
+            '[1]Sheet1!',
+            '[1]!',
+            "'[1]x y'!",
+            "'C:\\path\\[Book.xlsx]Sheet1'!",
+        ]);
+    const reference = (): string => {
+        const prefix = chance(0.6) ? '' : sheet();
+        if (prefix !== '' && chance(0.2)) return `${prefix}${cell()}:${prefix}${cell()}`;
+        if (prefix !== '' && chance(0.1)) return `${prefix}#REF!`;
+        return (
+            prefix +
+            pick([
+                cell,
+                cell,
+                () => `${cell()}:${cell()}`,
+                () => `${column()}:${column()}`,
+                () => `${row()}:${row()}`,
+            ])()
+        );
+    };
+    const name = () => pick(['Rate', 'total_2', 'x.y', '_a', 'RC', 'R1C1', 'r', 'C', 'R5C', 'rc', 'XFE1', 'A1048577']);
+    const number = () =>
+        pick([
+            '0',
+            '1',
+            '42',
+            '2.5',
+            '.5',
+            '1.',
+            '1E3',
+            '1e-9',
+            '1.5E+7',
+            '12345678901234567',
+            '0.1234567890123456789',
+        ]);
+    const constant = () =>
+        pick([
+            number,
+            number,
+            () => pick(['"a"', '""', '"a""b"', '"x, (y) \'z\'"']),
+            () => pick(['TRUE', 'false', 'True']),
+            () => pick([pick(ERROR_LITERALS), pick(ERROR_LITERALS).toLowerCase()]),
+        ])();
+    const list = (depth: number) => {
+        const count = Math.floor(random() * 4);
+        const items = Array.from({ length: count }, () => (chance(0.15) ? '' : expression(depth - 1)));
+        return `(${count === 1 && items[0] === '' ? '' : items.join(',')}${space()})`;
+    };
+    const call = (depth: number) =>
+        pick(['SUM', 'if', 'Log10', 'NORM.S.DIST', '_xlfn.XLOOKUP', 'nosuchfn']) + list(depth);
+    const array = () => {
+        const columns = Math.floor(random() * 3) + 1;
+        const element = () => space() + (chance(0.2) ? pick(['-', '+']) + number() : constant());
+        const line = () => Array.from({ length: columns }, element).join(',');
+        return `{${Array.from({ length: Math.floor(random() * 3) + 1 }, line).join(';')}${space()}}`;
+    };
+    const region = (depth: number) => pick([reference, reference, () => '#REF!', () => call(depth)])();
+    const primary = (depth: number): string => {
+        const leaves = [
+            constant,
+            reference,
+            () => reference() + (chance(0.2) ? '#' : ''),
+            name,
+            () => `Sheet2!${name()}`,
+        ];
+        if (depth <= 0) return space() + pick(leaves)();
+        return (
+            space() +
+            pick([
+                ...leaves,
+                () => call(depth),
+                () => call(depth) + list(depth),
+                () => `(${expression(depth - 1)}${space()})`,
+                () => `(${region(depth)},${region(depth)}${space()})`,
+                array,
+                () => `${region(depth)}${pick([' ', '  ', '\n'])}${region(depth)}`,
+                () => `${cell()}${space()}:${space()}${call(depth)}`,
+                () => `#REF!:${cell()}`,
+            ])()
+        );
+    };
+    const operand = (depth: number): string => {
+        let text = '';
+        while (chance(0.15)) text += space() + pick(['-', '+', '@']);
+        text += primary(depth);
+        while (chance(0.1)) text += `${space()}%`;
+        return text;
+    };
+    const expression = (depth: number): string => {
+        let text = operand(depth);
+        while (chance(0.35)) text += space() + pick(OPERATORS) + operand(depth);
+        return text;
+    };
+    // One text in fifty is a chain of thousands of operands, close to the longest a person may type.
+    return () => {
+        let text = `=${expression(3)}`;
+        if (chance(0.02)) while (text.length < 8000) text += pick(OPERATORS) + operand(0);
+        return text;
+    };
+}
+
+const OPERATORS = ['+', '-', '*', '/', '^', '&', '=', '<>', '<', '<=', '>', '>='];
+
+const TYPED_WORDS = [
+    ...['A1', '$A$1', 'B$2', '$C3', 'A:A', '$A:C', '1:1', '$1:3', 'A1:B2', 'B2:A1', 'B$2:B1', 'XFD1048576', 'XFE1'],
+    ...['A', 'B', 'R', 'C', 'RC', 'R1C1', 'rc', 'R1', 'C1', 'R[1]C[1]', 'RC[1]', 'C[-1]', 'A[1]', 'Rate', 'x.y', '_a'],
+    ...['TRUE', 'FALSE', 'true', 'SUM', 'IF', 'F', 'SUM(', 'IF(', ')(', ',,', 'F()', '{1,2;3,4}', '{-1,"a"', 'A1#'],
+    ...['1', '2.5', '1E3', '.5', '1.', '11.', '1E-9', '12345678901234567', '"a"', '""', '"a""b"', '"', "'"],
+    ...['#N/A', '#REF!', '#DIV/0!', '#NAME?', '#FOO!', '#REF?', '#ref!', '#GETTING_DATA', '#'],
+    ...['Sheet2!', "'My Sheet'!", 'NoSuch!', "'No Such'!", 'Sheet1:Sheet2!', "'A B:C D'!", '[1]Sheet1!', "'[1]x y'!"],
+    ...['Jan:Dec!', 'Q:FY!', 'A1Sheet!', 'B1x!', '[s2]!', '[1]', '!', '$', '.', '?', '\u00a0', 'é'],
+    ...['+', '-', '@', '%', '#', '^', '*', '/', '&', '=', '<>', '<', '<=', '>', '>=', ':', ',', ';', '{', '}'],
+    ...['(', ')', '(', ')', '(', ')', ',', ':', ':', ':'],
+];
+
+const STORED_WORDS = [
+    ...['RC', 'R[1]C[-1]', 'R1C1', 'R[-2]C3', 'R5C', 'C[1]:C[3]', 'C1:C2', 'R[1]:R[2]', 'R1:R[3]', 'R[2]C[2]:RC'],
+    ...['R', 'C', 'R5', 'C3', 'rc', 'r1c1', 'A', 'B', 'XFD', 'A1', 'Rate', 'x.y', 'TRUE', 'FALSE', 'SUM', 'IF', 'F'],
+    ...['SUM(', 'IF(', ')(', ',,', 'F()', '{1,2;3,4}', 'RC#', '1', '2.5', '1E+21', '1E-9', '0.5', '11.', '1.'],
+    ...['"a"', '""', '"a""b"', '"', "'", '#N/A', '#REF!', '#DIV/0!', '#FOO!', '#'],
+    ...['[s2]!', '[my]!', '[gone]!', "'No Such'!", "'A:B'!", "'[1]x'!", 'NoSuch!', '[1]x!', 'Jan:Dec!', '[', ']'],
+    ...['+', '-', '@', '%', '#', '^', '*', '/', '&', '=', '=', '<>', '<', '<=', '>', '>=', ':', ',', ';', '{', '}'],
+    ...['(', ')', '(', ')', '(', ')', ',', ':', ':', ':', '!', '$'],
+];
+
+// A seeded token soup: a few words of one grammar's vocabulary in any order, most of which do not parse.
+export function soup(seed: number, typed: boolean): () => string {
+    const { random, pick } = dice(seed);
+    const words = typed ? TYPED_WORDS : STORED_WORDS;
+    return () => {
+        let text = '=';
+        for (let count = 1 + Math.floor(random() * 9); count > 0; count -= 1) {
+            text += pick(['', '', '', '', ' ', '  ', '\n']) + pick(words);
+        }
+        return text;
+    };
+}
+
+// Whether a tree shows at a host as text that is another shape: a range's corners are out of order there, where the
+// A1 printer swaps them, or a sheet is gone, or a sheet kept by its name has come to exist.
+function showsAsAnother(node: FormulaNode, row: number, column: number): boolean {
+    if (node.sheetKind === SheetKind.Id && sheetName(node.sheet) === undefined) return true;
+    if (node.sheetKind === SheetKind.Name && findSheet(node.sheet)) return true;
+    if (node.kind === NodeKind.Ref && node.op !== RefKind.Cell) {
+        const { flags } = node;
+        const top = flags & RefFlag.RowAbsolute ? node.row : node.row + row;
+        const bottom = flags & RefFlag.Row2Absolute ? node.row2 : node.row2 + row;
+        const left = flags & RefFlag.ColumnAbsolute ? node.column : node.column + column;
+        const right = flags & RefFlag.Column2Absolute ? node.column2 : node.column2 + column;
+        if (top > bottom || left > right) return true;
+    }
+    return node.children.some((child) => showsAsAnother(child, row, column));
+}
+
+// The laws every text keeps, as typed at a cell or as stored. Throws naming the one that broke. `seen` holds every
+// stored text printed so far with its tree, across calls. Returns whether the text parsed.
+export function keepsLaws(
+    text: string,
+    typed: boolean,
+    row: number,
+    column: number,
+    seen: Map<string, string>,
+): boolean {
+    const broke = (law: string, detail: string) =>
+        new Error(`${law}: ${JSON.stringify(text.slice(0, 300))} at ${row},${column} ${detail.slice(0, 300)}`);
+    const tree = typed ? parseA1(text, row, column, findSheet) : parseStored(text);
+    if ('reason' in tree) {
+        if (!typed) return false;
+        // Text that fails as typed never comes back as a formula, and shows as it was typed.
+        const kept = storedText(text, row, column, findSheet);
+        const table = new ShapeTable();
+        const shape = table.shape(table.intern(kept));
+        if (shape.tree !== null || !('reason' in parseStored(kept))) throw broke('unparsable text came alive', kept);
+        if (typedText(shape, row, column, sheetName) !== text) throw broke('unparsable text changed', kept);
+        return false;
+    }
+    const stored = printStored(tree);
+    const back = parseStored(stored);
+    const json = JSON.stringify(tree);
+    if ('reason' in back) throw broke('stored text does not parse back', stored);
+    if (JSON.stringify(back) !== json) throw broke('stored text parses back to another tree', stored);
+    if ((seen.get(stored) ?? json) !== json) throw broke('two trees print one stored text', stored);
+    seen.set(stored, json);
+    const a1 = printA1(tree, row, column, sheetName);
+    const again = parseA1(a1, row, column, findSheet);
+    if ('reason' in again) throw broke('A1 text does not parse back', a1);
+    // A reference that is off the grid at this host shows as #REF! and stays that.
+    const offGrid = a1.split('#REF!').length !== stored.split('#REF!').length;
+    if (offGrid || showsAsAnother(tree, row, column)) return true;
+    if (printStored(again) !== stored) {
+        throw broke('A1 text parses back to another shape', `${a1} -> ${printStored(again)}, not ${stored}`);
+    }
+    return true;
 }

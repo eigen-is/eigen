@@ -1,9 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import type { FormulaNode } from '../../text';
 import { NodeKind, parseA1, parseStored, printA1, printStored, RefFlag, ShapeTable } from '../../text';
-import { findSheet, formulas, sheetName, treeStored } from './support';
+import { failure, findSheet, formulas, keepsLaws, sheetName, soup, treeStored, typedFormulas } from './support';
 
 const RUNS = 3000;
+const SOUP_RUNS = 100000;
+// The first and last rows and columns of the grid, and a few between.
+const HOST_ROWS = [0, 0, 1, 4, 1003, 1048574, 1048575];
+const HOST_COLUMNS = [0, 0, 1, 13, 200, 16382, 16383];
 
 function walk(node: FormulaNode, visit: (node: FormulaNode) => void): void {
     visit(node);
@@ -87,5 +91,34 @@ describe('round trip', () => {
         }
         expect(new Set(idOf.values()).size).toBe(idOf.size);
         expect(table.size).toBe(idOf.size);
+    });
+
+    test('typed text of every kind, at hosts up to the edges of the grid, keeps the laws', () => {
+        const next = typedFormulas(6);
+        const seen = new Map<string, string>();
+        let longest = 0;
+        for (let run = 0; run < RUNS; run += 1) {
+            const text = next();
+            longest = Math.max(longest, text.length);
+            const row = HOST_ROWS[run % HOST_ROWS.length];
+            const column = HOST_COLUMNS[(run * 3 + Math.floor(run / 7)) % HOST_COLUMNS.length];
+            if (!keepsLaws(text, true, row, column, seen)) throw new Error(`run ${run}: ${failure(text)}`);
+        }
+        expect(longest).toBeGreaterThan(5000);
+        expect(seen.size).toBeGreaterThan(RUNS * 0.9);
+    });
+
+    test('a token soup of either grammar keeps the laws, and nothing throws', () => {
+        const seen = new Map<string, string>();
+        let parsed = 0;
+        for (const typed of [true, false]) {
+            const next = soup(typed ? 7 : 8, typed);
+            for (let run = 0; run < SOUP_RUNS; run += 1) {
+                const row = HOST_ROWS[run % HOST_ROWS.length];
+                const column = HOST_COLUMNS[(run * 3 + Math.floor(run / 7)) % HOST_COLUMNS.length];
+                if (keepsLaws(next(), typed, row, column, seen)) parsed += 1;
+            }
+        }
+        expect(parsed).toBeGreaterThan(SOUP_RUNS / 10);
     });
 });

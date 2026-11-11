@@ -59,6 +59,10 @@ describe('ShapeTable', () => {
         expect(shape.refs.every((ref) => ref.kind === NodeKind.Ref)).toBe(true);
         expect(shape.refs[3].sheet).toBe('s2');
         expect(table.shape(table.intern('=1+2')).refs).toEqual([]);
+        const chain = table.shape(table.intern(`=${'RC[1]+R1C1*RC[2]-'.repeat(450)}(RC[3],RC[4])`));
+        expect(chain.refs).toHaveLength(1352);
+        expect(chain.refs.slice(0, 4).map((ref) => ref.column)).toEqual([1, 0, 2, 1]);
+        expect(chain.refs.slice(-3).map((ref) => ref.column)).toEqual([2, 3, 4]);
     });
 
     test('a shape that names a sheet that does not exist says so', () => {
