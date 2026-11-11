@@ -159,7 +159,7 @@ export function answeredOccurrence(event: CalendarEvent): string | undefined {
 }
 
 // A guest answers the ORGANIZER, and only the calendar's own Home holds the event, so every message names the one its
-// file `stored`. A file that names none is organized by the Home's user, or on a team, which has no address, by `user`.
+// file stores. A file that stores none is organized by the Home's user, or on a team, which has no address, by `user`.
 export function organizerOf(organizerHome: Home, user: User | undefined, stored?: Organizer): Organizer {
     const named = stored ?? (organizerHome.user.email ? organizerHome.user : user);
     return { userId: organizerHome.user.id, email: named?.email ?? '', name: named?.name };
