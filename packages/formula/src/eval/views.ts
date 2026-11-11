@@ -1,11 +1,13 @@
 // Reading the cells a reference names: where its first error sits, and the array it becomes when an operator needs
-// its elements. A reference to a whole column or row costs the cells that exist and not the grid.
+// its elements. The array stores one row for every row of the area that holds a cell and one for every stretch of
+// rows that hold none, and its columns the same way, so a reference costs the cells that exist, wherever they lie.
 
 import { CellKind, KIND_MASK } from '../store/column';
 import { GRID_ROWS } from '../text/a1';
 import type { FormulaError } from '../values/errors';
+import { CALC } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
-import { arrayOf } from '../values/value';
+import { MOST_ELEMENTS, ValueType } from '../values/value';
 import type { Evaluator } from './evaluator';
 
 // The first error of one area, row by row, once its cells are settled. A cell on a loop still carries its flags.
@@ -28,35 +30,60 @@ export function firstError(ctx: Evaluator, area: Reference): FormulaError | null
     return found;
 }
 
-// How many columns and rows of an area are stored when it is read as an array: the ones the sheet holds cells in
-// and one more, which is blank and stands for the rest of the area.
-export function storedColumns(area: Reference): number {
-    const { columns } = area.sheet;
-    let held = Math.max(0, Math.min(area.right + 1, columns.length) - area.left);
-    while (held > 0 && columns[area.left + held - 1].length === 0) held -= 1;
-    return Math.min(area.right - area.left + 1, held + 1);
-}
-
-export function storedRows(area: Reference, width: number): number {
-    let used = 0;
-    for (let c = 0; c < width; c += 1) {
-        used = Math.max(used, (area.sheet.columns[area.left + c]?.length ?? 0) - area.top);
-    }
-    return Math.min(area.bottom - area.top + 1, used + 1);
-}
-
 // The cells of one area as an array, or the cell itself when there is one.
 export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
     ctx.recalc.settleArea(area);
-    const width = storedColumns(area);
-    const height = storedRows(area, width);
-    ctx.recalc.count(height * width);
-    const items = new Array<Scalar>(height * width);
-    for (let c = 0; c < width; c += 1) {
-        const column = area.sheet.columns[area.left + c];
-        for (let r = 0; r < height; r += 1) {
-            items[r * width + c] = column === undefined ? null : ctx.workbook.value(column, area.top + r);
+    const { top, left } = area;
+    const sheet = area.sheet.columns;
+    const rows = area.bottom - top + 1;
+    const columns = area.right - left + 1;
+    const across = Math.max(0, Math.min(columns, sheet.length - left));
+    let down = 0;
+    for (let c = 0; c < across; c += 1) down = Math.max(down, Math.min(rows, sheet[left + c].length - top));
+    // Which rows and columns of the area hold a cell. Only this decides what is stored, never how long a column is.
+    const filledRows = ctx.marks(down, true);
+    const filledColumns = ctx.marks(across, false);
+    for (let c = 0; c < across; c += 1) {
+        const { kind, length } = sheet[left + c];
+        const end = Math.min(rows, length - top);
+        for (let r = 0; r < end; r += 1) {
+            if ((kind[top + r] & KIND_MASK) === CellKind.Empty) continue;
+            filledRows[r] = 1;
+            filledColumns[c] = 1;
         }
     }
-    return arrayOf(area.bottom - area.top + 1, area.right - area.left + 1, items, height, width);
+    const rowEnds = runs(filledRows, down, rows);
+    const columnEnds = runs(filledColumns, across, columns);
+    const height = rowEnds?.length ?? rows;
+    const width = columnEnds?.length ?? columns;
+    if (!ctx.recalc.room(height * width, MOST_ELEMENTS)) return CALC;
+    const items = new Array<Scalar>(height * width);
+    for (let j = 0; j < width; j += 1) {
+        const c = columnEnds === null || j === 0 ? j : columnEnds[j - 1];
+        const column = c < across && filledColumns[c] === 1 ? sheet[left + c] : null;
+        for (let i = 0; i < height; i += 1) {
+            const r = rowEnds === null || i === 0 ? i : rowEnds[i - 1];
+            const held = column !== null && r < down && filledRows[r] === 1;
+            items[i * width + j] = held ? ctx.workbook.value(column, top + r) : null;
+        }
+    }
+    if (rows * columns === 1) return items[0];
+    // Not looked through for an array of numbers: what reads a range as an array reads it element by element.
+    return { type: ValueType.Array, rows, columns, height, width, items, nums: null, rowEnds, columnEnds };
+}
+
+// Where the runs of an axis of `size` end: each of the first `length` marks that is set is a run of its own, and
+// each stretch of the others, the axis past the marks included, is one. Null when every run is one long.
+function runs(filled: Uint8Array, length: number, size: number): Int32Array | null {
+    let count = length < size && (length === 0 || filled[length - 1] === 1) ? 1 : 0;
+    for (let at = 0; at < length; at += 1) if (filled[at] === 1 || at === 0 || filled[at - 1] === 1) count += 1;
+    if (count === size) return null;
+    const ends = new Int32Array(count);
+    let run = -1;
+    for (let at = 0; at < length; at += 1) {
+        if (filled[at] === 1 || at === 0 || filled[at - 1] === 1) run += 1;
+        ends[run] = at + 1;
+    }
+    ends[count - 1] = size;
+    return ends;
 }

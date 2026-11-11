@@ -12,8 +12,8 @@ import type { Workbook } from '../store/workbook';
 import { compareValues } from '../values/compare';
 import { equal15 } from '../values/precision';
 import { textKey } from '../values/text-order';
-import type { Scalar, Value } from '../values/value';
-import { isArray, isReference } from '../values/value';
+import type { Reference, Scalar, Value } from '../values/value';
+import { bandOf, isArray, isReference } from '../values/value';
 import { patternMatches, patternOf } from '../values/wildcard';
 
 export type Key = number | string | boolean;
@@ -22,15 +22,16 @@ export type Vector = {
     readonly workbook: Workbook;
     // The values are the cells of this column from row `start` down, or else `items` from `start` in steps of `step`.
     readonly column: Column | null;
-    readonly items: ArrayLike<Scalar>;
+    readonly items: ArrayLike<Scalar | Reference>;
     readonly start: number;
     readonly step: number;
     // How many values there are, and how many of them, counted from the first, can be other than blank.
     readonly length: number;
     readonly used: number;
-    // How many of the values are held one by one, from the first. The last of them stands for every value after it,
-    // so a search that visits every value looks at these and no further.
+    // How many of the values that can be other than blank are held, each for a run of equal values, and where each
+    // run ends: null when each is one value. A search that visits every value looks at the held ones only.
     readonly stored: number;
+    readonly ends: Int32Array | null;
 };
 
 export function heightOf(range: Value): number {
@@ -51,38 +52,47 @@ export function edgeOf(ctx: Evaluator, range: Value, down: boolean): Vector {
         // The blanks at the end of the range take no part, whatever cells the column holds below it.
         let used = column === undefined ? 0 : Math.max(0, Math.min(length, column.length - range.top));
         while (used > 0 && (column.kind[range.top + used - 1] & KIND_MASK) === CellKind.Empty) used -= 1;
-        return { workbook, column: column ?? null, items: [], start: range.top, step: 1, length, used, stored: used };
+        const held = { column: column ?? null, items: [], start: range.top, step: 1 };
+        return { workbook, ...held, length, used, stored: used, ends: null };
     }
     const values = isReference(range) ? toArray(ctx, { ...range, bottom: range.top, next: null }) : ctx.read(range);
     if (!isArray(values)) {
-        return { workbook, column: null, items: [values], start: 0, step: 1, length: 1, used: 1, stored: 1 };
+        const held = { column: null, items: [values], start: 0, step: 1 };
+        return { workbook, ...held, length: 1, used: 1, stored: 1, ends: null };
     }
     const { items } = values;
     const length = down ? values.rows : values.columns;
-    const stored = down ? values.height : values.width;
+    const ends = down ? values.rowEnds : values.columnEnds;
     const step = down ? values.width : 1;
-    // The values past the stored ones are all the last stored one, so they take part unless that is a blank. The
-    // blanks at the end never do, however many are stored.
-    let used = stored === length || items[(stored - 1) * step] !== null ? length : stored;
-    while (used > 0 && used <= stored && items[(used - 1) * step] === null) used -= 1;
-    return { workbook, column: null, items, start: 0, step, length, used, stored };
+    // The blanks at the end never take part.
+    let stored = down ? values.height : values.width;
+    while (stored > 0 && items[(stored - 1) * step] === null) stored -= 1;
+    const used = stored === 0 ? 0 : (ends?.[stored - 1] ?? stored);
+    return { workbook, column: null, items, start: 0, step, length, used, stored, ends };
 }
 
-function valueAt(vector: Vector, at: number): Scalar {
+// The value at a position.
+function valueAt(vector: Vector, at: number): Scalar | Reference {
     const { column, start } = vector;
     if (column !== null) return vector.workbook.value(column, start + at);
-    return vector.items[start + Math.min(at, vector.stored - 1) * vector.step];
+    return vector.items[start + bandOf(vector.ends, at) * vector.step];
 }
 
-// Where a search from the last value back met a value: the last value held stands for the ones after it, so it was
-// met at the last position of all.
+// The held value `at`, counted from the first held one.
+function heldAt(vector: Vector, at: number): Scalar | Reference {
+    const { column, start } = vector;
+    return column !== null ? vector.workbook.value(column, start + at) : vector.items[start + at * vector.step];
+}
+
+// The position at which a search met a held value: the first of its run, or the last when it came from the end.
 function placeOf(vector: Vector, at: number, reverse: boolean): number {
-    return reverse && at === vector.stored - 1 ? vector.used - 1 : at;
+    const { ends } = vector;
+    if (ends === null || at < 0) return at;
+    return reverse ? ends[at] - 1 : at === 0 ? 0 : ends[at - 1];
 }
 
-// How the value at a position sorts against the key, and NaN when it is of another kind.
-function against(vector: Vector, at: number, key: Key): number {
-    const value = valueAt(vector, at);
+// How a value sorts against the key, and NaN when it is of another kind.
+function against(value: Scalar | Reference, key: Key): number {
     return typeof value === 'object' || typeof value !== typeof key ? Number.NaN : compareValues(value, key);
 }
 
@@ -90,13 +100,15 @@ function against(vector: Vector, at: number, key: Key): number {
 // a blank key finds a blank.
 export function exact(vector: Vector, key: Key | null, wild: boolean, reverse: boolean): number {
     const { column, start } = vector;
-    const used = Math.min(vector.used, vector.stored);
+    const used = vector.stored;
     const step = reverse ? -1 : 1;
     const first = reverse ? used - 1 : 0;
     const end = reverse ? -1 : used;
     if (key === null) {
         if (reverse && vector.length > vector.used) return vector.length - 1;
-        for (let at = first; at !== end; at += step) if (valueAt(vector, at) === null) return at;
+        for (let at = first; at !== end; at += step) {
+            if (heldAt(vector, at) === null) return placeOf(vector, at, reverse);
+        }
         return vector.length > vector.used ? vector.used : -1;
     }
     let sought = key;
@@ -105,7 +117,7 @@ export function exact(vector: Vector, key: Key | null, wild: boolean, reverse: b
         const pattern = wild ? patternOf(sought) : null;
         if (pattern !== null && pattern.literal === null) {
             for (let at = first; at !== end; at += step) {
-                const value = valueAt(vector, at);
+                const value = heldAt(vector, at);
                 if (typeof value === 'string' && patternMatches(pattern, textKey(value))) {
                     return placeOf(vector, at, reverse);
                 }
@@ -116,7 +128,7 @@ export function exact(vector: Vector, key: Key | null, wild: boolean, reverse: b
     }
     if (column === null) {
         for (let at = first; at !== end; at += step) {
-            if (against(vector, at, sought) === 0) return placeOf(vector, at, reverse);
+            if (against(heldAt(vector, at), sought) === 0) return placeOf(vector, at, reverse);
         }
         return -1;
     }
@@ -152,13 +164,13 @@ export function exact(vector: Vector, key: Key | null, wild: boolean, reverse: b
 // The value that equals the key, or else the nearest smaller one, or the nearest larger one with `larger`. Every
 // value is looked at, in order, or from the last one back when `reverse`, and of equal candidates the first met wins.
 export function nearest(vector: Vector, key: Key, larger: boolean, reverse: boolean): number {
-    const used = Math.min(vector.used, vector.stored);
+    const used = vector.stored;
     const step = reverse ? -1 : 1;
     const end = reverse ? -1 : used;
     let best = -1;
     let bestValue = key;
     for (let at = reverse ? used - 1 : 0; at !== end; at += step) {
-        const value = valueAt(vector, at);
+        const value = heldAt(vector, at);
         if (typeof value === 'object' || typeof value !== typeof key) continue;
         const order = compareValues(value, key);
         if (order === 0) return placeOf(vector, at, reverse);
@@ -185,15 +197,15 @@ export function bisect(vector: Vector, key: Key, descending: boolean, mode: numb
     while (low <= high) {
         const middle = (low + high) >> 1;
         let at = middle;
-        let order = against(vector, at, key);
+        let order = against(valueAt(vector, at), key);
         while (Number.isNaN(order) && at > low) {
             at -= 1;
-            order = against(vector, at, key);
+            order = against(valueAt(vector, at), key);
         }
         if (Number.isNaN(order)) at = middle;
         while (Number.isNaN(order) && at < high) {
             at += 1;
-            order = against(vector, at, key);
+            order = against(valueAt(vector, at), key);
         }
         if (Number.isNaN(order)) break;
         if (descending) order = -order;
@@ -206,7 +218,7 @@ export function bisect(vector: Vector, key: Key, descending: boolean, mode: numb
         }
     }
     const hit = last ? before : after;
-    if (hit >= 0 && against(vector, hit, key) === 0) return hit;
+    if (hit >= 0 && against(valueAt(vector, hit), key) === 0) return hit;
     if (mode === 0) return -1;
     return mode < 0 === descending ? after : before;
 }
