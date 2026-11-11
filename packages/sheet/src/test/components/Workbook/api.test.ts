@@ -174,8 +174,9 @@ describe('applyOp and a batch that fails halfway', () => {
         expect(joiner.celldata).toEqual(dataToCelldata(ctx.sheets[0].data));
     });
 
-    it('says the batch did not apply, and that a good one did', () => {
+    it('leaves the sheets as they were, and a good batch applies after it', () => {
         let next = makeCtx(null);
+        const { sheets } = next;
         const setContext = (recipe: (draft: Context) => void) => {
             next = produce(next, recipe);
         };
@@ -186,8 +187,10 @@ describe('applyOp and a batch that fails halfway', () => {
             () => {},
             { undoList: [], redoList: [] },
         );
-        expect(workbook.applyOp(ops)).toBe(false);
-        expect(workbook.applyOp(ops.slice(0, 2))).toBe(true);
+        workbook.applyOp(ops);
+        expect(next.sheets).toBe(sheets);
+        workbook.applyOp(ops.slice(0, 2));
+        expect(next.sheets).not.toBe(sheets);
     });
 });
 
@@ -433,18 +436,17 @@ describe('replayOps', () => {
             () => {},
             history,
         );
-        const accepted = api.replayOps(base, batches, new Set(fresh));
-        return { ctx: next, history, accepted };
+        api.replayOps(base, batches, new Set(fresh));
+        return { ctx: next, history };
     }
 
     it('applies the batches on the base, clears both stacks and keeps the view', () => {
         const base = makeCtx(null);
         const shown = applyPeerOps(base, [typedA1]);
-        const { ctx, history, accepted } = replay(shown, base.sheets, [[typedB2], [typedA1]], [[typedB2]]);
+        const { ctx, history } = replay(shown, base.sheets, [[typedB2], [typedA1]], [[typedB2]]);
         expect([ctx.sheets[0].data?.[0][0]?.v, ctx.sheets[0].data?.[1][1]?.v]).toEqual([9, 'b2']);
         expect(history).toMatchObject({ undoList: [], redoList: [] });
         expect(ctx.selections).toBe(shown.selections);
-        expect(accepted).toBe(true);
     });
 
     // The replay itself skips the formula graph, so a long one stays short, and the graph is built while the browser
@@ -458,10 +460,55 @@ describe('replayOps', () => {
         expect(ctx.formulaCache.graph?.formulaAt('id_1', 0, 1)?.formula).toBe('=A1*2');
     });
 
-    it('says when a batch failed to apply', () => {
+    it('skips a batch that fails to apply and applies the next', () => {
         const broken: Op = { op: 'replace', id: 'id_1', path: ['data', 99, 0, 'v'], value: 1 };
-        const ctx = makeCtx(null);
-        expect(replay(ctx, ctx.sheets, [[broken]], [[broken]]).accepted).toBe(false);
+        const base = makeCtx(null);
+        const { ctx } = replay(base, base.sheets, [[broken], [typedB2]], [[broken], [typedB2]]);
+        expect([ctx.sheets[0].data?.length, ctx.sheets[0].data?.[1][1]?.v]).toEqual([
+            base.sheets[0].data?.length,
+            'b2',
+        ]);
+    });
+
+    // A new snapshot's sheets come from the decoder, which hands them the stored cell list and no matrix.
+    it('gives a base without a matrix one, as the mount does, and keeps the view and the cursors', () => {
+        const shown = produce(makeCtx(null), (draft: Context) => {
+            draft.presences = [
+                { clientId: 7, sheetId: 'id_1', username: 'Ann', color: '#f00', selection: { r: 1, c: 1 } },
+            ];
+        });
+        const [{ data, ...stored }] = shown.sheets;
+        const fromSnapshot = { ...stored, celldata: [{ r: 2, c: 1, v: { v: 'stored', m: 'stored' } }] };
+        const { ctx, history } = replay(shown, [fromSnapshot], [], []);
+        expect(ctx.sheets[0].data?.length).toBe(data?.length);
+        expect(ctx.sheets[0].data?.[2][1]?.v).toBe('stored');
+        expect(ctx.sheets[0].celldata).toBeUndefined();
+        expect(ctx.selections).toBe(shown.selections);
+        expect(ctx.presences).toBe(shown.presences);
+        expect(history).toMatchObject({ undoList: [], redoList: [] });
+    });
+
+    it('drops a selection past the edge of a smaller base, on the sheet on screen and on one the tab left', () => {
+        const shown = produce(makeCtx(null), (draft: Context) => {
+            draft.selections = [{ row: [3, 3], column: [1, 1] }];
+            draft.editingCellPosition = [3, 1];
+            draft.sheetViewRecord = {
+                id_2: {
+                    scrollLeft: 0,
+                    scrollTop: 0,
+                    selectionActive: false,
+                    selections: [{ row: [0, 0], column: [3, 3] }],
+                },
+            };
+        });
+        const small = shown.sheets.map((sheet) => ({
+            ...sheet,
+            data: sheet.data?.slice(0, 2).map((row) => row.slice(0, 2)),
+        }));
+        const { ctx } = replay(shown, small, [], []);
+        expect(ctx.selections).toBeUndefined();
+        expect(ctx.editingCellPosition).toEqual([]);
+        expect(ctx.sheetViewRecord['id_2']?.selections).toBeUndefined();
     });
 
     it('moves an open cell editor only for a batch new to the tab', () => {

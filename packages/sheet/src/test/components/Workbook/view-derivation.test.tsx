@@ -180,6 +180,15 @@ test("a tab switch paints the new sheet's layout in its first render", async () 
     expect(contextRenders.count).toBe(1);
 });
 
+test("a replay onto a sheet with the same id paints that sheet's default row height", async () => {
+    const { workbook, container } = await mountWorkbook();
+    const [one, two] = workbook().getAllSheets();
+    await act(async () => {
+        workbook().replayOps([{ ...one, defaultRowHeight: 40 }, two], [], new Set());
+    });
+    expect(container.querySelector<HTMLElement>('.sheet-cell-selected-focus')?.style.height).toBe('39px');
+});
+
 test("a peer's merge over the selected cell grows its box", async () => {
     const { workbook, container, select } = await mountWorkbook();
     await select(4);
