@@ -17,16 +17,15 @@ let routes: Route[] | null = null;
 let trust: (TrustedNetworks & { source: string }) | null = null;
 
 export function isIpTrusted(ip: string): boolean {
-    const { networks, gateways } = trustedNetworks();
+    return isTrustedBy(trustedNetworks(), ip);
+}
+
+export function isTrustedBy({ networks, gateways }: TrustedNetworks, ip: string): boolean {
     return !gateways.includes(normalizeIp(ip)) && networks.some((entry) => matchesCidr(ip, entry));
 }
 
-// A client of a published port can arrive from a bridge subnet's gateway (the host, Docker Desktop, rootless
-// Docker), so a trusted subnet this host sits on is trusted without it. Its gateway is the default route's when
-// that route leaves through the subnet's interface, as in docker/postfix/entrypoint.sh; otherwise, as when a
-// second network's default route wins, it is unknown and the subnet is not trusted at all. Unlike the
-// entrypoint, which trusts loopback only then, an entry with no matching subnet route is kept here, since exact
-// IPs and wider entries must stay.
+// A subnet's gateway is the default route's only when that route leaves through the subnet's interface. An entry
+// no subnet route matches is kept, since exact IPs and wider entries must stay.
 export function scopeTrustedNetworks(networks: string[], routes: Route[]): TrustedNetworks {
     const defaultRoute = routes.find((route) => route.destination === '0.0.0.0' && route.prefix === 0);
     const untrusted: string[] = [];
