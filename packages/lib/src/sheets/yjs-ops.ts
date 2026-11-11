@@ -5,6 +5,7 @@
 
 import type { Patch } from 'immer';
 import { isRecord } from '../core/guards';
+import type { RuleStore } from './range-rules';
 import { holdsOnlyRules, ruleStoreOf } from './range-rules';
 import type { Op, Sheet } from './types';
 import { isCellLinkType, isPatchOp } from './types';
@@ -28,6 +29,9 @@ export function opToPatchOnSheets(sheets: readonly Sheet[], ops: readonly Op[]):
         // Every reader walks a sheet's matrix and its rows, so a write that would leave either no array is dropped.
         const writesMatrixOrRow = op.path.length === 1 || (op.path.length === 2 && typeof op.path[1] === 'number');
         if (op.path[0] === 'data' && writesMatrixOrRow && !Array.isArray(op.value)) continue;
+        // Every reader gives a sheet these maps and a joiner's decoder adds a missing one back, so a tab that took one
+        // away, or left it no map, would skip the writes into it that the joiner applies.
+        if (op.path.length === 1 && SHEET_MAPS.has(op.path[0]) && (op.op === 'remove' || !isRecord(op.value))) continue;
         const store = ruleStoreOf(op.path[0]);
         if (store && !isRuleWrite(store, op)) continue;
         if (op.path[0] === 'data' && !isCellWrite(op)) continue;
@@ -84,9 +88,8 @@ export function sheetHoldsNoBadLink({ data, celldata }: Record<string, unknown>)
     return !Array.isArray(celldata) || celldata.every((entry) => !isRecord(entry) || holdsNoBadLink(entry['v']));
 }
 
-// The editor writes a sheet's rules one at a time under their ids, and whole when an undo brings a sheet's rules back.
-// A write that would leave a rule not well formed, or one into a rule's fields, which the editor never sends, is
-// dropped.
+// The editor writes a rule whole under its id, and a sheet's rules whole when the undo of a sheet delete brings them
+// back. A write that would leave a rule not well formed, or one into a rule's fields, is dropped.
 function isRuleWrite(store: RuleStore, { op, path, value }: Op): boolean {
     if (path.length === 1) return holdsOnlyRules(store, value);
     return path.length === 2 && (op === 'remove' || store.holds(value));
@@ -115,9 +118,10 @@ function isLink(value: unknown): boolean {
     return isCellLinkType(type) && typeof address === 'string';
 }
 
-type RuleStore = NonNullable<ReturnType<typeof ruleStoreOf>>;
 type Container = Record<string, unknown> | unknown[];
 type Key = string | number;
+
+const SHEET_MAPS = new Set<unknown>(['config', 'images', 'charts', 'conditionalFormats', 'dataValidations']);
 
 const isKey = (key: unknown): key is Key => typeof key === 'string' || typeof key === 'number';
 const isContainer = (value: unknown): value is Container => typeof value === 'object' && value !== null;

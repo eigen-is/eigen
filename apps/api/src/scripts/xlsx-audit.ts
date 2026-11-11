@@ -345,8 +345,8 @@ export function tallySource(bytes: Uint8Array): Map<Feature, number> {
 
 // ── Running an importer ─────────────────────────────────────────────────────────────────────────────────────────
 
-// A package of the given sheets, each body what its <worksheet> holds, a stylesheet of one bold differential format, and
-// any more parts.
+// A package of the given sheets, each body what its <worksheet> holds, a stylesheet of one bold differential format,
+// and any more parts.
 export function xlsxPackage(
     sheets: { name: string; body: string; state?: 'hidden' | 'veryHidden' }[],
     parts: ZipWriteEntry[] = [],
@@ -909,7 +909,7 @@ export function compareRuns(
 
 // ── Round trip: the import, our export and its import again ─────────────────────────────────────────────────────
 
-// One thing the two imports hold differently: a sheet's feature at a place, or a cell's key at its cell, with the cells.
+// One thing the two imports hold differently: a sheet's feature at a place, or a cell's key at its cell.
 export type RoundtripDifference = BaseDifference & { sheet: string; cells?: { a?: Cell; b?: Cell } };
 
 // A picture's media as a reader draws it, by its media name: its type and its pixels.
@@ -1015,8 +1015,8 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
     return differences;
 }
 
-// Each import numbers its rules afresh, so the sides compare by the rule each cell gets, never by ids or ranges. A block
-// is cut in two at a range's edge until each side gives it one rule, so a large block no edge crosses is read once.
+// Each import numbers its rules afresh, so the sides compare by the rule each cell gets, never by ids or ranges. A
+// block is cut in two at a range's edge until each side gives it one rule, so a block no edge crosses is read once.
 function validationDifferences(
     a: Sheet['dataValidations'],
     b: Sheet['dataValidations'],

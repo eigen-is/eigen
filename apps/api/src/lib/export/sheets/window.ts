@@ -28,9 +28,8 @@ import { getElementBounds } from '@workspace/lib/vector';
 import { richText, withCfRanges } from '@workspace/sheet/engine';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 
-// A window keeps at most maxRows shown rows and maxCols shown columns from the top-left of the used range, and at most
-// maxCells cells, rows times columns. maxCells is a bound of its own, so tuning the rows or the columns can never
-// remove it.
+// A window keeps at most maxRows shown rows and maxCols shown columns from the top-left of the used range. maxCells
+// bounds rows times columns on its own, so tuning the other two can never remove it.
 export type SheetBudget = { maxRows: number; maxCols: number; maxCells: number };
 
 type GridRange = [firstRow: number, lastRow: number, firstCol: number, lastCol: number];
@@ -39,18 +38,17 @@ type GridRange = [firstRow: number, lastRow: number, firstCol: number, lastCol: 
 // as it turns.
 export type FloatingObject = { item: SheetFloatingItem; box: Box; bounds: Bounds };
 
-// `rows` and `cols` are the shown tracks the window renders, in order. `range` is the rectangle they span, the hidden
-// tracks inside it included, and null for a sheet with nothing but images or charts. `offset` is the pixels from A1 to
-// the window's first cell, which the overlay subtracts from each stored box. `budgetEnd` is the last row and column of
-// the budget's box: as many shown tracks from the window's first as the budget holds, past a small sheet too. The track
-// maps reach it, and the preview clips its overlay there. `floating` is the sheet's images and charts in paint order.
-// `cells` is what the window costs.
+// The part of a sheet an export or a preview renders: its shown rows and columns in order, and its images and charts
+// in paint order.
 export type WindowedSheet = {
     sheet: Sheet;
     rows: number[];
     cols: number[];
+    // The rectangle the tracks span, hidden ones included, or null for a sheet with nothing but images or charts.
     range: GridRange | null;
+    // The pixels from A1 to the window's first cell.
     offset: { left: number; top: number };
+    // The last row and column the budget would hold, past the end of a small sheet too: the preview clips there.
     budgetEnd: { row: number; col: number };
     floating: FloatingObject[];
     truncated: boolean;
@@ -68,8 +66,7 @@ const MIN_TRACK_PX = 1;
 const keyCounts = new WeakMap<object, number>();
 
 // The sheet cut to the window that `budgetFor` sizes from its shown rows and columns, or null when the budget holds
-// none of its rows. Keys past Excel's grid, merges that overlap an earlier one and track sizes no sheet can have are
-// dropped first, so every walk after this is bounded by the window.
+// none of its rows. What no sheet can hold, such as a key past Excel's grid, goes first, so the window bounds a walk.
 export function windowedSheet(
     sheet: Sheet,
     budgetFor: (shownRows: number, shownCols: number) => SheetBudget,
@@ -174,10 +171,8 @@ export function windowedSheet(
     };
 }
 
-// Every image and chart in their one paint order. sheetFloatingBox clamps each box as the editor's writers store it,
-// and turns a string a peer stored into its number. The box it covers as it turns sizes the page, places the window's
-// origin and meets the preview's clip. One turned past A1 tucks under the editor's headers, but a page has none, so
-// it moves right or down until it starts on the page.
+// Every image and chart in their one paint order, each with the box it covers as it turns. One turned past A1 tucks
+// under the editor's headers, but a page has none, so it moves right or down until it starts on the page.
 function floatingObjects(sheet: Sheet): FloatingObject[] {
     return floatingItems(sheet).map((item) => {
         const stored = sheetFloatingBox(item.object);
@@ -194,9 +189,8 @@ function trackLength(value: unknown): number | undefined {
     return length >= MIN_TRACK_PX && length <= MAX_TRACK_PX ? length : undefined;
 }
 
-// The tracks from first to last that a map has a key for, ascending. A span shorter than the map's keys is walked by
-// lookup, so a map of a million hidden rows can't slow down a small window. Any other span reads the map's keys, so a
-// first cell at the far end of the grid costs what the map holds, not the tracks before it.
+// The tracks from first to last that a map has a key for, ascending. It walks the shorter of the span and the map's
+// keys, so neither a map of a million hidden rows nor a first cell at the far end of the grid slows a small window.
 function tracksIn(map: Record<string, number> | undefined, first: number, last: number): number[] {
     const tracks: number[] = [];
     // A WeakMap refuses a key that is no object, and a peer can store a number or a string as the map.
@@ -347,11 +341,8 @@ function windowBorders(
     return kept;
 }
 
-// The merges that meet the window, each as stored. Excel forbids overlapping merges, so a merge that overlaps an
-// earlier one in reading order is left out. A merge overlaps a kept one exactly when one of its columns is covered at
-// its first row. Two merges that overlap outside the window overlap inside it too, since both start inside it. A scan
-// of a merge's columns would cost the window's width for a merge as wide as the grid, so a segment tree answers in log
-// time.
+// The merges that meet the window, each as stored, without one that overlaps an earlier one in reading order, which
+// Excel forbids. A merge overlaps a kept one when a column of its first row is covered, which a segment tree answers.
 function windowMerges(merges: MergeCell[], range: GridRange): Record<string, MergeCell> {
     const [firstRow, lastRow, firstCol, lastCol] = range;
     const clipped: { stored: MergeCell; m: MergeCell }[] = [];
@@ -396,9 +387,8 @@ function windowMerges(merges: MergeCell[], range: GridRange): Record<string, Mer
     return kept;
 }
 
-// A rule may name the whole sheet while the window is small, and the evaluator visits every cell of every range,
-// running a formula rule's engine once per cell. Clipping keeps that work to the window's rows and columns, its hidden
-// ones included. A rule that misses the window drops out, and a formula rule keeps its anchor (withCfRanges).
+// The evaluator visits every cell of every range, and a rule may name the whole sheet, so each rule is cut to the
+// window's rows and columns. A rule that misses the window drops out, and a formula rule keeps its anchor.
 function clipRulesToWindow(
     rules: Readonly<Record<string, ConditionalFormatRule>>,
     [firstRow, lastRow, firstCol, lastCol]: GridRange,

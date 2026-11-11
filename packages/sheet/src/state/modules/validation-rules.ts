@@ -1,9 +1,8 @@
-// A sheet's data-validation rules as it stores them: each rule once, with the ranges it covers and its order key,
-// under an id. This module finds the rule over a cell, for the hit tests and the input check, and once per paint for
-// the painter. It also takes cells out of the rules and puts a rule on cells, for writers such as the validation
-// dialog, a paste and a fill. Putting a rule on cells first takes them out of every other rule; where rules still
-// overlap, as after two peers' edits at once, the last in order has the cell. Every peer, the server and a reload drop
-// a rule past the caps, so a writer makes none: a rule forgets cells, and the edit stands.
+// A sheet's data-validation rules as it stores them: each rule once under an id, with the ranges it covers and its
+// order key. This module finds the rule over a cell, for readers such as the hit tests and the painter, and takes
+// cells out of the rules and puts a rule on cells, for writers such as the validation dialog, a paste and a fill.
+// Where rules overlap, as after two peers' edits at once, the last in order has the cell. Every reader drops a rule
+// past the caps, so a writer makes none: a rule forgets cells, and the edit stands.
 
 import {
     coalescedRanges,
@@ -30,9 +29,8 @@ export function validationAt(
     return last?.[1].rule;
 }
 
-// The painter's lookup for one paint. The rules over the window it paints are laid out once into a grid of its cells,
-// first to last, so the last rule wins a cell two rules cover, and a cell costs one read however many rules the sheet
-// has. A cell outside the window, which the text overflow can ask about, is looked up in full once.
+// The painter's lookup for one paint: the rules over its window are laid out once into a grid of its cells, first to
+// last, so a cell costs one read. A cell outside the window, which the text overflow can ask about, is looked up once.
 export function validationLookup(
     validations: Readonly<Sheet['dataValidations']>,
     window: SingleRange,
@@ -72,9 +70,8 @@ export function clearValidations(sheet: Sheet, area: SingleRange) {
     }
 }
 
-// Puts a rule on ranges of the sheet under an id; they join the id's ranges and are coalesced, so a paste or fill
-// that lands one range per cell leaves a few. A new id's rule goes last. Past a cap the cells keep no rule, and the
-// id's rule stays as it was.
+// Puts a rule on ranges of the sheet under an id, first taking them out of every other rule; they join the id's
+// ranges, coalesced. A new id's rule goes last. Past a cap the cells keep no rule, and the id's rule stays as it was.
 export function addValidation(sheet: Sheet, id: string, rule: DataValidationRule, ranges: readonly SingleRange[]) {
     const landed = coalescedRanges(ranges);
     for (const range of landed) clearValidations(sheet, range);

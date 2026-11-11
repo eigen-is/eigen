@@ -60,8 +60,10 @@ export type RulesContext = {
     inline(formula: string): string;
 };
 
-// A conditional format as the file has it, before its place among the sheet's rules is known.
-type ReadFormat = ConditionalFormatRule extends infer R ? (R extends unknown ? Omit<R, 'order'> : never) : never;
+// A conditional format as the file has it, before its place among the sheet's rules is known. Omit on all rules at
+// once would keep only the fields every kind shares, so the kinds with their own fields go apart.
+type ScaleRule = Extract<ConditionalFormatRule, { type: 'dataBar' | 'colorGradation' }>;
+type ReadFormat = Omit<DefaultConditionalFormatRule, 'order'> | Omit<ScaleRule, 'order'>;
 
 export function readRules(
     rest: XmlElement | undefined,
@@ -128,9 +130,8 @@ export function readRules(
             }
         }
     }
-    // Excel resolves overlapping rules by priority, the lowest number winning a conflicting property; the engine
-    // applies rules in order, the last write winning, so the rules come highest number first. Past the rules a sheet
-    // may hold, the ones Excel ranks lowest go. Numbered in that order: a fresh sheet holds no other rule.
+    // In Excel the lowest priority number wins a property two rules set, and in the engine the last rule does, so
+    // the rules come highest number first. Past the rules a sheet may hold, the ones Excel ranks lowest go.
     formats.sort((a, b) => b.priority - a.priority);
     const conditionalFormats: NonNullable<Sheet['conditionalFormats']> = {};
     for (const [i, { format }] of formats.entries()) {
@@ -410,10 +411,8 @@ function mapDataValidation(
     return rule;
 }
 
-// A quoted literal ('"Red,Green,Blue"') becomes the engine's comma-separated list. Anything else is kept as a range
-// reference when it is a valid one, so an edit to the source cells still changes the list. The editor resolves such a
-// reference itself, a quoted sheet name included. A defined name arrives as its range; one left as written, or one of
-// a formula, would make a one-option list of its text, worse than no rule, so the rule goes.
+// A quoted literal ('"Red,Green,Blue"') becomes the engine's comma-separated list, and a valid range reference stays
+// one, so an edit to its cells still changes the list. Any other text would make a one-option list, so the rule goes.
 function listSource(raw: string | undefined): string | null {
     if (!raw) return null;
     const inner = unquoteXlsxLiteral(raw);

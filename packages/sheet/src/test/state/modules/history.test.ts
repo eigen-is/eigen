@@ -13,10 +13,12 @@ import { dataToCelldata } from '../../../engine/celldata';
 import { MAX_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Cell, ShiftedSheet } from '../../../engine/types';
+import { getSheet } from '../../../state/api/common';
 import { copySheet, hideSheet, showSheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { getFlowdata } from '../../../state/context';
 import { setChartSpec } from '../../../state/modules/chart';
+import { deleteSheetRule } from '../../../state/modules/condition-format';
 import { applyDataValidation } from '../../../state/modules/data-validation';
 import type { RowColMove } from '../../../state/modules/history-shift';
 import { deleteMove, insertMove, shiftEntries } from '../../../state/modules/history-shift';
@@ -630,6 +632,53 @@ describe("a row op moves another sheet's formulas for every reader", () => {
         s.edit(s.b, ...insertRows(2, 2));
         expect(cells(s.a.ctx.sheets[3])[0].v?.f).toBe('=One!B12');
         expectAgree(s);
+    });
+});
+
+// The engine rewrites a formula rule that names the op's sheet on every sheet, so an entry that holds such a rule
+// would bring back its old text. It is dropped, as one on the op's own sheet is.
+describe("a row op on another sheet drops the undo of a formula rule that reads the op's sheet", () => {
+    const rules = (t: Tab) => formatList(t.ctx.sheets.find((x) => x.id === TWO)?.conditionalFormats);
+    const withRules = (...formulas: string[]) =>
+        produce(workbook(), (ctx: Context) => {
+            ctx.sheets[1].conditionalFormats = formatsOf(formulas.map((formula) => formulaRule(formula)));
+        });
+    const expectSameRules = (s: ReturnType<typeof session>) => {
+        expect(rules(s.b)).toEqual(rules(s.a));
+        expect(formatList(s.joiner().find((x) => x.id === TWO)?.conditionalFormats)).toEqual(rules(s.a));
+    };
+
+    test('a deleted rule does not come back reading the row it read before the insert', () => {
+        const s = session(withRules('=One!A5>0', '=A5>0'));
+        s.edit(
+            s.a,
+            on(TWO, (ctx) => deleteSheetRule(ctx, 'f2')),
+        );
+        s.edit(
+            s.a,
+            on(TWO, (ctx) => deleteSheetRule(ctx, 'f1')),
+        );
+        s.edit(s.b, ...insertRows(0, 1));
+        expect(s.a.history.undoList).toHaveLength(1);
+        s.undo(s.a);
+        s.undo(s.a);
+        expect(rules(s.a)).toEqual([formulaRule('=A5>0')]);
+        expectSameRules(s);
+    });
+
+    test('an undone add is not redone with the text it had before the insert', () => {
+        const s = session(withRules());
+        const add = (formula: string) =>
+            on(TWO, (ctx) => {
+                Object.assign(getSheet(ctx).conditionalFormats ?? {}, formatsOf([formulaRule(formula)]));
+            });
+        s.edit(s.a, add('=One!A5>0'));
+        s.undo(s.a);
+        s.edit(s.b, ...insertRows(0, 1));
+        expect(s.a.history.redoList).toHaveLength(0);
+        s.redo(s.a);
+        expect(rules(s.a)).toEqual([]);
+        expectSameRules(s);
     });
 });
 

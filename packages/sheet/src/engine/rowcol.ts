@@ -357,9 +357,8 @@ function shiftLineMaps(cfg: ExtendedSheetConfig, next: ExtendedSheetConfig, type
     }
 }
 
-// Moves the ranges of every rule in a sheet's record of conditional formats or validation rules, and drops a rule
-// left with none. A rule whose ranges stay where they were is kept as the same object, and so is the record when no
-// rule moved, so only a rule that moved is written, under its id.
+// Moves the ranges of every rule in a sheet's conditional formats or validation rules, and drops a rule left with
+// none. A rule that stays is the same object, and so is the record, so only a rule that moved is written, by its id.
 export function shiftRules<R extends { ranges: SingleRange[] }>(
     rules: Readonly<Record<string, R>>,
     shift: (range: SingleRange) => SingleRange | null,

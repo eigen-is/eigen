@@ -40,8 +40,8 @@ const REFERENCE_FORMULAS: Partial<Record<ConditionRuleType, (cell: string, value
     between: (cell, [lower, upper]) => `AND(${cell}>=${lower},${cell}<=${upper})`,
 };
 
-// Why the dialog's rule can't be saved, or undefined when it can. The dialog shows the reason under its fields and stays
-// open, so the check runs before addConditionRule.
+// Why the dialog's rule can't be saved, or undefined when it can. The dialog shows the reason under its fields and
+// stays open, so the check runs before addConditionRule.
 export function conditionRuleError(ctx: Context, rules: ConditionRulesProps): string | undefined {
     const values = readRuleValues(ctx, rules);
     return typeof values === 'string' ? values : undefined;
@@ -135,9 +135,8 @@ function isCellReference(value: string): boolean {
     return value.startsWith('=');
 }
 
-// The computed map per sheet, so a canvas paint doesn't evaluate every rule again. A single slot missed on every
-// switch between two sheets, which costs seconds on a sheet with formula rules. Immer replaces a sheet's rules and data
-// on any edit, so an entry is fresh while both are the same objects.
+// The computed map per sheet, so neither a canvas paint nor a switch between two sheets evaluates every rule again.
+// Immer replaces a sheet's rules and data on any edit, so an entry is fresh while both are the same objects.
 const _cfCache = new Map<string, { rules: Sheet['conditionalFormats']; data: CellMatrix; result: ComputeMap }>();
 
 export function getComputeMap(ctx: Context): ComputeMap | null {
@@ -153,8 +152,7 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
     }
 
     // Each entry holds a whole matrix, so a miss drops the entries that can't hit again: a sheet that is gone, such as
-    // one of a workbook this session closed, and a sheet edited since, such as by a peer or a cross-sheet recalc. The
-    // recompute below costs far more than this sweep.
+    // one of a workbook this session closed, and a sheet edited since.
     const live = new Map(ctx.sheets.map((sheet) => [sheet.id, sheet]));
     for (const [id, entry] of _cfCache) {
         const sheet = live.get(id);
@@ -182,10 +180,8 @@ export function checkCF(r: number, c: number, computeMap: ComputeMap | null): Ce
     return null;
 }
 
-// The color scales and data bars the Format menu offers, by the preset keys it lists. A scale's stops run from the
-// highest value to the lowest. The colors are Eigen's palette and white, the closest to the presets Excel offers;
-// where the match was in doubt, the lighter, less saturated step. A rule keeps the colors it was made with, so
-// changing one here changes only the rules made after.
+// The color scales and data bars the Format menu offers, by its preset keys, in the Eigen colors closest to Excel's
+// presets. A scale's stops run from the highest value to the lowest, and a rule keeps the colors it was made with.
 const RED = eigenColor('red', 400);
 const YELLOW = eigenColor('yellow', 200);
 const GREEN = eigenColor('emerald', 400);

@@ -38,9 +38,8 @@ type EncodedSheet = Omit<
     config?: Omit<SheetConfig, 'borderInfo'>;
     cells?: EncodedCell[];
     borderCells?: EncodedBorder[];
-    // Floating images, charts and rules are a few small records per sheet, so they are written as they are. An empty
-    // map is left out, and the decoder adds it back. The rules are read as unknown, since the decoder keeps only the
-    // ones that are well formed.
+    // Images, charts and rules are a few small records per sheet, written as they are; an empty map is left out and
+    // the decoder adds it back. The rules are read as unknown, since the decoder keeps only the well-formed ones.
     images?: Record<string, SheetImage>;
     charts?: Record<string, SheetChart>;
     conditionalFormats?: unknown;
@@ -126,8 +125,8 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
     const ids = new Set<string>();
     const decoded = sheets.map((encoded) => {
         const { cells, borderCells, config, images, charts, conditionalFormats, dataValidations, ...rest } = encoded;
-        // Every op names its sheet by id, so a sheet without an id of its own is as corrupt as a bad style index. Minting
-        // one here would give each reader a different sheet.
+        // Every op names its sheet by id, so a sheet without an id of its own is as corrupt as a bad style index.
+        // Making one here would give each reader a different sheet.
         if (typeof rest.id !== 'string' || ids.has(rest.id)) throw unknownFormat(rest.id);
         ids.add(rest.id);
         // Every sheet gets all four maps, even empty: the editor writes each image, chart or rule under its own key,
@@ -230,8 +229,8 @@ function encodeCell(entry: CellWithRowAndCol, styles: StyleTuple[], styleIndex: 
 function decodeCell(styleIdx: number, content: EncodedContent | undefined, styles: StyleTuple[]): Cell | null {
     if (styleIdx === -1 && content === undefined) return null;
 
-    // An index past the styles dictionary is as corrupt as one past the borders. Read on, it would become a cell with no
-    // style that hides the problem.
+    // An index past the styles dictionary is as corrupt as one past the borders. Read on, it would become a cell with
+    // no style that hides the problem.
     if (styleIdx !== -1 && styles[styleIdx] === undefined) throw unknownFormat(styleIdx);
     const cell: Record<string, unknown> = styleIdx === -1 ? {} : materializeStyle(styles[styleIdx]);
     if (content === undefined) return cell as Cell;

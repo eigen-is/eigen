@@ -10,19 +10,17 @@ import { generateKeyBetween, isValidFractionalIndex } from '../vector/fractional
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from './defaults';
 import type { ConditionalFormatRule, DataValidationRule, SheetValidation, SingleRange } from './types';
 
-// The most ranges one rule holds. Excel applies a rule to a selection, which holds at most 2,048 ranges, and the
-// largest rule in our xlsx corpus has 1,024. The editor's cuts split a range into up to four, so the cap leaves room
-// for four times Excel's. It bounds what one write of a rule costs every tab.
+// The most ranges one rule holds, which bounds what one write of a rule costs every tab. Excel's selection holds at
+// most 2,048 ranges, and the editor's cuts split a range into up to four.
 export const MAX_RULE_RANGES = 4 * 2048;
 
-// The most rules of one kind a sheet holds. The sheet in our xlsx corpus with the most validation rules has 16. With
-// the range cap it bounds what a reader that walks every rule pays, such as the export, which cuts each validation
-// rule out of the cells of every later one, and the painter, which evaluates every conditional format.
+// The most rules of one kind a sheet holds; the fullest sheet in our xlsx corpus has 16 validation rules. With the
+// range cap it bounds what a reader that walks every rule pays, such as the painter and the export.
 export const MAX_VALIDATIONS = 1024;
 export const MAX_CONDITIONAL_FORMATS = 1024;
 
 type RangeRule = { ranges: SingleRange[]; order: string };
-type RuleStore<R extends RangeRule> = { max: number; holds: (value: unknown) => value is R };
+export type RuleStore<R extends RangeRule = RangeRule> = { max: number; holds: (value: unknown) => value is R };
 
 const VALIDATIONS: RuleStore<SheetValidation> = { max: MAX_VALIDATIONS, holds: isSheetValidation };
 const CONDITIONAL_FORMATS: RuleStore<ConditionalFormatRule> = {
@@ -31,7 +29,7 @@ const CONDITIONAL_FORMATS: RuleStore<ConditionalFormatRule> = {
 };
 
 // The cap and the shape check of the rules a sheet field holds, for a field that holds rules.
-export function ruleStoreOf(field: unknown): RuleStore<RangeRule> | undefined {
+export function ruleStoreOf(field: unknown): RuleStore | undefined {
     if (field === 'dataValidations') return VALIDATIONS;
     return field === 'conditionalFormats' ? CONDITIONAL_FORMATS : undefined;
 }
@@ -39,8 +37,8 @@ export function ruleStoreOf(field: unknown): RuleStore<RangeRule> | undefined {
 // Whether a value is a whole record of well-formed rules within the store's cap.
 export function holdsOnlyRules<R extends RangeRule>(store: RuleStore<R>, value: unknown): value is Record<string, R> {
     if (!isRecord(value)) return false;
-    const rules = Object.values(value);
-    return rules.length <= store.max && rules.every(store.holds);
+    const rules = Object.entries(value);
+    return rules.length <= store.max && rules.every(([id, rule]) => holdsRule(store, id, rule));
 }
 
 // A sheet's rules of one kind without the ones that are not well formed, and past the cap without the last in order.
@@ -53,9 +51,8 @@ export function wellFormedConditionalFormats(value: unknown): Record<string, Con
     return wellFormedRules(CONDITIONAL_FORMATS, value);
 }
 
-// A sheet's rules with their ids, first to last. The last rule over a cell wins it: a conditional format's colors
-// overwrite an earlier rule's, and a cell takes the last validation rule. Rules two peers added at once share a key,
-// and every reader then orders them by id.
+// A sheet's rules with their ids, first to last, and the last rule over a cell wins it. Rules two peers added at once
+// share a key, and every reader then orders them by id.
 export function orderedRules<R extends { order: string }>(
     rules: Readonly<Record<string, R>> | undefined,
 ): [string, R][] {
@@ -102,14 +99,16 @@ function isSheetValidation(value: unknown): value is SheetValidation {
     );
 }
 
-// What the evaluator and the exports read of a rule: a rule's values are strings or numbers, its looks an object, and
-// a scale's stops colors the painter can parse.
+// What the evaluator and the exports read of a rule: a rule's values are strings or numbers, its looks two optional
+// colors, and a scale's stops colors the painter can parse.
 function isConditionalFormat(value: unknown): value is ConditionalFormatRule {
     if (!isRangeRule(value)) return false;
     const { type, format, conditionName, conditionValue } = value;
     if (type === 'default') {
         return (
             isRecord(format) &&
+            isOptionalColor(format['textColor']) &&
+            isOptionalColor(format['cellColor']) &&
             typeof conditionName === 'string' &&
             Array.isArray(conditionValue) &&
             conditionValue.every((item) => typeof item === 'string' || typeof item === 'number')
@@ -121,14 +120,22 @@ function isConditionalFormat(value: unknown): value is ConditionalFormatRule {
 }
 
 // The same cells in fewer ranges. Two ranges of one width join where they touch or overlap, first down the rows,
-// then across the columns, so a duplicate goes too. One cell pasted down a column lands a range per row, and they
-// become one range.
+// then across the columns, so a duplicate goes and one cell pasted down a column becomes one range.
 export function coalescedRanges(ranges: readonly SingleRange[]): SingleRange[] {
     return mergedAlong(mergedAlong(ranges, 'row'), 'column');
 }
 
 export function rangesOverlap(a: SingleRange, b: SingleRange): boolean {
     return a.row[0] <= b.row[1] && b.row[0] <= a.row[1] && a.column[0] <= b.column[1] && b.column[0] <= a.column[1];
+}
+
+// A write by id never reaches an own `__proto__` key, so a rule stored under that id could not be deleted.
+function holdsRule<R extends RangeRule>(store: RuleStore<R>, id: string, rule: unknown): rule is R {
+    return id !== '__proto__' && store.holds(rule);
+}
+
+function isOptionalColor(color: unknown): boolean {
+    return color == null || typeof color === 'string';
 }
 
 // Every reader walks a rule's ranges and sorts by its order key, and a new rule's key is made from the last one.
@@ -154,7 +161,7 @@ function wellFormedRules<R extends RangeRule>(store: RuleStore<R>, value: unknow
     if (holdsOnlyRules(store, value)) return value;
     if (!isRecord(value)) return {};
     const kept: Record<string, R> = {};
-    for (const [id, rule] of Object.entries(value)) if (store.holds(rule)) kept[id] = rule;
+    for (const [id, rule] of Object.entries(value)) if (holdsRule(store, id, rule)) kept[id] = rule;
     return Object.fromEntries(orderedRules(kept).slice(0, store.max));
 }
 

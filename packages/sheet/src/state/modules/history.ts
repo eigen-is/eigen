@@ -1,9 +1,8 @@
 // What ⌘Z and ⌘⇧Z do in this tab. An edit is recorded as an entry of immer patches that names its sheet by id, and
 // undo and redo turn an entry into the next context and the batch to send. A cell or field entry skips a target a peer
-// changed since, applies the rest through applySheetWrites, which skips what its peers will skip, and recalculates the
-// formulas it writes back. A structural entry, such as a row op or a rename, leaves the stacks at a peer's first
-// batch, so it always finds the workbook as it left it, and its step applies exactly the ops it sends, through
-// applyOpBatch, as its peers will. The Workbook keeps the stacks.
+// changed since, applies the rest through applySheetWrites and recalculates the formulas it writes back. A structural
+// entry, such as a row op or a rename, leaves the stacks at a peer's first batch, so its step finds the workbook as it
+// left it and applies exactly the ops it sends, through applyOpBatch. The Workbook keeps the stacks.
 
 import type { MergeCell } from '@workspace/lib/sheets';
 import { applySheetWrites } from '@workspace/lib/sheets/yjs-ops';
@@ -279,9 +278,8 @@ function repairOps(sheet: Sheet, recorded: CellMatrix): Op[] {
     return ops;
 }
 
-// The patches whose targets still hold what the entry wrote there, which is when writing the entry's side again, as
-// every reader would, changes nothing: a target a peer changed since keeps the peer's value, as Google does. A merge
-// and its cells pass or skip together.
+// The patches whose targets still hold what the entry wrote there: a target a peer changed since keeps the peer's
+// value, as Google does. A merge and its cells pass or skip together.
 function stillWritten(ctx: Context, apply: Patch[], written: Patch[]): Patch[] {
     const parent = new Map<string, string>();
     const find = (key: string): string => {

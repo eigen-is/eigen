@@ -335,6 +335,36 @@ describe('applySheetWrites', () => {
         expect(landed(base, ops).applied.map(({ path }) => path[2])).toEqual(['last']);
     });
 
+    // Every reader gives a sheet these maps, and a joiner's decoder adds a missing one back. A tab that took the map
+    // away would skip the next write under an id, which the joiner applies.
+    test.each(['conditionalFormats', 'dataValidations', 'images', 'charts', 'config'])(
+        'a write that takes away a whole %s map, or leaves it no map, is dropped',
+        (field) => {
+            const base: Sheet[] = [
+                { ...SHEETS[0], images: {}, charts: {}, conditionalFormats: { x: format('a0') }, dataValidations: {} },
+            ];
+            const ops: Op[] = [
+                { op: 'remove', id: 'sheet-1', path: [field], value: {} },
+                { op: 'remove', id: 'sheet-1', path: [field] },
+                { op: 'replace', id: 'sheet-1', path: [field], value: 5 },
+                { op: 'replace', id: 'sheet-1', path: [field], value: null },
+                { op: 'add', id: 'sheet-1', path: ['conditionalFormats', 'y'], value: format('a1') },
+            ];
+            const after = landed(base, ops);
+            expect(after.applied.map(({ path }) => path.slice(1))).toEqual([['conditionalFormats', 'y']]);
+            expect(formats(after.sheets)).toEqual(['x', 'y']);
+            expect(landed(base, [{ op: 'replace', id: 'sheet-1', path: [field], value: {} }]).applied).toHaveLength(1);
+        },
+    );
+
+    test('a whole record of rules that holds one under the id __proto__ is dropped', () => {
+        const base: Sheet[] = [{ ...SHEETS[0], conditionalFormats: { x: format('a0') } }];
+        const forged = JSON.parse(`{"__proto__":${JSON.stringify(format('a1'))}}`);
+        const after = landed(base, [{ op: 'replace', id: 'sheet-1', path: ['conditionalFormats'], value: forged }]);
+        expect(after.applied).toEqual([]);
+        expect(formats(after.sheets)).toEqual(['x']);
+    });
+
     // An op log an older build wrote names a conditional format by its place in a list no sheet holds any more.
     test("an older build's write into the rule list by index is skipped, as its parent is gone", () => {
         const base: Sheet[] = [{ ...SHEETS[0], conditionalFormats: { x: format('a0') } }];

@@ -162,9 +162,8 @@ function cfRuleOf(rule: ConditionalFormatRule): CfRule | undefined {
 }
 
 function dataValidationsXml(rules: Record<string, SheetValidation>, lost: Lost): string {
-    // Each rule is one validation over its ranges. The ranges go in order of their top-left cells, and the rules in
-    // order of their first range, so one workbook always writes the same file. A relative reference reads from the
-    // first range's top-left cell, as Excel reads it.
+    // The ranges go in order of their top-left cells and the rules in order of their first range, so one workbook
+    // always writes the same file. Excel reads a relative reference from the first range's top-left cell.
     const topLeft = (a: SingleRange, b: SingleRange) => a.row[0] - b.row[0] || a.column[0] - b.column[0];
     const entries = Object.entries(withoutOverlaps(rules, lost))
         .map(([, { ranges, rule }]) => ({ ranges: [...ranges].sort(topLeft), rule }))
@@ -199,10 +198,8 @@ function dataValidationsXml(rules: Record<string, SheetValidation>, lost: Lost):
         : '';
 }
 
-// Where rules overlap, the last in order wins the cell, but the file's own order is by cell. So each rule loses the
-// cells a later rule holds, and no two rules overlap in the file. A rule left with no cell goes, and loses nothing: it
-// held no cell. A rule the cuts leave with more ranges than a rule may hold is dropped and counted, since the importer
-// would drop it.
+// Where rules overlap the last in order wins the cell, but the file orders by cell, so each rule loses the cells a
+// later rule holds. A rule the cuts leave with more ranges than a rule may hold is dropped and counted.
 export function withoutOverlaps(rules: Record<string, SheetValidation>, lost: Lost): Record<string, SheetValidation> {
     const kept: Record<string, SheetValidation> = {};
     // The rules from the last down. The index holds the ranges of the rules already walked, the later ones.
@@ -241,16 +238,13 @@ function boundsOf(ranges: readonly SingleRange[]): SingleRange {
     return bounds;
 }
 
-// The index keeps each range in one of three grids: square tiles of this many rows and columns for a small range, bands
-// this many rows tall across the sheet for a wide one, such as a whole row, and bands this many columns wide down the
-// sheet for a tall one, such as a whole column. A range goes in the first grid where it covers at most MAX_TILES tiles.
+// The index keeps a range in the first of three grids where it covers at most MAX_TILES tiles: square tiles of this
+// size, bands this tall across the sheet for a wide range, and bands this wide down the sheet for a tall one.
 const TILE = 64;
 const MAX_TILES = 16;
 
-// The ranges added so far, which a range asks for the ones it overlaps without a check against each of them. A range
-// checks only the ranges in the tiles it covers of each grid. A range too large for every grid, such as the whole
-// sheet, is kept in a list every lookup checks. Such ranges are rare, and a rule of them mostly meets no other rule's
-// bounds.
+// The ranges added so far, which a range asks for the ones it overlaps: it checks only the tiles it covers of each
+// grid. A range too large for every grid, such as the whole sheet, is rare and kept in a list every lookup checks.
 function rangeIndex() {
     const grids = [tileGrid(TILE, TILE), tileGrid(TILE, REFERENCE_COLUMN_COUNT), tileGrid(REFERENCE_ROW_COUNT, TILE)];
     const large: SingleRange[] = [];

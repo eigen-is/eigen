@@ -98,6 +98,45 @@ describe('wellFormedConditionalFormats', () => {
         });
         expect(Object.keys(kept)).toEqual(['f']);
     });
+
+    // Making the next key walks the last one character by character, so a forged key of 40,000 characters would make
+    // every later add of a rule throw.
+    test('drops a rule whose order key is longer than any writer makes, so the next rule still gets a key', () => {
+        const order = `z${'z'.repeat(26)}${'z'.repeat(40_000)}`;
+        const kept = wellFormedConditionalFormats({ f: format, forged: { ...format, order } });
+        expect(Object.keys(kept)).toEqual(['f']);
+        expect(nextRuleOrder(kept)).toBe('a1');
+    });
+
+    // A write by id never reaches an own `__proto__` key, so a rule stored under it could not be deleted.
+    test('drops a rule under the id __proto__, from a record that is otherwise well formed too', () => {
+        const stored = JSON.parse(`{"f":${JSON.stringify(format)},"__proto__":${JSON.stringify(format)}}`);
+        expect(Object.keys(stored)).toEqual(['f', '__proto__']);
+        expect(Object.keys(wellFormedConditionalFormats(stored))).toEqual(['f']);
+        const validation = { ranges: [cell(0, 0)], order: 'a0', rule: RULE };
+        const validations = JSON.parse(`{"__proto__":${JSON.stringify(validation)}}`);
+        expect(Object.keys(wellFormedValidations(validations))).toEqual([]);
+    });
+
+    test.each([
+        ['textColor', 5],
+        ['cellColor', { x: 1 }],
+    ])('drops a rule whose %s is %p, and keeps one whose color is text, null or absent', (field, value) => {
+        const rule = {
+            type: 'default',
+            ranges: [cell(0, 0)],
+            order: 'a0',
+            conditionName: 'equal',
+            conditionValue: [1],
+        };
+        const kept = wellFormedConditionalFormats({
+            bad: { ...rule, format: { [field]: value } },
+            text: { ...rule, format: { [field]: '#ff0000' } },
+            none: { ...rule, format: { [field]: null } },
+            absent: { ...rule, format: {} },
+        });
+        expect(Object.keys(kept).sort()).toEqual(['absent', 'none', 'text']);
+    });
 });
 
 describe('orderedRules', () => {

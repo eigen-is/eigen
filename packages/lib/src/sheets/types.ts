@@ -162,7 +162,7 @@ export type DataValidationRule = {
 };
 
 // One rule over its ranges, stored under an id in `Sheet.dataValidations`. `order` is a fractional key: where two
-// rules cover a cell, the last in order has it. Applying a rule also takes its cells out of every other rule.
+// rules cover a cell, the last in order has it.
 export type SheetValidation = { ranges: SingleRange[]; order: string; rule: DataValidationRule };
 
 export type SheetConfig = {
@@ -174,9 +174,6 @@ export type SheetConfig = {
     borderInfo?: Record<string, CellBorderSides>;
 };
 
-// A conditional-format rule over its ranges, stored under an id in `Sheet.conditionalFormats`. `order` is a
-// fractional key: the rules apply first to last, so the last rule's colors win a cell. The editor writes a rule, and
-// the engine's `evaluateConditionalFormat` reads it for the canvas painter and the API's HTML export.
 export type ConditionalFormatConditionName =
     | 'greaterThan'
     | 'greaterThanOrEqual'
@@ -209,6 +206,8 @@ export type DefaultConditionalFormatRule = CFRuleBase & {
     conditionValue: (string | number)[];
 };
 
+// A conditional-format rule over its ranges, stored under an id in `Sheet.conditionalFormats`. `order` is a fractional
+// key: the rules apply first to last, so the last rule's colors win a cell.
 export type ConditionalFormatRule = DataBarRule | ColorGradationRule | DefaultConditionalFormatRule;
 
 export type Sheet = {
@@ -237,9 +236,8 @@ export type Sheet = {
     // The autofilter's range, whose header row shows the filter buttons. Each column's criteria live on the
     // editor-only `filter` field.
     filterRange?: SingleRange;
-    // The conditional formats and the data-validation rules by id, each over its ranges. Materialized like the config
-    // collections, so a new rule or a changed one is written under its own id and two peers editing different rules
-    // don't overwrite each other.
+    // The conditional formats and the data-validation rules by id. Every reader gives a sheet both maps, so a rule is
+    // written under its own id and two peers editing different rules don't overwrite each other.
     conditionalFormats?: Record<string, ConditionalFormatRule>;
     dataValidations?: Record<string, SheetValidation>;
     // Floating images and charts by id. Materialized like the config collections, because each object is

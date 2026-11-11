@@ -189,10 +189,8 @@ export function carryCells(
     }
 }
 
-// A rule leaves the cells a carry lands on and a cut's source cells, and covers the cells whose source it covered. On
-// the source's sheet the landed cells join the source rule under its id; on another sheet they join a rule that says
-// the same, or become a new rule, which goes last. The rules go first to last, so where two validations overlap a
-// landed cell takes the one its source cell shows. Only a rule that changes is written, under its id.
+// A rule leaves the cells a carry lands on and a cut's source cells, and covers the cells whose source it covered.
+// The landed cells join the source rule, or on another sheet a rule that says the same, else a new rule that goes last.
 function carryRules(
     ctx: Context,
     snapshot: Context,
