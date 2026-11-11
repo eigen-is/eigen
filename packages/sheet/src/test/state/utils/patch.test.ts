@@ -20,13 +20,13 @@ const getContext = () =>
 describe('opToPatchOnSheets', () => {
     test('drops an op on a sheet that is gone', () => {
         const ops: Op[] = [{ op: 'replace', id: 'sheet-missing', path: ['celldata'], value: 1 }];
-        expect(opToPatchOnSheets(getContext().sheets, ops)[0]).toEqual([]);
+        expect(opToPatchOnSheets(getContext().sheets, ops)).toEqual([]);
     });
 
     // Immer emits it when a recipe reassigns ctx.sheets, and it names no sheet.
     test("drops a whole ['sheets'] replace with no id", () => {
         const ops: Op[] = [{ op: 'replace', path: ['sheets'], value: SHEETS }];
-        expect(opToPatchOnSheets(getContext().sheets, ops)[0]).toEqual([]);
+        expect(opToPatchOnSheets(getContext().sheets, ops)).toEqual([]);
     });
 });
 

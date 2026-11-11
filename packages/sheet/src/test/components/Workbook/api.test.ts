@@ -158,23 +158,34 @@ describe('applyOp and the formula dependency map', () => {
     });
 });
 
-// replaySheetsOps rolls a failing batch back whole, so a live client must too or it disagrees with a joiner.
-describe('applyOp and a batch that fails halfway', () => {
-    const ops: Op[] = [
+// One function applies a batch on a live client and for a joiner: a write whose parent is gone is skipped alone, and
+// an op the sheet refuses rolls the whole batch back.
+describe('applyOp and a batch with a write or an op that cannot apply', () => {
+    const good: Op[] = [
         { op: 'deleteRowCol', id: 'id_1', path: [], value: { type: 'row', start: 3, end: 3, id: 'id_1' } },
         { op: 'replace', id: 'id_1', path: ['data', 0, 0], value: { v: 9, m: '9' } },
-        { op: 'replace', id: 'id_1', path: ['data', 9, 9, 'v'], value: 1 },
     ];
+    const unresolved: Op = { op: 'replace', id: 'id_1', path: ['data', 9, 9, 'v'], value: 1 };
+    const refused: Op = { op: 'insertRowCol', id: 'id_1', path: [], value: { type: 'row', index: -1 } };
 
-    it('applies none of it, a row delete before the failing patch included, as the replay does', () => {
+    it('skips only the write whose parent is gone, as the replay does', () => {
         const ctx = makeCtx(null);
-        const peer = applyPeerOps(ctx, ops);
-        const [joiner] = join(ctx, [ops]);
+        const peer = applyPeerOps(ctx, [...good, unresolved]);
+        const [joiner] = join(ctx, [[...good, unresolved]]);
+        expect(peer.sheets[0].data).toHaveLength(3);
+        expect(peer.sheets[0].data?.[0]?.[0]).toEqual({ v: 9, m: '9' });
+        expect(joiner.celldata).toEqual(dataToCelldata(peer.sheets[0].data));
+    });
+
+    it('applies none of a batch with a refused row op, the writes before it included, as the replay does', () => {
+        const ctx = makeCtx(null);
+        const peer = applyPeerOps(ctx, [...good, refused]);
+        const [joiner] = join(ctx, [[...good, refused]]);
         expect(peer.sheets[0].data).toEqual(ctx.sheets[0].data);
         expect(joiner.celldata).toEqual(dataToCelldata(ctx.sheets[0].data));
     });
 
-    it('says the batch did not apply, and that a good one did', () => {
+    it('says the refused batch did not apply, and that the one with a skipped write did', () => {
         let next = makeCtx(null);
         const setContext = (recipe: (draft: Context) => void) => {
             next = produce(next, recipe);
@@ -186,8 +197,8 @@ describe('applyOp and a batch that fails halfway', () => {
             () => {},
             { undoList: [], redoList: [] },
         );
-        expect(workbook.applyOp(ops)).toBe(false);
-        expect(workbook.applyOp(ops.slice(0, 2))).toBe(true);
+        expect(workbook.applyOp([...good, refused])).toBe(false);
+        expect(workbook.applyOp([...good, unresolved])).toBe(true);
     });
 });
 
@@ -226,7 +237,7 @@ describe('applyOp and a joiner agree on the batch shapes that once disagreed', (
         };
         const ops: Op[] = [
             { op: 'addSheet', id: 'id_3', path: [], value: withFormula },
-            { op: 'replace', id: 'id_1', path: ['data', 9, 9, 'v'], value: 1 },
+            { op: 'insertRowCol', id: 'id_1', path: [], value: { type: 'row', index: -1 } },
         ];
         const ctx = makeCtx(null);
         const before = { ...heldGraph(ctx).formulas };
@@ -459,7 +470,7 @@ describe('replayOps', () => {
     });
 
     it('says when a batch failed to apply', () => {
-        const broken: Op = { op: 'replace', id: 'id_1', path: ['data', 99, 0, 'v'], value: 1 };
+        const broken: Op = { op: 'insertRowCol', id: 'id_1', path: [], value: { type: 'row', index: -1 } };
         const ctx = makeCtx(null);
         expect(replay(ctx, ctx.sheets, [[broken]], [[broken]]).accepted).toBe(false);
     });

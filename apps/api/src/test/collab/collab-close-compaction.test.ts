@@ -57,8 +57,8 @@ const SHEETS: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: []
 const edit = (r: number, c: number, v: string | number): Op[] => [
     { op: 'replace', id: 'sheet-1', path: ['data', r, c], value: { v, m: String(v) } },
 ];
-// immer can't resolve the path, so the replay rejects the whole batch.
-const POISON: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['missing', 'deep'], value: 1 }];
+// The row op's value is malformed, so the replay rejects the whole batch.
+const POISON: Op[] = [{ op: 'insertRowCol', id: 'sheet-1', path: [], value: { type: 'row', index: -1 } }];
 
 type StubbedRun = {
     request: DocumentTransformRequest;

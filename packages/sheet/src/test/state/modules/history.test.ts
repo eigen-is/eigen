@@ -290,7 +290,7 @@ describe("a peer's batch shifts the undo stacks once it applied", () => {
     test('a batch that fails leaves the undo where it was', () => {
         const s = session(workbook({ B10: text('old') }));
         s.edit(s.a, typedAt('B10', 'new'));
-        tabReceive(s.a, peerInsert([{ op: 'replace', id: ONE, path: ['data', 999, 999, 'v'], value: 1 }]));
+        tabReceive(s.a, peerInsert([{ op: 'insertRowCol', id: ONE, path: [], value: { type: 'row', index: -1 } }]));
         expect(cellAt(s.a, 'B10')?.v).toBe('new');
         tabUndo(s.a);
         expect(cellAt(s.a, 'B10')?.v).toBe('old');
@@ -396,7 +396,7 @@ describe("a peer's batch ends your row, column and sheet undo", () => {
     test('a batch that fails ends nothing', () => {
         const s = session(workbook());
         s.edit(s.a, ...insertRows(2, 1));
-        tabReceive(s.a, [{ op: 'replace', id: ONE, path: ['data', 999, 999, 'v'], value: 1 }]);
+        tabReceive(s.a, [{ op: 'insertRowCol', id: ONE, path: [], value: { type: 'row', index: -1 } }]);
         expect(s.a.history.undoList).toHaveLength(1);
         s.undo(s.a);
         expect(s.a.ctx.sheets[0].data).toHaveLength(40);
@@ -816,11 +816,13 @@ describe("a formula is its cell's `f`, nothing else", () => {
         expect(cellAt(b, 'D1')?.v).toBe(2);
     });
 
-    test('a row written past the end leaves holes in the matrix, and the map still builds', () => {
+    test('a row written past the end is skipped, so the matrix keeps no holes and the map still builds', () => {
         const t = tab(workbook());
-        tabReceive(t, [{ op: 'replace', id: ONE, path: ['data', 50], value: [{ f: '=1+1', v: 2, m: '2' }] }]);
+        const rows = t.ctx.sheets[0].data?.length ?? 0;
+        tabReceive(t, [{ op: 'replace', id: ONE, path: ['data', rows + 9], value: [{ f: '=1+1', v: 2, m: '2' }] }]);
         t.ctx.formulaCache.forgetGraph();
-        expect(heldGraph(t.ctx).formulaAt(ONE, 50, 0)?.formula).toBe('=1+1');
+        expect(t.ctx.sheets[0].data).toHaveLength(rows);
+        expect(heldGraph(t.ctx).formulaAt(ONE, rows + 9, 0)).toBeUndefined();
     });
 
     test('a stored op on the old recalc list fails no batch, and leaves no list on the sheet', () => {

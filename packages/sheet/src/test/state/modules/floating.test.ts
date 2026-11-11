@@ -10,6 +10,7 @@ import type { Patch } from 'immer';
 import { applyPatches, produce } from 'immer';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
+import { withoutSkippedWrites } from '../../../state/modules/apply-ops';
 import { insertChart } from '../../../state/modules/chart';
 import {
     deleteActiveObject,
@@ -17,7 +18,6 @@ import {
     reorderFloatingObject,
     selectFloatingObject,
     updateFloatingBox,
-    withoutDeletedFloatingEdits,
 } from '../../../state/modules/floating';
 import { redoEntry, undoEntry } from '../../../state/modules/history';
 import {
@@ -110,9 +110,9 @@ describe('floating writers', () => {
             expect(join(base, [removal.ops, move.ops])[0][field]).toEqual({});
             const peerGone = receive(move.next, removal.ops);
             expect(() => applyPatches(peerGone, move.inverse)).toThrow();
-            expect(withoutDeletedFloatingEdits(peerGone, move.inverse)).toEqual([]);
-            expect(withoutDeletedFloatingEdits(move.next, move.inverse)).toEqual(move.inverse);
-            expect(withoutDeletedFloatingEdits(removal.next, removal.inverse)).toEqual(removal.inverse);
+            expect(withoutSkippedWrites(peerGone, move.inverse)).toEqual([]);
+            expect(withoutSkippedWrites(move.next, move.inverse)).toEqual(move.inverse);
+            expect(withoutSkippedWrites(removal.next, removal.inverse)).toEqual(removal.inverse);
         });
     }
 
@@ -133,7 +133,7 @@ describe('floating writers', () => {
         };
         // Workbook's handleUndo and handleRedo: the entry's writes that still apply, and the batch they ship.
         const replay = (ctx: Context, patches: Patch[]) => {
-            const kept = withoutDeletedFloatingEdits(ctx, patches);
+            const kept = withoutSkippedWrites(ctx, patches);
             const next = applyPatches(ctx, kept);
             return { next, ops: patchToOp(ctx, next, kept) };
         };
@@ -234,7 +234,7 @@ describe('floating writers', () => {
         expect(Object.keys(onA.sheets[0].images!)).toHaveLength(2);
         expect(objects(onB.sheets)).toEqual(objects(onA.sheets));
         expect(objects(joiner)).toEqual(objects(onA.sheets));
-        const undone = applyPatches(onA, withoutDeletedFloatingEdits(onA, insert.inverse));
+        const undone = applyPatches(onA, withoutSkippedWrites(onA, insert.inverse));
         expect(objects(undone.sheets)).toEqual(objects(removal.next.sheets));
     });
 

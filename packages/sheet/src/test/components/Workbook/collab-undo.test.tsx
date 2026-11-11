@@ -92,7 +92,7 @@ test("an undo called right after a peer's batch that fails, before a render, lan
     await step(() => a().setCellFormat(9, 1, 'bl', 1));
     const failing: Op[] = [
         { op: 'insertRowCol', id: 's1', path: [], value: { type: 'row', index: 2, count: 2, direction: 'lefttop' } },
-        { op: 'replace', id: 's1', path: ['data', 999, 999, 'v'], value: 1 },
+        { op: 'insertRowCol', id: 's1', path: [], value: { type: 'row', index: -1 } },
     ];
     await step(() => b().applyOp(failing));
     await step(() => {

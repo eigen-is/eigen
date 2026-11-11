@@ -28,8 +28,7 @@ import {
     sheetOrder,
     storedCopy,
 } from '../utils';
-import { applyOpBatch } from './apply-ops';
-import { withoutDeletedFloatingEdits } from './floating';
+import { applyOpBatch, withoutSkippedWrites } from './apply-ops';
 import { execFunctionGroup } from './formula-exec';
 import { namesStructuralOp, unitOf } from './history-shift';
 import { settleCurrentSheet, shiftSheetOrders } from './sheet';
@@ -181,11 +180,7 @@ function sheetStep(ctx: Context, batch: (after: Sheet[]) => Op[], recorded: Patc
 // A cell or field entry: `apply` goes in, and `written`, the entry's other side, says what the targets should hold.
 // The formula values the entry recorded were right for the inputs of their time, so the step recalculates them.
 function patchStep(ctx: Context, apply: Patch[], written: Patch[]): Step {
-    const kept = stillWritten(
-        ctx,
-        withoutDeletedFloatingEdits(ctx, atSheetIndex(ctx, apply)),
-        atSheetIndex(ctx, written),
-    );
+    const kept = stillWritten(ctx, withoutSkippedWrites(ctx, atSheetIndex(ctx, apply)), atSheetIndex(ctx, written));
     const patches = withoutComputedValues(ctx, kept);
     if (patches.length === 0) return { ctx, ops: [] };
     const applied = applyPatches(ctx, patches);

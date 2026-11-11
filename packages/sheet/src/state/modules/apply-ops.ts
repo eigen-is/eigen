@@ -1,10 +1,12 @@
 // Applies one op batch to the editor's context. applySheetsBatch, which the replay applies a joiner's batches with,
 // runs on the plain sheets outside immer, and one recipe writes what changed into the context. Every sheet, row or
 // column change of the open workbook comes through here, such as a peer's batch, an undo step or the author's own row
-// op, so every tab ends the same. It reports the ops that moved rows, which the undo stacks follow, and a batch new to
-// the tab moves its view too.
+// op, so every tab ends the same. It reports the ops that moved rows, which the undo stacks follow, and tells a cell
+// or field undo which of its writes every reader would apply.
 
 import { isRecord } from '@workspace/lib/guards';
+import { applySheetWrites } from '@workspace/lib/sheets/yjs-ops';
+import type { Patch } from 'immer';
 import { produce } from 'immer';
 import { applySheetsBatch } from '../../engine/replay-ops';
 import type { Context } from '../context';
@@ -63,6 +65,13 @@ export function applyBatch(ctx: Context, ops: Op[], moveView = true): AppliedRow
     }
     settleCurrentSheet(ctx);
     return moved;
+}
+
+// What of an undo or redo entry's patches applies, by the rule every reader applies to the batch they ship: a write
+// into an object or a cell a peer deleted is left out.
+export function withoutSkippedWrites(ctx: Context, patches: Patch[]): Patch[] {
+    const writes = patches.map((patch) => ({ ...patch, path: patch.path.slice(1) }));
+    return applySheetWrites(ctx.sheets, writes).applied.map((write) => ({ ...write, path: ['sheets', ...write.path] }));
 }
 
 // The sheet fields written entry by entry, with how many levels down; every other field is written whole.

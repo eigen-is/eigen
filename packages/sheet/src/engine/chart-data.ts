@@ -166,7 +166,7 @@ export function mapChartRefs(
 }
 
 // Sheets writes applied onto a chart in place, so a recipe's draft ships each entry as its own patch. An entry under a
-// field that isn't a record is skipped: no build stores one, and floatingWriteFilter drops the write.
+// field that isn't a record is skipped: no build stores one, and every reader skips the write.
 export function writeSheetChartSpec(chart: SheetChartSpecParts, writes: SheetChartSpecWrite[]): void {
     for (const write of writes) {
         if (!('entry' in write)) chart[write.key] = write.value;

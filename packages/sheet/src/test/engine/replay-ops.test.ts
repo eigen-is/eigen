@@ -540,6 +540,76 @@ describe('a rule a peer deleted', () => {
     });
 });
 
+// A write into something a peer deleted or cleared finds no parent on any reader, so that write alone is skipped. The
+// rest of its batch was written for cells and fields that are still there.
+describe('a write whose parent is gone', () => {
+    const cell = (v: string) => ({ v, m: v, ct: { fa: 'General', t: 'g' } });
+    const image = { id: 'i1', index: 'a0', x: 10, y: 20, width: 40, height: 30, mediaName: 'i1.png' };
+    const base = (): Sheet => ({
+        id: 's1',
+        name: 'Sheet1',
+        order: 0,
+        data: [
+            [cell('a'), null],
+            [null, null],
+        ],
+        config: {},
+        images: { i1: image },
+    });
+    const kept: Op = { op: 'replace', id: 's1', path: ['data', 0, 1], value: cell('kept') };
+
+    test.each<[string, Op['op'], Op['path'], unknown]>([
+        ['a field of a cell a peer cleared', 'add', ['data', 1, 1, 'bg'], '#ff0000'],
+        ['a cell on a row a peer deleted', 'replace', ['data', 5, 0], cell('x')],
+        ['a field of a cell on a row a peer deleted', 'replace', ['data', 5, 0, 'v'], 'x'],
+        ['a row past the matrix', 'replace', ['data', 50], [cell('x'), null]],
+        ['a cell past its row', 'replace', ['data', 0, 9], cell('x')],
+        ['a matrix made longer by its length', 'replace', ['data', 'length'], 50],
+        ['a write below a field of an image', 'replace', ['images', 'i1', 'x', 'y'], 1],
+        ['a field of an image a peer deleted', 'replace', ['images', 'gone', 'x'], 1],
+        ['an entry of a filter a peer cleared', 'add', ['filter', '1'], { rows: [1] }],
+        ['a key every object inherits', 'add', ['config', '__proto__'], { polluted: true }],
+    ])('%s is skipped, and the rest of its batch applies', (_, op, path, value) => {
+        const dropped: unknown[] = [];
+        for (const batch of [
+            [{ op, id: 's1', path, value }, kept],
+            [kept, { op, id: 's1', path, value }],
+        ]) {
+            const [sheet] = replaySheetsOps([base()], [batch], (e) => dropped.push(e));
+            expect(sheet.data).toHaveLength(2);
+            expect(sheet.data).toEqual([
+                [cell('a'), cell('kept')],
+                [null, null],
+            ]);
+            expect(sheet.images).toEqual({ i1: image });
+            expect(sheet).not.toHaveProperty('filter');
+            expect(Object.getPrototypeOf(sheet.config)).toBe(Object.prototype);
+        }
+        expect(dropped).toEqual([]);
+    });
+
+    test('a batch of only such writes hands the sheets back as they were', () => {
+        const [sheet] = replaySheetsOps(
+            [base()],
+            [[{ op: 'add', id: 's1', path: ['data', 1, 1, 'bg'], value: '#ff0000' }]],
+        );
+        expect(sheet.data).toEqual(base().data);
+    });
+
+    test('a refused row op still rolls its whole batch back', () => {
+        const dropped: unknown[] = [];
+        const refused: Op = { op: 'insertRowCol', id: 's1', path: [], value: { type: 'row', index: -1 } };
+        const [sheet] = replaySheetsOps([base()], [[kept, refused]], (e) => dropped.push(e));
+        expect(dropped).toHaveLength(1);
+        expect(sheet.data).toEqual(base().data);
+    });
+
+    test('a shorter length cuts an array, as the undo of a grown one writes it', () => {
+        const [sheet] = replaySheetsOps([base()], [[{ op: 'replace', id: 's1', path: ['data', 'length'], value: 1 }]]);
+        expect(sheet.data).toEqual([[cell('a'), null]]);
+    });
+});
+
 // A peer can write anything as a sheet's matrix or one of its rows, and every reader of the replay walks the matrix.
 // Such a write is dropped, so one op can't make the workbook unreadable, and the cells of its batch still arrive.
 describe('a write that would leave the matrix or a row no array', () => {

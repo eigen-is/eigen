@@ -404,10 +404,10 @@ test('a formula typed while a peer overwrites another keeps recalculating on the
     expectJoined(b);
 });
 
-// A batch of the tab's own can apply before a peer's batch arrives and fail once the log puts the peer's first. The
-// formula map learned the batch's formula, so a replay that kept the map would let the next edit of a cell the formula
-// reads write the formula back.
-test("the tab's own formula that the log's order rejects stays gone after the next edit", async () => {
+// A batch of the tab's own can apply before a peer's batch arrives and lose a write once the log puts the peer's first:
+// the typed formula recomputed D1, which the peer cleared. Only the writes into D1 are skipped, on the tab as for a
+// joiner, and the next edit of a cell the formula reads does not bring D1 back.
+test("the tab's own batch keeps its formula where the log's order skips its write into a cleared cell", async () => {
     const s = server({ '0_0': '1' });
     push(s, [{ op: 'replace', id: 's1', path: ['data', 0, 3], value: { f: '=C1+1', v: 1, m: '1' } }]);
     const tab = await openTab(s, 50);
@@ -415,9 +415,11 @@ test("the tab's own formula that the log's order rejects stays gone after the ne
     push(peer, [{ op: 'replace', id: 's1', path: ['data', 0, 3], value: null }]);
     await tab.type(0, 2, '=A1*2');
     await deliver(peer, tab.doc);
-    expect(tab.cell(0, 2)).toBeNull();
+    expect(tab.cell(0, 2)?.f).toBe('=A1*2');
+    expect(tab.cell(0, 3)).toBeNull();
     await tab.type(0, 0, '5');
-    expect(tab.cell(0, 2)).toBeNull();
+    expect(tab.cell(0, 2)?.v).toBe(10);
+    expect(tab.cell(0, 3)).toBeNull();
     expectJoined(tab);
 });
 
@@ -475,7 +477,7 @@ for (const peerID of [1, 2000]) {
         await deliver(tab.doc, s);
         compact(s);
         const peer = replica(s, peerID);
-        push(peer, [{ op: 'replace', id: 's1', path: ['data', 99, 0, 'v'], value: 1 }]);
+        push(peer, [{ op: 'insertRowCol', id: 's1', path: [], value: { type: 'row', index: -1 } }]);
         await deliver(peer, s);
         await deliver(s, tab.doc);
         expect(tab.seen.version).toBe(0);
