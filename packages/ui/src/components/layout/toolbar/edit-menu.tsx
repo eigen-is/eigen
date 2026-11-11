@@ -26,6 +26,8 @@ type EditMenuProps = {
     // Host-app selection entries (docs' Cut, Copy, Select all, Delete), a group of their own between Undo and Find, for
     // viewers too: the host gates each entry.
     selectionItems?: ReactNode;
+    // Classes for the menu content, such as Sheets' width.
+    contentClassName?: string;
     // An editor that takes focus back on Undo or Redo passes its keep-focus handler; a Find pick still focuses the bar.
     onCloseAutoFocus?: (event: Event) => void;
 };
@@ -38,6 +40,7 @@ export function EditMenu({
     onRedo,
     children,
     selectionItems,
+    contentClassName,
     onCloseAutoFocus,
 }: EditMenuProps) {
     const { docSearchBar, focusFindBarRef, onCloseAutoFocus: refocusFindBar } = useFindBarRefocus();
@@ -45,6 +48,7 @@ export function EditMenu({
     return (
         <AppBarMenu
             label="Edit"
+            contentClassName={contentClassName}
             onCloseAutoFocus={(event) => {
                 refocusFindBar(event);
                 if (!event.defaultPrevented) onCloseAutoFocus?.(event);
