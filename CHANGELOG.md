@@ -111,6 +111,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Row and column changes while others edit in Sheets** — a rename, tab color or link someone sets while you insert or delete rows stays
 - **Tabs while others edit in Sheets** — a tab added at the same moment as another of its name is kept as "Name (2)" instead of vanishing. Two people deleting or hiding the last two visible tabs at once leave one showing, and Duplicate works on a tab whose old name breaks the naming rules
 - **Filters while others edit in Sheets** — a filter someone else changes no longer leaves rows hidden for good after your next filter edit
+- **Filters and deleted rows in Sheets** — deleting rows keeps a column's filter set, also when they are the last rows it hides
 - **Refused edits in Sheets** — Delete on part of a merged cell shows a notice, a paste past the sheet's size limit says so, and a paste over part of a merge says it can't and changes nothing
 - **Long text in Sheets** — wrapped text grows its row to fit every line, however you confirm it, from the formula bar or by clicking elsewhere too
 - **Clicks and drags in Sheets** — the link card over a frozen pane shows the link you point at, dragging a formula's range picks the right rows, and a move near the bottom of the grid no longer snaps to the last row

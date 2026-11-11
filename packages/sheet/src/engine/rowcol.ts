@@ -365,17 +365,14 @@ function shiftFilter(sheet: ShiftedSheet, cfg: ExtendedSheetConfig, type: 'row' 
     for (const [key, entry] of Object.entries(filter ?? {})) {
         if (type === 'row') {
             const rowhidden = shiftKeyedMap(entry.rowhidden ?? {}, edit);
-            if (edit.insert || Object.keys(rowhidden).length > 0) {
-                shifted[key] = { ...entry, rowhidden, str: range.row[0], edr: range.row[1] };
-            }
+            shifted[key] = { ...entry, rowhidden, str: range.row[0], edr: range.row[1] };
         } else {
             const cindex = mapIndex(edit, entry.cindex);
             if (cindex === GONE) continue;
             shifted[cindex - range.column[0]] = { ...entry, cindex, stc: range.column[0], edc: range.column[1] };
         }
     }
-    const kept = edit.insert ? filter && shifted : Object.keys(shifted).length > 0 ? shifted : undefined;
-    writeFilter(sheet, cfg, range, kept);
+    writeFilter(sheet, cfg, range, filter && shifted);
 }
 
 // The rows a filter hides are hidden rows of the sheet too. The sheet and its config are the op's own copies, but
