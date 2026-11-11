@@ -4,7 +4,6 @@
 // towards it, and all of them get the loop's result whatever they computed. Nesting is bounded by one budget: past
 // it the calls in progress are dropped by a throw and the cells computed again from the list of cells in progress.
 
-import type { Evaluator as EvaluatorType } from '../eval/evaluator';
 import { Evaluator } from '../eval/evaluator';
 import { FACT_BITS, Fact, shapeFacts } from '../eval/facts';
 import type { Registry } from '../functions/registry';
@@ -36,7 +35,7 @@ const STOP = Object.freeze({ reason: 'the recalc computed as many formulas as it
 export class Recalc {
     private readonly workbook: Workbook;
     private readonly functions: Registry;
-    private readonly evaluator: EvaluatorType;
+    private readonly evaluator: Evaluator;
     private readonly index = new ReverseIndex();
     // Whether a formula came or went since the index was built.
     private stale = true;
