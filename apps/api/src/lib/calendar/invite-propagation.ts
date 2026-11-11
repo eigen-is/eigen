@@ -133,9 +133,8 @@ export async function propagateCancellation(
     }
 }
 
-// What a newcomer to the server is owed when their account appears: each series that lists them, and each occurrence
-// that lists them while its series doesn't. An event somebody else organizes is not this Home's to send, linked or not,
-// and a cancelled one was taken from its guests.
+// What a newcomer is owed when their account appears: each live series that lists them, and each live occurrence
+// that lists them while its series doesn't. An event somebody else organizes is not this Home's to send, linked or not.
 export function pendingInvitations(calendar: Calendar, email: string): InvitationRequest[] {
     const address = email.toLowerCase();
     const lists = (event: CalendarEvent | undefined) =>
