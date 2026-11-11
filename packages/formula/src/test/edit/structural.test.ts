@@ -25,11 +25,16 @@ import { at } from '../text/support';
 import type { Holder, Step, StructuralCase } from './structural-cases';
 import { CASES } from './structural-cases';
 
-// Where this engine's text differs from Excel's, and why.
+// Where this engine's text differs from Excel's, and why. Excel's own text is the oracle's, checked by hand in Excel
+// on the web for T2-61, T4-79, T6-107, T6-109, T7-112, T7-113, T7-117 and T7-119.
 const OURS: Record<string, [string, string]> = {
     'T2-61': ['=B1:B1048575', 'Excel rewrites B1:B1048576 to B:B when it is typed; a typed range stays a range here'],
     'T4-79': ['=SUM(A1:A10)', 'the proposal: a range follows a move only when the whole range is in the block'],
-    'T6-107': ['=Sheet2!A4', 'the proposal: a sort is a copy per row, so an offset to another sheet moves too'],
+    'T6-107': [
+        '=Sheet2!A4',
+        'the proposal: a sort is a copy per row; Excel keeps an offset to another sheet in a sort',
+    ],
+    'T6-109': ['=SUM(#REF!)', 'as T6-107; Excel by hand clips the range to =SUM(C1:C8) in a sort'],
     'T7-112': ['=#REF!', 'a deleted sheet prints as a bare #REF!, where Excel writes #REF!A1'],
     'T7-113': ['=#REF!', 'as T7-112; the new Sheet2 has another id and does not bind'],
     'T7-115': ['=SUM(Sheet2:Sheet4!A1)', 'a 3-D reference is kept as typed: not an Eigen feature'],
