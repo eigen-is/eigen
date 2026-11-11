@@ -3,9 +3,9 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { Move } from '../../text';
-import { GRID_ROWS, parseStored, printStored, toA1, transformMove } from '../../text';
-import { at } from '../text/support';
-import { random, SHEETS, shown, tree } from './support';
+import { GRID_ROWS, printStored, toA1, transformMove } from '../../text';
+import { at, treeStored } from '../text/support';
+import { CONTEXTS, random, reread, SHEETS, shown, tree } from './support';
 
 // "Sheet1!A1:B4" → the sheet's id and the block's corner and size.
 function block(text: string): { sheet: string; row: number; column: number; rows: number; columns: number } {
@@ -168,8 +168,7 @@ describe('what a move leaves alone', () => {
         });
     });
     test('a broken reference, though the formula itself moves or is landed beside', () => {
-        const before = parseStored('=#REF!+[s2]!#REF!+SUM(#REF!)');
-        if ('reason' in before) throw new Error(before.reason);
+        const before = treeStored('=#REF!+[s2]!#REF!+SUM(#REF!)+SUM(#REF!:#REF!)+[s1]!#REF!:[s1]!Rate+#REF!#');
         for (const edit of [
             move('Sheet1!A1:B2', 'Sheet2!A1'),
             move('Sheet2!A1', 'Sheet1!C1'),
@@ -177,6 +176,12 @@ describe('what a move leaves alone', () => {
         ]) {
             expect(transformMove(before, edit, 's1', 0, 0)).toMatchObject({ tree: before, lossy: false });
         }
+    });
+    test('a broken end of a range, whose other end follows the block alone', () => {
+        const before = treeStored('=SUM(#REF!:R5C1)+SUM([s2]!#REF!:[s2]!R[4]C)');
+        const result = transformMove(before, move('Sheet2!A1:A5', 'Sheet2!A9'), 's1', 0, 0);
+        expect(printStored(result.tree)).toBe('=SUM(#REF!:R5C1)+SUM([s2]!#REF!:[s2]!R[12]C)');
+        expect(result.tree.children[1].children[0].children[0]).toBe(before.children[1].children[0].children[0]);
     });
     test('a reference off the grid at its host', () => {
         const copied = tree('=A1', 'B2');
@@ -194,11 +199,12 @@ describe('a move and the move back', () => {
 
     test('give every formula that is not lossy its stored text back, on one sheet and across two', () => {
         const pick = random(42);
-        const kept = { same: 0, across: 0, carried: 0, followed: 0 };
+        const kept = { broken: 0, same: 0, across: 0, carried: 0, followed: 0 };
         for (let run = 0; run < 40000; run += 1) {
             const cell = () => `${pick(2) ? '$' : ''}${'ABCDEF'[pick(6)]}${pick(2) ? '$' : ''}${1 + pick(8)}`;
             const prefix = () => ['', '', 'Sheet1!', 'Sheet2!', 'Sheet3!', 'Later!'][pick(6)];
-            const text = `=${prefix()}${cell()}+SUM(${prefix()}${cell()}:${cell()})`;
+            const range = `${prefix()}${cell()}:${cell()}`;
+            const text = CONTEXTS[pick(CONTEXTS.length)](`${prefix()}${cell()}`, range, `${prefix()}${cell()}`);
             const [sheet, row, column] = [['s1', 's2'][pick(2)], pick(8), pick(6)];
             const there: Move = {
                 fromSheet: ['s1', 's2'][pick(2)],
@@ -224,20 +230,21 @@ describe('a move and the move back', () => {
             if (!carried && inside(there, sheet, row, column, true)) continue;
             const before = tree(text, toA1(row, column));
             const moved = transformMove(before, there, sheet, row, column);
-            const reread = parseStored(printStored(moved.tree));
-            expect('reason' in reread ? reread.reason : printStored(reread)).toBe(printStored(moved.tree));
+            const where = `${text} on ${sheet} at ${toA1(row, column)}, ${JSON.stringify(there)}`;
+            expect([where, reread(moved.tree)]).toEqual([where, moved.tree]);
+            if (printStored(moved.tree).includes('#REF!')) kept.broken += 1;
             if (moved.lossy) continue;
             const [sheet2, row2, column2] = carried
                 ? [there.toSheet, row + there.toRow - there.row, column + there.toColumn - there.column]
                 : [sheet, row, column];
             const returned = transformMove(moved.tree, back, sheet2, row2, column2);
-            const where = `${text} on ${sheet} at ${toA1(row, column)}, ${JSON.stringify(there)}`;
             expect(`${where}: ${printStored(returned.tree)}`).toBe(`${where}: ${printStored(before)}`);
             if (there.fromSheet === there.toSheet) kept.same += 1;
             else if (carried) kept.carried += 1;
             else if (moved.tree !== before) kept.followed += 1;
             else kept.across += 1;
         }
+        expect(kept.broken).toBeGreaterThan(1500);
         expect(kept.same).toBeGreaterThan(10000);
         expect(kept.across).toBeGreaterThan(5000);
         expect(kept.carried).toBeGreaterThan(100);

@@ -2,7 +2,7 @@
 // named as a person names them, and a seeded generator.
 
 import type { FormulaNode, LineEdit } from '../../text';
-import { GRID_COLUMNS, GRID_ROWS, parseA1, printA1, sheetFinder } from '../../text';
+import { GRID_COLUMNS, GRID_ROWS, parseA1, parseStored, printA1, printStored, sheetFinder } from '../../text';
 import { at } from '../text/support';
 
 export const SHEETS = [
@@ -26,6 +26,25 @@ export function tree(text: string, host: string): FormulaNode {
 export function shown(node: FormulaNode, host: string): string {
     return printA1(node, ...at(host), sheetName);
 }
+
+// What a transform returns must be text the parser reads back as the same tree: the tree its stored text parses to,
+// or why it did not parse, to hold against the tree itself.
+export function reread(node: FormulaNode): FormulaNode | string {
+    const stored = printStored(node);
+    const back = parseStored(stored);
+    return 'reason' in back ? `${stored}: ${back.reason}` : back;
+}
+
+// Where three references may stand, in either notation: as arguments, and in the places where the #REF! one of them
+// becomes must still be an operand, such as a spill, an intersection, a union and a range of ranges.
+export const CONTEXTS: ((a: string, b: string, c: string) => string)[] = [
+    (a, b, c) => `=SUM(${a},${b},${c})`,
+    (a, b, c) => `=${a}#+SUM(${b}#:(${c}))`,
+    (a, b, c) => `=SUM(${a} ${b},${c} ${a})`,
+    (a, b, c) => `=SUM((${a},${b}) ${c})+ROWS((${c},${a}))`,
+    (a, b, c) => `=SUM((${a}):(${b}):(${c}))`,
+    (a, b, c) => `=-${a}%+@${b}+SUM(${c}# (${a},${b}))`,
+];
 
 // Rows and columns are counted from 1 here, as a person names them: "insert 2 rows at 5".
 export const insertRows = (at1: number, count = 1, sheet = 's1'): LineEdit => ({

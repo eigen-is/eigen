@@ -4,6 +4,7 @@
 // the questions they ask of a reference leaf, such as which sheet it reads and whether it fell off the grid.
 
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
+import { REF_ERROR } from '../text/lexer';
 import type { FormulaNode } from '../text/tree';
 import { branch, leaf, NodeKind, RefFlag, SheetKind } from '../text/tree';
 
@@ -22,7 +23,7 @@ export function mapLeaves(node: FormulaNode, map: (leaf: FormulaNode) => Formula
 
 // What a reference becomes when the cells it named are gone: #REF! in its place, on the sheet it named.
 export function broken(reference: FormulaNode): FormulaNode {
-    return leaf(NodeKind.Error, 0, '#REF!', reference.space, reference.sheetKind, reference.sheet);
+    return leaf(NodeKind.Error, REF_ERROR, '', reference.space, reference.sheetKind, reference.sheet);
 }
 
 // The id of the sheet a reference reads from a host on `hostSheet`, or null when it names no sheet of this workbook.

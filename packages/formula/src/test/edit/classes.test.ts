@@ -16,7 +16,7 @@ import {
     ShapeTable,
     transformLines,
 } from '../../text';
-import { deleteRows, insertRows, random, tree } from './support';
+import { CONTEXTS, deleteRows, insertRows, random, reread, tree } from './support';
 
 type End = { absolute: boolean; value: number };
 
@@ -90,8 +90,14 @@ function slow(
 
 type Sample = { edit: LineEdit; hostSheet: string; references: Reference[]; tree: FormulaNode };
 
+const asArguments = (texts: string[]) => `=SUM(${texts.join(',')})`;
+
+function anywhere(pick: (below: number) => number): (texts: string[]) => string {
+    return (texts) => CONTEXTS[pick(CONTEXTS.length)](texts[0], texts[1 % texts.length], texts[2 % texts.length]);
+}
+
 // A formula of one to three references and an edit, on an axis of 6 to 13 lines, with targets on and off the grid.
-function sample(pick: (below: number) => number): Sample {
+function sample(pick: (below: number) => number, write: (texts: string[]) => string): Sample {
     const rows = pick(2) === 0;
     const lines = 6 + pick(8);
     const insert = pick(2) === 0;
@@ -115,7 +121,7 @@ function sample(pick: (below: number) => number): Sample {
         const ends = kind === 9 ? [] : kind < 3 ? [end()] : [end(), end()];
         references.push({ prefix, sheet, whole: kind === 8, ends });
     }
-    const text = `=SUM(${references.map((reference) => storedText(rows, reference)).join(',')})`;
+    const text = write(references.map((reference) => storedText(rows, reference)));
     const parsed = parseStored(text);
     if ('reason' in parsed) throw new Error(`${text}: ${parsed.reason}`);
     return { edit, hostSheet: ['s1', 's1', 's2'][pick(3)], references, tree: parsed };
@@ -129,17 +135,12 @@ function named(rows: boolean, leaf: FormulaNode, host: number): [number, number]
     return [first, leaf.op === RefKind.Cell ? first : (rows ? leaf.row2 : leaf.column2) + (absolute2 ? 0 : host)];
 }
 
-function reread(node: FormulaNode): string {
-    const back = parseStored(printStored(node));
-    return 'reason' in back ? back.reason : printStored(back);
-}
-
 describe('the fast path against the slow version', () => {
     test('the transform: the cells it names, its flags and the edit that takes it back', () => {
         const pick = random(20261111);
         const seen = { changed: 0, gone: 0, lossy: 0, recompute: 0, resized: 0, offGrid: 0, undone: 0 };
         for (let run = 0; run < 20000; run += 1) {
-            const { edit, hostSheet, references, tree: before } = sample(pick);
+            const { edit, hostSheet, references, tree: before } = sample(pick, asArguments);
             const { rows, lines } = edit;
             const axis = axisAfter(edit);
             const text = printStored(before);
@@ -150,7 +151,7 @@ describe('the fast path against the slow version', () => {
                 const result = transformLines(before, edit, hostSheet, host);
                 const stored = printStored(result.tree);
                 expect(`${where}: ${result.tree === before}`).toBe(`${where}: ${stored === text}`);
-                expect(`${where}: ${reread(result.tree)}`).toBe(`${where}: ${stored}`);
+                expect([where, reread(result.tree)]).toEqual([where, result.tree]);
                 const flags = { lossy: false, recompute: false, resized: false };
                 references.forEach((reference, i) => {
                     const leaf = result.tree.children[i];
@@ -210,6 +211,31 @@ describe('the fast path against the slow version', () => {
         expect(seen.undone).toBeGreaterThan(40000);
     });
 
+    test('wherever a reference stands, what comes out is stored text that reads back as the same tree', () => {
+        const pick = random(5);
+        const seen = { broken: 0, spill: 0, intersection: 0, union: 0 };
+        for (let run = 0; run < 8000; run += 1) {
+            const { edit, hostSheet, tree: before } = sample(pick, anywhere(pick));
+            const axis = axisAfter(edit);
+            for (let host = 0; host < edit.lines; host += 1) {
+                if (hostSheet === edit.sheet && !axis.includes(host)) continue;
+                const result = transformLines(before, edit, hostSheet, host);
+                const where = `${printStored(before)} on ${hostSheet} at line ${host}, ${JSON.stringify(edit)}`;
+                expect([where, reread(result.tree)]).toEqual([where, result.tree]);
+                const stored = printStored(result.tree);
+                if (!stored.includes('#REF!')) continue;
+                seen.broken += 1;
+                if (stored.includes('#REF!#')) seen.spill += 1;
+                if (stored.includes('#REF! ') || stored.includes(' #REF!')) seen.intersection += 1;
+                if (stored.includes('(#REF!,') || stored.includes(',#REF!)')) seen.union += 1;
+            }
+        }
+        expect(seen.broken).toBeGreaterThan(3000);
+        expect(seen.spill).toBeGreaterThan(500);
+        expect(seen.intersection).toBeGreaterThan(500);
+        expect(seen.union).toBeGreaterThan(500);
+    });
+
     test('the classes give every host of a run what the transform gives it', () => {
         const pick = random(7);
         const table = new ShapeTable();
@@ -217,7 +243,7 @@ describe('the fast path against the slow version', () => {
         let single = 0;
         let stretches = 0;
         for (let run = 0; run < 12000; run += 1) {
-            const { edit, hostSheet, tree: parsed } = sample(pick);
+            const { edit, hostSheet, tree: parsed } = sample(pick, anywhere(pick));
             const { lines } = edit;
             const axis = axisAfter(edit);
             const shape = table.shape(table.internTree(parsed));
@@ -305,6 +331,15 @@ describe('a column filled down splits into few classes, not one per cell', () =>
             [8, 8, '=SUM(R1C[-1]:R[-2]C[-1])'],
             [9, 9, '=SUM(R1C[-1]:R[-3]C[-1])'],
             [10, GRID_ROWS - 1, '=SUM(R1C[-1]:R[-3]C[-1])'],
+        ]);
+    });
+
+    test('a broken reference splits nothing, as it reads no cell', () => {
+        const table = new ShapeTable();
+        const shape = table.shape(table.intern('=[s1]!#REF!+SUM([s1]!#REF!:[s1]!#REF!)+[s1]!#REF!#'));
+        if (shape.tree === null) throw new Error('unparsed');
+        expect(hostClasses(shape.tree, shape.refs, insertRows(50), 's2', 0, 99)).toEqual([
+            { start: 0, end: 99, tree: shape.tree, lossy: false, recompute: false, resized: false },
         ]);
     });
 

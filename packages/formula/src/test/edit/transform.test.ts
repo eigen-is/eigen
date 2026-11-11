@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { LineEdit } from '../../text';
 import { GONE, mapIndex, parseStored, printStored, toA1, transformLines } from '../../text';
-import { at } from '../text/support';
+import { at, treeStored } from '../text/support';
 import { deleteColumns, deleteRows, insertColumns, insertRows, shown, tree } from './support';
 
 type Outcome = { text: string; changed: boolean; lossy: boolean; recompute: boolean; resized: boolean };
@@ -210,11 +210,16 @@ describe('what the transform leaves alone', () => {
         expect(result).toMatchObject(QUIET);
     });
     test('a broken reference, which is no reference to the cell the formula is in', () => {
-        const before = parseStored('=#REF!+[s2]!#REF!+SUM(#REF!)');
-        if ('reason' in before) throw new Error(before.reason);
+        const before = treeStored('=#REF!+[s2]!#REF!+SUM(#REF!)+SUM(#REF!:#REF!)+[s1]!#REF!:[s1]!Rate+#REF!#');
         for (const edit of [insertRows(1), deleteRows(1), insertRows(1, 1, 's2'), deleteColumns('A')]) {
             expect(transformLines(before, edit, 's1', 0)).toEqual({ tree: before, ...QUIET });
         }
+    });
+    test('a broken end of a range, whose other end moves alone', () => {
+        const before = treeStored('=SUM(#REF!:R5C1)+SUM([s1]!#REF!:[s1]!R[4]C)');
+        const result = transformLines(before, insertRows(1), 's2', 0);
+        expect(printStored(result.tree)).toBe('=SUM(#REF!:R5C1)+SUM([s1]!#REF!:[s1]!R[5]C)');
+        expect(result.tree.children[1].children[0].children[0]).toBe(before.children[1].children[0].children[0]);
     });
     test('every part of the formula around its references', () => {
         const text = '= IF( A5>0, {1,2;3,4}, -A5% ) & "x" & LAMBDA(x,x+A5)(2)';
@@ -239,11 +244,6 @@ describe('what comes out is stored text that reads back as the same tree', () =>
         ['=(A5,B5)', '=(#REF!,#REF!)'],
         ['=A5:B5:C7', '=#REF!:R[5]C[-1]'],
         ['=SUM(A3:A$5)+A$9', '=SUM(R[2]C[-3]:R4C[-3])+R8C[-3]'],
-    ])('%s', (text, stored) => {
-        expect(reread(text)).toEqual([stored, stored]);
-    });
-    // The parser reads #REF! as a reference operand only once the text unit's fix is merged: then these are tests.
-    test.todo.each([
         ['=A5#', '=#REF!#'],
         ['=A1:B2 A5', '=RC[-3]:R[1]C[-2] #REF!'],
         ['=SUM(A5:A5 A1)', '=SUM(#REF! RC[-3])'],
