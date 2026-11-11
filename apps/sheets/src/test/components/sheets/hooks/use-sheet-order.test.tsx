@@ -723,8 +723,8 @@ test("a peer's delete of every row keeps the last, and the selection lands on it
     expectJoined(tab);
 });
 
-// The box lands on the next row, and the text typed for the cell that went must not follow it there.
-test("a peer's delete of the cell being edited closes the editor and writes its text nowhere", async () => {
+// The text typed for the cell that went, and the keys typed after it, must not land on the row that took its place.
+test("a peer's delete of the cell being edited closes the editor, and the keys after it write nowhere", async () => {
     const s = server({ '3_0': 'mine', '4_0': 'theirs' });
     const tab = await openTab(s, 50);
     const peer = replica(s, 100);
@@ -733,11 +733,21 @@ test("a peer's delete of the cell being edited closes the editor and writes its 
     input.textContent = 'hello';
     push(peer, rowDelete(3));
     await deliver(peer, tab.doc);
-    expect(tab.seen.selection?.row).toEqual([3, 3]);
     expect(input.textContent).toBe('');
-    await tab.press('Enter', 13);
-    await tab.press('Enter', 13);
+    expect(document.activeElement === input).toBe(false);
+    const sent = opsIn(tab.doc);
+    for (const [key, keyCode] of [
+        ['x', 88],
+        ['Enter', 13],
+    ] as const) {
+        await act(async () => {
+            input.dispatchEvent(new KeyboardEvent('keydown', { key, keyCode, bubbles: true }));
+        });
+    }
+    expect(opsIn(tab.doc)).toBe(sent);
     expect(tab.cell(3, 0)?.v).toBe('theirs');
+    await tab.type(3, 0, 'typed');
+    expect(tab.cell(3, 0)?.v).toBe('typed');
     expectJoined(tab);
 });
 
