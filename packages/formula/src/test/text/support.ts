@@ -178,7 +178,7 @@ export function formulas(seed: number, ordered: boolean): () => string {
     };
     const constant = () =>
         pick([
-            () => pick(['0', '1', '42', '2.5', '0.001', '1E+21', '1.5E-7', '123456789012345']),
+            () => pick(['0', '1', '42', '2.5', '0.001', '1E+21', '0.00000015', '6.626E-34', '123456789012345']),
             () => pick(['"a"', '""', '"a""b"', '"x, (y) \'z\'"', '"line\nbreak"']),
             () => pick(['TRUE', 'FALSE']),
             () => pick(['#N/A', '#DIV/0!', '#NAME?', '#VALUE!', '#REF!', '#GETTING_DATA']),

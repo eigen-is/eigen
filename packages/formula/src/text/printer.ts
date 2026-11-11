@@ -9,6 +9,10 @@ import { quotedSheetName, quoteSheetName } from './sheet-name';
 import type { Ends, FormulaNode } from './tree';
 import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from './tree';
 
+// The smallest exponent a number below 1 prints in plain digits with. Excel was seen to do so at 1E-10; that it
+// stops where it does above 1, at 20, is assumed.
+const PLAIN_EXPONENT_MIN = -20;
+
 export type SheetNames = (id: string) => string | undefined;
 
 export function printStored(tree: FormulaNode): string {
@@ -27,10 +31,8 @@ function noName(): undefined {
 function print(node: FormulaNode, stored: boolean, row: number, column: number, sheetName: SheetNames): string {
     const { children, space } = node;
     switch (node.kind) {
-        case NodeKind.Number: {
-            const text = String(node.value);
-            return space + (text.includes('e') ? text.replace('e', 'E') : text);
-        }
+        case NodeKind.Number:
+            return space + numberText(node.value);
         case NodeKind.String:
             return `${space}"${node.text.includes('"') ? node.text.replaceAll('"', '""') : node.text}"`;
         case NodeKind.Boolean:
@@ -71,6 +73,17 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
         case NodeKind.Array:
             return `${space}{${list(node, 0, node.op, stored, row, column, sheetName)}${node.spaceEnd}}`;
     }
+}
+
+// The one spelling of a number: the shortest digits that read back as it, plain where Excel rewrites a literal to
+// plain digits on entry. JavaScript turns to E notation at 1E+21, as Excel does, but below 1 already at 1E-7.
+function numberText(value: number): string {
+    const short = String(value);
+    if (!short.includes('e')) return short;
+    const [mantissa, power] = short.split('e');
+    const exponent = Number(power);
+    if (exponent > 0 || exponent < PLAIN_EXPONENT_MIN) return `${mantissa}E${power}`;
+    return `0.${'0'.repeat(-exponent - 1)}${mantissa.replace('.', '')}`;
 }
 
 // The children from `from` on with commas between, and a semicolon where a row of `columns` ends.

@@ -17,7 +17,7 @@ import {
     storedText,
     Token,
 } from '../../text';
-import { at, failure, findSheet, grouped, sheetName, shown, stored, treeA1, treeStored } from './support';
+import { at, dice, failure, findSheet, grouped, sheetName, shown, stored, treeA1, treeStored } from './support';
 
 const group = (text: string, host = 'A1') => grouped(treeA1(text, host));
 
@@ -191,6 +191,65 @@ describe('literals and names (parsing.md 2.3)', () => {
         ['=norm.s.dist(1,true)', '=NORM.S.DIST(1,TRUE)'],
     ])('%s shows as %s', (text, expected) => {
         expect(shown(text)).toBe(expected);
+    });
+
+    test.each([
+        ['=0.0000001', '=0.0000001'],
+        ['=1E-7', '=0.0000001'],
+        ['=A1*0.000000001', '=A1*0.000000001'],
+        ['=1.5E-7', '=0.00000015'],
+        ['=1E-10', '=0.0000000001'],
+        ['=1E-5', '=0.00001'],
+        ['=0.000000000008854', '=0.000000000008854'],
+        ['=1.6e-19', '=0.00000000000000000016'],
+        ['=1E-20', '=0.00000000000000000001'],
+        ['=1.23456789012345E-20', '=0.0000000000000000000123456789012345'],
+        ['=9.99999999999999E-21', '=9.99999999999999E-21'],
+        ['=1E-21', '=1E-21'],
+        ['=6.626E-34', '=6.626E-34'],
+        ['=0.00000000000000000000000000000000066260', '=6.626E-34'],
+        ['=5E-324', '=5E-324'],
+        ['=1E+15', '=1000000000000000'],
+        ['=1E20', '=100000000000000000000'],
+        ['=123456789012345E6', '=123456789012345000000'],
+        ['=9.99999999999999e20', '=999999999999999000000'],
+        ['=1E21', '=1E+21'],
+        ['=1000000000000000000000', '=1E+21'],
+        ['=1.5e21', '=1.5E+21'],
+        ['=1.23456789012345E+100', '=1.23456789012345E+100'],
+        ['=1E308', '=1E+308'],
+        ['=0', '=0'],
+    ])('a number prints in plain digits where Excel writes them: %s shows as %s', (text, expected) => {
+        expect(shown(text)).toBe(expected);
+        expect(stored(text)).toBe(expected.replace('A1', 'RC[-13]'));
+        expect(treeStored(stored(text))).toEqual(treeA1(text));
+    });
+
+    test('a number of 15 digits at any exponent has one spelling, which reads back as the same value', () => {
+        const { random } = dice(9);
+        for (let exponent = -323; exponent <= 307; exponent += 1) {
+            for (let run = 0; run < 40; run += 1) {
+                let digits = String(1 + Math.floor(random() * 9));
+                for (let i = Math.floor(random() * 15); i > 0; i -= 1) digits += Math.floor(random() * 10);
+                const typed = `=${digits.charAt(0)}.${digits.slice(1)}0E${exponent}`;
+                const tree = treeA1(typed);
+                const value = Number(typed.slice(1));
+                expect(tree.value).toBe(value);
+                const text = printStored(tree);
+                expect(treeStored(text).value).toBe(value);
+                expect(printStored(treeStored(text))).toBe(text);
+                expect(shown(text)).toBe(text);
+                const power = Math.floor(Math.log10(value));
+                const plain = /^=(?:0|[1-9]\d*)(?:\.\d*[1-9])?$/.test(text);
+                const scientific = /^=[1-9](?:\.\d*[1-9])?E[+-]\d{2,3}$/.test(text);
+                // Below the smallest normal number a double holds fewer digits than were typed.
+                const significant = text.replace(/E.*|[=.]/g, '').replace(/^0+|0+$/g, '').length;
+                if (exponent > -300) expect(significant).toBeLessThanOrEqual(15);
+                expect(plain || scientific).toBe(true);
+                if (Math.abs(power) < 20) expect(plain).toBe(true);
+                if (Math.abs(power) > 21) expect(scientific).toBe(true);
+            }
+        }
     });
 
     test('a number is its value, a string its content', () => {
