@@ -49,6 +49,8 @@ type CanvasToolbarProps = {
     setTool: (tool: VectorTool) => void;
     // Greys the Edit rows that act on the selection, and Insert › Comment unless it is one element.
     selectedIds: readonly string[];
+    // While the canvas edits text, the Edit rows that act on objects grey, as their keys stand down.
+    textEditing: boolean;
     // Tool lock (Q): keeps the selected tool active for repeated placement.
     toolLocked: boolean;
     setToolLocked: (locked: boolean) => void;
@@ -89,6 +91,7 @@ export function CanvasToolbar({
     tool,
     setTool,
     selectedIds,
+    textEditing,
     toolLocked,
     setToolLocked,
     onInsertImage,
@@ -150,9 +153,11 @@ export function CanvasToolbar({
                                             onCut={() => canvasRef.current?.cut()}
                                             onCopy={() => canvasRef.current?.copy()}
                                             onPaste={() => canvasRef.current?.paste()}
+                                            onSelectAll={() => canvasRef.current?.selectAll()}
                                             onDuplicate={() => canvasRef.current?.duplicate()}
                                             onDelete={() => canvasRef.current?.delete()}
                                             selectionEmpty={selectedIds.length === 0}
+                                            selectionLocked={textEditing}
                                         />
                                         <DropdownMenuSeparator />
                                         <ToolMenuItems tools={EDIT_TOOLS} setTool={setTool} />

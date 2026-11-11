@@ -134,6 +134,8 @@ const canvasProps = {
     toggle: () => {},
     aspectLocked: false,
     publishCursor: () => {},
+    canvasRef: { current: null },
+    onTextEditingChange: () => {},
     commentCards: cards,
 };
 

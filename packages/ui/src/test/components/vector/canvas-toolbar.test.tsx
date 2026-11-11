@@ -35,6 +35,7 @@ async function render(props: Partial<Parameters<typeof CanvasToolbar>[0]> = {}) 
         tool: 'select',
         setTool: () => {},
         selectedIds: [],
+        textEditing: false,
         toolLocked: false,
         setToolLocked: () => {},
         canvasRef: { current: null },
@@ -125,6 +126,7 @@ function handle(log: string[] = []) {
         cut: () => log.push('cut'),
         copy: () => log.push('copy'),
         paste: () => log.push('paste'),
+        selectAll: () => log.push('selectAll'),
         duplicate: () => log.push('duplicate'),
         delete: () => log.push('delete'),
     };
@@ -146,6 +148,7 @@ test("an editor's Edit menu puts the clipboard rows above the tools", async () =
         'Copy',
         'Paste',
         '—',
+        'Select all',
         'Duplicate',
         'Delete',
         '—',
@@ -164,6 +167,13 @@ test('with nothing selected only Paste of the clipboard rows stays enabled', asy
     expect(disabledRows()).toEqual(['Undo', 'Redo', 'Cut', 'Copy', 'Duplicate', 'Delete']);
 });
 
+// The canvas's keys stand down while a text box is edited, so a pick here can't cut or delete the box under the caret.
+test('while text is edited, the rows that act on objects grey and Paste stays', async () => {
+    await render({ selectedIds: ['shape-1'], textEditing: true });
+    await openMenu('Edit');
+    expect(disabledRows()).toEqual(['Undo', 'Redo', 'Cut', 'Copy', 'Select all', 'Duplicate', 'Delete']);
+});
+
 test('a viewer, who selects nothing on the canvas, keeps only Find', async () => {
     await render({ canEdit: false });
     await openMenu('Edit');
@@ -173,13 +183,13 @@ test('a viewer, who selects nothing on the canvas, keeps only Find', async () =>
 test("an Edit row runs the canvas's own action", async () => {
     const log: string[] = [];
     await render({ selectedIds: ['shape-1'], canvasRef: { current: handle(log) } });
-    for (const label of ['Cut', 'Copy', 'Paste', 'Duplicate', 'Delete']) {
+    for (const label of ['Cut', 'Copy', 'Paste', 'Select all', 'Duplicate', 'Delete']) {
         await openMenu('Edit');
         await act(async () => {
             menuItem(label)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         });
     }
-    expect(log).toEqual(['cut', 'copy', 'paste', 'duplicate', 'delete']);
+    expect(log).toEqual(['cut', 'copy', 'paste', 'selectAll', 'duplicate', 'delete']);
 });
 
 // A canvas card anchors to one element, so Insert › Comment, last after a separator as in Google's, takes one.

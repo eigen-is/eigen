@@ -134,6 +134,7 @@ async function render(canEdit: boolean, selected: string[] = []) {
             aspectLocked: false,
             publishCursor: () => {},
             canvasRef,
+            onTextEditingChange: () => {},
         });
     }
     const rendered = await renderInDocument(
@@ -271,4 +272,12 @@ test("the toolbar's Edit › Duplicate and Delete act on the selection, as the o
     await act(async () => canvasRef.current?.delete());
     expect(elements.size).toBe(ELEMENTS.length);
     expect(elements.has('r')).toBe(true);
+});
+
+test("the toolbar's Edit › Select all selects every element, as ⌘A does", async () => {
+    await render(true);
+    await act(async () => canvasRef.current?.selectAll());
+    // Delete takes the selection, so an empty scene says every element was in it.
+    await act(async () => canvasRef.current?.delete());
+    expect(doc.getMap('elements').size).toBe(0);
 });

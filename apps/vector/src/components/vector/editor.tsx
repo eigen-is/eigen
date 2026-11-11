@@ -52,6 +52,8 @@ export function VectorEditor({
     const doc = useCanvasDoc(ownerId, path.mountId, path.id, VECTOR_STYLE_DEFAULTS);
     const { tool, setTool, toolLocked, setToolLocked } = useTool();
     const { selectedIds, setSelectedIds, toggle } = useSelection();
+    // The canvas reports an open text editor, so the toolbar's Edit rows stand down as the canvas's keys do.
+    const [textEditing, setTextEditing] = useState(false);
     // Peers see this user's name and selection, and the canvas gets a throttled publisher for the cursor. The selection
     // comes from here, because the editor owns it.
     const { user } = useAuth();
@@ -133,6 +135,7 @@ export function VectorEditor({
                     tool={tool}
                     setTool={setTool}
                     selectedIds={selectedIds}
+                    textEditing={textEditing}
                     toolLocked={toolLocked}
                     setToolLocked={setToolLocked}
                     onInsertImage={insertImage}
@@ -194,6 +197,7 @@ export function VectorEditor({
                     aspectLocked={aspectLocked}
                     publishCursor={publishCursor}
                     canvasRef={canvasRef}
+                    onTextEditingChange={setTextEditing}
                     onOpenCard={comments.openCard}
                     commentCards={comments.lifecycle.cards}
                     onAddComment={addComment}

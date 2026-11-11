@@ -3,6 +3,13 @@
 // chart or a selection.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
+import {
+    COPY_HOTKEY,
+    CUT_HOTKEY,
+    DUPLICATE_HOTKEY,
+    PASTE_HOTKEY,
+    SELECT_ALL_HOTKEY,
+} from '@workspace/lib/constants/hotkeys';
 import { downloadDriveFile } from '@workspace/lib/download';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ZOp } from '@workspace/lib/vector';
@@ -66,6 +73,7 @@ export function ClipboardMenuItems({
     onDuplicate,
     onDelete,
     selectionEmpty = false,
+    selectionLocked = false,
 }: {
     onCut?: () => void;
     onCopy?: () => void;
@@ -74,42 +82,45 @@ export function ClipboardMenuItems({
     onDuplicate?: () => void;
     onDelete?: () => void;
     selectionEmpty?: boolean;
+    // The selection's keys stand down, such as while a canvas edits a text box, so its rows and Select all grey too.
+    selectionLocked?: boolean;
 }) {
+    const actsOnSelection = !selectionEmpty && !selectionLocked;
     return (
         <>
             {onCut && (
-                <DropdownMenuItem onClick={onCut} disabled={selectionEmpty}>
+                <DropdownMenuItem onClick={onCut} disabled={!actsOnSelection}>
                     <Scissors className="h-4 w-4" /> Cut
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+X')}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>{formatForDisplay(CUT_HOTKEY)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
             {onCopy && (
-                <DropdownMenuItem onClick={onCopy} disabled={selectionEmpty}>
+                <DropdownMenuItem onClick={onCopy} disabled={!actsOnSelection}>
                     <Copy className="h-4 w-4" /> Copy
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+C')}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>{formatForDisplay(COPY_HOTKEY)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
             {onPaste && (
                 <DropdownMenuItem onClick={onPaste}>
                     <ClipboardPaste className="h-4 w-4" /> Paste
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+V')}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>{formatForDisplay(PASTE_HOTKEY)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
             {(onSelectAll || onDuplicate || onDelete) && <DropdownMenuSeparator />}
             {onSelectAll && (
-                <DropdownMenuItem onClick={onSelectAll}>
+                <DropdownMenuItem onClick={onSelectAll} disabled={selectionLocked}>
                     <TextSelect className="h-4 w-4" /> Select all
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+A')}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>{formatForDisplay(SELECT_ALL_HOTKEY)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
             {onDuplicate && (
-                <DropdownMenuItem onClick={onDuplicate} disabled={selectionEmpty}>
+                <DropdownMenuItem onClick={onDuplicate} disabled={!actsOnSelection}>
                     <CopyPlus className="h-4 w-4" /> Duplicate
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+D')}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>{formatForDisplay(DUPLICATE_HOTKEY)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
             {onDelete && (
-                <DropdownMenuItem variant="destructive" onClick={onDelete} disabled={selectionEmpty}>
+                <DropdownMenuItem variant="destructive" onClick={onDelete} disabled={!actsOnSelection}>
                     <Trash2 className="h-4 w-4" /> Delete
                 </DropdownMenuItem>
             )}
