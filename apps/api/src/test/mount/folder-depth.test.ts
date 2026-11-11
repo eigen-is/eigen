@@ -3,7 +3,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { Mount } from '../../lib/mount/mount';
 import { createGetLocalDatabase } from '../fault-storage-helpers';
-import { createTestMountConfig, TEST_ACTOR } from '../mount-test-helpers';
+import { createTestMountConfig, seedFile, TEST_ACTOR } from '../mount-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-folder-depth-${Date.now()}`);
 const TOO_DEEP = { status: 400, message: 'Folders can be nested at most 256 levels deep' };
@@ -50,7 +50,7 @@ describe('Folders nest at most 256 levels deep', () => {
     test('a folder at depth 256 is created, and a folder or file at 257 is refused', async () => {
         const deepest = await mount.createFolder(levels[255]!, 'L256');
         await expect(mount.createFolder(deepest, 'L257')).rejects.toMatchObject(TOO_DEEP);
-        await expect(mount.createFile(deepest, 'f.txt', 'text/plain', 1, Buffer.from('x'))).rejects.toMatchObject(
+        await expect(seedFile(mount, deepest, 'f.txt', 'text/plain', 1, Buffer.from('x'))).rejects.toMatchObject(
             TOO_DEEP,
         );
         expect(await mount.listFolder(deepest)).toHaveLength(0);

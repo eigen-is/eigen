@@ -12,7 +12,7 @@ import { verifyFolder } from '../../lib/backup/verify';
 import { getHome } from '../../lib/home/get-home';
 import { Mount } from '../../lib/mount/mount';
 import { S3Storage } from '../../lib/storage/s3-storage';
-import { registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
+import { pendingUploadCount, registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
 import {
     assertJson,
     authedRequest,
@@ -220,7 +220,7 @@ describe.skipIf(!live)('Backup round trip on a real S3 mount (MinIO)', () => {
         await restored.init();
         try {
             await restored.uploadQueue?.drain({ flushNow: true });
-            expect(restored.uploadQueue?.pendingCount).toBe(0);
+            expect(pendingUploadCount(restored)).toBe(0);
             expect(await bytesInBucket(storage, restoredPngKey)).toEqual(TEST_PNG_BYTES);
             expect(await bytesInBucket(storage, restoredTextKey)).toEqual(TEXT_BYTES);
         } finally {

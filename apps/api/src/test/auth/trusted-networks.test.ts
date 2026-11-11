@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseRouteTable, scopeTrustedNetworks } from '../../lib/auth/trusted-networks';
+import { isTrustedBy, parseRouteTable, scopeTrustedNetworks } from '../../lib/auth/trusted-networks';
 
 const HEADER = 'Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT';
 
@@ -73,5 +73,20 @@ describe('scopeTrustedNetworks', () => {
         const routes = parseRouteTable(table(DEFAULT_VIA_OTHER, OTHER_SUBNET));
         const trusted = ['127.0.0.0/8', '10.0.0.0/8', '10.0.0.5', '172.20.0.0/24'];
         expect(scopeTrustedNetworks(trusted, routes)).toEqual({ networks: trusted, gateways: [], untrusted: [] });
+    });
+});
+
+describe('isTrustedBy, behind a Docker bridge', () => {
+    const trust = scopeTrustedNetworks(TRUSTED, parseRouteTable(table(DEFAULT_VIA_EIGEN, EIGEN_SUBNET)));
+
+    test('refuses the gateway, which a local user on the host arrives from', () => {
+        expect(isTrustedBy(trust, '172.20.0.1')).toBe(false);
+        expect(isTrustedBy(trust, '::ffff:172.20.0.1')).toBe(false);
+    });
+
+    test('admits another address of the subnet, and loopback', () => {
+        expect(isTrustedBy(trust, '172.20.0.4')).toBe(true);
+        expect(isTrustedBy(trust, '::ffff:172.20.0.4')).toBe(true);
+        expect(isTrustedBy(trust, '127.0.0.1')).toBe(true);
     });
 });

@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { unescapeHtml } from '@workspace/lib/html';
+import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { functionHTMLGenerate } from '../../../state/modules/formula-editor';
+
+installHappyDom();
 
 // The formula bar and the in-cell editor render this output through innerHTML, and a
 // cell's `f` text is a schemaless CRDT string — any collaborator can author one, and an
@@ -38,14 +40,11 @@ describe('state/formula-editor — functionHTMLGenerate', () => {
 // The editor puts the caret back as an offset into its whole text after a rebuild, so the
 // spans must render exactly the typed formula, escaped tokens included.
 describe('state/formula-editor — generated HTML measures like its rendered text', () => {
-    for (const formula of ['=A1&B1', '=A1<B1', '=IF(A1<>2,1,0)', '=A1>=5', '=CONCAT("a&b")']) {
-        test(`${formula} decodes back to itself`, () => {
-            const html = functionHTMLGenerate(formula);
-            const segments = html
-                .replace(/<span.*?>/g, '')
-                .split('</span>')
-                .map(unescapeHtml);
-            expect(segments.join('')).toBe(formula);
+    for (const formula of ['=A1&B1', '=A1<B1', '=IF(A1<>2,1,0)', '=A1>=5', '=CONCAT("a&b")', '=A1  + B1 ']) {
+        test(`${formula} renders as itself`, () => {
+            const rendered = document.createElement('div');
+            rendered.innerHTML = functionHTMLGenerate(formula);
+            expect(rendered.textContent).toBe(formula);
         });
     }
 });

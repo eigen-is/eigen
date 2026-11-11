@@ -10,7 +10,6 @@ import { CONTENT_REINDEX_CAP_SECONDS } from '../../lib/mount/content-reindex-que
 import type { Mount } from '../../lib/mount/mount';
 import { setShutdownDrainDeadline } from '../../lib/mount/upload-limits';
 import { extractText } from '../../lib/search/extract-text';
-import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION, HOUR_MS } from '../../lib/versioning/retention';
 import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
@@ -19,16 +18,16 @@ import {
     createGetLocalDatabase,
     createS3MountConfig,
     FaultMount,
+    passStorageDeadline,
     provisionDoc,
     registerFaultMount,
     SETTLE_BOUND_MS,
-    SHRUNK_STORAGE_TIMEOUT_MS,
     STALL_BOUND_MS,
     settleContainer,
     settlesWithin,
     waitFor,
 } from '../fault-storage-helpers';
-import { TEST_ACTOR } from '../mount-test-helpers';
+import { seedFile, TEST_ACTOR } from '../mount-test-helpers';
 import { getTestContext } from '../setup';
 
 // A mount whose real S3Storage talks to a FakeS3Server that stalls, fails or cuts its reads.
@@ -63,7 +62,7 @@ async function storedDoc(mount: Mount, rows = 1): Promise<{ containerId: string;
 async function storedFile(name: string): Promise<{ fileId: string; key: string }> {
     const rootId = (await mount.getRootFolder())!.id;
     const bytes = new Uint8Array(256 * 1024).fill(7);
-    const fileId = await mount.createFile(rootId, name, 'application/octet-stream', bytes.length, bytes);
+    const fileId = await seedFile(mount, rootId, name, 'application/octet-stream', bytes.length, bytes);
     return { fileId, key: await mount.getStorageKey(fileId) };
 }
 
@@ -82,7 +81,6 @@ beforeEach(async () => {
     await mount.init();
 });
 afterEach(async () => {
-    setStorageTimeoutMs(STORAGE_TIMEOUT_MS);
     fake.heal();
     await mount.closeAllDatabases();
     await fake.stop();
@@ -91,38 +89,42 @@ afterAll(() => rmSync(TEST_DIR, { recursive: true, force: true }));
 
 describe('Stalled S3 reads', () => {
     test('a download whose HEAD stalls answers 503 instead of waiting on the backend', async () => {
-        setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
         const rootId = (await mount.getRootFolder())!.id;
-        const fileId = await mount.createFile(rootId, 'a.bin', 'application/octet-stream', 4, new Uint8Array(4));
+        const fileId = await seedFile(mount, rootId, 'a.bin', 'application/octet-stream', 4, new Uint8Array(4));
         fake.faults.set(await mount.getStorageKey(fileId), 'stall');
-        const failure = mount.readFile(fileId).catch((error: unknown) => error);
+        const { started: failure } = await passStorageDeadline(
+            () => mount.readFile(fileId).catch((error: unknown) => error),
+            () => fake.heldCount > 0,
+        );
         expect(await settlesWithin([failure], STALL_BOUND_MS)).toBe(true);
         expect(await failure).toMatchObject({ status: 503 });
     });
 
     test('a document open whose data.db GET stalls mid-body answers 503', async () => {
-        setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
         const { dataDbId, dataKey } = await storedDoc(mount);
         fake.faults.set(dataKey, 'stall-body');
-        const failure = mount.withDatabase(docConfig, dataDbId, async () => {}).catch((error: unknown) => error);
+        const { started: failure } = await passStorageDeadline(
+            () => mount.withDatabase(docConfig, dataDbId, async () => {}).catch((error: unknown) => error),
+            () => fake.heldCount > 0,
+        );
         expect(await settlesWithin([failure], STALL_BOUND_MS)).toBe(true);
         expect(await failure).toMatchObject({ status: 503 });
     });
 
     // The snapshot holds the lock across its GET, so the storage deadline is what bounds the wait.
     test('the container lock frees while a version snapshot waits on its S3 GET', async () => {
-        setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
         const { containerId, dataKey } = await storedDoc(mount);
         fake.faults.set(dataKey, 'stall-body');
-        const snapshot = mount.snapshotContainerDataDb(containerId, DEFAULT_RETENTION);
-        snapshot.catch(() => {});
-        await waitFor(() => fake.heldCount > 0);
+        const { started: snapshot } = await passStorageDeadline(
+            () => mount.snapshotContainerDataDb(containerId, DEFAULT_RETENTION).catch(() => {}),
+            () => fake.heldCount > 0,
+        );
         const next = mount.withPathLock(containerId, async () => 'free');
         try {
             expect(await settlesWithin([next], STALL_BOUND_MS)).toBe(true);
         } finally {
             fake.heal();
-            await snapshot.catch(() => {});
+            await snapshot;
             await next;
         }
     });
@@ -149,10 +151,12 @@ describe('Stalled S3 reads', () => {
 
 describe('Whole-body reads', () => {
     test('a whole-body read whose GET stalls mid-body answers 503', async () => {
-        setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
         const { fileId, key } = await storedFile('e.bin');
         fake.faults.set(key, 'stall-body');
-        const failure = mount.readBytes(fileId).catch((error: unknown) => error);
+        const { started: failure } = await passStorageDeadline(
+            () => mount.readBytes(fileId).catch((error: unknown) => error),
+            () => fake.heldCount > 0,
+        );
         expect(await settlesWithin([failure], STALL_BOUND_MS)).toBe(true);
         expect(await failure).toMatchObject({ status: 503 });
     });
@@ -176,9 +180,8 @@ describe('Whole-body reads', () => {
     });
 
     test('mount teardown does not wait on a text extraction whose GET stalls', async () => {
-        setStorageTimeoutMs(3_000);
         const rootId = (await mount.getRootFolder())!.id;
-        const fileId = await mount.createFile(rootId, 'notes.txt', 'text/plain', 5, new TextEncoder().encode('notes'));
+        const fileId = await seedFile(mount, rootId, 'notes.txt', 'text/plain', 5, new TextEncoder().encode('notes'));
         fake.faults.set(await mount.getStorageKey(fileId), 'stall-body');
         // The same mount restarted with an extractor: its reindex queue replays the dirty row at init.
         await mount.closeAllDatabases();
@@ -191,7 +194,8 @@ describe('Whole-body reads', () => {
     test('the teardown abort stops the reindex drain and leaves its backlog due', async () => {
         const rootId = (await mount.getRootFolder())!.id;
         for (let i = 0; i < 20; i++) {
-            const fileId = await mount.createFile(
+            const fileId = await seedFile(
+                mount,
                 rootId,
                 `n${i}.txt`,
                 'text/plain',
@@ -242,7 +246,7 @@ describe('A stalled DELETE', () => {
 describe('S3 reads that fail', () => {
     test('a download whose HEAD fails answers 503', async () => {
         const rootId = (await mount.getRootFolder())!.id;
-        const fileId = await mount.createFile(rootId, 'b.bin', 'application/octet-stream', 4, new Uint8Array(4));
+        const fileId = await seedFile(mount, rootId, 'b.bin', 'application/octet-stream', 4, new Uint8Array(4));
         fake.faults.set(await mount.getStorageKey(fileId), 'fail');
         await expect(mount.readFile(fileId)).rejects.toMatchObject({ status: 503 });
     });
@@ -250,7 +254,7 @@ describe('S3 reads that fail', () => {
     test('a copy whose source GET dies midway leaves nothing in tmp/', async () => {
         const rootId = (await mount.getRootFolder())!.id;
         const bytes = new Uint8Array(256 * 1024).fill(7);
-        const fileId = await mount.createFile(rootId, 'c.bin', 'application/octet-stream', bytes.length, bytes);
+        const fileId = await seedFile(mount, rootId, 'c.bin', 'application/octet-stream', bytes.length, bytes);
         const before = readdirSync(mount.tmpDir);
         fake.faults.set(await mount.getStorageKey(fileId), 'cut');
         await expect(
@@ -270,7 +274,7 @@ describe('Abandoned downloads', () => {
     test('a client that abandons a streaming download closes the upstream GET', async () => {
         const rootId = (await mount.getRootFolder())!.id;
         const bytes = new Uint8Array(256 * 1024).fill(7);
-        const fileId = await mount.createFile(rootId, 'd.bin', 'application/octet-stream', bytes.length, bytes);
+        const fileId = await seedFile(mount, rootId, 'd.bin', 'application/octet-stream', bytes.length, bytes);
         fake.faults.set(await mount.getStorageKey(fileId), 'stall-body');
         const reader = (await mount.readFile(fileId))!.stream().getReader();
         expect((await reader.read()).done).toBe(false);
@@ -317,7 +321,6 @@ describe('A stalled GET and the Home', () => {
     });
 
     test('turning a mount off does not wait on a document whose GET stalls', async () => {
-        setStorageTimeoutMs(3_000);
         const ctx = await getTestContext();
         const home = await getHome(ctx.alice.user.id);
         const homeMount = new FaultMount(

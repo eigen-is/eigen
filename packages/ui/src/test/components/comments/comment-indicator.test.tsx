@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { EIGEN_COLORS_MAP, EIGEN_STICKIES_COLOR_ROW, EIGEN_STICKIES_INDICATOR_ROW } from '@workspace/lib/constants';
+import { eigenColor } from '@workspace/lib/constants';
 import { CELL_INDICATOR_SIZE, INDICATOR_RED } from '@workspace/lib/constants/comment-indicator';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CommentIndicator } from '../../../components/comments/comment-indicator';
@@ -13,7 +13,7 @@ describe('CommentIndicator', () => {
     });
 
     test('paints in the card colour, mapped through the stickies indicator tone', () => {
-        const html = renderToStaticMarkup(<CommentIndicator color={EIGEN_COLORS_MAP[1][EIGEN_STICKIES_COLOR_ROW]} />);
-        expect(html).toContain(`solid ${EIGEN_COLORS_MAP[1][EIGEN_STICKIES_INDICATOR_ROW]}`);
+        const html = renderToStaticMarkup(<CommentIndicator color={eigenColor('orange', 100)} />);
+        expect(html).toContain(`solid ${eigenColor('orange', 400)}`);
     });
 });

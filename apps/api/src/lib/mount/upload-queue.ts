@@ -5,7 +5,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { and, asc, count, eq, lte } from 'drizzle-orm';
+import { and, asc, eq, lte } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { settlesWithin } from '../../utils/timing';
 import type { StorageBackend } from '../storage';
@@ -24,7 +24,7 @@ type OrphanState = { count: number; canceled: boolean; isDatabase: boolean; last
 // would stop every mount sharing it. Long enough that a slow PUT completes.
 export const UPLOAD_PUT_TIMEOUT_MS = 120_000;
 
-export type UploadQueueDeps = {
+type UploadQueueDeps = {
     // The mount's metadata.db, which holds the pending_uploads table.
     db: Db;
     storage: StorageBackend;
@@ -65,9 +65,6 @@ export class UploadQueue {
     private closing = false;
     private closed = false;
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
-    // Fields, so tests can shrink the PUT timeout and hold back the jittered retry.
-    private putTimeoutMs = UPLOAD_PUT_TIMEOUT_MS;
-    private backoffMs = uploadBackoffMs;
 
     public constructor(deps: UploadQueueDeps) {
         this.db = deps.db;
@@ -76,12 +73,6 @@ export class UploadQueue {
         this.destinationKey = deps.destinationKey;
         this.label = deps.label;
         this.hold = deps.hold;
-    }
-
-    // How many uploads wait, for the logs and the status checks.
-    public get pendingCount(): number {
-        const row = this.db.select({ c: count() }).from(pendingUploads).get();
-        return row?.c ?? 0;
     }
 
     // Deletes the staged copies no row points to, which a crash before the row insert leaves.
@@ -113,7 +104,7 @@ export class UploadQueue {
 
     // Waits up to waitMs for the PUTs still on the wire. A forced close, such as an eviction for a restore, may find
     // some, and an old PUT that lands after the reopened queue's ack would overwrite newer bytes.
-    public async close(waitMs = this.putTimeoutMs): Promise<void> {
+    public async close(waitMs = UPLOAD_PUT_TIMEOUT_MS): Promise<void> {
         this.closing = true;
         if (this.retryTimer) {
             clearTimeout(this.retryTimer);
@@ -284,7 +275,6 @@ export class UploadQueue {
             this.liveWrites.add(write);
             const end = () => this.endWrite(write);
             write.then(end, end);
-            const timeoutMs = this.putTimeoutMs;
             await Promise.race([
                 write,
                 new Promise<never>((_, reject) => {
@@ -295,8 +285,8 @@ export class UploadQueue {
                         if (!this.closing && this.getPendingStagingPath(storageKey) === null) {
                             orphan.canceled = true;
                         }
-                        reject(new Error(`PUT exceeded ${timeoutMs}ms`));
-                    }, timeoutMs);
+                        reject(new Error(`PUT exceeded ${UPLOAD_PUT_TIMEOUT_MS}ms`));
+                    }, UPLOAD_PUT_TIMEOUT_MS);
                 }),
             ]);
             putOk = true;
@@ -331,7 +321,7 @@ export class UploadQueue {
             const next = attempt + 1;
             this.db
                 .update(pendingUploads)
-                .set({ attempt: next, nextAttemptAt: Date.now() + this.backoffMs(next) })
+                .set({ attempt: next, nextAttemptAt: Date.now() + uploadBackoffMs(next) })
                 .where(eq(pendingUploads.storageKey, storageKey))
                 .run();
             return;
@@ -414,7 +404,7 @@ export class UploadQueue {
             if (!this.liveWrites.has(write)) return;
             console.error(`[sync] giving up on the timed-out PUT for ${storageKey}, which may still land`);
             this.endWrite(write);
-        }, this.putTimeoutMs).unref();
+        }, UPLOAD_PUT_TIMEOUT_MS).unref();
         return orphan;
     }
 

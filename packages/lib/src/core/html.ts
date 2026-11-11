@@ -12,17 +12,6 @@ export function escapeHtml(text: string): string {
         .replace(/>/g, '&gt;');
 }
 
-// Exact inverse of escapeHtml, for code that must see what the browser renders. `&amp;` decodes last so an escaped
-// `&amp;lt;` comes back as the literal `&lt;` and not as a `<`.
-export function unescapeHtml(html: string): string {
-    return html
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&');
-}
-
 // Plain text → paragraph HTML, the inverse of stripTagsServer: one <p> per line, escaped. The one
 // builder for "this text becomes a rich-text body" (the canvas' text paste, the demo builder).
 export function textToParagraphHtml(text: string): string {
@@ -41,8 +30,15 @@ export function stripTagsServer(html: string): string {
         .replace(/<br\s*\/?>/gi, '\n')
         // `[^<>]`, not `[^>]`: a `<` no `>` follows would rescan the rest of the input from every `<`.
         .replace(/<[^<>]+>/g, '');
-    // `&nbsp;` is not one of escapeHtml's five, so it stays here; the rest decode through the shared inverse.
-    return unescapeHtml(text.replace(/&nbsp;/gi, ' '))
+    // The inverse of escapeHtml, plus `&nbsp;`. `&amp;` decodes last, so an escaped `&amp;lt;` comes back as the
+    // literal `&lt;` and not as a `<`.
+    return text
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
         .replace(/[ \t]+/g, ' ')
         .replace(/\n{3,}/g, '\n\n')
         .trim();

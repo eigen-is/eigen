@@ -30,7 +30,7 @@ import {
     seedDocumentMedia,
     seedVectorDoc,
 } from '../fixtures/golden-documents';
-import { createTestMountConfig } from '../mount-test-helpers';
+import { createTestMountConfig, seedFile } from '../mount-test-helpers';
 import { authedRequest, driveGet, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 describe('Preview', () => {
@@ -447,7 +447,7 @@ async function previewMount(name: string, fileName: string, mimeType: string, by
     await mount.init();
     const root = await mount.getRootFolder();
     if (!root) throw new Error('no root folder');
-    const fileId = await mount.createFile(root.id, fileName, mimeType, bytes.length, bytes);
+    const fileId = await seedFile(mount, root.id, fileName, mimeType, bytes.length, bytes);
     return { mount, path: await mount.getActivePath(fileId) };
 }
 
@@ -463,7 +463,7 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         const rootId = (await mount.getRootFolder())!.id;
 
         const v1 = Buffer.from('version one');
-        const fileId = await mount.createFile(rootId, 'notes.txt', 'text/plain', v1.length, v1);
+        const fileId = await seedFile(mount, rootId, 'notes.txt', 'text/plain', v1.length, v1);
         const path = await mount.getActivePath(fileId);
 
         // Nothing cached yet — the first request generates the current version synchronously.
@@ -506,7 +506,7 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         const rootId = (await mount.getRootFolder())!.id;
 
         const bytes = Buffer.from('current content');
-        const fileId = await mount.createFile(rootId, 'notes.txt', 'text/plain', bytes.length, bytes);
+        const fileId = await seedFile(mount, rootId, 'notes.txt', 'text/plain', bytes.length, bytes);
         const path = await mount.getActivePath(fileId);
 
         mkdirSync(mount.previewsDir, { recursive: true });
@@ -531,7 +531,7 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         const rootId = (await mount.getRootFolder())!.id;
 
         const bytes = Buffer.alloc(TEXT_PREVIEW_MAX_BYTES + 1, 'x');
-        const fileId = await mount.createFile(rootId, 'huge.txt', 'text/plain', bytes.length, bytes);
+        const fileId = await seedFile(mount, rootId, 'huge.txt', 'text/plain', bytes.length, bytes);
         const path = await mount.getActivePath(fileId);
 
         // The row's size decides, so the decode and the highlighter are spared the read as well.
@@ -555,7 +555,7 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         const rootId = (await mount.getRootFolder())!.id;
 
         const bytes = Buffer.from('plain text pretending to be a deck');
-        const fileId = await mount.createFile(rootId, 'deck.txt', 'text/plain', bytes.length, bytes);
+        const fileId = await seedFile(mount, rootId, 'deck.txt', 'text/plain', bytes.length, bytes);
         const path = await mount.getActivePath(fileId);
 
         const served = await getTextPreview(mount, { ...path, mimeType: DRIVE_MIME_SLIDES });
@@ -647,7 +647,7 @@ describe('a failed preview', () => {
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
         const bytes = Buffer.from(VCARD);
-        const fileId = await mount.createFile(rootId, 'team.vcf', 'text/vcard', bytes.length, bytes);
+        const fileId = await seedFile(mount, rootId, 'team.vcf', 'text/vcard', bytes.length, bytes);
         return { mount, path: await mount.getActivePath(fileId) };
     }
 
@@ -801,7 +801,7 @@ describe('vCard preview route', () => {
         const seed = await uploadVCard('seed-for-mount.vcf', bytes.toString());
         const home = await getHome(ownerId);
         const { mount } = await home.drive.resolveFile(mountId, seed.id);
-        const hugeId = await mount.createFile(rootId, 'huge.vcf', 'text/vcard', VCARD_MAX_BYTES + 1, bytes);
+        const hugeId = await seedFile(mount, rootId, 'huge.vcf', 'text/vcard', VCARD_MAX_BYTES + 1, bytes);
 
         const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${hugeId}/vcard-preview`);
         expect(res.status).toBe(413);
@@ -891,7 +891,7 @@ describe('eml preview route', () => {
         const seed = await uploadEml('seed-for-eml-mount.eml', MESSAGE);
         const home = await getHome(ownerId);
         const { mount } = await home.drive.resolveFile(mountId, seed.id);
-        const hugeId = await mount.createFile(rootId, 'huge.eml', EML_MIME, EML_MAX_BYTES + 1, bytes);
+        const hugeId = await seedFile(mount, rootId, 'huge.eml', EML_MIME, EML_MAX_BYTES + 1, bytes);
 
         const res = await authedRequest(token, previewUrl(hugeId));
         expect(res.status).toBe(413);
@@ -996,7 +996,7 @@ describe('ics preview route', () => {
         const seed = await uploadIcs('seed-for-ics-mount.ics', CALENDAR);
         const home = await getHome(ownerId);
         const { mount } = await home.drive.resolveFile(mountId, seed.id);
-        const hugeId = await mount.createFile(rootId, 'huge.ics', ICS_MIME, ICS_MAX_BYTES + 1, bytes);
+        const hugeId = await seedFile(mount, rootId, 'huge.ics', ICS_MIME, ICS_MAX_BYTES + 1, bytes);
 
         const res = await authedRequest(token, previewUrl(hugeId));
         expect(res.status).toBe(413);

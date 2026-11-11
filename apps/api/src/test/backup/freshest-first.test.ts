@@ -3,13 +3,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'b
 import { chmodSync, existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
-import { drainBackupJobs, getBackupJob, runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
+import { drainBackupJobs, runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
 import { getBackupsDir } from '../../lib/backup/paths';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
 import type { Mount } from '../../lib/mount/mount';
-import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { FakeS3Server } from '../fake-s3-server';
 import type { FaultStorage } from '../fault-storage-helpers';
@@ -18,15 +17,15 @@ import {
     createHomeFaultMount,
     createS3MountConfig,
     FaultMount,
+    passStorageDeadline,
     provisionDoc,
     registerFaultMount,
     SETTLE_BOUND_MS,
-    SHRUNK_STORAGE_TIMEOUT_MS,
     settleContainer,
     settlesWithin,
     unregisterFaultMount,
-    waitFor,
 } from '../fault-storage-helpers';
+import { seedFile } from '../mount-test-helpers';
 import { createTestUser, findOrFail, getTestContext, TEST_DATA_DIR, TEST_PNG_BYTES } from '../setup';
 import { MARKER_DB_CONFIG, MARKER_SCHEMA, readMarkers, snapshotInto } from './backup-test-helpers';
 
@@ -147,10 +146,10 @@ beforeAll(async () => {
     // The settled mount: a plain file at the root, one nested in a folder, a container database,
     // and a trashed file — every row shape the paths-table walk has to materialize.
     const rootId = (await fullMount.getRootFolder())!.id;
-    await fullMount.createFile(rootId, 'kept.png', 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
+    await seedFile(fullMount, rootId, 'kept.png', 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
     const nestedId = await fullMount.createFolder(rootId, 'Nested');
     nestedFileBytes = new TextEncoder().encode('nested payload');
-    await fullMount.createFile(nestedId, 'nested.txt', 'text/plain', nestedFileBytes.byteLength, nestedFileBytes);
+    await seedFile(fullMount, nestedId, 'nested.txt', 'text/plain', nestedFileBytes.byteLength, nestedFileBytes);
 
     const { containerId, dataDbId } = await provisionDoc(fullMount);
     docFolderName = (await fullMount.getPath(containerId))!.name;
@@ -158,7 +157,8 @@ beforeAll(async () => {
     managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'settled' }).run();
     await settleContainer(fullMount, containerId);
 
-    trashedFileId = await fullMount.createFile(
+    trashedFileId = await seedFile(
+        fullMount,
         rootId,
         'gone.png',
         'image/png',
@@ -252,7 +252,8 @@ describe('Backup freshest-first on an s3 mount', () => {
         const rootId = (await staleMount.getRootFolder())!.id;
         const scratch = mkdtempSync(join(TEST_DATA_DIR, 'backup-plain-'));
         const storedBytes = await writeMarkerDb(join(scratch, 'stored.db'), 'stored');
-        const fileId = await staleMount.createFile(
+        const fileId = await seedFile(
+            staleMount,
             rootId,
             'ledger.db',
             'application/x-sqlite3',
@@ -289,7 +290,8 @@ describe('Backup freshest-first on an s3 mount', () => {
     test('a storage failure fails the snapshot, naming the mount, the code and the object', async () => {
         await withFakeS3Mount(FAILING_MOUNT_ID, async (mount, fake) => {
             const rootId = (await mount.getRootFolder())!.id;
-            const fileId = await mount.createFile(
+            const fileId = await seedFile(
+                mount,
                 rootId,
                 'unreachable.png',
                 'image/png',
@@ -347,7 +349,8 @@ describe('Backup freshest-first on an s3 mount', () => {
         'an unreadable local copy fails the snapshot with its own errno',
         async () => {
             const rootId = (await staleMount.getRootFolder())!.id;
-            const fileId = await staleMount.createFile(
+            const fileId = await seedFile(
+                staleMount,
                 rootId,
                 'locked.bin',
                 'application/octet-stream',
@@ -373,7 +376,7 @@ describe('Backup freshest-first on an s3 mount', () => {
     test('a plain file whose object is gone from the bucket is archived without it, and named', async () => {
         const rootId = (await staleMount.getRootFolder())!.id;
         const create = (name: string) =>
-            staleMount.createFile(rootId, name, 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
+            seedFile(staleMount, rootId, name, 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
         const fileId = await create('lost.png');
         const keptId = await create('beside.png');
         try {
@@ -397,7 +400,8 @@ describe('Backup freshest-first on an s3 mount', () => {
         await withFakeS3Mount(NO_BUCKET_PLAIN_MOUNT_ID, async (mount, fake) => {
             const rootId = (await mount.getRootFolder())!.id;
             for (const name of ['a.png', 'b.png']) {
-                const fileId = await mount.createFile(
+                const fileId = await seedFile(
+                    mount,
                     rootId,
                     name,
                     'image/png',
@@ -415,7 +419,7 @@ describe('Backup freshest-first on an s3 mount', () => {
         await withFakeS3Mount(NO_BUCKET_STAGED_MOUNT_ID, async (mount, fake) => {
             const rootId = (await mount.getRootFolder())!.id;
             const create = (name: string) =>
-                mount.createFile(rootId, name, 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
+                seedFile(mount, rootId, name, 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
             for (const name of ['a.png', 'b.png']) {
                 fake.faults.set(await mount.getStorageKey(await create(name)), 'no-bucket');
             }
@@ -438,7 +442,8 @@ describe('Backup freshest-first on an s3 mount', () => {
     test('a file with no object passes when it has no bytes on record or is deleted mid-walk', async () => {
         const rootId = (await staleMount.getRootFolder())!.id;
         const touchedId = await staleMount.touchFile(rootId, 'touched.txt', 'text/plain');
-        const deletedId = await staleMount.createFile(
+        const deletedId = await seedFile(
+            staleMount,
             rootId,
             'deleted.png',
             'image/png',
@@ -489,7 +494,8 @@ describe('Backup freshest-first on an s3 mount', () => {
     test('a file deleted between the HEAD and the GET drops out of the archive', async () => {
         await withFakeS3Mount(RACING_DELETE_MOUNT_ID, async (mount) => {
             const rootId = (await mount.getRootFolder())!.id;
-            const fileId = await mount.createFile(
+            const fileId = await seedFile(
+                mount,
                 rootId,
                 'raced.png',
                 'image/png',
@@ -508,7 +514,8 @@ describe('Backup freshest-first on an s3 mount', () => {
     test('a live file whose object vanishes between the HEAD and the GET fails the backup', async () => {
         await withFakeS3Mount(VANISHING_OBJECT_MOUNT_ID, async (mount, fake) => {
             const rootId = (await mount.getRootFolder())!.id;
-            const fileId = await mount.createFile(
+            const fileId = await seedFile(
+                mount,
                 rootId,
                 'lost.png',
                 'image/png',
@@ -631,33 +638,35 @@ describe('Backup freshest-first on a local mount', () => {
 describe('Backup job on an s3 mount whose bucket stalls', () => {
     test('a GET that stalls ends the backup job, so the home can be restored again', async () => {
         await withFakeS3Mount(STALLED_MOUNT_ID, async (mount, fake) => {
-            let jobId: string | undefined;
+            const rootId = (await mount.getRootFolder())!.id;
+            const fileId = await seedFile(
+                mount,
+                rootId,
+                'stalled.png',
+                'image/png',
+                TEST_PNG_BYTES.byteLength,
+                TEST_PNG_BYTES,
+            );
+            const storageKey = await mount.getStorageKey(fileId);
+            fake.faults.set(storageKey, 'stall-body');
+            const { started: job } = await passStorageDeadline(
+                () =>
+                    startBackupJob('backup', home.user.id, home.user.id, (running, onProgress) =>
+                        runHomeBackup(home.user.id, running, onProgress),
+                    ),
+                () => fake.heldCount > 0,
+            );
             try {
-                const rootId = (await mount.getRootFolder())!.id;
-                const fileId = await mount.createFile(
-                    rootId,
-                    'stalled.png',
-                    'image/png',
-                    TEST_PNG_BYTES.byteLength,
-                    TEST_PNG_BYTES,
-                );
-                const storageKey = await mount.getStorageKey(fileId);
-                fake.faults.set(storageKey, 'stall-body');
-                setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
-                jobId = startBackupJob('backup', home.user.id, home.user.id, (job, onProgress) =>
-                    runHomeBackup(home.user.id, job, onProgress),
-                ).id;
-                await waitFor(() => fake.gets.has(storageKey), 10_000);
                 expect(await settlesWithin([drainBackupJobs()], SETTLE_BOUND_MS)).toBe(true);
-                expect(getBackupJob(jobId)?.state).toBe('failed');
+                expect(job.state).toBe('failed');
+                // No code: only the deadline's 503 carries no cause.
+                expect(job.error).toBe(`mount ${STALLED_MOUNT_ID}: storage unreachable reading ${storageKey}`);
             } finally {
-                setStorageTimeoutMs(STORAGE_TIMEOUT_MS);
                 fake.heal();
                 await drainBackupJobs();
-                const artifact = jobId && getBackupJob(jobId)?.artifact;
-                if (artifact) {
-                    rmSync(join(getBackupsDir(), artifact), { force: true });
-                    rmSync(join(getBackupsDir(), `${artifact}.manifest.json`), { force: true });
+                if (job.artifact) {
+                    rmSync(join(getBackupsDir(), job.artifact), { force: true });
+                    rmSync(join(getBackupsDir(), `${job.artifact}.manifest.json`), { force: true });
                 }
             }
         });

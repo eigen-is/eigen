@@ -8,7 +8,12 @@ import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { setShutdownDrainDeadline } from '../../lib/mount/upload-limits';
 import type { FaultStorage } from '../fault-storage-helpers';
-import { countRowsInFile, createFaultMount, createGetLocalDatabase } from '../fault-storage-helpers';
+import {
+    countRowsInFile,
+    createFaultMount,
+    createGetLocalDatabase,
+    pendingUploadCount,
+} from '../fault-storage-helpers';
 import { createTestMountConfig } from '../mount-test-helpers';
 
 // Regression net for AUDIT_MOUNT § P1 (finding 2a + siblings): a cached document DB syncs to a
@@ -166,7 +171,7 @@ describe('delete/trash must evict the cached document DB (no resurrection, no le
         // The cached DB was closed: its live temp (and 30s sync timer) are gone, so no later tick can
         // re-stage the dead key.
         expect(existsSync(mount.getTempPath(dataDbId))).toBe(false);
-        expect(mount.uploadQueue?.pendingCount).toBe(0);
+        expect(pendingUploadCount(mount)).toBe(0);
 
         await mount.uploadQueue?.drain({ flushNow: true });
         expect(await backing.exists(storageKey)).toBe(false); // never resurrected

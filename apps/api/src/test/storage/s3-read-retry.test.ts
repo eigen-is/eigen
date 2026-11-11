@@ -1,26 +1,17 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, jest, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-    RETRY_WAITS_MS,
-    readStorageFile,
-    STORAGE_TIMEOUT_MS,
-    setRetryWaitsMs,
-    setStorageTimeoutMs,
-    streamStorageFile,
-} from '../../lib/storage/deadline';
+import { readStorageFile, STORAGE_TIMEOUT_MS, streamStorageFile } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { S3Storage } from '../../lib/storage/s3-storage';
 import { FakeS3Server } from '../fake-s3-server';
-import { SHRUNK_RETRY_WAITS_MS, STALL_BOUND_MS, waitFor } from '../fault-storage-helpers';
+import { passStorageDeadline, STALL_BOUND_MS, waitFor } from '../fault-storage-helpers';
 
 // The real S3Storage against a fake S3 that answers 503 SlowDown, as Hetzner does under load. Bun's S3Client never
 // retries a read itself.
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-s3-read-retry-${Date.now()}`);
 const BYTES = new Uint8Array(4096).fill(7);
-// Longer than the first wait (200 to 300 ms), shorter than the first two together.
-const RETRY_DEADLINE_MS = 500;
 
 let fake: FakeS3Server;
 let storage: S3Storage;
@@ -34,7 +25,6 @@ beforeEach(async () => {
     key = storage.getKey('image.png');
 });
 afterEach(async () => {
-    setStorageTimeoutMs(STORAGE_TIMEOUT_MS);
     fake.heal();
     await fake.stop();
 });
@@ -104,20 +94,23 @@ describe('S3 reads do not retry a definite answer', () => {
     });
 });
 
-// Real waits: these pin where a wait falls against the deadline and the signal.
 describe('a retry stays inside the storage deadline', () => {
-    beforeEach(() => setRetryWaitsMs(RETRY_WAITS_MS));
-    afterEach(() => setRetryWaitsMs(SHRUNK_RETRY_WAITS_MS));
-
     test('a HEAD stops retrying when the deadline fires during its wait', async () => {
-        setStorageTimeoutMs(RETRY_DEADLINE_MS);
         fake.slowDowns.set(key, 3);
-        const started = Date.now();
-        await expect(storage.exists('image.png')).rejects.toMatchObject({ status: 503 });
-        expect(Date.now() - started).toBeLessThan(RETRY_DEADLINE_MS + STALL_BOUND_MS);
-        // Past where a third attempt would have run without the deadline: 300 ms, then at most 1200 ms.
-        await Bun.sleep(1_600);
-        expect(fake.heads.get(key)).toBe(2);
+        const { started: probe } = await passStorageDeadline(
+            () => {
+                const exists = storage.exists('image.png').catch((error: unknown) => error);
+                // Short of the deadline by less than the first wait, which is at least 200 ms.
+                jest.advanceTimersByTime(STORAGE_TIMEOUT_MS - 100);
+                return exists;
+            },
+            // The deadline and the wait it must stop are both armed.
+            () => jest.getTimerCount() === 2,
+        );
+        expect(await probe).toMatchObject({ status: 503 });
+        // A wait the deadline did not stop has run out by now, and its HEAD has arrived.
+        await Bun.sleep(STALL_BOUND_MS);
+        expect(fake.heads.get(key)).toBe(1);
     });
 
     test("a GET stops retrying when its read's signal aborts during the wait", async () => {
