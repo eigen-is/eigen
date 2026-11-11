@@ -97,12 +97,15 @@ describe('S3 reads do not retry a definite answer', () => {
 describe('a retry stays inside the storage deadline', () => {
     test('a HEAD stops retrying when the deadline fires during its wait', async () => {
         fake.slowDowns.set(key, 3);
-        jest.useFakeTimers();
-        const probe = storage.exists('image.png').catch((error: unknown) => error);
-        // Short of the deadline by less than the first wait, which is at least 200 ms.
-        jest.advanceTimersByTime(STORAGE_TIMEOUT_MS - 100);
-        // Two timers: the deadline's and, once the first HEAD is refused, the wait's.
-        await passStorageDeadline(() => jest.getTimerCount() === 2);
+        const { started: probe } = await passStorageDeadline(
+            () => {
+                const exists = storage.exists('image.png').catch((error: unknown) => error);
+                // Short of the deadline by less than the first wait, which is at least 200 ms.
+                jest.advanceTimersByTime(STORAGE_TIMEOUT_MS - 100);
+                return exists;
+            },
+            () => fake.heads.get(key) === 1,
+        );
         expect(await probe).toMatchObject({ status: 503 });
         // A wait the deadline did not stop has run out by now, and its HEAD has arrived.
         await Bun.sleep(STALL_BOUND_MS);

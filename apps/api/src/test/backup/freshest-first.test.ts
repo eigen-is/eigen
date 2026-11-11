@@ -1,9 +1,9 @@
 import { constants, Database } from 'bun:sqlite';
-import { afterAll, afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { chmodSync, existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
-import { drainBackupJobs, getBackupJob, runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
+import { drainBackupJobs, runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
 import { getBackupsDir } from '../../lib/backup/paths';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
@@ -638,33 +638,35 @@ describe('Backup freshest-first on a local mount', () => {
 describe('Backup job on an s3 mount whose bucket stalls', () => {
     test('a GET that stalls ends the backup job, so the home can be restored again', async () => {
         await withFakeS3Mount(STALLED_MOUNT_ID, async (mount, fake) => {
-            let jobId: string | undefined;
+            const rootId = (await mount.getRootFolder())!.id;
+            const fileId = await seedFile(
+                mount,
+                rootId,
+                'stalled.png',
+                'image/png',
+                TEST_PNG_BYTES.byteLength,
+                TEST_PNG_BYTES,
+            );
+            const storageKey = await mount.getStorageKey(fileId);
+            fake.faults.set(storageKey, 'stall-body');
+            const { started: job } = await passStorageDeadline(
+                () =>
+                    startBackupJob('backup', home.user.id, home.user.id, (running, onProgress) =>
+                        runHomeBackup(home.user.id, running, onProgress),
+                    ),
+                () => fake.heldCount > 0,
+            );
             try {
-                const rootId = (await mount.getRootFolder())!.id;
-                const fileId = await seedFile(
-                    mount,
-                    rootId,
-                    'stalled.png',
-                    'image/png',
-                    TEST_PNG_BYTES.byteLength,
-                    TEST_PNG_BYTES,
-                );
-                const storageKey = await mount.getStorageKey(fileId);
-                fake.faults.set(storageKey, 'stall-body');
-                jest.useFakeTimers();
-                jobId = startBackupJob('backup', home.user.id, home.user.id, (job, onProgress) =>
-                    runHomeBackup(home.user.id, job, onProgress),
-                ).id;
-                await passStorageDeadline(() => fake.heldCount > 0);
                 expect(await settlesWithin([drainBackupJobs()], SETTLE_BOUND_MS)).toBe(true);
-                expect(getBackupJob(jobId)?.state).toBe('failed');
+                expect(job.state).toBe('failed');
+                // No code: only the deadline's 503 carries no cause.
+                expect(job.error).toBe(`mount ${STALLED_MOUNT_ID}: storage unreachable reading ${storageKey}`);
             } finally {
                 fake.heal();
                 await drainBackupJobs();
-                const artifact = jobId && getBackupJob(jobId)?.artifact;
-                if (artifact) {
-                    rmSync(join(getBackupsDir(), artifact), { force: true });
-                    rmSync(join(getBackupsDir(), `${artifact}.manifest.json`), { force: true });
+                if (job.artifact) {
+                    rmSync(join(getBackupsDir(), job.artifact), { force: true });
+                    rmSync(join(getBackupsDir(), `${job.artifact}.manifest.json`), { force: true });
                 }
             }
         });

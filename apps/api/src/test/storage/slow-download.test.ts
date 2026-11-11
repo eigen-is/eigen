@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, jest, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
@@ -92,9 +92,10 @@ describe('Stalled S3 reads', () => {
         const rootId = (await mount.getRootFolder())!.id;
         const fileId = await seedFile(mount, rootId, 'a.bin', 'application/octet-stream', 4, new Uint8Array(4));
         fake.faults.set(await mount.getStorageKey(fileId), 'stall');
-        jest.useFakeTimers();
-        const failure = mount.readFile(fileId).catch((error: unknown) => error);
-        await passStorageDeadline(() => fake.heldCount > 0);
+        const { started: failure } = await passStorageDeadline(
+            () => mount.readFile(fileId).catch((error: unknown) => error),
+            () => fake.heldCount > 0,
+        );
         expect(await settlesWithin([failure], STALL_BOUND_MS)).toBe(true);
         expect(await failure).toMatchObject({ status: 503 });
     });
@@ -102,9 +103,10 @@ describe('Stalled S3 reads', () => {
     test('a document open whose data.db GET stalls mid-body answers 503', async () => {
         const { dataDbId, dataKey } = await storedDoc(mount);
         fake.faults.set(dataKey, 'stall-body');
-        jest.useFakeTimers();
-        const failure = mount.withDatabase(docConfig, dataDbId, async () => {}).catch((error: unknown) => error);
-        await passStorageDeadline(() => fake.heldCount > 0);
+        const { started: failure } = await passStorageDeadline(
+            () => mount.withDatabase(docConfig, dataDbId, async () => {}).catch((error: unknown) => error),
+            () => fake.heldCount > 0,
+        );
         expect(await settlesWithin([failure], STALL_BOUND_MS)).toBe(true);
         expect(await failure).toMatchObject({ status: 503 });
     });
@@ -113,16 +115,16 @@ describe('Stalled S3 reads', () => {
     test('the container lock frees while a version snapshot waits on its S3 GET', async () => {
         const { containerId, dataKey } = await storedDoc(mount);
         fake.faults.set(dataKey, 'stall-body');
-        jest.useFakeTimers();
-        const snapshot = mount.snapshotContainerDataDb(containerId, DEFAULT_RETENTION);
-        snapshot.catch(() => {});
-        await passStorageDeadline(() => fake.heldCount > 0);
+        const { started: snapshot } = await passStorageDeadline(
+            () => mount.snapshotContainerDataDb(containerId, DEFAULT_RETENTION).catch(() => {}),
+            () => fake.heldCount > 0,
+        );
         const next = mount.withPathLock(containerId, async () => 'free');
         try {
             expect(await settlesWithin([next], STALL_BOUND_MS)).toBe(true);
         } finally {
             fake.heal();
-            await snapshot.catch(() => {});
+            await snapshot;
             await next;
         }
     });
@@ -151,9 +153,10 @@ describe('Whole-body reads', () => {
     test('a whole-body read whose GET stalls mid-body answers 503', async () => {
         const { fileId, key } = await storedFile('e.bin');
         fake.faults.set(key, 'stall-body');
-        jest.useFakeTimers();
-        const failure = mount.readBytes(fileId).catch((error: unknown) => error);
-        await passStorageDeadline(() => fake.heldCount > 0);
+        const { started: failure } = await passStorageDeadline(
+            () => mount.readBytes(fileId).catch((error: unknown) => error),
+            () => fake.heldCount > 0,
+        );
         expect(await settlesWithin([failure], STALL_BOUND_MS)).toBe(true);
         expect(await failure).toMatchObject({ status: 503 });
     });

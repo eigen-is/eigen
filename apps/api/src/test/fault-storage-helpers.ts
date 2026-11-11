@@ -370,16 +370,19 @@ export const STALL_BOUND_MS = 250;
 // The same for a settle of several steps (a mount teardown, a backup job and its cleanup) on a slow CI runner.
 export const SETTLE_BOUND_MS = 1_500;
 
-// For a storage call started under jest.useFakeTimers(): once the backend holds its request, runs the clock past the
-// storage deadline and gives the real clock back. It waits by event-loop turn, as a faked clock stops Bun.sleep and
-// every clock a bound could read.
-export async function passStorageDeadline(held: () => boolean): Promise<void> {
+// Starts a storage call on a faked clock and, once the backend holds its request, runs the clock past the storage
+// deadline. The real clock is back when it returns or throws. It waits by event-loop turn, as a faked clock stops
+// Bun.sleep and every clock a bound could read. The call comes back wrapped, so the await does not wait for it.
+export async function passStorageDeadline<T>(start: () => T, held: () => boolean): Promise<{ started: T }> {
+    jest.useFakeTimers();
     try {
+        const started = start();
         for (let turn = 0; !held(); turn++) {
             if (turn > 1_000_000) throw new Error('the backend never held the request');
             await eventLoopTurn();
         }
         jest.advanceTimersByTime(STORAGE_TIMEOUT_MS);
+        return { started };
     } finally {
         jest.useRealTimers();
     }

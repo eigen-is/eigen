@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import * as nodeFs from 'node:fs';
 import {
     cpSync,
@@ -302,10 +302,11 @@ describe('Backup safety copies of an s3 home', () => {
             join(copyDir, 'settings.json'),
             JSON.stringify({ mounts: { [MOUNT_ID]: { storageType: 's3', enabled: true, s3Config } } }),
         );
-        jest.useFakeTimers();
-        const deleting = withHomeSlot(userId, () => deleteSafetyCopy(copyDir, homeDir)).catch(() => {});
+        const { started: deleting } = await passStorageDeadline(
+            () => withHomeSlot(userId, () => deleteSafetyCopy(copyDir, homeDir)).catch(() => {}),
+            () => fake.heldCount > 0,
+        );
         try {
-            await passStorageDeadline(() => fake.heldCount > 0);
             expect(await settlesWithin([deleting], SETTLE_BOUND_MS)).toBe(true);
             expect(existsSync(copyDir)).toBe(true);
             expect(fake.heldCount + fake.abandoned).toBe(1);
