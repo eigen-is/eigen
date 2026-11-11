@@ -4,8 +4,8 @@
 // depends on its host through the host's line on the edited axis, so hostClasses cuts a span of host lines into
 // stretches with one outcome each and the store transforms a filled column once per stretch, not once per cell.
 
-import type { FormulaNode } from '../text/tree';
-import { NodeKind, RefFlag, RefKind, referenceNode } from '../text/tree';
+import type { Ends, FormulaNode } from '../text/tree';
+import { endsAt, NodeKind, RefFlag, RefKind, referenceNode } from '../text/tree';
 import { broken, mapLeaves, sheetOf } from './leaves';
 import type { Edit, Span } from './map';
 import { GONE, mapIndex, mapSpan } from './map';
@@ -87,6 +87,7 @@ function shift(tree: FormulaNode, edit: LineEdit, hostSheet: string, host: numbe
     const { rows, index, count, lines } = edit;
     const after = index + count;
     const hostAfter = hostSheet === edit.sheet ? mapIndex(edit, host) : host;
+    const ends: Ends = { first: 0, second: 0 };
     const span: Span = { start: 0, end: 0 };
     let lossy = false;
     let recompute = false;
@@ -104,15 +105,16 @@ function shift(tree: FormulaNode, edit: LineEdit, hostSheet: string, host: numbe
         const absolute2 = flags & (rows ? RefFlag.Row2Absolute : RefFlag.Column2Absolute);
         const stored = rows ? node.row : node.column;
         const stored2 = rows ? node.row2 : node.column2;
-        const target = absolute ? stored : host + stored;
-        const target2 = op === RefKind.Cell ? target : absolute2 ? stored2 : host + stored2;
+        const onAxis = endsAt(node, rows, host, lines, ends);
+        const target = ends.first;
+        const target2 = ends.second;
         const inOrder = target <= target2;
         const low = inOrder ? target : target2;
         const high = inOrder ? target2 : target;
         let moved = target;
         let moved2 = target2;
         // A target off the grid reads as #REF! at this host and stays where it is, so that it never comes back.
-        if (onSheet && low >= 0 && high < lines) {
+        if (onSheet && onAxis) {
             if (!mapSpan(edit, low, high, span)) {
                 lossy = true;
                 recompute = true;

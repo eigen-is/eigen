@@ -5,8 +5,8 @@
 
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { REF_ERROR } from '../text/lexer';
-import type { FormulaNode } from '../text/tree';
-import { branch, leaf, NodeKind, RefFlag, SheetKind } from '../text/tree';
+import type { Ends, FormulaNode } from '../text/tree';
+import { branch, endsAt, leaf, NodeKind, SheetKind } from '../text/tree';
 
 export function mapLeaves(node: FormulaNode, map: (leaf: FormulaNode) => FormulaNode): FormulaNode {
     const { children } = node;
@@ -47,13 +47,10 @@ export function sheetOf(reference: FormulaNode, hostSheet: string): string | nul
 }
 
 // Whether a reference names cells off the grid at this host, where it reads as #REF!. A copy, a fill and a sort keep
-// the stored text, so this check is all they need. The part a whole column or row lacks resolves to the host's own.
+// the stored text, so this check is all they need.
 export function offGrid(reference: FormulaNode, hostRow: number, hostColumn: number): boolean {
-    const { flags } = reference;
-    const row = flags & RefFlag.RowAbsolute ? reference.row : hostRow + reference.row;
-    const column = flags & RefFlag.ColumnAbsolute ? reference.column : hostColumn + reference.column;
-    const row2 = flags & RefFlag.Row2Absolute ? reference.row2 : hostRow + reference.row2;
-    const column2 = flags & RefFlag.Column2Absolute ? reference.column2 : hostColumn + reference.column2;
-    if (Math.min(row, row2, column, column2) < 0) return true;
-    return Math.max(row, row2) >= GRID_ROWS || Math.max(column, column2) >= GRID_COLUMNS;
+    const ends: Ends = { first: 0, second: 0 };
+    return (
+        !endsAt(reference, true, hostRow, GRID_ROWS, ends) || !endsAt(reference, false, hostColumn, GRID_COLUMNS, ends)
+    );
 }

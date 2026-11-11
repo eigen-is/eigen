@@ -4,8 +4,8 @@
 // The store calls this for the formulas in the block and for those the reverse index finds reading it.
 
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
-import type { FormulaNode } from '../text/tree';
-import { NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from '../text/tree';
+import type { Ends, FormulaNode } from '../text/tree';
+import { endsAt, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from '../text/tree';
 import { broken, mapLeaves, sheetOf } from './leaves';
 import type { Transformed } from './transform';
 
@@ -36,6 +36,7 @@ export function transformMove(
     const sheetAfter = carried ? move.toSheet : hostSheet;
     const rowAfter = carried ? hostRow + rowShift : hostRow;
     const columnAfter = carried ? hostColumn + columnShift : hostColumn;
+    const ends: Ends = { first: 0, second: 0 };
     let lossy = false;
     let recompute = false;
     const mapped = mapLeaves(tree, (node) => {
@@ -43,11 +44,12 @@ export function transformMove(
         const { op, flags, sheetKind } = node;
         const rowless = op === RefKind.Columns;
         const columnless = op === RefKind.Rows;
-        let row = flags & RefFlag.RowAbsolute ? node.row : hostRow + node.row;
-        let column = flags & RefFlag.ColumnAbsolute ? node.column : hostColumn + node.column;
-        let row2 = op === RefKind.Cell ? row : flags & RefFlag.Row2Absolute ? node.row2 : hostRow + node.row2;
-        let column2 =
-            op === RefKind.Cell ? column : flags & RefFlag.Column2Absolute ? node.column2 : hostColumn + node.column2;
+        endsAt(node, true, hostRow, GRID_ROWS, ends);
+        let row = ends.first;
+        let row2 = ends.second;
+        endsAt(node, false, hostColumn, GRID_COLUMNS, ends);
+        let column = ends.first;
+        let column2 = ends.second;
         const read = sheetOf(node, hostSheet);
         let sheet = read ?? node.sheet;
         if (read !== null) {

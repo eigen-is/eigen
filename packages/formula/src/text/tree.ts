@@ -2,7 +2,7 @@
 // kind cannot be forgotten by one that reads `children`, the one way down the tree. A tree is immutable and holds
 // nothing that depends on the cell it sits in: a relative reference is an offset, a sheet is an id, and the corners
 // of a range stay as typed. The parser builds it through the three constructors here, the one place a node is made,
-// and the printers, the shape table and the evaluator read it.
+// the printers, the shape table and the evaluator read it, and endsAt says where a reference points from a cell.
 
 export const NodeKind = {
     Number: 0,
@@ -150,3 +150,22 @@ export function referenceNode(
 
 // The one node of an argument left out.
 export const EMPTY = leaf(NodeKind.Empty, 0, '', '', SheetKind.Host, '');
+
+// The lines a reference names on one axis at a host, in the order they were typed. The caller's own, written by
+// endsAt, so that reading a reference allocates nothing.
+export type Ends = { first: number; second: number };
+
+// Writes the rows, or the columns, a reference names from a host on line `host` of that axis into `into`, and says
+// whether both are on an axis of `lines` lines. A cell's second end is its first, and where a whole column or row
+// names no line, both are the host's own.
+export function endsAt(reference: FormulaNode, rows: boolean, host: number, lines: number, into: Ends): boolean {
+    const { flags } = reference;
+    const absolute = flags & (rows ? RefFlag.RowAbsolute : RefFlag.ColumnAbsolute);
+    const absolute2 = flags & (rows ? RefFlag.Row2Absolute : RefFlag.Column2Absolute);
+    const first = (rows ? reference.row : reference.column) + (absolute ? 0 : host);
+    const second =
+        reference.op === RefKind.Cell ? first : (rows ? reference.row2 : reference.column2) + (absolute2 ? 0 : host);
+    into.first = first;
+    into.second = second;
+    return first >= 0 && first < lines && second >= 0 && second < lines;
+}
