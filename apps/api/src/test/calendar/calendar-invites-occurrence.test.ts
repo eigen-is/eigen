@@ -378,6 +378,20 @@ describe('Occurrence edits of an invited series', () => {
         await untilBob(series.uid, (occ) => occ.length === 0);
     });
 
+    test('cancelling a series cancels it for the guests of one date only', async () => {
+        const CAROL = 'carol.date-only-cancel@example.org';
+        const series = await createSeries('Weekly Date Guests Cancel');
+        const date = '2027-02-09';
+        const attendees = [...guests(), { email: CAROL, name: 'Carol', status: 'pending', role: 'required' }];
+        await editOccurrence(series.id, date, { title: 'Date Guests Cancel', data: { attendees } });
+        await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Date Guests Cancel'));
+
+        const { ics } = await cancelMailTo(CAROL, () => putEvent(series.id, { status: 'cancelled' }));
+        expect(ics).toContain('STATUS:CANCELLED');
+        expect(ics).not.toContain('RECURRENCE-ID');
+        await untilBob(series.uid, (occ) => occ.length === 0);
+    });
+
     // RFC 5546 § 2.1.4: each CANCEL raises the SEQUENCE. Eigen raises the series', which a guest who never got the date
     // on its own holds it at, so a CANCEL naming the date's older number could be dropped as stale.
     test("a cancelled date's CANCEL carries the series' SEQUENCE", async () => {

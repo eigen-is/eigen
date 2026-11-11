@@ -118,7 +118,6 @@ export async function deleteEvent(
     expectedEtag?: string,
 ): Promise<void> {
     const erased = await calendar.writeLock.run(async () => {
-        // Someone can be invited to one date only, so a series' guests are every date's too.
         const dates = exceptionsOf(calendar, id);
         const existing = await eraseStoredEvent(calendar, calendarId, id, expectedEtag);
         return existing && { existing, dates };
@@ -128,10 +127,8 @@ export async function deleteEvent(
 
     const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
     const invitation = isInvitationFromOthers(series ?? existing, calendar.home.user.email) ? existing.data : null;
-    // A cancelled master answers and cancels nothing: its PUT already fanned out STATUS:CANCELLED.
-    const live = existing.status === 'cancelled' ? [] : [existing, ...dates.filter((d) => d.status !== 'cancelled')];
-    const listed = live.flatMap((event) => event.data?.attendees ?? []);
-    const held = [...new Map(listed.map((a) => [a.email.toLowerCase(), a])).values()];
+    // A cancelled master answers and cancels nothing: its update already sent the CANCEL.
+    const { held, stored } = heldGuests(existing, dates);
     const declining = user && held.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
     if (declining && invitation?.organizer) {
         const orgUserId = invitation.organizer.userId;
@@ -149,7 +146,6 @@ export async function deleteEvent(
         }
     } else if (!invitation && held.length) {
         // An event nobody else organizes is this calendar's own, and its organizer's delete cancels it.
-        const stored = live.find((event) => event.data?.organizer)?.data?.organizer;
         const organizer = organizerOf(calendar.home, user, stored);
         propagateCancellation(calendar.home, organizer, existing, held, series ?? undefined).catch(console.error);
     }
@@ -358,21 +354,34 @@ async function propagateWrite(
     previous: CalendarEvent | null,
 ): Promise<void> {
     const series = event.parentEventId ? eventById(calendar, event.parentEventId) : null;
+    if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
+    // An occurrence write is itself one exception and carries none.
+    const exceptions = series ? [] : exceptionsOf(calendar, event.id);
+    if (event.status === 'cancelled') {
+        const { held, stored } = heldGuests(previous, exceptions);
+        if (!held.length) return;
+        const organizer = organizerOf(calendar.home, user, stored);
+        await propagateCancellation(calendar.home, organizer, event, held, series ?? undefined);
+        return;
+    }
     // A name missing from the list the guests held cancels that instance.
     const held = previous?.data?.attendees ?? [];
     const attendees = event.data?.attendees ?? [];
     if (!attendees.length && !held.length) return;
-    if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
     if (previous && guestView(previous, series) === guestView(event, series)) return;
     // An event that lost its last guests names no organizer any more, so their cancellation names the one they held.
     const organizer = organizerOf(calendar.home, user, event.data?.organizer ?? previous?.data?.organizer);
-    if (series && event.status === 'cancelled') {
-        await propagateCancellation(calendar.home, organizer, event, held, series);
-        return;
-    }
-    // An occurrence write is itself one exception and carries none.
-    const exceptions = series ? [] : exceptionsOf(calendar, event.id);
     await propagateInvitation(calendar.home, organizer, event, user, held, attendees, series ?? undefined, exceptions);
+}
+
+// Who held an event until now, and the ORGANIZER they were told. Someone can be invited to one date only, so a
+// series' guests are every live date's too.
+function heldGuests(event: CalendarEvent | null, dates: readonly CalendarEvent[]) {
+    const live =
+        !event || event.status === 'cancelled' ? [] : [event, ...dates.filter((d) => d.status !== 'cancelled')];
+    const listed = live.flatMap((e) => e.data?.attendees ?? []);
+    const held = [...new Map(listed.map((a) => [a.email.toLowerCase(), a])).values()];
+    return { held, stored: live.find((e) => e.data?.organizer)?.data?.organizer };
 }
 
 // The file a guest would get, minus what no save changes for them: the revision, which moves with every write, and the

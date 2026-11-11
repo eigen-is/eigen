@@ -125,7 +125,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Changing room in Chat** — what you were about to send is cleared when you change room, so it can't go to the wrong one
 - **Two people editing in Calendar** — editing, moving or deleting an event someone else just changed is refused instead of overwriting their change
 - **Removing a location in Calendar** — an update that only removes an event's location or description reaches its guests
-- **Deleting a repeating event in Calendar** — deleting the whole series cancels it for guests invited to only one of its dates too
+- **Deleting a repeating event in Calendar** — deleting or cancelling the whole series cancels it for guests invited to only one of its dates too
 - **Calendar files from others** — a calendar file someone else made, in a mail invite, from a calendar app or in an import, no longer freezes the server
 - **Guest emails in Calendar** — changing only the color or reminder of an event or of one of its dates, or moving a one-off event to another time zone without changing when it happens, no longer emails its guests. Neither does a save that changes nothing
 - **Events from other calendar apps** — the first save in Calendar of an event made in another calendar app no longer rewrites what you didn't change, or emails its guests
