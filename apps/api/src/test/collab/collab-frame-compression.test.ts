@@ -3,10 +3,11 @@ import type { ServerWebSocket } from 'elysia/ws/bun';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
-
-import { MESSAGE_SYNC } from '../../lib/collab/collab-document';
 import { getHome } from '../../lib/home/get-home';
 import { driveGet, drivePost, getTestContext } from '../setup';
+
+// The y-websocket message type of a sync frame.
+const MESSAGE_SYNC = 0;
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 

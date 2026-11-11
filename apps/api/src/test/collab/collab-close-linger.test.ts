@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, jest, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'elysia/ws/bun';
-import { CLOSE_LINGER_MS, CollabDocument } from '../../lib/collab/collab-document';
+import { CollabDocument } from '../../lib/collab/collab-document';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import { driveGet, drivePost, getTestContext } from '../setup';
@@ -9,6 +9,9 @@ import { driveGet, drivePost, getTestContext } from '../setup';
 // The last unsubscribe schedules the close instead of running it at once. A reconnect right after, such
 // as a tab reload or a y-websocket retry, then reattaches to the loaded document instead of downloading
 // and loading it again.
+
+// How long a document with no socket stays open.
+const CLOSE_LINGER_MS = 60_000;
 
 type SpyConn = ServerWebSocket<undefined> & { readyState: number; sent: Uint8Array[] };
 

@@ -3,7 +3,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { COLLAB_EPOCH_MESSAGE } from '@workspace/lib/constants/collab';
 import * as decoding from 'lib0/decoding';
-import { MESSAGE_AWARENESS, MESSAGE_SYNC } from '../../lib/collab/collab-document';
+import { MESSAGE_AWARENESS } from '../../lib/collab/collab-document';
 import type { Drive } from '../../lib/drive/drive';
 import { getHome } from '../../lib/home';
 import type { Mount } from '../../lib/mount/mount';
@@ -14,6 +14,9 @@ import { createFakeS3Mount, removeFakeS3Mount, settleContainer, waitFor } from '
 import { getTestContext } from '../setup';
 
 // Collab opens whose data.db comes over Bun's real S3 client from a fake S3; needs a listening server (app.handle() never upgrades).
+
+// The y-websocket message type of a sync frame.
+const MESSAGE_SYNC = 0;
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-collab-open-from-s3-${Date.now()}`);
 const MOUNT_ID = 'collab-open-s3';

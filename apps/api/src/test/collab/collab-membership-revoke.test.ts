@@ -10,7 +10,7 @@ import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import { session as sessionTable, user as userTable } from '../../../auth-schema';
 import { getAuthDrizzleDb } from '../../lib/auth/auth';
-import { CollabDocument, MESSAGE_SYNC } from '../../lib/collab/collab-document';
+import { CollabDocument } from '../../lib/collab/collab-document';
 import { getServerConfig } from '../../lib/config/server-config';
 import { Drive } from '../../lib/drive';
 import { getHome } from '../../lib/home/get-home';
@@ -33,6 +33,9 @@ import {
 // Read is checked when a collab socket opens and again on its 15 s keepalive, along with its session. So a socket that
 // lost read or whose session ended closes at the next tick, whichever way the row went. Needs a real listening server.
 // The tests run a tick by hand: the callback each socket gave setInterval, the real one, with no wait.
+
+// The y-websocket message type of a sync frame.
+const MESSAGE_SYNC = 0;
 
 const REVOKED = { code: COLLAB_ACCESS_LOST_CLOSE, reason: COLLAB_ACCESS_LOST_REASON };
 
