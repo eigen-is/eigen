@@ -387,4 +387,40 @@ describe('the cap of an edit', () => {
             expect(valueAt(engine, 'P2')).toBe(REF);
         }
     });
+
+    test('with a cap of 0 every pass still stores one formula, or one whole loop', () => {
+        const engine = engineOf({ s1: { A1: '=1+1', A2: '=A3', A3: '=A2', A4: '=A1+1' } });
+        expect(engine.recalc(0).stopped).toBe(true);
+        expect([valueAt(engine, 'A1'), valueAt(engine, 'A4')]).toEqual([2, null]);
+        expect(engine.recalc(0).stopped).toBe(true);
+        expect([valueAt(engine, 'A2'), valueAt(engine, 'A3'), valueAt(engine, 'A4')]).toEqual([REF, REF, null]);
+        expect(engine.recalc(0)).toMatchObject({ stopped: false });
+        expect(valueAt(engine, 'A4')).toBe(3);
+    });
+
+    test('the elements of a formula that runs again after the nesting got too deep count once', () => {
+        // Each formula makes an array of two elements twice and then reads the one below it, so the first one asked
+        // nests through all of them: 599 formulas of 1 and 4, and the one that asks.
+        const cells: Record<string, Literal> = { A600: 1, Y1: 1 };
+        for (let row = 1; row < 600; row += 1) cells[`A${row}`] = `=SUM((Y1:Z1)*1)+A${row + 1}`;
+        const cost = 599 * 5 + 1;
+        const exact = engineOf({ s1: { ...cells, C1: '=A1' } });
+        expect(exact.recalc(cost).stopped).toBe(false);
+        expect(valueAt(exact, 'C1')).toBe(600);
+        expect(engineOf({ s1: { ...cells, C1: '=A1' } }).recalc(cost - 1).stopped).toBe(true);
+    });
+
+    test.each([[0], [1], [2], [3], [4], [5], [6]])(
+        'stopped passes come to an end on arrays, loops and deep chains: cap %i',
+        (cap) => {
+            const cells: Record<string, Literal> = { A200: 1, C1: '=SUM(A1:A200*2)', D1: '=D2+SUM(A:A)', D2: '=D1' };
+            for (let row = 1; row < 200; row += 1) cells[`A${row}`] = `=SUM((A${row + 1}:B${row + 1})*1)+1`;
+            const engine = engineOf({ s1: cells });
+            let result = engine.recalc(cap);
+            for (let pass = 0; result.stopped && pass < 1000; pass += 1) result = engine.recalc(cap);
+            expect(result.stopped).toBe(false);
+            expect(result.loops).toHaveLength(2);
+            expect(valueAt(engine, 'C1')).toBe(200 * 201);
+        },
+    );
 });
