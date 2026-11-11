@@ -235,7 +235,7 @@ class Shifter {
         const { type, edit } = this.move;
         if (map === 'merge') {
             if (below.length > 0 || !patch.value) return this.cellKeyed(patch, [key, ...below]);
-            const [entry] = Object.entries(shiftMerges({ merge: { [key]: patch.value } }, type, edit));
+            const [entry] = Object.entries(shiftMerges({ merge: { [key]: patch.value } }, type, edit).merges);
             if (!entry || !sameSize(entry[1], patch.value)) return null;
             return { ...patch, path: [...head, entry[0]], value: entry[1] };
         }

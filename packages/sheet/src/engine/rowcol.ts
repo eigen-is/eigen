@@ -77,8 +77,9 @@ export function shiftMerges(
     { merge = {} }: ExtendedSheetConfig,
     type: 'row' | 'column',
     edit: Edit,
-): Record<string, MergeCell> {
-    const shifted: Record<string, MergeCell> = {};
+): { merges: Record<string, MergeCell>; unmerged: MergeCell[] } {
+    const merges: Record<string, MergeCell> = {};
+    const unmerged: MergeCell[] = [];
     const span = { start: 0, end: 0 };
     for (const key of Object.keys(merge).sort()) {
         const { r, c, rs, cs } = merge[key];
@@ -86,9 +87,11 @@ export function shiftMerges(
         const size = span.end - span.start + 1;
         const placed =
             type === 'row' ? { ...merge[key], r: span.start, rs: size } : { ...merge[key], c: span.start, cs: size };
-        shifted[`${placed.r}_${placed.c}`] = placed;
+        // A merge the edit cuts to one cell is a merge no more, as in Excel.
+        if (placed.rs * placed.cs === 1 && rs * cs > 1) unmerged.push(placed);
+        else merges[`${placed.r}_${placed.c}`] = placed;
     }
-    return shifted;
+    return { merges, unmerged };
 }
 
 // Re-keys an "r_c" map, an entry on a line the op deletes dropped.
@@ -208,7 +211,8 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     const edit = lineEdit(op);
     const insertAt = edit.index;
 
-    newCfg.merge = shiftMerges(cfg, op.type, edit);
+    const { merges, unmerged } = shiftMerges(cfg, op.type, edit);
+    newCfg.merge = merges;
     const borderInfo = shiftCellKeyed(cfg.borderInfo, op.type, edit);
     // The new lines take the borders of the line they were inserted beside.
     for (const [key, sides] of Object.entries(cfg.borderInfo ?? {})) {
@@ -235,7 +239,7 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
         }
     }
 
-    stampMerges(newData, newCfg.merge, op.type, insertAt);
+    stampMerges(newData, merges, unmerged, op.type, insertAt);
     newTarget.config = newCfg;
     setSize(newTarget, newData, op.type);
 
@@ -274,14 +278,15 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
     const removeCount = op.end - op.start + 1;
     const edit = lineEdit(op);
 
-    newCfg.merge = shiftMerges(cfg, op.type, edit);
+    const { merges, unmerged } = shiftMerges(cfg, op.type, edit);
+    newCfg.merge = merges;
     newCfg.borderInfo = shiftCellKeyed(cfg.borderInfo, op.type, edit);
     shiftLineMaps(cfg, newCfg, op.type, edit);
 
     if (op.type === 'row') newData.splice(op.start, removeCount);
     else for (const row of newData) row.splice(op.start, removeCount);
 
-    stampMerges(newData, newCfg.merge, op.type, op.start);
+    stampMerges(newData, merges, unmerged, op.type, op.start);
     newTarget.config = newCfg;
     setSize(newTarget, newData, op.type);
 
@@ -393,22 +398,39 @@ function writeFilter(
 }
 
 // The op moved the cells from `from` on but not their `mc` stamps, so each merge reaching that far, or ending right
-// before it, stamps its cells again within each row. A row the op shares with the sheet before it is copied first.
-function stampMerges(data: CellMatrix, merges: Record<string, MergeCell>, type: 'row' | 'column', from: number) {
+// before it, stamps its cells again, and the one cell an unmerged merge leaves loses its stamp.
+function stampMerges(
+    data: CellMatrix,
+    merges: Record<string, MergeCell>,
+    unmerged: MergeCell[],
+    type: 'row' | 'column',
+    from: number,
+) {
+    // A row op shares its rows with the sheet before it, so a row is copied before its first write.
     const copied = new Set<number>();
+    const own = (i: number) => {
+        if (type === 'row' && !copied.has(i)) {
+            data[i] = [...data[i]];
+            copied.add(i);
+        }
+        return data[i];
+    };
     for (const { r, c, rs, cs } of Object.values(merges)) {
         if ((type === 'row' ? r + rs : c + cs) < from) continue;
         for (let i = r; i < r + rs; i += 1) {
             if (!data[i]) continue;
-            if (type === 'row' && !copied.has(i)) {
-                data[i] = [...data[i]];
-                copied.add(i);
-            }
-            for (let j = c; j < Math.min(c + cs, data[i].length); j += 1) {
+            const row = own(i);
+            for (let j = c; j < Math.min(c + cs, row.length); j += 1) {
                 const mc = i === r && j === c ? { r, c, rs, cs } : { r, c };
-                data[i][j] = { ...data[i][j], mc };
+                row[j] = { ...row[j], mc };
             }
         }
+    }
+    for (const { r, c } of unmerged) {
+        const cell = data[r]?.[c];
+        if (!cell) continue;
+        const { mc: _, ...rest } = cell;
+        own(r)[c] = rest;
     }
 }
 

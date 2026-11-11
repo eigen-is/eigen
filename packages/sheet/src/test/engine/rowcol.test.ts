@@ -326,12 +326,76 @@ describe('applySheetsInsertRowCol — merges and sizes at the edges of the one r
         expect(sheet.config?.rowlen).toEqual({ 1: 20 });
     });
 
-    test('a merge pushed past the last row of the grid ends on it', () => {
+    test('a merge the last row of the grid cuts to one cell is removed, and a wider one ends on it', () => {
         const sheet = insertRow(
-            sheetWith({ merge: { [`${last - 1}_0`]: { r: last - 1, c: 0, rs: 2, cs: 1 } } }),
+            sheetWith({
+                merge: {
+                    [`${last - 1}_0`]: { r: last - 1, c: 0, rs: 2, cs: 1 },
+                    [`${last - 1}_1`]: { r: last - 1, c: 1, rs: 2, cs: 2 },
+                },
+            }),
             'lefttop',
         );
-        expect(sheet.config?.merge).toEqual({ [`${last}_0`]: { r: last, c: 0, rs: 1, cs: 1 } });
+        expect(sheet.config?.merge).toEqual({ [`${last}_1`]: { r: last, c: 1, rs: 1, cs: 2 } });
+    });
+});
+
+describe('applySheetsDeleteRowCol — a merge cut to one cell is removed', () => {
+    const merged = (merge: { r: number; c: number; rs: number; cs: number }) => {
+        const data: (Cell | null)[][] = Array.from({ length: 3 }, () => [null, null, null]);
+        for (let r = merge.r; r < merge.r + merge.rs; r += 1) {
+            for (let c = merge.c; c < merge.c + merge.cs; c += 1)
+                data[r][c] = { bl: 1, mc: { r: merge.r, c: merge.c } };
+        }
+        data[merge.r][merge.c] = { ...cell('head'), mc: merge };
+        return [makeSheet('s1', 'Sheet1', data, { config: { merge: { [`${merge.r}_${merge.c}`]: merge } } })];
+    };
+
+    test('a row delete that leaves the head leaves a plain cell', () => {
+        const [sheet] = applySheetsDeleteRowCol(merged({ r: 0, c: 0, rs: 2, cs: 1 }), {
+            type: 'row',
+            start: 1,
+            end: 1,
+            id: 's1',
+        });
+        expect(sheet.config?.merge).toEqual({});
+        expect(sheet.data?.[0][0]).toEqual(cell('head'));
+    });
+
+    test('a row delete that takes the head leaves the covered cell with its format and no stamp', () => {
+        const [sheet] = applySheetsDeleteRowCol(merged({ r: 0, c: 0, rs: 2, cs: 1 }), {
+            type: 'row',
+            start: 0,
+            end: 0,
+            id: 's1',
+        });
+        expect(sheet.config?.merge).toEqual({});
+        expect(sheet.data?.[0][0]).toEqual({ bl: 1 });
+    });
+
+    test('a column delete does the same', () => {
+        const [sheet] = applySheetsDeleteRowCol(merged({ r: 1, c: 0, rs: 1, cs: 3 }), {
+            type: 'column',
+            start: 1,
+            end: 2,
+            id: 's1',
+        });
+        expect(sheet.config?.merge).toEqual({});
+        expect(sheet.data?.[1][0]).toEqual(cell('head'));
+    });
+
+    test('a merge left wider than one cell stays, and so does a one-cell merge the delete only moves', () => {
+        const sheets = merged({ r: 1, c: 0, rs: 2, cs: 2 });
+        const single = { r: 2, c: 2, rs: 1, cs: 1 };
+        sheets[0].config = { merge: { ...sheets[0].config?.merge, '2_2': single } };
+        sheets[0].data![2][2] = { mc: single };
+        const [sheet] = applySheetsDeleteRowCol(sheets, { type: 'row', start: 1, end: 1, id: 's1' });
+        expect(sheet.config?.merge).toEqual({
+            '1_0': { r: 1, c: 0, rs: 1, cs: 2 },
+            '1_2': { r: 1, c: 2, rs: 1, cs: 1 },
+        });
+        expect(sheet.data?.[1][1]?.mc).toEqual({ r: 1, c: 0 });
+        expect(sheet.data?.[1][2]?.mc).toEqual({ r: 1, c: 2, rs: 1, cs: 1 });
     });
 });
 
