@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { useRef } from 'react';
 import { ADD_COMMENT_HOTKEY } from './extensions/comment-mark';
+import { INSERT_FOOTNOTE_HOTKEY } from './extensions/footnote';
 import { pageWidths } from './extensions/text-column';
 import type { ToolbarState } from './hooks/use-toolbar-state';
 import type { PageNumberPreset } from './page-numbers';
@@ -214,7 +215,7 @@ export function InsertMenu({
                                 }}
                             >
                                 <Superscript className="h-4 w-4" /> Footnote
-                                <DropdownMenuShortcut>{formatForDisplay('Mod+Alt+F')}</DropdownMenuShortcut>
+                                <DropdownMenuShortcut>{formatForDisplay(INSERT_FOOTNOTE_HOTKEY)}</DropdownMenuShortcut>
                             </DropdownMenuItem>
                         )}
                     </DropdownMenuSubContent>
