@@ -385,9 +385,6 @@ export async function passStorageDeadline(held: () => boolean): Promise<void> {
     }
 }
 
-// The retry waits every test file starts with (preload.ts): an injected 5xx would otherwise cost a second per read.
-export const SHRUNK_RETRY_WAITS_MS = [1, 1];
-
 // Bounded deadlock detector, not synchronization: on the green path the promises settle at once and
 // the timer is cleared; only a real wedge runs it out. A rejection propagates like a plain await.
 export async function settlesWithin(promises: Promise<unknown>[], ms: number): Promise<boolean> {

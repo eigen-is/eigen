@@ -18,7 +18,7 @@ export function errnoOf(error: unknown): string | null {
 }
 
 // A storage call wraps the backend's error in an ApiError, whose cause carries the code.
-export function causeCode(error: unknown): string | null {
+function causeCode(error: unknown): string | null {
     return errnoOf(error instanceof ApiError ? error.cause : error);
 }
 
@@ -45,13 +45,8 @@ export function withStorageDeadline<T>(request: (deadline: AbortSignal) => Promi
     ]).finally(() => clearTimeout(timer));
 }
 
-// One wait before each retry, so a read gets one attempt more than there are waits. A setter so tests can shrink them.
-export const RETRY_WAITS_MS: readonly number[] = [200, 800];
-let retryWaitsMs = RETRY_WAITS_MS;
-
-export function setRetryWaitsMs(waits: readonly number[]): void {
-    retryWaitsMs = waits;
-}
+// One wait before each retry, so a read gets one attempt more than there are waits.
+const RETRY_WAITS_MS: readonly number[] = [200, 800];
 
 // Bun's S3Client reports a HEAD's 5xx and 403 alike as UnknownError, as a HEAD has no body: both are retried.
 const TRANSIENT_S3_CODES = new Set([
@@ -66,7 +61,7 @@ const TRANSIENT_S3_CODES = new Set([
 
 // Bun's S3Client never retries a read, and a provider shedding load (Hetzner's 503 SlowDown) answers the same
 // request a second later. A wait stops at the signal, and the last failure is what the caller sees.
-export async function retryStorageRead<T>(
+async function retryStorageRead<T>(
     op: string,
     key: string,
     read: () => Promise<T>,
@@ -77,7 +72,7 @@ export async function retryStorageRead<T>(
             return await read();
         } catch (error) {
             const code = causeCode(error);
-            const wait = retryWaitsMs[attempt - 1];
+            const wait = RETRY_WAITS_MS[attempt - 1];
             if (
                 code === null ||
                 !TRANSIENT_S3_CODES.has(code) ||
@@ -130,9 +125,8 @@ export async function readStorageFile(
     return Bun.concatArrayBuffers(chunks);
 }
 
-// Stream a buffer, StorageFile (BunFile/S3File), or ReadableStream into a temp path while
-// computing the sha256 hash in a single pass. Avoids holding the full payload in memory twice.
-// A StorageFile read carries the storage idle deadline; a request body is the client's to pace.
+// Hashes while it writes, so a payload is never held in memory twice. A StorageFile read carries the storage idle
+// deadline; a request body is the client's to pace.
 export async function writeTempWithHash(
     tempPath: string,
     data: Buffer | Uint8Array | StorageFile | ReadableStream<Uint8Array>,
