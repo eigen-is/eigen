@@ -168,10 +168,10 @@ test('with nothing selected only Paste of the clipboard rows stays enabled', asy
 });
 
 // The canvas's keys stand down while a text box is edited, so a pick here can't cut or delete the box under the caret.
-test('while text is edited, the rows that act on objects grey and Paste stays', async () => {
+test('while text is edited, every clipboard row greys, as the keys stand down', async () => {
     await render({ selectedIds: ['shape-1'], textEditing: true });
     await openMenu('Edit');
-    expect(disabledRows()).toEqual(['Undo', 'Redo', 'Cut', 'Copy', 'Select all', 'Duplicate', 'Delete']);
+    expect(disabledRows()).toEqual(['Undo', 'Redo', 'Cut', 'Copy', 'Paste', 'Select all', 'Duplicate', 'Delete']);
 });
 
 test('a viewer, who selects nothing on the canvas, keeps only Find', async () => {

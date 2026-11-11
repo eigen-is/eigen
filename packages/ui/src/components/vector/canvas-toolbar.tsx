@@ -157,7 +157,7 @@ export function CanvasToolbar({
                                             onDuplicate={() => canvasRef.current?.duplicate()}
                                             onDelete={() => canvasRef.current?.delete()}
                                             selectionEmpty={selectedIds.length === 0}
-                                            selectionLocked={textEditing}
+                                            locked={textEditing}
                                         />
                                         <DropdownMenuSeparator />
                                         <ToolMenuItems tools={EDIT_TOOLS} setTool={setTool} />

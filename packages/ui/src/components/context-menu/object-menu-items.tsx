@@ -64,7 +64,7 @@ export function OrderMenuSub({ onApply }: { onApply: (op: ZOp) => void }) {
 
 // Cut, Copy and Paste, then Select all, Duplicate and Delete, the order of every Edit menu. Each row appears only when
 // its callback is supplied, so a host that can only paste here (an empty canvas) and one with the full set compose the
-// same rows. With nothing selected, the rows that act on the selection grey out.
+// same rows. With nothing selected, the rows that act on the selection grey out; while the host is locked, all do.
 export function ClipboardMenuItems({
     onCut,
     onCopy,
@@ -73,7 +73,7 @@ export function ClipboardMenuItems({
     onDuplicate,
     onDelete,
     selectionEmpty = false,
-    selectionLocked = false,
+    locked = false,
 }: {
     onCut?: () => void;
     onCopy?: () => void;
@@ -82,10 +82,10 @@ export function ClipboardMenuItems({
     onDuplicate?: () => void;
     onDelete?: () => void;
     selectionEmpty?: boolean;
-    // The selection's keys stand down, such as while a canvas edits a text box, so its rows and Select all grey too.
-    selectionLocked?: boolean;
+    // The host's clipboard keys stand down, such as while a canvas edits a text box, so every row greys as well.
+    locked?: boolean;
 }) {
-    const actsOnSelection = !selectionEmpty && !selectionLocked;
+    const actsOnSelection = !selectionEmpty && !locked;
     return (
         <>
             {onCut && (
@@ -101,14 +101,14 @@ export function ClipboardMenuItems({
                 </DropdownMenuItem>
             )}
             {onPaste && (
-                <DropdownMenuItem onClick={onPaste}>
+                <DropdownMenuItem onClick={onPaste} disabled={locked}>
                     <ClipboardPaste className="h-4 w-4" /> Paste
                     <DropdownMenuShortcut>{formatForDisplay(PASTE_HOTKEY)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
             {(onSelectAll || onDuplicate || onDelete) && <DropdownMenuSeparator />}
             {onSelectAll && (
-                <DropdownMenuItem onClick={onSelectAll} disabled={selectionLocked}>
+                <DropdownMenuItem onClick={onSelectAll} disabled={locked}>
                     <TextSelect className="h-4 w-4" /> Select all
                     <DropdownMenuShortcut>{formatForDisplay(SELECT_ALL_HOTKEY)}</DropdownMenuShortcut>
                 </DropdownMenuItem>

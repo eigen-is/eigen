@@ -57,7 +57,7 @@ test('nothing selected greys the rows that act on a selection, Paste and Select 
     expect(disabledRows()).toEqual(['Cut', 'Copy', 'Duplicate', 'Delete']);
 });
 
-test('a locked selection greys Select all too, and Paste stays', async () => {
+test('a locked host greys every row', async () => {
     await render({
         onCut: noop,
         onCopy: noop,
@@ -65,9 +65,9 @@ test('a locked selection greys Select all too, and Paste stays', async () => {
         onSelectAll: noop,
         onDuplicate: noop,
         onDelete: noop,
-        selectionLocked: true,
+        locked: true,
     });
-    expect(disabledRows()).toEqual(['Cut', 'Copy', 'Select all', 'Duplicate', 'Delete']);
+    expect(disabledRows()).toEqual(['Cut', 'Copy', 'Paste', 'Select all', 'Duplicate', 'Delete']);
 });
 
 test('a pick runs its row', async () => {
