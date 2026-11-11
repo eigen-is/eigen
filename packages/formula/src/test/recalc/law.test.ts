@@ -4,8 +4,8 @@ import { Engine } from '../../index';
 import { parseStored } from '../../text';
 import { random } from '../store/support';
 
-// The law of incremental recalc: after any sequence of writes with recalcs in between, every cell holds what a
-// fresh engine computes from the same inputs.
+// The law of incremental recalc: after any sequence of writes with recalcs in between, stopped ones included, every
+// cell holds what a fresh engine computes from the same inputs, and the same cells are on a loop.
 
 const NO_CAP = Number.POSITIVE_INFINITY;
 const SHEETS = ['s1', 's2'];
@@ -91,7 +91,7 @@ function generator(next: () => number) {
     return { pick, formula, literal };
 }
 
-function run(seed: number, steps: number): { compared: number; abandoned: number } {
+function run(seed: number, steps: number): { compared: number; stops: number } {
     const { pick, formula, literal } = generator(random(seed));
     const model: Model = new Map(SHEETS.map((id) => [id, new Map()]));
     let engine = new Engine(sources(model, null));
@@ -107,7 +107,9 @@ function run(seed: number, steps: number): { compared: number; abandoned: number
         }
     };
     let compared = 0;
-    let abandoned = 0;
+    let stops = 0;
+    // An engine opened from cached values knows a loop only once a recalc has computed it again.
+    let knowsLoops = true;
     for (let step = 0; step < steps; step += 1) {
         const id = SHEETS[pick(2)];
         const row = pick(ROWS);
@@ -131,20 +133,25 @@ function run(seed: number, steps: number): { compared: number; abandoned: number
             }
         }
         if (pick(5) < 3) continue;
-        if (pick(8) === 0) engine.valueOf(id, pick(ROWS), pick(COLUMNS));
-        if (engine.recalc(pick(6) === 0 ? pick(40) : NO_CAP).abandoned) {
-            abandoned += 1;
-            continue;
+        let result = engine.recalc(pick(4) === 0 ? pick(40) : NO_CAP);
+        if (result.stopped) {
+            stops += 1;
+            // More writes land before the stopped pass goes on, or it goes on in small steps.
+            if (pick(2) === 0) continue;
+            for (let cap = 10; result.stopped; cap += 10) result = engine.recalc(cap);
         }
         const fresh = new Engine(sources(model, null));
-        fresh.recalc(NO_CAP);
-        const expected = values(fresh);
-        expect([seed, step, ...values(engine)]).toEqual([seed, step, ...expected]);
+        const expected = fresh.recalc(NO_CAP);
+        expect([seed, step, ...values(engine)]).toEqual([seed, step, ...values(fresh)]);
+        if (knowsLoops) expect([seed, step, result.loops]).toEqual([seed, step, expected.loops]);
         compared += 1;
         // Now and then the workbook is opened again from its cached values, as a tab that joins.
-        if (pick(12) === 0) engine = new Engine(sources(model, engine));
+        if (pick(12) === 0) {
+            engine = new Engine(sources(model, engine));
+            knowsLoops = expected.loops.length === 0;
+        }
     }
-    return { compared, abandoned };
+    return { compared, stops };
 }
 
 describe('held against a fresh load', () => {
@@ -156,9 +163,9 @@ describe('held against a fresh load', () => {
     test.each([[1], [2], [3], [4], [5], [6], [7], [8], [9], [10], [11], [12]])(
         'after random writes and recalcs every cell equals a fresh full recalc: seed %i',
         (seed) => {
-            const { compared, abandoned } = run(seed, 1500);
+            const { compared, stops } = run(seed, 1500);
             expect(compared).toBeGreaterThan(300);
-            expect(abandoned).toBeGreaterThan(10);
+            expect(stops).toBeGreaterThan(10);
         },
     );
 });

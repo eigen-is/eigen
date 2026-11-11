@@ -12,40 +12,42 @@ import { Recalc } from './recalc';
 
 export class Engine {
     private readonly workbook: Workbook;
-    private readonly cells: Recalc;
+    private readonly calc: Recalc;
 
     public constructor(sheets: readonly SheetSource[]) {
         this.workbook = new Workbook(sheets);
-        this.cells = new Recalc(this.workbook, FUNCTIONS);
+        this.calc = new Recalc(this.workbook, FUNCTIONS);
     }
 
     public setValue(sheet: string, row: number, column: number, value: Literal): void {
-        const held = this.sheet(sheet);
-        this.cells.touch(held, row, column, false);
-        this.workbook.setValue(held, row, column, value);
+        const target = this.sheet(sheet);
+        this.calc.touch(target, row, column, false);
+        this.workbook.setValue(target, row, column, value);
     }
 
-    // The formula in its stored text. It is computed when its value is next asked for, or by a recalc.
+    // The formula in its stored text. It holds no value until a recalc computes it.
     public setFormula(sheet: string, row: number, column: number, text: string): void {
-        const held = this.sheet(sheet);
-        this.cells.touch(held, row, column, true);
-        this.workbook.setFormula(held, row, column, text);
+        const target = this.sheet(sheet);
+        this.calc.touch(target, row, column, true);
+        this.workbook.setFormula(target, row, column, text);
     }
 
     public clear(sheet: string, row: number, column: number): void {
-        const held = this.sheet(sheet);
-        this.cells.touch(held, row, column, false);
-        this.workbook.clear(held, row, column);
+        const target = this.sheet(sheet);
+        this.calc.touch(target, row, column, false);
+        this.workbook.clear(target, row, column);
     }
 
     // Computes the formulas that the writes since the last recalc reach: one that came with a value and reads
-    // nothing written keeps it. Past `cap` cells read the pass is abandoned whole and computes again next time.
+    // nothing written keeps it. Past `cap` cells read the pass stops, and the next recalc goes on from there.
     public recalc(cap: number): RecalcResult {
-        return this.cells.pass(cap);
+        return this.calc.pass(cap);
     }
 
+    // The value a cell holds. For a formula that is the last one a recalc computed.
     public valueOf(sheet: string, row: number, column: number): Scalar {
-        return this.cells.valueOf(this.sheet(sheet), column, row);
+        const cells = this.sheet(sheet).columns[column];
+        return cells === undefined ? null : this.workbook.value(cells, row);
     }
 
     private sheet(id: string): Sheet {

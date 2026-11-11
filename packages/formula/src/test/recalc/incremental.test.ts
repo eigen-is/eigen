@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { Literal } from '../../index';
 import { Engine, REF } from '../../index';
 import type { Cells } from './support';
-import { at, engineOf, stored, valueAt } from './support';
+import { at, stored, valueAt } from './support';
 
 const NO_CAP = Number.POSITIVE_INFINITY;
 const KEPT = 'kept';
@@ -51,7 +51,7 @@ function opened(sheets: Readonly<Record<string, Cells>>) {
     }
     // The formulas a recalc computed again, in the order they were given, column by column.
     const computed = (cap = NO_CAP): string[] => {
-        expect(engine.recalc(cap).abandoned).toBe(false);
+        expect(engine.recalc(cap).stopped).toBe(false);
         return formulas
             .filter(([id, row, column]) => engine.valueOf(id, row, column) !== KEPT)
             .map(([id, row, column]) => (id === 's1' ? label(row, column) : `${id}!${label(row, column)}`));
@@ -136,17 +136,6 @@ describe('what a recalc computes', () => {
         const { computed, write } = opened({ s1: { 'D1:D10': '=B1*C1', E1: '=SUM(D1:D3)', E2: '=SUM(D8:D9)' } });
         for (const cell of ['B2', 'B3', 'B4', 'C7', 'A1', 'B10']) write(cell, 1);
         expect(computed()).toEqual(['D2', 'D3', 'D4', 'D7', 'D10', 'E1']);
-    });
-
-    test('a value read before the recalc is computed again when a cell it read was written', () => {
-        const engine = engineOf({ s1: { A1: 1, B1: '=A1*2' } });
-        engine.recalc(NO_CAP);
-        engine.setValue('s1', 0, 0, 5);
-        engine.setFormula('s1', 0, 2, '=RC[-1]+1');
-        engine.setFormula('s1', 0, 3, '=RC[-1]+1');
-        expect(valueAt(engine, 'C1')).toBe(3);
-        engine.recalc(NO_CAP);
-        expect(['B1', 'C1', 'D1'].map((cell) => valueAt(engine, cell))).toEqual([10, 11, 12]);
     });
 });
 
@@ -281,12 +270,22 @@ describe('circular references between recalcs', () => {
         expect(['B1', 'C1', 'D1'].map((cell) => valueAt(engine, cell))).toEqual([2, 3, 3]);
     });
 
-    test('a loop that no write reaches is not computed again', () => {
-        const engine = engineOf({ s1: { A1: '=B1', B1: '=A1', C1: 1, D1: '=C1+1' } });
+    test('a loop that no write reaches is still reported, and not computed again', () => {
+        const { engine, computed, write } = opened({ s1: { A1: '=B1', B1: '=A1', C1: 1, D1: '=C1+1', E1: '=A1' } });
+        engine.setFormula('s1', 0, 0, '=RC[1]');
+        expect(engine.recalc(NO_CAP).loops).toEqual([
+            { sheet: 's1', row: 0, column: 0 },
+            { sheet: 's1', row: 0, column: 1 },
+        ]);
+        write('C1', 5);
         expect(engine.recalc(NO_CAP).loops.length).toBe(2);
-        engine.setValue('s1', 0, 2, 5);
+        expect(computed()).toEqual(['A1', 'B1', 'D1', 'E1']);
+        write('B1', 3);
         expect(engine.recalc(NO_CAP).loops).toEqual([]);
-        expect(['A1', 'D1'].map((cell) => valueAt(engine, cell))).toEqual([REF, 6]);
+        engine.setFormula('s1', 0, 1, '=RC[-1]');
+        expect(engine.recalc(NO_CAP).loops.length).toBe(2);
+        engine.clear('s1', 0, 0);
+        expect(engine.recalc(NO_CAP).loops).toEqual([]);
     });
 });
 
@@ -310,21 +309,21 @@ describe('the cap of an edit', () => {
     test('an edit reads the cells of its cone, not of the workbook', () => {
         const engine = filled();
         engine.setValue('s1', 499, 1, 7);
-        expect(engine.recalc(2)).toEqual({ loops: [], abandoned: false });
+        expect(engine.recalc(2)).toEqual({ loops: [], stopped: false });
         expect(engine.valueOf('s1', 499, 3)).toBe(14);
     });
 
-    test('an abandoned edit leaves the old values, and the next recalc computes it', () => {
+    test('an edit that is stopped keeps what it computed, and the next recalcs finish it', () => {
         const engine = filled();
         engine.setValue('s1', 499, 1, 7);
         engine.setFormula('s1', 0, 4, '=R[499]C[-1]+R[500]C[-1]');
         engine.setValue('s1', 500, 1, 1);
-        expect(engine.recalc(3).abandoned).toBe(true);
-        expect([engine.valueOf('s1', 499, 3), engine.valueOf('s1', 500, 3)]).toEqual([998, 1000]);
-        expect(engine.recalc(3).abandoned).toBe(true);
-        expect(engine.recalc(6)).toEqual({ loops: [], abandoned: false });
-        expect([499, 500].map((row) => engine.valueOf('s1', row, 3))).toEqual([14, 2]);
+        expect(engine.recalc(3).stopped).toBe(true);
+        expect([499, 500].map((row) => engine.valueOf('s1', row, 3))).toEqual([14, 1000]);
+        expect(engine.recalc(3).stopped).toBe(true);
+        expect([engine.valueOf('s1', 500, 3), engine.valueOf('s1', 0, 4)]).toEqual([2, null]);
+        expect(engine.recalc(2)).toEqual({ loops: [], stopped: false });
         expect(engine.valueOf('s1', 0, 4)).toBe(16);
-        expect(engine.recalc(0).abandoned).toBe(false);
+        expect(engine.recalc(0).stopped).toBe(false);
     });
 });

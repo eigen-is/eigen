@@ -6,7 +6,7 @@
 
 import { Fact } from '../eval/facts';
 import type { Column } from '../store/column';
-import { KIND_MASK } from '../store/column';
+import { SETTLED } from '../store/column';
 import type { Workbook } from '../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { RefFlag, RefKind, SheetKind } from '../text/tree';
@@ -200,7 +200,7 @@ export class ReverseIndex {
         if (held.pending === this.formulas[sheet][column]) return;
         let first = -1;
         for (let row = top; row <= bottom; row += 1) {
-            if (held.kind[row] <= KIND_MASK) {
+            if (held.kind[row] <= SETTLED) {
                 held.markDirty(row);
                 if (first < 0) first = row;
             } else if (first >= 0) {

@@ -48,5 +48,7 @@ export function valueAt(engine: Engine, label: string, sheet = 's1') {
 
 // The value of one formula typed at `host` on a sheet that holds `cells`.
 export function evaluate(formula: string, cells: Cells = {}, host = 'N1') {
-    return valueAt(engineOf({ s1: { ...cells, [host]: formula }, s2: { D3: 300 } }), host);
+    const engine = engineOf({ s1: { ...cells, [host]: formula }, s2: { D3: 300 } });
+    engine.recalc(Number.POSITIVE_INFINITY);
+    return valueAt(engine, host);
 }

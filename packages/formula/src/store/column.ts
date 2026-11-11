@@ -1,17 +1,19 @@
 // One column of one sheet: four parallel typed arrays over its rows, holding each cell's value and, for a formula,
-// the id of its shape. A column is as long as its last row, grows by doubling, and counts its errors and its
-// formulas still to compute so that a loop over it can skip the per-cell checks. The high bits of `kind` are the
-// recalc's own flags, which move with the cell when rows do.
+// the id of its shape. A column is as long as its last row, grows by doubling, and counts its errors, its formulas
+// still to compute and its cells on a loop, so that a loop over it can skip the per-cell checks. The high bits of
+// `kind` are the recalc's own flags, which move with the cell when rows do.
 
 import { GRID_ROWS } from '../text/a1';
 
 export const CellKind = { Empty: 0, Number: 1, Boolean: 2, Text: 3, Error: 4 } as const;
 
-// A kind above the mask carries a flag: the formula is to be computed, is being computed, or is on a loop.
+// A kind above the mask carries a flag. Above SETTLED the formula is to be computed or is being computed. LOOP
+// says the cell is on a circular reference, and stays on a computed cell until it is computed again.
 export const KIND_MASK = 15;
-export const DIRTY = 128;
-export const RUNNING = 64;
 export const LOOP = 32;
+export const SETTLED = 63;
+export const RUNNING = 64;
+export const DIRTY = 128;
 
 export class Column {
     public kind: Uint8Array;
@@ -25,6 +27,7 @@ export class Column {
     public length: number;
     public errors = 0;
     public pending = 0;
+    public loops = 0;
     // Goes up with every change to a cell of the column.
     public version = 0;
 
@@ -63,14 +66,22 @@ export class Column {
     }
 
     public markDirty(row: number): void {
-        if (this.kind[row] > KIND_MASK) return;
+        if (this.kind[row] > SETTLED) return;
         this.kind[row] |= DIRTY;
         this.pending += 1;
     }
 
+    // The cell holds no formula any more.
     public settle(row: number): void {
-        if (this.kind[row] <= KIND_MASK) return;
-        this.kind[row] &= KIND_MASK;
+        const kind = this.kind[row];
+        if (kind > SETTLED) this.pending -= 1;
+        if (kind & LOOP) this.loops -= 1;
+        this.kind[row] = kind & KIND_MASK;
+    }
+
+    // The formula of the cell was computed. Whether it is on a loop stays.
+    public computed(row: number): void {
+        this.kind[row] &= KIND_MASK | LOOP;
         this.pending -= 1;
     }
 
@@ -103,12 +114,13 @@ export class Column {
         this.version += 1;
     }
 
-    // Takes the rows from `from` up to `to` out of the two counts, before they leave the column.
+    // Takes the rows from `from` up to `to` out of the counts, before they leave the column.
     private forget(from: number, to: number): void {
         for (let row = from; row < to; row += 1) {
             const kind = this.kind[row];
             if ((kind & KIND_MASK) === CellKind.Error) this.errors -= 1;
-            if (kind > KIND_MASK) this.pending -= 1;
+            if (kind > SETTLED) this.pending -= 1;
+            if (kind & LOOP) this.loops -= 1;
         }
     }
 
