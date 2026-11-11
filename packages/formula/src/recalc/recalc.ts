@@ -75,20 +75,16 @@ export class Recalc {
         this.workbook = workbook;
         this.functions = functions;
         this.evaluator = new Evaluator(workbook, functions, this);
-        // A formula that came without a value was never computed, which the ones that came with a value have to
-        // hear. When none did, every formula is computed anyway and there is nothing to flag.
-        let settled = false;
+        // A formula that came without a value was never computed, which the ones that came with a value have to hear.
         for (let s = 0; s < workbook.sheets.length; s += 1) {
             const { columns } = workbook.sheets[s];
             for (let c = 0; c < columns.length; c += 1) {
-                const { kind, shape, length } = columns[c];
-                for (let row = 0; (columns[c].pending > 0 || !settled) && row < length; row += 1) {
+                const { kind, length } = columns[c];
+                for (let row = 0; columns[c].pending > 0 && row < length; row += 1) {
                     if (kind[row] > SETTLED) this.seed(s, c, row);
-                    else if (shape[row] > 0) settled = true;
                 }
             }
         }
-        if (!settled) this.seeds.length = 0;
     }
 
     // To be called before a cell is written, with whether a formula is: the cell is a seed of the next pass.
