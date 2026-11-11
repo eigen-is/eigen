@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, tick boxes, checkboxes, data-validation]
 related: [sheets/data-validation, sheets/enter-and-edit-data]
 order: 55
-updated: 2026-11-02
+updated: 2026-11-11
 ---
 
 A tick box turns a cell into a box you click instead of a cell you type `TRUE` or `FALSE` into. Use them for checklists, or for a column that marks which rows are done.
@@ -33,11 +33,11 @@ A cell that holds a formula does not toggle. Writing `TRUE` into it would replac
 
 A ticked box is the value `TRUE` and an empty box is `FALSE`. Nothing else is stored, which means a `TRUE` that arrives some other way (typed in, pasted, imported from Excel, or produced by a formula) draws as a ticked box too.
 
-If a cell in the range holds something else, such as a word, the box appears and the text stays visible beside it.
+If a cell in the range holds something else, such as a word, it shows the word and no box, with a red triangle in its top-left corner. Clear the cell or type `TRUE` or `FALSE` to get the box back.
 
 ## Use your own values instead
 
-**Insert → Tick box** is a shortcut for the **Checkbox** validation rule with `TRUE` and `FALSE` as its two values. To use a different pair, such as `Yes` and `No`, set the rule up in **Data → Data validation** instead and fill in the **Selected** and **Not selected** values. A box with custom values shows its value next to the box, so you can tell one state from the other. See [Set up data validation](/support/sheets/data-validation).
+**Insert → Tick box** is a shortcut for the **Checkbox** validation rule with `TRUE` and `FALSE` as its two values. To use a different pair, such as `Yes` and `No`, set the rule up in **Data → Data validation** instead and fill in the **Selected** and **Not selected** values. A box with custom values looks like any other tick box, and the formula bar shows the value it holds. See [Set up data validation](/support/sheets/data-validation).
 
 ## Remove tick boxes
 

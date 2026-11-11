@@ -2,6 +2,7 @@
 // included, deep below the rows that hold data. It looks the rules up once per paint, cut down to the window.
 
 import { describe, expect, test } from 'bun:test';
+import { INDICATOR_RED } from '@workspace/lib/constants/comment-indicator';
 import { REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { Canvas } from '../../../state/canvas';
 import type { Context } from '../../../state/context';
@@ -20,18 +21,20 @@ g.Path2D ??= class {
 
 const ROWS = 6000;
 const ROW_HEIGHT = 20;
+type Call = { name: string; args: unknown[]; fillStyle: unknown };
+
 const TICK_BOX: DataValidationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
 
-// A 2D context that records every call, and a canvas element that hands it out.
+// A 2D context that records every call with the fill colour it was made in, and a canvas element that hands it out.
 function recordingCanvas() {
-    const calls: { name: string; args: unknown[] }[] = [];
+    const calls: Call[] = [];
     const state: Record<string | symbol, unknown> = {};
     const context = new Proxy(state, {
         get: (target, key) =>
             key in target
                 ? target[key]
                 : (...args: unknown[]) => {
-                      calls.push({ name: String(key), args });
+                      calls.push({ name: String(key), args, fillStyle: target.fillStyle });
                       return key === 'measureText'
                           ? { width: 10, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2 }
                           : undefined;
@@ -74,7 +77,7 @@ function paintAround5000(ctx: Context) {
     return canvas.calls;
 }
 
-const tickBoxes = (calls: { name: string; args: unknown[] }[]) =>
+const tickBoxes = (calls: Call[]) =>
     calls.filter(({ name, args }) => name === 'strokeRect' && args[2] === CHECKBOX_SIZE);
 
 describe('the painter and a whole-column tick box', () => {
@@ -104,5 +107,67 @@ describe('the painter and a whole-column tick box', () => {
         expect(checkboxChange(ctx, 5001, 1)).toBe(true);
         expect(ctx.sheets[0].data?.[5001][1]?.v).toBe(true);
         expect(checkboxChange(ctx, 5001, 0)).toBe(false);
+    });
+});
+
+// Column B spans x 74..148 and its text box 74..146, so a centred 10px box starts at 105, a left one at 76 and a right
+// one at 134, each stroked half a pixel in. The rows are 20px, and the box sits in the middle of its own.
+describe('the painter and a tick box with its own values', () => {
+    const YES_NO: DataValidationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
+
+    function paint(cells: (Cell | null)[]) {
+        const ctx = contextFactory({
+            visibledatarow: cells.map((_, r) => (r + 1) * ROW_HEIGHT),
+            visibledatacolumn: [74, 148, 222],
+            devicePixelRatio: 1,
+        }) as Context;
+        ctx.sheets[0].data = cells.map((cell) => [null, cell, null]);
+        ctx.sheets[0].dataValidations = {
+            ticks: { ranges: [{ row: [0, cells.length - 1], column: [1, 1] }], rule: YES_NO },
+        };
+        const canvas = recordingCanvas();
+        new Canvas(canvas.element, ctx).drawMain({
+            scrollWidth: 0,
+            scrollHeight: 0,
+            drawWidth: 222,
+            drawHeight: cells.length * ROW_HEIGHT - 1,
+            offsetLeft: 0,
+            offsetTop: 0,
+        });
+        return canvas.calls;
+    }
+    const boxesAt = (calls: Call[]) => tickBoxes(calls).map(({ args }) => [args[0], args[1]]);
+    const texts = (calls: Call[]) => calls.filter(({ name }) => name === 'fillText').map(({ args }) => args[0]);
+    const redMarks = (calls: Call[]) =>
+        calls.filter((call) => call.name === 'fill' && call.fillStyle === INDICATOR_RED);
+
+    test('draws the box alone and centred, ticked, unticked and empty alike', () => {
+        const calls = paint([{ v: 'Yes', m: 'Yes' }, { v: 'No', m: 'No' }, null]);
+        expect(boxesAt(calls)).toEqual([
+            [105.5, 5],
+            [105.5, 25],
+            [105.5, 45],
+        ]);
+        expect(texts(calls)).toEqual([]);
+        expect(redMarks(calls)).toHaveLength(0);
+    });
+
+    test("the cell's own alignment moves the box to that side", () => {
+        const calls = paint([
+            { v: 'Yes', m: 'Yes', ht: 1 },
+            { v: 'No', m: 'No', ht: 2 },
+        ]);
+        expect(boxesAt(calls).map(([x]) => x)).toEqual([76.5, 134.5]);
+        expect(texts(calls)).toEqual([]);
+    });
+
+    test('a value the rule does not name paints as text with the invalid mark, and no box', () => {
+        const calls = paint([
+            { v: 'Maybe', m: 'Maybe' },
+            { v: 'Yes', m: 'Yes' },
+        ]);
+        expect(boxesAt(calls)).toEqual([[105.5, 25]]);
+        expect(texts(calls)).toEqual(['Maybe']);
+        expect(redMarks(calls)).toHaveLength(1);
     });
 });

@@ -242,8 +242,7 @@ export function getRealCellValue(r: number, c: number, data: CellMatrix) {
     return getCellValue(r, c, data, 'm') ?? getCellValue(r, c, data);
 }
 
-// A number stored as text (qp === 1) that still reads as a number. One predicate for the painter's corner mark and the
-// glyph hit test, so the two never drift over what "forced string" means.
+// A number stored as text (qp === 1) that still reads as a number, which the painter marks in the cell's corner.
 export function isForcedStringNumber(cell: Cell | null | undefined): boolean {
     return cell?.qp === 1 && !Number.isNaN(Number(cell.v));
 }
