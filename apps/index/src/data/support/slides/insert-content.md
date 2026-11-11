@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, text, images, charts, objects, canvas]
 related: [slides/get-started, slides/add-slides, slides/style-objects, slides/draw-shapes-and-arrows]
 order: 40
-updated: 2026-10-28
+updated: 2026-11-11
 ---
 
 You build slides by placing text boxes, images, and charts on the canvas. They work the same way: add one from the toolbar, then move, resize, and adjust it from the properties panel on the right.
@@ -27,7 +27,7 @@ A rectangle, diamond, or ellipse holds text too. Double-click it, or select it a
 
 1. Select the slide you want to edit.
 2. Click **Add image** in the toolbar.
-3. The **Add image** dialog opens. Either click **Upload from device** to pick a file from your computer, or browse your Drive, click a file, and click **Select**.
+3. The **Insert image** dialog opens. Either click **Upload from device** to pick a file from your computer, or browse your Drive, click a file, and click **Select**.
 4. The image appears on the slide.
 
 You can also drag an image file from your desktop straight onto the canvas. A **Drop images to add** overlay appears, and Slides adds the image to the slide you are on.

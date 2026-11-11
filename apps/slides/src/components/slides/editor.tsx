@@ -329,6 +329,7 @@ export function SlideEditor({
                     undoManager={doc.undoManager}
                     tool={tool}
                     setTool={setTool}
+                    selectionEmpty={selectedIds.length === 0}
                     toolLocked={toolLocked}
                     setToolLocked={setToolLocked}
                     onInsertImage={insertImage}

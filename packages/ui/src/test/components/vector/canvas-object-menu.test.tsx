@@ -1,6 +1,7 @@
 // A canvas object's menu downloads what it is about: a selection, or a chart alone, as Download image, the SVG the
 // browser draws, and a single image only as its original file. A viewer, who selects nothing, gets the same rows for
-// the element right-clicked. The selection's file draws its text as SVG text and embeds the faces it uses.
+// the element right-clicked. The selection's file draws its text as SVG text and embeds the faces it uses. The toolbar's
+// Edit menu reaches the same writes through the canvas handle.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { stubCanvasImageFonts } from '../../canvas-image';
 import { installHappyDom } from '../../happy-dom';
@@ -258,4 +259,16 @@ test("File › Download › SVG draws every element on the drawing's background,
     } finally {
         saved.mockRestore();
     }
+});
+
+test("the toolbar's Edit › Duplicate and Delete act on the selection, as the object menu's rows do", async () => {
+    await render(true, ['r']);
+    const elements = doc.getMap('elements');
+    await act(async () => canvasRef.current?.duplicate());
+    expect(elements.size).toBe(ELEMENTS.length + 1);
+    expect(elements.has('r')).toBe(true);
+    // The copy is the selection now, so Delete takes it and leaves the original.
+    await act(async () => canvasRef.current?.delete());
+    expect(elements.size).toBe(ELEMENTS.length);
+    expect(elements.has('r')).toBe(true);
 });
