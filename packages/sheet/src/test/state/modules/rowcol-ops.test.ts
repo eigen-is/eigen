@@ -265,9 +265,8 @@ describe('structural sharing through the immer produce', () => {
 });
 
 // A row or column op writes each field of a sheet whole, a chart per object: a write inside a field a peer just
-// removed, such as the frozen pane's focus after an unfreeze, would fail on the peer and in the replay, taking the
-// whole batch with it, and would throw in the author's own undo. Which frozen pane wins follows the log's order
-// (SHEETS-TODO.md), so only the grid is compared.
+// removed, such as the frozen pane's focus after an unfreeze, would be skipped on the peer, in the replay and in the
+// author's own undo. Which frozen pane wins follows the log's order (SHEETS-TODO.md), so only the grid is compared.
 describe("a row or column op racing a peer's unfreeze", () => {
     const frozenContext = () =>
         produce(richContext(), (ctx: Context) => {

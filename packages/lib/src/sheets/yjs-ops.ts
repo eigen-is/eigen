@@ -96,7 +96,10 @@ function isValidationWrite(op: Op): boolean {
 // kind no reader follows, is dropped. The editor writes a link whole, as it writes a cell, a row or a matrix.
 function isCellWrite({ op, path, value }: Op): boolean {
     if (path[3] === 'link') return path.length === 4 && (op === 'remove' || isLink(value));
-    if (op === 'remove' || path.length > 3) return true;
+    if (path.length > 3) return true;
+    // No writer removes the matrix, a row or a cell's place: immer cuts an array by its `length`. A removal would
+    // leave the matrix a size no snapshot keeps, and a joiner would apply the writes a live tab then skips.
+    if (op === 'remove') return false;
     return Array.isArray(value) ? value.flat().every(holdsNoBadLink) : holdsNoBadLink(value);
 }
 
@@ -112,8 +115,10 @@ function isLink(value: unknown): boolean {
     return isCellLinkType(type) && typeof address === 'string';
 }
 
-// A chart's keyed parts stay records, as every writer of an entry expects.
+// A chart's keyed parts stay records, as every writer of an entry expects, and nothing is written below an entry,
+// which is a string.
 function isChartWrite({ path, value }: Op): boolean {
+    if (path.length > 4) return false;
     return path.length !== 3 || !SHEET_CHART_KEYED_PART_KEYS.has(String(path[2])) || isRecord(value);
 }
 

@@ -54,7 +54,7 @@ describe('replaySheetsOps', () => {
 
     test('a sheet an addSheet op introduces is materialized like the replay base', () => {
         // The editor writes each image and chart under its own key and each config entry the same way, so a
-        // patch against a sheet that lacks the map fails to resolve and drops the batch.
+        // write into a sheet that lacks the map would be skipped.
         const ops: Op[][] = [[{ op: 'addSheet', path: [], value: baseSheet('s2', 'Sheet2') }]];
         const [base, added] = replaySheetsOps([baseSheet('s1', 'Sheet1')], ops);
         expect(added.images).toEqual({});
@@ -194,10 +194,8 @@ describe('replaySheetsOps', () => {
     });
 
     test('celldata-only snapshot: data is materialized so cell ops can apply', () => {
-        // The persisted snapshot (xlsxToSheets / an FE snapshot from before
-        // materialization) typically carries celldata only. Patches reference
-        // ['data', r, c]; without internal materialization applyPatches throws
-        // "path doesn't resolve". Verifies the BE export and FE startup paths.
+        // A stored snapshot carries celldata only, and a cell op writes ['data', r, c]: without the matrix the
+        // replay builds, every cell write would be skipped.
         const sheet: Sheet = {
             id: 's1',
             name: 'Sheet1',
@@ -473,13 +471,9 @@ describe('a sheet added under a name it cannot take', () => {
     });
 });
 
-// A granular patch into a collection (`['config','rowlen','2']`) only resolves if the collection
-// already exists. Every document written before the editor started materializing them — and every
-// fresh doc before its first compaction — stores `config: {}`, so the replay base must materialize
-// them too. Without this,
-// replaySheetsOps throws "path doesn't resolve" and rolls back the WHOLE batch: the edit is
-// lost, not degraded, on every reader (a second client opening the doc, the preview renderer,
-// and every xlsx/HTML/PDF export).
+// A write into a collection, such as ['config', 'rowlen', '2'], applies only when the collection is there. A fresh
+// workbook before its first compaction stores `config: {}`, so the replay base gets every collection first. Without
+// them the write is skipped and the edit is lost on every reader: a second tab, the preview and every export.
 describe('ops from a normalizing editor apply to an un-normalized stored sheet', () => {
     const storedBeforeThisBranch = (): Sheet[] => [{ name: 'Sheet1', id: 'id_1', order: 0, celldata: [], config: {} }];
 

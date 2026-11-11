@@ -134,6 +134,9 @@ describe('applySheetWrites', () => {
             write('replace', ['data', 0.5], [null, null]),
             write('replace', ['data', '0'], [null, null]),
             write('remove', ['data', 2]),
+            write('remove', ['data', 1]),
+            write('remove', ['data', 0, 1]),
+            write('remove', ['data']),
             write('replace', ['data', 'length'], 5),
             write('replace', ['data', 0, 0, 'v', 'deeper'], 1),
             write('add', ['filter', '1'], {}),
@@ -201,12 +204,18 @@ describe('applySheetWrites', () => {
     });
 
     // A keyed part is a record from the chart's creation on, so only a forged chart has another value there: an entry
-    // write below it is skipped, not the batch, and so is a write below an entry, which is a string, and a write that
-    // would leave the part no record.
+    // write below it is skipped, not the batch, and so is a write that would leave the part no record. A write below
+    // an entry is skipped whatever the entry holds: under a forged record entry, an add and its remove would each
+    // lower the chart's count by one, and take the chart past its cap.
     test('an entry write lands on a record field only, and a keyed part stays a record', () => {
         const forged = { ...chart('c2', 'a2'), specPoints: '{}' };
         expect(
             paths([
+                write('add', ['charts', 'c1', 'specPoints', 'forged'], { k: 1 }),
+                write('add', ['charts', 'c1', 'specPoints', 'forged', 'k2'], 1),
+                write('remove', ['charts', 'c1', 'specPoints', 'forged', 'k2']),
+                write('remove', ['charts', 'c1', 'specPoints', 'forged', 'k']),
+                write('remove', ['charts', 'c1', 'specPoints', 'forged']),
                 write('add', ['charts', 'c2'], forged),
                 write('add', ['charts', 'c2', 'specPoints', 's-1/3'], '{"color":"#ff0000"}'),
                 write('add', ['charts', 'c1', 'specPoints', 's-1/3'], '{"color":"#ff0000"}'),
@@ -221,6 +230,8 @@ describe('applySheetWrites', () => {
                 write('add', ['charts', 'c2', 'specPoints', 's-1/4'], '{}'),
             ]),
         ).toEqual([
+            'charts/c1/specPoints/forged',
+            'charts/c1/specPoints/forged',
             'charts/c2',
             'charts/c1/specPoints/s-1/3',
             'charts/c1/specPoints/s-1/4',

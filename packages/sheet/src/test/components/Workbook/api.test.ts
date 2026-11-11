@@ -469,6 +469,20 @@ describe('replayOps', () => {
         expect(ctx.formulaCache.graph?.formulaAt('id_1', 0, 1)?.formula).toBe('=A1*2');
     });
 
+    // The graph the tab holds has followed its own clear of B1. The replay starts from the base, where B1 still holds
+    // its formula, and the peer's row moves it out from under the clear, so a graph kept through it would lack it.
+    it("forgets the graph it held, so a formula a peer's row insert saves from the tab's clear is in it", () => {
+        const base = makeCtx({ f: '=A1*2', v: 10, m: '10' });
+        const clear: Op[] = [{ op: 'replace', id: 'id_1', path: ['data', 0, 1], value: null }];
+        heldGraph(base);
+        const shown = applyPeerOps(base, clear);
+        expect(heldGraph(shown).formulaAt('id_1', 0, 1)).toBeUndefined();
+        const late = [rowInsert];
+        const { ctx } = replay(shown, base.sheets, [late, clear], [late]);
+        expect(ctx.sheets[0].data?.[1]?.[1]?.f).toBe('=A2*2');
+        expect(ctx.formulaCache.graph?.formulaAt('id_1', 1, 1)?.formula).toBe('=A2*2');
+    });
+
     it('says when a batch failed to apply', () => {
         const broken: Op = { op: 'insertRowCol', id: 'id_1', path: [], value: { type: 'row', index: -1 } };
         const ctx = makeCtx(null);

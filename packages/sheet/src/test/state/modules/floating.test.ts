@@ -6,11 +6,11 @@ import { describe, expect, test } from 'bun:test';
 import { CHART_MAX_SIDE, MAX_CHART_SPEC_ENTRIES, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet as LibSheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
 import { floatingItems } from '@workspace/lib/sheets';
+import { applySheetWrites } from '@workspace/lib/sheets/yjs-ops';
 import type { Patch } from 'immer';
 import { applyPatches, produce } from 'immer';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
-import { withoutSkippedWrites } from '../../../state/modules/apply-ops';
 import { insertChart } from '../../../state/modules/chart';
 import {
     deleteActiveObject,
@@ -110,16 +110,16 @@ describe('floating writers', () => {
             expect(join(base, [removal.ops, move.ops])[0][field]).toEqual({});
             const peerGone = receive(move.next, removal.ops);
             expect(() => applyPatches(peerGone, move.inverse)).toThrow();
-            expect(withoutSkippedWrites(peerGone, move.inverse)).toEqual([]);
-            expect(withoutSkippedWrites(move.next, move.inverse)).toEqual(move.inverse);
-            expect(withoutSkippedWrites(removal.next, removal.inverse)).toEqual(removal.inverse);
+            expect(undoEntry(peerGone, move.entry)).toEqual({ ctx: peerGone, ops: [] });
+            expect(undoEntry(move.next, move.entry).ops.map((op) => op.path)).toEqual([[field, id, 'x']]);
+            expect(undoEntry(removal.next, removal.entry).ops.map((op) => op.path)).toEqual([[field, id]]);
         });
     }
 
     // setContextWithProduce merges every write of a panel gesture into one entry: its own earlier write can bring back
     // the object a later one edits, so only an object missing where the write lands drops it, on the author, a peer
     // and a joiner alike.
-    test('a merged entry that deletes or inserts an object it edits undoes and redoes whole, everywhere', () => {
+    test("a merged entry's writes that delete or insert an object it edits land whole, everywhere", () => {
         const merged = (base: Context, ...recipes: ((ctx: Context) => void)[]) => {
             let next = base;
             const entry = { patches: [] as Patch[], inverse: [] as Patch[] };
@@ -131,10 +131,12 @@ describe('floating writers', () => {
             }
             return { next, ops: patchToOp(base, next, entry.patches), ...entry };
         };
-        // Workbook's handleUndo and handleRedo: the entry's writes that still apply, and the batch they ship.
+        // One side of the entry as every reader applies it, and the batch it ships.
         const replay = (ctx: Context, patches: Patch[]) => {
-            const kept = withoutSkippedWrites(ctx, patches);
-            const next = applyPatches(ctx, kept);
+            const writes = patches.map((patch) => ({ ...patch, path: patch.path.slice(1) }));
+            const { sheets, applied } = applySheetWrites(ctx.sheets, writes);
+            const next = { ...ctx, sheets };
+            const kept = applied.map((write) => ({ ...write, path: ['sheets', ...write.path] }));
             return { next, ops: patchToOp(ctx, next, kept) };
         };
         const base = workbook();
@@ -234,8 +236,8 @@ describe('floating writers', () => {
         expect(Object.keys(onA.sheets[0].images!)).toHaveLength(2);
         expect(objects(onB.sheets)).toEqual(objects(onA.sheets));
         expect(objects(joiner)).toEqual(objects(onA.sheets));
-        const undone = applyPatches(onA, withoutSkippedWrites(onA, insert.inverse));
-        expect(objects(undone.sheets)).toEqual(objects(removal.next.sheets));
+        const undone = undoEntry(onA, insert.entry);
+        expect(objects(undone.ctx.sheets)).toEqual(objects(removal.next.sheets));
     });
 
     test('a media rename and a pending removal reach an image on another sheet', () => {
