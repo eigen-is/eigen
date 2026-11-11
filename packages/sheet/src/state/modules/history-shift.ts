@@ -275,10 +275,10 @@ class Shifter {
         return `=${this.move.formula(f.slice(1), this.name, onTargetSheet, this.findSheet)}`;
     }
 
-    // A chart's data and points follow the ranges it reads; a write to its box or look moves with nothing.
+    // A chart's data follows the ranges it reads; a write to its box, its look or its style moves with nothing.
     private chartNamesSheet(patch: Patch): boolean {
         const [, sheet, , chartId, part] = patch.path;
-        if (part != null && part !== 'specData' && part !== 'specPoints') return false;
+        if (part != null && part !== 'specData') return false;
         const stored = this.sheets.find((s) => s.id === sheet)?.charts ?? {};
         const charts: (SheetChart | undefined)[] =
             chartId == null

@@ -6,10 +6,9 @@ import { describe, expect, test } from 'bun:test';
 import {
     CHART_MAX_SIDE,
     DEFAULT_CHART_SERIES_STYLE,
+    defaultChartSpec,
     FLAT_CHART_LOOK,
-    MAX_CHART_SPEC_ENTRIES,
     newChartSpecParts,
-    newSheetChartSpecParts,
     readChartLook,
     readChartSpec,
     sampleChartSpec,
@@ -24,7 +23,7 @@ import {
 import type { CellRangeRef, ChartSpec, ChartSpecChange } from '@workspace/lib/types/chart';
 import { enablePatches, produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
-import { mapChartRefs, replaySheetsOps } from '../../../engine';
+import { replaySheetsOps } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Context } from '../../../state/context';
 import {
@@ -33,6 +32,7 @@ import {
     setChartDataRange,
     setChartLook,
     setChartSpec,
+    sheetChartClipboardItem,
     sheetChartSvg,
 } from '../../../state/modules/chart';
 import { updateFloatingBox } from '../../../state/modules/floating';
@@ -48,7 +48,7 @@ enablePatches();
 const S = 'id_1';
 const T = 'id_2';
 const BOX = { x: 10, y: 20, width: 400, height: 300 };
-const SPEC = newSheetChartSpecParts(sampleChartSpec('column'));
+const SPEC = newChartSpecParts(sampleChartSpec('column'));
 const TO_LINE: ChartSpecChange = [{ op: 'set', path: ['chart', 'type'], value: 'line' }];
 
 const ref = (sheetId: string, row: [number, number], column: [number, number] = [1, 1]): CellRangeRef => ({
@@ -70,7 +70,7 @@ function asLine(spec: ChartSpec): ChartSpec {
 }
 
 function chart(id: string, spec: ChartSpec, index = 'a0'): SheetChart {
-    return { id, index, ...BOX, ...newSheetChartSpecParts(spec) };
+    return { id, index, ...BOX, ...newChartSpecParts(spec) };
 }
 
 const grid = () => Array.from({ length: 10 }, () => Array.from({ length: 4 }, () => null));
@@ -158,18 +158,11 @@ describe('chart writers', () => {
         expect(readChartLook(next.sheets[0].charts!.c3)).toEqual(look);
     });
 
-    // The item carries each part's text; a keyed one split into entries keeps every entry as it came.
-    test('a paste stores the parts as they came, a keyed part the item lacks an empty record', () => {
-        const sample = sampleChartSpec('pie');
-        const { specPoints, ...parts } = newChartSpecParts({
-            ...sample,
-            series: { ...sample.series, 's-9': { ...DEFAULT_CHART_SERIES_STYLE, color: '#00ff00' } },
-        });
-        const fields = newSheetChartSpecParts(parts);
+    test('a paste stores the parts as they came, a part the item lacks as empty', () => {
+        const { specPoints, ...parts } = newChartSpecParts(sampleChartSpec('pie'));
+        const fields = newChartSpecParts({ ...parts, specTitle: '{"text":' });
         const { next } = author(workbook(), (ctx) => pasteChart(ctx, 'c3', fields, BOX, FLAT_CHART_LOOK));
-        const pasted = next.sheets[0].charts!.c3;
-        expect(readChartSpec(pasted).stored).toEqual(readChartSpec({ ...parts, specPoints }).stored);
-        expect(pasted.specPoints).toEqual({});
+        expect(next.sheets[0].charts!.c3).toMatchObject({ ...parts, specTitle: '{"text":', specPoints: '' });
     });
 
     test('a look edit writes only the fields given, each its own op', () => {
@@ -260,7 +253,7 @@ describe('a chart edit keeps what this build does not know', () => {
             const series = spec.data.series.map((s) => ({ ...s, dash: 'dot' }));
             c1.specChart = JSON.stringify({ ...spec.chart, future: 1 });
             c1.specLegend = JSON.stringify({ position: 'inside' });
-            c1.specAxes.y = JSON.stringify({ ...spec.axes.y, logBase: 10 });
+            c1.specAxes = JSON.stringify({ ...spec.axes, y: { ...spec.axes.y, logBase: 10 } });
             c1.specData = JSON.stringify({ ...spec.data, future: 2, series });
         });
     const part = (ctx: Context, key: 'specTitle' | 'specData') => JSON.parse(ctx.sheets[0].charts!.c1[key]);
@@ -270,7 +263,7 @@ describe('a chart edit keeps what this build does not know', () => {
         return [
             JSON.parse(specChart).future,
             JSON.parse(specLegend).position,
-            JSON.parse(specAxes.y).logBase,
+            JSON.parse(specAxes).y.logBase,
             data.future,
             data.series[0].dash,
         ];
@@ -456,9 +449,8 @@ describe('charts converge over real ops', () => {
     });
 });
 
-// Every entry of a keyed part sits under its own key, so two peers editing two entries, or a part and an entry, keep
-// both on every client and a joiner.
-describe('two peers editing one chart keep both edits', () => {
+// Each part is its own field, so two peers editing two parts of one chart keep both.
+describe('two peers editing two parts of one chart keep both edits', () => {
     const set = (path: string[], value: unknown): ChartSpecChange => [{ op: 'set', path, value }];
     const title = set(['title', 'text'], 'Goals');
     const recolor = (index: number, color: string) => set(['points', 's-1', String(index)], { color });
@@ -485,39 +477,22 @@ describe('two peers editing one chart keep both edits', () => {
             { title: { text: 'Goals' }, series: { 's-1': { color: '#00ff00' } } },
         ],
         [
-            "two series' colours",
+            'a series colour and a slice colour',
             set(['series', 's-1', 'color'], '#ff0000'),
-            set(['series', 's-2', 'color'], '#00ff00'),
-            { series: { 's-1': { color: '#ff0000' }, 's-2': { color: '#00ff00' } } },
+            recolor(2, '#00ff00'),
+            { series: { 's-1': { color: '#ff0000' } }, points: { 's-1': { 2: { color: '#00ff00' } } } },
         ],
         [
-            "the x axis's title and the y axis's min",
+            "the x axis's title and a column chart's stacking",
             set(['axes', 'x', 'title', 'text'], 'Month'),
-            set(['axes', 'y', 'scale', 'min'], 10),
-            { axes: { x: { title: { text: 'Month' } }, y: { scale: { min: 10 } } } },
+            set(['plots', 'column', 'stacking'], 'stacked'),
+            { axes: { x: { title: { text: 'Month' } } }, plots: { column: { stacking: 'stacked' } } },
         ],
-        ['two slice colours', recolor(0, '#ff0000'), recolor(2, '#00ff00'), { points: { 's-1': { 0: {}, 2: {} } } }],
     ])('%s', (_, first, second, expected) => {
         const base = withChart('c3', sampleChartSpec('column'));
         const a = author(base, (ctx) => setChartSpec(ctx, 'c3', first));
         const b = author(base, (ctx) => setChartSpec(ctx, 'c3', second));
         expect(spec(converge(base, a, b), 'c3')).toMatchObject(expected);
-    });
-
-    // A new chart's points are a record from its insert, so each first slice colour ships as its entry alone.
-    test("two peers' first slice colours of a new chart ship an entry each, and a joiner keeps both", () => {
-        const inserted = author(workbook(), (ctx) => insertChart(ctx, 'p', BOX, sampleChartSpec('pie')));
-        const base = inserted.next;
-        const a = author(base, (ctx) => setChartSpec(ctx, 'p', recolor(0, '#ff0000')));
-        const b = author(base, (ctx) => setChartSpec(ctx, 'p', recolor(2, '#00ff00')));
-        expect(a.ops).toEqual([
-            { op: 'add', id: S, path: ['charts', 'p', 'specPoints', 's-1/0'], value: '{"color":"#ff0000"}' },
-        ]);
-        const joiner = join(workbook(), [inserted.ops, a.ops, b.ops]);
-        expect(readChartSpec(joiner[0].charts!.p).spec?.points).toEqual({
-            's-1': { 0: { color: '#ff0000' }, 2: { color: '#00ff00' } },
-        });
-        expect(charts(converge(base, a, b))).toEqual(charts(joiner));
     });
 
     // c1's points run along its values, rows 2 to 5. Both ops land inside them and leave every point at its index.
@@ -569,34 +544,84 @@ describe('two peers editing one chart keep both edits', () => {
     }
 });
 
-// Every read of a chart, a draw, the panel and a row op among them, goes through readChartSpec, whose byte count stops
-// at the limit; a chart past the entry cap never reaches one, whichever door it came through.
-describe('a forged chart costs a read what fits under the byte limit', () => {
-    const forgedPoints = (count: number) =>
-        Object.fromEntries(Array.from({ length: count }, (_, i) => [`s-1/${i % 2000}-${i}`, '{"color":"#ff0000"}']));
-
-    test('a draw and a row op read entries only up to the limit', () => {
-        let visited = 0;
-        const points = new Proxy(forgedPoints(20_000), {
-            get: (target, key) => {
-                visited += 1;
-                return Reflect.get(target, key);
-            },
+// A sheet's chart holds the eight JSON strings a canvas element and a doc's node hold, so one codec reads and writes all.
+describe('a sheet chart stores each part as one string', () => {
+    const set = (path: string[], value: unknown): ChartSpecChange => [{ op: 'set', path, value }];
+    const sample = sampleChartSpec('column');
+    const withChart = (patch: Record<string, unknown> = {}) =>
+        produce(workbook(), (ctx: Context) => {
+            const stored: SheetChart = { id: 'c3', index: 'a2', ...BOX, ...newChartSpecParts(sample) };
+            ctx.sheets[0].charts!.c3 = Object.assign(stored, patch);
         });
-        const forged = { ...chart('f1', rangeSpec(ref(S, [2, 5]))), specPoints: points };
-        sheetChartSvg(workbook(), forged);
-        expect(mapChartRefs(forged, (r) => ({ ...r, row: [r.row[0] + 1, r.row[1] + 1] }))).toBe(forged);
-        expect(visited).toBeGreaterThan(0);
-        expect(visited).toBeLessThan(2 * 4_000);
+    const c3 = (sheets: LibSheet[]) => sheets[0].charts!.c3;
+
+    test('a restyle is one replace of the part it changed', () => {
+        const { ops, next } = author(withChart(), (ctx) =>
+            setChartSpec(ctx, 'c3', set(['series', 's-1', 'color'], '#00ff00')),
+        );
+        const series = JSON.stringify({ ...sample.series, 's-1': { ...sample.series['s-1'], color: '#00ff00' } });
+        expect(ops).toEqual([{ op: 'replace', id: S, path: ['charts', 'c3', 'specSeries'], value: series }]);
+        expect(c3(next.sheets).specSeries).toBe(series);
     });
 
-    test('a snapshot or a replay base leaves out a chart past the entry cap', () => {
-        const base = workbook();
-        const forged = { ...chart('f1', rangeSpec(ref(S, [2, 5]))), specPoints: forgedPoints(MAX_CHART_SPEC_ENTRIES) };
-        const sheets = structuredClone(base.sheets);
-        sheets[0].charts!.f1 = forged;
-        const decoded = decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true }));
-        expect(Object.keys(decoded[0].charts!).sort()).toEqual(['c1', 'c2']);
-        expect(Object.keys(replaySheetsOps(sheets, [])[0].charts!).sort()).toEqual(['c1', 'c2']);
+    test("a peer's write of a part lands whole, and of two on one part the later one stands", () => {
+        const base = withChart();
+        const a = author(base, (ctx) => setChartSpec(ctx, 'c3', set(['series', 's-1', 'color'], '#ff0000')));
+        const b = author(base, (ctx) => setChartSpec(ctx, 'c3', set(['series', 's-2', 'color'], '#00ff00')));
+        expect(charts(receive(base, a.ops).sheets)).toEqual(charts(a.next.sheets));
+        const joined = join(base, [a.ops, b.ops]);
+        expect(c3(joined).specSeries).toBe(c3(b.next.sheets).specSeries);
+        expect(readChartSpec(c3(joined)).spec?.series).toMatchObject({
+            's-1': { color: null },
+            's-2': { color: '#00ff00' },
+        });
+    });
+
+    test("an edit of a part keeps the keys in it this build doesn't know", () => {
+        const specAxes = JSON.stringify({ ...sample.axes, y: { ...sample.axes.y, logBase: 10 }, y9: { future: 1 } });
+        const { next } = author(withChart({ specAxes }), (ctx) =>
+            setChartSpec(ctx, 'c3', set(['axes', 'y', 'scale', 'min'], 5)),
+        );
+        const axes = JSON.parse(c3(next.sheets).specAxes);
+        expect([axes.y.scale.min, axes.y.logBase, axes.y9]).toEqual([5, 10, { future: 1 }]);
+    });
+
+    // What a build before this one stored: a record of entries where a part is now a string.
+    test('a part stored as a record of entries reads its defaults, the chart draws, and an edit stores a string', () => {
+        const records = {
+            specAxes: { y: JSON.stringify({ ...sample.axes.y, title: { text: 'Old axis' } }) },
+            specPlots: { column: JSON.stringify({ stacking: 'stacked' }) },
+            specSeries: { 's-1': JSON.stringify({ ...sample.series['s-1'], color: '#ff0000' }) },
+            specPoints: { 's-1/0': JSON.stringify({ color: '#00ff00' }) },
+        };
+        const base = withChart(records);
+        const defaults = defaultChartSpec('column', sample.data);
+        expect(readChartSpec(c3(base.sheets)).spec).toEqual({
+            ...sample,
+            axes: defaults.axes,
+            plots: defaults.plots,
+            series: defaults.series,
+            points: {},
+        });
+        const svg = sheetChartSvg(base, c3(base.sheets));
+        expect(svg).toContain('Hot star');
+        expect(svg).not.toContain('Old axis');
+        expect(svg).not.toContain("can't be shown");
+        const { ops } = author(base, (ctx) => setChartSpec(ctx, 'c3', set(['axes', 'y', 'title', 'text'], 'New')));
+        expect(ops).toEqual([
+            {
+                op: 'replace',
+                id: S,
+                path: ['charts', 'c3', 'specAxes'],
+                value: JSON.stringify({ y: { title: { text: 'New' } } }),
+            },
+        ]);
+    });
+
+    test('a copy to another app carries the eight parts as stored, and no ninth key', () => {
+        const specAxes = JSON.stringify({ ...sample.axes, y: { ...sample.axes.y, logBase: 10 } });
+        const base = withChart({ specAxes, specFuture: '{"forged":1}' });
+        const item = sheetChartClipboardItem(base, c3(base.sheets));
+        expect(item?.parts).toEqual({ ...newChartSpecParts(sample), specAxes });
     });
 });

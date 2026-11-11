@@ -1,6 +1,6 @@
 // Insert → Chart from the selection, and the data range writes the chart panel makes.
 import { expect, test } from 'bun:test';
-import { newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, readChartSpec } from '@workspace/lib/charts';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { produce } from 'immer';
 import type { ChartRangeRefusal } from '../../../engine/chart-range';
@@ -123,7 +123,7 @@ test('a typed data range is set up from its cells and keeps each series’ color
         if (!chart || spec?.data.source !== 'range') throw new Error('no range chart');
         const { id } = spec.data.series[0];
         spec.series[id] = { ...spec.series[id], color: '#000000' };
-        Object.assign(chart, newSheetChartSpecParts(spec));
+        Object.assign(chart, newChartSpecParts(spec));
     });
     const ranged = produce(recolored, (draft: Context) => setChartDataRange(draft, 'new', ref([0, 4], [0, 1])));
     const chart = ranged.sheets[0].charts?.new;

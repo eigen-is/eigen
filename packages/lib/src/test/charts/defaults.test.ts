@@ -16,7 +16,7 @@ import { chart } from './spec-fixtures';
 describe('the shape', () => {
     test('a spec is eight parts, each a record', () => {
         const spec = sampleChartSpec('column');
-        expect(Object.keys(spec).sort()).toEqual(Object.keys(CHART_SPEC_PARTS).sort());
+        expect(Object.keys(spec).sort()).toEqual([...CHART_SPEC_PARTS].sort());
         for (const part of Object.values(spec)) expect(typeof part === 'object' && !Array.isArray(part)).toBe(true);
     });
 });

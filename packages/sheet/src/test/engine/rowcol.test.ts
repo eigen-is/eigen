@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { newSheetChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { Cell, CellLink, Sheet, SheetChart, SheetConfig } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
@@ -858,7 +858,7 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
 
     function chart(data: Omit<RangeChartData, 'source'>, id = 'c1'): SheetChart {
         const spec: ChartSpec = { ...sampleChartSpec('column'), data: { source: 'range', ...data } };
-        return { id, index: 'a0', x: 0, y: 0, width: 400, height: 300, ...newSheetChartSpecParts(spec) };
+        return { id, index: 'a0', x: 0, y: 0, width: 400, height: 300, ...newChartSpecParts(spec) };
     }
     const series = (values: CellRangeRef | null, name: string | CellRangeRef = 'Points') => ({
         id: 's-1',
@@ -970,7 +970,7 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
             const points = Object.fromEntries(COLORS.map((color, i) => [i, { color, future: color }]));
             return {
                 ...c,
-                ...newSheetChartSpecParts({
+                ...newChartSpecParts({
                     ...spec,
                     chart: { ...spec.chart, type: 'pie' },
                     points: { 's-1': points },

@@ -2,18 +2,19 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CHART_MAX_SIDE, readChartSpec } from '@workspace/lib/charts';
-import type { Sheet } from '@workspace/lib/sheets';
+import type { Sheet, SheetChart } from '@workspace/lib/sheets';
 import {
     floatingItems,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
     SHEET_DEFAULT_COL_WIDTH,
 } from '@workspace/lib/sheets';
+import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
 import { solidFill } from '@workspace/lib/vector';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
 import { MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
 import { IMPORT_MESSAGES } from '../../../lib/import/messages';
-import { CHART_SHEET_SIZE, partsText, placeDrawings, readSheetDrawing } from '../../../lib/import/sheets/drawing';
+import { CHART_SHEET_SIZE, placeDrawings, readSheetDrawing } from '../../../lib/import/sheets/drawing';
 import { readXlsx } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_XLSX_ELEMENTS } from '../../../lib/import/sheets/package';
 import { drawingTheme, IMAGE_EXTENSION_BY_MIME } from '../../../lib/ooxml/drawingml';
@@ -359,8 +360,9 @@ describe('a worksheet chart', () => {
         });
         const charts = chartsOf(sheet);
         expect(charts).toHaveLength(2);
-        expect(Object.keys(charts[0].specSeries)).not.toEqual([]);
-        expect(charged).toEqual(charts.map(partsText));
+        expect(Object.keys(JSON.parse(charts[0].specSeries))).not.toEqual([]);
+        const text = (chart: SheetChart) => CHART_SPEC_PART_KEYS.reduce((sum, key) => sum + chart[key].length, 0);
+        expect(charged).toEqual(charts.map(text));
     });
 
     // Placing an anchor walks the tracks before its corners, so a far one costs its columns and rows.
@@ -649,10 +651,10 @@ describe('a chart sheet', () => {
                 specChart: expect.any(String),
                 specTitle: expect.any(String),
                 specLegend: expect.any(String),
-                specAxes: expect.any(Object),
-                specPlots: expect.any(Object),
-                specSeries: expect.any(Object),
-                specPoints: expect.any(Object),
+                specAxes: expect.any(String),
+                specPlots: expect.any(String),
+                specSeries: expect.any(String),
+                specPoints: expect.any(String),
                 specData: expect.any(String),
             },
         ]);

@@ -6,7 +6,7 @@
 
 import { isRecord } from '@workspace/lib/guards';
 import type { Sheet } from '@workspace/lib/sheets';
-import { chartsWithinEntryCap, wellFormedValidations } from '@workspace/lib/sheets';
+import { wellFormedValidations } from '@workspace/lib/sheets';
 import type { ExtendedSheetConfig } from './types';
 
 // One list: a collection missing from it brings the overwrite back for its own first write. `satisfies` only checks
@@ -37,10 +37,9 @@ export function normalizeSheetConfig(sheet: Sheet) {
     // `Sheet.config` is lib's wire shape; the editor extras ride along on the same object.
     const cfg: ExtendedSheetConfig = (sheet.config ??= {});
     for (const key of SHEET_CONFIG_COLLECTIONS) cfg[key] ??= {};
-    // Images, charts and validation rules live outside config but are written per key the same way. A value that is
-    // no map, a chart past the entry cap or a rule that is not well formed only a forged sheet holds: it is left out,
-    // as the op conversion leaves out a write that brings one.
+    // Images, charts and validation rules live outside config but are written per key the same way. Only a forged
+    // sheet holds a value that is no map or a rule that is not well formed, and it is left out.
     sheet.images = isRecord(sheet.images) ? sheet.images : {};
-    sheet.charts = isRecord(sheet.charts) ? chartsWithinEntryCap(sheet.charts) : {};
+    sheet.charts = isRecord(sheet.charts) ? sheet.charts : {};
     sheet.dataValidations = wellFormedValidations(sheet.dataValidations);
 }

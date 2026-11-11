@@ -30,12 +30,10 @@ export {
     INLINE_GRID_MAX_SERIES,
     inlineRowCount,
     isChartSeriesId,
-    isChartSpecKey,
     MAX_CHART_LABEL_LENGTH,
     MAX_CHART_POINTS,
     MAX_CHART_SERIES,
     MAX_CHART_SPEC_BYTES,
-    MAX_CHART_SPEC_ENTRIES,
     newChartSeriesId,
 } from './limits';
 export { chartPaintOf, FLAT_CHART_LOOK, readChartLook } from './look';
@@ -45,12 +43,8 @@ export { BAR_GROUP_WIDTH } from './scales';
 export {
     chartSpecTexts,
     chartSpecWrites,
-    isChartSpecPartKey,
-    mapChartSpecParts,
     newChartSpecParts,
-    newSheetChartSpecParts,
     parseChartSpec,
     readChartSpec,
-    sheetChartSpecWrites,
 } from './spec';
 export { formatTickValue } from './ticks';

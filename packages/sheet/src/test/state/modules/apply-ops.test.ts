@@ -5,7 +5,7 @@
 // view, and the author's own structural edits, have tests of their own.
 
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import { DEFAULT_CHART_SERIES_STYLE, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { DEFAULT_CHART_SERIES_STYLE, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { isRecord } from '@workspace/lib/guards';
 import { produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 const chart = (id: string, sheetId: string) => ({
-    ...newSheetChartSpecParts({
+    ...newChartSpecParts({
         ...sampleChartSpec('column'),
         series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#2a78d6' } },
         data: {

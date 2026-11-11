@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { newSheetChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet as LibSheet } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import { produce, produceWithPatches } from 'immer';
@@ -40,7 +40,7 @@ describe('sheet/core/api/sheet', () => {
                 series: [{ id: 's-1', name: ref('id_1'), values: ref('id_1') }],
             },
         };
-        const chart = { id: 'c1', index: 'a0', x: 0, y: 0, width: 400, height: 300, ...newSheetChartSpecParts(spec) };
+        const chart = { id: 'c1', index: 'a0', x: 0, y: 0, width: 400, height: 300, ...newChartSpecParts(spec) };
         const ctx = contextFactory({
             sheets: [
                 { name: 'S', id: 'id_1', order: 0, charts: { c1: chart } },

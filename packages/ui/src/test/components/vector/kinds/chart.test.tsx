@@ -440,15 +440,18 @@ describe('two peers on one chart, through the panel and the canvas writer', () =
         }
     });
 
-    test("a newer build's part stays on the element through an edit, and the canvas reads it", async () => {
+    test("a key a newer build nested in a part stays through an edit of that part, and a ninth part isn't read", async () => {
         const { a, panelA } = await peers();
         const stored = a.getMap('elements').get('c1');
         if (!(stored instanceof Y.Map)) throw new Error('no chart');
-        await act(async () => stored.set('specFuture', '{"a":1}'));
+        await act(async () => {
+            stored.set('specTitle', '{"text":"Old","future":1}');
+            stored.set('specFuture', '{"a":1}');
+        });
         await setTitle(panelA, 'Goals');
-        expect(stored.get('specFuture')).toBe('{"a":1}');
+        expect(stored.get('specTitle')).toBe('{"text":"Goals","future":1}');
         const [el] = readVectorFromDoc(a).elements;
-        expect(el && prop(el, 'specFuture')).toBe('{"a":1}');
+        expect(el && prop(el, 'specFuture')).toBeUndefined();
     });
 
     test("Edit data's series delete on one and a recolour on the other: both kept on both", async () => {

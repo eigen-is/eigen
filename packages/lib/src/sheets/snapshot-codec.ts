@@ -5,7 +5,6 @@
 
 import { isRecord } from '../core/guards';
 import { cloneSides, parseCellKey } from './borders';
-import { chartsWithinEntryCap } from './floating';
 import type {
     Cell,
     CellBorderSides,
@@ -124,13 +123,12 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
         // one here would give each reader a different sheet.
         if (typeof rest.id !== 'string' || ids.has(rest.id)) throw unknownFormat(rest.id);
         ids.add(rest.id);
-        // Every sheet gets all three maps, even empty ones. The editor writes each image, chart or validation under its
-        // own key, and that patch needs the map to exist. A value that is no map is dropped, and so is a chart past the
-        // entry cap and a validation that is not well formed.
+        // Every sheet gets all three maps, even empty: the editor writes each image, chart or rule under its own key,
+        // and that patch needs the map. A value that is no map is dropped, and so is a rule that is not well formed.
         const sheet: Sheet = {
             ...rest,
             images: isRecord(images) ? images : {},
-            charts: isRecord(charts) ? chartsWithinEntryCap(charts) : {},
+            charts: isRecord(charts) ? charts : {},
             dataValidations: wellFormedValidations(dataValidations),
         };
 

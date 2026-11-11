@@ -31,16 +31,17 @@ describe('the elements clipboard item', () => {
         expect(readElementsClipboardItem([item as EigenClipboardElementsItem])?.elements).toEqual(elements);
     });
 
-    test('a chart carries a part a newer build added and a part that does not parse, through the paste write too', () => {
-        const el = Object.assign(chart({ id: 'c', specTitle: '{"text":' }), { specFuture: '{"later":true}' });
-        const item = buildElementsClipboardItem([el], '');
+    test('a chart carries a part that does not parse, and no ninth prefixed key, through the paste write too', () => {
+        const el = chart({ id: 'c', specTitle: '{"text":' });
+        const forged = Object.assign({ ...el }, { specFuture: '{"later":true}' });
+        const item = buildElementsClipboardItem([forged], '');
         const [read] = readElementsClipboardItem([item as EigenClipboardElementsItem])?.elements ?? [];
         expect(read).toEqual(el);
         const doc = new Y.Doc();
         const id = writeElementInDoc(doc, read, 'a0', VECTOR_STYLE_DEFAULTS);
         const stored = doc.getMap('elements').get(id);
         expect(stored instanceof Y.Map && [stored.get('specFuture'), stored.get('specTitle')]).toEqual([
-            '{"later":true}',
+            undefined,
             '{"text":',
         ]);
     });

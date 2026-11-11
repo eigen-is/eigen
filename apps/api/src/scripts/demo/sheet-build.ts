@@ -4,7 +4,7 @@
 // shapes the editor stores, and the formulas are computed here once, as the xlsx importer does, so the snapshot is
 // stored as computed and opens with its values. Deterministic ids: a reseed builds the same workbook.
 
-import { CHART_DEFAULT_SIZE, defaultChartSpec, newSheetChartSpecParts } from '@workspace/lib/charts';
+import { CHART_DEFAULT_SIZE, defaultChartSpec, newChartSpecParts } from '@workspace/lib/charts';
 import { eigenColor } from '@workspace/lib/constants/colors';
 import type {
     BorderSide,
@@ -118,7 +118,7 @@ function buildSheet(spec: SheetSpec, order: number, ids: Map<string, string>): S
             id,
             index: nextFloatingIndex(sheet),
             ...sheetFloatingBox({ x: chart.x, y: chart.y, ...CHART_DEFAULT_SIZE }),
-            ...newSheetChartSpecParts({ ...defaults, title: { text: chart.title }, legend: { position: 'none' } }),
+            ...newChartSpecParts({ ...defaults, title: { text: chart.title }, legend: { position: 'none' } }),
         };
     }
     normalizeSheetConfig(sheet);

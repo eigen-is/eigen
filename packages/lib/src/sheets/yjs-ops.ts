@@ -4,10 +4,7 @@
 // It lives in lib so the API can replay ops without the sheet package's state barrel, which reaches DOM code.
 
 import type { Patch } from 'immer';
-import { MAX_CHART_SPEC_ENTRIES } from '../charts/limits';
-import { SHEET_CHART_KEYED_PART_KEYS } from '../charts/spec';
 import { isRecord } from '../core/guards';
-import { chartEntries, chartsWithinEntryCap } from './floating';
 import type { Op, Sheet } from './types';
 import { isCellLinkType, isPatchOp } from './types';
 import { isSheetValidation, isSheetValidations, MAX_VALIDATIONS } from './validations';
@@ -33,7 +30,8 @@ export function opToPatchOnSheets(sheets: readonly Sheet[], ops: readonly Op[]):
         if (op.path[0] === 'data' && writesMatrixOrRow && !Array.isArray(op.value)) continue;
         if (op.path[0] === 'dataValidations' && !isValidationWrite(op)) continue;
         if (op.path[0] === 'data' && !isCellWrite(op)) continue;
-        if (op.path[0] === 'charts' && !isChartWrite(op)) continue;
+        // A chart's fields are plain values, a part of its spec one string, so no writer writes below one.
+        if (op.path[0] === 'charts' && op.path.length > 3) continue;
         const i = sheets.findIndex((s) => s.id === op.id);
         if (i !== -1) patches.push({ op: op.op, value: op.value, path: [i, ...op.path] });
     }
@@ -48,7 +46,7 @@ export function applySheetWrites(
 ): { sheets: Sheet[]; applied: Patch[] } {
     const result = [...sheets];
     const copied = new Set<unknown>();
-    const sizes = new Map<string, number>();
+    const sizes = new Map<Key, number>();
     const applied: Patch[] = [];
     for (const write of writes) {
         const { op, path, value } = write;
@@ -61,7 +59,7 @@ export function applySheetWrites(
         }
         const parent = above[last];
         if (last < 1 || !parent || !resolves(parent, path[last], op, value)) continue;
-        if (!withinCaps(above, write, sizes)) continue;
+        if (!withinCap(above, write, sizes)) continue;
         applied.push(write);
         if (op === 'replace' && Object.is(held(parent, path[last]), value)) continue;
         let owner: Container = result;
@@ -115,20 +113,12 @@ function isLink(value: unknown): boolean {
     return isCellLinkType(type) && typeof address === 'string';
 }
 
-// A chart's keyed parts stay records, as every writer of an entry expects, and nothing is written below an entry,
-// which is a string.
-function isChartWrite({ path, value }: Op): boolean {
-    if (path.length > 4) return false;
-    return path.length !== 3 || !SHEET_CHART_KEYED_PART_KEYS.has(String(path[2])) || isRecord(value);
-}
-
 type Container = Record<string, unknown> | unknown[];
 type Key = string | number;
 
 const isKey = (key: unknown): key is Key => typeof key === 'string' || typeof key === 'number';
 const isContainer = (value: unknown): value is Container => typeof value === 'object' && value !== null;
 const isIndex = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
-const entries = (value: unknown) => (isRecord(value) ? Object.keys(value).length : 0);
 
 function held(parent: Container, key: Key): unknown {
     if (Array.isArray(parent)) return typeof key === 'number' ? parent[key] : undefined;
@@ -153,34 +143,17 @@ function put(parent: Container, key: Key, op: Patch['op'], value: unknown) {
     else parent.splice(key, 1);
 }
 
-// A peer's op is untrusted, so a sheet's rules and a chart's entries stay within their caps as the batch goes, each
-// counted once in `sizes`. A `replace` of a rule that is gone is skipped too, so a peer's delete wins.
-function withinCaps(above: readonly Container[], { op, path, value }: Patch, sizes: Map<string, number>): boolean {
-    const [sheet, field, id, key, entry] = path;
-    const [, , collection, chart, part] = above;
-    const kept = op !== 'remove';
-    if (field !== 'charts' && field !== 'dataValidations') return true;
-    if (path.length === 2) sizes.clear();
-    if (field === 'dataValidations') {
-        if (path.length !== 3 || !isRecord(collection)) return true;
-        const known = Object.hasOwn(collection, id);
-        const size = (sizes.get(`${sheet}`) ?? Object.keys(collection).length) + Number(kept) - Number(known);
-        if (!known && (op === 'replace' || size > MAX_VALIDATIONS)) return false;
-        sizes.set(`${sheet}`, size);
-        return true;
-    }
-    const at = `${sheet}/${id}`;
-    if (path.length === 2) return !isRecord(value) || chartsWithinEntryCap(value) === value;
-    if (path.length === 3) {
-        sizes.delete(at);
-        return chartEntries(value) <= MAX_CHART_SPEC_ENTRIES;
-    }
-    if (!isRecord(chart)) return true;
-    let size = sizes.get(at) ?? chartEntries(chart);
-    if (path.length === 4) {
-        size += (kept ? 1 + entries(value) : 0) - (Object.hasOwn(chart, key) ? 1 + entries(chart[key]) : 0);
-    } else if (isRecord(part)) size += Number(kept) - Number(Object.hasOwn(part, entry));
-    if (size > MAX_CHART_SPEC_ENTRIES) return false;
-    sizes.set(at, size);
+// A peer's op is untrusted, so a sheet's rules stay within their cap as the batch goes, counted once in `sizes`. A
+// `replace` of a rule that is gone is skipped too, so a peer's delete wins.
+function withinCap(above: readonly Container[], { op, path }: Patch, sizes: Map<Key, number>): boolean {
+    const [sheet, field, id] = path;
+    const [, , rules] = above;
+    if (field !== 'dataValidations') return true;
+    if (path.length === 2) sizes.delete(sheet);
+    if (path.length !== 3 || !isRecord(rules)) return true;
+    const known = Object.hasOwn(rules, id);
+    const size = (sizes.get(sheet) ?? Object.keys(rules).length) + Number(op !== 'remove') - Number(known);
+    if (!known && (op === 'replace' || size > MAX_VALIDATIONS)) return false;
+    sizes.set(sheet, size);
     return true;
 }

@@ -1,8 +1,7 @@
-// A sheet's floating images and charts: one paint order for both, the box every painter draws, the index an insert
-// takes, and the count of a chart's entries its cap is checked against. The editor's overlay, the exports and the
-// batch apply read them, so every reader orders, draws and bounds the objects alike.
+// A sheet's floating images and charts: one paint order for both, the box every painter draws and the index an insert
+// takes. The editor's overlay and the exports read them, so every reader orders, draws and bounds the objects alike.
 
-import { CHART_MAX_SIDE, MAX_CHART_SPEC_ENTRIES } from '../charts/limits';
+import { CHART_MAX_SIDE } from '../charts/limits';
 import { isRecord } from '../core/guards';
 import { generateKeyBetween, orderByFractionalIndex, syncInvalidIndices } from '../vector/fractional-index';
 import type { Box } from '../vector/geometry';
@@ -31,23 +30,6 @@ export function floatingItems(sheet: Sheet): SheetFloatingItem[] {
     return orderByFractionalIndex(items.map((item) => ({ id: item.object.id, index: item.object.index, item }))).map(
         ({ item }) => item,
     );
-}
-
-// A chart's keys and those of every record it holds: its keyed parts' entries, and any other key a peer stored.
-export function chartEntries(chart: unknown): number {
-    if (!isRecord(chart)) return 0;
-    let count = Object.keys(chart).length;
-    for (const value of Object.values(chart)) if (isRecord(value)) count += Object.keys(value).length;
-    return count;
-}
-
-const chartFits = (chart: unknown) => chartEntries(chart) <= MAX_CHART_SPEC_ENTRIES;
-
-// A sheet's charts as a snapshot or a whole sheet brings them, past every write's own check: a chart past
-// MAX_CHART_SPEC_ENTRIES is left out, so no read lists its keys. The map itself when every chart fits.
-export function chartsWithinEntryCap<C>(charts: Record<string, C>): Record<string, C> {
-    if (Object.values(charts).every(chartFits)) return charts;
-    return Object.fromEntries(Object.entries(charts).filter(([, chart]) => chartFits(chart)));
 }
 
 // The index of an object inserted above every image and chart. It repairs tied and malformed keys on the sheet's own

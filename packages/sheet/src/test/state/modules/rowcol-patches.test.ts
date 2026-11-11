@@ -12,7 +12,7 @@
 // the moment someone reintroduces `ctx.sheets = ...`.
 
 import { describe, expect, test } from 'bun:test';
-import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import type { Patch } from 'immer';
 import { enablePatches, produce, produceWithPatches } from 'immer';
@@ -79,7 +79,7 @@ describe('a row op writes only the data of a chart it moves', () => {
                 y: 0,
                 width: 400,
                 height: 300,
-                ...newSheetChartSpecParts({
+                ...newChartSpecParts({
                     ...sample,
                     points: { 's-1': { 1: { color: '#111111' }, 3: { color: '#333333' } } },
                     data: { source: 'range', categories: null, series: [{ id: 's-1', name: 'Points', values }] },
