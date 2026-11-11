@@ -25,7 +25,7 @@ const countBlank: FunctionBody = (args, ctx) => {
     if (!isReference(range)) return isError(range) ? range : VALUE;
     let blank = 0;
     for (let area: Reference | null = range; area !== null; area = area.next) {
-        ctx.cells.settleArea(area);
+        ctx.recalc.settleArea(area);
         // Asked once the formulas are computed: the empty text has an id only when a cell holds it.
         const empty = ctx.workbook.strings.find('');
         blank += (area.bottom - area.top + 1) * (area.right - area.left + 1);
@@ -80,7 +80,7 @@ export const STATISTICAL = [
         0,
         2,
     ),
-    define('AVERAGEIF', [RANGE, SCALAR, optional(RANGE, OMITTED)], averageIf, FunctionFlag.ReadsUnnamed),
+    define('AVERAGEIF', [RANGE, SCALAR, optional(RANGE, OMITTED)], averageIf, FunctionFlag.Resizes),
     define(
         'AVERAGEIFS',
         [RANGE, RANGE, SCALAR],

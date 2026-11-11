@@ -44,10 +44,10 @@ export function storedRows(area: Reference, width: number): number {
 
 // The cells of one area as an array, or the cell itself when there is one.
 export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
-    ctx.cells.settleArea(area);
+    ctx.recalc.settleArea(area);
     const width = storedColumns(area);
     const height = storedRows(area, width);
-    ctx.cells.count(height * width);
+    ctx.recalc.count(height * width);
     const items = new Array<Scalar>(height * width);
     for (let c = 0; c < width; c += 1) {
         const column = area.sheet.columns[area.left + c];

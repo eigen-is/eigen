@@ -9,15 +9,24 @@ import { toNumber, toText } from '../values/coerce';
 import { compareValues } from '../values/compare';
 import type { FormulaError } from '../values/errors';
 import { DIV0, NUM, VALUE } from '../values/errors';
+import { snapSum } from '../values/precision';
 import type { Scalar, Value } from '../values/value';
 import { isError } from '../values/value';
 
 const SMALLEST_NORMAL = 2.2250738585072014e-308;
+const LONGEST_TEXT = 32767;
 
-// A result as a cell can hold it: an overflow is #NUM!, and what is too small to be a normal double is 0.
+// A number as a cell can hold it: an overflow is #NUM!, and what is too small to be a normal double is 0.
 export function real(result: number): number | FormulaError {
     if (result - result !== 0) return NUM;
     return result > -SMALLEST_NORMAL && result < SMALLEST_NORMAL ? 0 : result;
+}
+
+// What an operator or a function made, as a cell can hold it: a number as above, and a text of up to 32,767
+// characters.
+export function held(result: Value): Value {
+    if (typeof result === 'number') return real(result);
+    return typeof result === 'string' && result.length > LONGEST_TEXT ? VALUE : result;
 }
 
 function power(base: number, exponent: number): number | FormulaError {
@@ -67,18 +76,23 @@ function compare(op: number, a: Value, b: Value): Scalar {
     }
 }
 
-export function operate(op: number, a: Value, b: Value): Scalar {
+// One operator on two values. With `snap`, a sum or a difference that is tiny against its left operand is 0, which
+// is for the last operation of a formula only.
+export function operate(op: number, a: Value, b: Value, snap: boolean): Scalar {
     if (op >= Token.Equal) return compare(op, a, b);
     if (op === Token.Concat) {
         const left = toText(a);
         if (typeof left !== 'string') return left;
         const right = toText(b);
-        return typeof right === 'string' ? left + right : right;
+        if (typeof right !== 'string') return right;
+        return left.length + right.length > LONGEST_TEXT ? VALUE : left + right;
     }
     const x = toNumber(a);
     if (typeof x !== 'number') return x;
     const y = toNumber(b);
-    return typeof y === 'number' ? arithmetic(op, x, y) : y;
+    if (typeof y !== 'number') return y;
+    const result = arithmetic(op, x, y);
+    return snap && typeof result === 'number' ? snapSum(result, x) : result;
 }
 
 export function negate(a: Value): Scalar {
@@ -108,7 +122,7 @@ const BINARY = [
 
 // By operator token, for an operand that is an array.
 export const LIFTED_BINARY: readonly FunctionEntry[] = BINARY.reduce((entries: FunctionEntry[], op) => {
-    entries[op] = define('', [SCALAR, SCALAR], (args) => operate(op, args[0], args[1]));
+    entries[op] = define('', [SCALAR, SCALAR], (args) => operate(op, args[0], args[1], false));
     return entries;
 }, []);
 export const LIFTED_NEGATE = define('', [SCALAR], (args) => negate(args[0]));

@@ -8,18 +8,15 @@ import { ParamKind, PENDING } from '../functions/registry';
 import type { Sheet } from '../store/sheet';
 import type { FormulaNode } from '../text/tree';
 import type { FormulaError } from '../values/errors';
-import { CALC, NA, NAME, NUM, VALUE } from '../values/errors';
+import { CALC, NA, NAME, VALUE } from '../values/errors';
 import type { ArrayValue, Scalar, Value } from '../values/value';
 import { arrayOf, elementAt, isArray, isError, isReference, OMITTED } from '../values/value';
 import type { Evaluator } from './evaluator';
+import { held } from './operators';
 
 function paramAt(entry: FunctionEntry, index: number): Param {
     const { params, repeat } = entry;
     return params[index < params.length ? index : params.length - repeat + ((index - params.length) % repeat)];
-}
-
-function finite(result: Value): Value {
-    return typeof result === 'number' && result - result !== 0 ? NUM : result;
 }
 
 export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
@@ -58,7 +55,7 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
             ? refused
             : lifted
               ? lift(ctx, entry, args, node, sheet, row, column)
-              : finite(entry.run(args, ctx, node, sheet, row, column));
+              : held(entry.run(args, ctx, node, sheet, row, column));
     ctx.calls = level;
     return result;
 }
@@ -100,7 +97,7 @@ export function lift(
     }
     height = Math.min(height, rows);
     width = Math.min(width, columns);
-    ctx.cells.count(height * width);
+    ctx.recalc.count(height * width);
     const items = new Array<Scalar>(height * width);
     for (let r = 0; r < height; r += 1) {
         for (let c = 0; c < width; c += 1) {
@@ -112,7 +109,7 @@ export function lift(
                     (array.columns !== columns && array.columns !== 1 && c >= array.width);
                 element[i] = short ? NA : elementAt(array, r, c);
             }
-            const result = ctx.read(finite(entry.run(element, ctx, node, sheet, row, column)));
+            const result = ctx.read(held(entry.run(element, ctx, node, sheet, row, column)));
             items[r * width + c] = isArray(result) ? CALC : result;
         }
     }

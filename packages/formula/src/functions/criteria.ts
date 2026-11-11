@@ -185,8 +185,8 @@ export function tally(ctx: Evaluator, pairs: readonly Value[], counted: Value | 
     }
     // Every formula in the ranges is computed before a criterion is read or a cell looked at: a text is known by
     // its id only once a cell holds it, and no formula may run while an index is in use.
-    for (const range of ranges) ctx.cells.settleArea(range);
-    if (values !== null) ctx.cells.settleArea(values);
+    for (const range of ranges) ctx.recalc.settleArea(range);
+    if (values !== null) ctx.recalc.settleArea(values);
     const criteria: Criterion[] = [];
     const blanks: boolean[] = [];
     for (let i = 1; i < pairs.length; i += 2) {

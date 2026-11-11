@@ -45,7 +45,7 @@ type Factor = { readonly nums: Float64Array; readonly height: number; readonly w
 // column stand for the rest. A reference to one column is its own plane, uncopied, when the column reaches its end.
 function factorOf(ctx: Evaluator, arg: Value): Factor | FormulaError {
     if (isReference(arg)) {
-        ctx.cells.settleArea(arg);
+        ctx.recalc.settleArea(arg);
         const error = firstError(ctx, arg);
         if (error !== null) return error;
         const { columns } = arg.sheet;
@@ -55,7 +55,7 @@ function factorOf(ctx: Evaluator, arg: Value): Factor | FormulaError {
             return { nums: columns[left].num.subarray(top, arg.bottom + 1), height: arg.bottom - top + 1, width: 1 };
         const width = storedColumns(arg);
         const height = storedRows(arg, width);
-        ctx.cells.count(height * width);
+        ctx.recalc.count(height * width);
         const nums = new Float64Array(height * width);
         for (let c = 0; c < width; c += 1) {
             const column = columns[left + c];
@@ -134,7 +134,7 @@ export const MATH = [
             const total = tally(ctx, args.slice(0, 2), args[2], true);
             return total.error ?? total.sum;
         },
-        FunctionFlag.ReadsUnnamed,
+        FunctionFlag.Resizes,
     ),
     define(
         'SUMIFS',

@@ -31,7 +31,7 @@ function position(ctx: Evaluator, reference: Value, own: number, rows: boolean):
     const first = rows ? reference.top : reference.left;
     const count = (rows ? reference.bottom : reference.right) - first + 1;
     // Every number is one of its own, so this array is as large as the reference, up to a whole column.
-    ctx.cells.count(count);
+    ctx.recalc.count(count);
     const numbers = new Float64Array(count);
     for (let i = 0; i < count; i += 1) numbers[i] = first + 1 + i;
     return rows ? numbersOf(count, 1, numbers) : numbersOf(1, count, numbers);
@@ -86,7 +86,7 @@ function keyOf(value: Value): Key | FormulaError {
 
 // One cell of a range or one element of an array, by its row and column from 0.
 function pick(ctx: Evaluator, source: Value, row: number, column: number): Value {
-    if (isReference(source)) return ctx.cells.valueOf(source.sheet, source.top + row, source.left + column);
+    if (isReference(source)) return ctx.recalc.valueOf(source.sheet, source.top + row, source.left + column);
     return isArray(source) ? elementAt(source, row, column) : source;
 }
 
@@ -195,17 +195,9 @@ const xlookup: FunctionBody = (args, ctx, node, sheet, row, column) => {
 };
 
 export const LOOKUP = [
-    define(
-        'ROW',
-        [optional(REF_PARAM, OMITTED)],
-        (args, ctx, _node, _sheet, row) => position(ctx, args[0], row, true),
-        FunctionFlag.Positional,
-    ),
-    define(
-        'COLUMN',
-        [optional(REF_PARAM, OMITTED)],
-        (args, ctx, _node, _sheet, _row, column) => position(ctx, args[0], column, false),
-        FunctionFlag.Positional,
+    define('ROW', [optional(REF_PARAM, OMITTED)], (args, ctx, _node, _sheet, row) => position(ctx, args[0], row, true)),
+    define('COLUMN', [optional(REF_PARAM, OMITTED)], (args, ctx, _node, _sheet, _row, column) =>
+        position(ctx, args[0], column, false),
     ),
     define('INDEX', [RANGE, SCALAR, optional(SCALAR, null), optional(SCALAR, 1)], index, FunctionFlag.ReturnsReference),
     define('MATCH', [SCALAR, RANGE, optional(SCALAR, 1)], match),

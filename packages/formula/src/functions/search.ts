@@ -45,7 +45,7 @@ export function widthOf(range: Value): number {
 export function edgeOf(ctx: Evaluator, range: Value, down: boolean): Vector {
     const { workbook } = ctx;
     if (isReference(range) && down) {
-        ctx.cells.settleArea({ ...range, right: range.left, next: null });
+        ctx.recalc.settleArea({ ...range, right: range.left, next: null });
         const column = range.sheet.columns[range.left];
         const length = range.bottom - range.top + 1;
         const used = column === undefined ? 0 : Math.max(0, Math.min(length, column.length - range.top));

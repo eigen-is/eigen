@@ -63,7 +63,7 @@ export class Walk {
         // Another aggregate can run while these formulas are computed, and it uses this same walk.
         for (const arg of args) {
             for (let area = isReference(arg) ? arg : null; area !== null; area = area.next) {
-                this.ctx.cells.settleArea(area);
+                this.ctx.recalc.settleArea(area);
             }
         }
         this.args = args;
