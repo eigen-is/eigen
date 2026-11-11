@@ -38,6 +38,29 @@ describe('load', () => {
         }
     });
 
+    test('a cell reported empty sizes nothing: the columns are those of a load without it', () => {
+        const content: TestCell[] = [
+            [0, 0, 1],
+            [4, 2, ''],
+            [0, 3, null, '=R1C1'],
+        ];
+        const empties: TestCell[] = [
+            [1048575, 0, null],
+            [9, 2, null],
+            [3, 1, null],
+            [0, 40, null],
+        ];
+        const extents = (cells: TestCell[]) =>
+            sheetOf(new Workbook([source('s1', cells)])).columns.map((column) => [column.length, column.kind.length]);
+        expect(extents([...empties, ...content, ...empties])).toEqual(extents(content));
+        expect(extents(content)).toEqual([
+            [1, 1],
+            [0, 0],
+            [5, 5],
+            [1, 1],
+        ]);
+    });
+
     test('every kind of value comes back as it went in', () => {
         const workbook = new Workbook([
             source('s1', [

@@ -39,7 +39,8 @@ export class Workbook {
             this.sheets.push(sheet);
             this.byId.set(sheet.id, sheet);
             const lengths: number[] = [];
-            source.cells((row, column) => {
+            source.cells((row, column, value, formula) => {
+                if (value === null && formula === null) return;
                 while (lengths.length <= column) lengths.push(0);
                 if (row >= lengths[column]) lengths[column] = row + 1;
             });
