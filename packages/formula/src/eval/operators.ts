@@ -1,0 +1,115 @@
+// The operators on values that are already read: arithmetic, comparison and joining text, with their coercions and
+// their error order, the left operand first. They are total: a value that is no scalar is #VALUE!. Each operator is
+// also an entry of the kind a function is, so that an operator on an array is lifted by the code that lifts a call.
+
+import type { FunctionEntry } from '../functions/registry';
+import { define, SCALAR } from '../functions/registry';
+import { Token } from '../text/lexer';
+import { toNumber, toText } from '../values/coerce';
+import { compareValues } from '../values/compare';
+import type { FormulaError } from '../values/errors';
+import { DIV0, NUM, VALUE } from '../values/errors';
+import type { Scalar, Value } from '../values/value';
+import { isError } from '../values/value';
+
+const SMALLEST_NORMAL = 2.2250738585072014e-308;
+
+// A result as a cell can hold it: an overflow is #NUM!, and what is too small to be a normal double is 0.
+export function real(result: number): number | FormulaError {
+    if (result - result !== 0) return NUM;
+    return result > -SMALLEST_NORMAL && result < SMALLEST_NORMAL ? 0 : result;
+}
+
+function power(base: number, exponent: number): number | FormulaError {
+    if (base === 0 && exponent <= 0) return exponent === 0 ? NUM : DIV0;
+    if (base < 0 && !Number.isInteger(exponent)) {
+        // An odd root of a negative number is real: (-8)^(1/3) is -2.
+        const root = Math.round(1 / exponent);
+        if (root % 2 === 0 || Math.abs(1 / exponent - root) > 1e-9) return NUM;
+        return real(-((-base) ** exponent));
+    }
+    return real(base ** exponent);
+}
+
+export function arithmetic(op: number, x: number, y: number): number | FormulaError {
+    switch (op) {
+        case Token.Plus:
+            return real(x + y);
+        case Token.Minus:
+            return real(x - y);
+        case Token.Multiply:
+            return real(x * y);
+        case Token.Divide:
+            return y === 0 ? DIV0 : real(x / y);
+        default:
+            return power(x, y);
+    }
+}
+
+function compare(op: number, a: Value, b: Value): Scalar {
+    if (isError(a)) return a;
+    if (isError(b)) return b;
+    if ((typeof a === 'object' && a !== null) || (typeof b === 'object' && b !== null)) return VALUE;
+    const order = compareValues(a, b);
+    switch (op) {
+        case Token.Equal:
+            return order === 0;
+        case Token.NotEqual:
+            return order !== 0;
+        case Token.Less:
+            return order < 0;
+        case Token.LessEqual:
+            return order <= 0;
+        case Token.Greater:
+            return order > 0;
+        default:
+            return order >= 0;
+    }
+}
+
+export function operate(op: number, a: Value, b: Value): Scalar {
+    if (op >= Token.Equal) return compare(op, a, b);
+    if (op === Token.Concat) {
+        const left = toText(a);
+        if (typeof left !== 'string') return left;
+        const right = toText(b);
+        return typeof right === 'string' ? left + right : right;
+    }
+    const x = toNumber(a);
+    if (typeof x !== 'number') return x;
+    const y = toNumber(b);
+    return typeof y === 'number' ? arithmetic(op, x, y) : y;
+}
+
+export function negate(a: Value): Scalar {
+    const x = toNumber(a);
+    return typeof x === 'number' ? 0 - x : x;
+}
+
+export function percent(a: Value): Scalar {
+    const x = toNumber(a);
+    return typeof x === 'number' ? real(x / 100) : x;
+}
+
+const BINARY = [
+    Token.Plus,
+    Token.Minus,
+    Token.Multiply,
+    Token.Divide,
+    Token.Power,
+    Token.Concat,
+    Token.Equal,
+    Token.NotEqual,
+    Token.Less,
+    Token.LessEqual,
+    Token.Greater,
+    Token.GreaterEqual,
+];
+
+// By operator token, for an operand that is an array.
+export const LIFTED_BINARY: readonly FunctionEntry[] = BINARY.reduce((entries: FunctionEntry[], op) => {
+    entries[op] = define('', [SCALAR, SCALAR], (args) => operate(op, args[0], args[1]));
+    return entries;
+}, []);
+export const LIFTED_NEGATE = define('', [SCALAR], (args) => negate(args[0]));
+export const LIFTED_PERCENT = define('', [SCALAR], (args) => percent(args[0]));
