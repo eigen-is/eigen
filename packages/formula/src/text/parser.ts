@@ -154,6 +154,9 @@ class Parser {
     private legFlags = 0;
     private index = 0;
     private absolute = false;
+    // What sheetPrefix found last.
+    private prefixKind: FormulaNode['sheetKind'] = SheetKind.Host;
+    private prefixSheet = '';
 
     public constructor(text: string, stored: boolean, hostRow: number, hostColumn: number, findSheet: SheetFinder) {
         this.text = text;
@@ -271,16 +274,10 @@ class Parser {
     // Each operand must be able to yield a reference, so a number never stands beside a colon as a row would.
     private colon(left: FormulaNode, right: FormulaNode, space: string): FormulaNode {
         if (!yieldsReference(left) || !yieldsReference(right)) return this.fail();
-        if (right.sheetKind !== SheetKind.Host) {
-            // A second corner may repeat the sheet of the first, as in HR!B9:HR!M9, and name no other.
-            if (left.sheetKind !== right.sheetKind || left.sheet !== right.sheet) return this.fail();
-            if (space === '' && right.space === '' && isCell(left) && isCell(right)) {
-                const { sheetKind, sheet, row, column } = left;
-                const flags = left.flags | (right.flags << 2);
-                const { row: row2, column: column2 } = right;
-                return referenceNode(RefKind.Range, left.space, sheetKind, sheet, row, column, row2, column2, flags);
-            }
-        } else if (space === '') {
+        // The right operand may repeat the sheet of the left, and name no other.
+        const elsewhere = left.sheetKind !== right.sheetKind || left.sheet !== right.sheet;
+        if (right.sheetKind !== SheetKind.Host && elsewhere) return this.fail();
+        if (space === '') {
             // A name that is a column label, a colon and a column would show as text that reads as one range. Typed
             // text never gets here that way, so this refuses only stored text.
             const before = left.kind === NodeKind.Binary ? left.children[1] : left;
@@ -360,22 +357,9 @@ class Parser {
                 return this.array(space);
             case Token.Word:
                 return this.word(space);
-            case Token.Quote: {
-                if (text.charCodeAt(end) !== BANG) return this.fail();
-                const quoted = text.slice(pos + 1, end - 1);
-                return this.named(space, end, quoted.includes("'") ? quoted.replaceAll("''", "'") : quoted);
-            }
-            case Token.Bracket: {
-                if (this.stored) {
-                    if (text.charCodeAt(end) !== BANG) return this.fail();
-                    return this.prefixed(space, end, SheetKind.Id, text.slice(pos + 1, end - 1));
-                }
-                // Another workbook as a file writes it: its index, then the sheet, if any.
-                const sheet = lexAt(text, end);
-                const bang = tokenKind(sheet) === Token.Word ? tokenEnd(sheet) : end;
-                if (text.charCodeAt(bang) !== BANG) return this.fail();
-                return this.prefixed(space, bang, SheetKind.External, text.slice(pos, bang));
-            }
+            case Token.Quote:
+            case Token.Bracket:
+                return this.prefixed(space, this.sheetPrefix(pos));
             default:
                 return this.fail();
         }
@@ -387,7 +371,7 @@ class Parser {
         const { text, pos, end } = this;
         const after = text.charCodeAt(end);
         if (after === OPEN) return this.call(space);
-        if (after === BANG) return this.bare(space, end);
+        if (after === BANG) return this.prefixed(space, this.sheetPrefix(pos));
         const reference = this.reference(space, SheetKind.Host, '');
         if (reference) return reference;
         if (callsSpaced(text, pos, end)) return this.call(space);
@@ -399,10 +383,8 @@ class Parser {
             }
         }
         if (after === COLON) {
-            const last = lexAt(text, end + 1);
-            if (tokenKind(last) === Token.Word && text.charCodeAt(tokenEnd(last)) === BANG) {
-                return this.bare(space, tokenEnd(last));
-            }
+            const bang = this.sheetPrefix(pos);
+            if (bang !== -1) return this.prefixed(space, bang);
         }
         return this.name(space, SheetKind.Host, '');
     }
@@ -492,25 +474,58 @@ class Parser {
         return branch(NodeKind.Array, columns, '', elements, space, '', spaceEnd);
     }
 
-    // A sheet prefix written without quotes, from the current word to `bang`: one name, or the two of a 3-D
-    // reference. Another workbook's bracket needs quotes, or it would read as a stored offset.
-    private bare(space: string, bang: number): FormulaNode {
-        const name = this.text.slice(this.pos, bang);
-        return name.includes('[') ? this.fail() : this.named(space, bang, name);
+    // The sheet prefix that starts at `pos`, into the prefix fields: a quoted name, a stored id, or one bare name or
+    // the two of a 3-D reference, which typed text may write behind another workbook's index. Returns where its !
+    // is, or -1 when no prefix starts there.
+    private sheetPrefix(pos: number): number {
+        const { text } = this;
+        const first = lexAt(text, pos);
+        const kind = tokenKind(first);
+        let bang = tokenEnd(first);
+        let name = '';
+        if (kind === Token.Quote) {
+            const quoted = text.slice(pos + 1, bang - 1);
+            name = quoted.includes("'") ? quoted.replaceAll("''", "'") : quoted;
+        } else if (kind === Token.Bracket && this.stored) {
+            this.prefixKind = SheetKind.Id;
+            this.prefixSheet = text.slice(pos + 1, bang - 1);
+            return text.charCodeAt(bang) === BANG ? bang : -1;
+        } else if (kind === Token.Word || kind === Token.Bracket) {
+            let named = kind === Token.Word;
+            if (!named) {
+                const sheet = lexAt(text, bang);
+                named = tokenKind(sheet) === Token.Word;
+                if (named) bang = tokenEnd(sheet);
+            }
+            if (named && text.charCodeAt(bang) === COLON) {
+                const last = lexAt(text, bang + 1);
+                if (tokenKind(last) === Token.Word) bang = tokenEnd(last);
+            }
+            name = text.slice(pos, bang);
+            // Another workbook's bracket inside a name needs quotes, or it would read as a stored offset.
+            if (kind === Token.Word && name.includes('[')) return -1;
+        }
+        if (text.charCodeAt(bang) !== BANG) return -1;
+        this.prefixSheet = name;
+        if (name.includes('[')) {
+            this.prefixKind = SheetKind.External;
+        } else if (name.includes(':')) {
+            this.prefixKind = SheetKind.Span;
+        } else {
+            // Only typed text is looked up: stored text names a sheet by id.
+            const found = this.stored ? undefined : this.findSheet(name);
+            this.prefixKind = found ? SheetKind.Id : SheetKind.Name;
+            if (found) this.prefixSheet = found.id;
+        }
+        return bang;
     }
 
-    // What follows the sheet prefix that ends at `bang`, on the sheet its name stands for. Only typed text is looked
-    // up: stored text names a sheet by id.
-    private named(space: string, bang: number, name: string): FormulaNode {
-        if (name.includes('[')) return this.prefixed(space, bang, SheetKind.External, name);
-        if (name.includes(':')) return this.prefixed(space, bang, SheetKind.Span, name);
-        const found = this.stored ? undefined : this.findSheet(name);
-        if (found) return this.prefixed(space, bang, SheetKind.Id, found.id);
-        return this.prefixed(space, bang, SheetKind.Name, name);
-    }
-
-    // What follows the ! of a sheet prefix: a reference, a name scoped to the sheet, or the #REF! a deletion left.
-    private prefixed(space: string, bang: number, sheetKind: FormulaNode['sheetKind'], sheet: string): FormulaNode {
+    // What follows the ! of the sheet prefix read last: a reference, a name scoped to the sheet, or the #REF! a
+    // deletion left.
+    private prefixed(space: string, bang: number): FormulaNode {
+        if (bang === -1) return this.fail();
+        const sheetKind = this.prefixKind;
+        const sheet = this.prefixSheet;
         this.end = bang + 1;
         this.next();
         if (this.space !== '') return this.fail();
@@ -535,7 +550,13 @@ class Parser {
         const column = this.legColumn;
         const flags = this.legFlags;
         if (text.charCodeAt(end) === COLON) {
-            const legEnd = this.leg(end + 1);
+            let second = end + 1;
+            if (sheetKind !== SheetKind.Host) {
+                // The second end may repeat the sheet of the first, as in HR!B9:HR!M9.
+                const bang = this.sheetPrefix(second);
+                if (bang !== -1 && this.prefixKind === sheetKind && this.prefixSheet === sheet) second = bang + 1;
+            }
+            const legEnd = this.leg(second);
             const after = text.charCodeAt(legEnd);
             const whole = after !== OPEN && after !== BANG && !continuesWord(after);
             if (legEnd !== -1 && this.legKind === kind && whole) {
@@ -679,8 +700,4 @@ function yieldsReference(node: FormulaNode): boolean {
 
 function isColumnName(node: FormulaNode): boolean {
     return node.kind === NodeKind.Name && columnIndex(node.text) !== -1;
-}
-
-function isCell(node: FormulaNode): boolean {
-    return node.kind === NodeKind.Ref && node.op === RefKind.Cell;
 }

@@ -439,7 +439,7 @@ describe('references and sheets (parsing.md 2.4)', () => {
         ['=NoSuch!A1:NoSuch!B2', "='NoSuch'!RC[-13]:R[1]C[-12]", '=NoSuch!A1:B2'],
         ["='No Such'!$A$1:'No Such'!B2", "='No Such'!R1C1:R[1]C[-12]", "='No Such'!$A$1:B2"],
         ['=Sheet2!A1: Sheet2!B2', '=[s2]!RC[-13]: [s2]!R[1]C[-12]', '=Sheet2!A1: Sheet2!B2'],
-        ['=Sheet2!A1:Sheet2!B2:C3', '=[s2]!RC[-13]:[s2]!R[1]C[-12]:R[2]C[-11]', '=Sheet2!A1:Sheet2!B2:C3'],
+        ['=Sheet2!A1:Sheet2!B2:C3', '=[s2]!RC[-13]:R[1]C[-12]:R[2]C[-11]', '=Sheet2!A1:B2:C3'],
         ['=Sheet2!A1:Sheet2!B2:Sheet2!C3', '=[s2]!RC[-13]:R[1]C[-12]:[s2]!R[2]C[-11]', '=Sheet2!A1:B2:Sheet2!C3'],
         ['=Sheet2!A1:Sheet2!Rate', '=[s2]!RC[-13]:[s2]!Rate', '=Sheet2!A1:Sheet2!Rate'],
         ['=A1:INDEX(Sheet2!B:B,5)', '=RC[-13]:INDEX([s2]!C[-12]:C[-12],5)', '=A1:INDEX(Sheet2!B:B,5)'],
@@ -447,6 +447,43 @@ describe('references and sheets (parsing.md 2.4)', () => {
         expect(stored(text)).toBe(kept);
         expect(treeStored(kept)).toEqual(treeA1(text));
         expect(shown(text)).toBe(a1);
+    });
+
+    test.each([
+        ['=Sheet2!A:Sheet2!B', '=[s2]!C[-13]:C[-12]', '=Sheet2!A:B'],
+        ['=Sheet2!$A:Sheet2!$B', '=[s2]!C1:C2', '=Sheet2!$A:$B'],
+        ['=Sheet2!1:Sheet2!2', '=[s2]!R:R[1]', '=Sheet2!1:2'],
+        ["=sheet2!$1:'Sheet2'!3", '=[s2]!R1:R[2]', '=Sheet2!$1:3'],
+        ['=SUM(Sheet2!A:Sheet2!A)', '=SUM([s2]!C[-13]:C[-13])', '=SUM(Sheet2!A:A)'],
+        ["='No Such'!A:'No Such'!B", "='No Such'!C[-13]:C[-12]", "='No Such'!A:B"],
+        ['=Jan:Dec!1:Jan:Dec!2', "='Jan:Dec'!R:R[1]", "='Jan:Dec'!1:2"],
+        ['=[1]Book!$A:[1]Book!B', "='[1]Book'!C1:C[-12]", "='[1]Book'!$A:B"],
+        ['=Sheet2!A:Sheet2!B:Sheet2!C', '=[s2]!C[-13]:C[-12]:[s2]!c', '=Sheet2!A:B:Sheet2!c'],
+    ])('a whole column or row may repeat its sheet too: %s is stored as %s and shows as %s', (text, kept, a1) => {
+        expect(stored(text)).toBe(kept);
+        expect(treeStored(kept)).toEqual(treeA1(text));
+        expect(shown(text)).toBe(a1);
+        expect(stored(a1)).toBe(kept);
+    });
+
+    test.each([
+        '=Sheet2!A:Sheet1!B',
+        '=Sheet2!$A:Sheet1!$B',
+        '=Sheet2!1:Sheet1!2',
+        '=Sheet2!A:NoSuch!B',
+        '=Sheet2!1:Sheet2!B',
+        '=Sheet2!$A:Sheet2!2',
+        '=Sheet2!1:Sheet2!',
+    ])('and names no other sheet, and no other kind of end: %s does not parse', (text) => {
+        expect(failure(text)).toBe('syntax');
+    });
+
+    test('stored text that repeats the sheet reads as the one range', () => {
+        expect(treeStored('=[s2]!C1:[s2]!C2')).toEqual(treeStored('=[s2]!C1:C2'));
+        expect(treeStored('=[s2]!R:[s2]!R[1]')).toEqual(treeStored('=[s2]!R:R[1]'));
+        expect(treeStored("='x'!RC:'x'!R[1]C")).toEqual(treeStored("='x'!RC:R[1]C"));
+        expect(parseStored('=[s2]!A:[s2]!B')).toMatchObject({ reason: 'syntax' });
+        expect(parseStored('=[s2]!C1:[s1]!C2')).toMatchObject({ reason: 'syntax' });
     });
 
     test('a 3-D reference parses and is kept, and shows in quotes', () => {

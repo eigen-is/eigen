@@ -262,7 +262,10 @@ export function typedFormulas(seed: number): () => string {
         ]);
     const reference = (): string => {
         const prefix = chance(0.6) ? '' : sheet();
-        if (prefix !== '' && chance(0.2)) return `${prefix}${cell()}:${prefix}${cell()}`;
+        if (prefix !== '' && chance(0.2)) {
+            const end = pick([cell, cell, column, row]);
+            return `${prefix}${end()}:${prefix}${end()}`;
+        }
         if (prefix !== '' && chance(0.1)) return `${prefix}#REF!`;
         return (
             prefix +
@@ -369,6 +372,7 @@ const TYPED_WORDS = [
     ...['+', '-', '@', '%', '#', '^', '*', '/', '&', '=', '<>', '<', '<=', '>', '>=', ':', ',', ';', '{', '}'],
     ...['(', ')', '(', ')', '(', ')', ',', ':', ':', ':'],
     ...['SUM (', 'TRUE (', 'F  (', 'RC (', 'A1 (', 'Rate\n('],
+    ...['Sheet2!A', 'Sheet2!A', 'Sheet2!$B', 'Sheet2!1', 'Sheet2!$2', 'Sheet2!A1', "'No Such'!B", 'NoSuch!B'],
 ];
 
 const STORED_WORDS = [
@@ -380,6 +384,7 @@ const STORED_WORDS = [
     ...['+', '-', '@', '%', '#', '^', '*', '/', '&', '=', '=', '<>', '<', '<=', '>', '>=', ':', ',', ';', '{', '}'],
     ...['(', ')', '(', ')', '(', ')', ',', ':', ':', ':', '!', '$'],
     ...['SUM (', 'TRUE (', 'F  (', 'RC (', 'A1 (', 'rc (', 'Rate\n('],
+    ...['[s2]!C1', '[s2]!C[2]', '[s2]!R', '[s2]!R2', '[s2]!A', '[s2]!B', '[s2]!RC', "'x'!C"],
 ];
 
 // A seeded token soup: a few words of one grammar's vocabulary in any order, most of which do not parse.
