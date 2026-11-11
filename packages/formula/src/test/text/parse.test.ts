@@ -591,6 +591,11 @@ describe('the stored form (parsing.md 2.6)', () => {
         '=a:xfd',
         '=[s2]!A:B',
         '=Jan:Dec',
+        '=RC:A:B',
+        '=rc:C[1]:C[3]',
+        '=F:C1:C2',
+        '=SUM:C1:C2#',
+        '=A:B:RC',
     ])('stored text that would show as a reference is refused: %s', (text) => {
         expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
     });
@@ -604,8 +609,10 @@ describe('the stored form (parsing.md 2.6)', () => {
         ['=XFE:XFF', '=XFE:XFF'],
         ['=Rate:Total', '=Rate:Total'],
         ['=Sheet2!Rate:Sheet2!B', '=[s2]!Rate:[s2]!B'],
-        ['=1 :11', '=1 :11'],
-        ['=1:A', '=1:A'],
+        ['=rc:SUM(A1)', '=rc:SUM(RC[-13])'],
+        ['=A:B:C', '=C[-13]:C[-12]:c'],
+        ['=A1:B', '=RC[-13]:B'],
+        ['=x:INDEX(A:A,1)', '=x:INDEX(C[-13]:C[-13],1)'],
     ])('what a person types that looks like one is kept apart: %s is stored as %s', (text, kept) => {
         const tree = treeA1(text);
         expect(printStored(tree)).toBe(kept);
@@ -613,13 +620,13 @@ describe('the stored form (parsing.md 2.6)', () => {
         expect(stored(printA1(tree, ...at('N1'), sheetName))).toBe(kept);
     });
 
-    test.each(['=1:11.', '=1.:11', '=1:1E1', '=1:2.5', '=0:5', '=1:9999999', '=SUM(1.0:2)'])(
-        'two numbers around a colon are rows or nothing: %s does not parse',
-        (text) => {
-            expect(failure(text)).toBe('syntax');
-            expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
-        },
-    );
+    test.each([
+        ...['=1:11.', '=1.:11', '=1:1E1', '=1:2.5', '=0:5', '=1:9999999', '=SUM(1.0:2)', '=1 :11', '=1:A', '=A1:1.:2'],
+        ...['=1.:1:2', '=1:2:3', '=A1:"a"', '=TRUE:A1', '=A1:-B1', '=A1:#N/A', '=A1:{1}', '=A1%:B1'],
+    ])('a colon joins only what may yield a reference: %s does not parse', (text) => {
+        expect(failure(text)).toBe('syntax');
+        expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
+    });
 
     test('a sheet id is read as written', () => {
         expect(treeStored('=[k3f9]!R2C1')).toMatchObject({ sheetKind: SheetKind.Id, sheet: 'k3f9', row: 1 });

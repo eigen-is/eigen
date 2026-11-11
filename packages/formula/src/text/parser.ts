@@ -235,32 +235,26 @@ class Parser {
     }
 
     // The node of a colon between two operands, which is where a range that was not read as one reference is built.
+    // Each operand must be able to yield a reference, so a number never stands beside a colon as a row would.
     private colon(left: FormulaNode, right: FormulaNode, space: string): FormulaNode {
-        const joined = space === '' && right.space === '';
+        if (!yieldsReference(left) || !yieldsReference(right)) return this.fail();
         if (right.sheetKind !== SheetKind.Host) {
             // A second corner may repeat the sheet of the first, as in HR!B9:HR!M9, and name no other.
             if (left.sheetKind !== right.sheetKind || left.sheet !== right.sheet) return this.fail();
-            if (joined && isCell(left) && isCell(right)) {
+            if (space === '' && right.space === '' && isCell(left) && isCell(right)) {
                 const { sheetKind, sheet, row, column } = left;
                 const flags = left.flags | (right.flags << 2);
-                return referenceNode(
-                    RefKind.Range,
-                    left.space,
-                    sheetKind,
-                    sheet,
-                    row,
-                    column,
-                    right.row,
-                    right.column,
-                    flags,
-                );
+                const { row: row2, column: column2 } = right;
+                return referenceNode(RefKind.Range, left.space, sheetKind, sheet, row, column, row2, column2, flags);
             }
-        } else if (joined && left.kind === right.kind) {
-            // Two numbers, or two stored names that are column labels, would show as text that reads back as one
-            // reference.
-            if (left.kind === NodeKind.Number) return this.fail();
-            const columns = columnIndex(left.text) !== -1 && columnIndex(right.text) !== -1;
-            if (this.stored && left.kind === NodeKind.Name && columns) return this.fail();
+        } else if (space === '') {
+            // A name that is a column label, a colon and a column would show as text that reads as one range. Typed
+            // text never gets here that way, so this refuses only stored text.
+            const before = left.kind === NodeKind.Binary ? left.children[1] : left;
+            let after = right;
+            while (after.kind === NodeKind.Postfix) after = after.children[0];
+            const column = after.kind === NodeKind.Ref ? after.op === RefKind.Columns : isColumnName(after);
+            if (isColumnName(before) && column && after.space === '') return this.fail();
         }
         return branch(NodeKind.Binary, Token.Colon, '', [left, right], space, '');
     }
@@ -300,16 +294,10 @@ class Parser {
                 return leaf(NodeKind.Number, value, '', space, SheetKind.Host, '');
             }
             case Token.String: {
-                const content = text.slice(pos + 1, end - 1);
+                const quoted = text.slice(pos + 1, end - 1);
+                const content = quoted.includes('"') ? quoted.replaceAll('""', '"') : quoted;
                 this.next();
-                return leaf(
-                    NodeKind.String,
-                    0,
-                    content.includes('"') ? content.replaceAll('""', '"') : content,
-                    space,
-                    SheetKind.Host,
-                    '',
-                );
+                return leaf(NodeKind.String, 0, content, space, SheetKind.Host, '');
             }
             case Token.Error:
                 this.next();
@@ -516,13 +504,8 @@ class Parser {
         if (text.charCodeAt(end) === Char.Colon) {
             const legEnd = this.leg(end + 1);
             const after = text.charCodeAt(legEnd);
-            if (
-                legEnd !== -1 &&
-                this.legKind === kind &&
-                after !== Char.Open &&
-                after !== Char.Bang &&
-                !continuesWord(after)
-            ) {
+            const whole = after !== Char.Open && after !== Char.Bang && !continuesWord(after);
+            if (legEnd !== -1 && this.legKind === kind && whole) {
                 this.end = legEnd;
                 this.next();
                 const op = kind === LEG_CELL ? RefKind.Range : kind === LEG_COLUMN ? RefKind.Columns : RefKind.Rows;
@@ -663,6 +646,10 @@ function yieldsReference(node: FormulaNode): boolean {
 
 function returnsFunction(node: FormulaNode): boolean {
     return node.kind === NodeKind.Call || node.kind === NodeKind.Invoke || node.kind === NodeKind.Paren;
+}
+
+function isColumnName(node: FormulaNode): boolean {
+    return node.kind === NodeKind.Name && columnIndex(node.text) !== -1;
 }
 
 function isCell(node: FormulaNode): boolean {

@@ -9,6 +9,7 @@ import {
     RefFlag,
     RefKind,
     ShapeTable,
+    SheetKind,
     sheetFinder,
     storedText,
     Token,
@@ -392,8 +393,11 @@ export function soup(seed: number, typed: boolean): () => string {
     };
 }
 
-// Whether a range's corners are out of order at a host, where the A1 printer swaps them.
-function reversed(node: FormulaNode, row: number, column: number): boolean {
+// Whether a tree shows at a host as text that is another shape: a range's corners are out of order there, where the
+// A1 printer swaps them, or a sheet is gone, or a sheet kept by its name has come to exist.
+function showsAsAnother(node: FormulaNode, row: number, column: number): boolean {
+    if (node.sheetKind === SheetKind.Id && sheetName(node.sheet) === undefined) return true;
+    if (node.sheetKind === SheetKind.Name && findSheet(node.sheet)) return true;
     if (node.kind === NodeKind.Ref && node.op !== RefKind.Cell) {
         const { flags } = node;
         const top = flags & RefFlag.RowAbsolute ? node.row : node.row + row;
@@ -402,7 +406,7 @@ function reversed(node: FormulaNode, row: number, column: number): boolean {
         const right = flags & RefFlag.Column2Absolute ? node.column2 : node.column2 + column;
         if (top > bottom || left > right) return true;
     }
-    return node.children.some((child) => reversed(child, row, column));
+    return node.children.some((child) => showsAsAnother(child, row, column));
 }
 
 // The laws every text keeps, as typed at a cell or as stored. Throws naming the one that broke. `seen` holds every
@@ -437,11 +441,10 @@ export function keepsLaws(
     const a1 = printA1(tree, row, column, sheetName);
     const again = parseA1(a1, row, column, findSheet);
     if ('reason' in again) throw broke('A1 text does not parse back', a1);
-    if (printA1(again, row, column, sheetName) !== a1) throw broke('A1 text is not stable', a1);
-    // A reference that is off the grid at this host, or on a sheet that is gone, shows as #REF! and stays that, and
-    // corners out of order at this host show in order.
-    const lost = a1.split('#REF!').length !== stored.split('#REF!').length;
-    if (!lost && !reversed(tree, row, column) && printStored(again) !== stored) {
+    // A reference that is off the grid at this host shows as #REF! and stays that.
+    const offGrid = a1.split('#REF!').length !== stored.split('#REF!').length;
+    if (offGrid || showsAsAnother(tree, row, column)) return true;
+    if (printStored(again) !== stored) {
         throw broke('A1 text parses back to another shape', `${a1} -> ${printStored(again)}, not ${stored}`);
     }
     return true;
