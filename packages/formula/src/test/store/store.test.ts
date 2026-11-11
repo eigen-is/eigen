@@ -159,7 +159,37 @@ describe('writes', () => {
         expect(column.kind[0]).toBe(CellKind.Empty);
         workbook.clear(sheet, 500, 9);
         expect(sheet.columns.length).toBe(1);
-        expect(column.length).toBe(1);
+        expect(column.length).toBe(0);
+    });
+
+    test('a column ends at its last cell, whatever it held before', () => {
+        const workbook = new Workbook([
+            source('s1', [
+                [2, 0, 1],
+                [5, 0, 'x'],
+                [9, 0, 3],
+                [7, 1, null, '=R1C1'],
+                [9, 1, 4],
+            ]),
+        ]);
+        const sheet = sheetOf(workbook);
+        const [first, second] = sheet.columns;
+        workbook.clear(sheet, 5, 0);
+        expect(first.length).toBe(10);
+        workbook.clear(sheet, 9, 0);
+        expect(first.length).toBe(3);
+        workbook.clear(sheet, 9, 1);
+        expect(second.length).toBe(8);
+        workbook.setValue(sheet, 20, 0, 7);
+        workbook.setValue(sheet, 30, 0, 8);
+        sheet.deleteRows(25, 10);
+        expect(first.length).toBe(21);
+        sheet.deleteRows(3, 100);
+        expect([first.length, second.length]).toEqual([3, 0]);
+        workbook.setValue(sheet, GRID_ROWS - 1, 0, 9);
+        sheet.insertRows(1, 1);
+        expect(first.length).toBe(4);
+        expect(read(workbook, 3, 0)).toBe(1);
     });
 
     test('a column counts its errors and bumps its version on every change', () => {

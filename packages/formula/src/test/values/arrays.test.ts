@@ -197,16 +197,27 @@ describe('an array has the size that was written', () => {
         expect(engineOf({ s1: filled }).recalc(100000).stopped).toBe(false);
     });
 
-    // The one case the stored form cannot hold: an array shorter than the one it meets, with rows past its cells.
-    // Excel has 0 from the end of its cells to its last row and #N/A after it; here it is #N/A from the first on.
-    test('a shorter array is #N/A past its last row, and past its cells when it holds fewer', () => {
+    test('a shorter array is #N/A past its own last row, whatever the sheet holds', () => {
         expect(evaluate('=INDEX(B1:B3*{1;2},3)', cells)).toBe(NA);
         expect(evaluate('=INDEX(B1:B5*{1;2;3},3)', cells)).toBe(90);
         expect(evaluate('=INDEX(B1:B5*{1;2;3},4)', cells)).toBe(NA);
-        expect(evaluate('=INDEX(B1:B10*C1:C20,15)', cells)).toBe(NA);
         expect(evaluate('=INDEX(B1:B10*C1:C20,1)', cells)).toBe(20);
-        expect(evaluate('=INDEX(B1:B10*C1:C20,8)', cells)).toBe(NA);
+        expect(evaluate('=INDEX(B1:B10*C1:C20,8)', cells)).toBe(0);
+        expect(evaluate('=INDEX(B1:B10*C1:C20,10)', cells)).toBe(0);
+        expect(evaluate('=INDEX(B1:B10*C1:C20,11)', cells)).toBe(NA);
+        expect(evaluate('=INDEX(B1:B10*C1:C20,20)', cells)).toBe(NA);
         expect(evaluate('=SUM(B1:B10*C1:C20)', cells)).toBe(NA);
+        expect(evaluate('=INDEX(B1:C2+B1:F1,1,3)', cells)).toBe(NA);
+        expect(evaluate('=INDEX(B1:B1000000+B:B,999999)', cells)).toBe(0);
+        expect(evaluate('=INDEX(B1:B1000000+B:B,1000001)', cells)).toBe(NA);
+    });
+
+    // An array that is shorter than the one it meets is stored up to its last row. Past about two million elements
+    // the engine does not build that, and the whole result is #N/A where Excel has values in its first rows.
+    test('a shorter array too large to store makes the whole result #N/A', () => {
+        expect(evaluate('=INDEX(B1:D1000000+B:D,1,1)', cells)).toBe(NA);
+        expect(evaluate('=SUM(B1:D1000000+B:D)', cells)).toBe(NA);
+        expect(evaluate('=SUM(B1:D1000000+B1:D1000000)', cells)).toBe(130);
     });
 });
 

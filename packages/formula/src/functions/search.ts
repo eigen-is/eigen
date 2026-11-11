@@ -59,8 +59,10 @@ export function edgeOf(ctx: Evaluator, range: Value, down: boolean): Vector {
     const length = down ? values.rows : values.columns;
     const stored = down ? values.height : values.width;
     const step = down ? values.width : 1;
-    // The values past the stored ones are all the last stored one: when that is a blank, none of them takes part.
-    const used = stored === length ? length : items[(stored - 1) * step] === null ? stored - 1 : length;
+    // The values past the stored ones are all the last stored one, so they take part unless that is a blank. The
+    // blanks at the end never do, however many are stored.
+    let used = stored === length || items[(stored - 1) * step] !== null ? length : stored;
+    while (used > 0 && used <= stored && items[(used - 1) * step] === null) used -= 1;
     return { workbook, column: null, items, start: 0, step, length, used, stored };
 }
 

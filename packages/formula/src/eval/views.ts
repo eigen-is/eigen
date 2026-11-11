@@ -31,7 +31,10 @@ export function firstError(ctx: Evaluator, area: Reference): FormulaError | null
 // How many columns and rows of an area are stored when it is read as an array: the ones the sheet holds cells in
 // and one more, which is blank and stands for the rest of the area.
 export function storedColumns(area: Reference): number {
-    return Math.min(area.right - area.left + 1, Math.max(0, area.sheet.columns.length - area.left) + 1);
+    const { columns } = area.sheet;
+    let held = Math.max(0, Math.min(area.right + 1, columns.length) - area.left);
+    while (held > 0 && columns[area.left + held - 1].length === 0) held -= 1;
+    return Math.min(area.right - area.left + 1, held + 1);
 }
 
 export function storedRows(area: Reference, width: number): number {

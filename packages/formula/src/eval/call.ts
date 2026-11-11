@@ -14,6 +14,9 @@ import { arrayOf, elementAt, isArray, isError, isReference, OMITTED } from '../v
 import type { Evaluator } from './evaluator';
 import { held } from './operators';
 
+// The most elements an operation stores to hold the #N/A of an array that is shorter than the one it meets.
+const MOST_FORCED = 2 ** 21;
+
 function paramAt(entry: FunctionEntry, index: number): Param {
     const { params, repeat } = entry;
     return params[index < params.length ? index : params.length - repeat + ((index - params.length) % repeat)];
@@ -87,16 +90,23 @@ export function lift(
             columns = Math.max(columns, array.columns);
         }
     }
-    // An array shorter than the result is #N/A past what it stores, which takes one more row or column to say.
+    // An array shorter than the result is #N/A past its last row or column, which takes storing it up to there and
+    // one more. So that a whole column against a shorter one cannot take the memory of the grid, a result that
+    // would store more than this build allows is #N/A whole.
     let height = 1;
     let width = 1;
+    let short = false;
     for (const array of spread) {
         if (array === null) continue;
-        height = Math.max(height, array.rows === rows || array.rows === 1 ? array.height : array.height + 1);
-        width = Math.max(width, array.columns === columns || array.columns === 1 ? array.width : array.width + 1);
+        const lower = array.rows !== rows && array.rows !== 1;
+        const narrower = array.columns !== columns && array.columns !== 1;
+        height = Math.max(height, lower ? array.rows + 1 : array.height);
+        width = Math.max(width, narrower ? array.columns + 1 : array.width);
+        short ||= lower || narrower;
     }
     height = Math.min(height, rows);
     width = Math.min(width, columns);
+    if (short && height * width > MOST_FORCED) return NA;
     ctx.recalc.count(height * width);
     const items = new Array<Scalar>(height * width);
     for (let r = 0; r < height; r += 1) {
@@ -104,10 +114,8 @@ export function lift(
             for (let i = 0; i < spread.length; i += 1) {
                 const array = spread[i];
                 if (array === null) continue;
-                const short =
-                    (array.rows !== rows && array.rows !== 1 && r >= array.height) ||
-                    (array.columns !== columns && array.columns !== 1 && c >= array.width);
-                element[i] = short ? NA : elementAt(array, r, c);
+                const past = (r >= array.rows && array.rows !== 1) || (c >= array.columns && array.columns !== 1);
+                element[i] = past ? NA : elementAt(array, r, c);
             }
             const result = ctx.read(held(entry.run(element, ctx, node, sheet, row, column)));
             items[r * width + c] = isArray(result) ? CALC : result;

@@ -115,6 +115,7 @@ export class Workbook {
         held.settle(row);
         held.setShape(row, 0);
         this.put(held, row, null);
+        held.trim();
     }
 
     private carry(error: FormulaError): number {
