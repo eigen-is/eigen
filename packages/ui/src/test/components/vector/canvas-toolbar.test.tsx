@@ -34,7 +34,7 @@ async function render(props: Partial<Parameters<typeof CanvasToolbar>[0]> = {}) 
         undoManager: null,
         tool: 'select',
         setTool: () => {},
-        selectionEmpty: true,
+        selectedIds: [],
         toolLocked: false,
         setToolLocked: () => {},
         canvasRef: { current: null },
@@ -136,7 +136,7 @@ const disabledRows = () =>
     [...document.querySelectorAll('[role="menu"] [role="menuitem"][data-disabled]')].map(rowLabel);
 
 test("an editor's Edit menu puts the clipboard rows above the tools", async () => {
-    await render({ selectionEmpty: false });
+    await render({ selectedIds: ['shape-1'] });
     await openMenu('Edit');
     expect(menuRows()).toEqual([
         'Undo',
@@ -172,7 +172,7 @@ test('a viewer, who selects nothing on the canvas, keeps only Find', async () =>
 
 test("an Edit row runs the canvas's own action", async () => {
     const log: string[] = [];
-    await render({ selectionEmpty: false, canvasRef: { current: handle(log) } });
+    await render({ selectedIds: ['shape-1'], canvasRef: { current: handle(log) } });
     for (const label of ['Cut', 'Copy', 'Paste', 'Duplicate', 'Delete']) {
         await openMenu('Edit');
         await act(async () => {
@@ -180,6 +180,30 @@ test("an Edit row runs the canvas's own action", async () => {
         });
     }
     expect(log).toEqual(['cut', 'copy', 'paste', 'duplicate', 'delete']);
+});
+
+// A canvas card anchors to one element, so Insert › Comment, last after a separator as in Google's, takes one.
+test('Insert ends with Comment, which raises a card on the one selected element', async () => {
+    const commented: string[] = [];
+    await render({ selectedIds: ['shape-1'], onAddComment: (id) => commented.push(id) });
+    await openMenu('Insert');
+    expect(menuRows().slice(-2)).toEqual(['—', 'Comment']);
+    await act(async () => {
+        menuItem('Comment')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(commented).toEqual(['shape-1']);
+});
+
+test.each([[[]], [['shape-1', 'shape-2']]])('Insert › Comment is greyed with %p selected', async (selectedIds) => {
+    await render({ selectedIds, onAddComment: () => {} });
+    await openMenu('Insert');
+    expect(disabledRows()).toEqual(['Comment']);
+});
+
+test('a user who cannot comment has no Insert › Comment', async () => {
+    await render({ selectedIds: ['shape-1'] });
+    await openMenu('Insert');
+    expect(menuRows()).not.toContain('Comment');
 });
 
 async function openDownloads(): Promise<(string | undefined)[]> {

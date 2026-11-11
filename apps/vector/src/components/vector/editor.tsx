@@ -90,6 +90,7 @@ export function VectorEditor({
         isMobile,
         onReveal: revealElement,
     });
+    const addComment = canWrite && chatFolderId ? comments.addCommentTo : undefined;
 
     // ⌘F over the scene: a reveal selects the matching element. The reveal keeps its identity, or the controller would
     // start over on every render.
@@ -131,10 +132,11 @@ export function VectorEditor({
                     undoManager={doc.undoManager}
                     tool={tool}
                     setTool={setTool}
-                    selectionEmpty={selectedIds.length === 0}
+                    selectedIds={selectedIds}
                     toolLocked={toolLocked}
                     setToolLocked={setToolLocked}
                     onInsertImage={insertImage}
+                    onAddComment={addComment}
                     canvasRef={canvasRef}
                     onAccessDialogOpen={onAccessDialogOpen}
                     createLabel="New vector"
@@ -194,7 +196,7 @@ export function VectorEditor({
                     canvasRef={canvasRef}
                     onOpenCard={comments.openCard}
                     commentCards={comments.lifecycle.cards}
-                    onAddComment={canWrite && chatFolderId ? comments.addCommentTo : undefined}
+                    onAddComment={addComment}
                     onCommentHover={comments.onCommentHover}
                     searchMatchedIds={searchMatchedIds}
                     searchActiveId={searchActiveId}
