@@ -186,6 +186,38 @@ describe('share reconciliation', () => {
         expect((await calendar.pendingInvitations(email)).map((request) => request.events[0].uid)).not.toContain(uid);
     });
 
+    // The guests who held a cancelled series had their copies purged, so a newcomer is owed nothing of it either.
+    test('a newcomer gets nothing from a cancelled series, as a guest of it or of one of its dates', async () => {
+        const seriesGuest = `recon-cancelled-${crypto.randomUUID()}@test.eigen.is`;
+        const dateGuest = `recon-cancelled-date-${crypto.randomUUID()}@test.eigen.is`;
+        const calendar = (await getHome(ctx.alice.user.id)).calendar;
+        const calendarId = findOrFail(await calendar.getCalendars(), (c) => c.isDefault).id;
+        const guest = (email: string) => ({ email, status: 'pending' as const, role: 'required' as const });
+        const series = await calendar.createEvent(calendarId, {
+            title: 'Recon cancelled series',
+            startTime: new Date('2027-04-06T09:00:00Z'),
+            endTime: new Date('2027-04-06T10:00:00Z'),
+            allDay: false,
+            rrule: 'FREQ=WEEKLY;COUNT=4',
+            data: { attendees: [guest(seriesGuest)] },
+        });
+        await calendar.createEvent(calendarId, {
+            title: 'Recon cancelled date',
+            startTime: new Date('2027-04-13T09:00:00Z'),
+            endTime: new Date('2027-04-13T10:00:00Z'),
+            allDay: false,
+            parentEventId: series.id,
+            recurrenceDate: '2027-04-13',
+            data: { attendees: [guest(dateGuest)] },
+        });
+        await calendar.updateEvent(calendarId, series.id, { status: 'cancelled' });
+
+        for (const email of [seriesGuest, dateGuest]) {
+            const owed = (await calendar.pendingInvitations(email)).map((request) => request.events[0].uid);
+            expect(owed).not.toContain(series.uid);
+        }
+    });
+
     // An invitation names an address, so a team join has none to pull, and a pull would re-add one the member removed.
     test('joining a team delivers its shares and pulls no invitations', async () => {
         const orgId = getServerConfig()?.orgId;

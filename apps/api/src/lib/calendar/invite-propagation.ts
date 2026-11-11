@@ -134,7 +134,8 @@ export async function propagateCancellation(
 }
 
 // What a newcomer to the server is owed when their account appears: each series that lists them, and each occurrence
-// that lists them while its series doesn't. An event somebody else organizes is not this Home's to send, linked or not.
+// that lists them while its series doesn't. An event somebody else organizes is not this Home's to send, linked or not,
+// and a cancelled one was taken from its guests.
 export function pendingInvitations(calendar: Calendar, email: string): InvitationRequest[] {
     const address = email.toLowerCase();
     const lists = (event: CalendarEvent | undefined) =>
@@ -145,6 +146,7 @@ export function pendingInvitations(calendar: Calendar, email: string): Invitatio
     return all.flatMap((event) => {
         const series = event.parentEventId ? byId.get(event.parentEventId) : undefined;
         if (!lists(event) || lists(series)) return [];
+        if (event.status === 'cancelled' || series?.status === 'cancelled') return [];
         if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return [];
         const exceptions = series ? [] : (exceptionsOf.get(event.id) ?? []);
         const organizer = organizerOf(calendar.home, undefined, event.data?.organizer);
