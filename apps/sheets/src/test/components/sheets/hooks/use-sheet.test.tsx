@@ -462,6 +462,16 @@ test('a batch that lands before the loaded ones while the grid mounts ends as th
     expect(JSON.parse(JSON.stringify(workbookRef.current?.getFlowdata()))).toEqual(joinerCells());
 });
 
+test('a batch that lands before an applied one, after a compaction left a batch in the log, ends as the log', async () => {
+    const log = [typed(0, 0, 'folded'), rowInsert];
+    const { workbookRef, cell } = await open({ '1_1': 'stored' }, undefined, log);
+    await act(async () => compact(1));
+    await act(async () => peerSends(typed(5, 0, 'applied')));
+    await act(async () => peer.getArray<Op[]>('ops').insert(1, [typed(5, 0, 'late')]));
+    expect([cell(2, 1)?.v, cell(3, 1), cell(5, 0)?.v]).toEqual(['stored', null, 'applied']);
+    expect(JSON.parse(JSON.stringify(workbookRef.current?.getFlowdata()))).toEqual(joinerCells());
+});
+
 test('a restore that brings back an older snapshot keeps the view and drops the undo steps', async () => {
     const { workbookRef, cell, seen } = await open({ '1_1': 'stored' });
     await act(async () => workbookRef.current?.revealSearchMatch({ sheetId: 's1', r: 3, c: 2 }));

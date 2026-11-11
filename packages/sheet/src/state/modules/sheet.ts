@@ -65,17 +65,15 @@ export function lastShownSheetRefusal(ctx: Context, id: string, action: 'hide' |
 export function applySheetView(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
-    const sheet = ctx.sheets[index];
-    ctx.defaultrowlen = sheetDefaultRowHeight(sheet);
-    ctx.defaultcollen = sheetDefaultColWidth(sheet);
-    ctx.showGridLines = sheet.showGridLines !== 0 && sheet.showGridLines !== false;
-    deriveGeometry(ctx, sheet);
+    deriveSheetView(ctx, ctx.sheets[index]);
     if (!ctx.selections?.length) ctx.selections = normalizeSelection(ctx, [{ row: [0, 0], column: [0, 0] }]);
 }
 
-// What the geometry, the selection's box and the filter's rects are worked out from, besides the grid's size. The first
-// row counts too: a column's width depends on whether its first cell is set, and its length is the column count.
+// What the geometry, the gridlines, the selection's box and the filter's rects are worked out from, besides the grid's
+// size. The first row counts too: a column's width depends on whether its first cell is set, and its length is the
+// column count.
 const GEOMETRY_MAPS = ['rowlen', 'columnlen', 'rowhidden', 'colhidden', 'merge'] as const;
+const VIEW_FIELDS = ['filterRange', 'showGridLines', 'defaultRowHeight', 'defaultColWidth'] as const;
 
 // Immer gives a changed map a new identity, so a cell edit and a drag frame cost a few comparisons here. A write
 // outside sheets stays off the wire and out of the undo entry, which are built from the commit's own patches.
@@ -88,13 +86,16 @@ export function deriveView(base: Context, next: Context): Context {
         base.allowEdit !== next.allowEdit ||
         before?.data?.length !== after.data?.length ||
         before?.data?.[0] !== after.data?.[0] ||
-        before?.filterRange !== after.filterRange ||
+        VIEW_FIELDS.some((field) => before?.[field] !== after[field]) ||
         GEOMETRY_MAPS.some((map) => before?.config?.[map] !== after.config?.[map]);
-    return changed ? produce(next, (draft: Context) => deriveGeometry(draft, after)) : next;
+    return changed ? produce(next, (draft: Context) => deriveSheetView(draft, after)) : next;
 }
 
-function deriveGeometry(ctx: Context, { data }: Sheet) {
-    if (data) updateContextWithSheetData(ctx, data);
+function deriveSheetView(ctx: Context, sheet: Sheet) {
+    ctx.defaultrowlen = sheetDefaultRowHeight(sheet);
+    ctx.defaultcollen = sheetDefaultColWidth(sheet);
+    ctx.showGridLines = sheet.showGridLines !== 0 && sheet.showGridLines !== false;
+    if (sheet.data) updateContextWithSheetData(ctx, sheet.data);
     createFilterOptions(ctx);
 }
 

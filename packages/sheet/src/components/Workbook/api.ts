@@ -67,8 +67,8 @@ function setStacksAfterPeer(history: Stacks, undoList: History[], redoList: Hist
 }
 
 function holdsSelections(sheets: Sheet[], sheetId: string, selections: Selection[] | undefined): boolean {
-    const data = sheets.find(({ id }) => id === sheetId)?.data;
     if (!selections) return true;
+    const data = sheets.find(({ id }) => id === sheetId)?.data;
     return data != null && selections.every(({ row, column }) => row[1] < data.length && column[1] < data[0].length);
 }
 
