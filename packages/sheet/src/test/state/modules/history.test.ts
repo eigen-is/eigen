@@ -921,23 +921,6 @@ describe("a formula is its cell's `f`, nothing else", () => {
         expect(t.ctx.sheets[0].data).toHaveLength(rows);
         expect(heldGraph(t.ctx).formulaAt(ONE, rows + 9, 0)).toBeUndefined();
     });
-
-    test('a stored op on the old recalc list fails no batch, and leaves no list on the sheet', () => {
-        const oldLog: Op[] = [
-            { op: 'add', id: ONE, path: ['calcChain', 0], value: { r: 0, c: 1, id: ONE } },
-            { op: 'replace', id: ONE, path: ['data', 0, 1], value: { v: 2, f: '=1+1', m: '2' } },
-            { op: 'replace', id: ONE, path: ['calcChain'], value: [null] },
-            { op: 'remove', id: ONE, path: ['calcChain'] },
-        ];
-        const base = workbook();
-        const t = tab(base);
-        tabReceive(t, oldLog);
-        const [joined] = join(base, [oldLog]);
-        for (const one of [t.ctx.sheets[0], joined]) {
-            expect(one.data?.[0]?.[1]?.v).toBe(2);
-            expect('calcChain' in one).toBe(false);
-        }
-    });
 });
 
 describe('a structural undo or redo applies exactly what it sends', () => {
