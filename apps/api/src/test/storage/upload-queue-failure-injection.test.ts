@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:
 import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig } from '../../lib/core';
+import { eventLoopTurn } from '../../lib/core';
 import type { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { setShutdownDrainDeadline } from '../../lib/mount/upload-limits';
@@ -10,12 +11,11 @@ import type { FaultStorage } from '../fault-storage-helpers';
 import {
     countBackingRows,
     createFaultMount,
+    passPutDeadline,
     pendingUploadCount,
     provisionDoc,
-    restorePutTimeout,
     SETTLE_BOUND_MS,
     settlesWithin,
-    shrinkPutTimeout,
     waitFor,
 } from '../fault-storage-helpers';
 
@@ -190,12 +190,13 @@ describe('a Home that closes and reopens in one process', () => {
         await m1.mount.uploadQueue?.drain({ flushNow: true });
 
         // {1} parks and times out into an orphan, then {1,2} acks over it.
-        shrinkPutTimeout(m1.mount, 50);
         m1.fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
-        await managed.flush();
+        await passPutDeadline(
+            () => managed.flush(),
+            () => m1.fault.parkedCount === 1,
+        );
         const orphan = await m1.fault.waitForParked(() => true);
-        restorePutTimeout(m1.mount);
         await m1.mount.uploadQueue?.drain();
         m1.fault.parkWrites = false;
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
@@ -262,7 +263,7 @@ describe('corrupted staged copy', () => {
 });
 
 describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan)', () => {
-    // Finding 1 of the upload-queue deep-dive: a PUT stalls past putTimeoutMs (treated as failed),
+    // Finding 1 of the upload-queue deep-dive: a PUT stalls past its timeout (treated as failed),
     // the user's newer bytes land via a later PUT and ack — row deleted, staged copy deleted,
     // local temp cleaned by the doc close. Then the orphan completes server-side and rolls the
     // object back, with nothing queued to re-drive it. The fix retains the acked bytes while the
@@ -277,13 +278,13 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         await m1.mount.uploadQueue?.drain({ flushNow: true });
         expect(pendingUploadCount(m1.mount)).toBe(0);
 
-        // Sync {1}: its PUT parks (stalled) and the 50ms ceiling fails the attempt into backoff.
-        shrinkPutTimeout(m1.mount, 50);
+        // Sync {1}: its PUT parks (stalled) and the ceiling fails the attempt into backoff.
         m1.fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
-        await managed.flush(); // stages {1}, kicks the drain, parks in storage.write
-        await waitFor(() => m1.fault.parkedCount === 1);
-        restorePutTimeout(m1.mount); // the parked PUT keeps its armed 50ms deadline
+        await passPutDeadline(
+            () => managed.flush(), // stages {1}, kicks the drain, parks in storage.write
+            () => m1.fault.parkedCount === 1,
+        );
         await m1.mount.uploadQueue?.drain(); // returns once the timeout fired and the row backed off
         expect(pendingUploadCount(m1.mount)).toBe(1);
 
@@ -320,7 +321,6 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
     test('an orphaned plain file keeps its kind: the repair re-uploads it instead of dropping it', async () => {
         const { mount, fault } = createS3Mount('orphan-plain-file');
         await mount.init();
-        shrinkPutTimeout(mount, 50);
         const queue = mount.uploadQueue!;
         const key = 'restored-plain-file.png';
 
@@ -328,9 +328,10 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         fault.parkWrites = true;
         const first = queue.newStagingPath();
         writeFileSync(first, 'v1');
-        queue.enqueueStaged(key, first, false);
-        await waitFor(() => fault.parkedCount === 1);
-        restorePutTimeout(mount);
+        await passPutDeadline(
+            () => queue.enqueueStaged(key, first, false),
+            () => fault.parkedCount === 1,
+        );
         await mount.uploadQueue?.drain();
         expect(pendingUploadCount(mount)).toBe(1);
 
@@ -363,12 +364,14 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
 
         const managed = await mount.createDatabase(docConfig, dataDbId);
         await mount.uploadQueue?.drain({ flushNow: true }); // ack the create-time schema PUT
-        shrinkPutTimeout(mount, 50);
         fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
-        await mount.closeDatabase(dataDbId); // enqueues; drain parks in storage.write
-        await waitFor(() => fault.parkedCount === 1);
-        await mount.uploadQueue?.drain(); // 50ms ceiling fires; the attempt is failed into backoff
+        const { started: closed } = await passPutDeadline(
+            () => mount.closeDatabase(dataDbId), // enqueues; drain parks in storage.write
+            () => fault.parkedCount === 1,
+        );
+        await closed;
+        await mount.uploadQueue?.drain(); // the ceiling fired; the attempt is failed into backoff
 
         // Permanent delete while the orphan is still pending server-side: cancels the row, unlinks
         // the staged copy, deletes the (not-yet-existing) object.
@@ -396,14 +399,19 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
 
         const managed = await mount.createDatabase(docConfig, dataDbId);
         await mount.uploadQueue?.drain({ flushNow: true }); // ack the create-time schema PUT
-        shrinkPutTimeout(mount, 250);
         fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
-        await mount.closeDatabase(dataDbId); // enqueues; drain parks in storage.write
-        await waitFor(() => fault.parkedCount === 1);
-
-        // Permanent delete while the PUT is parked and the 250ms ceiling has NOT fired yet.
-        await mount.deletePath(containerId);
+        // Permanent delete while the PUT is parked and the ceiling has NOT fired yet.
+        let deleted = false;
+        await passPutDeadline(
+            async () => {
+                await mount.closeDatabase(dataDbId); // enqueues; drain parks in storage.write
+                while (fault.parkedCount < 1) await eventLoopTurn();
+                await mount.deletePath(containerId);
+                deleted = true;
+            },
+            () => deleted,
+        );
         expect(pendingUploadCount(mount)).toBe(0);
         await mount.uploadQueue?.drain(); // returns once the ceiling fired and the PUT was failed
 

@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { jest } from 'bun:test';
+import { jest, spyOn } from 'bun:test';
 import { join } from 'node:path';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
 import { EMPTY_S3 } from '@workspace/lib/types/mount';
@@ -10,6 +10,7 @@ import type { Drive } from '../lib/drive/drive';
 import type { Home } from '../lib/home';
 import { Mount } from '../lib/mount/mount';
 import { pendingUploads } from '../lib/mount/schema';
+import * as uploadLimits from '../lib/mount/upload-limits';
 import { UPLOAD_PUT_TIMEOUT_MS } from '../lib/mount/upload-queue';
 import type { StorageBackend, StorageFile } from '../lib/storage';
 import { STORAGE_TIMEOUT_MS } from '../lib/storage/deadline';
@@ -71,8 +72,7 @@ export class FaultStorage implements StorageBackend {
         await oldest.land();
     }
 
-    // Resolve when a parked PUT matching the predicate exists (event-driven, so the test can land a
-    // PUT within the queue's shrunk client-side timeout).
+    // Resolve when a parked PUT matching the predicate exists.
     public async waitForParked(
         match: (p: ParkedWrite) => boolean | Promise<boolean>,
         timeoutMs = 3_000,
@@ -184,14 +184,18 @@ export function createGetLocalDatabase(baseDir: string) {
 
 // A Mount whose upload queue never retries on its own. A fault-mount test drives every retry itself
 // with drain({ flushNow }); the queue's jittered retry (a random 0-2 s after the first failure) would
-// land at an unpredictable moment — on one CI run, inside a restart mount's replay. Pinned right after
-// init builds the queue; a restart under an outage can still arm one jittered retry from init's own
-// reconcile drain, which merely fails again on the same queue.
+// land at an unpredictable moment — on one CI run, inside a restart mount's replay.
 export class FaultMount extends Mount {
     public override async init(opts?: { passive?: boolean }): Promise<void> {
+        holdUploadRetries();
         await super.init(opts);
-        holdRetries(this);
     }
+}
+
+// Every upload queue waits this long before a retry from now on. A test of a bucket that keeps failing passes a
+// few ms, and puts the hold back after.
+export function holdUploadRetries(ms = 60_000): void {
+    spyOn(uploadLimits, 'uploadBackoffMs').mockReturnValue(ms);
 }
 
 // An s3-type mount backed by a FaultStorage over a local directory. Same `id` ⇒ same baseDir +
@@ -327,35 +331,6 @@ export async function countBackingRows(mount: Mount, id: string, tmpDir: string)
     return countRowsInFile(mount.storage.read(await mount.getStorageKey(id)), tmpDir);
 }
 
-type QueueTestFields = { putTimeoutMs: number; backoffMs: (attempt: number) => number };
-
-function queueFields(mount: Mount): QueueTestFields {
-    return mount.uploadQueue as unknown as QueueTestFields;
-}
-
-// Holds the queue's jittered retry (see FaultMount); the test drives every retry with drain({flushNow}).
-function holdRetries(mount: Mount): void {
-    queueFields(mount).backoffMs = () => 60_000;
-}
-
-// Lets the queue retry on its own, every ms, for a test of a bucket that keeps failing.
-export function shrinkRetryBackoff(mount: Mount, ms: number): void {
-    queueFields(mount).backoffMs = () => ms;
-}
-
-// Shrinks the PUT deadline so a parked PUT orphans fast. Retries are already held (FaultMount): one
-// the queue fired on its own inside the orphan window would take the shrunk deadline, park, and time
-// out behind the test's back.
-export function shrinkPutTimeout(mount: Mount, ms: number): void {
-    queueFields(mount).putTimeoutMs = ms;
-}
-
-// Restores the production PUT deadline once the PUT meant to orphan has armed its timer (it is
-// parked), so no later healthy PUT inherits the tiny deadline and orphans under a loaded CPU.
-export function restorePutTimeout(mount: Mount): void {
-    queueFields(mount).putTimeoutMs = UPLOAD_PUT_TIMEOUT_MS;
-}
-
 export async function waitFor(cond: () => boolean | Promise<boolean>, timeoutMs = 2_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (!(await cond())) {
@@ -373,7 +348,17 @@ export const SETTLE_BOUND_MS = 1_500;
 // Starts a storage call on a faked clock and, once the backend holds its request, runs the clock past the storage
 // deadline. The real clock is back when it returns or throws. It waits by event-loop turn, as a faked clock stops
 // Bun.sleep and every clock a bound could read. The call comes back wrapped, so the await does not wait for it.
-export async function passStorageDeadline<T>(start: () => T, held: () => boolean): Promise<{ started: T }> {
+export function passStorageDeadline<T>(start: () => T, held: () => boolean): Promise<{ started: T }> {
+    return passDeadline(STORAGE_TIMEOUT_MS, start, held);
+}
+
+// The same for the upload queue's PUT deadline: the PUT that `start` queues times out into an orphan while the
+// backend still holds it. A PUT started after this keeps the real deadline.
+export function passPutDeadline<T>(start: () => T, held: () => boolean): Promise<{ started: T }> {
+    return passDeadline(UPLOAD_PUT_TIMEOUT_MS, start, held);
+}
+
+async function passDeadline<T>(ms: number, start: () => T, held: () => boolean): Promise<{ started: T }> {
     jest.useFakeTimers();
     try {
         const started = start();
@@ -381,7 +366,7 @@ export async function passStorageDeadline<T>(start: () => T, held: () => boolean
             if (turn > 1_000_000) throw new Error('the backend never held the request');
             await eventLoopTurn();
         }
-        jest.advanceTimersByTime(STORAGE_TIMEOUT_MS);
+        jest.advanceTimersByTime(ms);
         return { started };
     } finally {
         jest.useRealTimers();
