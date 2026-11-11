@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { FormulaNode } from '../../text';
-import { NodeKind, parseA1, parseStored, printA1, printStored, RefFlag } from '../../text';
+import { NodeKind, parseA1, parseStored, printA1, printStored, RefFlag, ShapeTable } from '../../text';
 import { findSheet, formulas, sheetName, treeStored } from './support';
 
 const RUNS = 3000;
@@ -73,5 +73,19 @@ describe('round trip', () => {
             if ('reason' in back) throw new Error(`${a1}: ${back.reason} at ${back.at}`);
             expect(printStored(back)).toBe(text);
         }
+    });
+
+    test('equal stored text is equal shape id, and only then', () => {
+        const next = formulas(5, false);
+        const table = new ShapeTable();
+        const idOf = new Map<string, number>();
+        for (let run = 0; run < RUNS; run += 1) {
+            const text = next();
+            const id = run % 2 === 0 ? table.intern(text) : table.internTree(treeStored(text));
+            expect(idOf.get(text) ?? id).toBe(id);
+            idOf.set(text, id);
+        }
+        expect(new Set(idOf.values()).size).toBe(idOf.size);
+        expect(table.size).toBe(idOf.size);
     });
 });
