@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { LineEdit } from '../../text';
-import { GONE, mapIndex, parseStored, printStored, toA1, transformLines } from '../../text';
+import { GONE, parseStored, printStored, toA1, transformLines } from '../../text';
 import { at, treeStored } from '../text/support';
-import { deleteColumns, deleteRows, insertColumns, insertRows, shown, tree } from './support';
+import { deleteColumns, deleteRows, insertColumns, insertRows, lineAfter, shown, tree } from './support';
 
 type Outcome = { text: string; changed: boolean; lossy: boolean; recompute: boolean; resized: boolean };
 
@@ -11,7 +11,7 @@ function after(text: string, host: string, edit: LineEdit, hostSheet = 's1'): Ou
     const before = tree(text, host);
     const [row, column] = at(host);
     const result = transformLines(before, edit, hostSheet, edit.rows ? row : column);
-    const moved = hostSheet === edit.sheet ? mapIndex(edit, edit.rows ? row : column) : edit.rows ? row : column;
+    const moved = hostSheet === edit.sheet ? lineAfter(edit, edit.rows ? row : column) : edit.rows ? row : column;
     expect(moved).not.toBe(GONE);
     const place = edit.rows ? toA1(moved, column) : toA1(row, moved);
     expect(result.tree === before).toBe(printStored(result.tree) === printStored(before));

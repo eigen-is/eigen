@@ -2,7 +2,7 @@
 // edits named as a person names them, the places a reference may stand in, and a seeded generator.
 
 import type { FormulaNode, LineEdit } from '../../text';
-import { GRID_COLUMNS, GRID_ROWS, parseA1, parseStored, printA1, printStored, sheetFinder } from '../../text';
+import { GRID_COLUMNS, GRID_ROWS, mapIndex, parseA1, parseStored, printA1, printStored, sheetFinder } from '../../text';
 import { at } from '../text/support';
 
 export const SHEETS = [
@@ -51,7 +51,6 @@ export const insertRows = (at1: number, count = 1, sheet = 's1'): LineEdit => ({
     insert: true,
     index: at1 - 1,
     count,
-    lines: GRID_ROWS,
     sheet,
     rows: true,
 });
@@ -60,7 +59,6 @@ export const deleteRows = (from1: number, to1 = from1, sheet = 's1'): LineEdit =
     insert: false,
     index: from1 - 1,
     count: to1 - from1 + 1,
-    lines: GRID_ROWS,
     sheet,
     rows: true,
 });
@@ -69,7 +67,6 @@ export const insertColumns = (label: string, count = 1, sheet = 's1'): LineEdit 
     insert: true,
     index: at(`${label}1`)[1],
     count,
-    lines: GRID_COLUMNS,
     sheet,
     rows: false,
 });
@@ -78,10 +75,14 @@ export const deleteColumns = (from: string, to = from, sheet = 's1'): LineEdit =
     insert: false,
     index: at(`${from}1`)[1],
     count: at(`${to}1`)[1] - at(`${from}1`)[1] + 1,
-    lines: GRID_COLUMNS,
     sheet,
     rows: false,
 });
+
+// Where a line of the edited axis is after the edit, or GONE.
+export function lineAfter({ insert, index, count, rows }: LineEdit, line: number): number {
+    return mapIndex({ insert, index, count, lines: rows ? GRID_ROWS : GRID_COLUMNS }, line);
+}
 
 export function random(seed: number): (below: number) => number {
     let state = seed;

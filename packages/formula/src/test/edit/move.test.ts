@@ -36,7 +36,6 @@ function after(text: string, host: string, from: string, to: string): string {
     const before = tree(text, toA1(row, column));
     const result = transformMove(before, edit, sheet, row, column);
     expect(result.tree === before).toBe(printStored(result.tree) === printStored(before));
-    expect(result.resized).toBe(false);
     const carried =
         sheet === edit.fromSheet &&
         row >= edit.row &&
@@ -187,7 +186,6 @@ describe('what a move leaves alone', () => {
             tree: before,
             lossy: false,
             recompute: false,
-            resized: false,
         });
     });
     test('a broken reference, though the formula itself moves or is landed beside', () => {

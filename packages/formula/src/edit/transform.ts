@@ -4,14 +4,22 @@
 // depends on its host through the host's line on the edited axis, so hostClasses cuts a span of host lines into
 // stretches with one outcome each and the store transforms a filled column once per stretch, not once per cell.
 
+import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { Ends, FormulaNode } from '../text/tree';
 import { endsAt, NodeKind, RefFlag, RefKind, referenceNode } from '../text/tree';
 import { broken, mapLeaves, sheetOf } from './leaves';
 import type { Edit, Span } from './map';
 import { GONE, mapIndex, mapSpan } from './map';
 
-// Rows or columns inserted or deleted on one sheet, named by its id.
-export type LineEdit = Edit & { readonly sheet: string; readonly rows: boolean };
+// `count` rows or columns inserted so that the first new one is line `index`, or the `count` from `index` on deleted,
+// on the sheet of this id.
+export type LineEdit = {
+    readonly insert: boolean;
+    readonly index: number;
+    readonly count: number;
+    readonly sheet: string;
+    readonly rows: boolean;
+};
 
 export type Transformed = {
     // The tree that went in when the stored text stays as it is.
@@ -21,9 +29,8 @@ export type Transformed = {
     // A cell a reference named is gone, or lines shifted inside a whole column or row one names: the value can
     // change whatever the formula computes, so it is a seed of the recompute.
     readonly recompute: boolean;
-    // A range that is still a range spans another number of lines at this host than it did. Every cell it reads kept
-    // its value, so the formula is a seed only when its shape depends on the size of a range, as ROWS, MATCH and
-    // INDEX do and a sum does not. That, and a formula that reads its own position, is the caller's to decide.
+    // A range that is still a range spans another number of lines than it did, and every cell it reads kept its
+    // value: a seed only for a formula that depends on the size of a range, as ROWS does, which the caller decides.
     readonly resized: boolean;
 };
 
@@ -33,8 +40,7 @@ export type HostClass = Transformed & { readonly start: number; readonly end: nu
 // `host` is the formula's own row for a row edit and its column for a column edit, before the edit. The host
 // itself must survive the edit.
 export function transformLines(tree: FormulaNode, edit: LineEdit, hostSheet: string, host: number): Transformed {
-    const { tree: mapped, lossy, recompute, resized } = shift(tree, edit, hostSheet, host);
-    return { tree: mapped, lossy, recompute, resized };
+    return shift(tree, edit, onAxis(edit), hostSheet, host).result;
 }
 
 // The outcomes for the hosts of one formula on the lines `from` to `to` of one sheet, in order. Lines whose host
@@ -47,7 +53,9 @@ export function hostClasses(
     from: number,
     to: number,
 ): HostClass[] {
-    const { rows, index, lines } = edit;
+    const { rows, index } = edit;
+    const axis = onAxis(edit);
+    const { lines } = axis;
     const second = edit.insert ? lines - edit.count : index + edit.count;
     const hostOnSheet = hostSheet === edit.sheet;
     const absolute = rows ? RefFlag.RowAbsolute : RefFlag.ColumnAbsolute;
@@ -70,23 +78,35 @@ export function hostClasses(
     for (let i = 0; i < starts.length; i += 1) {
         const start = starts[i];
         if (start < from || start > to || start === starts[i + 1]) continue;
-        if (hostOnSheet && mapIndex(edit, start) === GONE) continue;
+        if (hostOnSheet && mapIndex(axis, start) === GONE) continue;
         const end = i + 1 < starts.length ? Math.min(to, starts[i + 1] - 1) : to;
         for (let host = start; host <= end; ) {
-            const { tree: mapped, lossy, recompute, resized, perHost } = shift(tree, edit, hostSheet, host);
+            const { result, perHost } = shift(tree, edit, axis, hostSheet, host);
             const last = perHost ? host : end;
-            classes.push({ start: host, end: last, tree: mapped, lossy, recompute, resized });
+            classes.push({ start: host, end: last, ...result });
             host = last + 1;
         }
     }
     return classes;
 }
 
+// The edit as the maps take it, on the axis it edits.
+function onAxis({ insert, index, count, rows }: LineEdit): Edit {
+    return { insert, index, count, lines: rows ? GRID_ROWS : GRID_COLUMNS };
+}
+
 // `perHost` says an end that travels with the host was cut off at a fixed line, so the next host differs.
-function shift(tree: FormulaNode, edit: LineEdit, hostSheet: string, host: number) {
-    const { rows, index, count, lines } = edit;
+function shift(
+    tree: FormulaNode,
+    edit: LineEdit,
+    axis: Edit,
+    hostSheet: string,
+    host: number,
+): { result: Transformed; perHost: boolean } {
+    const { rows } = edit;
+    const { index, count, lines } = axis;
     const after = index + count;
-    const hostAfter = hostSheet === edit.sheet ? mapIndex(edit, host) : host;
+    const hostAfter = hostSheet === edit.sheet ? mapIndex(axis, host) : host;
     const ends: Ends = { first: 0, second: 0 };
     const span: Span = { start: 0, end: 0 };
     let lossy = false;
@@ -115,7 +135,7 @@ function shift(tree: FormulaNode, edit: LineEdit, hostSheet: string, host: numbe
         let moved2 = target2;
         // A target off the grid reads as #REF! at this host and stays where it is, so that it never comes back.
         if (onSheet && onAxis) {
-            if (!mapSpan(edit, low, high, span)) {
+            if (!mapSpan(axis, low, high, span)) {
                 lossy = true;
                 recompute = true;
                 return broken(node);
@@ -142,5 +162,5 @@ function shift(tree: FormulaNode, edit: LineEdit, hostSheet: string, host: numbe
             ? referenceNode(op, node.space, sheetKind, node.sheet, next, node.column, next2, node.column2, flags)
             : referenceNode(op, node.space, sheetKind, node.sheet, node.row, next, node.row2, next2, flags);
     });
-    return { tree: mapped, lossy, recompute, resized, perHost };
+    return { result: { tree: mapped, lossy, recompute, resized }, perHost };
 }

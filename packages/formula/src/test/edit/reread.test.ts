@@ -1,20 +1,8 @@
 import { expect, test } from 'bun:test';
 import type { FormulaNode, LineEdit, Move } from '../../text';
-import {
-    GONE,
-    GRID_COLUMNS,
-    GRID_ROWS,
-    mapIndex,
-    parseA1,
-    parseStored,
-    printA1,
-    printStored,
-    toA1,
-    transformLines,
-    transformMove,
-} from '../../text';
+import { GONE, parseA1, parseStored, printA1, printStored, toA1, transformLines, transformMove } from '../../text';
 import { findSheet, sheetName, showsAsAnother } from '../text/support';
-import { random, shapes } from './support';
+import { lineAfter, random, shapes } from './support';
 
 const SHEET_IDS = ['s1', 's2', 'my'];
 
@@ -59,12 +47,11 @@ test('a formula taken through line edits and moves is, after each, text that rea
                     insert,
                     index: pick(9),
                     count: 1 + pick(3),
-                    lines: rows ? GRID_ROWS : GRID_COLUMNS,
                     sheet: SHEET_IDS[pick(3)],
                     rows,
                 };
                 const line = rows ? host.row : host.column;
-                const after = host.sheet === edit.sheet ? mapIndex(edit, line) : line;
+                const after = host.sheet === edit.sheet ? lineAfter(edit, line) : line;
                 if (after === GONE) break;
                 where += `, ${JSON.stringify(edit)}`;
                 tree = transformLines(tree, edit, host.sheet, line).tree;

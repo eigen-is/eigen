@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { FormulaNode, LineEdit } from '../../text';
 import {
+    GRID_COLUMNS,
     GRID_ROWS,
     hostClasses,
     NodeKind,
@@ -27,12 +28,9 @@ const PREFIXES: [string, string | null][] = [
     ["'Later'!", 'later'],
 ];
 
-function index({ absolute, value }: End): string {
-    return absolute ? String(value + 1) : value === 0 ? '' : `[${value}]`;
-}
-
 // The stored text of a reference: its ends on the edited axis, and on the other axis a fixed line and an offset.
-function storedText(rows: boolean, { prefix, whole, ends }: Reference): string {
+function storedText(rows: boolean, base: number, { prefix, whole, ends }: Reference): string {
+    const index = ({ absolute, value }: End) => (absolute ? String(value + base + 1) : value === 0 ? '' : `[${value}]`);
     const [along, across] = rows ? ['R', 'C'] : ['C', 'R'];
     if (ends.length === 0) return `${prefix}${across}1:${across}[2]`;
     if (whole) return `${prefix}${along}${index(ends[0])}:${along}${index(ends[1])}`;
@@ -40,8 +38,13 @@ function storedText(rows: boolean, { prefix, whole, ends }: Reference): string {
     return prefix + (ends.length === 1 ? corner(ends[0], '2') : `${corner(ends[0], '2')}:${corner(ends[1], '[1]')}`);
 }
 
+// The lines the slow version counts in: the 64 at one edge of the grid, numbered from 0, of which the first is line
+// `base` of the grid. Only the grid's own edge is ever reached, as hosts and ends keep to the 6 to 13 lines there.
+const MODEL_LINES = 64;
+type ModelEdit = LineEdit & { lines: number };
+
 // The axis after the edit as a list: every line that is left, by the number it had, and null for a new line.
-function axisAfter(edit: LineEdit): (number | null)[] {
+function axisAfter(edit: ModelEdit): (number | null)[] {
     const axis: (number | null)[] = Array.from({ length: edit.lines }, (_, line) => line);
     if (edit.insert) axis.splice(edit.index, 0, ...Array.from({ length: edit.count }, () => null));
     else axis.splice(edit.index, edit.count);
@@ -59,7 +62,7 @@ type Expected = {
 
 // What a reference names after the edit, from a host on line `host` before it.
 function slow(
-    edit: LineEdit,
+    edit: ModelEdit,
     axis: (number | null)[],
     hostSheet: string,
     reference: Reference,
@@ -90,7 +93,17 @@ function slow(
     };
 }
 
-type Sample = { edit: LineEdit; hostSheet: string; references: Reference[]; tree: FormulaNode };
+// `edit` is in the model's lines and `real` in the grid's. The hosts are on the model's lines `first` to `last`.
+type Sample = {
+    edit: ModelEdit;
+    real: LineEdit;
+    base: number;
+    first: number;
+    last: number;
+    hostSheet: string;
+    references: Reference[];
+    tree: FormulaNode;
+};
 
 function anywhere(pick: (below: number) => number): (texts: string[]) => string {
     return (texts) => CONTEXTS[pick(CONTEXTS.length)](texts[0], texts[1 % texts.length], texts[2 % texts.length]);
@@ -103,23 +116,26 @@ function leaves(node: FormulaNode, into: FormulaNode[] = []): FormulaNode[] {
     return into;
 }
 
-// A formula of one to three references and an edit, on an axis of 6 to 13 lines, with targets on and off the grid.
+// A formula of one to three references and an edit, on the first or the last 6 to 13 lines of the grid, with targets
+// on and off it.
 function sample(pick: (below: number) => number, write: (texts: string[]) => string): Sample {
     const rows = pick(2) === 0;
     const lines = 6 + pick(8);
+    const atEnd = pick(2) === 0;
+    const first = atEnd ? MODEL_LINES - lines : 0;
+    const base = atEnd ? (rows ? GRID_ROWS : GRID_COLUMNS) - MODEL_LINES : 0;
     const insert = pick(2) === 0;
     const at = pick(lines);
-    const edit: LineEdit = {
+    const real: LineEdit = {
         insert,
-        index: at,
+        index: base + first + at,
         count: 1 + pick(insert ? (pick(4) === 0 ? lines + 2 : 3) : lines - at),
-        lines,
         sheet: ['s1', 's1', 's2', 's3'][pick(4)],
         rows,
     };
     const end = (): End => {
         const absolute = pick(2) === 0;
-        return { absolute, value: absolute ? pick(lines) : pick(lines + 4) - (lines >> 1) - 2 };
+        return { absolute, value: absolute ? first + pick(lines) : pick(lines + 4) - (lines >> 1) - 2 };
     };
     const references: Reference[] = [];
     for (let n = 1 + pick(3); n > 0; n -= 1) {
@@ -128,10 +144,19 @@ function sample(pick: (below: number) => number, write: (texts: string[]) => str
         const ends = kind === 9 ? [] : kind < 3 ? [end()] : [end(), end()];
         references.push({ prefix, sheet, whole: kind === 8, ends });
     }
-    const text = write(references.map((reference) => storedText(rows, reference)));
+    const text = write(references.map((reference) => storedText(rows, base, reference)));
     const parsed = parseStored(text);
     if ('reason' in parsed) throw new Error(`${text}: ${parsed.reason}`);
-    return { edit, hostSheet: ['s1', 's1', 's2'][pick(3)], references, tree: parsed };
+    return {
+        edit: { ...real, index: first + at, lines: MODEL_LINES },
+        real,
+        base,
+        first,
+        last: first + lines - 1,
+        hostSheet: ['s1', 's1', 's2'][pick(3)],
+        references,
+        tree: parsed,
+    };
 }
 
 // The two lines a reference leaf names on the edited axis at a host, read from its fields.
@@ -147,16 +172,17 @@ describe('the fast path against the slow version', () => {
         const pick = random(20261111);
         const seen = { changed: 0, gone: 0, lossy: 0, recompute: 0, resized: 0, offGrid: 0, undone: 0 };
         for (let run = 0; run < 20000; run += 1) {
-            const { edit, hostSheet, references, tree: before } = sample(pick, (texts) => `=SUM(${texts.join(',')})`);
-            const { rows, lines } = edit;
+            const asArguments = (texts: string[]) => `=SUM(${texts.join(',')})`;
+            const { edit, real, base, first, last, hostSheet, references, tree: before } = sample(pick, asArguments);
+            const { rows } = edit;
             const axis = axisAfter(edit);
             const text = printStored(before);
             const written = leaves(before);
-            for (let host = 0; host < lines; host += 1) {
+            for (let host = first; host <= last; host += 1) {
                 const hostAfter = hostSheet === edit.sheet ? axis.indexOf(host) : host;
                 if (hostAfter === -1) continue;
-                const where = `${text} on ${hostSheet} at line ${host}, ${JSON.stringify(edit)}`;
-                const result = transformLines(before, edit, hostSheet, host);
+                const where = `${text} on ${hostSheet} at line ${base + host}, ${JSON.stringify(real)}`;
+                const result = transformLines(before, real, hostSheet, base + host);
                 const stored = printStored(result.tree);
                 expect(`${where}: ${result.tree === before}`).toBe(`${where}: ${stored === text}`);
                 expect([where, reread(result.tree)]).toEqual([where, result.tree]);
@@ -181,8 +207,8 @@ describe('the fast path against the slow version', () => {
                         return;
                     }
                     if (Math.min(expected.first, expected.second) < 0) seen.offGrid += 1;
-                    expect(`${where}: ${leaf.kind} ${named(rows, leaf, hostAfter)}`).toBe(
-                        `${where}: ${NodeKind.Ref} ${[expected.first, expected.second]}`,
+                    expect(`${where}: ${leaf.kind} ${named(rows, leaf, base + hostAfter)}`).toBe(
+                        `${where}: ${NodeKind.Ref} ${[base + expected.first, base + expected.second]}`,
                     );
                     expect([leaf.op, leaf.flags, leaf.sheetKind, leaf.sheet]).toEqual([
                         was.op,
@@ -203,11 +229,16 @@ describe('the fast path against the slow version', () => {
                 if (recompute) seen.recompute += 1;
                 if (resized) seen.resized += 1;
                 // The edit that takes this one back gives every formula that lost nothing its stored text again.
-                const back: LineEdit = { ...edit, insert: !edit.insert };
+                const back = { ...edit, insert: !edit.insert };
                 const returns = hostSheet !== edit.sheet || axisAfter(back).indexOf(hostAfter) === host;
                 if (lossy || !returns) continue;
                 seen.undone += 1;
-                const undone = transformLines(result.tree, back, hostSheet, hostAfter);
+                const undone = transformLines(
+                    result.tree,
+                    { ...real, insert: !real.insert },
+                    hostSheet,
+                    base + hostAfter,
+                );
                 expect(`${where}: ${printStored(undone.tree)}`).toBe(`${where}: ${text}`);
             }
         }
@@ -223,13 +254,13 @@ describe('the fast path against the slow version', () => {
     test('wherever a reference stands, what comes out is stored text that reads back as the same tree', () => {
         const pick = random(5);
         const seen = { broken: 0, spill: 0, intersection: 0, union: 0 };
-        for (let run = 0; run < 8000; run += 1) {
-            const { edit, hostSheet, tree: before } = sample(pick, anywhere(pick));
+        for (let run = 0; run < 12000; run += 1) {
+            const { edit, real, base, first, last, hostSheet, tree: before } = sample(pick, anywhere(pick));
             const axis = axisAfter(edit);
-            for (let host = 0; host < edit.lines; host += 1) {
+            for (let host = first; host <= last; host += 1) {
                 if (hostSheet === edit.sheet && !axis.includes(host)) continue;
-                const result = transformLines(before, edit, hostSheet, host);
-                const where = `${printStored(before)} on ${hostSheet} at line ${host}, ${JSON.stringify(edit)}`;
+                const result = transformLines(before, real, hostSheet, base + host);
+                const where = `${printStored(before)} on ${hostSheet} at line ${base + host}, ${JSON.stringify(real)}`;
                 expect([where, reread(result.tree)]).toEqual([where, result.tree]);
                 const stored = printStored(result.tree);
                 if (!stored.includes('#REF!')) continue;
@@ -252,26 +283,25 @@ describe('the fast path against the slow version', () => {
         let single = 0;
         let stretches = 0;
         for (let run = 0; run < 12000; run += 1) {
-            const { edit, hostSheet, tree: parsed } = sample(pick, anywhere(pick));
-            const { lines } = edit;
+            const { edit, real, base, first, last, hostSheet, tree: parsed } = sample(pick, anywhere(pick));
             const axis = axisAfter(edit);
             const shape = table.shape(table.internTree(parsed));
             if (shape.tree === null) throw new Error(shape.text);
-            const from = pick(3) === 0 ? pick(lines) : 0;
-            const to = pick(3) === 0 ? from + pick(lines - from) : lines - 1;
-            const classes = hostClasses(shape.tree, shape.refs, edit, hostSheet, from, to);
+            const from = base + first + (pick(3) === 0 ? pick(last - first + 1) : 0);
+            const to = pick(3) === 0 ? from + pick(base + last + 1 - from) : base + last;
+            const classes = hostClasses(shape.tree, shape.refs, real, hostSheet, from, to);
             if (classes.length > 1) split += 1;
-            const where = `${shape.text} on ${hostSheet} over ${from} to ${to}, ${JSON.stringify(edit)}`;
+            const where = `${shape.text} on ${hostSheet} over ${from} to ${to}, ${JSON.stringify(real)}`;
             let next = 0;
             for (let host = from; host <= to; host += 1) {
                 while (next < classes.length && classes[next].end < host) next += 1;
                 const found = next < classes.length && classes[next].start <= host ? classes[next] : undefined;
-                if (hostSheet === edit.sheet && !axis.includes(host)) {
+                if (hostSheet === edit.sheet && !axis.includes(host - base)) {
                     expect(`${where}: line ${host} ${found === undefined}`).toBe(`${where}: line ${host} true`);
                     continue;
                 }
                 if (found === undefined) throw new Error(`${where}: no class for the host on line ${host}`);
-                const direct = transformLines(shape.tree, edit, hostSheet, host);
+                const direct = transformLines(shape.tree, real, hostSheet, host);
                 const flags = [found.lossy, found.recompute, found.resized];
                 const same = found.tree === shape.tree;
                 expect(`${where}: line ${host} ${printStored(found.tree)} ${flags} ${same}`).toBe(

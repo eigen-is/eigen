@@ -28,7 +28,7 @@ export function transformMove(
     hostSheet: string,
     hostRow: number,
     hostColumn: number,
-): Transformed {
+): Omit<Transformed, 'resized'> {
     const rowShift = move.toRow - move.row;
     const columnShift = move.toColumn - move.column;
     const carried =
@@ -92,7 +92,7 @@ export function transformMove(
         }
         return referenceNode(op, node.space, nextKind, nextSheet, nextRow, nextColumn, nextRow2, nextColumn2, flags);
     });
-    return { tree: mapped, lossy, recompute, resized: false };
+    return { tree: mapped, lossy, recompute };
 }
 
 // Whether the block of the move's size at `row`, `column` holds the whole rectangle.
