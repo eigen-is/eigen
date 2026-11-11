@@ -1,9 +1,12 @@
+// The attachments row of a mail being read: one chip per part, a click opening its quick look, a
+// right-click or long press offering the file actions, and a button that saves them all.
+
 import { useAuth } from '@workspace/lib/auth';
 import { subjectFromMailAttachment, subjectInfo } from '@workspace/lib/file-subject';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type { Attachment } from '@workspace/lib/types/mail';
 import { TooltipButton } from '@workspace/ui';
-import { SimpleAttachmentChip, useAttachmentChipMenu } from '@workspace/ui/components/attachment';
+import { AttachmentStrip, SimpleAttachmentChip, useAttachmentChipMenu } from '@workspace/ui/components/attachment';
 import { ContextMenuAnchor } from '@workspace/ui/components/context-menu';
 import { FileActionMenuItems, useFileActionRunner } from '@workspace/ui/components/file-actions';
 import { usePreview } from '@workspace/ui/components/preview-provider';
@@ -42,7 +45,7 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
 
     return (
         <div className="flex items-center gap-2 mb-4" {...bind()}>
-            <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+            <AttachmentStrip className="flex-1 min-w-0">
                 {chips.map(({ subject, info }) => (
                     <SimpleAttachmentChip
                         key={info.key}
@@ -56,7 +59,7 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
                         }}
                     />
                 ))}
-            </div>
+            </AttachmentStrip>
             <TooltipButton
                 icon={Download}
                 tooltipText={subjects.length === 1 ? 'Save attachment' : 'Save attachments'}

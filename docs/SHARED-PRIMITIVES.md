@@ -5,13 +5,13 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2161 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2162 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (199)
+## Components (200)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -82,6 +82,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VersionLabel` | `@workspace/ui` | packages/ui/src/components/layout/app/version-label.tsx |
 | `AttachmentChip` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/attachment-chip.tsx |
 | `AttachmentDraftChips` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/attachment-draft-chips.tsx |
+| `AttachmentStrip` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/attachment-strip.tsx |
 | `ReferenceAttachmentChip` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/reference-attachment-chip.tsx |
 | `SimpleAttachmentChip` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/simple-attachment-chip.tsx |
 | `AttendeeList` | `@workspace/ui/components/calendar` | packages/ui/src/components/calendar/attendee-list.tsx |
@@ -1127,7 +1128,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getMonthRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `getWeekRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `handleCalendarSSEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/sse-handlers.ts |
-| `heldAttendees` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `ICS_METHOD_LABEL` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/preview-lines.ts |
 | `isFreeBusyEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isInvitationFromOthers` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
@@ -2197,6 +2197,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `menuRows` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |
 | `openSubmenu` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |
 | `renderOpenMenu` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |
+| `rowLabel` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |
 | `pressEnter` | `@workspace/ui/test/press-enter` | packages/ui/src/test/press-enter.ts |
 | `loadReact` | `@workspace/ui/test/render-in-document` | packages/ui/src/test/render-in-document.ts |
 | `renderInDocument` | `@workspace/ui/test/render-in-document` | packages/ui/src/test/render-in-document.ts |

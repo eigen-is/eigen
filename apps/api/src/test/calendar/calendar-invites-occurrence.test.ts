@@ -1,8 +1,8 @@
 // One occurrence of an invited series, over the Home relay: the organizer's "this event" edit must reach
 // the guest as an exception on their linked series — never as an update of the whole series — and the
-// same for a second edit, a cancellation and a guest's RSVP. A date that holds its own guest list follows the
-// series' guests and each guest's answer for the whole series. Driven through the routes the calendar app calls
-// (docs/CALENDAR.md § An occurrence message names the series).
+// same for a second edit, a cancellation and a guest's RSVP. Every date stores its whole guest list, follows the
+// series' guest changes and each guest's answer for the whole series, and a recolour tells no guest. Driven through
+// the routes the calendar app calls (docs/CALENDAR.md § An occurrence message names the series).
 import { beforeAll, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, EventData } from '@workspace/lib/types/calendar';
 import { processInboundImip } from '../../lib/calendar/imip';
@@ -39,7 +39,9 @@ describe('Occurrence edits of an invited series', () => {
         ).id;
     });
 
-    const guests = () => [{ email: ctx.bob.user.email, name: 'Bob', status: 'pending' as const, role: 'required' }];
+    const guests = () => [
+        { email: ctx.bob.user.email, name: 'Bob', status: 'pending' as const, role: 'required' as const },
+    ];
 
     async function createSeries(title: string, attendees: object[] = guests()): Promise<CalendarEvent> {
         const res = await authedRequest(
@@ -109,16 +111,23 @@ describe('Occurrence edits of an invited series', () => {
         }, "the organizer's message to reach Bob's calendar");
     }
 
-    // Bob's stored resource, read the way a CalDAV client reads it.
-    async function bobIcs(uid: string): Promise<string> {
-        const home = await getHome(ctx.bob.user.id);
-        const resource = findOrFail(await home.calendar.listResources(bobCalendarId), (r) => r.uid === uid);
-        const res = await davRequest('GET', `/dav/calendars/${ctx.bob.user.id}/${bobCalendarId}/${resource.uri}`, {
-            email: ctx.bob.user.email,
+    // A stored resource, read the way the owner's CalDAV client reads it.
+    async function storedIcs(user: { id: string; email: string }, calendarId: string, uid: string): Promise<string> {
+        const home = await getHome(user.id);
+        const resource = findOrFail(await home.calendar.listResources(calendarId), (r) => r.uid === uid);
+        const res = await davRequest('GET', `/dav/calendars/${user.id}/${calendarId}/${resource.uri}`, {
+            email: user.email,
         });
         expect(res.status).toBe(200);
         return res.text();
     }
+    const bobIcs = (uid: string) => storedIcs(ctx.bob.user, bobCalendarId, uid);
+    // Each VEVENT of Alice's stored resource, its folded lines joined.
+    const aliceVEvents = async (uid: string) =>
+        (await storedIcs(ctx.alice.user, aliceCalendarId, uid))
+            .replace(/\r\n[ \t]/g, '')
+            .split('BEGIN:VEVENT')
+            .slice(1);
 
     async function bobStored(uid: string) {
         const { events } = parseIcs(await bobIcs(uid));
@@ -329,30 +338,94 @@ describe('Occurrence edits of an invited series', () => {
     });
 
     // A DELETE of the override row is the API's "delete this": the cancellation names the series plus the
-    // ORIGINAL occurrence, which is what the guest's copy holds, not the override's own id or moved start. An
-    // override that names no guests holds the series' list, so deleting it owes those guests the CANCEL too.
-    for (const named of [true, false]) {
-        test(`deleting a moved occurrence that names ${named ? 'its' : 'no'} guests over REST cancels it for every guest`, async () => {
-            const CAROL = `carol.delete-${named}@example.org`;
-            const { series, target, attendees } = await seededWithExternal(`Weekly Occurrence Delete ${named}`, CAROL);
-            const override = await moveOccurrence(series, target, `Moved Then Deleted ${named}`, {
-                attendees: named ? attendees : [],
-            });
+    // ORIGINAL occurrence, which is what the guest's copy holds, not the override's own id or moved start.
+    test('deleting a moved occurrence over REST cancels it for every guest', async () => {
+        const CAROL = 'carol.delete@example.org';
+        const { series, target, attendees } = await seededWithExternal('Weekly Occurrence Delete', CAROL);
+        const override = await moveOccurrence(series, target, 'Moved Then Deleted', { attendees });
 
-            const { ics } = await cancelMailTo(CAROL, () =>
-                authedRequest(
-                    ctx.alice.user.sessionToken,
-                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${override.id}`,
-                    { method: 'DELETE' },
-                ),
-            );
-            expect(ics).toContain(`RECURRENCE-ID;TZID=${TZ}:${target.replaceAll('-', '')}T100000`);
-            expect(ics).toContain('STATUS:CANCELLED');
+        const { ics } = await cancelMailTo(CAROL, () =>
+            authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${override.id}`,
+                { method: 'DELETE' },
+            ),
+        );
+        expect(ics).toContain(`RECURRENCE-ID;TZID=${TZ}:${target.replaceAll('-', '')}T100000`);
+        expect(ics).toContain('STATUS:CANCELLED');
 
-            const occurrences = await untilBob(series.uid, (occ) => occ.length === 3);
-            expect(occurrences.some((e) => e.occurrenceDate === target)).toBe(false);
+        const occurrences = await untilBob(series.uid, (occ) => occ.length === 3);
+        expect(occurrences.some((e) => e.occurrenceDate === target)).toBe(false);
+    });
+
+    // Someone can be invited to one date only, so a series' guests are every date's as well as its own.
+    test('deleting a series cancels it for the guests of one date only', async () => {
+        const CAROL = 'carol.date-only@example.org';
+        const series = await createSeries('Weekly Date Guests Delete', []);
+        const date = '2027-02-09';
+        const attendees = [...guests(), { email: CAROL, name: 'Carol', status: 'pending', role: 'required' }];
+        await editOccurrence(series.id, date, { title: 'Date Guests Only', data: { attendees } });
+        await untilBob(series.uid, (occ) => occ.length === 1);
+
+        const { ics } = await cancelMailTo(CAROL, () =>
+            authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${series.id}`,
+                { method: 'DELETE' },
+            ),
+        );
+        expect(ics).toContain('STATUS:CANCELLED');
+        await untilBob(series.uid, (occ) => occ.length === 0);
+    });
+
+    test('cancelling a series cancels it for the guests of one date only', async () => {
+        const CAROL = 'carol.date-only-cancel@example.org';
+        const series = await createSeries('Weekly Date Guests Cancel');
+        const date = '2027-02-09';
+        const attendees = [...guests(), { email: CAROL, name: 'Carol', status: 'pending', role: 'required' }];
+        await editOccurrence(series.id, date, { title: 'Date Guests Cancel', data: { attendees } });
+        await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Date Guests Cancel'));
+
+        const { ics } = await cancelMailTo(CAROL, () => putEvent(series.id, { status: 'cancelled' }));
+        expect(ics).toContain('STATUS:CANCELLED');
+        expect(ics).not.toContain('RECURRENCE-ID');
+        await untilBob(series.uid, (occ) => occ.length === 0);
+    });
+
+    test('deleting a cancelled series tells its guests nothing more', async () => {
+        const CAROL = 'carol.cancelled-delete@example.org';
+        const carol = { email: CAROL, name: 'Carol', status: 'pending' as const, role: 'required' as const };
+        const series = await createSeries('Weekly Cancelled Then Deleted');
+        await editOccurrence(series.id, '2027-02-09', {
+            title: series.title,
+            data: { attendees: [...guests(), carol] },
         });
-    }
+        await cancelMailTo(CAROL, () => putEvent(series.id, { status: 'cancelled' }));
+        await untilBob(series.uid, (occ) => occ.length === 0);
+
+        const relay = await import('../../lib/home/home-relay');
+        const relayed = spyOn(relay, 'sendToHome');
+        const mail = await catchMail();
+        try {
+            relayed.mockClear();
+            const deleted = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${series.id}`,
+                { method: 'DELETE' },
+            );
+            expect(deleted.status).toBe(200);
+
+            // Absence only counts behind what IS expected: a later invitation reaches both guests the path a CANCEL takes.
+            await createSeries('Weekly After The Delete', [...guests(), carol]);
+            await mail.to(CAROL, 'Invitation: Weekly After The Delete');
+            await eventually(async () => relayed.mock.calls.length > 0 || undefined, 'the invitation to reach Bob');
+            expect(mail.sent(CAROL)).toHaveLength(1);
+            expect(relayed.mock.calls.map(([, message]) => message.type)).toEqual(['calendar:request']);
+        } finally {
+            mail.restore();
+            relayed.mockRestore();
+        }
+    });
 
     // RFC 5546 § 2.1.4: each CANCEL raises the SEQUENCE. Eigen raises the series', which a guest who never got the date
     // on its own holds it at, so a CANCEL naming the date's older number could be dropped as stale.
@@ -485,28 +558,6 @@ describe('Occurrence edits of an invited series', () => {
         for (const [n, sequence] of sent.entries()) expect(sequence).toBeGreaterThan(n ? sent[n - 1] : held);
         const moved = new Date(Date.parse(`${target}T09:00:00Z`) + 4 * HOUR).getTime();
         await untilBob(series.uid, (occ) => occ.some((e) => new Date(e.startTime).getTime() === moved));
-    });
-
-    test("a date that keeps the series' guests takes a new SEQUENCE with every move", async () => {
-        const CAROL = 'carol.inherit-bump@example.org';
-        const { series, target } = await seededWithExternal('Weekly Inherit Bump', CAROL);
-        const mail = await catchMail();
-        let sent: number[] = [];
-        try {
-            const override = await moveOccurrence(series, target, 'Inherit Bump Moved', { attendees: [] });
-            const start = new Date(Date.parse(`${target}T09:00:00Z`) + 2 * HOUR);
-            expect(
-                (await putEvent(override.id, { startTime: start, endTime: new Date(start.getTime() + HOUR) })).status,
-            ).toBe(200);
-            await eventually(
-                async () => (mail.sent(CAROL).length === 2 ? true : undefined),
-                'both moves to reach Carol',
-            );
-            sent = sequencesTo(mail, CAROL);
-        } finally {
-            mail.restore();
-        }
-        expect(sent[1]).toBeGreaterThan(sent[0]);
     });
 
     test("a date's CANCEL after another date's and a series edit outranks the series' last REQUEST", async () => {
@@ -746,56 +797,242 @@ describe('Occurrence edits of an invited series', () => {
         expect(res.status).toBe(400);
     });
 
-    // An override that names nobody is a client that did not restate the guest list — a stored VEVENT
-    // cannot tell that apart from "this occurrence has no guests" — so an override moves the occurrence
-    // and never changes who is invited to it.
-    test('an override naming no guests still reaches the series guests', async () => {
-        const { series, target } = await seeded('Weekly Occurrence Guestless');
-
-        await editOccurrence(series.id, target, { title: 'Still Bob', data: { attendees: [] } });
-
-        const occurrences = await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Still Bob'));
-        expect(occurrences).toHaveLength(4);
-        expect(findOrFail(occurrences, (e) => e.occurrenceDate === target).title).toBe('Still Bob');
+    const organizerLine = () => new RegExp(`\\r\\nORGANIZER[^\\r]*:mailto:${ctx.alice.user.email}\\r\\n`);
+    // The occurrence on `date` as the series has it, unmoved.
+    const slotOf = (date: string) => ({
+        startTime: new Date(`${date}T09:00:00Z`),
+        endTime: new Date(`${date}T10:00:00Z`),
     });
 
-    // Emptying an occurrence's own list hands it back to the series, so a guest that list had left out is invited again.
-    test("emptying an occurrence's guest list invites the series guests it had left out", async () => {
-        const CAROL = 'carol.reinherit@example.org';
-        const { series, target } = await seededWithExternal('Weekly Occurrence Reinherit', CAROL);
-        await editOccurrence(series.id, target, { title: 'Bob Only' });
+    // RFC 5546 clients read a date's ATTENDEE lines as its whole guest list, so a CalDAV client syncing Alice's
+    // calendar sees each date's guests and who organizes it: a date she moved, and one Bob answered on his own.
+    test("every VEVENT of the organizer's series stores its whole guest list and the ORGANIZER", async () => {
+        const CAROL = 'carol.stored-list@example.org';
+        const { series, target, attendees } = await seededWithExternal('Weekly Stored List', CAROL);
+        await moveOccurrence(series, target, 'Stored List Moved', { attendees });
+        const answered = '2027-02-16';
+        const bobMaster = findOrFail(await bobOccurrences(series.uid), (e) => !e.parentEventId);
+        const oneDate = { status: 'tentative', scope: 'this', recurrenceDate: answered };
+        expect((await rsvpAsBob(bobMaster.id, oneDate)).status).toBe(200);
+        await eventually(async () => {
+            const one = (await aliceOccurrences(series.uid)).find((e) => e.occurrenceDate === answered);
+            return one?.parentEventId ? one : undefined;
+        }, "Bob's answer for one date to reach Alice");
 
-        const mail = await catchMail();
-        try {
-            await editOccurrence(series.id, target, { title: 'Everyone Again', data: { attendees: [] } });
-            await mail.to(CAROL, 'Invitation: Everyone Again');
-        } finally {
-            mail.restore();
+        const vevents = await aliceVEvents(series.uid);
+        expect(vevents).toHaveLength(3);
+        for (const vevent of vevents) {
+            expect(vevent).toMatch(organizerLine());
+            expect(vevent).toContain(`:mailto:${ctx.bob.user.email}\r\n`);
+            expect(vevent).toContain(`:mailto:${CAROL}\r\n`);
         }
     });
 
-    // Eigen reads that override as inheriting the series' guests, so the mail an external guest gets says so too:
-    // an override with only the organizer on it reads as an occurrence the guest is not invited to.
-    test("an override naming no guests travels with the series' guests", async () => {
-        const CAROL = 'carol.guestless@example.org';
-        const { series, target, attendees } = await seededWithExternal('Weekly Occurrence Guestless Mail', CAROL);
+    // RFC 5545 gives an event on one person's calendar no ORGANIZER, and a group-scheduled one must have it.
+    test('an event takes the ORGANIZER line with its first guest', async () => {
+        const series = await createSeries('Weekly First Guest', []);
+        expect((await aliceVEvents(series.uid))[0]).not.toContain('ORGANIZER');
 
-        const mail = await catchMail();
-        await editOccurrence(series.id, target, { title: 'Guestless Override', data: { attendees: [] } });
-        const occurrence = await mail.to(CAROL, 'Updated invitation: Guestless Override');
-        expect((await putEvent(series.id, { title: 'Guestless Series Renamed', data: { attendees } })).status).toBe(
-            200,
+        expect((await putEvent(series.id, { data: { attendees: guests() } })).status).toBe(200);
+        expect((await aliceVEvents(series.uid))[0]).toMatch(organizerLine());
+    });
+
+    test('an event drops the ORGANIZER line with its last guest', async () => {
+        const series = await createSeries('Weekly Last Guest');
+        expect((await aliceVEvents(series.uid))[0]).toMatch(organizerLine());
+
+        expect((await putEvent(series.id, { data: { attendees: [] } })).status).toBe(200);
+        expect((await aliceVEvents(series.uid))[0]).not.toContain('ORGANIZER');
+    });
+
+    test('a date the series gives its first guest names the ORGANIZER too', async () => {
+        const series = await createSeries('Weekly Date First Guest', []);
+        await editOccurrence(series.id, '2027-02-09', { title: 'Date First Guest Moved', data: { attendees: [] } });
+
+        expect((await putEvent(series.id, { data: { attendees: guests() } })).status).toBe(200);
+        const vevents = await aliceVEvents(series.uid);
+        expect(vevents).toHaveLength(2);
+        for (const vevent of vevents) expect(vevent).toMatch(organizerLine());
+    });
+
+    // An older build stored a date with guests and no ORGANIZER, and the rule holds across the whole file.
+    test("an organizer's save gives an older date with guests the ORGANIZER it lacks", async () => {
+        const uid = crypto.randomUUID();
+        const GUEST = `older-dates-${uid}@example.org`;
+        const { calendar } = await getHome(ctx.alice.user.id);
+        const vevent = (lines: string[]) => [
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            ...lines,
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${GUEST}`,
+            'END:VEVENT',
+        ];
+        const body = vcal([
+            ...vevent(['DTSTART:20270202T090000Z', 'DTEND:20270202T100000Z', 'RRULE:FREQ=WEEKLY;COUNT=4']),
+            ...vevent(['RECURRENCE-ID:20270209T090000Z', 'DTSTART:20270209T100000Z', 'DTEND:20270209T110000Z']),
+        ]);
+        const put = await calendar.putResource(aliceCalendarId, `${uid}.ics`, body, {
+            ifMatch: null,
+            ifNoneMatch: null,
+        });
+        expect(put.ok).toBe(true);
+        const master = findOrFail(await calendar.getEventsByUid(uid), (e) => !e.recurrenceDate);
+
+        // A color save carries no guest list, so it reaches no date of the series.
+        expect((await putEvent(master.id, { data: { color: '#2563eb' } })).status).toBe(200);
+        const vevents = await aliceVEvents(uid);
+        expect(vevents).toHaveLength(2);
+        for (const stored of vevents) expect(stored).toMatch(organizerLine());
+        expect(vevents[1]).not.toContain('SEQUENCE:1');
+    });
+
+    // The ORGANIZER is the file's to keep. A body naming someone else would make the owner's own event an invitation
+    // from that stranger.
+    test("a save that names another organizer keeps the saver's ORGANIZER", async () => {
+        const organizer = { userId: '', email: 'mallory.organizer@example.org', name: 'Mallory' };
+        const created = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Weekly Foreign Organizer',
+                    startTime: SERIES_START,
+                    endTime: SERIES_END,
+                    allDay: false,
+                    rrule: 'FREQ=WEEKLY;COUNT=4',
+                    timezone: TZ,
+                    data: { attendees: guests(), organizer },
+                }),
+            },
         );
-        const whole = await mail.to(CAROL, 'Updated invitation: Guestless Series Renamed');
-        mail.restore();
+        const series = await assertJson<CalendarEvent>(created);
+        const renamed = { title: 'Foreign Organizer Renamed', data: { ...series.data, organizer } };
+        expect((await putEvent(series.id, renamed)).status).toBe(200);
+        await editOccurrence(series.id, '2027-02-09', {
+            title: 'Foreign Organizer Date',
+            data: { attendees: guests(), organizer },
+        });
 
-        for (const sent of [occurrence, whole]) {
-            const vevents = unfolded(sent).split('BEGIN:VEVENT').slice(1);
-            expect(vevents).toHaveLength(sent === whole ? 2 : 1);
-            for (const vevent of vevents) {
-                expect(vevent).toContain(`:mailto:${CAROL}\r\n`);
-                expect(vevent).toContain(`:mailto:${ctx.bob.user.email}\r\n`);
-            }
+        const vevents = await aliceVEvents(series.uid);
+        expect(vevents).toHaveLength(2);
+        for (const stored of vevents) {
+            expect(stored).toMatch(organizerLine());
+            expect(stored).not.toContain(organizer.email);
+        }
+    });
+
+    // A write with no user, such as a script's, on a personal calendar is the owner's.
+    test("a write with no user names the calendar's owner as the ORGANIZER", async () => {
+        const { calendar } = await getHome(ctx.alice.user.id);
+        const event = await calendar.createEvent(aliceCalendarId, {
+            title: 'Scripted Guests',
+            startTime: new Date(SERIES_START),
+            endTime: new Date(SERIES_END),
+            allDay: false,
+            data: { attendees: guests() },
+        });
+        expect((await aliceVEvents(event.uid))[0]).toMatch(organizerLine());
+    });
+
+    // A guest may re-alarm their copy and nothing more, one date included.
+    test("a date Bob sets apart on his copy keeps the organizer's fields and takes only his reminders", async () => {
+        const { series, target } = await seeded('Weekly Guest Date');
+        const bobMaster = findOrFail(await bobOccurrences(series.uid), (e) => !e.parentEventId);
+        const reminders = [{ type: 'notification', minutes: 30 }];
+        const moved = new Date(Date.parse(`${target}T09:00:00Z`) + HOUR);
+        const res = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Renamed by Bob',
+                    startTime: moved,
+                    endTime: new Date(moved.getTime() + HOUR),
+                    allDay: false,
+                    timezone: TZ,
+                    parentEventId: bobMaster.id,
+                    recurrenceDate: target,
+                    data: { reminders, attendees: [] },
+                }),
+            },
+        );
+        expect(res.status).toBe(200);
+
+        const date = findOrFail((await bobStored(series.uid)).overrides, (e) => e.recurrenceDate === target);
+        expect(date).toMatchObject({ title: series.title, ...slotOf(target), data: { reminders } });
+        expect(date.data?.attendees?.map((a) => a.email)).toEqual([ctx.bob.user.email]);
+    });
+
+    // A date's list is its whole guest list, so an emptied one has no guests, and those it had hear it is cancelled.
+    test("emptying one date's guest list cancels that date for its guests and leaves it guest-less", async () => {
+        const CAROL = 'carol.emptied@example.org';
+        const { series, target } = await seededWithExternal('Weekly Emptied Date', CAROL);
+
+        const { ics } = await cancelMailTo(CAROL, async () => {
+            await editOccurrence(series.id, target, {
+                title: series.title,
+                ...slotOf(target),
+                data: { attendees: [] },
+            });
+            return new Response();
+        });
+        expect(ics).toContain(`RECURRENCE-ID;TZID=${TZ}:${target.replaceAll('-', '')}T100000`);
+
+        const theirs = await untilBob(series.uid, (occ) => occ.length === 3);
+        expect(theirs.map((e) => e.occurrenceDate)).not.toContain(target);
+        const mine = findOrFail(await aliceOccurrences(series.uid), (e) => e.occurrenceDate === target);
+        expect(mine.data?.attendees ?? []).toEqual([]);
+    });
+
+    test('a guest the series gains joins a date whose list was emptied', async () => {
+        const ERIN = 'erin.emptied@outside.test';
+        const { series, target } = await seeded('Weekly Emptied Then Joined');
+        await editOccurrence(series.id, target, { title: series.title, ...slotOf(target), data: { attendees: [] } });
+        await untilBob(series.uid, (occ) => occ.length === 3);
+
+        const erin = { email: ERIN, name: 'Erin', status: 'pending', role: 'required' };
+        expect((await putEvent(series.id, { data: { attendees: [...guests(), erin] } })).status).toBe(200);
+
+        const date = findOrFail(await aliceOccurrences(series.uid), (e) => e.occurrenceDate === target);
+        expect(date.data?.attendees?.map((a) => a.email)).toEqual([ERIN]);
+    });
+
+    // A colour is the organizer's own display choice: guests keep their own on their copy, so neither a date nor the
+    // series recoloured is a message or a new revision.
+    test('recolouring one date or the whole series tells no guest and raises no SEQUENCE', async () => {
+        const CAROL = 'carol.recolour@example.org';
+        const { series, attendees } = await seededWithExternal('Weekly Recolour', CAROL);
+        const date = '2027-02-16';
+        const held = findOrFail(await aliceOccurrences(series.uid), (e) => !e.parentEventId).sequence;
+        const relay = await import('../../lib/home/home-relay');
+        const relayed = spyOn(relay, 'sendToHome');
+        const mail = await catchMail();
+        try {
+            relayed.mockClear();
+            const recoloured = { title: series.title, ...slotOf(date), data: { attendees, color: '#dc2626' } };
+            await editOccurrence(series.id, date, recoloured);
+            expect((await putEvent(series.id, { data: { color: '#16a34a' } })).status).toBe(200);
+
+            const mine = await aliceOccurrences(series.uid);
+            const recolouredDate = findOrFail(mine, (e) => e.occurrenceDate === date);
+            expect(recolouredDate.parentEventId).toBe(series.id);
+            expect(recolouredDate.data?.color).toBe('#dc2626');
+            expect(recolouredDate.sequence).toBe(held);
+            expect(findOrFail(mine, (e) => !e.parentEventId).sequence).toBe(held);
+
+            // Absence only counts behind what IS expected: a rename, made last, takes the path the recolours must not.
+            expect((await putEvent(series.id, { title: 'Weekly Recolour Renamed' })).status).toBe(200);
+            await mail.to(CAROL, 'Updated invitation: Weekly Recolour Renamed');
+            await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Weekly Recolour Renamed'));
+            expect(mail.sent(CAROL)).toHaveLength(1);
+            expect(relayed.mock.calls.filter(([, message]) => message.type === 'calendar:request')).toHaveLength(1);
+        } finally {
+            mail.restore();
+            relayed.mockRestore();
         }
     });
 
@@ -912,6 +1149,7 @@ describe('Occurrence edits of an invited series', () => {
             for (const vevent of vevents) expect(vevent).toContain(`:mailto:${ERIN}\r\n`);
         } finally {
             mail.restore();
+            setSystemTime();
         }
 
         const mine = await aliceOccurrences(series.uid);
@@ -1005,13 +1243,8 @@ describe('Occurrence edits of an invited series', () => {
             title: 'Deleted Copy Moved',
             startTime: movedStart,
             endTime: new Date(movedStart.getTime() + HOUR),
-            data: { attendees: [] },
         });
-        await editOccurrence(series.id, cancelled, {
-            title: series.title,
-            status: 'cancelled',
-            data: { attendees: [] },
-        });
+        await editOccurrence(series.id, cancelled, { title: series.title, status: 'cancelled' });
         const held = await untilBob(
             series.uid,
             (occ) => occ.length === 3 && occ.some((e) => e.title === 'Deleted Copy Moved'),
@@ -1092,8 +1325,9 @@ describe('Occurrence edits of an invited series', () => {
             return bobStatus(master) === 'declined' ? master : undefined;
         }, "Bob's cut to reach Alice as a decline");
 
-        // The web app's "This event" leaves the date the series' list, which holds Bob's decline.
-        await moveOccurrence(series, target, 'Moved After The Cut', { attendees: [] });
+        // The web app's "This event" sends the date's list as Alice sees it, which holds Bob's decline.
+        const { data } = findOrFail(await aliceOccurrences(series.uid), (e) => e.occurrenceDate === target);
+        await moveOccurrence(series, target, 'Moved After The Cut', { attendees: data?.attendees });
 
         const moved = findOrFail(await bobOccurrences(series.uid), (e) => e.occurrenceDate === target);
         expect(bobStatus(moved)).toBe('accepted');

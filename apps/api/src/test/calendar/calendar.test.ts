@@ -2216,21 +2216,25 @@ describe('Event move across calendars', () => {
     });
 
     test('moving a linked (invited) event does not send an iMIP decline', async () => {
-        // A client can't declare itself an invitee (EventDataSchema strips organizer), so seed the linked
-        // copy through the domain. External organizer → the decline path would be a sendMail.
-        const home = await getHome(ctx.alice.user.id);
-        const seedLinked = (title: string, organizer: string, orgEventId: string) =>
-            home.calendar.createEvent(sourceCalId, {
-                title,
-                startTime: new Date('2026-11-02T09:00:00Z'),
-                endTime: new Date('2026-11-02T10:00:00Z'),
-                allDay: false,
-                data: {
-                    organizer: { userId: `external_${organizer}`, email: organizer, name: 'Org' },
-                    organizerEventId: orgEventId,
-                    attendees: [{ email: ctx.alice.user.email, status: 'accepted', role: 'required' }],
-                },
-            });
+        // The web app can't name an organizer (EventDataSchema strips it), so the invitation comes in as a CalDAV PUT
+        // would. External organizer → the decline path would be a sendMail.
+        const { calendar } = await getHome(ctx.alice.user.id);
+        const seedLinked = async (title: string, organizer: string, uid: string) => {
+            const body = vcal([
+                'BEGIN:VEVENT',
+                `UID:${uid}`,
+                'DTSTART:20261102T090000Z',
+                'DTEND:20261102T100000Z',
+                `SUMMARY:${title}`,
+                `ORGANIZER;CN=Org:mailto:${organizer}`,
+                `ATTENDEE;PARTSTAT=ACCEPTED:mailto:${ctx.alice.user.email}`,
+                'END:VEVENT',
+            ]);
+            expect(
+                (await calendar.putResource(sourceCalId, `${uid}.ics`, body, { ifMatch: null, ifNoneMatch: null })).ok,
+            ).toBe(true);
+            return findOrFail(await calendar.getEventsByUid(uid), () => true);
+        };
         const linked = await seedLinked('Invited Movable', 'org@example.com', 'ext-move-1');
         // Deleting a linked copy DOES decline, so it is the control the move's silence is measured against.
         const control = await seedLinked('Invited Control', 'control@example.com', 'ext-move-control');

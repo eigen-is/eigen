@@ -1,5 +1,8 @@
+// The chips for files staged in a composer before they are sent, such as a chat message or a new card.
+// Every kind a draft can hold renders here, each with an optional remove button.
+
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
-import { cn } from '@workspace/ui/lib/utils';
+import { AttachmentStrip } from './attachment-strip';
 import { ReferenceAttachmentChip } from './reference-attachment-chip';
 import { SimpleAttachmentChip } from './simple-attachment-chip';
 
@@ -14,7 +17,7 @@ type AttachmentDraftChipsProps = {
 export function AttachmentDraftChips({ items, onRemove, className }: AttachmentDraftChipsProps) {
     if (items.length === 0) return null;
     return (
-        <div className={cn('flex flex-wrap gap-2', className)}>
+        <AttachmentStrip className={className}>
             {items.map((item, i) => {
                 const remove = onRemove ? () => onRemove(i) : undefined;
                 if (item instanceof File) {
@@ -42,6 +45,6 @@ export function AttachmentDraftChips({ items, onRemove, className }: AttachmentD
                     />
                 );
             })}
-        </div>
+        </AttachmentStrip>
     );
 }

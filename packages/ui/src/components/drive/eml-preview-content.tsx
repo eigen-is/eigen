@@ -1,3 +1,7 @@
+// The quick look for a saved email, whether a .eml file in Drive or a message attached to a mail: its
+// headers, body and the names of the parts it carries. The preview overlay mounts it for either kind;
+// oversize messages show a note instead of being parsed.
+
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { useEmlPreview } from '@workspace/lib/drive';
 import { useMailEmlPreview } from '@workspace/lib/mail';
@@ -5,6 +9,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { MailPartRef } from '@workspace/lib/types/file-subject';
 import { mailAttachmentName } from '@workspace/lib/types/mail';
 import type { EmlPreview } from '@workspace/lib/types/preview';
+import { AttachmentStrip } from '../attachment/attachment-strip';
 import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
 import { MessageView } from '../mail/message-view';
 import type { PreviewStatus } from './preview-pane';
@@ -57,7 +62,7 @@ function PreviewAttachments({ data }: { data: EmlPreview }) {
 
     return (
         <div className="flex flex-col gap-2 mb-4">
-            <div className="flex flex-wrap items-center gap-2">
+            <AttachmentStrip>
                 {data.attachments.map((att, index) => (
                     <SimpleAttachmentChip
                         key={`${index}-${att.filename ?? ''}`}
@@ -65,7 +70,7 @@ function PreviewAttachments({ data }: { data: EmlPreview }) {
                         mimeType={att.contentType}
                     />
                 ))}
-            </div>
+            </AttachmentStrip>
             <PreviewCounts remaining={data.remainingAttachments} dropped={0} noun="attachment" />
         </div>
     );

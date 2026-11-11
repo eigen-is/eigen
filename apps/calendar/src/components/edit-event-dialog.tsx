@@ -6,7 +6,6 @@
 
 import { useAuth } from '@workspace/lib/auth';
 import {
-    heldAttendees,
     isSeriesOccurrence,
     seriesEditFromOccurrence,
     toLocalDateString,
@@ -108,7 +107,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     const location = typed.location ?? event.location ?? '';
     const { allDay, startDate, startTime, endDate, endTime, rrule: rruleString } = times;
     // A list the user edited says who is on it, and each guest's reply stays the server's.
-    const serverAttendees = heldAttendees(event, master);
+    const serverAttendees = event.data?.attendees ?? [];
     const attendees =
         typed.attendees?.map(
             (guest) => serverAttendees.find((held) => held.email.toLowerCase() === guest.email.toLowerCase()) ?? guest,
@@ -142,8 +141,6 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
             );
             return [...kept, ...joined];
         };
-        // "This event" keeps the list a date already holds, and gives one to a date only when the user changed it.
-        const dateGuests = typed.attendees ? attendees : isOverride ? (event.data?.attendees ?? []) : [];
         const timezone = allDay ? null : (event.timezone ?? viewerTimeZone());
         const edited = {
             title: title.trim(),
@@ -211,8 +208,6 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 calendarId: event.calendarId,
                 ...updates,
                 rrule: null,
-                // An empty list hands the date back to the series' guests.
-                data: { ...event.data, attendees: dateGuests },
                 parentEventId: targetId,
                 recurrenceDate: event.occurrenceDate,
                 etag: heldEtag,
@@ -325,11 +320,6 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                                             onChange={(value) => edit({ attendees: value })}
                                             currentUserEmail={user?.email}
                                         />
-                                        {isPartOfSeries && attendees.length === 0 && (
-                                            <p className="text-xs text-muted-foreground mt-1">
-                                                Saved for one occurrence, this keeps the series' guests.
-                                            </p>
-                                        )}
                                     </div>
                                 </div>
                             )

@@ -498,6 +498,38 @@ describe('Team calendar administration', () => {
         expect(cancel.from?.address).toBe(ctx.bob.user.email);
     });
 
+    // The guest was invited by the member who saved it, so the CANCEL of another member's delete names that member.
+    test("a member deleting another member's team event names its organizer in the CANCEL", async () => {
+        const teamHome = await getHome(teamOwnerId(adminTeamId));
+        const alice = makeSyntheticUser(ctx.alice.user.id, 'Alice', ctx.alice.user.email);
+        const bob = makeSyntheticUser(ctx.bob.user.id, 'Bob', ctx.bob.user.email);
+        const sent = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        try {
+            const event = await teamHome.calendar.createEvent(
+                adminTeamCalId,
+                {
+                    title: 'Team Review Alice Organized',
+                    startTime: new Date('2027-03-03T09:00:00Z'),
+                    endTime: new Date('2027-03-03T10:00:00Z'),
+                    allDay: false,
+                    data: { attendees: [{ email: 'erin.team@example.org', status: 'pending', role: 'required' }] },
+                },
+                alice,
+            );
+            await eventually(async () => sent.mock.calls[0]?.[0], 'the invitation');
+            sent.mockClear();
+
+            await teamHome.calendar.deleteEvent(adminTeamCalId, event.id, bob);
+            const cancel = await eventually(async () => sent.mock.calls[0]?.[0], 'the cancellation');
+
+            expect(cancel.subject).toBe('Canceled: Team Review Alice Organized');
+            expect(cancel.from?.address).toBe(ctx.alice.user.email);
+            expect(cancel.icalEvent?.content).toContain(`ORGANIZER;CN=Alice:mailto:${ctx.alice.user.email}`);
+        } finally {
+            sent.mockRestore();
+        }
+    });
+
     // The Admin app's team detail: the list is what it reads the default calendar and its shares off.
     test('an org admin who is not a team member reads the team calendar list and sets its shares', async () => {
         const listRes = await authedRequest(
