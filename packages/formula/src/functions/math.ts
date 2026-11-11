@@ -1,5 +1,5 @@
 // The functions on numbers. SUM and SUMPRODUCT loop over the planes of the columns they are given and copy no
-// range; ABS is the plain case of one number in and one out.
+// range; ABS is the plain case of one number in and one out. SUMIF and SUMIFS add what the criteria module matched.
 
 import type { Evaluator } from '../eval/evaluator';
 import { columnsOf, firstError, toArray } from '../eval/views';
@@ -8,7 +8,8 @@ import { VALUE } from '../values/errors';
 import { snapSum } from '../values/precision';
 import type { Reference, Value } from '../values/value';
 import { isArray, isError, isReference, OMITTED } from '../values/value';
-import { define, RANGE, scalar1 } from './registry';
+import { tally } from './criteria';
+import { define, FunctionFlag, optional, RANGE, SCALAR, scalar1 } from './registry';
 
 // The total is added in argument order, down each column of a reference, and only its last addition can snap to 0.
 // In a reference or an array a 0 is no addition, so a column is summed without looking at what its cells are.
@@ -105,4 +106,23 @@ export const MATH = [
     scalar1('ABS', toNumber, Math.abs),
     define('SUM', [RANGE], sum, 0, 1),
     define('SUMPRODUCT', [RANGE], sumproduct, 0, 1),
+    define(
+        'SUMIF',
+        [RANGE, SCALAR, optional(RANGE, OMITTED)],
+        (args, ctx) => {
+            const total = tally(ctx, args.slice(0, 2), args[2], true);
+            return total.error ?? total.sum;
+        },
+        FunctionFlag.ReadsUnnamed,
+    ),
+    define(
+        'SUMIFS',
+        [RANGE, RANGE, SCALAR],
+        (args, ctx) => {
+            const total = tally(ctx, args.slice(1), args[0], false);
+            return total.error ?? total.sum;
+        },
+        0,
+        2,
+    ),
 ];
