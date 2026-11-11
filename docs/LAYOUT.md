@@ -125,7 +125,7 @@ A row that depends on the selection or the document's state is disabled, such as
 
 ## A shown shortcut is the binding's own constant
 
-A menu row shows `formatForDisplay` of the constant its key handler binds, such as `PRINT_HOTKEY`, `ADD_COMMENT_HOTKEY` or `SHEET_HOTKEYS`, so the menu cannot name a key that does something else. The shared clipboard rows spell their keys, because the browser or each host binds them. ⌘K is the command palette in every app ([COMMAND-PALETTE.md](COMMAND-PALETTE.md)), so Insert › Link shows no shortcut, where Google's shows ⌘K.
+A menu row shows `formatForDisplay` of the constant its key handler binds, such as `PRINT_HOTKEY`, `ADD_COMMENT_HOTKEY` or `SHEET_HOTKEYS`, so the menu cannot name a key that does something else. The shared clipboard rows show the lib constants (`CUT_HOTKEY`, `SELECT_ALL_HOTKEY`, …) that the sheet's table and the canvas's keys bind too; Cut, Copy and Paste themselves are the browser's clipboard events, which every editor handles. ⌘K is the command palette in every app ([COMMAND-PALETTE.md](COMMAND-PALETTE.md)), so Insert › Link shows no shortcut, where Google's shows ⌘K.
 
 ## A row that deletes is red and last
 

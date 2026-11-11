@@ -29,7 +29,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Deleting a comment** — in Docs, Sheets, Slides, Vector and Stickies, the edit form of a comment or sticky has a Delete button, and deleting from it or from the comment's right-click menu asks you to confirm
 - **Menus in Docs** — the menus read File, Edit, Insert, Format, Tools. Edit has **Paste**, which asks your browser for the clipboard, and Print and Insert › Comment show their shortcuts, ⌘P and ⌥⌘M
 - **Links in Docs** — the link dialog matches the one in Sheets: it shows the selected text, waits for a valid address and edits a link the cursor is on. Right-clicking a link offers Open, Copy, Edit and Remove link
-- **Menus in Slides and Vector** — Edit has Cut, Copy, Paste, Duplicate and Delete for the selection, and Insert › **Comment** comments on the one object you selected
+- **Menus in Slides and Vector** — Edit has Cut, Copy, Paste, Select all, Duplicate and Delete, and Insert › **Comment** comments on the one object you selected
 - **Unread dots** — on a sticky or a comment in the pane, the red dot moves to the start of the card's footer, beside its replies
 - **Attachments in a row** — the files on a sticky or comment, a chat message and a mail sit in one row that scrolls sideways, so a card with many files no longer pushes its footer under the reply box
 - **Flat icon buttons** — icon-only buttons have no border in the edit form of a sticky or comment, Drive's file details, the add button of share dialogs and guest lists, and the remove-image button in properties panels, so they match the toolbars
