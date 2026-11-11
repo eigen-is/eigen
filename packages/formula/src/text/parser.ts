@@ -263,7 +263,8 @@ class Parser {
             else this.next();
             const right = this.expression(power + 1, union);
             height = Math.max(height, this.height);
-            const joinsReferences = op === Token.Space || op === Token.Comma;
+            // A number never stands beside a colon as a row would: each of these joins what may yield a reference.
+            const joinsReferences = op === Token.Colon || op === Token.Space || op === Token.Comma;
             if (joinsReferences && !(yieldsReference(left) && yieldsReference(right))) return this.fail();
             left =
                 op === Token.Colon
@@ -277,9 +278,7 @@ class Parser {
     }
 
     // The node of a colon between two operands, which is where a range that was not read as one reference is built.
-    // Each operand must be able to yield a reference, so a number never stands beside a colon as a row would.
     private colon(left: FormulaNode, right: FormulaNode, space: string): FormulaNode {
-        if (!yieldsReference(left) || !yieldsReference(right)) return this.fail();
         if (space === '') {
             const before = left.kind === NodeKind.Binary ? left.children[1] : left;
             let after = right;
@@ -343,10 +342,7 @@ class Parser {
                 this.next();
                 // Typed text may hold Excel's spelling of a reference to a deleted sheet, #REF!A1. The error forgets
                 // the cells, so they are read and dropped.
-                const cells = this.kind === Token.Word || this.kind === Token.Number;
-                if (code === REF_ERROR && !this.stored && this.space === '' && cells) {
-                    this.reference('', SheetKind.Host, '');
-                }
+                if (code === REF_ERROR && !this.stored && this.space === '') this.reference('', SheetKind.Host, '');
                 return leaf(NodeKind.Error, code, '', space, SheetKind.Host, '');
             }
             case Token.Plus:
@@ -559,7 +555,6 @@ class Parser {
                 return leaf(NodeKind.Name, 0, name, space, sheetKind, sheet);
             }
         }
-        if (this.kind !== Token.Word && this.kind !== Token.Number) return this.fail();
         const reference = this.reference(space, sheetKind, sheet);
         if (reference) return reference;
         return this.kind === Token.Word ? this.name(space, sheetKind, sheet) : this.fail();
