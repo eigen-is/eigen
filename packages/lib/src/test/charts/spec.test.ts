@@ -135,7 +135,8 @@ describe('the stored parts', () => {
                 { op: 'set', path: ['axes', 'y', 'scale', 'min'], value: 0 },
                 { op: 'set', path: ['plots', 'bar', 'stacking'], value: 'percent' },
                 { op: 'set', path: ['series', 's-2', 'color'], value: null },
-                { op: 'move', from: ['points', 's-1', '3'], path: ['points', 's-1', '2'] },
+                { op: 'remove', path: ['points', 's-1', '3'] },
+                { op: 'set', path: ['points', 's-1', '2', 'color'], value: '#eb6834' },
             ]),
         ).toEqual([
             { key: 'specTitle', value: JSON.stringify({ text: 'New' }) },
@@ -163,7 +164,6 @@ describe('the stored parts', () => {
         const removes: ChartSpecChange = [
             { op: 'remove', path: ['points', 's-1', '5'] },
             { op: 'remove', path: ['points', 's-3', '0'] },
-            { op: 'move', from: ['points', 's-2', '1'], path: ['points', 's-2', '0'] },
         ];
         expect(chartSpecWrites(readChartSpec(parts()).stored, removes)).toEqual({});
         expect(sheetChartSpecWrites(readChartSpec(sheet()).stored, removes)).toEqual([]);

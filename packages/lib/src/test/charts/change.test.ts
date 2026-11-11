@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { applyChartSpecChange, chartPointMoves, chartSpecChange, MAX_CHART_POINTS } from '../../charts';
+import { applyChartSpecChange, chartSpecChange } from '../../charts';
 import type { ChartSpecChange, StoredChartSpec } from '../../types/chart';
 import { chart, stored } from './spec-fixtures';
 
@@ -87,12 +87,6 @@ describe('applyChartSpecChange', () => {
         expect(apply([{ op: 'remove', path: ['nothing', 'here'] }])).toEqual(parsed());
     });
 
-    test('a move takes the value to its new path, and nothing at from leaves nothing there', () => {
-        const next = apply([{ op: 'move', from: ['future'], path: ['past'] }]);
-        expect([next.future, next.past]).toEqual([undefined, 1]);
-        expect(apply([{ op: 'move', from: ['nothing'], path: ['future'] }]).future).toBeUndefined();
-    });
-
     test('the records it makes and copies have no prototype', () => {
         const next = apply([{ op: 'set', path: ['points', 's-1', '3', 'color'], value: '#eb6834' }]);
         expect(Object.getPrototypeOf(next)).toBeNull();
@@ -106,7 +100,6 @@ describe('applyChartSpecChange', () => {
                 { op: 'set', path: [key, 'polluted'], value: true },
                 { op: 'set', path: ['axes', key], value: { polluted: true } },
                 { op: 'remove', path: [key] },
-                { op: 'move', from: ['future'], path: [key] },
             ];
             expect(applyChartSpecChange(before, change)).toBe(before);
         }
@@ -118,76 +111,5 @@ describe('applyChartSpecChange', () => {
         const next = applyChartSpecChange(read, [{ op: 'set', path: ['title', 'text'], value: 'New' }]);
         expect(JSON.stringify(next)).toContain('"__proto__":{"polluted":true}');
         expect(Object.hasOwn(Object.prototype, 'polluted')).toBe(false);
-    });
-});
-
-describe('chartPointMoves', () => {
-    const points = (colors: Record<number, string>) => ({
-        points: { 's-1': Object.fromEntries(Object.entries(colors).map(([i, color]) => [i, { color, future: i }])) },
-    });
-    const moved = (before: Record<number, string>, target: (index: number) => number | null) =>
-        JSON.parse(JSON.stringify(applyChartSpecChange(points(before), chartPointMoves(points(before), target))))
-            .points['s-1'];
-
-    test('a delete removes its points and moves the ones after it down, unknown keys with them', () => {
-        const after = moved({ 0: '#000000', 1: '#000001', 2: '#000002', 3: '#000003' }, (i) =>
-            i === 1 ? null : i > 1 ? i - 1 : i,
-        );
-        expect(after).toEqual({
-            0: { color: '#000000', future: '0' },
-            1: { color: '#000002', future: '2' },
-            2: { color: '#000003', future: '3' },
-        });
-    });
-
-    test('an insert moves the points after it up, from the highest, leaving the inserted ones automatic', () => {
-        const after = moved({ 0: '#000000', 1: '#000001', 2: '#000002' }, (i) => (i >= 1 ? i + 1 : i));
-        expect(after).toEqual({
-            0: { color: '#000000', future: '0' },
-            2: { color: '#000001', future: '1' },
-            3: { color: '#000002', future: '2' },
-        });
-    });
-
-    // An xlsx pie can store a point on every slice, and each row op moves them all. Timed against a tenth of the
-    // points: linear is about 10x, a copy per move 100x. CPU time, not the wall clock, because a loaded runner
-    // preempts the long run far more often than the short one. Both sizes run once before the clock so the JIT is
-    // warm for each, ten rounds lift the short run above the clock's grain, and the two sizes take turns and keep
-    // their fastest of five, so a GC pause in one run fails nothing.
-    test('applies a move of every point in linear time', () => {
-        const shift = (i: number) => (i === 0 ? null : i - 1);
-        const applying = (count: number) => {
-            const stored = points(Object.fromEntries(Array.from({ length: count }, (_, i) => [i, '#000000'])));
-            const change = chartPointMoves(stored, shift);
-            return () => applyChartSpecChange(stored, change);
-        };
-        const cpu = (run: () => unknown) => {
-            const started = process.cpuUsage();
-            for (let round = 0; round < 10; round += 1) run();
-            const { user, system } = process.cpuUsage(started);
-            return user + system;
-        };
-        const large = applying(MAX_CHART_POINTS);
-        const small = applying(MAX_CHART_POINTS / 10);
-        large();
-        small();
-        let fastestLarge = Infinity;
-        let fastestSmall = Infinity;
-        for (let turn = 0; turn < 5; turn += 1) {
-            fastestLarge = Math.min(fastestLarge, cpu(large));
-            fastestSmall = Math.min(fastestSmall, cpu(small));
-        }
-        expect(fastestLarge).toBeLessThan(30 * fastestSmall);
-        const after = moved(
-            Object.fromEntries(Array.from({ length: MAX_CHART_POINTS }, (_, i) => [i, '#000000'])),
-            shift,
-        );
-        expect(Object.keys(after)).toHaveLength(MAX_CHART_POINTS - 1);
-        expect(after[MAX_CHART_POINTS - 2]).toEqual({ color: '#000000', future: String(MAX_CHART_POINTS - 1) });
-    });
-
-    test('only a stored point moves, and an index that stays writes nothing', () => {
-        expect(moved({ 1: '#000001' }, (i) => (i === 0 ? 1 : null))).toEqual({});
-        expect(chartPointMoves(points({ 0: '#000000', 1: '#000001', 2: '#000002' }), (i) => i)).toEqual([]);
     });
 });

@@ -963,11 +963,9 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
 
     describe('points', () => {
         const COLORS = ['#000001', '#000002', '#000003', '#000004', '#000005'];
-        // Categories A1:A5, values B1:B5, a slice color on each point beside a key this build doesn't know, and the
-        // same points on a second series and on a series id the data doesn't name.
-        const pie = (categories: CellRangeRef | null = ref('S', [0, 4], [0, 0])) => {
-            const values = ref('S', [0, 4]);
-            const c = chart({ categories, series: [series(values), { ...series(values), id: 'other' }] });
+        // Categories A1:A5, values B1:B5, a slice color on each point beside a key this build doesn't know.
+        const pie = () => {
+            const c = chart({ categories: ref('S', [0, 4], [0, 0]), series: [series(ref('S', [0, 4]))] });
             const spec = readChartSpec(c).spec!;
             const points = Object.fromEntries(COLORS.map((color, i) => [i, { color, future: color }]));
             return {
@@ -975,67 +973,23 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
                 ...newSheetChartSpecParts({
                     ...spec,
                     chart: { ...spec.chart, type: 'pie' },
-                    points: { 's-1': points, other: points, gone: points },
+                    points: { 's-1': points },
                 }),
             };
         };
-        // The stored points of a series by index, each its color.
-        const sliceColors = (sheet: Sheet, id = 's-1') => {
-            const entries = Object.entries(sheet.charts!.c1.specPoints).filter(([key]) => key.startsWith(`${id}/`));
-            return Object.fromEntries(
-                entries.map(([key, text]) => {
-                    const point: { color: string; future: string } = JSON.parse(text);
-                    expect(point.future).toBe(point.color);
-                    return [key.slice(id.length + 1), point.color];
-                }),
-            );
-        };
-        const ALL = { 0: '#000001', 1: '#000002', 2: '#000003', 3: '#000004', 4: '#000005' };
         const deleteRows = (start: number, end: number) => ({ type: 'row', start, end, id: 'S' }) as const;
 
-        test('a delete inside the categories drops the deleted points, and every series’ points after them move', () => {
-            const [s] = applySheetsDeleteRowCol(workbook({ c1: pie() }), deleteRows(2, 2));
-            expect(rangeData(s)?.categories?.row).toEqual([0, 3]);
-            const kept = { 0: '#000001', 1: '#000002', 2: '#000004', 3: '#000005' };
-            expect(sliceColors(s)).toEqual(kept);
-            expect(sliceColors(s, 'other')).toEqual(kept);
-            expect(sliceColors(s, 'gone')).toEqual({});
-            expect(readChartSpec(s.charts!.c1).spec?.points['s-1'][2]).toEqual({ color: '#000004' });
-        });
-
-        test('a chart this build can’t draw moves its points as a pie does', () => {
-            const scatter = {
-                ...pie(),
-                specChart: JSON.stringify({ ...JSON.parse(pie().specChart), type: 'scatter' }),
-            };
-            const [s] = applySheetsDeleteRowCol(workbook({ c1: scatter }), deleteRows(1, 1));
-            expect(sliceColors(s)).toEqual({ 0: '#000001', 1: '#000003', 2: '#000004', 3: '#000005' });
-        });
-
-        test('an insert inside the categories leaves the inserted points automatic', () => {
-            const [s] = applySheetsInsertRowCol(workbook({ c1: pie() }), insertRows(2, 2, 'lefttop'));
-            expect(rangeData(s)?.categories?.row).toEqual([0, 6]);
-            expect(sliceColors(s)).toEqual({ 0: '#000001', 1: '#000002', 4: '#000003', 5: '#000004', 6: '#000005' });
-        });
-
-        test('a chart without categories keeps its points with its first series’ values', () => {
-            const [s] = applySheetsDeleteRowCol(workbook({ c1: pie(null) }), deleteRows(0, 0));
-            expect(sliceColors(s)).toEqual({ 0: '#000002', 1: '#000003', 2: '#000004', 3: '#000005' });
-        });
-
-        test('an op outside the categories or across them keeps the points', () => {
-            const [below] = applySheetsDeleteRowCol(workbook({ c1: pie() }), deleteRows(6, 7));
-            expect(sliceColors(below)).toEqual(ALL);
-            const [moved] = applySheetsInsertRowCol(workbook({ c1: pie() }), insertRows(0, 1, 'lefttop'));
-            expect(rangeData(moved)?.categories?.row).toEqual([1, 5]);
-            expect(sliceColors(moved)).toEqual(ALL);
-            const [column] = applySheetsDeleteRowCol(workbook({ c1: pie() }), {
-                type: 'column',
-                start: 2,
-                end: 2,
-                id: 'S',
-            });
-            expect(sliceColors(column)).toEqual(ALL);
+        // Google's rule: a slice color belongs to its index, so the slice that takes a deleted row's place takes its
+        // color too.
+        test('a delete or an insert inside the categories moves the refs and leaves every point at its index', () => {
+            const c1 = (sheet: Sheet) => sheet.charts!.c1;
+            const [deleted] = applySheetsDeleteRowCol(workbook({ c1: pie() }), deleteRows(2, 2));
+            expect(rangeData(deleted)?.categories?.row).toEqual([0, 3]);
+            expect(c1(deleted).specPoints).toEqual(pie().specPoints);
+            expect(readChartSpec(c1(deleted)).spec?.points['s-1'][2]).toEqual({ color: '#000003' });
+            const [inserted] = applySheetsInsertRowCol(workbook({ c1: pie() }), insertRows(2, 2, 'lefttop'));
+            expect(rangeData(inserted)?.categories?.row).toEqual([0, 6]);
+            expect(c1(inserted).specPoints).toEqual(pie().specPoints);
         });
 
         test('a bar chart’s spec changes only in its refs', () => {

@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2159 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2158 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1018,7 +1018,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1177)
+## Utilities & constants (1176)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1154,7 +1154,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `chartPaintOf` | `@workspace/lib/charts` | packages/lib/src/charts/look.ts |
 | `chartPointColor` | `@workspace/lib/charts` | packages/lib/src/charts/defaults.ts |
 | `chartPointIndex` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
-| `chartPointMoves` | `@workspace/lib/charts` | packages/lib/src/charts/change.ts |
 | `chartSearchText` | `@workspace/lib/charts` | packages/lib/src/charts/resolve.ts |
 | `chartSeriesStyle` | `@workspace/lib/charts` | packages/lib/src/charts/defaults.ts |
 | `chartSpecChange` | `@workspace/lib/charts` | packages/lib/src/charts/change.ts |

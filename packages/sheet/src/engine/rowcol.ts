@@ -91,30 +91,6 @@ export function shiftRangeForDelete<R extends AxisRange>(
     return op.type === 'row' ? { ...range, row: span } : { ...range, column: span };
 }
 
-// A chart's points, a pie's slice colors among them, go by index along its categories, so an insert inside them leaves
-// the new points automatic and moves the ones after up. Only a ref that runs along the op's axis has points there.
-function pointsForInsert(ref: CellRangeRef, op: InsertRowColOp): ((index: number) => number) | null {
-    if (!runsAlong(ref, op.type)) return null;
-    const [start, end] = op.type === 'row' ? ref.row : ref.column;
-    const at = lineMove(op).at - start;
-    if (at <= 0 || at > end - start) return null;
-    return (index) => (index >= at ? index + op.count : index);
-}
-
-// A delete drops the deleted points, so the points after them keep theirs.
-function pointsForDelete(ref: CellRangeRef, op: DeleteRowColOp): ((index: number) => number | null) | null {
-    if (!runsAlong(ref, op.type)) return null;
-    const [start, end] = op.type === 'row' ? ref.row : ref.column;
-    const first = Math.max(op.start, start) - start;
-    const last = Math.min(op.end, end) - start;
-    if (first > last) return null;
-    return (index) => (index < first ? index : index > last ? index - (last - first + 1) : null);
-}
-
-function runsAlong(ref: CellRangeRef, type: 'row' | 'column'): boolean {
-    return type === 'row' ? ref.column[0] === ref.column[1] : ref.row[0] === ref.row[1];
-}
-
 export function shiftMergeForInsert(
     cfg: ExtendedSheetConfig,
     type: 'row' | 'column',
@@ -214,20 +190,18 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
     );
 }
 
-// A chart ref names its sheet by id, so an op moves the refs to its sheet on every sheet's charts, and the points along
-// them. Only a chart whose refs moved is rewritten.
+// A chart ref names its sheet by id, so an op moves the refs to its sheet on every sheet's charts. Only a chart whose
+// refs moved is rewritten.
 function shiftChartsAcrossSheets<S extends Sheet>(
     sheets: S[],
     sheetId: string,
     shift: (ref: CellRangeRef) => CellRangeRef | null,
-    shiftPoints: (ref: CellRangeRef) => ((index: number) => number | null) | null,
 ): S[] {
     const move = (ref: CellRangeRef) => (ref.sheetId === sheetId ? shift(ref) : ref);
-    const points = (ref: CellRangeRef) => (ref.sheetId === sheetId ? shiftPoints(ref) : null);
     return sheets.map((sheet) => {
         let charts: Record<string, SheetChart> | null = null;
         for (const chart of Object.values(sheet.charts ?? {})) {
-            const moved = mapChartRefs(chart, move, points);
+            const moved = mapChartRefs(chart, move);
             if (moved === chart) continue;
             charts ??= { ...sheet.charts };
             charts[chart.id] = moved;
@@ -326,12 +300,7 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
         count,
         'add',
     );
-    return shiftChartsAcrossSheets(
-        shifted,
-        op.id,
-        (ref) => shiftRangeForInsert(ref, op),
-        (ref) => pointsForInsert(ref, op),
-    );
+    return shiftChartsAcrossSheets(shifted, op.id, (ref) => shiftRangeForInsert(ref, op));
 }
 
 export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op: DeleteRowColOp): S[] {
@@ -393,12 +362,7 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
         removeCount,
         'del',
     );
-    return shiftChartsAcrossSheets(
-        shifted,
-        op.id,
-        (ref) => shiftRangeForDelete(ref, op),
-        (ref) => pointsForDelete(ref, op),
-    );
+    return shiftChartsAcrossSheets(shifted, op.id, (ref) => shiftRangeForDelete(ref, op));
 }
 
 function shiftLineMaps(cfg: ExtendedSheetConfig, next: ExtendedSheetConfig, type: 'row' | 'column', move: LineMove) {
