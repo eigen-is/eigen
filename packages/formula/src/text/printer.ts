@@ -4,37 +4,12 @@
 // #REF! for a reference that falls off the grid there or names a sheet that is gone.
 
 import { columnLabel, GRID_COLUMNS, GRID_ROWS } from './a1';
-import { Token } from './lexer';
-import { isBareSheetName, quotedSheetName, quoteSheetName } from './sheet-name';
+import { ERROR_LITERALS, SYMBOLS } from './lexer';
+import { quotedSheetName, quoteSheetName } from './sheet-name';
 import type { FormulaNode } from './tree';
 import { NodeKind, RefFlag, RefKind, SheetKind } from './tree';
 
-type SheetNames = (id: string) => string | undefined;
-
-// An intersection has no symbol: its whitespace is the operator.
-const SYMBOLS: Record<number, string> = {
-    [Token.Space]: '',
-    [Token.Colon]: ':',
-    [Token.Comma]: ',',
-    [Token.Plus]: '+',
-    [Token.Minus]: '-',
-    [Token.At]: '@',
-    [Token.Percent]: '%',
-    [Token.Hash]: '#',
-    [Token.Power]: '^',
-    [Token.Multiply]: '*',
-    [Token.Divide]: '/',
-    [Token.Concat]: '&',
-    [Token.Equal]: '=',
-    [Token.NotEqual]: '<>',
-    [Token.Less]: '<',
-    [Token.LessEqual]: '<=',
-    [Token.Greater]: '>',
-    [Token.GreaterEqual]: '>=',
-};
-
-// Another workbook's prefix as a file writes it bare: an index, then a sheet name that needs no quotes.
-const BARE_EXTERNAL = /^\[\d+\](?:[\p{L}_][\p{L}\p{N}_.]*)?$/u;
+export type SheetNames = (id: string) => string | undefined;
 
 export function printStored(tree: FormulaNode): string {
     return `=${print(tree, true, 0, 0, noName)}`;
@@ -65,7 +40,8 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
         case NodeKind.Error:
         case NodeKind.Name: {
             const prefix = sheetPrefix(node, stored, sheetName);
-            return space + (prefix === null ? '#REF!' : prefix + node.text);
+            if (prefix === null) return `${space}#REF!`;
+            return space + prefix + (node.kind === NodeKind.Name ? node.text : ERROR_LITERALS[node.value - 1]);
         }
         case NodeKind.Ref:
             return space + reference(node, stored, row, column, sheetName);
@@ -80,8 +56,15 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
         case NodeKind.Postfix:
             return print(children[0], stored, row, column, sheetName) + space + SYMBOLS[node.op];
         case NodeKind.Binary: {
-            const left = print(children[0], stored, row, column, sheetName);
-            return left + space + SYMBOLS[node.op] + print(children[1], stored, row, column, sheetName);
+            // A sum of thousands of terms is a chain that deep down its left operands, so it is read in a loop.
+            let chain = node;
+            let text = '';
+            while (chain.kind === NodeKind.Binary) {
+                const right = print(chain.children[1], stored, row, column, sheetName);
+                text = chain.space + SYMBOLS[chain.op] + right + text;
+                chain = chain.children[0];
+            }
+            return print(chain, stored, row, column, sheetName) + text;
         }
         case NodeKind.Paren:
             return `${space}(${print(children[0], stored, row, column, sheetName)}${node.spaceEnd})`;
@@ -123,9 +106,8 @@ function sheetPrefix(node: FormulaNode, stored: boolean, sheetName: SheetNames):
         case SheetKind.Name:
             return `${stored ? quotedSheetName(sheet) : quoteSheetName(sheet)}!`;
         case SheetKind.External:
-            return `${stored || !BARE_EXTERNAL.test(sheet) ? quotedSheetName(sheet) : sheet}!`;
         case SheetKind.Span:
-            return `${stored || !sheet.split(':').every(isBareSheetName) ? quotedSheetName(sheet) : sheet}!`;
+            return `${quotedSheetName(sheet)}!`;
     }
 }
 

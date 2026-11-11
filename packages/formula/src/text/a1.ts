@@ -6,16 +6,17 @@
 export const GRID_ROWS = 1048576;
 export const GRID_COLUMNS = 16384;
 
-// The column a label names, from 0, or -1 for text that is not one to three letters.
-export function columnIndex(label: string): number {
-    if (label.length === 0 || label.length > 3) return -1;
+// The column a label names, from 0, or -1 for text that names no column of the grid. The label may be a part of a
+// longer text, from `from` up to `to`.
+export function columnIndex(label: string, from = 0, to = label.length): number {
+    if (to === from || to - from > 3) return -1;
     let column = 0;
-    for (let i = 0; i < label.length; i += 1) {
+    for (let i = from; i < to; i += 1) {
         const letter = (label.charCodeAt(i) | 32) - 96;
         if (letter < 1 || letter > 26) return -1;
         column = column * 26 + letter;
     }
-    return column - 1;
+    return column > GRID_COLUMNS ? -1 : column - 1;
 }
 
 export function columnLabel(column: number): string {
