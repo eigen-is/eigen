@@ -356,6 +356,26 @@ describe('Occurrence edits of an invited series', () => {
         expect(occurrences.some((e) => e.occurrenceDate === target)).toBe(false);
     });
 
+    // Someone can be invited to one date only, so a series' guests are every date's as well as its own.
+    test('deleting a series cancels it for the guests of one date only', async () => {
+        const CAROL = 'carol.date-only@example.org';
+        const series = await createSeries('Weekly Date Guests Delete', []);
+        const date = '2027-02-09';
+        const attendees = [...guests(), { email: CAROL, name: 'Carol', status: 'pending', role: 'required' }];
+        await editOccurrence(series.id, date, { title: 'Date Guests Only', data: { attendees } });
+        await untilBob(series.uid, (occ) => occ.length === 1);
+
+        const { ics } = await cancelMailTo(CAROL, () =>
+            authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${series.id}`,
+                { method: 'DELETE' },
+            ),
+        );
+        expect(ics).toContain('STATUS:CANCELLED');
+        await untilBob(series.uid, (occ) => occ.length === 0);
+    });
+
     // RFC 5546 § 2.1.4: each CANCEL raises the SEQUENCE. Eigen raises the series', which a guest who never got the date
     // on its own holds it at, so a CANCEL naming the date's older number could be dropped as stale.
     test("a cancelled date's CANCEL carries the series' SEQUENCE", async () => {

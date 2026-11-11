@@ -114,13 +114,21 @@ export async function deleteEvent(
     user?: User,
     expectedEtag?: string,
 ): Promise<void> {
-    const existing = await calendar.writeLock.run(() => eraseStoredEvent(calendar, calendarId, id, expectedEtag));
-    if (!existing) return;
+    const erased = await calendar.writeLock.run(async () => {
+        // Someone can be invited to one date only, so a series' guests are every date's too.
+        const dates = exceptionsOf(calendar, id);
+        const existing = await eraseStoredEvent(calendar, calendarId, id, expectedEtag);
+        return existing && { existing, dates };
+    });
+    if (!erased) return;
+    const { existing, dates } = erased;
 
     // A cancelled master answers and cancels nothing: its PUT already fanned out STATUS:CANCELLED.
     const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
     const invitation = isInvitationFromOthers(series ?? existing, calendar.home.user.email) ? existing.data : null;
-    const held = existing.status === 'cancelled' ? [] : (existing.data?.attendees ?? []);
+    const live = existing.status === 'cancelled' ? [] : [existing, ...dates.filter((d) => d.status !== 'cancelled')];
+    const listed = live.flatMap((event) => event.data?.attendees ?? []);
+    const held = [...new Map(listed.map((a) => [a.email.toLowerCase(), a])).values()];
     const declining = user && held.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
     if (declining && invitation?.organizer) {
         const orgUserId = invitation.organizer.userId;
@@ -138,7 +146,8 @@ export async function deleteEvent(
         }
     } else if (!invitation && held.length) {
         // An event with no foreign organizer makes this user its organizer, and an organizer's delete cancels.
-        const organizer = organizerOf(calendar.home, user, existing.data?.organizer);
+        const stored = live.find((event) => event.data?.organizer)?.data?.organizer;
+        const organizer = organizerOf(calendar.home, user, stored);
         propagateCancellation(calendar.home, organizer, existing, held, series ?? undefined).catch(console.error);
     }
 
