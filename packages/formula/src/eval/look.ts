@@ -19,7 +19,7 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
     for (let p = 0; p < params.length; p += 1) {
         const { family, rest } = params[p];
         if (family === null) {
-            args[p] = held[p];
+            args[p] = rest ? held.slice(p, count) : held[p];
             continue;
         }
         const to = rest ? count : p + 1;

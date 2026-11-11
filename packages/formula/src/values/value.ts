@@ -5,7 +5,7 @@
 
 import type { FormulaError } from './errors';
 
-export const ValueType = { Error: 1, Reference: 2, Array: 3, Omitted: 4 } as const;
+export const ValueType = { Error: 1, Reference: 2, Array: 3, Omitted: 4, Lazy: 5 } as const;
 
 export type Scalar = number | string | boolean | null | FormulaError;
 

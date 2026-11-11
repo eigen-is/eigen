@@ -4,6 +4,7 @@
 
 import type { FormulaError } from '../values/errors';
 import type { ArrayValue, Scalar, Value } from '../values/value';
+import { ValueType } from '../values/value';
 import type { Family } from './families';
 
 export const MAX_ARGUMENTS = 255;
@@ -13,12 +14,14 @@ export const Prepare = {
     Scalar: 0,
     // Kept as it is, a reference unread: every value of it is taken, and an array never lifts the call.
     Walked: 1,
+    // Not evaluated: the slot holds a token, and the argument is evaluated when the body answers with it.
+    Lazy: 2,
 } as const;
 
 export type Prepare = (typeof Prepare)[keyof typeof Prepare];
 
 // How a prepared argument becomes what the body gets. An error ends the call for every reading before Any.
-export const Read = { Number: 0, Integer: 1, Text: 2, Boolean: 3, Walked: 4, Any: 5 } as const;
+export const Read = { Number: 0, Integer: 1, Text: 2, Boolean: 3, Walked: 4, Any: 5, Lazy: 6 } as const;
 
 export type Read = (typeof Read)[keyof typeof Read];
 
@@ -42,10 +45,18 @@ export type Param<T> = {
 
 export type Walked<T> = Param<T> & { readonly prepare: typeof Prepare.Walked };
 
-// What a slot of a call holds: an argument as prepared and, once read, what the body gets for it.
-export type Held = Value | undefined;
+// What a body gets for a lazy argument. It can only answer with it: the wrapper then evaluates that argument.
+export type Lazy = { readonly type: typeof ValueType.Lazy; readonly index: number };
 
-export type Result = Scalar | ArrayValue;
+// The token of each argument place, made once.
+export const TOKENS: readonly Lazy[] = Array.from({ length: MAX_ARGUMENTS }, (_, index) =>
+    Object.freeze({ type: ValueType.Lazy, index }),
+);
+
+// What a slot of a call holds: an argument as prepared and, once read, what the body gets for it.
+export type Held = Value | Lazy | undefined;
+
+export type Result = Scalar | ArrayValue | Lazy;
 
 export type Entry = {
     readonly name: string;

@@ -6,7 +6,7 @@
 import type { Family } from '../eval/families';
 import { Families } from '../eval/families';
 import type { Numbers } from '../eval/readers';
-import type { Entry, Param, Walked } from '../eval/signature';
+import type { Entry, Lazy, Param, Walked } from '../eval/signature';
 import { MAX_ARGUMENTS, Prepare, Read } from '../eval/signature';
 import { toBoolean, toNumber, toText } from '../values/coerce';
 import type { ArrayValue, Scalar } from '../values/value';
@@ -37,6 +37,9 @@ export const BOOLEAN = scalar<boolean>(Read.Boolean);
 // The value as it is, an error included, for a function that asks what a value is.
 export const ANY = scalar<Scalar>(Read.Any);
 
+// Not evaluated. The body may answer with it, and the wrapper then evaluates the argument: an empty one is a blank.
+export const LAZY: Param<Lazy> = Object.freeze({ ...REQUIRED, prepare: Prepare.Lazy, read: Read.Lazy });
+
 // Every number of a range or an array. Typed as an argument, a text is read as a number and a boolean is 1 or 0.
 export const NUMBERS = walked(Families.Numbers);
 // The numbers, to be counted: a typed text counts when it reads as a number, and an error is passed over.
@@ -47,31 +50,44 @@ export const FILLED = walked(Families.Filled);
 export const TRUTHS = walked(Families.Truths);
 
 // The argument may be left out at the end, and the body then gets `fallback`. An empty argument is still a blank.
-export function optional<T>(param: Param<T>, fallback: NoInfer<T> & Scalar): Param<T> {
+// Of a lazy argument the fallback is what the call answers when its token comes back.
+export function optional(param: Param<Lazy>, fallback: Scalar): Param<Lazy>;
+export function optional<T>(param: Param<T>, fallback: NoInfer<T> & Scalar): Param<T>;
+export function optional(param: Param<unknown>, fallback: Scalar): Param<unknown> {
     return Object.freeze({ ...param, optional: true, fallback });
 }
 
-// The parameter takes every argument from its own to the last, as one reader over all of them.
-export function rest<T>(param: Walked<T>): Param<T> {
+// The parameter takes every argument from its own to the last: as one reader over all of them, or as a list.
+export function rest<T>(param: Walked<T>): Param<T>;
+export function rest<T>(param: Param<T>): Param<readonly T[]>;
+export function rest(param: Param<unknown>): Param<unknown> {
     return Object.freeze({ ...param, rest: true });
 }
 
 type Args<P extends readonly Param<unknown>[]> = { [K in keyof P]: P[K] extends Param<infer T> ? T : never };
 
+// A token only where a parameter is lazy.
+type Picks<P extends readonly Param<unknown>[]> = true extends {
+    [K in keyof P]: P[K] extends Param<Lazy> ? true : false;
+}[number]
+    ? Lazy
+    : never;
+
 export function fn<const P extends readonly Param<unknown>[]>(
     name: string,
     params: P,
-    body: (...args: Args<P>) => Scalar | ArrayValue,
+    body: (...args: Args<P>) => Scalar | ArrayValue | Picks<P>,
 ): Entry {
     let min = 0;
     let plain = true;
     params.forEach((param, at) => {
         if (param.rest && at < params.length - 1)
             throw new Error(`${name}: a repeating parameter that is not the last`);
-        if (param.optional && reads(param) !== param.fallback) throw new Error(`${name}: a fallback of another kind`);
+        if (param.optional && param.read !== Read.Lazy && reads(param) !== param.fallback)
+            throw new Error(`${name}: a fallback of another kind`);
         if (!param.optional && min < at) throw new Error(`${name}: a required parameter after an optional one`);
         if (!param.optional) min += 1;
-        plain &&= param.prepare === Prepare.Scalar;
+        plain &&= param.prepare !== Prepare.Walked && !param.rest;
     });
     const repeats = params.at(-1)?.rest === true;
     const fixed = repeats ? params.length - 1 : params.length;

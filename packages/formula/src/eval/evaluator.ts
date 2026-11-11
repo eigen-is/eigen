@@ -91,7 +91,9 @@ export class Evaluator {
                 // Nothing spills in this build, so no cell is an anchor.
                 if (node.op === Token.Hash) return REF;
                 const value = this.operand(node.children[0], sheet, row, column);
-                return isArray(value) ? lift(this, LIFTED_PERCENT, [value], 1) : percent(value);
+                return isArray(value)
+                    ? lift(this, LIFTED_PERCENT, [value], 1, node, sheet, row, column)
+                    : percent(value);
             }
             case NodeKind.Binary:
                 return this.binary(node, sheet, row, column, false);
@@ -198,7 +200,7 @@ export class Evaluator {
         if (node.op === Token.Plus) return this.operand(child, sheet, row, column);
         if (node.op === Token.Minus) {
             const value = this.operand(child, sheet, row, column);
-            return isArray(value) ? lift(this, LIFTED_NEGATE, [value], 1) : negate(value);
+            return isArray(value) ? lift(this, LIFTED_NEGATE, [value], 1, node, sheet, row, column) : negate(value);
         }
         const value = this.evaluate(child, sheet, row, column);
         if (isArray(value)) return value.items[0];
@@ -241,7 +243,7 @@ export class Evaluator {
         }
         const a = this.read(left);
         const b = this.operand(node.children[1], sheet, row, column);
-        if (isArray(a) || isArray(b)) return lift(this, LIFTED_BINARY[op], [a, b], 2);
+        if (isArray(a) || isArray(b)) return lift(this, LIFTED_BINARY[op], [a, b], 2, node, sheet, row, column);
         return operate(op, a, b, snap);
     }
 

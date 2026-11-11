@@ -11,7 +11,7 @@ import { toBoolean, toNumber, toText } from '../values/coerce';
 import { NAME, VALUE } from '../values/errors';
 import { parseNumber } from '../values/parse-number';
 import type { Value } from '../values/value';
-import { isArray, isError } from '../values/value';
+import { isArray, isError, ValueType } from '../values/value';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Errors, TypedText } from './families';
@@ -20,8 +20,8 @@ import { lift } from './lift';
 import { look } from './look';
 import { real } from './operators';
 import { Frame } from './readers';
-import type { Entry, Held, Param, Result } from './signature';
-import { Prepare, Read } from './signature';
+import type { Entry, Held, Lazy, Param, Result } from './signature';
+import { Prepare, Read, TOKENS } from './signature';
 
 const LONGEST_TEXT = 32767;
 
@@ -41,17 +41,19 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
     let lifted = false;
     for (let i = 0; i < size; i += 1) {
         let value: Held;
-        if (i >= count) value = undefined;
+        const { prepare } = slotOf(entry, i);
+        if (prepare === Prepare.Lazy) value = TOKENS[i];
+        else if (i >= count) value = undefined;
         // An argument left empty is a blank, and is read as one.
         else if (given[i].kind === NodeKind.Empty) value = null;
-        else if (slotOf(entry, i).prepare === Prepare.Scalar) {
+        else if (prepare === Prepare.Scalar) {
             value = ctx.operand(given[i], sheet, row, column);
             if (isArray(value)) lifted = true;
         } else value = ctx.evaluate(given[i], sheet, row, column);
         held[i] = value;
     }
-    let result: Value | null = null;
-    if (lifted) result = lift(ctx, entry, held, count);
+    let result: Value | Lazy | null = null;
+    if (lifted) result = lift(ctx, entry, held, count, node, sheet, row, column);
     else {
         for (let i = 0; i < size && result === null; i += 1) {
             const param = slotOf(entry, i);
@@ -60,9 +62,32 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
             held[i] = value;
         }
         result ??= run(ctx, entry, held, count);
+        if (isLazy(result)) result = picked(ctx, entry, result, node, sheet, row, column);
     }
     ctx.calls = level;
     return result;
+}
+
+export function isLazy(value: Held): value is Lazy {
+    return typeof value === 'object' && value !== null && value.type === ValueType.Lazy;
+}
+
+// The argument a token names, evaluated now: a reference stays one. The token must be of this call's own.
+export function picked(
+    ctx: Evaluator,
+    entry: Entry,
+    token: Lazy,
+    node: FormulaNode,
+    sheet: Sheet,
+    row: number,
+    column: number,
+): Value {
+    const param = slotOf(entry, token.index);
+    if (token !== TOKENS[token.index] || param.prepare !== Prepare.Lazy)
+        throw new Error(`${entry.name}: a foreign token`);
+    if (token.index >= node.children.length) return param.fallback ?? null;
+    const child = node.children[token.index];
+    return child.kind === NodeKind.Empty ? null : ctx.evaluate(child, sheet, row, column);
 }
 
 // The parameter that takes the argument at a place.
@@ -74,6 +99,7 @@ export function slotOf(entry: Entry, at: number): Param<unknown> {
 // One prepared argument as the body gets it, or the error that ends the call.
 export function read(param: Param<unknown>, value: Held): Held {
     if (value === undefined) return param.fallback;
+    if (isLazy(value)) return value;
     switch (param.read) {
         case Read.Number:
             return typeof value === 'number' ? value : toNumber(value);
@@ -87,8 +113,13 @@ export function read(param: Param<unknown>, value: Held): Held {
             return toBoolean(value);
         case Read.Walked:
             return param.family === null ? value : collected(param.family, value);
-        default:
+        case Read.Any:
+        case Read.Lazy:
             return value;
+        default: {
+            const unknown: never = param.read;
+            return unknown;
+        }
     }
 }
 

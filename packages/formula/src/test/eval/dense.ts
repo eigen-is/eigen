@@ -195,15 +195,34 @@ function call(name: 'NEG' | 'ABS' | 'IF' | 'IFERROR', args: readonly Dense[]): D
     }
     if (name === 'IFERROR') {
         if (isScalar(first)) return isError(first.rows[0][0]) ? args[1] : { rows: first.rows, cells: false };
-        return each(args, ([value, other]) => (isError(value) ? other : value));
+        return lazy(
+            each([first], ([value]) => (isError(value) ? PICKS[0] : value)),
+            args.slice(1),
+        );
     }
-    const pick = (test: Plain, yes: Plain, no: Plain) => {
-        const truth = toBoolean(test);
-        return typeof truth !== 'boolean' ? truth : truth ? yes : no;
-    };
-    if (!isScalar(first)) return each(args, ([test, yes, no]) => pick(test, yes, no));
+    if (!isScalar(first)) {
+        const state = each([first], ([test]) => {
+            const truth = toBoolean(test);
+            return typeof truth !== 'boolean' ? truth : PICKS[truth ? 0 : 1];
+        });
+        return lazy(state, args.slice(1));
+    }
     const truth = toBoolean(first.rows[0][0]);
     return typeof truth !== 'boolean' ? { rows: [[truth]], cells: false } : args[truth ? 1 : 2];
+}
+
+// What an element holds until the argument it picked is filled in.
+const PICKS = ['\u0001first', '\u0001second'];
+
+// The elements that picked an argument take its value at their place. Only an argument that some element picked
+// lines up with the elements, so one that none picked never widens the result.
+function lazy(state: Dense, options: readonly Dense[]): Dense {
+    const all = state.rows.flat();
+    const used = options.filter((_, k) => all.includes(PICKS[k]));
+    return each([state, ...used], ([held, ...values]) => {
+        const k = typeof held === 'string' ? PICKS.indexOf(held) : -1;
+        return k < 0 ? held : values[used.indexOf(options[k])];
+    });
 }
 
 // A blank element of an array is a 0 that counts, which a blank cell of a range is not.
