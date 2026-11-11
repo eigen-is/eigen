@@ -5,7 +5,6 @@
 import {
     chartColor,
     chartLabel,
-    chartPointMoves,
     chartSeriesStyle,
     chartSpecTexts,
     chartSpecWrites,
@@ -137,14 +136,8 @@ export function inlineChartSpec(chart: SheetChart, resolver: CellResolver): Char
 // Rewrites a range chart's refs through `map`, and returns the chart itself when no ref changed or its
 // stored data is not range data. Every ref on the data or a series moves, under any key, so a ref this build
 // doesn't know moves too, even in a chart it can't draw. A null empties a ref, and a name ref leaves the series
-// unnamed. `points` says where each point index goes, given the ref its points run along before the map: the
-// categories, or the first series' values for a chart without them, found by shape as the refs are, so a chart this
-// build can't draw moves its points too. Every series' points move, each stored entry whole.
-export function mapChartRefs(
-    chart: SheetChart,
-    map: (ref: CellRangeRef) => CellRangeRef | null,
-    points?: (ref: CellRangeRef) => ((index: number) => number | null) | null,
-): SheetChart {
+// unnamed.
+export function mapChartRefs(chart: SheetChart, map: (ref: CellRangeRef) => CellRangeRef | null): SheetChart {
     const { stored } = readChartSpec(chart);
     const before = stored['data'];
     if (!isRecord(before) || before['source'] !== 'range') return chart;
@@ -155,14 +148,9 @@ export function mapChartRefs(
         return next ?? (key === 'name' ? '' : null);
     });
     if (!moved) return chart;
-    const change: ChartSpecChange = [{ op: 'set', path: ['data'], value: data }];
-    const series = Array.isArray(before['series']) ? before['series'] : [];
-    const along = [before['categories'], ...series.map((s) => (isRecord(s) ? s['values'] : null))].find(
-        isCellRangeShape,
-    );
-    const target = along && points?.(along);
-    if (target) change.push(...chartPointMoves(stored, target));
-    return withSheetChartSpecWrites(chart, sheetChartSpecWrites(stored, change));
+    const next = { ...chart };
+    writeSheetChartSpec(next, sheetChartSpecWrites(stored, [{ op: 'set', path: ['data'], value: data }]));
+    return next;
 }
 
 // Sheets writes applied onto a chart in place, so a recipe's draft ships each entry as its own patch. An entry under a
@@ -206,18 +194,6 @@ function rangeChartPoints({ series, categories }: RangeChartData): number | null
 
 function size(ref: CellRangeRef): number {
     return (ref.row[1] - ref.row[0] + 1) * (ref.column[1] - ref.column[0] + 1);
-}
-
-// writeSheetChartSpec's writes on a copy of the chart, which shares every record no write touched.
-function withSheetChartSpecWrites(chart: SheetChart, writes: SheetChartSpecWrite[]): SheetChart {
-    const next = { ...chart };
-    for (const write of writes) {
-        if ('entry' in write && next[write.key] === chart[write.key] && isRecord(chart[write.key])) {
-            next[write.key] = { ...chart[write.key] };
-        }
-    }
-    writeSheetChartSpec(next, writes);
-    return next;
 }
 
 // Stored data with every ref passed through `map`, which is told the key it sits under; undefined leaves it out. A ref

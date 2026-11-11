@@ -16,9 +16,7 @@ import { fromPercent } from './percent';
 export type InlineChartSpec = ChartSpec & { data: InlineChartData };
 
 type GridColumn = { id: string; name: string };
-// A row carries the index it opened at, so a removed row takes its points, such as its pie slice's color, with it and
-// the rows after it keep theirs. A new row has none, so its points are automatic.
-type GridRow = { origin: number | null; category: string; cells: string[] };
+type GridRow = { category: string; cells: string[] };
 // The corner, A1, heads the categories column: the category axis title, as in Google.
 export type Grid = { corner: string; columns: GridColumn[]; rows: GridRow[] };
 
@@ -34,7 +32,6 @@ export function gridOf({ data, axes }: InlineChartSpec): Grid {
         corner: axes.x.title.text,
         columns: data.series.map(({ id, name }) => ({ id, name })),
         rows: Array.from({ length: count }, (_, i) => ({
-            origin: i,
             category: data.categories[i] ?? '',
             cells: data.series.map((series) => String(series.values[i] ?? '')),
         })),
@@ -179,5 +176,5 @@ function newColumn(): GridColumn {
 }
 
 function newRow(columns: number): GridRow {
-    return { origin: null, category: '', cells: Array(columns).fill('') };
+    return { category: '', cells: Array(columns).fill('') };
 }

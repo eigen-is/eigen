@@ -30,7 +30,7 @@ export function opToPatchOnSheets(sheets: readonly Sheet[], ops: readonly Op[]):
         if (op.path[0] === 'id' || op.path[0] === 'name') continue;
         // Every reader walks a sheet's matrix and its rows, so a write that would leave either no array is dropped.
         const writesMatrixOrRow = op.path.length === 1 || (op.path.length === 2 && typeof op.path[1] === 'number');
-        if (op.path[0] === 'data' && op.op !== 'remove' && writesMatrixOrRow && !Array.isArray(op.value)) continue;
+        if (op.path[0] === 'data' && writesMatrixOrRow && !Array.isArray(op.value)) continue;
         if (op.path[0] === 'dataValidations' && !isValidationWrite(op)) continue;
         if (op.path[0] === 'data' && !isCellWrite(op)) continue;
         if (op.path[0] === 'charts' && !isChartWrite(op)) continue;

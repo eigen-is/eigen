@@ -5,7 +5,6 @@ import {
     decodeSheetsSnapshot,
     decodeSheetsWorkbook,
     encodeSheetsSnapshot,
-    readSheetsBase,
     readSheetsSnapshotJson,
     sheetsOpLog,
     sheetsStateMap,
@@ -1105,33 +1104,20 @@ describe('document/sheets — compactSheetsSnapshot', () => {
     });
 });
 
-describe('document/sheets — the base a snapshot starts', () => {
-    const sheets = (): Sheet[] => [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
-
-    test('a replacing import stamps a fresh base without compactedFrom, in the same transaction', () => {
+describe('document/sheets — a new snapshot', () => {
+    test('a replacing import writes its snapshot and empties the log in one update', () => {
         const doc = new Y.Doc();
-        writeSheetsSnapshot(doc, encodeSheetsSnapshot([], { computed: true }), { compactedFrom: 'older', folded: 0 });
-        const old = readSheetsBase(doc);
-        expect(old?.compactedFrom).toBe('older');
+        writeSheetsSnapshot(doc, encodeSheetsSnapshot([], { computed: true }), null);
         doc.getArray<Op[]>('ops').push([[{ op: 'replace', path: ['x'], value: 1 }]]);
 
         let updates = 0;
         doc.on('update', () => updates++);
-        writeSheetsSnapshot(doc, encodeSheetsSnapshot([], { computed: true }), null);
+        const imported = encodeSheetsSnapshot([], { computed: false });
+        writeSheetsSnapshot(doc, imported, null);
 
         expect(updates).toBe(1);
-        const base = readSheetsBase(doc);
-        expect(base).toEqual({ id: expect.any(String), compactedFrom: null });
-        expect(base?.id).not.toBe(old?.id);
-        doc.destroy();
-    });
-
-    test('appending tabs leaves the base alone', () => {
-        const doc = new Y.Doc();
-        writeSheetsSnapshot(doc, encodeSheetsSnapshot(sheets(), { computed: true }), null);
-        const base = readSheetsBase(doc);
-        append(doc, encodeSheetsSnapshot(sheets(), { computed: true }));
-        expect(readSheetsBase(doc)).toEqual(base);
+        expect(readSheetsSnapshotJson(doc)).toBe(imported);
+        expect(doc.getArray('ops').length).toBe(0);
         doc.destroy();
     });
 });

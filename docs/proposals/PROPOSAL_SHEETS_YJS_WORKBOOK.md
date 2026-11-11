@@ -92,7 +92,9 @@ If Shape 2 is built, sheets gets everything the other editors have, by construct
 
 The server compacts a workbook's log only when the workbook closes, so a sheet some tab always has open grows its log, and every joiner and every server reader replays all of it. Build this when joiners of a long-open sheet load measurably slower; measure at 100, 1,000 and 5,000 batches on the reference workbook. The server then also compacts past a threshold while tabs are connected, and those tabs keep their view.
 
-A tab already keeps its grid through a compaction of the base it holds, through the base chain `state.base = { id, compactedFrom }` ([SHEETS.md](../SHEETS.md#a-tab-keeps-its-grid-through-a-compaction-of-the-base-it-holds)), and the swap already drops a result that anything changed under. What is left:
+A tab loads a new snapshot into its mounted grid, which keeps its view and empties its undo stacks ([SHEETS.md](../SHEETS.md#a-new-snapshot-loads-into-the-mounted-grid)), and the swap already drops a result that anything changed under. What is left:
+
+- **A tab that keeps its undo through a fold.** A fold of batches a connected tab holds changes nothing it shows, so the tab should not load it as a new snapshot. It needs a way to tell such a fold from a restore or an import.
 
 - **A trigger while sockets are connected.** `CollabDocument` compacts only at the end of its linger (`closeAfterLinger` in `apps/api/src/lib/collab/collab-document.ts`). A threshold run needs its own trigger, and its swap must not drop on every keystroke a connected tab sends meanwhile.
 - **Threshold compaction costs a broadcast.** The swap sets the whole snapshot string, and every live client receives it: 12.6 MB for the big workbook each time the array crosses the threshold, where a close sends it to nobody. Accepted at a threshold of a few hundred batches; if it bites, the threshold counts bytes instead, and a large sheet on a slow link needs the ROADMAP row "Collab: large documents on slow connections".

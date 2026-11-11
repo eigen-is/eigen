@@ -50,11 +50,9 @@ export {
     wellFormedValidations,
 } from './validations';
 export {
-    readSheetsBase,
     readSheetsSnapshotJson,
     sheetsLogStartsWith,
     sheetsOpLog,
     sheetsStateMap,
-    stampSheetsBase,
     writeSheetsSnapshot,
 } from './yjs-state';

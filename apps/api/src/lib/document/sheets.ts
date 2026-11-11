@@ -1,19 +1,9 @@
 // A workbook's Yjs doc, read and written on the server. The transform process reads it as Sheet[], for example for an
 // export or a preview, and replays the pending ops over the snapshot as a browser does. It also folds the head of the
-// ops into a new snapshot when the document closes, and builds the addSheet ops an Import… as new tabs pushes. Some
-// writers change the doc through it, such as a version restore that stamps a fresh base.
+// ops into a new snapshot when the document closes, and builds the addSheet ops an Import… as new tabs pushes.
 
 import type { Op, Sheet } from '@workspace/lib/sheets';
-import {
-    decodeSheetsSnapshot,
-    encodeSheetsSnapshot,
-    readSheetsBase,
-    readSheetsSnapshotJson,
-    sheetsOpLog,
-    stampSheetsBase,
-} from '@workspace/lib/sheets';
-import type { DrivePathType } from '@workspace/lib/types/drive';
-import { DRIVE_TYPE_SHEETS } from '@workspace/lib/types/drive';
+import { decodeSheetsSnapshot, encodeSheetsSnapshot, readSheetsSnapshotJson, sheetsOpLog } from '@workspace/lib/sheets';
 import {
     copySheetName,
     decodeOrDefault,
@@ -145,16 +135,4 @@ export function addSheetsBatch(workbook: SheetsWorkbookJson, snapshotJson: strin
         const value: Sheet = { ...sheet, id, name, order: current.length + i, charts };
         return { op: 'addSheet', id, path: [], value };
     });
-}
-
-// A workbook opened without a base, such as a new one or one stored before bases existed, gets one. Then its first
-// compaction names the base an open tab already holds, and the tab keeps its grid.
-export function stampMissingSheetsBase(type: DrivePathType, doc: Y.Doc): void {
-    if (type === DRIVE_TYPE_SHEETS && readSheetsBase(doc) === null) stampSheetsBase(doc, null);
-}
-
-// A version restore puts back the base the version was saved with. A workbook gets a fresh one, so an open tab can't
-// take the restored snapshot for a compaction of the one it holds.
-export function restampRestoredSheetsBase(type: DrivePathType, doc: Y.Doc): void {
-    if (type === DRIVE_TYPE_SHEETS) stampSheetsBase(doc, null);
 }

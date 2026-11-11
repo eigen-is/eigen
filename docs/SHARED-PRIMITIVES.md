@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2158 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2155 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1018,7 +1018,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1176)
+## Utilities & constants (1173)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1154,7 +1154,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `chartPaintOf` | `@workspace/lib/charts` | packages/lib/src/charts/look.ts |
 | `chartPointColor` | `@workspace/lib/charts` | packages/lib/src/charts/defaults.ts |
 | `chartPointIndex` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
-| `chartPointMoves` | `@workspace/lib/charts` | packages/lib/src/charts/change.ts |
 | `chartSearchText` | `@workspace/lib/charts` | packages/lib/src/charts/resolve.ts |
 | `chartSeriesStyle` | `@workspace/lib/charts` | packages/lib/src/charts/defaults.ts |
 | `chartSpecChange` | `@workspace/lib/charts` | packages/lib/src/charts/change.ts |
@@ -1657,7 +1656,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `nextFloatingIndex` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
 | `parseCellKey` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `rangesOverlap` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
-| `readSheetsBase` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `readSheetsSnapshotJson` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `REFERENCE_COLUMN_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `REFERENCE_ROW_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
@@ -1677,7 +1675,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `sheetsOpLog` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetsStateMap` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetTrackAt` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
-| `stampSheetsBase` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `wellFormedValidations` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
 | `writeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `fetchImportBlob` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
