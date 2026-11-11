@@ -1,21 +1,27 @@
 // The call wrapper: the one place that turns the argument nodes of a call into what the function's body gets. It
 // works down one ordered list, which is also the rule for which error a call answers: the count, then every
-// argument prepared left to right, then every argument read left to right, then the body. An array where one value
-// is read turns the call into one call per element, which `lift` runs over the same `read` and `run`.
+// argument prepared left to right, then every argument read left to right, then the insides of the ranges, then
+// the body. An array where one value is read turns the call into one call per element, which `lift` runs over
+// the same `read` and `run`.
 
 import type { Sheet } from '../store/sheet';
 import type { FormulaNode } from '../text/tree';
 import { NodeKind } from '../text/tree';
 import { toBoolean, toNumber, toText } from '../values/coerce';
 import { NAME, VALUE } from '../values/errors';
+import { parseNumber } from '../values/parse-number';
 import type { Value } from '../values/value';
 import { isArray, isError } from '../values/value';
 import type { Evaluator } from './evaluator';
+import type { Family } from './families';
+import { Errors, TypedText } from './families';
 import { legacyCall } from './legacy';
 import { lift } from './lift';
+import { look } from './look';
 import { real } from './operators';
+import { Frame } from './readers';
 import type { Entry, Held, Param, Result } from './signature';
-import { Read } from './signature';
+import { Prepare, Read } from './signature';
 
 const LONGEST_TEXT = 32767;
 
@@ -26,31 +32,43 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
     const given = node.children;
     const count = given.length;
     if (count < entry.min || count > entry.max) return VALUE;
-    const { params } = entry;
+    const { fixed } = entry;
     const level = ctx.calls;
-    const held = (ctx.frames[level] ??= []);
+    const { held } = (ctx.frames[level] ??= new Frame(ctx));
     ctx.calls = level + 1;
-    held.length = params.length;
+    const size = Math.max(count, fixed);
+    held.length = size;
     let lifted = false;
-    for (let i = 0; i < params.length; i += 1) {
+    for (let i = 0; i < size; i += 1) {
         let value: Held;
+        if (i >= count) value = undefined;
         // An argument left empty is a blank, and is read as one.
-        if (i < count) value = given[i].kind === NodeKind.Empty ? null : ctx.operand(given[i], sheet, row, column);
-        if (isArray(value)) lifted = true;
+        else if (given[i].kind === NodeKind.Empty) value = null;
+        else if (slotOf(entry, i).prepare === Prepare.Scalar) {
+            value = ctx.operand(given[i], sheet, row, column);
+            if (isArray(value)) lifted = true;
+        } else value = ctx.evaluate(given[i], sheet, row, column);
         held[i] = value;
     }
     let result: Value | null = null;
-    if (lifted) result = lift(ctx, entry, held);
+    if (lifted) result = lift(ctx, entry, held, count);
     else {
-        for (let i = 0; i < params.length && result === null; i += 1) {
-            const value = read(params[i], held[i]);
-            if (isError(value) && params[i].read < Read.Any) result = value;
+        for (let i = 0; i < size && result === null; i += 1) {
+            const param = slotOf(entry, i);
+            const value = read(param, held[i]);
+            if (isError(value) && param.read < Read.Any) result = value;
             held[i] = value;
         }
-        result ??= run(entry, held);
+        result ??= run(ctx, entry, held, count);
     }
     ctx.calls = level;
     return result;
+}
+
+// The parameter that takes the argument at a place.
+export function slotOf(entry: Entry, at: number): Param<unknown> {
+    const { fixed } = entry;
+    return entry.params[at < fixed ? at : fixed + ((at - fixed) % entry.group)];
 }
 
 // One prepared argument as the body gets it, or the error that ends the call.
@@ -67,14 +85,43 @@ export function read(param: Param<unknown>, value: Held): Held {
             return toText(value);
         case Read.Boolean:
             return toBoolean(value);
+        case Read.Walked:
+            return param.family === null ? value : collected(param.family, value);
         default:
             return value;
     }
 }
 
+// An argument of a parameter that takes every value. A value typed there becomes the number the walk hands out
+// for it, or null when it is passed over; a reference and an array are kept for the walk.
+function collected(family: Family, value: Value): Held {
+    switch (typeof value) {
+        case 'number':
+            return value;
+        case 'boolean':
+            return value ? 1 : 0;
+        case 'string':
+            if (family.text === TypedText.Parsed) return toNumber(value);
+            if (family.text === TypedText.Numeric) return parseNumber(value) === undefined ? null : 0;
+            if (family.text === TypedText.Counted) return 0;
+            return value.toUpperCase() === 'TRUE' ? 1 : value.toUpperCase() === 'FALSE' ? 0 : null;
+        default:
+            if (value === null) return 0;
+            if (!isError(value)) return value;
+            return family.errors === Errors.Result ? value : family.errors === Errors.Counted ? 0 : null;
+    }
+}
+
 // The body on arguments that are read, and its answer as a cell can hold it: a number that is no number is #NUM!,
-// and a text has at most 32,767 characters.
-export function run(entry: Entry, args: readonly unknown[]): Result {
+// and a text has at most 32,767 characters. `held` are the slots of the call in progress.
+export function run(ctx: Evaluator, entry: Entry, held: readonly Held[], count: number): Result {
+    let args: readonly unknown[] = held;
+    const frame = entry.plain ? null : ctx.frames[ctx.calls - 1];
+    if (frame !== null) {
+        const error = look(ctx, entry, frame, count);
+        if (error !== null) return error;
+        args = frame.args;
+    }
     let result: Result;
     switch (args.length) {
         case 0:
@@ -92,6 +139,7 @@ export function run(entry: Entry, args: readonly unknown[]): Result {
         default:
             result = entry.run(...args);
     }
+    if (frame !== null && frame.failed !== null) return frame.failed;
     if (typeof result === 'number') return real(result);
     return typeof result === 'string' && result.length > LONGEST_TEXT ? VALUE : result;
 }

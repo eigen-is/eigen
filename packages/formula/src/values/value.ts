@@ -38,6 +38,8 @@ export type ArrayValue = {
     // One past the last written row, or column, that each stored one stands for. Null when each stands for one.
     readonly rowEnds: Int32Array | null;
     readonly columnEnds: Int32Array | null;
+    // Whether an element is a reference, which only a lifted call makes.
+    readonly references: boolean;
 };
 
 export type Omitted = { readonly type: typeof ValueType.Omitted };
@@ -70,6 +72,7 @@ export function arrayOf<T extends Scalar | Reference>(
     items: ArrayLike<T>,
     rowEnds: Int32Array | null = null,
     columnEnds: Int32Array | null = null,
+    references = false,
 ): T | ArrayValue {
     if (rows * columns === 1) return items[0];
     let nums: Float64Array | null = null;
@@ -87,7 +90,10 @@ export function arrayOf<T extends Scalar | Reference>(
     }
     const height = rowEnds?.length ?? rows;
     const width = columnEnds?.length ?? columns;
-    return { type: ValueType.Array, rows, columns, height, width, items: nums ?? items, nums, rowEnds, columnEnds };
+    return {
+        type: ValueType.Array,
+        ...{ rows, columns, height, width, items: nums ?? items, nums, rowEnds, columnEnds, references },
+    };
 }
 
 // The stored row or column that a written one lies in.

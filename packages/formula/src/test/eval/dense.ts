@@ -206,11 +206,13 @@ function call(name: 'NEG' | 'ABS' | 'IF' | 'IFERROR', args: readonly Dense[]): D
     return typeof truth !== 'boolean' ? { rows: [[truth]], cells: false } : args[truth ? 1 : 2];
 }
 
+// A blank element of an array is a 0 that counts, which a blank cell of a range is not.
 function numbers(value: Dense, booleans: boolean): { list: number[]; error: FormulaError | null } {
     const list: number[] = [];
     for (const item of value.rows.flat()) {
         if (isError(item)) return { list, error: item };
         if (typeof item === 'number') list.push(item);
+        else if (item === null && !value.cells) list.push(0);
         else if (typeof item === 'boolean' && booleans) list.push(item ? 1 : 0);
     }
     return { list, error: null };
@@ -226,8 +228,9 @@ function snapped(sum: number, before: number): number {
 // What an aggregate makes of one array or one range of more than one cell.
 export function aggregate(name: string, value: Dense): Plain {
     const all = value.rows.flat();
-    if (name === 'COUNTA') return all.filter((item) => item !== null).length;
-    if (name === 'COUNT') return all.filter((item) => typeof item === 'number').length;
+    const blanks = value.cells ? 0 : all.filter((item) => item === null).length;
+    if (name === 'COUNTA') return all.filter((item) => item !== null).length + blanks;
+    if (name === 'COUNT') return all.filter((item) => typeof item === 'number').length + blanks;
     const { list, error } = numbers(value, name === 'AND' || name === 'OR');
     if (error !== null) return error;
     if (name === 'AND' || name === 'OR') {
@@ -238,14 +241,11 @@ export function aggregate(name: string, value: Dense): Plain {
     if (name === 'MIN') return list.length === 0 ? 0 : Math.min(...list);
     let sum = 0;
     let before = 0;
-    for (const item of all) {
-        if (typeof item === 'number') {
-            before = sum;
-            sum += item;
-        } else if (item === null && !value.cells) before = Number.NaN;
+    for (const item of list) {
+        before = sum;
+        sum += item;
     }
-    // A blank element of an array after the last number is an addition of 0, so nothing snaps.
-    const result = Number.isNaN(before) ? sum : snapped(sum, before);
+    const result = snapped(sum, before);
     if (name === 'SUM') return result;
     return list.length === 0 ? DIV0 : result / list.length;
 }

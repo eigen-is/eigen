@@ -1,18 +1,20 @@
 import { describe, expect, test } from 'bun:test';
+import { Errors, TypedText } from '../../eval/families';
 import type { Entry, Param } from '../../eval/signature';
 import { Prepare, Read } from '../../eval/signature';
 import { FUNCTIONS } from '../../functions/library';
 import type { FormulaError } from '../../index';
-import { DIV0, NA, VALUE } from '../../index';
+import { DIV0, NA, REF, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
 import { engineOf, valueAt } from '../recalc/support';
 
 // Every law below is derived from a row's own data, for every row of the one table: no law names a function.
-// A1:A5 = 10..50, B1:B5 = a..e, C1:C3 = 1, 2, 3, D1 = TRUE, Z9 is blank.
+// A1:A5 = 10..50, B1:B5 = a..e, C1:C3 = 1, 2, 3, D1 = TRUE, E1:E3 = 1, #DIV/0!, 3, F1:F3 = 1, #N/A, 3, Z9 is blank.
 const SHEET: Cells = {
     ...{ A1: 10, A2: 20, A3: 30, A4: 40, A5: 50 },
     ...{ B1: 'a', B2: 'b', B3: 'c', B4: 'd', B5: 'e' },
     ...{ C1: 1, C2: 2, C3: 3, D1: true },
+    ...{ E1: 1, E2: '=1/0', E3: 3, F1: 1, F2: '=NA()', F3: 3 },
 };
 
 const ROWS: Entry[] = [];
@@ -33,6 +35,8 @@ function pool(param: Param<unknown>): readonly string[] {
             return ['"abc"', '"1"'];
         case Read.Boolean:
             return ['TRUE', 'FALSE'];
+        case Read.Walked:
+            return ['A1:A5', 'C1:C3', '1'];
         default:
             return ['1', '"abc"', 'TRUE'];
     }
@@ -193,5 +197,65 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         const [first, second, third] = evaluateAll([written(entry, base), written(entry, base), written(entry, base)]);
         expect(second).toEqual(first);
         expect(third).toEqual(first);
+    });
+
+    // The parameter that takes every value of its arguments, when the row ends in one.
+    const family = params.at(-1)?.rest === true ? params.at(-1)?.family : undefined;
+    // What the call answers with one more argument, and whether two forms of that argument answer alike.
+    const same = (a: string, b: string | null) => {
+        const [first, second] = evaluateAll([
+            written(entry, [...base, a]),
+            written(entry, b === null ? base : [...base, b]),
+        ]);
+        expect(first).toEqual(second);
+    };
+    const equals = (a: string, expected: FormulaError) =>
+        expect(evaluateAll([written(entry, [...base, a])])[0]).toBe(expected);
+
+    test('a value typed where every value is taken is read by the family', () => {
+        if (family === undefined || family === null) return;
+        same('TRUE', '1');
+        same('FALSE', '0');
+        same('', '0');
+        same('IF(TRUE,)', '0');
+        if (family.text === TypedText.Parsed) equals('"x y"', VALUE);
+        if (family.text === TypedText.Parsed || family.text === TypedText.Numeric) same('"2"', '2');
+        if (family.text === TypedText.Numeric || family.text === TypedText.Spelled) same('"x y"', null);
+        if (family.text === TypedText.Counted) same('"x y"', '1');
+        if (family.text === TypedText.Spelled) same('"true"', 'TRUE');
+        if (family.errors === Errors.Result) equals('1/0', DIV0);
+        else same('1/0', family.errors === Errors.Counted ? '1' : null);
+    });
+
+    test('a cell counts by its kind, a blank cell never, a blank element of an array as 0', () => {
+        if (family === undefined || family === null) return;
+        const counts = (kind: number) => ((family.kinds >> kind) & 1) === 1;
+        same('D1', counts(2) ? 'TRUE' : null);
+        same('B1', counts(3) ? '1' : null);
+        same('Z9', null);
+        same('C1', '1');
+        same('+D1', 'TRUE');
+        same('IF({1,1},Z9:AA9)', '{0,0}');
+        same('A1:A40*1', `{10;20;30;40;50${';0'.repeat(35)}}`);
+    });
+
+    test('an error in a range is found in argument order, after every typed argument is read', () => {
+        if (family === undefined || family === null) return;
+        if (family.errors !== Errors.Result) {
+            same('E1:E3', family.errors === Errors.Counted ? '{1,1,1}' : '{1,1}');
+            return;
+        }
+        equals('E1:E3', DIV0);
+        equals('E1:E3,F1:F3', DIV0);
+        equals('F1:F3,E1:E3', NA);
+        equals('E1:E3,NA()', NA);
+        if (family.text === TypedText.Parsed) equals('E1:E3,"x y"', VALUE);
+    });
+
+    test('an array where every value is taken does not lift the call, and a union gives every area', () => {
+        if (family === undefined || family === null) return;
+        const whole = written(entry, [...base, '{1,2,3}']).slice(1);
+        expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);
+        same('(A1:A3,C1:C3)', 'A1:A3,C1:C3');
     });
 });

@@ -72,8 +72,9 @@ describe('SUM', () => {
         ['=SUM(ZZ1:ZZ9)', 0],
         ['=SUM(#N/A,#DIV/0!)', NA],
         ['=SUM(1/0,A6)', DIV0],
-        ['=SUM(A6,1/0)', NA],
-        ['=SUM(A1:A6,1/0)', NA],
+        // An argument that is an error is read before any range is looked into.
+        ['=SUM(A6,1/0)', DIV0],
+        ['=SUM(A1:A6,1/0)', DIV0],
         ['=SUM("")', 0],
         ['=SUM(IF(TRUE,A1:A3))', 2],
     ])('%s is %p', (formula, expected) => {

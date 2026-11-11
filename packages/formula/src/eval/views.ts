@@ -69,7 +69,18 @@ export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
     }
     if (rows * columns === 1) return items[0];
     // Not looked through for an array of numbers: what reads a range as an array reads it element by element.
-    return { type: ValueType.Array, rows, columns, height, width, items, nums: null, rowEnds, columnEnds };
+    return {
+        type: ValueType.Array,
+        rows,
+        columns,
+        height,
+        width,
+        items,
+        nums: null,
+        rowEnds,
+        columnEnds,
+        references: false,
+    };
 }
 
 // Where the runs of an axis of `size` end: each of the first `length` marks that is set is a run of its own, and

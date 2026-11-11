@@ -6,17 +6,20 @@ import { CALC, NA, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { arrayOf, isArray, isError, isReference, MOST_ELEMENTS } from '../values/value';
 import { align } from './bands';
-import { read, run } from './call';
+import { read, run, slotOf } from './call';
 import type { Evaluator } from './evaluator';
 import type { Entry, Held, Result } from './signature';
-import { Read } from './signature';
+import { Prepare, Read } from './signature';
 
-export function lift(ctx: Evaluator, entry: Entry, held: readonly Held[]): Value {
-    const { params } = entry;
-    const element = held.slice();
+// `held` are the arguments as prepared, `count` of them written. Each element is read into `held` itself, so what
+// a reader of the call was bound to is the element in progress.
+export function lift(ctx: Evaluator, entry: Entry, held: Held[], count: number): Value {
+    const prepared = held.slice();
     const arrays: ArrayValue[] = [];
     // Per argument, which of the arrays it is, or -1.
-    const lifting = held.map((value) => (isArray(value) ? arrays.push(value) - 1 : -1));
+    const lifting = prepared.map((value, i) =>
+        isArray(value) && slotOf(entry, i).prepare === Prepare.Scalar ? arrays.push(value) - 1 : -1,
+    );
     let rows = 1;
     let columns = 1;
     for (const array of arrays) {
@@ -40,19 +43,20 @@ export function lift(ctx: Evaluator, entry: Entry, held: readonly Held[]): Value
         for (let c = 0; c < width; c += 1) {
             let result: Result | null = null;
             // An element is read as the argument of a call of its own is, and its failure stays in the element.
-            for (let i = 0; i < params.length && result === null; i += 1) {
+            for (let i = 0; i < prepared.length && result === null; i += 1) {
+                const param = slotOf(entry, i);
                 const k = lifting[i];
-                let value = held[i];
+                let value = prepared[i];
                 if (k >= 0) {
                     const from = across.from[k];
                     const stored = from === null ? c : from[c];
                     value = starts[k] < 0 || stored < 0 ? NA : single(ctx, arrays[k].items[starts[k] + stored]);
                 }
-                element[i] = read(params[i], value);
-                const failed = element[i];
-                if (isError(failed) && params[i].read < Read.Any) result = failed;
+                value = read(param, value);
+                if (isError(value) && param.read < Read.Any) result = value;
+                held[i] = value;
             }
-            result ??= run(entry, element);
+            result ??= run(ctx, entry, held, count);
             items[r * width + c] = isArray(result) ? CALC : result;
         }
     }

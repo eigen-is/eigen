@@ -2,23 +2,14 @@
 // AND and OR evaluate everything, and an error anywhere in their arguments is their result. In a reference or an
 // array they count only numbers and booleans, and with nothing to count they are #VALUE!.
 
-import { Take } from '../eval/walk';
 import { NA, VALUE } from '../values/errors';
 import { isError } from '../values/value';
-import { aggregate, define, LAZY, BOOLEAN as OLD_BOOLEAN, optional, refusal, SCALAR } from './legacy';
-import { BOOLEAN, fn } from './registry';
+import { define, LAZY, BOOLEAN as OLD_BOOLEAN, optional, refusal, SCALAR } from './legacy';
+import { BOOLEAN, fn, rest, TRUTHS } from './registry';
 
 export const LOGICAL = [
-    aggregate('AND', Take.Truths, (walk) => {
-        let all = true;
-        while (walk.next()) for (let i = walk.from; i < walk.to; i += 1) if (walk.num[i] === 0) all = false;
-        return walk.count === 0 ? VALUE : all;
-    }),
-    aggregate('OR', Take.Truths, (walk) => {
-        let any = false;
-        while (walk.next()) for (let i = walk.from; i < walk.to; i += 1) if (walk.num[i] !== 0) any = true;
-        return walk.count === 0 ? VALUE : any;
-    }),
+    fn('AND', [rest(TRUTHS)], (truths) => (truths.count() === 0 ? VALUE : !truths.list().includes(0))),
+    fn('OR', [rest(TRUTHS)], (truths) => (truths.count() === 0 ? VALUE : truths.min() !== 0 || truths.max() !== 0)),
     fn('NOT', [BOOLEAN], (truth) => !truth),
     define('IF', [OLD_BOOLEAN, LAZY, optional(LAZY, false)], (args, ctx, node, sheet, row, column) => {
         const test = OLD_BOOLEAN.read(args[0]);

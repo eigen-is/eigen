@@ -4,25 +4,18 @@
 
 import { align } from '../eval/bands';
 import type { Evaluator } from '../eval/evaluator';
+import { Families } from '../eval/families';
 import { firstError } from '../eval/views';
-import type { Walk } from '../eval/walk';
-import { Take } from '../eval/walk';
 import type { FormulaError } from '../values/errors';
 import { CALC, VALUE } from '../values/errors';
-import { roundDecimal, snapSum } from '../values/precision';
+import { roundDecimal } from '../values/precision';
 import type { Value } from '../values/value';
 import { arrayOf, isArray, isError, isReference, MOST_ELEMENTS, OMITTED } from '../values/value';
 import { tally } from './criteria';
 import type { FunctionBody } from './legacy';
-import { aggregate, define, FunctionFlag, optional, RANGE, SCALAR } from './legacy';
-import { fn, INTEGER, NUMBER } from './registry';
+import { define, FunctionFlag, optional, RANGE, SCALAR } from './legacy';
+import { fn, INTEGER, NUMBER, NUMBERS, rest } from './registry';
 import { heightOf, widthOf } from './search';
-
-// The sum of what a walk hands out, in its order. Only the last addition can snap to 0.
-export function total(walk: Walk): number {
-    const sum = walk.add();
-    return snapSum(sum, walk.before);
-}
 
 // The first error among the values of one argument, row by row, once the formulas in it are computed.
 function errorIn(ctx: Evaluator, arg: Value): FormulaError | null {
@@ -113,7 +106,7 @@ const sumproduct: FunctionBody = (args, ctx) => {
     }
     if (!sized) return VALUE;
     const { walk } = ctx;
-    walk.start([rangeProducts(ctx, args) ?? products(ctx, args)], Take.Numbers);
+    walk.start([rangeProducts(ctx, args) ?? products(ctx, args)], 0, 1, Families.Numbers);
     const sum = walk.add();
     return walk.error ?? sum;
 };
@@ -121,7 +114,7 @@ const sumproduct: FunctionBody = (args, ctx) => {
 export const MATH = [
     fn('ABS', [NUMBER], Math.abs),
     fn('ROUND', [NUMBER, INTEGER], roundDecimal),
-    aggregate('SUM', Take.Numbers, total),
+    fn('SUM', [rest(NUMBERS)], (numbers) => numbers.sum()),
     define('SUMPRODUCT', [RANGE], sumproduct, 0, 1),
     define(
         'SUMIF',

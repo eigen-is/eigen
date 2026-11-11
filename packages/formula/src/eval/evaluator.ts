@@ -19,7 +19,7 @@ import { arrayOf, isArray, isError, isReference, OMITTED, ValueType } from '../v
 import { call } from './call';
 import { lift } from './lift';
 import { LIFTED_BINARY, LIFTED_NEGATE, LIFTED_PERCENT, negate, operate, percent } from './operators';
-import type { Held } from './signature';
+import type { Frame } from './readers';
 import { toArray } from './views';
 import { Walk } from './walk';
 
@@ -31,7 +31,7 @@ export class Evaluator {
     public readonly functions: Registry;
     public readonly recalc: Recalc;
     // The argument lists of the calls in progress, one per level of nesting, reused from call to call.
-    public readonly frames: Held[][] = [];
+    public readonly frames: Frame[] = [];
     public readonly oldFrames: Value[][] = [];
     public calls = 0;
     public readonly walk = new Walk(this);
@@ -91,7 +91,7 @@ export class Evaluator {
                 // Nothing spills in this build, so no cell is an anchor.
                 if (node.op === Token.Hash) return REF;
                 const value = this.operand(node.children[0], sheet, row, column);
-                return isArray(value) ? lift(this, LIFTED_PERCENT, [value]) : percent(value);
+                return isArray(value) ? lift(this, LIFTED_PERCENT, [value], 1) : percent(value);
             }
             case NodeKind.Binary:
                 return this.binary(node, sheet, row, column, false);
@@ -133,6 +133,12 @@ export class Evaluator {
             default:
                 return value;
         }
+    }
+
+    // An element of an array as a value: of a reference its first cell.
+    public first(item: Scalar | Reference): Scalar {
+        if (!isReference(item)) return item;
+        return this.recalc.valueOf(this.workbook.sheets[item.sheet], item.top, item.left);
     }
 
     // `count` cleared marks, for rows or for columns. They are good until the next reference is read as an array.
@@ -188,11 +194,11 @@ export class Evaluator {
 
     private prefix(node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
         const child = node.children[0];
-        // A unary plus changes nothing, not even a text into a number.
-        if (node.op === Token.Plus) return this.evaluate(child, sheet, row, column);
+        // A unary plus changes nothing, not even a text into a number, but what it gives is a value and no cell.
+        if (node.op === Token.Plus) return this.operand(child, sheet, row, column);
         if (node.op === Token.Minus) {
             const value = this.operand(child, sheet, row, column);
-            return isArray(value) ? lift(this, LIFTED_NEGATE, [value]) : negate(value);
+            return isArray(value) ? lift(this, LIFTED_NEGATE, [value], 1) : negate(value);
         }
         const value = this.evaluate(child, sheet, row, column);
         if (isArray(value)) return value.items[0];
@@ -235,7 +241,7 @@ export class Evaluator {
         }
         const a = this.read(left);
         const b = this.operand(node.children[1], sheet, row, column);
-        if (isArray(a) || isArray(b)) return lift(this, LIFTED_BINARY[op], [a, b]);
+        if (isArray(a) || isArray(b)) return lift(this, LIFTED_BINARY[op], [a, b], 2);
         return operate(op, a, b, snap);
     }
 
