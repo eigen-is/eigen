@@ -220,7 +220,9 @@ class Parser {
             let power = BINDING[op];
             // A comma is a union only inside parentheses of its own, and ( calls only what can return a function.
             if (op === Token.Comma && !union) power = 0;
-            if (op === Token.Open && (space !== '' || !returnsFunction(left))) power = 0;
+            const callable =
+                left.kind === NodeKind.Call || left.kind === NodeKind.Invoke || left.kind === NodeKind.Paren;
+            if (op === Token.Open && (space !== '' || !callable)) power = 0;
             if (power === 0) {
                 if (space === '' || !this.startsReference() || !yieldsReference(left)) break;
                 op = Token.Space;
@@ -349,9 +351,11 @@ class Parser {
                 return this.array(space);
             case Token.Word:
                 return this.word(space);
-            case Token.Quote:
+            case Token.Quote: {
                 if (text.charCodeAt(end) !== BANG) return this.fail();
-                return this.named(space, end, this.unquoted(pos, end));
+                const quoted = text.slice(pos + 1, end - 1);
+                return this.named(space, end, quoted.includes("'") ? quoted.replaceAll("''", "'") : quoted);
+            }
             case Token.Bracket: {
                 if (this.stored) {
                     if (text.charCodeAt(end) !== BANG) return this.fail();
@@ -473,12 +477,6 @@ class Parser {
         this.depth -= 1;
         this.height = height + 1;
         return branch(NodeKind.Array, columns, '', elements, space, spaceEnd);
-    }
-
-    // The name inside a quoted token, where a quote is written twice.
-    private unquoted(start: number, end: number): string {
-        const name = this.text.slice(start + 1, end - 1);
-        return name.includes("'") ? name.replaceAll("''", "'") : name;
     }
 
     // A sheet prefix written without quotes, from the current word to `bang`: one name, or the two of a 3-D
@@ -664,10 +662,6 @@ function yieldsReference(node: FormulaNode): boolean {
         default:
             return false;
     }
-}
-
-function returnsFunction(node: FormulaNode): boolean {
-    return node.kind === NodeKind.Call || node.kind === NodeKind.Invoke || node.kind === NodeKind.Paren;
 }
 
 function isColumnName(node: FormulaNode): boolean {
