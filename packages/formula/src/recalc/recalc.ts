@@ -105,7 +105,8 @@ export class Recalc {
         }
         // A cell written twice is one seed: the spans in sheet, column and row order, those that meet as one.
         const { seeds } = this;
-        const order = Array.from({ length: seeds.length / 4 }, (_, i) => i * 4);
+        const order: number[] = [];
+        for (let at = 0; at < seeds.length; at += 4) order.push(at);
         order.sort((a, b) => seeds[a] - seeds[b] || seeds[a + 1] - seeds[b + 1] || seeds[a + 2] - seeds[b + 2]);
         const spans: number[] = [];
         for (const at of order) {
