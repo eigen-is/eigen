@@ -1,6 +1,8 @@
 // The engine as a host holds it: one workbook loaded from a description of its sheets, the three writes of a cell,
 // a recalc of what the writes reach, and the value of a cell. A sheet is named by its id and a cell by its row and
-// column from 0. The functions are the library's list, the same for every engine.
+// column from 0. The functions are the library's list, the same for every engine. A host lets a stopped recalc run
+// on before it writes more, or raises the cap: writes between every stopped recalc can keep one from ever finishing
+// when the cap is no larger than the number of formulas that every recalc after a write computes again.
 
 import { FUNCTIONS } from '../functions/library';
 import type { Sheet } from '../store/sheet';
