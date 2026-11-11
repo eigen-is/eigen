@@ -1,6 +1,7 @@
 // Resting the pointer on a comment mark shows the card, and only the mark does: the canvas reports where the mark is
 // and when the pointer leaves, a press opens the thread without a hover card over it, and the shell both canvas apps
-// render through draws the card the host's hover names, whose click runs the opener the mark uses.
+// render through draws the card the host's hover names, whose click runs the opener the mark uses. Its image picker is
+// titled Insert image, as in Docs and Sheets.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard, CommentHoverTarget } from '@workspace/lib/types/comments';
@@ -19,6 +20,7 @@ const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realComments = { ...(await import('@workspace/lib/comments')) };
 const realDialogs = { ...(await import('../../../components/comments/comment-lifecycle-dialogs')) };
 const realGuard = { ...(await import('../../../components/layout/app/unsynced-edits-guard')) };
+const realBrowser = { ...(await import('../../../components/drive/drive-browser')) };
 const { MediaResolverProvider } = await import('@workspace/lib/drive');
 const { generateNKeysBetween, VECTOR_STYLE_DEFAULTS, writeElementInDoc } = await import('@workspace/lib/vector');
 type UseCollabDocOptions = Parameters<typeof realCollab.useCollabDoc>[0];
@@ -71,12 +73,15 @@ mock.module('../../../components/comments/comment-lifecycle-dialogs', () => ({
 }));
 // The guard asks the router, which a test of the shell's comments has no need of.
 mock.module('../../../components/layout/app/unsynced-edits-guard', () => ({ UnsyncedEditsGuard: () => null }));
+// The picker's folder listing fetches Drive; only its title is under test.
+mock.module('../../../components/drive/drive-browser', () => ({ DriveBrowser: () => null }));
 afterAll(() => {
     mock.module('@workspace/lib/collab', () => realCollab);
     mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@workspace/lib/comments', () => realComments);
     mock.module('../../../components/comments/comment-lifecycle-dialogs', () => realDialogs);
     mock.module('../../../components/layout/app/unsynced-edits-guard', () => realGuard);
+    mock.module('../../../components/drive/drive-browser', () => realBrowser);
     provider.destroy();
 });
 
@@ -160,11 +165,17 @@ async function renderCanvas() {
 }
 
 // The whole wiring as an app mounts it: the real host and the real shell around the real canvas.
-async function renderShell() {
+async function renderShell({
+    mediaFolderId = null,
+    pickerOpen = false,
+}: {
+    mediaFolderId?: string | null;
+    pickerOpen?: boolean;
+} = {}) {
     const reveal = mock((_elementId: string) => {});
     function Host() {
         const canvas = useCanvasDoc('owner', 'mount', 'drawing', VECTOR_STYLE_DEFAULTS);
-        const [imagePickerOpen, setImagePickerOpen] = useState(false);
+        const [imagePickerOpen, setImagePickerOpen] = useState(pickerOpen);
         const comments = useCanvasCommentHost({
             ownerId: 'owner',
             path,
@@ -181,7 +192,7 @@ async function renderShell() {
             path,
             canWrite: true,
             canEdit: false,
-            mediaFolderId: null,
+            mediaFolderId,
             searchController,
             imagePickerOpen,
             onImagePickerOpenChange: setImagePickerOpen,
@@ -309,4 +320,9 @@ test('a click on the card opens it as the mark does, revealing its element', asy
     expect(reveal).toHaveBeenCalledWith('box');
     expect(setOpenCardId).toHaveBeenCalledWith('card-1');
     expect(hoverCard()).toBeNull();
+});
+
+test('the image picker is titled Insert image', async () => {
+    await renderShell({ mediaFolderId: 'media', pickerOpen: true });
+    expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Insert image');
 });
