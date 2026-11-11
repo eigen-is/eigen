@@ -196,7 +196,7 @@ Only a trusted transport sets the link: the relay envelope, or a verified iMIP s
 
 ## An attendee may re-alarm a copy and nothing more
 
-On a linked copy, `updateEvent` keeps changes to reminders and color and drops the rest. The edit dialog disables the same fields (`detailsDisabled`), so a save never drops them silently. The calendar select stays live, because moving the copy to another calendar is allowed.
+On a linked copy, a save keeps changes to reminders and color and drops the rest (`guestData`, `events.ts`), whether it edits the copy or sets one date apart. The edit dialog disables the same fields (`detailsDisabled`), so a save never drops them silently. The calendar select stays live, because moving the copy to another calendar is allowed.
 
 Whether an event is somebody else's invitation is `isInvitationFromOthers` (`packages/lib/src/core/calendar/calendar-utils.ts`). It compares the stored organizer address with the Home user's, case-insensitively. A stored `ORGANIZER` alone means nothing: Apple Calendar and Thunderbird write the account's own address on every event they create with guests, and that event is the owner's own. The guard, `deleteEvent`, `rsvp()`, the inbound REPLY lookup, both calendar dialogs and each write that asks whether its actor organizes the series all use this one rule, read on the series' master. A CalDAV PUT reads the stamp instead ([CALDAV.md](CALDAV.md#a-put-is-judged-inside-the-write-lock)).
 

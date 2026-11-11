@@ -387,14 +387,7 @@ async function patchStoredEvent(
 
     const series = existing.parentEventId ? requireEvent(calendar, existing.parentEventId) : existing;
     const organizer = !isInvitationFromOthers(series, calendar.home.user.email);
-    if (!organizer) {
-        const localData: EventData = { ...existing.data };
-        if (input.data) {
-            localData.reminders = input.data.reminders ?? localData.reminders;
-            localData.color = input.data.color ?? localData.color;
-        }
-        input = { data: localData };
-    }
+    if (!organizer) input = { data: guestData(existing.data, input.data) };
 
     // The stored rule passed these checks when it was projected, so it is checked again only beside a moved start.
     const rrule = input.rrule || input.startTime ? (input.rrule ?? existing.rrule) : null;
@@ -470,10 +463,16 @@ async function writeOverride(
         recurrenceDate: key,
     };
     const organizer = !isInvitationFromOthers(parent, calendar.home.user.email);
-    const edit = exceptionEdit(parent, input, saveContext(calendar, organizer, user));
+    const own = organizer ? input : { ...replaced, data: guestData(replaced.data, input.data) };
+    const edit = exceptionEdit(parent, own, saveContext(calendar, organizer, user));
     await editResource(calendar, resource, (component) => applyEdits(component, new Map([[key, edit]])));
     const created = exceptionOf(calendar, parent.id, key) ?? requireEvent(calendar, parent.id);
     return { created, replaced };
+}
+
+// On a linked copy the guest's own reminders and color are theirs to change, and the rest stays the organizer's.
+function guestData(held: EventData | null, edit: EventData | null | undefined): EventData {
+    return { ...held, reminders: edit?.reminders ?? held?.reminders, color: edit?.color ?? held?.color };
 }
 
 // An organizer's save names whoever saves as the ORGANIZER of a file that names none yet.

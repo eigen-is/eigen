@@ -784,6 +784,37 @@ describe('Occurrence edits of an invited series', () => {
         for (const vevent of vevents) expect(vevent).toMatch(organizerLine());
     });
 
+    // A guest may re-alarm their copy and nothing more, one date included.
+    test("a date Bob sets apart on his copy keeps the organizer's fields and takes only his reminders", async () => {
+        const { series, target } = await seeded('Weekly Guest Date');
+        const bobMaster = findOrFail(await bobOccurrences(series.uid), (e) => !e.parentEventId);
+        const reminders = [{ type: 'notification', minutes: 30 }];
+        const moved = new Date(Date.parse(`${target}T09:00:00Z`) + HOUR);
+        const res = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Renamed by Bob',
+                    startTime: moved,
+                    endTime: new Date(moved.getTime() + HOUR),
+                    allDay: false,
+                    timezone: TZ,
+                    parentEventId: bobMaster.id,
+                    recurrenceDate: target,
+                    data: { reminders, attendees: [] },
+                }),
+            },
+        );
+        expect(res.status).toBe(200);
+
+        const date = findOrFail((await bobStored(series.uid)).overrides, (e) => e.recurrenceDate === target);
+        expect(date).toMatchObject({ title: series.title, ...slotOf(target), data: { reminders } });
+        expect(date.data?.attendees?.map((a) => a.email)).toEqual([ctx.bob.user.email]);
+    });
+
     // A date's list is its whole guest list, so an emptied one has no guests, and those it had hear it is cancelled.
     test("emptying one date's guest list cancels that date for its guests and leaves it guest-less", async () => {
         const CAROL = 'carol.emptied@example.org';
