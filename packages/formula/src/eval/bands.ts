@@ -16,12 +16,16 @@ export type Axis = {
 // The rows of an operation over these arrays that is `size` rows long, or its columns. An array of one row is
 // read by every run, and a shorter one of more rows ends where it ends.
 export function align(arrays: readonly ArrayValue[], size: number, rows: boolean): Axis {
+    const first = rows ? arrays[0].rowEnds : arrays[0].columnEnds;
+    let alike = true;
+    for (const array of arrays) {
+        alike &&=
+            (rows ? array.rows : array.columns) === size && sameRuns(rows ? array.rowEnds : array.columnEnds, first);
+    }
+    if (alike) return { count: rows ? arrays[0].height : arrays[0].width, ends: first, from: arrays.map(() => null) };
     const lengths = arrays.map((array) => (rows ? array.rows : array.columns));
     const stored = arrays.map((array) => (rows ? array.height : array.width));
     const own = arrays.map((array) => (rows ? array.rowEnds : array.columnEnds));
-    if (lengths.every((length) => length === size) && own.every((ends) => sameRuns(ends, own[0]))) {
-        return { count: stored[0], ends: own[0], from: arrays.map(() => null) };
-    }
     let bound = 0;
     for (let k = 0; k < arrays.length; k += 1) bound += lengths[k] === 1 ? 0 : stored[k] + 1;
     bound = Math.min(bound, size);

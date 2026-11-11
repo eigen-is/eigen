@@ -34,6 +34,9 @@ export class Evaluator {
     public readonly walk = new Walk(this);
     // Where endsAt writes the rows or columns of the reference being read.
     private readonly ends: Ends = { first: 0, second: 0 };
+    // Where a reference that is read as an array marks its rows and its columns that hold a cell.
+    private rowMarks = new Uint8Array(64);
+    private columnMarks = new Uint8Array(64);
     // The value of each array constant met, which is the same for every cell that holds it.
     private readonly constants = new WeakMap<FormulaNode, Scalar | ArrayValue>();
 
@@ -50,9 +53,9 @@ export class Evaluator {
         const value = root
             ? this.read(this.binary(tree, sheet, row, column, true))
             : this.operand(tree, sheet, row, column);
-        const single = isArray(value) ? value.items[0] : value;
-        if (isReference(single)) return VALUE;
-        return single === null ? 0 : single;
+        if (!isArray(value)) return value === null ? 0 : value;
+        const first = value.items[0];
+        return isReference(first) ? VALUE : first === null ? 0 : first;
     }
 
     public evaluate(node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
@@ -125,6 +128,16 @@ export class Evaluator {
             default:
                 return value;
         }
+    }
+
+    // `count` cleared marks, for rows or for columns. They are good until the next reference is read as an array.
+    public marks(count: number, rows: boolean): Uint8Array {
+        let marks = rows ? this.rowMarks : this.columnMarks;
+        if (marks.length >= count) return marks.fill(0, 0, count);
+        marks = new Uint8Array(count);
+        if (rows) this.rowMarks = marks;
+        else this.columnMarks = marks;
+        return marks;
     }
 
     // A lazy argument, evaluated now unless the wrapper already had to. One left empty is a blank from here on.

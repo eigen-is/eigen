@@ -43,9 +43,8 @@ export class Walk {
     public num: Float64Array;
     public from = 0;
     public to = 0;
-    // A span from an array is one stored row: how many equal elements each number stands for, null when each stands
-    // for one, and how many written rows the whole span stands for. In written order every number comes `reps`
-    // times and the span as a whole `rows` times.
+    // Of a stored row of an array: how many equal elements each number stands for, null when each stands for one,
+    // and how many written rows the row stands for. In written order each number comes `reps` times, all of it `rows`.
     public reps: Int32Array | null = null;
     public rows = 1;
     // How many cells were handed out so far.

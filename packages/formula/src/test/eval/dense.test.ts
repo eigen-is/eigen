@@ -115,6 +115,12 @@ function questions(dice: Dice, expr: Expr, grid: Grid): [string, Plain][] {
             asked.push([`=SUMPRODUCT(${print(factor)},${text},${text})`, sumproduct([second, value, value])]);
         }
     }
+    if (expr.kind === 'ref') {
+        const top = dice.below(SIZE - height + 1);
+        const left = dice.below(SIZE - width + 1);
+        const moved: Expr = { kind: 'ref', top, left, bottom: top + height - 1, right: left + width - 1 };
+        asked.push([`=SUMPRODUCT(${text},${print(moved)})`, sumproduct([value, dense(moved, grid)])]);
+    }
     const joined: Dense = dense({ kind: 'binary', op: '&', a: expr, b: { kind: 'value', value: 'z' } }, grid);
     asked.push([`=COUNTA(${text}&"z")`, aggregate('COUNTA', joined)]);
     const row = 1 + dice.below(height);

@@ -1,6 +1,7 @@
 // What a formula can evaluate to. A number, a text and a boolean are the JS types and a blank is null, so most
 // arithmetic allocates nothing. The four kinds that need an object carry an integer `type`: an error, a reference
-// to cells that nobody has read yet, an array, and the argument a call leaves out.
+// to cells that nobody has read yet, an array, and the argument a call leaves out. An array keeps the size that
+// was written apart from what it stores, so a whole column costs its cells and not the grid.
 
 import type { Sheet } from '../store/sheet';
 import type { FormulaError } from './errors';

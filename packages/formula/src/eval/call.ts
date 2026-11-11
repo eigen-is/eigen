@@ -62,8 +62,7 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
 }
 
 // Runs the body once per stored element of the arrays its scalar parameters got, lined up: one result stands for
-// every written element of its run. A length of 1 repeats, and a shorter length that is not 1 leaves #N/A. A lazy
-// parameter is evaluated here, so with an array every branch runs.
+// its whole run. A lazy parameter is evaluated here, so with an array every branch runs.
 export function lift(
     ctx: Evaluator,
     entry: FunctionEntry,
@@ -101,16 +100,26 @@ export function lift(
     const height = down.count;
     const width = across.count;
     const items = new Array<Scalar>(height * width);
+    let alike = true;
+    for (let k = 0; k < arrays.length; k += 1) alike &&= down.from[k] === null && across.from[k] === null;
+    // Arrays that all run as the result does, such as two filled columns, are read at one place.
+    for (let at = 0; alike && at < items.length; at += 1) {
+        for (let k = 0; k < arrays.length; k += 1) element[places[k]] = arrays[k].items[at];
+        const result = ctx.read(held(entry.run(element, ctx, node, sheet, row, column)));
+        items[at] = isArray(result) ? CALC : result;
+    }
     // Per array, where its stored row for the row in progress starts, or -1 past its last row.
     const starts = arrays.map(() => 0);
-    for (let r = 0; r < height; r += 1) {
+    for (let r = 0; !alike && r < height; r += 1) {
         for (let k = 0; k < arrays.length; k += 1) {
-            const stored = down.from[k]?.[r] ?? r;
+            const from = down.from[k];
+            const stored = from === null ? r : from[r];
             starts[k] = stored < 0 ? -1 : stored * arrays[k].width;
         }
         for (let c = 0; c < width; c += 1) {
             for (let k = 0; k < arrays.length; k += 1) {
-                const stored = across.from[k]?.[c] ?? c;
+                const from = across.from[k];
+                const stored = from === null ? c : from[c];
                 element[places[k]] = starts[k] < 0 || stored < 0 ? NA : arrays[k].items[starts[k] + stored];
             }
             const result = ctx.read(held(entry.run(element, ctx, node, sheet, row, column)));
