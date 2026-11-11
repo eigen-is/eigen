@@ -1,3 +1,7 @@
+// The filter on a document's comment list: which assignee, colors and status it shows. useCommentFilter holds one
+// host's choice and knows whether it differs from that host's defaults, and matchesCommentFilter says whether a
+// card passes. A host such as an editor owns the state and hands it to the comment panel and the filter menu.
+
 import { useCallback, useMemo, useState } from 'react';
 import type { CommentEntry } from '../../types/chat';
 import type { CommentCard } from '../../types/comments';
@@ -21,22 +25,40 @@ export const COMMENT_STATUS_LABELS: Record<CommentFilter['status'], string> = {
     all: 'All',
 };
 
-function sameAssignee(a: CommentAssigneeFilter, b: CommentAssigneeFilter): boolean {
-    if (typeof a === 'string' || typeof b === 'string') return a === b;
-    return a.email === b.email;
-}
+export function useCommentFilter(defaults?: Partial<CommentFilter>): {
+    filter: CommentFilter;
+    setAssignee: (assignee: CommentAssigneeFilter) => void;
+    toggleColor: (color: string) => void;
+    setStatus: (status: CommentFilter['status']) => void;
+    isActive: boolean;
+    clear: () => void;
+} {
+    const [initial] = useState<CommentFilter>(() => ({ ...DEFAULT_COMMENT_FILTER, ...defaults }));
+    const [filter, setFilter] = useState(initial);
 
-function sameColors(a: Set<string> | null, b: Set<string> | null): boolean {
-    if (!a || !b) return a === b;
-    return a.size === b.size && [...a].every((c) => b.has(c));
-}
-
-export function isCommentFilterActive(filter: CommentFilter, defaults: CommentFilter): boolean {
-    return (
-        filter.status !== defaults.status ||
-        !sameAssignee(filter.assignee, defaults.assignee) ||
-        !sameColors(filter.colors, defaults.colors)
+    const setAssignee = useCallback(
+        (assignee: CommentAssigneeFilter) => setFilter((current) => ({ ...current, assignee })),
+        [],
     );
+    const setStatus = useCallback(
+        (status: CommentFilter['status']) => setFilter((current) => ({ ...current, status })),
+        [],
+    );
+    const toggleColor = useCallback(
+        (color: string) =>
+            setFilter((current) => {
+                const colors = new Set(current.colors);
+                if (colors.has(color)) colors.delete(color);
+                else colors.add(color);
+                return { ...current, colors: colors.size ? colors : null };
+            }),
+        [],
+    );
+    const clear = useCallback(() => setFilter(initial), [initial]);
+
+    const isActive = useMemo(() => isCommentFilterActive(filter, initial), [filter, initial]);
+
+    return { filter, setAssignee, toggleColor, setStatus, isActive, clear };
 }
 
 export function matchesCommentFilter(
@@ -58,32 +80,20 @@ export function matchesCommentFilter(
     return true;
 }
 
-export function useCommentFilter(defaults?: Partial<CommentFilter>): {
-    filter: CommentFilter;
-    setAssignee: (a: CommentAssigneeFilter) => void;
-    toggleColor: (color: string) => void;
-    setStatus: (s: CommentFilter['status']) => void;
-    isActive: boolean;
-    clear: () => void;
-} {
-    const [mergedDefaults] = useState<CommentFilter>(() => ({ ...DEFAULT_COMMENT_FILTER, ...defaults }));
-    const [filter, setFilter] = useState(mergedDefaults);
-
-    const setAssignee = useCallback((a: CommentAssigneeFilter) => setFilter((f) => ({ ...f, assignee: a })), []);
-    const setStatus = useCallback((s: CommentFilter['status']) => setFilter((f) => ({ ...f, status: s })), []);
-    const toggleColor = useCallback(
-        (color: string) =>
-            setFilter((f) => {
-                const next = new Set(f.colors);
-                if (next.has(color)) next.delete(color);
-                else next.add(color);
-                return { ...f, colors: next.size ? next : null };
-            }),
-        [],
+export function isCommentFilterActive(filter: CommentFilter, defaults: CommentFilter): boolean {
+    return (
+        filter.status !== defaults.status ||
+        !sameAssignee(filter.assignee, defaults.assignee) ||
+        !sameColors(filter.colors, defaults.colors)
     );
-    const clear = useCallback(() => setFilter(mergedDefaults), [mergedDefaults]);
+}
 
-    const isActive = useMemo(() => isCommentFilterActive(filter, mergedDefaults), [filter, mergedDefaults]);
+function sameAssignee(a: CommentAssigneeFilter, b: CommentAssigneeFilter): boolean {
+    if (typeof a === 'string' || typeof b === 'string') return a === b;
+    return a.email === b.email;
+}
 
-    return { filter, setAssignee, toggleColor, setStatus, isActive, clear };
+function sameColors(a: Set<string> | null, b: Set<string> | null): boolean {
+    if (!a || !b) return a === b;
+    return a.size === b.size && [...a].every((color) => b.has(color));
 }
