@@ -373,6 +373,7 @@ const TYPED_WORDS = [
     ...['(', ')', '(', ')', '(', ')', ',', ':', ':', ':'],
     ...['SUM (', 'TRUE (', 'F  (', 'RC (', 'A1 (', 'Rate\n('],
     ...['Sheet2!A', 'Sheet2!A', 'Sheet2!$B', 'Sheet2!1', 'Sheet2!$2', 'Sheet2!A1', "'No Such'!B", 'NoSuch!B'],
+    ...['#REF!A1', '#REF!$B$2', '#ref!A', '#REF!1', '#REF!A1:B2', '#N/AA1'],
 ];
 
 const STORED_WORDS = [
@@ -385,6 +386,7 @@ const STORED_WORDS = [
     ...['(', ')', '(', ')', '(', ')', ',', ':', ':', ':', '!', '$'],
     ...['SUM (', 'TRUE (', 'F  (', 'RC (', 'A1 (', 'rc (', 'Rate\n('],
     ...['[s2]!C1', '[s2]!C[2]', '[s2]!R', '[s2]!R2', '[s2]!A', '[s2]!B', '[s2]!RC', "'x'!C"],
+    ...['#REF!RC', '#REF!R1C1', '#REF!A1', '#REF!C'],
 ];
 
 // A seeded token soup: a few words of one grammar's vocabulary in any order, most of which do not parse.

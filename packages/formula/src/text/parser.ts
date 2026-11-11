@@ -329,9 +329,17 @@ class Parser {
                 this.next();
                 return leaf(NodeKind.String, 0, content, space, SheetKind.Host, '');
             }
-            case Token.Error:
+            case Token.Error: {
+                const code = errorCode(text, pos);
                 this.next();
-                return leaf(NodeKind.Error, errorCode(text, pos), '', space, SheetKind.Host, '');
+                // Typed text may hold Excel's spelling of a reference to a deleted sheet, #REF!A1. The error forgets
+                // the cells, so they are read and dropped.
+                const cells = this.kind === Token.Word || this.kind === Token.Number;
+                if (code === REF_ERROR && !this.stored && this.space === '' && cells) {
+                    this.reference('', SheetKind.Host, '');
+                }
+                return leaf(NodeKind.Error, code, '', space, SheetKind.Host, '');
+            }
             case Token.Plus:
             case Token.Minus:
             case Token.At: {

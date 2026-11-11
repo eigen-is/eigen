@@ -560,6 +560,45 @@ describe('references and sheets (parsing.md 2.4)', () => {
         expect(treeA1(shown(text))).toEqual(tree);
     });
 
+    test.each([
+        ['=#REF!A1', '#REF!'],
+        ['=#REF!$A$1', '#REF!'],
+        ['=#ReF!xfd1048576', '#REF!'],
+        ['=SUM(#REF!A1:B2)', 'SUM(#REF!)'],
+        ['=#REF!A:B+1', '(#REF!+1)'],
+        ['=#REF!$1:2', '#REF!'],
+        ['=1+#REF!A1*2', '(1+(#REF!*2))'],
+        ['=#REF!A1:#REF!B2', '(#REF!:#REF!)'],
+        ['=#REF!A1#', '(#REF!#)'],
+        ['=A1 #REF!B1', '(RC[-13] #REF!)'],
+    ])('the cells Excel writes behind the #REF! of a deleted sheet are dropped: %s', (text, expected) => {
+        const tree = treeA1(text);
+        expect(grouped(tree)).toBe(expected);
+        expect(treeStored(printStored(tree))).toEqual(tree);
+        expect(treeA1(shown(text))).toEqual(tree);
+    });
+
+    test('that #REF! is the leaf of a reference that broke, with its whitespace', () => {
+        expect(treeA1('=#REF!A1')).toEqual(treeA1('=#REF!'));
+        expect(shown('= #REF!A1 + 1')).toBe('= #REF! + 1');
+        expect(shown("='[1]x y'!#REF!")).toBe("='[1]x y'!#REF!");
+        expect(shown('=SUM(Sheet2!A1:#REF!)')).toBe('=SUM(Sheet2!A1:#REF!)');
+    });
+
+    test.each(['=#REF!Rate', '=#REF!A', '=#REF!5', '=#REF!A1B', '=#N/AA1', '=#REF!"a"', '=#REF!#REF!'])(
+        'only cells stand there: %s does not parse',
+        (text) => {
+            expect(failure(text)).toBe('syntax');
+        },
+    );
+
+    test.each(['=#REF!RC', '=#REF!R1C1', '=#REF!A1', '=#REF!C:C'])(
+        'the stored form never holds that spelling: %s does not parse',
+        (text) => {
+            expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
+        },
+    );
+
     test('a reference that left the grid or lost its sheet shows as text that parses', () => {
         const tree = treeA1('=SUM(A1:B2 C1)+A1#+Sheet2!A1', 'C3');
         const gone = treeStored('=SUM([gone]!RC [gone]!R1C1:R2C2)+[gone]!RC#');
