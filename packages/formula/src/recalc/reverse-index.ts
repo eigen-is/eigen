@@ -166,69 +166,73 @@ export class ReverseIndex {
         this.lists = [];
         this.starts = [];
         this.levels = [];
-        for (const read of areas) {
-            const count = read.length / 5;
-            // The first row and the place of each area in one number, so that a plain sort orders them by row.
-            const order = new Float64Array(count);
-            for (let i = 0; i < count; i += 1) order[i] = read[i * 5] * count + i;
-            order.sort();
-            // The blocks that tile the columns of each area, in that order: power of two, block and area.
-            const tiles: number[] = [];
-            // Per power of two, its first and last block in use.
-            const firsts = new Int32Array(LEVELS).fill(GRID_COLUMNS);
-            const lasts = new Int32Array(LEVELS).fill(-1);
-            for (let i = 0; i < count; i += 1) {
-                const area = (order[i] - Math.floor(order[i] / count) * count) * 5;
-                let low = read[area + 2];
-                let high = read[area + 3] + 1;
-                for (let level = 0; low < high; level += 1) {
-                    // An odd end is a block of its own: its neighbor pairs with a column outside the area.
-                    if (low & 1) {
-                        tiles.push(level, low, area);
-                        low += 1;
-                    }
-                    if (high & 1) {
-                        high -= 1;
-                        tiles.push(level, high, area);
-                    }
-                    low >>= 1;
-                    high >>= 1;
+        for (const read of areas) this.list(read);
+    }
+
+    // Builds the listings of one sheet from what its entries read of it: first and last row, first and last
+    // column, and the entry. A method of its own, so that it is called often enough to be compiled early.
+    private list(read: readonly number[]): void {
+        const count = read.length / 5;
+        // The first row and the place of each area in one number, so that a plain sort orders them by row.
+        const order = new Float64Array(count);
+        for (let i = 0; i < count; i += 1) order[i] = read[i * 5] * count + i;
+        order.sort();
+        // The blocks that tile the columns of each area, in that order: power of two, block and area.
+        const tiles: number[] = [];
+        // Per power of two, its first and last block in use.
+        const firsts = new Int32Array(LEVELS).fill(GRID_COLUMNS);
+        const lasts = new Int32Array(LEVELS).fill(-1);
+        for (let i = 0; i < count; i += 1) {
+            const area = (order[i] - Math.floor(order[i] / count) * count) * 5;
+            let low = read[area + 2];
+            let high = read[area + 3] + 1;
+            for (let level = 0; low < high; level += 1) {
+                // An odd end is a block of its own: its neighbor pairs with a column outside the area.
+                if (low & 1) {
+                    tiles.push(level, low, area);
+                    low += 1;
                 }
+                if (high & 1) {
+                    high -= 1;
+                    tiles.push(level, high, area);
+                }
+                low >>= 1;
+                high >>= 1;
             }
-            for (let t = 0; t < tiles.length; t += 3) {
-                const level = tiles[t];
-                if (tiles[t + 1] < firsts[level]) firsts[level] = tiles[t + 1];
-                if (tiles[t + 1] > lasts[level]) lasts[level] = tiles[t + 1];
-            }
-            const levels: number[] = [];
-            // Per power of two, where its block 0 would sit in `starts`.
-            const bases = new Int32Array(LEVELS);
-            let slots = 0;
-            for (let level = 0; level < LEVELS; level += 1) {
-                if (lasts[level] < 0) continue;
-                levels.push(level, firsts[level], lasts[level], slots);
-                bases[level] = slots - firsts[level];
-                slots += lasts[level] - firsts[level] + 1;
-            }
-            const starts = new Int32Array(slots + 1);
-            for (let t = 0; t < tiles.length; t += 3) starts[bases[tiles[t]] + tiles[t + 1] + 1] += 1;
-            for (let slot = 0; slot < slots; slot += 1) starts[slot + 1] += starts[slot];
-            const list = new Int32Array((tiles.length / 3) * 4);
-            const next = starts.slice();
-            // The tiles come in row order, so every block is filled in row order.
-            for (let t = 0; t < tiles.length; t += 3) {
-                const slot = bases[tiles[t]] + tiles[t + 1];
-                const at = next[slot] * 4;
-                next[slot] += 1;
-                list[at + TOP] = read[tiles[t + 2]];
-                list[at + BOTTOM] = read[tiles[t + 2] + 1];
-                list[at + ENTRY] = read[tiles[t + 2] + 4];
-            }
-            for (let slot = 0; slot < slots; slot += 1) reachOf(list, starts[slot], starts[slot + 1]);
-            this.lists.push(list);
-            this.starts.push(starts);
-            this.levels.push(levels);
         }
+        for (let t = 0; t < tiles.length; t += 3) {
+            const level = tiles[t];
+            if (tiles[t + 1] < firsts[level]) firsts[level] = tiles[t + 1];
+            if (tiles[t + 1] > lasts[level]) lasts[level] = tiles[t + 1];
+        }
+        const levels: number[] = [];
+        // Per power of two, where its block 0 would sit in `starts`.
+        const bases = new Int32Array(LEVELS);
+        let slots = 0;
+        for (let level = 0; level < LEVELS; level += 1) {
+            if (lasts[level] < 0) continue;
+            levels.push(level, firsts[level], lasts[level], slots);
+            bases[level] = slots - firsts[level];
+            slots += lasts[level] - firsts[level] + 1;
+        }
+        const starts = new Int32Array(slots + 1);
+        for (let t = 0; t < tiles.length; t += 3) starts[bases[tiles[t]] + tiles[t + 1] + 1] += 1;
+        for (let slot = 0; slot < slots; slot += 1) starts[slot + 1] += starts[slot];
+        const list = new Int32Array((tiles.length / 3) * 4);
+        const next = starts.slice();
+        // The tiles come in row order, so every block is filled in row order.
+        for (let t = 0; t < tiles.length; t += 3) {
+            const slot = bases[tiles[t]] + tiles[t + 1];
+            const at = next[slot] * 4;
+            next[slot] += 1;
+            list[at + TOP] = read[tiles[t + 2]];
+            list[at + BOTTOM] = read[tiles[t + 2] + 1];
+            list[at + ENTRY] = read[tiles[t + 2] + 4];
+        }
+        for (let slot = 0; slot < slots; slot += 1) reachOf(list, starts[slot], starts[slot + 1]);
+        this.lists.push(list);
+        this.starts.push(starts);
+        this.levels.push(levels);
     }
 
     // Flags every formula that reads a seed or a formula flagged here, each once, and with any seed at all every
