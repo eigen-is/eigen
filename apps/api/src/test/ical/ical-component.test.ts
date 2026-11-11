@@ -364,7 +364,7 @@ describe('SEQUENCE', () => {
         expect(sequenceOf(masterOf(resource))).toBe(3);
     });
 
-    test("an organizer's new date, and a cancelled one, outrank every revision the file holds", () => {
+    test("an organizer's new date that reschedules, and a cancelled one, outrank every revision the file holds", () => {
         const added = highWater();
         putOverride(added, { ...OVERRIDE, id: 'evt-new', recurrenceDate: '2026-05-06', sequence: 0 });
         expect(
