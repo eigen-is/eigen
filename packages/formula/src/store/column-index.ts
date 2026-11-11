@@ -13,12 +13,12 @@ type Rows = Map<number, number[]>;
 const NO_ROWS: readonly number[] = Object.freeze([]);
 
 export class ColumnIndex {
-    public readonly version: number;
+    private readonly version: number;
     private numbers: Rows | null = null;
     private texts: Rows | null = null;
     private booleans: readonly [number[], number[]] | null = null;
 
-    public constructor(version: number) {
+    private constructor(version: number) {
         this.version = version;
     }
 
