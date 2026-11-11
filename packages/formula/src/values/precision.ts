@@ -3,8 +3,9 @@
 // 0.1+0.2 equals 0.3 and ROUND(1.005,2) is 1.01. The evaluator's operators and the function library call them
 // once per cell, so each takes its cheap exit before it reads any decimal digits.
 
-// A sum this small against its larger operand is what binary rounding left of a decimal zero.
-const SNAP_RATIO = 2 ** -48;
+// A sum whose leading bit lies this many bits or more under its larger operand's is what binary rounding left of
+// a decimal zero.
+const SNAP_BITS = 50;
 
 // Two numbers further apart than this, relative to the larger, differ within their first 15 digits.
 const CLOSE_RATIO = 2e-14;
@@ -35,9 +36,17 @@ export function compare15(a: number, b: number): number {
     return a < b ? -1 : a > b ? 1 : 0;
 }
 
-// The result of one a + b or a - b, or 0 when it is tiny against its operands.
+// The result of one a + b or a - b, or 0 when it is tiny against its operands. Excel goes by binary exponents, so
+// the limit is a power of two: the largest one that is not above the larger operand, shifted down.
 export function snapSum(result: number, a: number, b: number): number {
-    return Math.abs(result) < SNAP_RATIO * Math.max(Math.abs(a), Math.abs(b)) ? 0 : result;
+    const top = Math.max(Math.abs(a), Math.abs(b));
+    const raised = Math.abs(result) * 2 ** (SNAP_BITS - 1);
+    if (raised >= top) return result;
+    if (raised * 2 <= top) return 0;
+    let power = 1;
+    while (power > top) power /= 2;
+    while (power * 2 <= top) power *= 2;
+    return raised < power ? 0 : result;
 }
 
 // Rounds half away from zero at `digits` decimals; negative digits round left of the decimal point. It rounds the

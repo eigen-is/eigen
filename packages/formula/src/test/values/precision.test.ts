@@ -72,6 +72,16 @@ describe('compare15 and equal15', () => {
         expect(compare15(1e300, 1.0000000000001e300)).toBe(-1);
     });
 
+    // The Excel experiment: 1 plus 22 last bits equals 1 and plus 23 does not; at 1E10 the line is between 26 and 28.
+    test("Excel's line between equal and not is the half of the 15th digit", () => {
+        expect(equal15(1 + 22 * 2 ** -52, 1)).toBe(true);
+        expect(equal15(1 + 23 * 2 ** -52, 1)).toBe(false);
+        expect(equal15(1e10 + 26 * 2 ** -19, 1e10)).toBe(true);
+        expect(equal15(1e10 + 28 * 2 ** -19, 1e10)).toBe(false);
+        expect(equal15(1, 1 + 2 ** -48)).toBe(true);
+        expect(equal15(1, 1 + 2 ** -47)).toBe(false);
+    });
+
     test('a 16 digit id equals another that agrees in 15 digits', () => {
         expect(equal15(1234567890123451, 1234567890123452)).toBe(true);
         expect(equal15(1234567890123410, 1234567890123420)).toBe(false);
@@ -100,6 +110,36 @@ describe('snapSum', () => {
         expect(snapSum(1 - 0.9 - 0.1, 1 - 0.9, 0.1)).toBe(0);
         expect(snapSum(1.333 + 1.225 - 1.333 - 1.225, 1.333 + 1.225 - 1.333, 1.225)).toBe(0);
         expect(snapSum(0.1 + 0.2 + -0.3, 0.1 + 0.2, -0.3)).toBe(0);
+    });
+
+    // x is `steps` last bits above `base`; Excel answers x - base and base - x with 0 up to 7 steps, at 1, 1E10
+    // and 1E-10, and with the difference from 8 steps on.
+    test("Excel's limit: a result 50 bits or more under its operands is 0", () => {
+        for (const base of [1, 1e10, 1e-10]) {
+            const bit = 2 ** (Math.floor(Math.log2(base)) - 52);
+            for (const steps of [1, 2, 3, 4, 5, 6, 7, 8, 9, 16, 23, 64, 4096]) {
+                const x = base + steps * bit;
+                const kept = steps >= 8;
+                expect([base, steps, snapSum(x - base, x, base)]).toEqual([base, steps, kept ? steps * bit : 0]);
+                expect([base, steps, snapSum(base - x, base, x)]).toEqual([base, steps, kept ? -steps * bit : 0]);
+            }
+        }
+        expect(snapSum(1 + 2 ** -50 - 1, 1 + 2 ** -50, 1)).toBe(0);
+        expect(snapSum(1 + 2 ** -40 - 1, 1 + 2 ** -40, 1)).toBe(2 ** -40);
+        expect(snapSum(1e15 + 0.3 - 1e15, 1e15 + 0.3, 1e15)).toBe(0);
+        expect(snapSum(1e15 + 1 - 1e15, 1e15 + 1, 1e15)).toBe(1);
+    });
+
+    test('the limit follows the larger operand, whichever side it is on, and its sign does not matter', () => {
+        expect(snapSum(7 * 2 ** -52, -1, 1 + 7 * 2 ** -52)).toBe(0);
+        expect(snapSum(2 ** -49, -1, 1 + 2 ** -49)).toBe(2 ** -49);
+        expect(snapSum(-(2 ** -50), -1.9999, 1.9999 - 2 ** -50)).toBe(0);
+        expect(snapSum(2 ** -49, 1.9999, -1.9999 + 2 ** -49)).toBe(2 ** -49);
+        expect(snapSum(1.5 * 2 ** -49, 2, -2 + 1.5 * 2 ** -49)).toBe(0);
+        expect(snapSum(2 ** -48, 2, -2 + 2 ** -48)).toBe(2 ** -48);
+        expect(snapSum(5e-324, 5e-324, 0)).toBe(5e-324);
+        expect(snapSum(1e-320, 1e-305, 1e-320)).toBe(0);
+        expect(snapSum(1e300, 1e300, 1e300)).toBe(1e300);
     });
 
     test('a result that is not tiny against its operands stays', () => {
