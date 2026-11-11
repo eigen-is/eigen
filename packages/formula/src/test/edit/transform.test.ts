@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { LineEdit } from '../../text';
-import { GONE, mapIndex, printStored, toA1, transformLines } from '../../text';
+import { GONE, mapIndex, parseStored, printStored, toA1, transformLines } from '../../text';
 import { at } from '../text/support';
 import { deleteColumns, deleteRows, insertColumns, insertRows, shown, tree } from './support';
 
@@ -183,5 +183,31 @@ describe('what the transform leaves alone', () => {
     test('an edit of a sheet the formula does not touch returns the same tree', () => {
         const before = tree('=A5+Sheet2!A5', 'C7');
         expect(transformLines(before, insertRows(1, 1, 's3'), 's1', 6).tree).toBe(before);
+    });
+});
+
+describe('what comes out is stored text that reads back as the same tree', () => {
+    const reread = (text: string): [string, string] => {
+        const stored = printStored(transformLines(tree(text, 'D1'), deleteRows(5), 's1', 0).tree);
+        const back = parseStored(stored);
+        return [stored, 'reason' in back ? back.reason : printStored(back)];
+    };
+    test.each([
+        ['=A5', '=#REF!'],
+        ['=SUM(A5,Sheet1!A5)', '=SUM(#REF!,[s1]!#REF!)'],
+        ['=-A5%+@A5', '=-#REF!%+@#REF!'],
+        ['=(A5,B5)', '=(#REF!,#REF!)'],
+        ['=A5:B5:C7', '=#REF!:R[5]C[-1]'],
+        ['=SUM(A3:A$5)+A$9', '=SUM(R[2]C[-3]:R4C[-3])+R8C[-3]'],
+    ])('%s', (text, stored) => {
+        expect(reread(text)).toEqual([stored, stored]);
+    });
+    // The parser reads #REF! as a reference operand only once the text unit's fix is merged: then these are tests.
+    test.todo.each([
+        ['=A5#', '=#REF!#'],
+        ['=A1:B2 A5', '=RC[-3]:R[1]C[-2] #REF!'],
+        ['=SUM(A5:A5 A1)', '=SUM(#REF! RC[-3])'],
+    ])('%s', (text, stored) => {
+        expect(reread(text)).toEqual([stored, stored]);
     });
 });

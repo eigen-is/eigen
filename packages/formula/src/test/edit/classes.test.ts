@@ -11,6 +11,7 @@ import {
     GRID_ROWS,
     hostClasses,
     mapIndex,
+    parseStored,
     printStored,
     ShapeTable,
     toA1,
@@ -142,6 +143,9 @@ describe('the fast path against the slow version', () => {
             const before = tree(text, place(edit.rows, base, cross));
             const result = transformLines(before, edit, hostSheet, base);
             if (result.tree !== before) changed += 1;
+            const stored = printStored(result.tree);
+            const reread = parseStored(stored);
+            expect('reason' in reread ? reread.reason : printStored(reread)).toBe(stored);
             expect(`${text} → ${shown(result.tree, place(edit.rows, after, cross))}`).toBe(
                 `${text} → ${expected(drawn, base)}`,
             );
