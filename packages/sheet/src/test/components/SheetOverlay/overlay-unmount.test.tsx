@@ -1,4 +1,4 @@
-// The overlay leaves no work behind when the grid goes, such as on a remount for a new snapshot: a move over a cell
+// The overlay leaves no work behind when the grid goes, such as when the editor opens another document: a move over a cell
 // arms the link card's debounce, and unmounting clears that timer, so no recipe runs on a workbook nobody shows.
 import { expect, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';

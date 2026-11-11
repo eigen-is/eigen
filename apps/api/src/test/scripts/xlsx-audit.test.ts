@@ -3,9 +3,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chartSeriesStyle, defaultChartSpec, newSheetChartSpecParts } from '@workspace/lib/charts';
-import type { Sheet } from '@workspace/lib/sheets';
+import { chartSeriesStyle, defaultChartSpec, newChartSpecParts } from '@workspace/lib/charts';
+import type { Sheet, SheetValidation } from '@workspace/lib/sheets';
 import type { ChartSpec } from '@workspace/lib/types/chart';
+import { generateNKeysBetween } from '@workspace/lib/vector';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import type { Feature } from '../../scripts/xlsx-audit';
 import {
@@ -56,6 +57,13 @@ const workbook = (marker = '') =>
 
 const counts = (tally: Map<Feature, number>, features: Feature[]) =>
     Object.fromEntries(features.map((feature) => [feature, tally.get(feature) ?? 0]));
+
+// Validation rules from a list, the last in the list winning where they overlap: the ids validation-1 and on, each
+// with the next order key.
+function numbered(rules: Pick<SheetValidation, 'ranges' | 'rule'>[]): Record<string, SheetValidation> {
+    const orders = generateNKeysBetween(null, null, rules.length);
+    return Object.fromEntries(rules.map((rule, i) => [`validation-${i + 1}`, { ...rule, order: orders[i] }]));
+}
 
 describe('tallies', () => {
     test("the source side counts what the package's XML holds, columns and rows one by one", () => {
@@ -421,9 +429,7 @@ describe('round trip', () => {
             {
                 id: 'fixture-7',
                 name: 'S',
-                dataValidations: Object.fromEntries(
-                    entries.map(({ ranges, value }, i) => [`validation-${i + 1}`, { ranges, rule: list(value) }]),
-                ),
+                dataValidations: numbered(entries.map(({ ranges, value }) => ({ ranges, rule: list(value) }))),
             },
         ];
         const classify = (b: Sheet[]) =>
@@ -461,23 +467,23 @@ describe('round trip', () => {
                 media: { a: new Map(), b: new Map() },
             }).map(({ kind, listed, count }) => [kind, listed, count]);
         // A cut that lets the lower rule keep the cell the higher one holds.
-        const overlapping = {
-            'validation-1': { ranges: [range([0, 9], [0, 0])], rule: list('a') },
-            'validation-2': { ranges: [range([4, 4], [0, 0])], rule: list('b') },
-        };
-        const reversed = {
-            'validation-1': { ranges: [range([4, 4], [0, 0])], rule: list('b') },
-            'validation-2': { ranges: [range([0, 9], [0, 0])], rule: list('a') },
-        };
+        const overlapping = numbered([
+            { ranges: [range([0, 9], [0, 0])], rule: list('a') },
+            { ranges: [range([4, 4], [0, 0])], rule: list('b') },
+        ]);
+        const reversed = numbered([
+            { ranges: [range([4, 4], [0, 0])], rule: list('b') },
+            { ranges: [range([0, 9], [0, 0])], rule: list('a') },
+        ]);
         expect(classify(new Map(), overlapping, reversed)).toEqual([['dataValidations', false, 1]]);
         // A rule the cuts leave past the range cap is dropped, which only the counted warning lists.
         const rows = Array.from({ length: 8192 }, (_, r) => range([r, r], [0, 9]));
         const cells = Array.from({ length: 8192 }, (_, i) => range([2 * i, 2 * i], [4, 4]));
-        const capped = {
-            'validation-1': { ranges: rows, rule: list('a') },
-            'validation-2': { ranges: cells, rule: list('b') },
-        };
-        const written = { 'validation-1': { ranges: cells, rule: list('b') } };
+        const capped = numbered([
+            { ranges: rows, rule: list('a') },
+            { ranges: cells, rule: list('b') },
+        ]);
+        const written = numbered([{ ranges: cells, rule: list('b') }]);
         expect(classify(new Map(), capped, written)).toEqual([['dataValidations', false, 1]]);
         expect(classify(new Map([['validations-dropped', 1]]), capped, written)).toEqual([
             ['validations dropped', true, 1],
@@ -493,10 +499,10 @@ describe('round trip', () => {
             {
                 id: 'fixture-4',
                 name: 'S',
-                dataValidations: {
-                    'validation-1': { ranges: [{ row: [0, 1048575], column: [0, 16383] }], rule: list(value1) },
-                    'validation-2': { ranges: scattered, rule: list('b') },
-                },
+                dataValidations: numbered([
+                    { ranges: [{ row: [0, 1048575], column: [0, 16383] }], rule: list(value1) },
+                    { ranges: scattered, rule: list('b') },
+                ]),
             },
         ];
         const started = performance.now();
@@ -518,6 +524,7 @@ describe('round trip', () => {
                 dataValidations: {
                     v: {
                         ranges: [{ row: [0, 9], column: [0, 0] }],
+                        order: 'a0',
                         rule: { type: 'number', type2: 'equal', value1: '1', value2: '', hintShow: true, hintValue },
                     },
                 },
@@ -579,7 +586,7 @@ describe('round trip', () => {
                 id: 'fixture-1',
                 name: 'S',
                 charts: {
-                    c: { id: 'c', index: 'a0', x: 0, y: 0, width: 10, height: 10, ...newSheetChartSpecParts(spec) },
+                    c: { id: 'c', index: 'a0', x: 0, y: 0, width: 10, height: 10, ...newChartSpecParts(spec) },
                 },
             },
         ];

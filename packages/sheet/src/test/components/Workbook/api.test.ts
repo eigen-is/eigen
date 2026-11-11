@@ -158,24 +158,36 @@ describe('applyOp and the formula dependency map', () => {
     });
 });
 
-// replaySheetsOps rolls a failing batch back whole, so a live client must too or it disagrees with a joiner.
-describe('applyOp and a batch that fails halfway', () => {
-    const ops: Op[] = [
+// One function applies a batch on a live client and for a joiner: a write whose parent is gone is skipped alone, and
+// an op the sheet refuses rolls the whole batch back.
+describe('applyOp and a batch with a write or an op that cannot apply', () => {
+    const good: Op[] = [
         { op: 'deleteRowCol', id: 'id_1', path: [], value: { type: 'row', start: 3, end: 3, id: 'id_1' } },
         { op: 'replace', id: 'id_1', path: ['data', 0, 0], value: { v: 9, m: '9' } },
-        { op: 'replace', id: 'id_1', path: ['data', 9, 9, 'v'], value: 1 },
     ];
+    const unresolved: Op = { op: 'replace', id: 'id_1', path: ['data', 9, 9, 'v'], value: 1 };
+    const refused: Op = { op: 'insertRowCol', id: 'id_1', path: [], value: { type: 'row', index: -1 } };
 
-    it('applies none of it, a row delete before the failing patch included, as the replay does', () => {
+    it('skips only the write whose parent is gone, as the replay does', () => {
         const ctx = makeCtx(null);
-        const peer = applyPeerOps(ctx, ops);
-        const [joiner] = join(ctx, [ops]);
+        const peer = applyPeerOps(ctx, [...good, unresolved]);
+        const [joiner] = join(ctx, [[...good, unresolved]]);
+        expect(peer.sheets[0].data).toHaveLength(3);
+        expect(peer.sheets[0].data?.[0]?.[0]).toEqual({ v: 9, m: '9' });
+        expect(joiner.celldata).toEqual(dataToCelldata(peer.sheets[0].data));
+    });
+
+    it('applies none of a batch with a refused row op, the writes before it included, as the replay does', () => {
+        const ctx = makeCtx(null);
+        const peer = applyPeerOps(ctx, [...good, refused]);
+        const [joiner] = join(ctx, [[...good, refused]]);
         expect(peer.sheets[0].data).toEqual(ctx.sheets[0].data);
         expect(joiner.celldata).toEqual(dataToCelldata(ctx.sheets[0].data));
     });
 
-    it('says the batch did not apply, and that a good one did', () => {
+    it('leaves the sheets as they were after a refused batch, and applies the one with a skipped write', () => {
         let next = makeCtx(null);
+        const { sheets } = next;
         const setContext = (recipe: (draft: Context) => void) => {
             next = produce(next, recipe);
         };
@@ -186,8 +198,11 @@ describe('applyOp and a batch that fails halfway', () => {
             () => {},
             { undoList: [], redoList: [] },
         );
-        expect(workbook.applyOp(ops)).toBe(false);
-        expect(workbook.applyOp(ops.slice(0, 2))).toBe(true);
+        workbook.applyOp([...good, refused]);
+        expect(next.sheets).toBe(sheets);
+        workbook.applyOp([...good, unresolved]);
+        expect(next.sheets[0].data).toHaveLength(3);
+        expect(next.sheets[0].data?.[0]?.[0]).toEqual({ v: 9, m: '9' });
     });
 });
 
@@ -226,7 +241,7 @@ describe('applyOp and a joiner agree on the batch shapes that once disagreed', (
         };
         const ops: Op[] = [
             { op: 'addSheet', id: 'id_3', path: [], value: withFormula },
-            { op: 'replace', id: 'id_1', path: ['data', 9, 9, 'v'], value: 1 },
+            { op: 'insertRowCol', id: 'id_1', path: [], value: { type: 'row', index: -1 } },
         ];
         const ctx = makeCtx(null);
         const before = { ...heldGraph(ctx).formulas };
@@ -433,18 +448,17 @@ describe('replayOps', () => {
             () => {},
             history,
         );
-        const accepted = api.replayOps(base, batches, new Set(fresh));
-        return { ctx: next, history, accepted };
+        api.replayOps(base, batches, new Set(fresh));
+        return { ctx: next, history };
     }
 
     it('applies the batches on the base, clears both stacks and keeps the view', () => {
         const base = makeCtx(null);
         const shown = applyPeerOps(base, [typedA1]);
-        const { ctx, history, accepted } = replay(shown, base.sheets, [[typedB2], [typedA1]], [[typedB2]]);
+        const { ctx, history } = replay(shown, base.sheets, [[typedB2], [typedA1]], [[typedB2]]);
         expect([ctx.sheets[0].data?.[0][0]?.v, ctx.sheets[0].data?.[1][1]?.v]).toEqual([9, 'b2']);
         expect(history).toMatchObject({ undoList: [], redoList: [] });
         expect(ctx.selections).toBe(shown.selections);
-        expect(accepted).toBe(true);
     });
 
     // The replay itself skips the formula graph, so a long one stays short, and the graph is built while the browser
@@ -458,10 +472,80 @@ describe('replayOps', () => {
         expect(ctx.formulaCache.graph?.formulaAt('id_1', 0, 1)?.formula).toBe('=A1*2');
     });
 
-    it('says when a batch failed to apply', () => {
-        const broken: Op = { op: 'replace', id: 'id_1', path: ['data', 99, 0, 'v'], value: 1 };
-        const ctx = makeCtx(null);
-        expect(replay(ctx, ctx.sheets, [[broken]], [[broken]]).accepted).toBe(false);
+    // The graph the tab holds has followed its own clear of B1. The replay starts from the base, where B1 still holds
+    // its formula, and the peer's row moves it out from under the clear, so a graph kept through it would lack it.
+    it("forgets the graph it held, so a formula a peer's row insert saves from the tab's clear is in it", () => {
+        const base = makeCtx({ f: '=A1*2', v: 10, m: '10' });
+        const clear: Op[] = [{ op: 'replace', id: 'id_1', path: ['data', 0, 1], value: null }];
+        heldGraph(base);
+        const shown = applyPeerOps(base, clear);
+        expect(heldGraph(shown).formulaAt('id_1', 0, 1)).toBeUndefined();
+        const late = [rowInsert];
+        const { ctx } = replay(shown, base.sheets, [late, clear], [late]);
+        expect(ctx.sheets[0].data?.[1]?.[1]?.f).toBe('=A2*2');
+        expect(ctx.formulaCache.graph?.formulaAt('id_1', 1, 1)?.formula).toBe('=A2*2');
+    });
+
+    it('skips a batch with a row op the sheet refuses and applies the next', () => {
+        const broken: Op = { op: 'insertRowCol', id: 'id_1', path: [], value: { type: 'row', index: -1 } };
+        const base = makeCtx(null);
+        const { ctx } = replay(base, base.sheets, [[typedA1, broken], [typedB2]], [[typedA1, broken], [typedB2]]);
+        expect([ctx.sheets[0].data?.length, ctx.sheets[0].data?.[0][0]?.v, ctx.sheets[0].data?.[1][1]?.v]).toEqual([
+            base.sheets[0].data?.length,
+            5,
+            'b2',
+        ]);
+    });
+
+    it('skips only the write whose parent is gone and applies the rest of its batch', () => {
+        const unresolved: Op = { op: 'replace', id: 'id_1', path: ['data', 99, 0, 'v'], value: 1 };
+        const base = makeCtx(null);
+        const { ctx } = replay(base, base.sheets, [[unresolved, typedB2]], [[unresolved, typedB2]]);
+        expect([ctx.sheets[0].data?.length, ctx.sheets[0].data?.[1][1]?.v]).toEqual([
+            base.sheets[0].data?.length,
+            'b2',
+        ]);
+    });
+
+    // A new snapshot's sheets come from the decoder, which hands them the stored cell list and no matrix.
+    it('gives a base without a matrix one, as the mount does, and keeps the view and the cursors', () => {
+        const shown = produce(makeCtx(null), (draft: Context) => {
+            draft.presences = [
+                { clientId: 7, sheetId: 'id_1', username: 'Ann', color: '#f00', selection: { r: 1, c: 1 } },
+            ];
+        });
+        const [{ data, ...stored }] = shown.sheets;
+        const fromSnapshot = { ...stored, celldata: [{ r: 2, c: 1, v: { v: 'stored', m: 'stored' } }] };
+        const { ctx, history } = replay(shown, [fromSnapshot], [], []);
+        expect(ctx.sheets[0].data?.length).toBe(data?.length);
+        expect(ctx.sheets[0].data?.[2][1]?.v).toBe('stored');
+        expect(ctx.sheets[0].celldata).toBeUndefined();
+        expect(ctx.selections).toBe(shown.selections);
+        expect(ctx.presences).toBe(shown.presences);
+        expect(history).toMatchObject({ undoList: [], redoList: [] });
+    });
+
+    it('drops a selection past the edge of a smaller base, on the sheet on screen and on one the tab left', () => {
+        const shown = produce(makeCtx(null), (draft: Context) => {
+            draft.selections = [{ row: [3, 3], column: [1, 1] }];
+            draft.editingCellPosition = [3, 1];
+            draft.sheetViewRecord = {
+                id_2: {
+                    scrollLeft: 0,
+                    scrollTop: 0,
+                    selectionActive: false,
+                    selections: [{ row: [0, 0], column: [3, 3] }],
+                },
+            };
+        });
+        const small = shown.sheets.map((sheet) => ({
+            ...sheet,
+            data: sheet.data?.slice(0, 2).map((row) => row.slice(0, 2)),
+        }));
+        const { ctx } = replay(shown, small, [], []);
+        expect(ctx.selections).toBeUndefined();
+        expect(ctx.editingCellPosition).toEqual([]);
+        expect(ctx.sheetViewRecord['id_2']?.selections).toBeUndefined();
     });
 
     it('moves an open cell editor only for a batch new to the tab', () => {
@@ -598,6 +682,15 @@ describe('replayOps', () => {
             const hide: Op[] = [{ op: 'replace', id: 'id_1', path: ['hide'], value: 1 }];
             const { ctx } = replay(shown, shown.sheets, [hide, typed], [hide]);
             expect(ctx.currentSheetId).toBe('id_2');
+        });
+
+        it('a fresh hide that lands the tab on a sheet whose kept selection went leaves no selection', () => {
+            const base = makeCtx(null);
+            const shown = applyPeerOps(leftBehind(base), insertAbove);
+            const hide: Op[] = [{ op: 'replace', id: 'id_2', path: ['hide'], value: 1 }];
+            const { ctx } = replay(shown, base.sheets, [deleteAbove, insertAbove, hide], [deleteAbove, hide]);
+            expect(ctx.currentSheetId).toBe('id_1');
+            expect(ctx.selections).toBeUndefined();
         });
     });
 });

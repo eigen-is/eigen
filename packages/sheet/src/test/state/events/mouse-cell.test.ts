@@ -44,9 +44,10 @@ function tickBoxContext(): Context {
     return ctx;
 }
 
-// A2's painted tick box. A2 spans x 0..74, y 20..40; an unaligned box drawn alone is centred, and the vt an
-// empty style yields is NaN, the painter's middle default.
-const PAINTED_BOX = checkboxRect(cellTextBox(0, 20, 74, 40), checkboxAlign(null, TICK_BOX, 'FALSE'), Number.NaN);
+// A2's painted tick box in sheet pixels, where a press is measured. A2 spans x 0..74, y 20..40, and the painter's
+// text box for it lies a pixel right of those edges and reaches a pixel lower. An unaligned box is centred, and the vt
+// an empty style yields is NaN, the painter's middle default.
+const PAINTED_BOX = checkboxRect(cellTextBox(1, 20, 75, 41), checkboxAlign(null), Number.NaN);
 
 function quietCache(state: Partial<GlobalCache> = {}): GlobalCache {
     return {
@@ -85,17 +86,19 @@ describe('handleCellAreaMouseDown — tick box', () => {
         expect(ctx.sheets[0].data![1][0]).toEqual({ v: true, m: 'TRUE', ct: { fa: 'General', t: 'b' } });
     });
 
-    test('answers a click on the painted box edge, not one a pixel above it', () => {
-        // The hit test used to rebuild the cell's text box without the painter's
-        // 1px top inset, so the box was drawn one pixel below the box that
-        // answered a click: its bottom edge was dead and the row above it live.
+    test("answers a click on the painted box's last pixel, not one a pixel past it or above it", () => {
         const ctx = tickBoxContext();
-        mouseDownAt(ctx, PAINTED_BOX.x + PAINTED_BOX.size, PAINTED_BOX.y + PAINTED_BOX.size);
+        mouseDownAt(ctx, PAINTED_BOX.x + PAINTED_BOX.size - 1, PAINTED_BOX.y + PAINTED_BOX.size - 1);
         expect(ctx.sheets[0].data![1][0]).toEqual({ v: true, m: 'TRUE', ct: { fa: 'General', t: 'b' } });
 
-        const above = tickBoxContext();
-        mouseDownAt(above, PAINTED_BOX.x, PAINTED_BOX.y - 1);
-        expect(above.sheets[0].data![1][0]).toEqual({ v: false, m: 'FALSE', ct: { fa: 'General', t: 'b' } });
+        for (const [x, y] of [
+            [PAINTED_BOX.x + PAINTED_BOX.size, PAINTED_BOX.y],
+            [PAINTED_BOX.x, PAINTED_BOX.y - 1],
+        ]) {
+            const beside = tickBoxContext();
+            mouseDownAt(beside, x, y);
+            expect(beside.sheets[0].data![1][0]).toEqual({ v: false, m: 'FALSE', ct: { fa: 'General', t: 'b' } });
+        }
     });
 
     test('leaves the box alone while a formula is being composed, and still takes the reference', () => {
@@ -169,12 +172,10 @@ describe('handleCellAreaMouseDown — a press that closes a menu', () => {
     });
 });
 
-// A press on a painted cell glyph outranks the selection box's DOM drag
-// targets. OverlayVisuals asks cellGlyphAtPointer before either handle starts
-// its drag, and lets a glyph press bubble to the cell area instead — these pin
-// that the predicate answers at the overlapping points and that the cell-area
-// mousedown then does the glyph's job. A1 is selected, so its bottom-right 8px
-// are the fill handle's grab and the 2px inside every edge the move band's.
+// A press on a list chevron or a tick box outranks the selection box's DOM drag targets. OverlayVisuals asks
+// cellGlyphAtPointer before either handle starts its drag, and lets a glyph press bubble to the cell area. These pin
+// that the predicate answers at the overlapping points and that the cell-area mousedown then does the glyph's job. A1
+// is selected, so its bottom-right 8px are the fill handle's grab and the 2px inside every edge the move band's.
 describe('cell glyphs over the selection drag handles', () => {
     const LIST_RULE: DataValidationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
 
@@ -218,27 +219,14 @@ describe('cell glyphs over the selection drag handles', () => {
         expect(ctx.cellSelectMoving).toBeFalsy();
     });
 
-    test('the comment triangle under the move band selects the cell, no move drag', () => {
+    test('a corner mark under the move band is no glyph, so the band keeps its press', () => {
         const ctx = selectedA1();
-        ctx.sheets[0].data![0][0] = { v: 'hi', m: 'hi', commentCardIds: ['card'] };
-        ctx.selections![0].column = [1, 1];
-        expect(glyphAt(ctx, 72, 1)).toBe('comment');
-        mouseDownAt(ctx, 72, 1);
-        expect(ctx.selections![0].column).toEqual([0, 0]);
-        expect(ctx.cellSelectMoving).toBeFalsy();
-    });
-
-    test('the invalid-value triangle under the move band selects the cell, no move drag', () => {
-        const ctx = selectedA1();
-        ctx.sheets[0].data![0][0] = { v: 1, m: '1' };
+        ctx.sheets[0].data![0][0] = { v: 1, m: '1', commentCardIds: ['card'] };
         ctx.sheets[0].dataValidations = validationsByCell({
             '0_0': { type: 'number', type2: 'moreThanThe', value1: '3', value2: '' },
         });
-        ctx.selections![0].column = [1, 1];
-        expect(glyphAt(ctx, 1, 5)).toBe('invalid');
-        mouseDownAt(ctx, 1, 5);
-        expect(ctx.selections![0].column).toEqual([0, 0]);
-        expect(ctx.cellSelectMoving).toBeFalsy();
+        expect(glyphAt(ctx, 72, 1)).toBeUndefined();
+        expect(glyphAt(ctx, 1, 5)).toBeUndefined();
     });
 
     test('outside the cell area nothing answers', () => {

@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_VALIDATION_RANGES, MAX_VALIDATIONS } from '@workspace/lib/sheets';
+import { MAX_RULE_RANGES, MAX_VALIDATIONS } from '@workspace/lib/sheets';
 import type { CountedWarningCode } from '../../../lib/document/transform/protocol';
 import { cellKey } from '../../../lib/import/sheets/cells';
 import { readRules } from '../../../lib/import/sheets/rules';
 import { readDxfs } from '../../../lib/import/sheets/styles';
 import { parseOoxml } from '../../../lib/ooxml/ooxml';
-import { rulesByCell } from '../../fixtures/validations';
+import { formatList, rulesByCell } from '../../fixtures/validations';
 import { SML, sheetXml } from '../../fixtures/xlsx';
 
 // A worksheet's conditional formats and data validations, Excel 2010's extensions besides, and each rule's output
@@ -82,7 +82,7 @@ describe('a dxf', () => {
 
 describe('a conditional format', () => {
     test('a literal comparison keeps its operands, a quoted percent as its number, with its dxf', () => {
-        const { conditionalFormatRules } = read(
+        const { conditionalFormats } = read(
             cf(
                 'B1:B5',
                 '<cfRule type="cellIs" dxfId="0" priority="1" operator="greaterThan"><formula>10</formula></cfRule>',
@@ -91,11 +91,17 @@ describe('a conditional format', () => {
             ),
         );
         const range = [{ row: [0, 4], column: [1, 1] }];
+        // Each rule takes the next id and order key, so the last is the one that wins a cell.
+        expect(Object.entries(conditionalFormats ?? {}).map(([id, { order }]) => [id, order])).toEqual([
+            ['format-1', 'a0'],
+            ['format-2', 'a1'],
+            ['format-3', 'a2'],
+        ]);
         // The lowest priority number wins in Excel and the last rule in the engine, so they come highest first.
-        expect(conditionalFormatRules).toEqual([
+        expect(formatList(conditionalFormats)).toEqual([
             {
                 type: 'default',
-                cellrange: range,
+                ranges: range,
                 format: { textColor: null, cellColor: '#00FF00' },
                 conditionName: 'between',
                 conditionRange: [],
@@ -103,7 +109,7 @@ describe('a conditional format', () => {
             },
             {
                 type: 'default',
-                cellrange: range,
+                ranges: range,
                 format: { textColor: null, cellColor: '#00FF00' },
                 conditionName: 'lessThanOrEqual',
                 conditionRange: [],
@@ -111,7 +117,7 @@ describe('a conditional format', () => {
             },
             {
                 type: 'default',
-                cellrange: range,
+                ranges: range,
                 format: { textColor: '#9C0006', cellColor: '#FFC7CE' },
                 conditionName: 'greaterThan',
                 conditionRange: [],
@@ -121,21 +127,21 @@ describe('a conditional format', () => {
     });
 
     test('a comparison with a reference is a formula anchored at the first range, a missing dxf no look', () => {
-        const { conditionalFormatRules } = read(
+        const { conditionalFormats } = read(
             cf(
                 'C3:C9 A1',
                 '<cfRule type="cellIs" priority="1" operator="notEqual"><formula>$A$1</formula></cfRule>',
                 '<cfRule type="cellIs" dxfId="9" priority="2" operator="notBetween"><formula>$A$1</formula><formula>5</formula></cfRule>',
             ),
         );
-        expect(conditionalFormatRules?.map((rule) => rule.type === 'default' && rule.conditionValue)).toEqual([
+        expect(formatList(conditionalFormats).map((rule) => rule.type === 'default' && rule.conditionValue)).toEqual([
             ['=NOT(AND(C3>=$A$1,C3<=5))'],
             ['=C3<>$A$1'],
         ]);
-        expect(conditionalFormatRules?.[0]).toMatchObject({
+        expect(formatList(conditionalFormats)[0]).toMatchObject({
             conditionName: 'formula',
             format: { textColor: null, cellColor: null },
-            cellrange: [
+            ranges: [
                 { row: [2, 8], column: [2, 2] },
                 { row: [0, 0], column: [0, 0] },
             ],
@@ -145,7 +151,7 @@ describe('a conditional format', () => {
     test('an expression, and the text and date rules Excel stores a formula for, are formula rules', () => {
         const formula = (type: string, text: string, priority: number) =>
             `<cfRule type="${type}" dxfId="0" priority="${priority}"><formula>${text}</formula></cfRule>`;
-        const { conditionalFormatRules } = read(
+        const { conditionalFormats } = read(
             cf(
                 'B2:B4 D2:D4',
                 formula('expression', 'SUM(B2:$C$3)&gt;2', 7),
@@ -157,28 +163,30 @@ describe('a conditional format', () => {
                 formula('containsErrors', 'ISERROR(B2)', 1),
             ),
         );
-        expect(conditionalFormatRules?.map((rule) => rule.type === 'default' && rule.conditionValue[0])).toEqual([
-            '=SUM(B2:$C$3)>2',
-            '=NOT(ISERROR(SEARCH(LEFT($A$1),B2)))',
-            '=ISERROR(SEARCH("x",B2))',
-            '=LEFT(B2,1)="a"',
-            '=FLOOR(B2,1)=TODAY()',
-            '=LEN(TRIM(B2))=0',
-            '=ISERROR(B2)',
-        ]);
+        expect(formatList(conditionalFormats).map((rule) => rule.type === 'default' && rule.conditionValue[0])).toEqual(
+            [
+                '=SUM(B2:$C$3)>2',
+                '=NOT(ISERROR(SEARCH(LEFT($A$1),B2)))',
+                '=ISERROR(SEARCH("x",B2))',
+                '=LEFT(B2,1)="a"',
+                '=FLOOR(B2,1)=TODAY()',
+                '=LEN(TRIM(B2))=0',
+                '=ISERROR(B2)',
+            ],
+        );
     });
 
     test("a text rule is the engine's own when its formula searches a literal", () => {
-        const { conditionalFormatRules } = read(
+        const { conditionalFormats } = read(
             cf(
                 'A1:A3',
                 '<cfRule type="containsText" dxfId="0" priority="1" operator="containsText" text="ignored"><formula>NOT(ISERROR(SEARCH("a ""b""",A1)))</formula></cfRule>',
             ),
         );
-        expect(conditionalFormatRules).toEqual([
+        expect(formatList(conditionalFormats)).toEqual([
             {
                 type: 'default',
-                cellrange: [{ row: [0, 2], column: [0, 0] }],
+                ranges: [{ row: [0, 2], column: [0, 0] }],
                 format: { textColor: '#9C0006', cellColor: '#FFC7CE' },
                 conditionName: 'textContains',
                 conditionRange: [],
@@ -188,7 +196,7 @@ describe('a conditional format', () => {
     });
 
     test('top and bottom, average and duplicate rules', () => {
-        const { conditionalFormatRules } = read(
+        const { conditionalFormats } = read(
             cf(
                 'A1:A9',
                 '<cfRule type="top10" dxfId="0" priority="1" rank="3"/>',
@@ -200,7 +208,9 @@ describe('a conditional format', () => {
             ),
         );
         expect(
-            conditionalFormatRules?.map((rule) => rule.type === 'default' && [rule.conditionName, rule.conditionValue]),
+            formatList(conditionalFormats).map(
+                (rule) => rule.type === 'default' && [rule.conditionName, rule.conditionValue],
+            ),
         ).toEqual([
             ['duplicateValue', ['1']],
             ['duplicateValue', ['0']],
@@ -212,22 +222,22 @@ describe('a conditional format', () => {
     });
 
     test('a color scale lists its stops from the maximum; a data bar is one solid color', () => {
-        const { conditionalFormatRules } = read(
+        const { conditionalFormats } = read(
             cf(
                 'C1:C3',
                 '<cfRule type="colorScale" priority="1"><colorScale><cfvo type="min"/><cfvo type="percentile" val="50"/><cfvo type="max"/><color rgb="FFF8696B"/><color theme="0" tint="-0.5"/><color theme="4"/></colorScale></cfRule>',
                 '<cfRule type="dataBar" priority="2"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF638EC6"/></dataBar></cfRule>',
             ),
         );
-        const cellrange = [{ row: [0, 2], column: [2, 2] }];
-        expect(conditionalFormatRules).toEqual([
-            { type: 'dataBar', cellrange, format: ['#638EC6'] },
-            { type: 'colorGradation', cellrange, format: ['#4472C4', '#808080', '#F8696B'] },
+        const ranges = [{ row: [0, 2], column: [2, 2] }];
+        expect(formatList(conditionalFormats)).toEqual([
+            { type: 'dataBar', ranges, format: ['#638EC6'] },
+            { type: 'colorGradation', ranges, format: ['#4472C4', '#808080', '#F8696B'] },
         ]);
     });
 
     test('what the engine has no rule for is dropped, the rest of the block kept', () => {
-        const { conditionalFormatRules } = read(
+        const { conditionalFormats } = read(
             cf(
                 'A1:A3',
                 '<cfRule type="iconSet" priority="1"><iconSet iconSet="3Arrows"><cfvo type="percent" val="0"/><cfvo type="percent" val="33"/><cfvo type="percent" val="67"/></iconSet></cfRule>',
@@ -242,10 +252,10 @@ describe('a conditional format', () => {
                     '<cfRule type="cellIs" dxfId="0" priority="7" operator="equal"><formula>1</formula></cfRule>',
                 ),
         );
-        expect(conditionalFormatRules).toEqual([
+        expect(formatList(conditionalFormats)).toEqual([
             {
                 type: 'default',
-                cellrange: [{ row: [0, 2], column: [0, 0] }],
+                ranges: [{ row: [0, 2], column: [0, 0] }],
                 format: { textColor: '#9C0006', cellColor: '#FFC7CE' },
                 conditionName: 'equal',
                 conditionRange: [],
@@ -273,20 +283,20 @@ describe('a conditional format', () => {
     });
 
     test('a range is cut to the grid, and one starting past it dropped', () => {
-        const { conditionalFormatRules } = read(
+        const { conditionalFormats } = read(
             cf(
                 `B2:A99999999 XFE1 ${'A'.repeat(300)}1 C1:${'Z'.repeat(300)}2`,
                 '<cfRule type="expression" priority="1"><formula>1</formula></cfRule>',
             ),
         );
-        expect(conditionalFormatRules?.[0].cellrange).toEqual([
+        expect(formatList(conditionalFormats)[0].ranges).toEqual([
             { row: [1, 1048575], column: [0, 1] },
             { row: [0, 1], column: [2, 16383] },
         ]);
     });
 
     test("Excel 2010's rules hold their formulas and look themselves, ordered among the others by priority", () => {
-        const { conditionalFormatRules } = read(
+        const { conditionalFormats } = read(
             cf(
                 'A1:A5',
                 '<cfRule type="cellIs" dxfId="0" priority="1" operator="lessThan"><formula>0</formula></cfRule>',
@@ -295,11 +305,11 @@ describe('a conditional format', () => {
                     `<x14:conditionalFormattings><x14:conditionalFormatting><x14:cfRule type="cellIs" priority="2" operator="greaterThan" id="{1}"><xm:f>3</xm:f><x14:dxf><font><color rgb="FF9C0006"/></font><fill><patternFill patternType="solid"><fgColor rgb="FFFFC7CE"/></patternFill></fill></x14:dxf></x14:cfRule><x14:cfRule type="expression" priority="3" id="{2}"><xm:f>Other!$A$1&gt;G3</xm:f><x14:dxf/></x14:cfRule><x14:cfRule type="dataBar" id="{3}"><x14:dataBar><x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/></x14:dataBar></x14:cfRule><xm:sqref>G3:G4</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings>`,
                 ),
         );
-        const cellrange = [{ row: [2, 3], column: [6, 6] }];
-        expect(conditionalFormatRules).toEqual([
+        const ranges = [{ row: [2, 3], column: [6, 6] }];
+        expect(formatList(conditionalFormats)).toEqual([
             {
                 type: 'default',
-                cellrange,
+                ranges,
                 format: { textColor: null, cellColor: null },
                 conditionName: 'formula',
                 conditionRange: [],
@@ -307,7 +317,7 @@ describe('a conditional format', () => {
             },
             {
                 type: 'default',
-                cellrange,
+                ranges,
                 format: { textColor: '#9C0006', cellColor: '#FFC7CE' },
                 conditionName: 'greaterThan',
                 conditionRange: [],
@@ -315,7 +325,7 @@ describe('a conditional format', () => {
             },
             {
                 type: 'default',
-                cellrange: [{ row: [0, 4], column: [0, 0] }],
+                ranges: [{ row: [0, 4], column: [0, 0] }],
                 format: { textColor: '#9C0006', cellColor: '#FFC7CE' },
                 conditionName: 'lessThan',
                 conditionRange: [],
@@ -394,8 +404,10 @@ describe('a conditional format', () => {
                 sqref,
                 '<cfRule type="cellIs" dxfId="0" priority="1" operator="between"><formula>43000</formula><formula>"x"</formula></cfRule>',
             );
-        const { conditionalFormatRules } = read(`${rule('A1:A3')}${rule('B1')}`, { date1904: true, dates: [[0, 0]] });
-        expect(conditionalFormatRules?.map((format) => 'conditionValue' in format && format.conditionValue)).toEqual([
+        const { conditionalFormats } = read(`${rule('A1:A3')}${rule('B1')}`, { date1904: true, dates: [[0, 0]] });
+        expect(
+            formatList(conditionalFormats).map((format) => 'conditionValue' in format && format.conditionValue),
+        ).toEqual([
             ['44462', 'x'],
             ['43000', 'x'],
         ]);
@@ -442,7 +454,7 @@ describe('a data validation', () => {
     // The reader hands each sheet its names' inliner; a name left as written is still no list.
     test('a list or a bound from a defined name reads what the name refers to, as a formula rule does', () => {
         const names: Record<string, string> = { Colours: 'Lists!$A$1:$A$3', Most: '10' };
-        const { rules, conditionalFormatRules } = readByCell(
+        const { rules, conditionalFormats } = readByCell(
             `${cf('A1', '<cfRule type="expression" dxfId="0" priority="1"><formula>A1&gt;Most</formula></cfRule>')}${dv(
                 list('A1', 'Colours'),
                 list('A2', 'Unknown'),
@@ -453,7 +465,7 @@ describe('a data validation', () => {
         expect(Object.keys(rules)).toEqual(['0_0', '2_0']);
         expect(rules?.['0_0'].value1).toBe('Lists!$A$1:$A$3');
         expect(rules?.['2_0'].value1).toBe('10');
-        expect(conditionalFormatRules?.map((rule) => rule.type === 'default' && rule.conditionValue)).toEqual([
+        expect(formatList(conditionalFormats).map((rule) => rule.type === 'default' && rule.conditionValue)).toEqual([
             ['=A1>10'],
         ]);
     });
@@ -600,7 +612,7 @@ describe('a data validation', () => {
 
     test('a validation over more separate ranges than a rule may hold is counted and left out', () => {
         const lost: CountedWarningCode[] = [];
-        const apart = Array.from({ length: MAX_VALIDATION_RANGES + 1 }, (_, i) => `A${2 * i + 1}`).join(' ');
+        const apart = Array.from({ length: MAX_RULE_RANGES + 1 }, (_, i) => `A${2 * i + 1}`).join(' ');
         const { dataValidations } = read(dv(list(apart, '"x"'), list('C1', '"y"')), {
             lost: (code) => lost.push(code),
         });

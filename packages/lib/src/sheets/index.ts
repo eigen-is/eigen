@@ -10,6 +10,7 @@ export {
     parseCellKey,
 } from './borders';
 export {
+    MAX_GRID_SLOTS,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
     SHEET_COLUMN_HEADER_HEIGHT,
@@ -20,14 +21,13 @@ export {
     sheetColumnsWidth,
     sheetDefaultColWidth,
     sheetDefaultRowHeight,
+    sheetFitsGrid,
     sheetRowsHeight,
     sheetTrackAt,
 } from './defaults';
 export { EXCEL_FUTURE_FUNCTIONS, isExcelFunction } from './excel-functions';
 export {
-    chartsWithinEntryCap,
     floatingItems,
-    floatingWriteFilter,
     nextFloatingIndex,
     type SheetFloatingItem,
     type SheetFloatingKind,
@@ -36,26 +36,31 @@ export {
 export { cellFontName, cellFontSize, SHEET_DEFAULT_DIGIT_WIDTH, SHEET_DEFAULT_FONT } from './fonts';
 export { columnIndexToLabel, columnLabelToIndex } from './labels';
 export {
+    coalescedRanges,
+    compareRules,
+    MAX_CONDITIONAL_FORMATS,
+    MAX_RULE_RANGES,
+    MAX_VALIDATIONS,
+    nextRuleOrder,
+    orderedRules,
+    rangesOverlap,
+    wellFormedConditionalFormats,
+    wellFormedValidations,
+} from './range-rules';
+export {
     decodeSheetsSnapshot,
     decodeSheetsWorkbook,
     encodeSheetsSnapshot,
     isCurrentSheetsSnapshot,
+    sheetKeyedMaps,
 } from './snapshot-codec';
 export * from './types';
 export {
-    coalescedRanges,
-    compareValidationIds,
-    MAX_VALIDATION_RANGES,
-    MAX_VALIDATIONS,
-    rangesOverlap,
-    wellFormedValidations,
-} from './validations';
-export {
-    readSheetsBase,
+    readSheetsLog,
     readSheetsSnapshotJson,
+    sheetsBatchOf,
     sheetsLogStartsWith,
     sheetsOpLog,
     sheetsStateMap,
-    stampSheetsBase,
     writeSheetsSnapshot,
 } from './yjs-state';

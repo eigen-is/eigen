@@ -1,8 +1,9 @@
-// The Manage rules dialog, opened from the Format menu: the current sheet's conditional-format rules, each with its
-// range, a plain-English description and a swatch of its style. Its delete button per rule removes the rule at once,
-// so the dialog is a list with only Close in its footer.
+// The Manage rules dialog, opened from the Format menu: the current sheet's conditional-format rules in their order,
+// each with its range, a plain-English description and a swatch of its style. Its delete button per rule removes that
+// rule by its id at once, so the dialog is a list with only Close in its footer.
 
 import type { ConditionalFormatRule, DefaultConditionalFormatRule } from '@workspace/lib/sheets';
+import { orderedRules } from '@workspace/lib/sheets';
 import { Button } from '@workspace/ui/components/button';
 import { DialogFooter } from '@workspace/ui/components/dialog';
 import { FormDialog } from '@workspace/ui/components/form-dialog';
@@ -24,6 +25,45 @@ const RULE_LABELS: Record<string, string> = {
     notBetween: 'Not between',
     formula: 'Custom formula',
 };
+
+export function ManageRules() {
+    const { context, setContext } = useContext(WorkbookContext);
+    const dialogProps = useDialogProps();
+    const rules = orderedRules(findSheet(context, context.currentSheetId)?.conditionalFormats);
+
+    return (
+        <FormDialog {...dialogProps} title="Manage rules" size="md">
+            {rules.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">No rules on this sheet.</p>
+            ) : (
+                <div className="max-h-[40vh] overflow-y-auto border border-border rounded-md divide-y divide-border">
+                    {rules.map(([id, rule]) => (
+                        <div key={id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                            <RuleSwatch rule={rule} />
+                            <div className="flex-1 min-w-0">
+                                <div className="font-medium truncate">{describeRule(rule)}</div>
+                                <div className="text-xs text-muted-foreground truncate">
+                                    {rule.ranges.map((range) => rangeToA1(range)).join(', ')}
+                                </div>
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Delete rule"
+                                className="h-7 w-7 shrink-0"
+                                onClick={() => setContext((ctx) => deleteSheetRule(ctx, id))}
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            <DialogFooter showCloseButton />
+        </FormDialog>
+    );
+}
 
 function describeDefaultRule(rule: DefaultConditionalFormatRule): string {
     const label = RULE_LABELS[rule.conditionName] ?? rule.conditionName;
@@ -100,44 +140,4 @@ function RuleSwatch({ rule }: { rule: ConditionalFormatRule }) {
         );
     }
     return <div className="w-8 h-6 rounded border border-border shrink-0" />;
-}
-
-export function ManageRules() {
-    const { context, setContext } = useContext(WorkbookContext);
-    const dialogProps = useDialogProps();
-    const rules = findSheet(context, context.currentSheetId)?.conditionalFormatRules ?? [];
-
-    return (
-        <FormDialog {...dialogProps} title="Manage rules" size="md">
-            {rules.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-6 text-center">No rules on this sheet.</p>
-            ) : (
-                <div className="max-h-[40vh] overflow-y-auto border border-border rounded-md divide-y divide-border">
-                    {rules.map((rule, i) => (
-                        // biome-ignore lint/suspicious/noArrayIndexKey: a rule has no id, and a row keeps no state for a delete to misplace
-                        <div key={i} className="flex items-center gap-3 px-3 py-2 text-sm">
-                            <RuleSwatch rule={rule} />
-                            <div className="flex-1 min-w-0">
-                                <div className="font-medium truncate">{describeRule(rule)}</div>
-                                <div className="text-xs text-muted-foreground truncate">
-                                    {rule.cellrange.map((range) => rangeToA1(range)).join(', ')}
-                                </div>
-                            </div>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label="Delete rule"
-                                className="h-7 w-7 shrink-0"
-                                onClick={() => setContext((ctx) => deleteSheetRule(ctx, i))}
-                            >
-                                <X className="h-3.5 w-3.5" />
-                            </Button>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            <DialogFooter showCloseButton />
-        </FormDialog>
-    );
 }

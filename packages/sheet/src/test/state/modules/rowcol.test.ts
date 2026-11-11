@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { MAX_GRID_SLOTS, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { produce } from 'immer';
+import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import type { Context } from '../../../state/context';
+import { tryInsertRowCol } from '../../../state/events/rowcol';
 import {
     deleteRowCol,
     hideSelectedRowCol,
@@ -147,6 +150,21 @@ describe('hidden rows and columns under the selection', () => {
         });
         expect(last.sheets[0].config?.colhidden).toEqual({ 4: 0, 5: 0 });
         expect(last.selections?.[0].column).toEqual([4, 4]);
+    });
+
+    test('an insert past a limit leaves the notice that names it', () => {
+        const refused = (rows: number, columns: number, type: 'row' | 'column') => {
+            const ctx = hiddenSheet(at(0, 0));
+            // The rows share one array, which a refused insert never writes.
+            ctx.sheets[0].data = new Array(rows).fill(new Array(columns).fill(null));
+            tryInsertRowCol(ctx, { type, index: 0, count: 1, direction: 'lefttop', id: ctx.currentSheetId });
+            expect(ctx.sheets[0].data).toHaveLength(rows);
+            return ctx.warnDialog;
+        };
+        expect(refused(MAX_SHEET_ROW_COUNT, 1, 'row')).toBe('10000 row limit exceeded');
+        expect(refused(1, MAX_SHEET_COLUMN_COUNT, 'column')).toBe('1000 column limit exceeded');
+        const widest = Math.floor(MAX_GRID_SLOTS / REFERENCE_ROW_COUNT);
+        expect(refused(REFERENCE_ROW_COUNT, widest, 'column')).toBe('110,000,000 cell limit exceeded');
     });
 
     test('hiding or showing refuses more than one selection', () => {

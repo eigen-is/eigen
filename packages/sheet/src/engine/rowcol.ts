@@ -4,14 +4,16 @@
 // applies, for example in the editor's own insert and in the server's replay of the op log. The shifters for one kind
 // of map are exported for code that moves the same maps, such as the undo stacks.
 
-import type { CellMatrix, MergeCell, Sheet, SheetChart, SheetValidation } from '@workspace/lib/sheets';
+import type { CellMatrix, MergeCell, Sheet, SheetChart } from '@workspace/lib/sheets';
 import {
     cloneSides,
     freezesColumns,
     freezesRows,
+    MAX_GRID_SLOTS,
     parseCellKey,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
+    sheetFitsGrid,
 } from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { sheetFinder } from './a1-notation';
@@ -36,7 +38,7 @@ export type DeleteRowColOp = {
     id: string;
 };
 
-// An insert past the sheet's size limit throws this, and every reader skips its whole batch.
+// An insert past a size limit throws this, and every reader skips its whole batch. Its message is the editor's notice.
 export class RowColError extends Error {}
 
 type InsertLines = Pick<InsertRowColOp, 'index' | 'count' | 'direction'>;
@@ -91,30 +93,6 @@ export function shiftRangeForDelete<R extends AxisRange>(
     return op.type === 'row' ? { ...range, row: span } : { ...range, column: span };
 }
 
-// A chart's points, a pie's slice colors among them, go by index along its categories, so an insert inside them leaves
-// the new points automatic and moves the ones after up. Only a ref that runs along the op's axis has points there.
-function pointsForInsert(ref: CellRangeRef, op: InsertRowColOp): ((index: number) => number) | null {
-    if (!runsAlong(ref, op.type)) return null;
-    const [start, end] = op.type === 'row' ? ref.row : ref.column;
-    const at = lineMove(op).at - start;
-    if (at <= 0 || at > end - start) return null;
-    return (index) => (index >= at ? index + op.count : index);
-}
-
-// A delete drops the deleted points, so the points after them keep theirs.
-function pointsForDelete(ref: CellRangeRef, op: DeleteRowColOp): ((index: number) => number | null) | null {
-    if (!runsAlong(ref, op.type)) return null;
-    const [start, end] = op.type === 'row' ? ref.row : ref.column;
-    const first = Math.max(op.start, start) - start;
-    const last = Math.min(op.end, end) - start;
-    if (first > last) return null;
-    return (index) => (index < first ? index : index > last ? index - (last - first + 1) : null);
-}
-
-function runsAlong(ref: CellRangeRef, type: 'row' | 'column'): boolean {
-    return type === 'row' ? ref.column[0] === ref.column[1] : ref.row[0] === ref.row[1];
-}
-
 export function shiftMergeForInsert(
     cfg: ExtendedSheetConfig,
     type: 'row' | 'column',
@@ -123,7 +101,7 @@ export function shiftMergeForInsert(
     direction: 'lefttop' | 'rightbottom',
 ): Record<string, MergeCell> {
     const shifted: Record<string, MergeCell> = {};
-    for (const merge of Object.values(cfg.merge ?? {})) {
+    for (const merge of mergesInKeyOrder(cfg)) {
         const [first, span] = type === 'row' ? [merge.r, merge.rs] : [merge.c, merge.cs];
         const last = first + span - 1;
         const above = direction === 'lefttop';
@@ -143,7 +121,7 @@ export function shiftMergeForDelete(
 ): Record<string, MergeCell> {
     const end = start + slen - 1;
     const shifted: Record<string, MergeCell> = {};
-    for (const merge of Object.values(cfg.merge ?? {})) {
+    for (const merge of mergesInKeyOrder(cfg)) {
         const [first, span] = type === 'row' ? [merge.r, merge.rs] : [merge.c, merge.cs];
         const last = first + span - 1;
         if (first > end) placeMerge(shifted, merge, type, first - slen, span);
@@ -153,6 +131,14 @@ export function shiftMergeForDelete(
         else placeMerge(shifted, merge, type, first, last >= end ? span - slen : start - first);
     }
     return shifted;
+}
+
+// Merges that overlap, as two tabs merging at once leave them, land and stamp their cells in turn. The turn is the
+// keys' order, since two readers may hold the same map written in different orders.
+function mergesInKeyOrder({ merge = {} }: ExtendedSheetConfig): MergeCell[] {
+    return Object.keys(merge)
+        .sort()
+        .map((key) => merge[key]);
 }
 
 function placeMerge(
@@ -214,20 +200,18 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
     );
 }
 
-// A chart ref names its sheet by id, so an op moves the refs to its sheet on every sheet's charts, and the points along
-// them. Only a chart whose refs moved is rewritten.
+// A chart ref names its sheet by id, so an op moves the refs to its sheet on every sheet's charts. Only a chart whose
+// refs moved is rewritten.
 function shiftChartsAcrossSheets<S extends Sheet>(
     sheets: S[],
     sheetId: string,
     shift: (ref: CellRangeRef) => CellRangeRef | null,
-    shiftPoints: (ref: CellRangeRef) => ((index: number) => number | null) | null,
 ): S[] {
     const move = (ref: CellRangeRef) => (ref.sheetId === sheetId ? shift(ref) : ref);
-    const points = (ref: CellRangeRef) => (ref.sheetId === sheetId ? shiftPoints(ref) : null);
     return sheets.map((sheet) => {
         let charts: Record<string, SheetChart> | null = null;
         for (const chart of Object.values(sheet.charts ?? {})) {
-            const moved = mapChartRefs(chart, move, points);
+            const moved = mapChartRefs(chart, move);
             if (moved === chart) continue;
             charts ??= { ...sheet.charts };
             charts[chart.id] = moved;
@@ -262,8 +246,19 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     const data = target.data;
     if (!data) return sheets;
 
-    if (op.type === 'row' && data.length + op.count > MAX_SHEET_ROW_COUNT) throw new RowColError();
-    if (op.type === 'column' && data[0] && data[0].length + op.count > MAX_SHEET_COLUMN_COUNT) throw new RowColError();
+    const rows = data.length + (op.type === 'row' ? op.count : 0);
+    const columns = (data[0]?.length ?? 0) + (op.type === 'column' ? op.count : 0);
+    if (op.type === 'row' && rows > MAX_SHEET_ROW_COUNT) {
+        throw new RowColError(`${MAX_SHEET_ROW_COUNT} row limit exceeded`);
+    }
+    if (op.type === 'column' && data[0] && columns > MAX_SHEET_COLUMN_COUNT) {
+        throw new RowColError(`${MAX_SHEET_COLUMN_COUNT} column limit exceeded`);
+    }
+    // An imported sheet may be taller or wider than an insert's limits, so a line on its other axis can pass the
+    // bound on the grid a reader may build, and a sheet stored past it fails every later open.
+    if (!sheetFitsGrid({ row: rows, column: columns })) {
+        throw new RowColError(`${MAX_GRID_SLOTS.toLocaleString('en-US')} cell limit exceeded`);
+    }
 
     const { count } = op;
     const newTarget = { ...target };
@@ -304,15 +299,9 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     newTarget.config = newCfg;
     setSize(newTarget, newData, op.type);
 
-    if (target.conditionalFormatRules != null) {
-        newTarget.conditionalFormatRules = target.conditionalFormatRules.map((cf) => ({
-            ...cf,
-            cellrange: cf.cellrange.map((range) => shiftRangeForInsert(range, op)),
-        }));
-    }
-    if (target.dataValidations != null) {
-        newTarget.dataValidations = shiftValidations(target.dataValidations, (range) => shiftRangeForInsert(range, op));
-    }
+    const moved = (range: SingleRange) => shiftRangeForInsert(range, op);
+    if (target.conditionalFormats != null) newTarget.conditionalFormats = shiftRules(target.conditionalFormats, moved);
+    if (target.dataValidations != null) newTarget.dataValidations = shiftRules(target.dataValidations, moved);
     const frozen = shiftFrozen(target.frozen, op.type, move);
     if (frozen !== target.frozen) newTarget.frozen = frozen;
     shiftFilterForInsert(newTarget, newCfg, op);
@@ -326,12 +315,7 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
         count,
         'add',
     );
-    return shiftChartsAcrossSheets(
-        shifted,
-        op.id,
-        (ref) => shiftRangeForInsert(ref, op),
-        (ref) => pointsForInsert(ref, op),
-    );
+    return shiftChartsAcrossSheets(shifted, op.id, (ref) => shiftRangeForInsert(ref, op));
 }
 
 export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op: DeleteRowColOp): S[] {
@@ -361,25 +345,16 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
     newTarget.config = newCfg;
     setSize(newTarget, newData, op.type);
 
-    if (target.conditionalFormatRules != null) {
-        const rules = [];
-        for (const cf of target.conditionalFormatRules) {
-            const ranges: SingleRange[] = [];
-            for (const range of cf.cellrange) {
-                const shifted = shiftRangeForDelete(range, op);
-                if (shifted) ranges.push(shifted);
-            }
-            if (ranges.length > 0) {
-                const first = op.type === 'row' ? ranges[0].row[0] : ranges[0].column[0];
-                const shift = first >= op.start ? -removeCount : 0;
-                rules.push(op.type === 'row' ? withCfRanges(cf, ranges, shift, 0) : withCfRanges(cf, ranges, 0, shift));
-            }
-        }
-        newTarget.conditionalFormatRules = rules;
+    const kept = (range: SingleRange) => shiftRangeForDelete(range, op);
+    if (target.conditionalFormats != null) {
+        // A formula rule reads from its first range's corner, which moves up or left when the delete is before it.
+        newTarget.conditionalFormats = shiftRules(target.conditionalFormats, kept, (rule, ranges) => {
+            const first = op.type === 'row' ? ranges[0].row[0] : ranges[0].column[0];
+            const shift = first >= op.start ? -removeCount : 0;
+            return op.type === 'row' ? withCfRanges(rule, ranges, shift, 0) : withCfRanges(rule, ranges, 0, shift);
+        });
     }
-    if (target.dataValidations != null) {
-        newTarget.dataValidations = shiftValidations(target.dataValidations, (range) => shiftRangeForDelete(range, op));
-    }
+    if (target.dataValidations != null) newTarget.dataValidations = shiftRules(target.dataValidations, kept);
     const frozen = shiftFrozen(target.frozen, op.type, move);
     if (frozen !== target.frozen) newTarget.frozen = frozen;
     shiftFilterForDelete(newTarget, newCfg, op);
@@ -393,12 +368,7 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
         removeCount,
         'del',
     );
-    return shiftChartsAcrossSheets(
-        shifted,
-        op.id,
-        (ref) => shiftRangeForDelete(ref, op),
-        (ref) => pointsForDelete(ref, op),
-    );
+    return shiftChartsAcrossSheets(shifted, op.id, (ref) => shiftRangeForDelete(ref, op));
 }
 
 function shiftLineMaps(cfg: ExtendedSheetConfig, next: ExtendedSheetConfig, type: 'row' | 'column', move: LineMove) {
@@ -408,21 +378,22 @@ function shiftLineMaps(cfg: ExtendedSheetConfig, next: ExtendedSheetConfig, type
     }
 }
 
-// Moves every validation rule's ranges, and drops a rule left with none. A rule whose ranges stay where they were is
-// kept as the same object, and so is the map when no rule moved.
-export function shiftValidations(
-    validations: Readonly<Record<string, SheetValidation>>,
+// Moves the ranges of every rule in a sheet's conditional formats or validation rules, and drops a rule left with
+// none. A rule that stays is the same object, and so is the record, so only a rule that moved is written, by its id.
+export function shiftRules<R extends { ranges: SingleRange[] }>(
+    rules: Readonly<Record<string, R>>,
     shift: (range: SingleRange) => SingleRange | null,
-): Record<string, SheetValidation> {
-    let shifted: Record<string, SheetValidation> | null = null;
-    for (const [id, entry] of Object.entries(validations)) {
-        const ranges = entry.ranges.flatMap((range) => shift(range) ?? []);
-        if (ranges.length === entry.ranges.length && ranges.every((range, i) => range === entry.ranges[i])) continue;
-        shifted ??= { ...validations };
-        if (ranges.length > 0) shifted[id] = { ...entry, ranges };
+    withRanges: (rule: R, ranges: SingleRange[]) => R = (rule, ranges) => ({ ...rule, ranges }),
+): Record<string, R> {
+    let shifted: Record<string, R> | null = null;
+    for (const [id, rule] of Object.entries(rules)) {
+        const ranges = rule.ranges.flatMap((range) => shift(range) ?? []);
+        if (ranges.length === rule.ranges.length && ranges.every((range, i) => range === rule.ranges[i])) continue;
+        shifted ??= { ...rules };
+        if (ranges.length > 0) shifted[id] = withRanges(rule, ranges);
         else delete shifted[id];
     }
-    return shifted ?? validations;
+    return shifted ?? rules;
 }
 
 // The frozen pane, moved whole, since a peer's unfreeze removes `frozen` and a write into it would not apply. A delete

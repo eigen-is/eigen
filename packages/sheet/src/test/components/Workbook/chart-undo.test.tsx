@@ -147,9 +147,9 @@ test("undoing a title leaves a peer's later series colour", async () => {
         id = w.insertChart(BOX, sampleChartSpec('column')) ?? '';
     });
     await step((w) => w.setChartSpec(id, [{ op: 'set', path: ['title', 'text'], value: 'Goals' }]));
-    const style = JSON.parse(charts()?.[id]?.specSeries['s-1'] ?? '{}');
-    const value = JSON.stringify({ ...style, color: '#00ff00' });
-    await step((w) => w.applyOp([{ op: 'replace', id: 's1', path: ['charts', id, 'specSeries', 's-1'], value }]));
+    const series = JSON.parse(charts()?.[id]?.specSeries ?? '{}');
+    const value = JSON.stringify({ ...series, 's-1': { ...series['s-1'], color: '#00ff00' } });
+    await step((w) => w.applyOp([{ op: 'replace', id: 's1', path: ['charts', id, 'specSeries'], value }]));
     await step((w) => w.undo());
     const { spec } = readChartSpec(charts()?.[id] ?? {});
     expect(spec?.title.text).toBe("Where a star's light goes");

@@ -3,10 +3,11 @@
 // build and read every item through these helpers, and a paste drops any item that doesn't match its own shape.
 
 import { toast } from 'sonner';
-import { exceedsChartSpecBytes, exceedsChartSpecDepth, isChartSpecKey } from '../../charts/limits';
+import { exceedsChartSpecDepth } from '../../charts/limits';
 import { readChartLook } from '../../charts/look';
 import { chartSpecTexts, readChartSpec } from '../../charts/spec';
 import type { ChartSpecTexts } from '../../types/chart';
+import { isChartSpecPartKey } from '../../types/chart';
 import type {
     EigenClipboardChartItem,
     EigenClipboardData,
@@ -30,19 +31,14 @@ import { isRecord } from '../guards';
 const EIGEN_CLIPBOARD_MIME = 'application/eigen-clipboard';
 const HTML_MARKER = 'data-eigen-clipboard';
 
-// Marks the foreign-visible `<img>` a vector copy appends after the marker span (an inlined SVG render).
-// It exists only so a non-eigen host renders something; `hasRichHtmlBeyondMarker` must ignore it, or a
-// shape-only vector copy reads as rich HTML and lands as a persisted figure. One source, used on both
-// the write side (the canvas' clipboard hook) and the ignore side (hasRichHtmlBeyondMarker).
+// Marks the `<img>` a vector copy appends for hosts that are not Eigen. hasRichHtmlBeyondMarker ignores it, or a
+// shape-only copy would read as rich HTML and land in a doc as a stored figure.
 export const EIGEN_CLIPBOARD_RENDER_ATTR = 'data-eigen-clipboard-render';
 
-// Geometry carried on every placeable clipboard item, in the source app's document-space units.
-// Both dims are mandatory (see the type's contract note) — a producer that stores only one measures
-// the other before it writes.
+// An item's size in the source app's document units. A producer that stores one dimension measures the other first.
 export type ClipboardBox = { width: number; height: number; angle?: number };
 
-// Build an image item so producers never hand-assemble the five source-path fields and geometry lands
-// on the typed fields. `source` is the media file's DrivePath.
+// `source` is the media file's path, which a paste into another document re-uploads from.
 export function buildImageClipboardItem(args: {
     mediaName: string;
     source: DrivePath;
@@ -63,8 +59,6 @@ export function buildImageClipboardItem(args: {
     };
 }
 
-// Build a text item with geometry + typography on typed fields. `text` is plain text (see the type's
-// contract note).
 export function buildTextClipboardItem(args: {
     text: string;
     box: ClipboardBox;
@@ -80,13 +74,12 @@ export function buildTextClipboardItem(args: {
     };
 }
 
-// A key that names a part, under its text.
+// One of the eight parts' keys, under its text.
 const isPartText = (entry: [string, unknown]): entry is [string, string] =>
-    isChartSpecKey(entry[0]) && typeof entry[1] === 'string';
+    isChartSpecPartKey(entry[0]) && typeof entry[1] === 'string';
 
-// The one test of a chart item's parts, the builder's and the reader's: a text under each key and every key a part's,
-// within the spec's byte and depth limits as the item carries them, and inline data that reads. What a host stores can
-// be larger, so a paste counts that again (pastedChartFields).
+// The builder and the reader share this test, since a paste stores the parts as they came: only part keys, each a
+// text, within the spec's byte and depth limits, with inline data that reads.
 function isInlineChartParts(parts: unknown): parts is ChartSpecTexts {
     if (!isRecord(parts)) return false;
     const texts = Object.entries(parts);
@@ -96,10 +89,8 @@ function isInlineChartParts(parts: unknown): parts is ChartSpecTexts {
     return !texts.some(([, text]) => exceedsChartSpecDepth(text));
 }
 
-// A chart item, or null for parts no consumer could draw (range data, unreadable, over a limit). The parts ride as
-// their holder stores them, never re-serialized, so one that doesn't parse and a newer build's arrive as they left.
-// The parts and the look are read off their holder (a canvas element, a doc's chart node, a sheet chart's inline
-// copy), and a missing look field copies flat.
+// Null for parts no consumer could draw, such as range data. The parts ride as their holder stores them, never
+// serialized again, so one that doesn't parse arrives as it left.
 export function buildChartClipboardItem(args: {
     chart: Readonly<Record<string, unknown>>;
     box: Pick<ClipboardBox, 'width' | 'height'>;
@@ -111,35 +102,20 @@ export function buildChartClipboardItem(args: {
     return { type: 'chart', parts, width: args.box.width, height: args.box.height, look };
 }
 
-// The fields a paste stores for a chart item's parts, as its host makes them, or null past the byte limit: Sheets
-// repeats a series id in each entry's key, and a canvas adds every part the item lacks, so an item within the limit can
-// land past it, as a chart every peer reads as the placeholder.
-export function pastedChartFields<Fields extends Readonly<Record<string, unknown>>>(
-    parts: ChartSpecTexts,
-    make: (parts: ChartSpecTexts) => Fields,
-): Fields | null {
-    const fields = make(parts);
-    return exceedsChartSpecBytes(fields) ? null : fields;
-}
-
-// Read the typed geometry off any item. Consumers size/rotate from this — there is no `meta` sniff
-// to fall back to (geometry is only ever on the typed fields).
 export function readClipboardBox(item: EigenClipboardItem): ClipboardBox {
-    // The elements item's box is the selection's bounds — a whole set, so it carries no rotation; a chart has none.
+    // An elements item's box is its selection's bounds, which has no rotation, and a chart has none.
     const angle = item.type === 'text' || item.type === 'image' ? item.angle : undefined;
     return { width: item.width, height: item.height, angle };
 }
 
-// A text item with a real payload, not an empty carrier. The canvas writes one per rich-text box, empty
-// boxes too, and the wire is forgeable, so every consumer skips them and a contentless item never lands
-// as a blank paragraph/cell. The one home for that convention.
+// The canvas writes a text item for every text box, an empty one too, which no consumer may land as a blank paragraph
+// or cell.
 export function clipboardTextItemHasContent(item: EigenClipboardTextItem): boolean {
     return item.text.trim().length > 0;
 }
 
-// One forged item must not cost the whole paste. The wire is writable by any web page, and every
-// consumer reads the typed fields with no fallbacks, inside paste handlers that already called
-// preventDefault — so an item that doesn't match its own variant is dropped HERE.
+// Any web page can write the wire, and every consumer reads the typed fields with no fallback, so an item that
+// doesn't match its own variant is dropped here and costs the paste nothing else.
 function isValidItem(item: unknown): item is EigenClipboardItem {
     if (!isRecord(item)) return false;
     if (!Number.isFinite(item.width) || !Number.isFinite(item.height)) return false;
@@ -156,8 +132,7 @@ function isValidItem(item: unknown): item is EigenClipboardItem {
                 typeof item.sourceMountId === 'string'
             );
         case 'elements':
-            // The records themselves are re-validated per element by the document reader
-            // (readElementsClipboardItem → readElementFromFields), which clamps hostile values.
+            // The canvas reads each record through its own element reader, which holds hostile values to their ranges.
             return Array.isArray(item.elements) && typeof item.sourceFrameId === 'string';
         case 'chart':
             return isInlineChartParts(item.parts);
@@ -187,11 +162,8 @@ function parseEigenJson(raw: string): EigenClipboardData | null {
     };
 }
 
-// Embed an eigen payload into an SVG's `<metadata>` block (Excalidraw's svg-source pattern) so a
-// self-contained SVG that travels alone still round-trips back to native elements. The JSON is
-// URI-encoded (attribute-safe: no quotes/`<`/`&`), and the block is inserted right after the opening
-// `<svg …>` tag; SVG renderers ignore `<metadata>`, so the drawing is unchanged. Callers embed the
-// items-only payload (never the `svg` field itself) to avoid nesting a copy of the SVG in its own text.
+// The items ride in the SVG's `<metadata>` block, which renderers ignore, so an SVG that travels alone pastes back
+// as elements. The `svg` field stays out, or the SVG would nest a copy of itself.
 export function embedClipboardSvgMetadata(svg: string, data: EigenClipboardData): string {
     const encoded = encodeURIComponent(JSON.stringify({ version: 1, items: data.items }));
     const block = `<metadata ${HTML_MARKER}="${encoded}"></metadata>`;
@@ -199,9 +171,7 @@ export function embedClipboardSvgMetadata(svg: string, data: EigenClipboardData)
     return open === -1 ? svg : svg.slice(0, open + 1) + block + svg.slice(open + 1);
 }
 
-// The inverse: pull an eigen payload back out of an SVG's `<metadata>` block. Returns null for any SVG
-// without our marker (a foreign drawing), so a paste consumer can tell "our SVG" (restore elements)
-// from "someone else's" (insert as an image).
+// Null for an SVG without the marker, which a paste inserts as an image.
 export function extractClipboardSvgMetadata(svg: string): EigenClipboardData | null {
     const match = svg.match(new RegExp(`<metadata[^>]*${HTML_MARKER}="([^"]*?)"`));
     if (!match?.[1]) return null;
@@ -213,51 +183,31 @@ export function extractClipboardSvgMetadata(svg: string): EigenClipboardData | n
     return null;
 }
 
-// Wrap an SVG string as an `image/svg+xml` File so a paste consumer can feed it straight into its
-// existing OS-image upload path (previews serve SVG as-is; `<image href>` renders it). One home for
-// the conversion, shared by docs, sheets and the canvas.
 export function svgToImageFile(svg: string, name = 'drawing.svg'): File {
     return new File([svg], name, { type: 'image/svg+xml' });
 }
 
-// Base64 `data:` URI for a Blob's bytes. Private — callers reach it via inlineClipboardSvgMedia /
-// svgToImageDataUri.
 async function blobToDataUri(blob: Blob): Promise<string> {
     const bytes = new Uint8Array(await blob.arrayBuffer());
     return `data:${blob.type || 'application/octet-stream'};base64,${bytesToBase64(bytes)}`;
 }
 
-// A whole SVG string as a base64 `data:image/svg+xml` URI — the `src` for the foreign-visible `<img>`
-// flavor the async menu-copy path writes. Goes through blobToDataUri so UTF-8 text in the drawing is
-// encoded correctly (a naive btoa over the raw string throws on non-Latin1 characters).
+// Through a Blob, since btoa over the raw string throws on a character outside Latin-1.
 export async function svgToImageDataUri(svg: string): Promise<string> {
     return blobToDataUri(new Blob([svg], { type: 'image/svg+xml' }));
 }
 
-// Caps on the `svg` copy flavor, the expensive half of a canvas copy: the same records are serialized
-// once as typed items, again into the SVG's `<metadata>`, and the whole SVG is then URI-encoded into an
-// HTML attribute, so a 500-shape select-all put ~1.1MB on `text/html`. Over either cap the producer
-// SKIPS the flavor — the count is checked before the render so a huge selection never pays for it, the
-// byte budget catches the few-but-enormous case (long freedraw point lists). The failure mode is
-// deliberate and total: a canvas still pastes losslessly from the elements item, docs and sheets get
-// only the image and text items, and a foreign host gets the text/plain fallback instead of an image
-// (the same thing it gets for a shape-only copy).
+// Past either cap a canvas copy skips its SVG flavor, which repeats every record. The count is checked before the
+// render, and the bytes catch a few huge elements, such as long freehand lines.
 export const CLIPBOARD_SVG_MAX_ELEMENTS = 300;
 export const CLIPBOARD_SVG_MAX_BYTES = 512 * 1024;
 
-// Soft cap on the total inlined payload (the sum of the image data-URIs). Beyond it the async copy
-// path skips the foreign `<img>` flavor entirely rather than put a multi-MB, clipboard-rejectable
-// blob on the clipboard — the eigen name-ref svg still travels for every eigen host. base64 inflates
-// the raw bytes ~1.37×, so a ~3MB image already lands here.
+// The most the inlined images may add up to, as base64. Past it the copy skips the flavor for other hosts, since a
+// clipboard may refuse a write that large.
 const INLINE_SVG_SOFT_CAP_BYTES = 4 * 1024 * 1024;
 
-// Inline an image-bearing vector SVG's `eigen-media:` name refs into self-contained base64 data URIs,
-// for the foreign-visible copy flavor (an `<img src="data:image/svg+xml…">` that no eigen server-side
-// inliner will serve). `resolve` fetches a ref's bytes — the caller wires it to the credentialed media
-// resolver; a null/failed fetch STRIPS that image's ref exactly as materializeClipboardSvg strips a
-// failed re-upload, so the svg never references bytes it can't show. Returns the svg unchanged when it
-// has no refs, or null when the total inlined payload would exceed the soft cap (the caller then skips
-// the foreign flavor). React-free: the browser fetch belongs to the caller, passed in as `resolve`.
+// The SVG with each image it names inlined as a data URI, for a host that can't fetch them. An image `resolve` can't
+// fetch is taken out, so the SVG names nothing it can't show. Null past the cap.
 export async function inlineClipboardSvgMedia(
     svg: string,
     resolve: (name: string) => Promise<Blob | null>,
@@ -296,14 +246,8 @@ async function resolveSvgMedia(
     return { dataUris, failed };
 }
 
-// The SVG a paste consumer should materialize, together with the typed items that back its
-// `eigen-media:` refs — the re-upload manifest `materializeClipboardSvg` fetches from. One read for
-// the host, so it never parses the payload twice. Two arms: a vector copy's `svg` field arrives with
-// its image items; a foreign SVG on text/plain has none. Null when there's no SVG to paste. The
-// plain-text arm requires the SVG namespace on the root tag — every real SVG export (ours,
-// Excalidraw's, an .svg file's text) carries it, while a hand-pasted `<svg>` code snippet usually
-// doesn't and must stay text. `eigen` may be supplied by a caller that already read the payload
-// (classifyPaste) so it is parsed only once; omit it and this reads the payload itself.
+// The SVG to paste, with the image items its names resolve through: a vector copy's own, or one on text/plain with
+// none. Plain text counts only with the SVG namespace on its root, which an export has and a typed snippet lacks.
 export function readSvgClipboardWithItems(
     clipboardData: DataTransfer,
     eigen: EigenClipboardData | null = readEigenClipboard(clipboardData),
@@ -314,20 +258,12 @@ export function readSvgClipboardWithItems(
     return null;
 }
 
-// True when the clipboard's `text/html` carries real content beyond the eigen marker span — i.e. a
-// rich-HTML producer wrote `marker + html` (docs figures, sheets tables) rather than a marker-only
-// write (slides objects, which pass no html). Consumers use it to choose between letting the platform
-// parse the HTML (rich content present — a sheets <table> lands as a real table) and consuming the
-// typed eigen items directly (marker-only — platform fallthrough would paste nothing). Wrapper noise
-// the OS clipboard adds (`<meta charset>`, `<html>`/`<body>`) is ignored: the marker element is
-// removed from a parsed document, then the body is tested for text or an embedded/structural element.
+// Whether the HTML holds content beside the marker, such as a doc's figure or a sheet's table, which a consumer lets
+// the platform parse. With the marker alone it reads the typed items.
 export function hasRichHtmlBeyondMarker(clipboardData: DataTransfer): boolean {
     const html = clipboardData.getData('text/html');
     if (!html) return false;
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    // Remove our marker span AND the foreign-render `<img>` a vector copy appends after it — the latter
-    // exists only so a non-eigen host shows something, and must not read as rich content (else a
-    // shape-only vector copy trips docs' eigen-rung gate and lands as a persisted base64 figure).
     for (const el of doc.querySelectorAll(`[${HTML_MARKER}], [${EIGEN_CLIPBOARD_RENDER_ATTR}]`)) el.remove();
     if ((doc.body.textContent ?? '').trim().length > 0) return true;
     return doc.body.querySelector('img, table, figure, hr, picture, svg, video, li') != null;
@@ -351,10 +287,8 @@ export function readEigenClipboard(clipboardData: DataTransfer): EigenClipboardD
     return null;
 }
 
-// Async read of eigen data via the Async Clipboard API, for handlers with no ClipboardEvent to read
-// (a context-menu Paste row). Symmetric with writeEigenClipboardAsync: the payload rides the
-// `text/html` marker span (custom MIME types can't survive navigator.clipboard). Returns null when
-// the read is denied/unavailable or no marker is present.
+// For a handler with no ClipboardEvent, such as a menu's Paste row. Only the marker in `text/html` is read, since
+// navigator.clipboard carries no custom MIME type.
 export async function readEigenClipboardAsync(): Promise<EigenClipboardData | null> {
     try {
         const clipItems = await navigator.clipboard.read();
@@ -394,12 +328,9 @@ export async function writeEigenClipboardAsync(
     const json = JSON.stringify(data);
     const encoded = encodeURIComponent(json);
     const marker = `<span ${HTML_MARKER}="${encoded}"></span>`;
-    // html may resolve later (the svg data-URI inliner fetches media): hand ClipboardItem a promise
-    // so navigator.clipboard.write starts inside the user gesture — Safari/Firefox reject a write
-    // whose activation window expired while awaiting the fetch.
+    // The write must start inside the user's gesture, which Safari and Firefox let expire during a fetch, so html
+    // that resolves later goes in as a promise. One that rejects still writes the marker and the plain text.
     const items: Record<string, Blob | Promise<Blob>> = {
-        // A rejecting html promise (the svg inliner's fetch failed) must not abort the whole write and
-        // lose the marker + text/plain — degrade to a marker-only html blob instead.
         'text/html': Promise.resolve(html)
             .catch(() => undefined)
             .then((h) => new Blob([h ? marker + h : marker], { type: 'text/html' })),
@@ -438,8 +369,7 @@ export async function reUploadImage(
         const blob = await response.blob();
         file = new File([blob], fileName, { type: blob.type || 'image/png' });
     } catch (e) {
-        // The source fetch isn't a mutation, so surface it here; upload-leg failures
-        // already toast via useUploadFile's onMutationError.
+        // The fetch is no mutation, so it reports its own failure. A failed upload reports through its hook.
         console.error('Image re-upload download failed:', e);
         toast.error('Could not load the pasted image');
         return null;
@@ -454,18 +384,13 @@ export async function reUploadImage(
             };
         }
     } catch {
-        // Upload failure already toasts via useUploadFile's onMutationError.
+        // The upload hook reported it.
     }
     return null;
 }
 
-// Materialize an image-bearing vector SVG (its images referenced BY NAME via `eigen-media:` hrefs)
-// into a File ready for the target container's normal image-upload path. For
-// each ref, its typed image item is the fetch manifest: cross-container refs re-upload through the
-// existing credentialed `reUploadImage` seam (in parallel), same-folder refs keep their name, and the
-// stored SVG's refs are rewritten old→final (collision renames) or stripped for uploads that failed or
-// have no typed item — the drawing only ever references names that exist in the target's media/. Undo
-// is the host's single svg-insert step, as for an image paste; the uploads are not undoable.
+// The SVG as a file for the target's image upload, each image it names uploaded to the target's media folder first.
+// A name is rewritten to the one its upload got, and taken out when the upload failed or no item backs it.
 export async function materializeClipboardSvg(
     svg: string,
     items: EigenClipboardItem[],
@@ -485,13 +410,10 @@ export async function materializeClipboardSvg(
     await Promise.all(
         refs.map(async (name) => {
             const item = imagesByName.get(name);
-            // A ref with no typed item (e.g. its item was dropped as forged) has no fetch manifest —
-            // strip it so the stored svg never references a name that won't exist in media/.
             if (!item) {
                 failed.add(name);
                 return;
             }
-            // Same-folder paste: the name already resolves against the target's own siblings.
             if (!needsReUpload(item.sourceParentId, mediaFolderId)) return;
             const result = await reUploadImage(
                 item.sourcePathId,
@@ -506,6 +428,5 @@ export async function materializeClipboardSvg(
         }),
     );
 
-    // Rewrite successes (still under their original token), then strip failures by their original name.
     return svgToImageFile(stripEigenMediaRefs(rewriteEigenMediaRefs(svg, renames), failed));
 }

@@ -1,20 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    CHART_MAX_SIDE,
-    DEFAULT_CHART_SERIES_STYLE,
-    newSheetChartSpecParts,
-    sampleChartSpec,
-} from '@workspace/lib/charts';
+import { CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { escapeHtml } from '@workspace/lib/html';
-import type {
-    Cell,
-    CellBorderSides,
-    ConditionalFormatRule,
-    Sheet,
-    SheetChart,
-    SheetImage,
-} from '@workspace/lib/sheets';
+import type { Cell, CellBorderSides, Sheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
 
 import {
     encodeSheetsSnapshot,
@@ -45,14 +33,18 @@ import { MAX_DECOMPRESSED_BYTES } from '../../lib/ooxml/zip';
 import { cpuClock } from '../cpu-time';
 import { embeddedSliceFiles } from '../fixtures/font-slices';
 import { buildGoldenSheets } from '../fixtures/heavy-sheets';
+import type { formatList } from '../fixtures/validations';
+import { formatsOf } from '../fixtures/validations';
 import { rowsXml, xlsxFixture } from '../fixtures/xlsx';
 import { NO_MEDIA } from '../setup';
+
+type FormatList = ReturnType<typeof formatList>;
 
 // Build a Sheet with both `data` (matrix form, required by the CF engine) and `celldata`
 // (sparse form, what the renderer iterates). The sheet Workbook keeps both
 // projections in sync via its dataToCelldata/celldataToData transforms, so snapshots
 // flushed by the FE editor carry both.
-function makeSheet(cells: { r: number; c: number; v: Cell }[], rules?: ConditionalFormatRule[]): Sheet {
+function makeSheet(cells: { r: number; c: number; v: Cell }[], rules?: FormatList): Sheet {
     const rows = cells.reduce((max, x) => Math.max(max, x.r), 0) + 1;
     const cols = cells.reduce((max, x) => Math.max(max, x.c), 0) + 1;
     const data: (Cell | null)[][] = Array.from({ length: rows }, () => Array.from({ length: cols }, () => null));
@@ -64,7 +56,7 @@ function makeSheet(cells: { r: number; c: number; v: Cell }[], rules?: Condition
         name: 'Sheet1',
         celldata: cells.map(({ r, c, v }) => ({ r, c, v })),
         data,
-        ...(rules ? { conditionalFormatRules: rules } : {}),
+        ...(rules ? { conditionalFormats: formatsOf(rules) } : {}),
     };
 }
 
@@ -146,7 +138,7 @@ describe('Sheets HTML export — fonts', () => {
             y: 0,
             width: 400,
             height: 300,
-            ...newSheetChartSpecParts(sampleChartSpec('column', 'Excalifont')),
+            ...newChartSpecParts(sampleChartSpec('column', 'Excalifont')),
         };
         expect(embedded([{ ...makeSheet([]), charts: { c1: chart } }])).toEqual(['Inter', 'Excalifont']);
     });
@@ -182,7 +174,7 @@ describe('Sheets HTML export — class-based styles', () => {
                     { r: 1, c: 0, v: { v: 10, ct: { t: 'n', fa: 'General' } } },
                     { r: 1, c: 1, v: { v: 20, ct: { t: 'n', fa: 'General' } } },
                 ],
-                [{ type: 'dataBar', cellrange: [{ row: [1, 1], column: [0, 1] }], format: ['#638ec6'] }],
+                [{ type: 'dataBar', ranges: [{ row: [1, 1], column: [0, 1] }], format: ['#638ec6'] }],
             ),
         };
         const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
@@ -562,7 +554,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                     [
                         {
                             type: 'default',
-                            cellrange: [{ row: [0, 0], column: [0, 1] }],
+                            ranges: [{ row: [0, 0], column: [0, 1] }],
                             format: { textColor: '#ffffff', cellColor: '#ff8888' },
                             conditionName: 'greaterThan',
                             conditionRange: [],
@@ -593,7 +585,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                     [
                         {
                             type: 'dataBar',
-                            cellrange: [{ row: [0, 2], column: [0, 0] }],
+                            ranges: [{ row: [0, 2], column: [0, 0] }],
                             format: ['#638ec6'],
                         },
                     ],
@@ -624,7 +616,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                     [
                         {
                             type: 'colorGradation',
-                            cellrange: [{ row: [0, 1], column: [0, 0] }],
+                            ranges: [{ row: [0, 1], column: [0, 0] }],
                             format: ['#00ff00', '#ff0000'],
                         },
                     ],
@@ -650,7 +642,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                     [
                         {
                             type: 'default',
-                            cellrange: [{ row: [0, 0], column: [0, 0] }],
+                            ranges: [{ row: [0, 0], column: [0, 0] }],
                             format: { cellColor: '#888888' },
                             conditionName: 'greaterThan',
                             conditionRange: [],
@@ -658,7 +650,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                         },
                         {
                             type: 'colorGradation',
-                            cellrange: [{ row: [0, 0], column: [0, 0] }],
+                            ranges: [{ row: [0, 0], column: [0, 0] }],
                             format: ['#00ff00', '#0000ff'],
                         },
                     ],
@@ -682,7 +674,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                     [
                         {
                             type: 'dataBar',
-                            cellrange: [{ row: [0, 1], column: [0, 0] }],
+                            ranges: [{ row: [0, 1], column: [0, 0] }],
                             format: ['#638ec6'],
                         },
                     ],
@@ -713,7 +705,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                     [
                         {
                             type: 'default',
-                            cellrange: [{ row: [0, 1], column: [0, 1] }],
+                            ranges: [{ row: [0, 1], column: [0, 1] }],
                             format: { textColor: '#ffffff', cellColor: '#00aa00' },
                             conditionName: 'formula',
                             conditionRange: [],
@@ -747,7 +739,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                     [
                         {
                             type: 'default',
-                            cellrange: [{ row: [0, 1], column: [0, 1] }],
+                            ranges: [{ row: [0, 1], column: [0, 1] }],
                             format: { textColor: '#000000', cellColor: '#ffaa00' },
                             conditionName: 'formula',
                             conditionRange: [],
@@ -779,7 +771,7 @@ describe('Sheets HTML export — conditional formatting', () => {
                     [
                         {
                             type: 'default',
-                            cellrange: [{ row: [0, 1], column: [0, 0] }],
+                            ranges: [{ row: [0, 1], column: [0, 0] }],
                             format: { textColor: '#000000', cellColor: '#88ccff' },
                             conditionName: 'formula',
                             conditionRange: [],
@@ -1011,14 +1003,14 @@ describe('Sheets HTML export — hostile values in CSS', () => {
                 [
                     {
                         type: 'default',
-                        cellrange: [{ row: [1, 1], column: [0, 0] }],
+                        ranges: [{ row: [1, 1], column: [0, 0] }],
                         format: { textColor: injected, cellColor: injected },
                         conditionName: 'greaterThan',
                         conditionRange: [],
                         conditionValue: [10],
                     },
-                    { type: 'dataBar', cellrange: [{ row: [2, 3], column: [0, 0] }], format: [injected] },
-                    { type: 'dataBar', cellrange: [{ row: [2, 3], column: [0, 0] }], format: [injected, injected] },
+                    { type: 'dataBar', ranges: [{ row: [2, 3], column: [0, 0] }], format: [injected] },
+                    { type: 'dataBar', ranges: [{ row: [2, 3], column: [0, 0] }], format: [injected, injected] },
                 ],
             ),
             config: { borderInfo: { '0_0': { b: { style: 1, color: injected } } } },
@@ -1046,24 +1038,17 @@ describe('Sheets HTML export — hostile values in CSS', () => {
         }
     });
 
-    // A peer can store any JSON where a color goes, and a color that is no string draws as none.
-    test('a cell, rule, border or data bar color that is not a string is dropped, in the export and the preview', () => {
+    // A peer can store any JSON where a color goes, and a color that is no string draws as none. A rule's colors are
+    // checked where the rule enters a workbook, so only a cell's and a border's reach the renderer unchecked.
+    test('a cell or border color that is not a string is dropped, in the export and the preview', () => {
         const numeric = { t: 'n', fa: 'General' };
         const sheet: Sheet = {
-            ...makeSheet(
-                [
-                    { r: 0, c: 0, v: JSON.parse('{"v":"x","fc":42,"bg":{"r":255}}') },
-                    { r: 1, c: 0, v: { v: 50, ct: numeric } },
-                    { r: 2, c: 0, v: { v: 10, ct: numeric } },
-                    { r: 3, c: 0, v: { v: 20, ct: numeric } },
-                ],
-                JSON.parse(`[
-                    {"type":"default","cellrange":[{"row":[1,1],"column":[0,0]}],"format":{"textColor":7,"cellColor":[1]},
-                     "conditionName":"greaterThan","conditionRange":[],"conditionValue":[10]},
-                    {"type":"dataBar","cellrange":[{"row":[2,3],"column":[0,0]}],"format":[5]},
-                    {"type":"dataBar","cellrange":[{"row":[2,3],"column":[0,0]}],"format":[5,true]}
-                ]`),
-            ),
+            ...makeSheet([
+                { r: 0, c: 0, v: JSON.parse('{"v":"x","fc":42,"bg":{"r":255}}') },
+                { r: 1, c: 0, v: { v: 50, ct: numeric } },
+                { r: 2, c: 0, v: { v: 10, ct: numeric } },
+                { r: 3, c: 0, v: { v: 20, ct: numeric } },
+            ]),
             config: { borderInfo: JSON.parse('{"0_0":{"b":{"style":1,"color":3}}}') },
         };
         const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
@@ -1098,7 +1083,7 @@ describe('Sheets HTML export — hostile values in CSS', () => {
                     [
                         {
                             type: 'colorGradation',
-                            cellrange: [{ row: [0, 2], column: [0, 0] }],
+                            ranges: [{ row: [0, 2], column: [0, 0] }],
                             format: ['#00ff00', '#ff0000'],
                         },
                     ],
@@ -1130,7 +1115,7 @@ describe('Sheets HTML export — hostile values in CSS', () => {
                     [
                         {
                             type: 'default',
-                            cellrange: [{ row: [0, 0], column: [0, 0] }],
+                            ranges: [{ row: [0, 0], column: [0, 0] }],
                             format: { textColor: '#ffffff', cellColor: 'red;"><script>alert(1)</script>' },
                             conditionName: 'greaterThan',
                             conditionRange: [],
@@ -1216,7 +1201,7 @@ describe('Sheets HTML export — hostile values in CSS', () => {
                     [
                         {
                             type: 'dataBar',
-                            cellrange: [{ row: [0, 1], column: [0, 0] }],
+                            ranges: [{ row: [0, 1], column: [0, 0] }],
                             format: ['red;"><script>x</script>'],
                         },
                     ],
@@ -1573,7 +1558,7 @@ describe('Sheets HTML export — charts', () => {
             id: 'c1',
             index: 'a0',
             ...box,
-            ...newSheetChartSpecParts({
+            ...newChartSpecParts({
                 ...spec,
                 title: { text: 'Points scored' },
                 series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#2a78d6' } },
@@ -2089,7 +2074,7 @@ describe('Sheets HTML export — the window over forged keys', () => {
             [
                 {
                     type: 'default',
-                    cellrange: [{ row: [-50_000_000, 0], column: [0, 0] }],
+                    ranges: [{ row: [-50_000_000, 0], column: [0, 0] }],
                     format: { textColor: '#ff0000', cellColor: '#00ff00' },
                     conditionName: 'greaterThan',
                     conditionRange: [],
@@ -2227,81 +2212,48 @@ describe('Sheets HTML export — the window over forged keys', () => {
         ]);
     });
 
-    test('a null rule, a rule with no ranges, or a range with no rows, is dropped and the export still renders', () => {
+    // The renderer trusts a rule's shape (a malformed rule is dropped where it enters a workbook), so what is left is a
+    // well-typed rule over a range that holds no cell.
+    test('a rule over a reversed range draws nothing, and the export and the preview still render', () => {
         const cell = { v: 5, m: '5', ct: { fa: 'General', t: 'n' } };
-        const valid: ConditionalFormatRule = {
-            type: 'default',
-            cellrange: [{ row: [0, 0], column: [0, 0] }],
-            format: { cellColor: '#00ff00' },
-            conditionName: 'greaterThan',
-            conditionRange: [],
-            conditionValue: [1],
-        };
-        const { cellrange: _, ...noRanges } = valid;
-        const forged = [
-            null,
-            noRanges,
-            { ...valid, cellrange: [{ row: null, column: [0, 0] }] },
-            { ...valid, cellrange: [null] },
-        ];
-        // A peer's values reach the export untyped, as JSON.parse returns them.
-        const sheet: Sheet = {
-            ...makeSheet([{ r: 0, c: 0, v: cell }]),
-            conditionalFormatRules: JSON.parse(JSON.stringify([...forged, valid])),
-        };
-        const nullMerge: Sheet = JSON.parse(JSON.stringify({ ...sheet, config: { merge: { '0_0': null } } }));
-        const out = renderSheetsHtml([nullMerge], NO_MEDIA, 'screen');
-        expect(classesFor(out, 'background:#00ff00')).toHaveLength(1);
-        expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html).toContain('background:#00ff00');
-    });
-
-    test('a rule whose values, looks or colors a peer forged is dropped, and the export and the preview still render', () => {
-        const cell = { v: 5, m: '5', ct: { fa: 'General', t: 'n' } };
-        const at = [{ row: [5, 6], column: [0, 0] }];
         const red = { cellColor: '#ff0000' };
-        // As a peer's update arrives: JSON no type checked. The formula rule starts above the window, so its anchor moves.
-        const forged = JSON.parse(
-            JSON.stringify([
-                {
-                    type: 'default',
-                    conditionName: 'formula',
-                    cellrange: [{ row: [0, 10], column: [0, 0] }],
-                    format: red,
-                    conditionValue: null,
-                },
-                { type: 'default', conditionName: 'greaterThan', cellrange: at, format: red },
-                { type: 'default', conditionName: 'greaterThan', cellrange: at, conditionValue: [1] },
-                { type: 'default', conditionName: 'equal', cellrange: at, format: red, conditionValue: [null] },
-                { type: 'dataBar', cellrange: at },
-                { type: 'colorGradation', cellrange: at, format: ['red', 'blue'] },
-                {
-                    type: 'default',
-                    conditionName: 'greaterThan',
-                    cellrange: [{ row: [6, 5], column: [0, 0] }],
-                    format: red,
-                    conditionValue: [1],
-                },
-            ]),
-        );
-        const valid: ConditionalFormatRule = {
-            type: 'default',
-            cellrange: [{ row: [5, 6], column: [0, 0] }],
-            format: { cellColor: '#00ff00' },
-            conditionName: 'greaterThan',
-            conditionRange: [],
-            conditionValue: [1],
-        };
         const sheet = makeSheet(
             [
                 { r: 5, c: 0, v: cell },
                 { r: 6, c: 0, v: cell },
             ],
-            [...forged, valid],
+            [
+                {
+                    type: 'default',
+                    conditionName: 'greaterThan',
+                    ranges: [{ row: [6, 5], column: [0, 0] }],
+                    format: red,
+                    conditionRange: [],
+                    conditionValue: [1],
+                },
+                {
+                    type: 'default',
+                    ranges: [{ row: [5, 6], column: [0, 0] }],
+                    format: { cellColor: '#00ff00' },
+                    conditionName: 'greaterThan',
+                    conditionRange: [],
+                    conditionValue: [1],
+                },
+            ],
         );
         const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(classesFor(out, 'background:#00ff00')).toHaveLength(1);
         expect(out.css).not.toContain('#ff0000');
         expect(renderSheetsPreviewHtml([sheet], NO_MEDIA).html).toContain('background:#00ff00');
+    });
+
+    test('a null merge entry a peer stored is skipped, and the export and the preview still render', () => {
+        const cell = { v: 5, m: '5', ct: { fa: 'General', t: 'n' } };
+        const sheet = makeSheet([{ r: 0, c: 0, v: cell }]);
+        // A peer's values reach the export untyped, as JSON.parse returns them.
+        const nullMerge: Sheet = JSON.parse(JSON.stringify({ ...sheet, config: { merge: { '0_0': null } } }));
+        expect(renderSheetsHtml([nullMerge], NO_MEDIA, 'screen').html).toContain('>5<');
+        expect(renderSheetsPreviewHtml([nullMerge], NO_MEDIA).html).toContain('>5<');
     });
 
     test('a merge marker, a track map or an image a peer stored as no object is skipped, and the export and the preview still render', () => {
@@ -2330,9 +2282,9 @@ describe('Sheets HTML export — the window over forged keys', () => {
     // The editor stores an empty list for a rule that takes no value, and the evaluator reads the first one.
     test('a date rule with no value draws nothing and fails nothing', () => {
         const date = { v: 46_000, m: '2025-12-09', ct: { fa: 'yyyy-mm-dd', t: 'd' } };
-        const rule: ConditionalFormatRule = {
+        const rule: FormatList[number] = {
             type: 'default',
-            cellrange: [{ row: [0, 0], column: [0, 0] }],
+            ranges: [{ row: [0, 0], column: [0, 0] }],
             format: { cellColor: '#ff0000' },
             conditionName: 'occurrenceDate',
             conditionRange: [],

@@ -184,7 +184,7 @@ describe('drag-fill carries the source cell data validation', () => {
         const ctx = makeCtx((d) => {
             d[0][0] = { v: 'yes', m: 'yes', ct: { fa: 'General', t: 'g' } };
         }, src);
-        ctx.sheets[0].dataValidations = { v: { ranges: [{ row: [0, 0], column: [0, 0] }], rule } };
+        ctx.sheets[0].dataValidations = { v: { ranges: [{ row: [0, 0], column: [0, 0] }], order: 'a0', rule } };
         return ctx;
     }
 
@@ -193,7 +193,9 @@ describe('drag-fill carries the source cell data validation', () => {
             dragFill(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 2], column: [0, 0] }, 'down');
         });
 
-        expect(filled.sheets[0].dataValidations).toEqual({ v: { ranges: [{ row: [0, 2], column: [0, 0] }], rule } });
+        expect(filled.sheets[0].dataValidations).toEqual({
+            v: { ranges: [{ row: [0, 2], column: [0, 0] }], order: 'a0', rule },
+        });
     });
 
     it('and the patch that survives filterPatch carries it, so peers and undo see it', () => {
@@ -220,7 +222,7 @@ describe('drag-fill carries the source cell data validation', () => {
         ]);
         ctx.sheets[0].dataValidations = {
             ...Object.fromEntries(elsewhere),
-            v: { ranges: [{ row: [0, 0], column: [0, 0] }], rule },
+            v: { ranges: [{ row: [0, 0], column: [0, 0] }], order: 'a0', rule },
         };
         const started = performance.now();
         const [filled] = produceWithPatches(ctx, (draft: Context) => {
@@ -234,8 +236,8 @@ describe('drag-fill carries the source cell data validation', () => {
         const other: DataValidationRule = { ...rule, value1: 'a,b' };
         const ctx = makeCtx(() => {}, { row: [0, 1], column: [0, 1] });
         ctx.sheets[0].dataValidations = {
-            v: { ranges: [{ row: [0, 0], column: [0, 1] }], rule },
-            own: { ranges: [{ row: [2, 5], column: [0, 1] }], rule: other },
+            v: { ranges: [{ row: [0, 0], column: [0, 1] }], order: 'a0', rule },
+            own: { ranges: [{ row: [2, 5], column: [0, 1] }], order: 'a0', rule: other },
         };
         const [filled] = produceWithPatches(ctx, (draft: Context) => {
             dragFill(draft, { row: [0, 1], column: [0, 1] }, { row: [2, 5], column: [0, 1] }, 'down');

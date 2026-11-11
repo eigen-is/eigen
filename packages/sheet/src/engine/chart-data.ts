@@ -1,22 +1,17 @@
 // A sheet chart's range data: reading its cells, drawing it, inlining it for a copy, and moving its refs through a row
-// op or a copied sheet. The writers apply a change onto the spec as stored, so a key this build doesn't know survives,
-// and write a keyed part an entry at a time.
+// op or a copied sheet. The writers apply a change onto the spec as stored, so a key this build doesn't know survives.
 
 import {
     chartColor,
     chartLabel,
-    chartPointMoves,
     chartSeriesStyle,
     chartSpecTexts,
     chartSpecWrites,
     exceedsChartSpecBytes,
     isCellRangeShape,
-    isChartSpecKey,
     MAX_CHART_POINTS,
-    newSheetChartSpecParts,
     readChartLook,
     readChartSpec,
-    sheetChartSpecWrites,
 } from '@workspace/lib/charts';
 import { isRecord } from '@workspace/lib/guards';
 import type { SheetChart } from '@workspace/lib/sheets';
@@ -30,17 +25,13 @@ import type {
     ChartSpecTexts,
     RangeChartData,
     RangeChartSeries,
-    SheetChartSpecParts,
-    SheetChartSpecWrite,
 } from '@workspace/lib/types/chart';
 import { renderChartSpecSvg } from '@workspace/lib/vector';
 import { cellDisplay } from './format';
 import type { Cell, CellResolver } from './types';
 
-// Reads a range chart's cells: values from the computed `v`, labels and names from the display
-// text `m` or a rich-text cell's runs, the same strings the grid shows. Hidden rows and columns are
-// read like any other. A series whose values were deleted is left out, as Google does, and keeps its
-// id, so its style stays in the spec for an undo.
+// Reads a range chart's cells as the grid shows them: values from the computed `v`, labels and names from the display
+// text, hidden lines included. A series whose values were deleted is left out and keeps its id for an undo.
 export function resolveRangeChartData(data: RangeChartData, resolver: CellResolver): ChartData | ChartDataError {
     const usable = (ref: CellRangeRef): boolean =>
         resolver.hasSheet(ref.sheetId) && (ref.row[0] === ref.row[1] || ref.column[0] === ref.column[1]);
@@ -85,9 +76,8 @@ export function cellLabel(cell: Cell | null): string {
     return chartLabel(String(cellDisplay(cell) ?? ''));
 }
 
-// A chart as the editor's overlay and the export draw it: its box clamped as stored, in the look it stores, its range
-// data read through the resolver, and its value ticks and data labels in the axis's own format or else the first value
-// cell's, Google's "From source data". Cells without a format read as General, as the grid shows them.
+// A chart as the editor's overlay and the export draw it, its range data read through the resolver. Value ticks and
+// data labels take the axis's own format, or else the first value cell's, and a cell without one reads as General.
 export function renderSheetChartSvg(chart: SheetChart, resolver: CellResolver): string {
     const { spec } = readChartSpec(chart);
     const range = spec?.data.source === 'range' ? spec.data : null;
@@ -103,12 +93,8 @@ export function renderSheetChartSvg(chart: SheetChart, resolver: CellResolver): 
     });
 }
 
-// The chart as a copy carries it to a host with no cells, its parts as text: its ranges read into inline data, and the
-// source cells' tick format written on the axis. An automatic color stays automatic unless a deleted series before
-// it would shift its index, which writes the color it draws in. Every part the copy doesn't touch is the text it
-// stores, a keyed part its entries joined, and a newer build's part goes too. A ref this build doesn't know is left
-// out, as it would name cells the host doesn't have. Null for a chart that draws #REF!, too much data or nothing, or
-// whose numbers pass the spec's size limit.
+// The chart as a copy carries it to a host with no cells: its parts as text, its ranges read into inline data. Null for
+// a chart that draws #REF!, too much data or nothing, or whose numbers pass the spec's size limit.
 export function inlineChartSpec(chart: SheetChart, resolver: CellResolver): ChartSpecTexts | null {
     const { stored, spec } = readChartSpec(chart);
     const texts = chartSpecTexts(chart);
@@ -134,17 +120,9 @@ export function inlineChartSpec(chart: SheetChart, resolver: CellResolver): Char
     return exceedsChartSpecBytes(inline) ? null : inline;
 }
 
-// Rewrites a range chart's refs through `map`, and returns the chart itself when no ref changed or its
-// stored data is not range data. Every ref on the data or a series moves, under any key, so a ref this build
-// doesn't know moves too, even in a chart it can't draw. A null empties a ref, and a name ref leaves the series
-// unnamed. `points` says where each point index goes, given the ref its points run along before the map: the
-// categories, or the first series' values for a chart without them, found by shape as the refs are, so a chart this
-// build can't draw moves its points too. Every series' points move, each stored entry whole.
-export function mapChartRefs(
-    chart: SheetChart,
-    map: (ref: CellRangeRef) => CellRangeRef | null,
-    points?: (ref: CellRangeRef) => ((index: number) => number | null) | null,
-): SheetChart {
+// Rewrites a range chart's refs through `map`, under any key, so a ref this build doesn't know moves too. A null
+// empties a ref, and a name ref leaves the series unnamed. The chart itself when no ref changed.
+export function mapChartRefs(chart: SheetChart, map: (ref: CellRangeRef) => CellRangeRef | null): SheetChart {
     const { stored } = readChartSpec(chart);
     const before = stored['data'];
     if (!isRecord(before) || before['source'] !== 'range') return chart;
@@ -154,37 +132,7 @@ export function mapChartRefs(
         if (next !== ref) moved = true;
         return next ?? (key === 'name' ? '' : null);
     });
-    if (!moved) return chart;
-    const change: ChartSpecChange = [{ op: 'set', path: ['data'], value: data }];
-    const series = Array.isArray(before['series']) ? before['series'] : [];
-    const along = [before['categories'], ...series.map((s) => (isRecord(s) ? s['values'] : null))].find(
-        isCellRangeShape,
-    );
-    const target = along && points?.(along);
-    if (target) change.push(...chartPointMoves(stored, target));
-    return withSheetChartSpecWrites(chart, sheetChartSpecWrites(stored, change));
-}
-
-// Sheets writes applied onto a chart in place, so a recipe's draft ships each entry as its own patch. An entry under a
-// field that isn't a record is skipped: no build stores one, and floatingWriteFilter drops the write.
-export function writeSheetChartSpec(chart: SheetChartSpecParts, writes: SheetChartSpecWrite[]): void {
-    for (const write of writes) {
-        if (!('entry' in write)) chart[write.key] = write.value;
-        else if (isRecord(chart[write.key])) {
-            if (write.value === null) delete chart[write.key][write.entry];
-            else chart[write.key][write.entry] = write.value;
-        }
-    }
-}
-
-// A chart's spec fields for a copy of it in this workbook: every prefixed key, a newer build's too, each record one of
-// its own, so the copy shares none with the chart. A part it lacks is empty, a keyed one an empty record.
-export function copySheetChartSpec(chart: SheetChart): SheetChartSpecParts {
-    const copy = newSheetChartSpecParts({});
-    for (const [key, value] of Object.entries(chart)) {
-        if (isChartSpecKey(key)) Object.assign(copy, { [key]: isRecord(value) ? { ...value } : value });
-    }
-    return copy;
+    return moved ? { ...chart, ...chartSpecWrites(stored, [{ op: 'set', path: ['data'], value: data }]) } : chart;
 }
 
 // The value axis's own format, or for a range chart the first value cell's.
@@ -206,18 +154,6 @@ function rangeChartPoints({ series, categories }: RangeChartData): number | null
 
 function size(ref: CellRangeRef): number {
     return (ref.row[1] - ref.row[0] + 1) * (ref.column[1] - ref.column[0] + 1);
-}
-
-// writeSheetChartSpec's writes on a copy of the chart, which shares every record no write touched.
-function withSheetChartSpecWrites(chart: SheetChart, writes: SheetChartSpecWrite[]): SheetChart {
-    const next = { ...chart };
-    for (const write of writes) {
-        if ('entry' in write && next[write.key] === chart[write.key] && isRecord(chart[write.key])) {
-            next[write.key] = { ...chart[write.key] };
-        }
-    }
-    writeSheetChartSpec(next, writes);
-    return next;
 }
 
 // Stored data with every ref passed through `map`, which is told the key it sits under; undefined leaves it out. A ref

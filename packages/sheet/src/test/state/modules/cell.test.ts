@@ -73,7 +73,7 @@ import type { Cell, CellMatrix, DataValidationRule, SheetConfig } from '../../..
 import { filterPatch } from '../../../state/utils/patch';
 import { contextFactory, workbookContextFactory } from '../factories/context';
 import { stubMeasuringCanvas } from '../factories/measuring-canvas';
-import { validationsByCell } from '../factories/validations';
+import { formatsOf, validationsByCell } from '../factories/validations';
 
 enablePatches();
 
@@ -268,16 +268,16 @@ describe('state/modules/cell — setCellValue typed numbers', () => {
     test('a typed number matches a greater-than conditional format', () => {
         const data: CellMatrix = [[typed('50') ?? null]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 0] }],
+                    ranges: [{ row: [0, 0], column: [0, 0] }],
                     format: { cellColor: '#ff0000' },
                     conditionName: 'greaterThan',
                     conditionRange: [],
                     conditionValue: ['10'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles['0_0']?.cellColor).toBe('#ff0000');

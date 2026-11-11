@@ -10,15 +10,12 @@ import { getFlowdata } from '../context';
 import {
     caretTakesRange,
     cellFocus,
-    cellTextBox,
     checkboxChange,
     createFormulaRangeSelect,
     createRangeHighlight,
     deselectFloatingObject,
     functionHTMLGenerate,
     getCellDataValidation,
-    isCheckboxClick,
-    isDropdownChevronClick,
     rangeSetValue,
     updateFunctionHint,
 } from '../modules';
@@ -53,9 +50,8 @@ function takesFormulaReference(ctx: Context): boolean {
     );
 }
 
-// Swallows the press on the grid that only closes a menu while a formula waits for a reference, and returns whether it
-// did. Like a reference press it keeps the browser from moving the focus out of the editor, which would put the caret
-// back at the start.
+// Swallows the press on the grid that only closes a menu while a formula waits for a reference, and says whether it
+// did. It keeps the focus in the editor, as a reference press does, or the caret would go back to the start.
 export function swallowMenuPress(ctx: Context, globalCache: GlobalCache, e: MouseEvent): boolean {
     if (!globalCache.pressClosedMenu || !takesFormulaReference(ctx)) return false;
     e.preventDefault();
@@ -118,28 +114,17 @@ export function handleCellAreaMouseDown(
 
     showLinkCard(ctx, row_index, col_index, false, true);
 
-    // The box the painter lays both data-validation glyphs out in.
-    const textBox = cellTextBox(col_pre, row_pre, col, row);
     // While a cell edit is open the click belongs to the edit, so it fires no glyph. A toggle would write the cell and
     // recalculate behind the formula the user is still typing.
-    const editing = ctx.editingCellPosition.length > 0;
+    const glyph = e.button !== 2 && ctx.editingCellPosition.length === 0 ? cellGlyphAt(ctx, x, y) : undefined;
 
-    if (e.button !== 2 && !editing && isCheckboxClick(ctx, row_index, col_index, textBox, x, y)) {
-        checkboxChange(ctx, row_index, col_index);
-    }
+    if (glyph === 'checkbox') checkboxChange(ctx, row_index, col_index);
 
     cellFocus(ctx, row_index, col_index);
 
     // cellFocus has just put the list's hidden anchor on this cell, and skips that when editing is not allowed, so a
     // read-only viewer sees the chevron but gets no list.
-    if (
-        e.button !== 2 &&
-        !editing &&
-        ctx.allowEdit !== false &&
-        isDropdownChevronClick(ctx, row_index, col_index, textBox, x, y)
-    ) {
-        ctx.validationListOpen = true;
-    }
+    if (glyph === 'dropdown' && ctx.allowEdit !== false) ctx.validationListOpen = true;
 
     // A cell scrolled partly out of view scrolls back in, with one request for both axes.
     if (pane === 'main') {

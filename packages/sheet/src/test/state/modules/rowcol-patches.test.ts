@@ -12,7 +12,7 @@
 // the moment someone reintroduces `ctx.sheets = ...`.
 
 import { describe, expect, test } from 'bun:test';
-import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import type { Patch } from 'immer';
 import { enablePatches, produce, produceWithPatches } from 'immer';
@@ -65,9 +65,9 @@ describe('row/col reducers emit per-sheet patches, not wholesale sheets replace'
     });
 });
 
-// A chart a row op moves gets back its changed parts only, a keyed part an entry at a time, so neither its patches nor
-// its undo's carry a record a peer may have written another entry of.
-describe('a row op writes a moved chart per part and per entry', () => {
+// A chart a row op moves gets back its refs only, so neither its patches nor its undo's carry a part a peer may have
+// written, and a point's style stays at its index.
+describe('a row op writes only the data of a chart it moves', () => {
     const sample = sampleChartSpec('pie');
     const values = { sheetId: 'id_1', row: [2, 5], column: [1, 1] } satisfies CellRangeRef;
     const withChart = produce(contextFactory() as Context, (ctx: Context) => {
@@ -79,7 +79,7 @@ describe('a row op writes a moved chart per part and per entry', () => {
                 y: 0,
                 width: 400,
                 height: 300,
-                ...newSheetChartSpecParts({
+                ...newChartSpecParts({
                     ...sample,
                     points: { 's-1': { 1: { color: '#111111' }, 3: { color: '#333333' } } },
                     data: { source: 'range', categories: null, series: [{ id: 's-1', name: 'Points', values }] },
@@ -90,19 +90,11 @@ describe('a row op writes a moved chart per part and per entry', () => {
     const paths = (patches: Patch[]) =>
         patches.filter((p) => p.path[2] === 'charts').map((p) => [p.op, p.path.slice(3).join('/')]);
 
-    test('an insert ships specData whole and the moved point as its entries, and so does its undo', () => {
+    test('an insert inside the values ships specData and no point, and so does its undo', () => {
         const [, patches, inverse] = produceWithPatches(withChart, (ctx: Context) => {
             insertRowCol(ctx, { type: 'row', index: 4, count: 1, direction: 'lefttop', id: 'id_1' }, false);
         });
-        expect(paths(patches).sort()).toEqual([
-            ['add', 'c1/specPoints/s-1/4'],
-            ['remove', 'c1/specPoints/s-1/3'],
-            ['replace', 'c1/specData'],
-        ]);
-        expect(paths(inverse).sort()).toEqual([
-            ['add', 'c1/specPoints/s-1/3'],
-            ['remove', 'c1/specPoints/s-1/4'],
-            ['replace', 'c1/specData'],
-        ]);
+        expect(paths(patches)).toEqual([['replace', 'c1/specData']]);
+        expect(paths(inverse)).toEqual([['replace', 'c1/specData']]);
     });
 });

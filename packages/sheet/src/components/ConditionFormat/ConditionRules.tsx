@@ -1,6 +1,6 @@
 // The dialog for one conditional-format rule, such as "Greater than" or "Top 10", opened from the Format menu. It
 // holds the rule's value and colors, and on OK it checks them with conditionRuleError: a refused value keeps the
-// dialog open with the reason under the field, and a good one goes to setConditionRules. RULE_COPY names each rule
+// dialog open with the reason under the field, and a good one goes to addConditionRule. RULE_COPY names each rule
 // once, so this dialog and the places that list rules, such as the Format menu, show the same words.
 
 import { eigenColor } from '@workspace/lib/constants/colors';
@@ -17,7 +17,7 @@ import { useContext, useId, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialogProps } from '../../hooks/useDialog';
 import type { ConditionRulesProps, ConditionRuleType } from '../../state';
-import { conditionRuleError, setConditionRules } from '../../state';
+import { addConditionRule, conditionRuleError } from '../../state';
 
 // Each rule's name and description, shared by the Format menu, this dialog and Manage rules. A label such as "Equal to"
 // keeps its last word, because Manage rules puts the rule's value after it.
@@ -73,7 +73,7 @@ export function ConditionRules({ type }: { type: ConditionRuleType }) {
                         setError(refusal);
                         return false;
                     }
-                    setContext((ctx) => setConditionRules(ctx, rule));
+                    setContext((ctx) => addConditionRule(ctx, rule));
                 }}
             >
                 {type !== 'aboveAverage' && type !== 'belowAverage' && (

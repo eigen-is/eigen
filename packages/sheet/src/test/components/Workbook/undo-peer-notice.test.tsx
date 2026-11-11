@@ -16,8 +16,8 @@ type Op = import('../../../state').Op;
 type Sheet = import('../../../state').Sheet;
 type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
 
-const CANT_UNDO = "Someone else edited this spreadsheet, so this can't be undone anymore.";
-const CANT_REDO = "Someone else edited this spreadsheet, so this can't be redone anymore.";
+const CANT_UNDO = "This spreadsheet was replaced or edited by someone else, so this can't be undone anymore.";
+const CANT_REDO = "This spreadsheet was replaced or edited by someone else, so this can't be redone anymore.";
 // Longer than the delay SheetOverlay shows a notice after.
 const NOTICE_DELAY_MS = 300;
 
@@ -72,10 +72,10 @@ async function mount() {
         return ref.current;
     };
 
-    const press = async (hotkey: string) => {
+    const press = async (hotkey: string, target: Element = input) => {
         const { key, ctrl, meta, shift, alt } = parseHotkey(hotkey);
         await act(async () => {
-            input.dispatchEvent(
+            target.dispatchEvent(
                 new KeyboardEvent('keydown', {
                     key: shift ? key : key.toLowerCase(),
                     code: `Key${key}`,
@@ -103,6 +103,7 @@ async function mount() {
         workbook,
         openEditMenu,
         undo: () => press('Mod+Z'),
+        undoWhereTheFocusIs: () => press('Mod+Z', document.activeElement ?? document.body),
         redo: () => press('Mod+Shift+Z'),
         bold: () => act(async () => workbook().setCellFormat(0, 0, 'bl', 1)),
         a1Bold: () => workbook().getAllSheets()[0]?.data?.[0]?.[0]?.bl,
@@ -238,7 +239,7 @@ test('a later batch that cuts nothing keeps it', async () => {
 test("a peer's batch that fails to apply sets nothing", async () => {
     const sheet = await mount();
     await sheet.deleteRow();
-    await sheet.peer([{ op: 'replace', id: 's1', path: ['data', 999, 999, 'v'], value: 1 }]);
+    await sheet.peer([{ op: 'insertRowCol', id: 's1', path: [], value: { type: 'row', index: -1 } }]);
 
     await sheet.undo();
     expect(sheet.rows()).toBe(10);
@@ -273,6 +274,19 @@ test('a late batch that makes the tab apply the log again takes both stacks', as
     });
 
     await sheet.undo();
+    expect(await takeNotice()).toBe(CANT_UNDO);
+});
+
+// An import that replaces the workbook brings sheets with new ids, so the grid moves to the first one and its A1.
+test('a new snapshot without the sheet on screen keeps the focus on the grid, so undo shows the notice', async () => {
+    const sheet = await mount();
+    await sheet.bold();
+    const imported: Sheet[] = [{ id: 's9', name: 'Imported', order: 0, row: 10, column: 5, celldata: [], config: {} }];
+    await act(async () => {
+        sheet.workbook().replayOps(imported, [], new Set());
+    });
+
+    await sheet.undoWhereTheFocusIs();
     expect(await takeNotice()).toBe(CANT_UNDO);
 });
 

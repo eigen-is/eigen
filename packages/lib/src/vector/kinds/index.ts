@@ -2,7 +2,6 @@
 // creatable kinds and each element's capabilities. Every vector module that dispatches on a kind asks it.
 // TypeScript forces every member of VectorElementType to have an entry, so a new kind can't be half added.
 
-import { chartSpecTexts } from '../../charts/spec';
 import type {
     ElementOfType,
     VectorBindableElement,
@@ -51,16 +50,14 @@ export const ELEMENT_KINDS: ElementKindRegistry = {
     arrow: arrowKind,
 };
 
-// What one element supports: its kind's table with the kind's overrides for that element. Some answers depend on
-// the element's shape, as an open freehand stroke paints no fill. So code holding an element calls this and never
-// reads `ELEMENT_KINDS[type].capabilities`.
+// What one element supports. Some answers depend on its shape, as an open freehand stroke paints no fill, so code
+// holding an element calls this and never reads `ELEMENT_KINDS[type].capabilities`.
 export function capabilitiesOf(el: VectorElement): Capabilities {
     return ELEMENT_KINDS[el.type].capabilitiesOf(el);
 }
 
-// Whether this element puts nothing on the page, such as an empty text box, a shape with neither fill nor border,
-// or an image with no picture. Only the editor uses it: the canvas rings such an element so it stays findable,
-// while a thumbnail, present mode and an export show the page as it is. Each kind answers for itself.
+// Whether this element puts nothing on the page, such as an empty text box or a shape with neither fill nor border.
+// The canvas rings such an element so it stays findable.
 export function paintsNothing(el: VectorElement): boolean {
     return ELEMENT_KINDS[el.type].paintsNothing(el);
 }
@@ -71,9 +68,8 @@ export function convertToShapes(el: VectorElement): VectorElement[] {
     return ELEMENT_KINDS[el.type].toShapes(el);
 }
 
-// Whether an arrow's end may bind to this element, read off its capabilities. Every caller, such as the reader
-// and the elbow router, asks this one guard, so they agree. A new kind opts in by declaring the capability and
-// not by joining a list.
+// Whether an arrow's end may bind to this element. A new kind opts in by declaring the capability, not by joining a
+// list.
 export function isBindable(el: VectorElement): el is VectorBindableElement {
     return capabilitiesOf(el).bindable;
 }
@@ -106,9 +102,8 @@ export function baseDefaultsFor(
     return { ...DEFAULT_ELEMENT_PROPS, roughness: style.roughness, ...ELEMENT_KINDS[type].baseDefaults };
 }
 
-// The kinds a tool can create, in toolbar order, which the toolbar's tools derive from. The literal tuple gives
-// `CreationToolType` a narrow union, so a UI table keyed by it must cover every kind. The registry test pins the
-// tuple to the capabilities, so the two can't disagree.
+// The kinds a tool can create, in toolbar order. The literal tuple gives `CreationToolType` a narrow union, so a UI
+// table keyed by it must cover every kind.
 const CREATION_ORDER = ['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw'] as const;
 
 type CreationToolType = (typeof CREATION_ORDER)[number];
@@ -120,31 +115,18 @@ export const ELEMENT_FIELDS: readonly string[] = [
     ...new Set([...BASE_ELEMENT_FIELDS, ...Object.values(ELEMENT_KINDS).flatMap((kind) => kind.fields)]),
 ];
 
-// A record's stored fields, in the list's order, without undefined values. That is all a writer sets into a Y.Map,
-// so a key the list doesn't hold never reaches the doc. A frame passes FRAME_FIELDS, and an element goes through
-// storedElementFields.
-export function storedFields(source: object, fields: readonly string[]): [string, unknown][] {
+// A record's stored fields off a Y.Map or a plain record, in the list's order, without undefined values. That is all
+// a writer sets into a Y.Map, so a key the list doesn't hold never reaches the doc.
+export function storedFields(source: YMapLike | object, fields: readonly string[]): [string, unknown][] {
     const out: [string, unknown][] = [];
     for (const field of fields) {
-        const value = prop(source, field);
+        const value = isYMapLike(source) ? source.get(field) : prop(source, field);
         if (value !== undefined) out.push([field, value]);
     }
     return out;
 }
 
-// An element's stored fields, read off a Y.Map or an element, in the list's order and without undefined values. A
-// chart also keeps every part a newer build added, within the spec's byte limit. A duplicate, a copy and a paste
-// store these, so they keep what this build can't read.
+// What a duplicate, a copy and a paste store of an element.
 export function storedElementFields(source: YMapLike | Readonly<Record<string, unknown>>): [string, unknown][] {
-    const read = (key: string) => (isYMapLike(source) ? source.get(key) : prop(source, key));
-    const fields: [string, unknown][] = [];
-    for (const field of ELEMENT_FIELDS) {
-        const value = read(field);
-        if (value !== undefined) fields.push([field, value]);
-    }
-    if (read('type') !== 'chart') return fields;
-    for (const [key, text] of Object.entries(chartSpecTexts(source) ?? {})) {
-        if (!ELEMENT_FIELDS.includes(key)) fields.push([key, text]);
-    }
-    return fields;
+    return storedFields(source, ELEMENT_FIELDS);
 }

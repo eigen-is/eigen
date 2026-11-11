@@ -242,8 +242,7 @@ export function getRealCellValue(r: number, c: number, data: CellMatrix) {
     return getCellValue(r, c, data, 'm') ?? getCellValue(r, c, data);
 }
 
-// A number stored as text (qp === 1) that still reads as a number. One predicate for the painter's corner mark and the
-// glyph hit test, so the two never drift over what "forced string" means.
+// A number stored as text (qp === 1) that still reads as a number, which the painter marks in the cell's corner.
 export function isForcedStringNumber(cell: Cell | null | undefined): boolean {
     return cell?.qp === 1 && !Number.isNaN(Number(cell.v));
 }
@@ -655,7 +654,7 @@ export function isAllSelectedCellsInStatus(ctx: Context, attr: RunStyleKey, stat
 
 // The font part of a cell's CSS, for the editor box and the copied HTML. The cell is read as its runs are, so the box
 // and the runs typed in it agree, and only the keys the cell sets write CSS.
-export function getFontStyleByCell(cell: Cell | null | undefined, checksCF?: CellFormatStyle | null) {
+function getFontStyleByCell(cell: Cell | null | undefined, checksCF?: CellFormatStyle | null) {
     const style: Record<string, string> = {};
     if (!cell) {
         return style;

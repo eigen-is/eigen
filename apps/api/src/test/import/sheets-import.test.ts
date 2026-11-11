@@ -1,6 +1,12 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { Cell, CellWithRowAndCol, Op, Sheet } from '@workspace/lib/sheets';
-import { decodeSheetsSnapshot, encodeSheetsSnapshot, sheetsOpLog, writeSheetsSnapshot } from '@workspace/lib/sheets';
+import {
+    decodeSheetsSnapshot,
+    encodeSheetsSnapshot,
+    readSheetsLog,
+    sheetsOpLog,
+    writeSheetsSnapshot,
+} from '@workspace/lib/sheets';
 import type { DrivePath, ImportResult } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_SHEETS } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
@@ -27,7 +33,7 @@ import { getUserById } from '../../lib/user';
 import { cellLinks } from '../fixtures/cell-links';
 import { PIXEL_PNG } from '../fixtures/pptx';
 import { build, deflated } from '../fixtures/raw-zip';
-import { ruleAt, rulesByCell } from '../fixtures/validations';
+import { formatList, ruleAt, rulesByCell } from '../fixtures/validations';
 import { exportXlsx, linkRels, rowsXml, SML, sheetXml, styleSheet, xlsxFixture } from '../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../fixtures/zip-bomb';
 import {
@@ -329,6 +335,17 @@ describe('Sheets xlsx import/convert', () => {
         expect(await listVersions(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, sheetsDoc.id)).toEqual([]);
     });
 
+    test('an insert into a workbook whose log holds an entry no JSON carries adds its sheets', async () => {
+        const sheetsDoc = await uploadAndConvert(buildXlsxBuffer([{ a1: 'A1', value: 'Mine' }], 'Data'), 'forged.xlsx');
+        const home = await getHome(ctx.alice.user.id);
+        const { doc } = await home.drive.getCollabDocument(mountId, sheetsDoc.id);
+        sheetsOpLog(doc).push([[1n]]);
+
+        await assertJson<ImportResult>(await importRequest(sheetsDoc.id, dataAndSummary(), 'insert'));
+
+        expect((await readLive(sheetsDoc.id)).map((sheet) => sheet.name)).toEqual(['Data', 'Data(Copy)', 'Summary']);
+    });
+
     // A running total of 2,000 rows recomputes about 2M cells at each of the three row inserts, a second or more of
     // replay, which the transform process runs while the event loop keeps turning.
     test('an insert replays the workbook in the transform process, its row inserts recomputed off the event loop', async () => {
@@ -487,7 +504,8 @@ describe('Sheets xlsx import/convert', () => {
         const { path } = await home.drive.resolveFile(mountId, sheetsDoc.id);
         const user = await getUserById(ctx.alice.user.id);
         if (!user) throw new Error('alice missing');
-        const ops = sheetsOpLog((await home.drive.getCollabDocument(mountId, sheetsDoc.id)).doc);
+        const { doc } = await home.drive.getCollabDocument(mountId, sheetsDoc.id);
+        const ops = sheetsOpLog(doc);
         // The first open reads the workbook for the transform; it grows before the write opens it again.
         const realGet = home.drive.getCollabDocument.bind(home.drive);
         let opens = 0;
@@ -502,7 +520,8 @@ describe('Sheets xlsx import/convert', () => {
         }
         try {
             expect(opens).toBe(2);
-            expect(ops.toArray().map((batch) => batch.map((op) => op.value.name))).toEqual([['Full'], ['Pictures']]);
+            const names = readSheetsLog(doc).map((batch) => batch.map((op) => op.value.name));
+            expect(names).toEqual([['Full'], ['Pictures']]);
         } finally {
             ops.delete(0, ops.length);
         }
@@ -1594,10 +1613,10 @@ describe('Sheets xlsx conversion fidelity', () => {
         );
 
         // Priority DESC order: priority 2 first, priority 1 last (last write wins in the engine).
-        expect(sheets[0].conditionalFormatRules).toEqual([
+        expect(formatList(sheets[0].conditionalFormats)).toEqual([
             {
                 type: 'default',
-                cellrange: [{ row: [0, 4], column: [1, 1] }],
+                ranges: [{ row: [0, 4], column: [1, 1] }],
                 format: { textColor: null, cellColor: '#00FF00' },
                 conditionName: 'lessThanOrEqual',
                 conditionRange: [],
@@ -1605,14 +1624,14 @@ describe('Sheets xlsx conversion fidelity', () => {
             },
             {
                 type: 'default',
-                cellrange: [{ row: [0, 4], column: [1, 1] }],
+                ranges: [{ row: [0, 4], column: [1, 1] }],
                 format: { textColor: '#FFFFFF', cellColor: '#FF0000' },
                 conditionName: 'greaterThan',
                 conditionRange: [],
                 conditionValue: ['10'],
             },
         ]);
-        expect(sheets[1].conditionalFormatRules).toBeUndefined();
+        expect(sheets[1].conditionalFormats).toEqual({});
     });
 
     test('convert imports cellIs between rules with both bounds', async () => {
@@ -1629,10 +1648,10 @@ describe('Sheets xlsx conversion fidelity', () => {
             }),
         );
 
-        expect(sheets[0].conditionalFormatRules).toEqual([
+        expect(formatList(sheets[0].conditionalFormats)).toEqual([
             {
                 type: 'default',
-                cellrange: [{ row: [0, 3], column: [0, 0] }],
+                ranges: [{ row: [0, 3], column: [0, 0] }],
                 format: { textColor: null, cellColor: '#112233' },
                 conditionName: 'between',
                 conditionRange: [],
@@ -1659,10 +1678,10 @@ describe('Sheets xlsx conversion fidelity', () => {
         );
 
         // Excel anchors the relative refs at the first range's top-left, and so does the engine.
-        expect(sheets[0].conditionalFormatRules).toEqual([
+        expect(formatList(sheets[0].conditionalFormats)).toEqual([
             {
                 type: 'default',
-                cellrange: [
+                ranges: [
                     { row: [1, 3], column: [1, 1] },
                     { row: [1, 3], column: [3, 3] },
                     { row: [6, 7], column: [0, 0] },
@@ -1693,10 +1712,10 @@ describe('Sheets xlsx conversion fidelity', () => {
         );
 
         // The file lists stops min→max; the engine's colorGradation format is max→min.
-        expect(sheets[0].conditionalFormatRules).toEqual([
+        expect(formatList(sheets[0].conditionalFormats)).toEqual([
             {
                 type: 'colorGradation',
-                cellrange: [{ row: [0, 2], column: [2, 2] }],
+                ranges: [{ row: [0, 2], column: [2, 2] }],
                 format: ['#FF0000', '#FFFFFF'],
             },
         ]);
@@ -1716,10 +1735,10 @@ describe('Sheets xlsx conversion fidelity', () => {
             }),
         );
 
-        expect(sheets[0].conditionalFormatRules).toEqual([
+        expect(formatList(sheets[0].conditionalFormats)).toEqual([
             {
                 type: 'default',
-                cellrange: [
+                ranges: [
                     { row: [0, 1], column: [0, 0] },
                     { row: [0, 1], column: [2, 2] },
                     { row: [4, 4], column: [4, 4] },
@@ -1749,7 +1768,7 @@ describe('Sheets xlsx conversion fidelity', () => {
         // Excel: lowest priority number wins conflicting properties. The engine applies
         // rules in array order with last-write-wins per property, so the importer emits
         // priority DESCENDING — the priority-1 (red) rule must come last.
-        const rules = sheets[0].conditionalFormatRules ?? [];
+        const rules = formatList(sheets[0].conditionalFormats);
         expect(rules).toHaveLength(2);
         expect(rules[0]).toMatchObject({ format: { cellColor: '#00FF00' }, conditionValue: ['0'] });
         expect(rules[1]).toMatchObject({ format: { cellColor: '#FF0000' }, conditionValue: ['50'] });
@@ -1776,17 +1795,17 @@ describe('Sheets xlsx conversion fidelity', () => {
             }),
         );
 
-        expect(sheets[0].conditionalFormatRules).toEqual([
+        expect(formatList(sheets[0].conditionalFormats)).toEqual([
             {
                 type: 'default',
-                cellrange: [{ row: [0, 2], column: [0, 0] }],
+                ranges: [{ row: [0, 2], column: [0, 0] }],
                 format: { textColor: '#00AA00', cellColor: null },
                 conditionName: 'equal',
                 conditionRange: [],
                 conditionValue: ['1'],
             },
         ]);
-        expect(sheets[1].conditionalFormatRules).toBeUndefined();
+        expect(sheets[1].conditionalFormats).toEqual({});
     });
 
     test('convert imports literal-list data validations as one dropdown rule per cell', async () => {

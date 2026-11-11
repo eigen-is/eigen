@@ -5,7 +5,7 @@
 // view, and the author's own structural edits, have tests of their own.
 
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import { DEFAULT_CHART_SERIES_STYLE, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { DEFAULT_CHART_SERIES_STYLE, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { isRecord } from '@workspace/lib/guards';
 import { produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
@@ -21,6 +21,7 @@ import type { Tab } from '../factories/collab';
 import { tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { selectionFactory, workbookContextFactory } from '../factories/context';
 import { typed } from '../factories/edit-cycle';
+import { formatsOf } from '../factories/validations';
 import type { Random } from '../factories/workbook-fuzz';
 import { fresh, nextBatch, random, sizeOf, withAuthorValues, workbook } from '../factories/workbook-fuzz';
 
@@ -33,7 +34,7 @@ afterEach(() => {
 });
 
 const chart = (id: string, sheetId: string) => ({
-    ...newSheetChartSpecParts({
+    ...newChartSpecParts({
         ...sampleChartSpec('column'),
         series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#2a78d6' } },
         data: {
@@ -63,17 +64,17 @@ function start(rnd: Random): Sheet[] {
             ...one,
             charts: { c1: chart('c1', 's2') },
             config: { rowlen: { 2: 30 } },
-            conditionalFormatRules: [
+            conditionalFormats: formatsOf([
                 {
                     type: 'default',
                     conditionName: 'formula',
                     conditionValue: ['=A2>10'],
-                    cellrange: [{ row: [1, 4], column: [0, 1] }],
+                    ranges: [{ row: [1, 4], column: [0, 1] }],
                     format: {},
                 },
-            ],
+            ]),
         },
-        { ...two, dataValidations: { v1: { ranges: [{ row: [0, 3], column: [0, 0] }], rule } } },
+        { ...two, dataValidations: { v1: { ranges: [{ row: [0, 3], column: [0, 0] }], order: 'a0', rule } } },
         { ...three, config: { merge: { '4_0': { r: 4, c: 0, rs: 2, cs: 2 } } } },
     ];
     for (const sheet of sheets) normalizeSheetConfig(sheet);
@@ -111,7 +112,7 @@ function extrasBatch(rnd: Random, sheets: Sheet[], step: number): Op[] {
     if (roll === 4) return [{ op: 'add', id, path: ['config', 'rowlen', `${rnd.int(8)}`], value: 20 + step }];
     if (roll === 5) {
         const ranges = [{ row: [rnd.int(4), 5], column: [1, 1] }];
-        return [{ op: 'add', id, path: ['dataValidations', `w${step}`], value: { ranges, rule } }];
+        return [{ op: 'add', id, path: ['dataValidations', `w${step}`], value: { ranges, order: 'a0', rule } }];
     }
     if (roll === 6) return [{ op: 'replace', id, path: ['hide'], value: rnd.chance(0.5) ? 1 : undefined }];
     return [{ op: 'remove', id, path: ['config', 'rowlen', '2'] }];

@@ -4,7 +4,7 @@
 // shapes the editor stores, and the formulas are computed here once, as the xlsx importer does, so the snapshot is
 // stored as computed and opens with its values. Deterministic ids: a reseed builds the same workbook.
 
-import { CHART_DEFAULT_SIZE, defaultChartSpec, newSheetChartSpecParts } from '@workspace/lib/charts';
+import { CHART_DEFAULT_SIZE, defaultChartSpec, newChartSpecParts } from '@workspace/lib/charts';
 import { eigenColor } from '@workspace/lib/constants/colors';
 import type {
     BorderSide,
@@ -17,7 +17,13 @@ import type {
     SheetValidation,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { encodeSheetsSnapshot, nextFloatingIndex, sheetFloatingBox, writeSheetsSnapshot } from '@workspace/lib/sheets';
+import {
+    encodeSheetsSnapshot,
+    nextFloatingIndex,
+    nextRuleOrder,
+    sheetFloatingBox,
+    writeSheetsSnapshot,
+} from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { normalizeSheetConfig, numberDisplay, parseA1Range, recalcSheets } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
@@ -61,24 +67,33 @@ function buildSheet(spec: SheetSpec, order: number, ids: Map<string, string>): S
         }
     }
 
-    const dataBars = (spec.dataBars ?? []).map(
-        (a1): ConditionalFormatRule => ({ type: 'dataBar', cellrange: [range(a1)], format: [DATA_BAR_COLOR] }),
-    );
-    const belowZero = (spec.redBelowZero ?? []).map(
-        (a1): ConditionalFormatRule => ({
+    // The rules are numbered and ordered as the spec lists them, as the charts below are.
+    const conditionalFormats: Record<string, ConditionalFormatRule> = {};
+    const format = () => ({
+        id: `format-${Object.keys(conditionalFormats).length + 1}`,
+        order: nextRuleOrder(conditionalFormats),
+    });
+    for (const a1 of spec.dataBars ?? []) {
+        const { id, order } = format();
+        conditionalFormats[id] = { type: 'dataBar', ranges: [range(a1)], order, format: [DATA_BAR_COLOR] };
+    }
+    for (const a1 of spec.redBelowZero ?? []) {
+        const { id, order } = format();
+        conditionalFormats[id] = {
             type: 'default',
-            cellrange: [range(a1)],
+            ranges: [range(a1)],
+            order,
             format: BELOW_ZERO_FORMAT,
             conditionName: 'lessThan',
             conditionRange: [],
             conditionValue: [0],
-        }),
-    );
-    // A list rule over its range, numbered as the charts below are.
+        };
+    }
     const dataValidations: Record<string, SheetValidation> = {};
     for (const [i, { range: a1, options }] of (spec.dropdowns ?? []).entries()) {
         dataValidations[`validation-${i + 1}`] = {
             ranges: [range(a1)],
+            order: nextRuleOrder(dataValidations),
             rule: {
                 type: 'dropdown',
                 type2: '',
@@ -101,7 +116,7 @@ function buildSheet(spec: SheetSpec, order: number, ids: Map<string, string>): S
             columnlen: Object.fromEntries(spec.columns.map((column, c) => [c, column.width])),
             borderInfo,
         },
-        conditionalFormatRules: [...dataBars, ...belowZero],
+        conditionalFormats,
         dataValidations,
         charts,
     };
@@ -118,7 +133,7 @@ function buildSheet(spec: SheetSpec, order: number, ids: Map<string, string>): S
             id,
             index: nextFloatingIndex(sheet),
             ...sheetFloatingBox({ x: chart.x, y: chart.y, ...CHART_DEFAULT_SIZE }),
-            ...newSheetChartSpecParts({ ...defaults, title: { text: chart.title }, legend: { position: 'none' } }),
+            ...newChartSpecParts({ ...defaults, title: { text: chart.title }, legend: { position: 'none' } }),
         };
     }
     normalizeSheetConfig(sheet);

@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { FLAT_CHART_LOOK } from '../../../charts';
 import { sampleChartSpec } from '../../../charts/defaults';
 import { MAX_CHART_SPEC_BYTES } from '../../../charts/limits';
-import { newChartSpecParts, newSheetChartSpecParts } from '../../../charts/spec';
+import { newChartSpecParts, readChartSpec } from '../../../charts/spec';
 import {
     buildChartClipboardItem,
     clipboardTextItemHasContent,
@@ -15,7 +15,6 @@ import {
     inlineClipboardSvgMedia,
     materializeClipboardSvg,
     needsReUpload,
-    pastedChartFields,
     readClipboardBox,
     readEigenClipboard,
     readSvgClipboardWithItems,
@@ -518,10 +517,10 @@ describe('chart items', () => {
     });
 
     // Each part is the text its host stores, so one that doesn't parse reads the same on the other side.
-    test('the item carries every part as stored text, a part a newer build added and one that does not parse', () => {
+    test('the item carries the eight parts as stored text, one that does not parse too, and no other key', () => {
         const chart = { ...inline, specTitle: '{"text":', specFuture: '{"later":true}', id: 'c1', width: 9 };
         const item = buildChartClipboardItem({ chart, box, look });
-        expect(item?.parts).toEqual({ ...inline, specTitle: '{"text":', specFuture: '{"later":true}' });
+        expect(item?.parts).toEqual({ ...inline, specTitle: '{"text":' });
         expect(readEigenClipboard(raw(item))?.items).toEqual(item ? [item] : []);
     });
 
@@ -540,56 +539,23 @@ describe('chart items', () => {
         expect(readEigenClipboard(raw({ ...good, height: Number.NaN }))?.items).toEqual([]);
     });
 
-    // The limits a host's read applies. An item's parts are texts, so it holds no entries, and many short keys are past
-    // the byte limit.
-    test('the reader refuses parts past the byte limit, many keys too, or the depth limit, or not texts', () => {
-        const used = Object.entries(inline).reduce((sum, [key, text]) => sum + utf8(key + text), 0);
-        const room = MAX_CHART_SPEC_BYTES - used - 'specFuture'.length;
-        const padded = (bytes: number) => ({ ...inline, specFuture: 'x'.repeat(bytes) });
-        expect(readEigenClipboard(raw({ ...good, parts: padded(room) }))?.items).toHaveLength(1);
+    // The limits a host's read applies, so a paste stores the parts as they came.
+    test('the reader refuses parts past the byte or depth limit, a key that is no part, and a part that is no text', () => {
+        const used = Object.values(inline).reduce((sum, text) => sum + utf8(text), 0);
+        const room = MAX_CHART_SPEC_BYTES - used + utf8(inline.specLegend);
+        const padded = (bytes: number) => ({ ...inline, specLegend: 'x'.repeat(bytes) });
+        const [atLimit] = readEigenClipboard(raw({ ...good, parts: padded(room) }))?.items ?? [];
+        expect(atLimit?.type === 'chart' && readChartSpec(newChartSpecParts(atLimit.parts)).spec).not.toBeNull();
         const deep = `${'['.repeat(MAX_CHART_SPEC_DEPTH + 1)}${']'.repeat(MAX_CHART_SPEC_DEPTH + 1)}`;
-        const keys = Object.fromEntries(Array.from({ length: MAX_CHART_SPEC_BYTES / 5 }, (_, i) => [`specX${i}`, '']));
         const refused = [
             padded(room + 1),
-            { ...inline, specFuture: deep },
-            { ...inline, ...keys },
-            { ...inline, specFuture: { 'a/1': '{}' } },
+            { ...inline, specLegend: deep },
+            { ...inline, specFuture: '{}' },
+            { ...inline, specPoints: { 'a/1': '{}' } },
             { ...inline, future: '{}' },
+            { ...inline, chart: {} },
         ];
         for (const parts of refused) expect(readEigenClipboard(raw({ ...good, parts }))?.items).toEqual([]);
-    });
-
-    // One series under a 64-character id with 2000 points carries about 18 KiB, and Sheets stores an entry per point
-    // with the id in its key, about 140 KiB. An item at the limit that lacks specPoints gains it on a canvas.
-    test('a paste refuses a chart its host would store past the byte limit', () => {
-        const id = 's'.repeat(64);
-        const series = { ...sampleChartSpec('column'), series: {}, points: {} };
-        const points = Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [i, {}]));
-        const longIds = {
-            ...newChartSpecParts({
-                ...series,
-                data: { source: 'inline', categories: [], series: [{ id, name: '', values: [] }] },
-            }),
-            specPoints: JSON.stringify({ [id]: points }),
-        };
-        const { specPoints: _, ...lacking } = inline;
-        const bytes = (parts: Record<string, string>) =>
-            Object.entries(parts).reduce((sum, [key, text]) => sum + utf8(key + text), 0);
-        const padded = (pad: string) => ({
-            ...lacking,
-            specChart: JSON.stringify({ ...JSON.parse(lacking.specChart), pad }),
-        });
-        const atLimit = padded('x'.repeat(MAX_CHART_SPEC_BYTES - bytes(padded(''))));
-        const read = (parts: Record<string, string>) => {
-            const [item] = readEigenClipboard(raw({ ...good, parts }))?.items ?? [];
-            if (item?.type !== 'chart') throw new Error('refused');
-            return item.parts;
-        };
-        const wide = read(longIds);
-        expect(pastedChartFields(wide, newChartSpecParts)).toEqual(newChartSpecParts(longIds));
-        expect(pastedChartFields(wide, newSheetChartSpecParts)).toBeNull();
-        expect(pastedChartFields(read(atLimit), newChartSpecParts)).toBeNull();
-        expect(pastedChartFields(read(inline), newSheetChartSpecParts)).toEqual(newSheetChartSpecParts(inline));
     });
 
     // The wire is any page's to write; the canvas reader's validators judge the look, and a missing one reads flat.

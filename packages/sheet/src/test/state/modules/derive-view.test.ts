@@ -24,7 +24,7 @@ function workbook(fields: Partial<Sheet> = {}): Context {
         currentSheetId: 'one',
         defaultrowlen: HEIGHT,
         defaultcollen: 70,
-        sheets: [makeSheet('one', fields), makeSheet('two')],
+        sheets: [makeSheet('one', { defaultColWidth: 70, ...fields }), makeSheet('two')],
         visibledatarow: Array.from({ length: ROWS }, (_, r) => (r + 1) * HEIGHT),
         visibledatacolumn: Array.from({ length: COLUMNS }, (_, c) => (c + 1) * 70),
         selections: [{ row: [3, 3], column: [0, 0], row_focus: 3, column_focus: 0, top: 3 * HEIGHT }],
@@ -101,13 +101,19 @@ describe('deriveView', () => {
     });
 
     test('a value set in the first row clamps a wide default column', () => {
-        const base = produce(workbook(), (draft) => {
-            draft.defaultcollen = 400;
-        });
-        const next = commit(base, (draft) => {
+        const next = commit(workbook({ defaultColWidth: 400 }), (draft) => {
             cells(draft)[0][1] = { v: 1 };
         });
         expect(next.visibledatacolumn.slice(0, 2)).toEqual([400, 700]);
+    });
+
+    test('a sheet that takes the place of the current one under its id brings its gridlines and default sizes', () => {
+        const next = commit(workbook(), (draft) => {
+            draft.sheets[0] = makeSheet('one', { showGridLines: 0, defaultRowHeight: 30, defaultColWidth: 50 });
+        });
+        expect([next.showGridLines, next.defaultrowlen, next.defaultcollen]).toEqual([false, 30, 50]);
+        expect(next.visibledatarow[1]).toBe(60);
+        expect(next.visibledatacolumn[1]).toBe(100);
     });
 
     test('a new filter range gets its rects, and a cleared one loses them', () => {

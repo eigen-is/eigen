@@ -3,8 +3,9 @@
 // every batch. The three must always agree.
 
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import { DEFAULT_CHART_SERIES_STYLE, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { DEFAULT_CHART_SERIES_STYLE, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet as LibSheet } from '@workspace/lib/sheets';
+import type { ChartSpecChange } from '@workspace/lib/types/chart';
 import type { Patch } from 'immer';
 import { produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
@@ -12,9 +13,12 @@ import { dataToCelldata } from '../../../engine/celldata';
 import { MAX_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Cell, ShiftedSheet } from '../../../engine/types';
+import { getSheet } from '../../../state/api/common';
 import { copySheet, hideSheet, showSheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { getFlowdata } from '../../../state/context';
+import { setChartSpec } from '../../../state/modules/chart';
+import { deleteSheetRule } from '../../../state/modules/condition-format';
 import { applyDataValidation } from '../../../state/modules/data-validation';
 import type { RowColMove } from '../../../state/modules/history-shift';
 import { deleteMove, insertMove, shiftEntries } from '../../../state/modules/history-shift';
@@ -24,13 +28,14 @@ import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, changeSheet, deleteSheet, renameSheet } from '../../../state/modules/sheet';
 import { updateFormatCell } from '../../../state/modules/toolbar';
 import { clearValidations, validationAt } from '../../../state/modules/validation-rules';
-import type { ConditionalFormatRule, DataValidationRule, Op, Sheet } from '../../../state/types';
+import type { DataValidationRule, Op, Sheet } from '../../../state/types';
 import { commutes } from '../../../state/utils/commute';
 import type { Tab } from '../factories/collab';
 import { author, join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { heldGraph, workbookContextFactory } from '../factories/context';
 import { typed } from '../factories/edit-cycle';
 import { cellLinks } from '../factories/links';
+import { formatList, formatsOf } from '../factories/validations';
 
 const ONE = 's1';
 const TWO = 's2';
@@ -103,7 +108,7 @@ function expectAgree(s: ReturnType<typeof session>) {
 
 // A chart on any sheet that reads B3:B6 of One.
 const chartReading = (id: string) => ({
-    ...newSheetChartSpecParts({
+    ...newChartSpecParts({
         ...sampleChartSpec('column'),
         series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#2a78d6' } },
         data: {
@@ -120,11 +125,11 @@ const chartReading = (id: string) => ({
     height: 100,
 });
 
-const formulaRule = (formula: string, first = 0, last = 0): ConditionalFormatRule => ({
+const formulaRule = (formula: string, first = 0, last = 0): ReturnType<typeof formatList>[number] => ({
     type: 'default',
     conditionName: 'formula',
     conditionValue: [formula],
-    cellrange: [{ row: [first, last], column: [0, 0] }],
+    ranges: [{ row: [first, last], column: [0, 0] }],
     format: {},
 });
 
@@ -141,7 +146,7 @@ const stored = (sheets: ShiftedSheet[]) =>
         cells: cells(s),
         config: s.config,
         dataValidations: s.dataValidations ?? {},
-        conditionalFormatRules: s.conditionalFormatRules,
+        conditionalFormats: s.conditionalFormats,
         frozen: s.frozen,
         filterRange: s.filterRange,
         filter: s.filter,
@@ -290,7 +295,7 @@ describe("a peer's batch shifts the undo stacks once it applied", () => {
     test('a batch that fails leaves the undo where it was', () => {
         const s = session(workbook({ B10: text('old') }));
         s.edit(s.a, typedAt('B10', 'new'));
-        tabReceive(s.a, peerInsert([{ op: 'replace', id: ONE, path: ['data', 999, 999, 'v'], value: 1 }]));
+        tabReceive(s.a, peerInsert([{ op: 'insertRowCol', id: ONE, path: [], value: { type: 'row', index: -1 } }]));
         expect(cellAt(s.a, 'B10')?.v).toBe('new');
         tabUndo(s.a);
         expect(cellAt(s.a, 'B10')?.v).toBe('old');
@@ -334,6 +339,21 @@ describe("undo after a peer's row op keeps a field its entry wrote", () => {
         s.undo(s.a);
         expect(cellLinks(s.a.ctx.sheets[0])).toEqual({});
         expectAgree(s);
+    });
+
+    // A point's style keeps its index through a row op, so the entry still holds what the recolour replaced.
+    test("a chart's slice colour stays undoable after a peer's row insert in its rows", () => {
+        const base = produce(workbook({}), (ctx: Context) => {
+            ctx.sheets[0].charts = { c1: chartReading('c1') };
+        });
+        const s = session(base);
+        const points = (sheets: LibSheet[]) => sheets[0].charts?.c1.specPoints;
+        const recolor: ChartSpecChange = [{ op: 'set', path: ['points', 's-1', '1', 'color'], value: '#ff0000' }];
+        s.edit(s.a, (ctx) => setChartSpec(ctx, 'c1', recolor));
+        expect(points(s.b.ctx.sheets)).toBe('{"s-1":{"1":{"color":"#ff0000"}}}');
+        s.edit(s.b, ...insertRows(4, 2));
+        s.undo(s.a);
+        expect([s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()].map(points)).toEqual(['{}', '{}', '{}']);
     });
 });
 
@@ -396,7 +416,7 @@ describe("a peer's batch ends your row, column and sheet undo", () => {
     test('a batch that fails ends nothing', () => {
         const s = session(workbook());
         s.edit(s.a, ...insertRows(2, 1));
-        tabReceive(s.a, [{ op: 'replace', id: ONE, path: ['data', 999, 999, 'v'], value: 1 }]);
+        tabReceive(s.a, [{ op: 'insertRowCol', id: ONE, path: [], value: { type: 'row', index: -1 } }]);
         expect(s.a.history.undoList).toHaveLength(1);
         s.undo(s.a);
         expect(s.a.ctx.sheets[0].data).toHaveLength(40);
@@ -441,6 +461,7 @@ describe('working alone', () => {
             one.dataValidations = {
                 a: {
                     ranges: [{ row: [3, 5], column: [0, 0] }],
+                    order: 'a0',
                     rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
                 },
             };
@@ -451,9 +472,9 @@ describe('working alone', () => {
             one.filter = {
                 0: { rowhidden: { 6: 0 }, optionstate: true, str: 2, edr: 9, cindex: 0, stc: 0, edc: 2 },
             };
-            one.conditionalFormatRules = [formulaRule('=A5>0', 3, 5)];
+            one.conditionalFormats = formatsOf([formulaRule('=A5>0', 3, 5)]);
             one.charts = { c1: chartReading('c1') };
-            two.conditionalFormatRules = [formulaRule('=One!A5>0')];
+            two.conditionalFormats = formatsOf([formulaRule('=One!A5>0')]);
             two.charts = { c2: chartReading('c2') };
         });
     };
@@ -509,16 +530,19 @@ describe('working alone', () => {
         expectAgree(s);
     });
 
-    test('an undo ships only the fields its marker did not bring back', () => {
-        const fieldsOfUndo = (...structural: Structural) => {
+    test('an undo ships only the entries its marker did not bring back', () => {
+        const writesOfUndo = (...structural: Structural) => {
             const t = tab(rich());
             tabEdit(t, ...structural);
-            return tabUndo(t).flatMap(({ path }) => (path.length === 1 ? [path[0]] : []));
+            return tabUndo(t).flatMap(({ path }) => (path.length > 0 && path[0] !== 'data' ? [path.join('/')] : []));
         };
-        expect(fieldsOfUndo(...insertRows(4, 1))).toEqual([]);
-        const fields = fieldsOfUndo(...deleteRows(4, 4));
-        expect(fields).toContain('config');
-        for (const field of ['name', 'color', 'hide', 'order', 'row', 'data']) expect(fields).not.toContain(field);
+        expect(writesOfUndo(...insertRows(4, 1))).toEqual([]);
+        expect(writesOfUndo(...deleteRows(4, 4))).toEqual([
+            'conditionalFormats/f1',
+            'conditionalFormats/f1',
+            'config/rowlen/4',
+            'config/borderInfo/4_0',
+        ]);
     });
 
     // A sheet past the row limit, as an import may bring: the delete applies, but the insert that would undo it fails.
@@ -614,6 +638,53 @@ describe("a row op moves another sheet's formulas for every reader", () => {
     });
 });
 
+// The engine rewrites a formula rule that names the op's sheet on every sheet, so an entry that holds such a rule
+// would bring back its old text. It is dropped, as one on the op's own sheet is.
+describe("a row op on another sheet drops the undo of a formula rule that reads the op's sheet", () => {
+    const rules = (t: Tab) => formatList(t.ctx.sheets.find((x) => x.id === TWO)?.conditionalFormats);
+    const withRules = (...formulas: string[]) =>
+        produce(workbook(), (ctx: Context) => {
+            ctx.sheets[1].conditionalFormats = formatsOf(formulas.map((formula) => formulaRule(formula)));
+        });
+    const expectSameRules = (s: ReturnType<typeof session>) => {
+        expect(rules(s.b)).toEqual(rules(s.a));
+        expect(formatList(s.joiner().find((x) => x.id === TWO)?.conditionalFormats)).toEqual(rules(s.a));
+    };
+
+    test('a deleted rule does not come back reading the row it read before the insert', () => {
+        const s = session(withRules('=One!A5>0', '=A5>0'));
+        s.edit(
+            s.a,
+            on(TWO, (ctx) => deleteSheetRule(ctx, 'f2')),
+        );
+        s.edit(
+            s.a,
+            on(TWO, (ctx) => deleteSheetRule(ctx, 'f1')),
+        );
+        s.edit(s.b, ...insertRows(0, 1));
+        expect(s.a.history.undoList).toHaveLength(1);
+        s.undo(s.a);
+        s.undo(s.a);
+        expect(rules(s.a)).toEqual([formulaRule('=A5>0')]);
+        expectSameRules(s);
+    });
+
+    test('an undone add is not redone with the text it had before the insert', () => {
+        const s = session(withRules());
+        const add = (formula: string) =>
+            on(TWO, (ctx) => {
+                Object.assign(getSheet(ctx).conditionalFormats ?? {}, formatsOf([formulaRule(formula)]));
+            });
+        s.edit(s.a, add('=One!A5>0'));
+        s.undo(s.a);
+        s.edit(s.b, ...insertRows(0, 1));
+        expect(s.a.history.redoList).toHaveLength(0);
+        s.redo(s.a);
+        expect(rules(s.a)).toEqual([]);
+        expectSameRules(s);
+    });
+});
+
 test("an edit to a linked cell after a peer's row insert keeps its link everywhere", () => {
     const s = session(workbook({ B5: text('link') }));
     s.edit(s.a, (ctx) => saveHyperlink(ctx, 4, 1, 'link', 'webpage', 'https://eigen.is'));
@@ -647,6 +718,22 @@ describe('undo skips a cell a peer changed since, by what was written into it', 
         expect(cellAt(s.a, 'B2')?.mc).toEqual({ r: 0, c: 0 });
         expectAgree(s);
     });
+
+    // A part is one string, so a peer's later edit of it holds the peer's whole part and the undo leaves it.
+    test("a chart's style edit is not undone once a peer has edited the same part", () => {
+        const base = produce(workbook({}), (ctx: Context) => {
+            ctx.sheets[0].charts = { c1: chartReading('c1') };
+        });
+        const s = session(base);
+        const series = (sheets: LibSheet[]) => JSON.parse(sheets[0].charts?.c1.specSeries ?? '{}')['s-1'];
+        const set = (path: string[], value: unknown): ChartSpecChange => [{ op: 'set', path, value }];
+        s.edit(s.a, (ctx) => setChartSpec(ctx, 'c1', set(['series', 's-1', 'color'], '#ff0000')));
+        s.edit(s.b, (ctx) => setChartSpec(ctx, 'c1', set(['series', 's-1', 'line', 'smooth'], true)));
+        s.undo(s.a);
+        for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
+            expect(series(sheets)).toMatchObject({ color: '#ff0000', line: { smooth: true } });
+        }
+    });
 });
 
 // An undo sends what a person wrote and recalculates the rest: a value the engine computed is only right for the
@@ -667,6 +754,16 @@ describe('undo and redo recalculate the formulas they touch', () => {
         s.redo(s.a);
         for (const t of [s.a, s.b]) expect(cellAt(t, 'D10')?.v).toBe(105);
         expectAgree(s);
+    });
+
+    // The entry's recorded total would go out as a batch that changes nothing, and end the peer's structural undos.
+    test('an undo whose input a peer changed since sends nothing, though a formula reads that input', () => {
+        const s = session(workbook({ A1: num(1), B1: num(2), D10: { ...num(3), f: '=A1+B1' } }));
+        s.edit(s.a, typedAt('A1', '5'));
+        s.edit(s.b, typedAt('A1', '7'));
+        expect(tabUndo(s.a)).toEqual([]);
+        expect(s.a.history).toMatchObject({ undoList: [], redoList: [] });
+        expect(cellAt(s.a, 'D10')?.v).toBe(9);
     });
 
     test('a formula a peer rewrote keeps a value that matches it after your undo', () => {
@@ -816,28 +913,13 @@ describe("a formula is its cell's `f`, nothing else", () => {
         expect(cellAt(b, 'D1')?.v).toBe(2);
     });
 
-    test('a row written past the end leaves holes in the matrix, and the map still builds', () => {
+    test('a row written past the end is skipped, so the matrix keeps no holes and the map still builds', () => {
         const t = tab(workbook());
-        tabReceive(t, [{ op: 'replace', id: ONE, path: ['data', 50], value: [{ f: '=1+1', v: 2, m: '2' }] }]);
+        const rows = t.ctx.sheets[0].data?.length ?? 0;
+        tabReceive(t, [{ op: 'replace', id: ONE, path: ['data', rows + 9], value: [{ f: '=1+1', v: 2, m: '2' }] }]);
         t.ctx.formulaCache.forgetGraph();
-        expect(heldGraph(t.ctx).formulaAt(ONE, 50, 0)?.formula).toBe('=1+1');
-    });
-
-    test('a stored op on the old recalc list fails no batch, and leaves no list on the sheet', () => {
-        const oldLog: Op[] = [
-            { op: 'add', id: ONE, path: ['calcChain', 0], value: { r: 0, c: 1, id: ONE } },
-            { op: 'replace', id: ONE, path: ['data', 0, 1], value: { v: 2, f: '=1+1', m: '2' } },
-            { op: 'replace', id: ONE, path: ['calcChain'], value: [null] },
-            { op: 'remove', id: ONE, path: ['calcChain'] },
-        ];
-        const base = workbook();
-        const t = tab(base);
-        tabReceive(t, oldLog);
-        const [joined] = join(base, [oldLog]);
-        for (const one of [t.ctx.sheets[0], joined]) {
-            expect(one.data?.[0]?.[1]?.v).toBe(2);
-            expect('calcChain' in one).toBe(false);
-        }
+        expect(t.ctx.sheets[0].data).toHaveLength(rows);
+        expect(heldGraph(t.ctx).formulaAt(ONE, rows + 9, 0)).toBeUndefined();
     });
 });
 
@@ -906,12 +988,12 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         'undoing a %s delete brings back a formula rule on another sheet that named it, and redo breaks it again',
         (_, deletion) => {
             const base = produce(workbook({ A5: num(3) }), (ctx: Context) => {
-                ctx.sheets[1].conditionalFormatRules = [formulaRule('=One!A5>0')];
+                ctx.sheets[1].conditionalFormats = formatsOf([formulaRule('=One!A5>0')]);
             });
             const s = session(base);
             const everyReaderReads = (formula: string) => {
                 for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
-                    const [rule] = sheets[1].conditionalFormatRules ?? [];
+                    const [rule] = formatList(sheets[1].conditionalFormats);
                     expect(rule.type === 'default' && rule.conditionValue).toEqual([formula]);
                 }
             };
@@ -939,6 +1021,57 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         expect(s.a.ctx.sheets[0].config?.merge).toEqual({ '4_0': merge });
         expect(cellAt(s.a, 'B6')?.mc).toEqual({ r: 4, c: 0 });
         expectAgree(s);
+    });
+
+    // B's batch sits before A's undo in the log, and A's undo was built without it.
+    function undoBehindPeer(base: Context, deletion: Structural, onB: (ctx: Context) => void) {
+        const s = session(base);
+        s.edit(s.a, ...deletion);
+        const fromB = tabEdit(s.b, onB);
+        const step = tabUndo(s.a);
+        tabReceive(s.a, fromB);
+        tabReceive(s.b, step);
+        return [s.a.ctx.sheets, s.b.ctx.sheets, join(base, [...s.batches, fromB, step])];
+    }
+    const side = { style: 1, color: '#000000' };
+    const widenAndBorder = (ctx: Context) => {
+        const { columnlen, borderInfo } = ctx.sheets[0].config ?? {};
+        if (columnlen) columnlen[1] = 200;
+        if (borderInfo) borderInfo['0_1'] = { b: side };
+    };
+
+    test('undoing your row delete keeps a column width and a border a peer set meanwhile', () => {
+        const base = produce(workbook({ A5: text('kept') }), (ctx: Context) => {
+            ctx.sheets[0].config = { ...ctx.sheets[0].config, rowlen: { 4: 40 } };
+        });
+        for (const sheets of undoBehindPeer(base, deleteRows(4, 4), widenAndBorder)) {
+            expect(sheets[0].config).toMatchObject({
+                rowlen: { 4: 40 },
+                columnlen: { 1: 200 },
+                borderInfo: { '0_1': { b: side } },
+            });
+        }
+    });
+
+    test("undoing a delete of merged rows keeps a peer's merge and border, and brings its own back whole", () => {
+        const merge = { r: 4, c: 0, rs: 2, cs: 2 };
+        const corner = { mc: { r: 4, c: 0 } };
+        const base = produce(
+            workbook({ A5: { v: 'm', m: 'm', mc: merge }, B5: corner, A6: corner, B6: corner }),
+            (ctx: Context) => {
+                ctx.sheets[0].config = { ...ctx.sheets[0].config, merge: { '4_0': merge } };
+            },
+        );
+        const readers = undoBehindPeer(base, deleteRows(4, 5), (ctx) => {
+            widenAndBorder(ctx);
+            mergeCells(ctx, ONE, [{ row: [0, 1], column: [3, 4] }], 'merge-all');
+        });
+        for (const sheets of readers) {
+            expect(sheets[0].config?.merge).toEqual({ '4_0': merge, '0_3': { r: 0, c: 3, rs: 2, cs: 2 } });
+            expect(sheets[0].config?.borderInfo).toEqual({ '0_1': { b: side } });
+            const mcs = cells(sheets[0]).flatMap(({ r, c, v }) => (v?.mc ? [`${r}_${c}`] : []));
+            expect(mcs.toSorted()).toEqual(['0_3', '0_4', '1_3', '1_4', '4_0', '4_1', '5_0', '5_1']);
+        }
     });
 
     test('undoing a row delete while another sheet is current restores the sheet it was made on', () => {
@@ -1189,6 +1322,7 @@ describe('shiftEntries', () => {
     const replace = (path: Patch['path'], value?: unknown): Patch => ({ op: 'replace', path, value });
     const at = (...path: Patch['path']) => ['sheets', ONE, ...path];
     const range = (row: number[]) => ({ row, column: [1, 1] });
+    const greaterThan = { type: 'default', conditionName: 'greaterThan', conditionValue: [1], format: {}, order: 'a0' };
 
     test.each<[string, RowColMove, Patch, Patch | null]>([
         [
@@ -1273,19 +1407,31 @@ describe('shiftEntries', () => {
         [
             "a validation rule's ranges move, the one an insert is inside grows",
             rows(2, 2),
-            replace(at('dataValidations', 'v'), { ranges: [range([5, 6]), range([1, 3])], rule: { type: 'checkbox' } }),
-            replace(at('dataValidations', 'v'), { ranges: [range([7, 8]), range([1, 5])], rule: { type: 'checkbox' } }),
+            replace(at('dataValidations', 'v'), {
+                ranges: [range([5, 6]), range([1, 3])],
+                order: 'a0',
+                rule: { type: 'checkbox' },
+            }),
+            replace(at('dataValidations', 'v'), {
+                ranges: [range([7, 8]), range([1, 5])],
+                order: 'a0',
+                rule: { type: 'checkbox' },
+            }),
         ],
         [
             'a validation rule a delete shrinks keeps what is left',
             deletedRows(2, 3),
-            replace(at('dataValidations', 'v'), { ranges: [range([3, 6]), range([2, 3])], rule: { type: 'checkbox' } }),
-            replace(at('dataValidations', 'v'), { ranges: [range([2, 4])], rule: { type: 'checkbox' } }),
+            replace(at('dataValidations', 'v'), {
+                ranges: [range([3, 6]), range([2, 3])],
+                order: 'a0',
+                rule: { type: 'checkbox' },
+            }),
+            replace(at('dataValidations', 'v'), { ranges: [range([2, 4])], order: 'a0', rule: { type: 'checkbox' } }),
         ],
         [
             'a validation rule a delete takes whole drops the entry',
             deletedRows(2, 3),
-            replace(at('dataValidations', 'v'), { ranges: [range([2, 3])], rule: { type: 'checkbox' } }),
+            replace(at('dataValidations', 'v'), { ranges: [range([2, 3])], order: 'a0', rule: { type: 'checkbox' } }),
             null,
         ],
         [
@@ -1315,7 +1461,22 @@ describe('shiftEntries', () => {
             replace(at('data', 5), [{ v: 1 }]),
             replace(at('data', 7), [{ v: 1 }]),
         ],
-        ['a conditional format drops the entry', rows(2, 2), replace(at('conditionalFormatRules', 0), {}), null],
+        [
+            'a conditional format written under its id moves its ranges',
+            rows(2, 2),
+            replace(at('conditionalFormats', 'f1'), { ...greaterThan, ranges: [range([5, 6])] }),
+            replace(at('conditionalFormats', 'f1'), { ...greaterThan, ranges: [range([7, 8])] }),
+        ],
+        [
+            'a formula conditional format drops the entry',
+            rows(2, 2),
+            replace(at('conditionalFormats', 'f1'), {
+                ...greaterThan,
+                conditionName: 'formula',
+                ranges: [range([5, 6])],
+            }),
+            null,
+        ],
         ['a whole row drops the entry on a column insert', columns(2, 2), replace(at('data', 5), []), null],
         ["a chart's data on One drops the entry", rows(2, 2), replace(at('charts', 'c1', 'specData'), '{}'), null],
         [
@@ -1323,6 +1484,12 @@ describe('shiftEntries', () => {
             rows(2, 2),
             replace(['sheets', TWO, 'charts', 'c2', 'specData'], '{}'),
             null,
+        ],
+        [
+            "a chart's slice colours stay, since a point keeps its index",
+            rows(2, 2),
+            replace(at('charts', 'c1', 'specPoints'), '{"s-1":{"0":{"color":"#ff0000"}}}'),
+            replace(at('charts', 'c1', 'specPoints'), '{"s-1":{"0":{"color":"#ff0000"}}}'),
         ],
         ["a chart's box stays", rows(2, 2), replace(at('charts', 'c1', 'x'), 5), replace(at('charts', 'c1', 'x'), 5)],
         ['the name stays', rows(2, 2), replace(at('name'), 'Uno'), replace(at('name'), 'Uno')],
@@ -1346,8 +1513,8 @@ describe('validation rules on two tabs and a joiner', () => {
     function ruled() {
         const base = workbook();
         base.sheets[0].dataValidations = {
-            a: { ranges: [{ row: [0, 9], column: [0, 0] }], rule: LIST },
-            b: { ranges: [{ row: [0, 9], column: [1, 1] }], rule: LIST },
+            a: { ranges: [{ row: [0, 9], column: [0, 0] }], order: 'a0', rule: LIST },
+            b: { ranges: [{ row: [0, 9], column: [1, 1] }], order: 'a0', rule: LIST },
         };
         return base;
     }
@@ -1422,7 +1589,7 @@ describe('validation rules on two tabs and a joiner', () => {
 
     test('two row inserts sent at once leave a rule on its cells on both tabs and the joiner', () => {
         const base = workbook({ A5: text('x'), A6: text('y') });
-        base.sheets[0].dataValidations = { a: { ranges: [{ row: [4, 5], column: [0, 0] }], rule: LIST } };
+        base.sheets[0].dataValidations = { a: { ranges: [{ row: [4, 5], column: [0, 0] }], order: 'a0', rule: LIST } };
         const a = tab(base);
         const b = tab(base);
         const fromA = tabEdit(a, ...insertRows(0, 1));

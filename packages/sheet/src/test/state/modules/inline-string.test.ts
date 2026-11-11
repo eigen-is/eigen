@@ -6,9 +6,10 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { escapeHtml } from '@workspace/lib/html';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import type { CellFormatStyle } from '../../../engine/conditional-format';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
-import { getFontStyleByCell, getInlineStringHTML, getStyleByCell, updateCell } from '../../../state/modules/cell';
+import { getInlineStringHTML, getStyleByCell, updateCell } from '../../../state/modules/cell';
 import type { RunStyleKey } from '../../../state/modules/inline-string';
 import {
     committedRuns,
@@ -28,6 +29,10 @@ import {
     handleUnderline,
 } from '../../../state/modules/toolbar';
 import { selectionFactory, workbookContextFactory } from '../factories/context';
+
+// The font part of a cell's CSS, as the editor box and the copied HTML get it, under a conditional format's style.
+const getFontStyleByCell = (cell: Cell, rule: CellFormatStyle = {}) =>
+    getStyleByCell(workbookContextFactory(), [[cell]], 0, 0, { '0_0': rule });
 
 installHappyDom();
 

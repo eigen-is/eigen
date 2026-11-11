@@ -77,9 +77,8 @@ Once someone else edits the spreadsheet, you can no longer undo or redo:
 - Your last insert or delete of rows or columns.
 - Your last added, duplicated, deleted or renamed sheet.
 - A paste that added rows or columns.
-- A conditional format rule you removed, or one you added to a sheet that already has rules.
 - Anything you did before one of these.
 
 What you did after it still undoes. If someone else renames a sheet, you can no longer undo or redo anything you did before that. Your own edit in another tab or on another device counts too.
 
-When there is nothing left to undo for this reason, pressing undo shows a notice: "Someone else edited this spreadsheet, so this can't be undone anymore." Pressing redo says: "Someone else edited this spreadsheet, so this can't be redone anymore." The notice stops once you make a new edit.
+Restoring a version or importing a file that replaces the spreadsheet also clears what you can undo. When there is nothing left to undo for one of these reasons, pressing undo shows a notice: "This spreadsheet was replaced or edited by someone else, so this can't be undone anymore." Pressing redo says: "This spreadsheet was replaced or edited by someone else, so this can't be redone anymore." The notice stops once you make a new edit.

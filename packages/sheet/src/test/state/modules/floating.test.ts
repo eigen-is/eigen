@@ -3,10 +3,9 @@
 // Workbook's applyOp and a joiner through replaySheetsOps.
 
 import { describe, expect, test } from 'bun:test';
-import { CHART_MAX_SIDE, MAX_CHART_SPEC_ENTRIES, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { CHART_MAX_SIDE, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet as LibSheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
 import { floatingItems } from '@workspace/lib/sheets';
-import type { Patch } from 'immer';
 import { applyPatches, produce } from 'immer';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
@@ -14,10 +13,10 @@ import { insertChart } from '../../../state/modules/chart';
 import {
     deleteActiveObject,
     deleteFloatingObject,
+    duplicateFloatingObject,
     reorderFloatingObject,
     selectFloatingObject,
     updateFloatingBox,
-    withoutDeletedFloatingEdits,
 } from '../../../state/modules/floating';
 import { redoEntry, undoEntry } from '../../../state/modules/history';
 import {
@@ -29,7 +28,6 @@ import {
 import { insertRowCol } from '../../../state/modules/rowcol';
 import { deleteSheet, initSheetData } from '../../../state/modules/sheet';
 import type { History, Op } from '../../../state/types';
-import { patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 
@@ -41,7 +39,7 @@ const chart = (id: string, index: string): SheetChart => ({
     id,
     index,
     ...BOX,
-    ...newSheetChartSpecParts(sampleChartSpec('column')),
+    ...newChartSpecParts(sampleChartSpec('column')),
 });
 
 // S holds image i1 above chart c1; T holds image t1, whose upload is still pending.
@@ -110,72 +108,98 @@ describe('floating writers', () => {
             expect(join(base, [removal.ops, move.ops])[0][field]).toEqual({});
             const peerGone = receive(move.next, removal.ops);
             expect(() => applyPatches(peerGone, move.inverse)).toThrow();
-            expect(withoutDeletedFloatingEdits(peerGone, move.inverse)).toEqual([]);
-            expect(withoutDeletedFloatingEdits(move.next, move.inverse)).toEqual(move.inverse);
-            expect(withoutDeletedFloatingEdits(removal.next, removal.inverse)).toEqual(removal.inverse);
+            expect(undoEntry(peerGone, move.entry)).toEqual({ ctx: peerGone, ops: [] });
+            expect(undoEntry(move.next, move.entry).ops.map((op) => op.path)).toEqual([[field, id, 'x']]);
+            expect(undoEntry(removal.next, removal.entry).ops.map((op) => op.path)).toEqual([[field, id]]);
         });
     }
 
-    // setContextWithProduce merges every write of a panel gesture into one entry: its own earlier write can bring back
-    // the object a later one edits, so only an object missing where the write lands drops it, on the author, a peer
-    // and a joiner alike.
-    test('a merged entry that deletes or inserts an object it edits undoes and redoes whole, everywhere', () => {
-        const merged = (base: Context, ...recipes: ((ctx: Context) => void)[]) => {
-            let next = base;
-            const entry = { patches: [] as Patch[], inverse: [] as Patch[] };
-            for (const recipe of recipes) {
-                const step = author(next, recipe);
-                next = step.next;
-                entry.patches.push(...step.patches);
-                entry.inverse.unshift(...step.inverse);
-            }
-            return { next, ops: patchToOp(base, next, entry.patches), ...entry };
-        };
-        // Workbook's handleUndo and handleRedo: the entry's writes that still apply, and the batch they ship.
-        const replay = (ctx: Context, patches: Patch[]) => {
-            const kept = withoutDeletedFloatingEdits(ctx, patches);
-            const next = applyPatches(ctx, kept);
-            return { next, ops: patchToOp(ctx, next, kept) };
-        };
-        const base = workbook();
-        const deleted = merged(
-            base,
-            (ctx) => updateFloatingBox(ctx, { kind: 'chart', id: 'c1' }, { x: 300 }),
-            (ctx) => deleteFloatingObject(ctx, { kind: 'chart', id: 'c1' }),
-        );
-        const undone = replay(deleted.next, deleted.inverse);
-        expect(objects(undone.next.sheets)).toEqual(objects(base.sheets));
-        expect(objects(receive(deleted.next, undone.ops).sheets)).toEqual(objects(base.sheets));
-        expect(objects(join(base, [deleted.ops, undone.ops]))).toEqual(objects(base.sheets));
+    // setContextWithProduce merges every write of a gesture into one entry, each sent as its own batch: the entry's
+    // earlier write can bring back the object a later one edits, so only an object missing where the write lands drops
+    // it, on the author, a peer and a joiner alike.
+    for (const { kind, id, field } of KINDS) {
+        test(`a merged entry that edits then deletes a ${kind}, or inserts then edits one, steps whole, everywhere`, () => {
+            const merged = (base: Context, ...recipes: ((ctx: Context) => void)[]) => {
+                let next = base;
+                const entry: History = { patches: [], inversePatches: [], options: {} };
+                const batches: Op[][] = [];
+                for (const recipe of recipes) {
+                    const step = author(next, recipe);
+                    next = step.next;
+                    batches.push(step.ops);
+                    entry.patches.push(...step.entry.patches);
+                    entry.inversePatches.unshift(...step.entry.inversePatches);
+                }
+                return { next, batches, entry };
+            };
+            const base = workbook();
+            const deleted = merged(
+                base,
+                (ctx) => updateFloatingBox(ctx, { kind, id }, { x: 300 }),
+                (ctx) => deleteFloatingObject(ctx, { kind, id }),
+            );
+            const undone = undoEntry(deleted.next, deleted.entry);
+            expect(undone.ops.map((op) => op.path)).toEqual([
+                [field, id],
+                [field, id, 'x'],
+            ]);
+            expect(objects(undone.ctx.sheets)).toEqual(objects(base.sheets));
+            expect(objects(receive(deleted.next, undone.ops).sheets)).toEqual(objects(base.sheets));
+            expect(objects(join(base, [...deleted.batches, undone.ops]))).toEqual(objects(base.sheets));
+            const gone = redoEntry(undone.ctx, deleted.entry);
+            expect(gone.ctx.sheets[0][field]).toEqual({});
+            expect(objects(receive(undone.ctx, gone.ops).sheets)).toEqual(objects(gone.ctx.sheets));
+            expect(objects(join(base, [...deleted.batches, undone.ops, gone.ops]))).toEqual(objects(gone.ctx.sheets));
 
-        const inserted = merged(
-            base,
-            (ctx) => insertChart(ctx, 'c2', BOX, sampleChartSpec('line')),
-            (ctx) => updateFloatingBox(ctx, { kind: 'chart', id: 'c2' }, { x: 300 }),
-        );
-        const back = replay(inserted.next, inserted.inverse);
-        const redone = replay(back.next, inserted.patches);
-        const expected = objects(inserted.next.sheets);
-        expect(objects(redone.next.sheets)).toEqual(expected);
-        expect(objects(receive(back.next, redone.ops).sheets)).toEqual(expected);
-        expect(objects(join(base, [inserted.ops, back.ops, redone.ops]))).toEqual(expected);
+            const added = (ctx: Context) => Object.keys(ctx.sheets[0][field] ?? {}).filter((key) => key !== id)[0];
+            const inserted = merged(
+                base,
+                (ctx) =>
+                    kind === 'image'
+                        ? insertImage(ctx, 'new.png', 40, 30)
+                        : insertChart(ctx, 'c2', BOX, sampleChartSpec('line')),
+                (ctx) => updateFloatingBox(ctx, { kind, id: added(ctx) }, { x: 300 }),
+            );
+            const expected = objects(inserted.next.sheets);
+            const back = undoEntry(inserted.next, inserted.entry);
+            expect(objects(back.ctx.sheets)).toEqual(objects(base.sheets));
+            const redone = redoEntry(back.ctx, inserted.entry);
+            expect(redone.ops.map((op) => op.path)).toEqual([
+                [field, added(inserted.next)],
+                [field, added(inserted.next), 'x'],
+            ]);
+            expect(objects(redone.ctx.sheets)).toEqual(expected);
+            expect(objects(receive(back.ctx, redone.ops).sheets)).toEqual(expected);
+            expect(objects(join(base, [...inserted.batches, back.ops, redone.ops]))).toEqual(expected);
+        });
+    }
+
+    test('a duplicate of a chart is one add that carries its parts and its look as stored', () => {
+        const specAxes = '{"y":{"logBase":10}}';
+        const base = produce(workbook(), (ctx: Context) => {
+            Object.assign(ctx.sheets[0].charts!.c1, newChartSpecParts(sampleChartSpec('pie')), { specAxes, seed: 7 });
+        });
+        const original = base.sheets[0].charts!.c1;
+        const { next, ops } = author(base, (ctx) => duplicateFloatingObject(ctx, { kind: 'chart', id: 'c1' }));
+        const copy = next.sheets[0].charts![next.activeObject?.id ?? ''];
+        expect(ops).toEqual([{ op: 'add', id: S, path: ['charts', copy.id], value: copy }]);
+        expect({ ...copy, id: 'c1', index: original.index, x: original.x, y: original.y }).toEqual({
+            ...original,
+            angle: 0,
+        });
+        expect(copy.specAxes).toBe(specAxes);
     });
 
-    // No build stores a keyed part as anything but a record, nor a chart past the entry cap: a peer's batch that does
-    // costs those writes, and its other writes apply on every client and the joiner.
-    test("a forged chart's writes are dropped and the rest of their batch applies, everywhere", () => {
+    // No writer writes below a chart's field: a peer's batch that does costs that write, and its other writes apply
+    // on every client and the joiner.
+    test("a write below a chart's field is dropped and the rest of its batch applies, everywhere", () => {
         const base = workbook();
-        const points = Object.fromEntries(Array.from({ length: MAX_CHART_SPEC_ENTRIES }, (_, i) => [`s-1/${i}`, '{}']));
         const batch: Op[] = [
-            { op: 'replace', id: S, path: ['charts', 'c1', 'specPoints'], value: 'forged' },
             { op: 'add', id: S, path: ['charts', 'c1', 'specPoints', 's-1/0'], value: '{"color":"#ff0000"}' },
-            { op: 'add', id: S, path: ['charts', 'c2'], value: { ...chart('c2', 'a3'), specPoints: points } },
             { op: 'replace', id: S, path: ['charts', 'c1', 'x'], value: 300 },
         ];
         const peer = receive(base, batch);
-        expect(peer.sheets[0].charts!.c1).toMatchObject({ x: 300 });
-        expect(peer.sheets[0].charts!.c1.specPoints).toEqual({ 's-1/0': '{"color":"#ff0000"}' });
-        expect(peer.sheets[0].charts!.c2).toBeUndefined();
+        expect(peer.sheets[0].charts!.c1).toEqual({ ...base.sheets[0].charts!.c1, x: 300 });
         expect(objects(join(base, [batch]))).toEqual(objects(peer.sheets));
     });
 
@@ -234,8 +258,8 @@ describe('floating writers', () => {
         expect(Object.keys(onA.sheets[0].images!)).toHaveLength(2);
         expect(objects(onB.sheets)).toEqual(objects(onA.sheets));
         expect(objects(joiner)).toEqual(objects(onA.sheets));
-        const undone = applyPatches(onA, withoutDeletedFloatingEdits(onA, insert.inverse));
-        expect(objects(undone.sheets)).toEqual(objects(removal.next.sheets));
+        const undone = undoEntry(onA, insert.entry);
+        expect(objects(undone.ctx.sheets)).toEqual(objects(removal.next.sheets));
     });
 
     test('a media rename and a pending removal reach an image on another sheet', () => {

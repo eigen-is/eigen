@@ -2,10 +2,12 @@
 // included, deep below the rows that hold data. It looks the rules up once per paint, cut down to the window.
 
 import { describe, expect, test } from 'bun:test';
-import { REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import { INDICATOR_RED } from '@workspace/lib/constants/comment-indicator';
+import { REFERENCE_ROW_COUNT, SHEET_COLUMN_HEADER_HEIGHT, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import { Canvas } from '../../../state/canvas';
 import type { Context } from '../../../state/context';
-import { CHECKBOX_SIZE, checkboxChange } from '../../../state/modules/data-validation';
+import { cellGlyphAt } from '../../../state/modules/cell-glyph';
+import { checkboxChange } from '../../../state/modules/data-validation';
 import type { Cell, DataValidationRule } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 
@@ -20,18 +22,20 @@ g.Path2D ??= class {
 
 const ROWS = 6000;
 const ROW_HEIGHT = 20;
+type Call = { name: string; args: unknown[]; fillStyle: unknown };
+
 const TICK_BOX: DataValidationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
 
-// A 2D context that records every call, and a canvas element that hands it out.
+// A 2D context that records every call with the fill colour it was made in, and a canvas element that hands it out.
 function recordingCanvas() {
-    const calls: { name: string; args: unknown[] }[] = [];
+    const calls: Call[] = [];
     const state: Record<string | symbol, unknown> = {};
     const context = new Proxy(state, {
         get: (target, key) =>
             key in target
                 ? target[key]
                 : (...args: unknown[]) => {
-                      calls.push({ name: String(key), args });
+                      calls.push({ name: String(key), args, fillStyle: target.fillStyle });
                       return key === 'measureText'
                           ? { width: 10, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2 }
                           : undefined;
@@ -55,7 +59,7 @@ function sheetContext(): Context {
     }) as Context;
     ctx.sheets[0].data = data;
     ctx.sheets[0].dataValidations = {
-        ticks: { ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }], rule: TICK_BOX },
+        ticks: { ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }], order: 'a0', rule: TICK_BOX },
     };
     return ctx;
 }
@@ -74,8 +78,10 @@ function paintAround5000(ctx: Context) {
     return canvas.calls;
 }
 
-const tickBoxes = (calls: { name: string; args: unknown[] }[]) =>
-    calls.filter(({ name, args }) => name === 'strokeRect' && args[2] === CHECKBOX_SIZE);
+// A tick box is 10 px a side, and its stroke stays inside it.
+const BOX_STROKE = 9;
+
+const tickBoxes = (calls: Call[]) => calls.filter(({ name, args }) => name === 'strokeRect' && args[2] === BOX_STROKE);
 
 describe('the painter and a whole-column tick box', () => {
     test('draws a tick box on every row of the window at row 5000, and ticks the TRUE one', () => {
@@ -84,7 +90,7 @@ describe('the painter and a whole-column tick box', () => {
         expect(tickBoxes(calls)).toHaveLength(11);
         const ticks = calls.filter(
             ({ name, args }, i) =>
-                name === 'strokeRect' && args[2] === CHECKBOX_SIZE && calls[i + 1]?.name === 'beginPath',
+                name === 'strokeRect' && args[2] === BOX_STROKE && calls[i + 1]?.name === 'beginPath',
         );
         expect(ticks).toHaveLength(1);
     });
@@ -92,7 +98,7 @@ describe('the painter and a whole-column tick box', () => {
     test('draws none where the rule does not reach', () => {
         const ctx = sheetContext();
         ctx.sheets[0].dataValidations = {
-            ticks: { ranges: [{ row: [0, 999], column: [1, 1] }], rule: TICK_BOX },
+            ticks: { ranges: [{ row: [0, 999], column: [1, 1] }], order: 'a0', rule: TICK_BOX },
         };
         expect(tickBoxes(paintAround5000(ctx))).toHaveLength(0);
     });
@@ -104,5 +110,100 @@ describe('the painter and a whole-column tick box', () => {
         expect(checkboxChange(ctx, 5001, 1)).toBe(true);
         expect(ctx.sheets[0].data?.[5001][1]?.v).toBe(true);
         expect(checkboxChange(ctx, 5001, 0)).toBe(false);
+    });
+});
+
+// Column B spans x 74..148 and its text box 74..146, so a centred 10px box starts at 105, a left one at 76 and a right
+// one at 134, each stroked half a pixel in. The rows are 20px, and the box sits in the middle of its own.
+describe('the painter and a tick box with its own values', () => {
+    const YES_NO: DataValidationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
+
+    function sheetWith(cells: (Cell | null)[]) {
+        const ctx = contextFactory({
+            visibledatarow: cells.map((_, r) => (r + 1) * ROW_HEIGHT),
+            visibledatacolumn: [74, 148, 222],
+            devicePixelRatio: 1,
+        }) as Context;
+        ctx.sheets[0].data = cells.map((cell) => [null, cell, null]);
+        ctx.sheets[0].dataValidations = {
+            ticks: { ranges: [{ row: [0, cells.length - 1], column: [1, 1] }], order: 'a0', rule: YES_NO },
+        };
+        return ctx;
+    }
+    function paintSheet(ctx: Context, offsetLeft: number, offsetTop: number) {
+        const canvas = recordingCanvas();
+        new Canvas(canvas.element, ctx).drawMain({
+            scrollWidth: 0,
+            scrollHeight: 0,
+            drawWidth: 222,
+            drawHeight: ctx.visibledatarow.length * ROW_HEIGHT - 1,
+            offsetLeft,
+            offsetTop,
+        });
+        return canvas.calls;
+    }
+    const paint = (cells: (Cell | null)[]) => paintSheet(sheetWith(cells), 0, 0);
+    const boxesAt = (calls: Call[]) => tickBoxes(calls).map(({ args }) => [args[0], args[1]]);
+    const texts = (calls: Call[]) => calls.filter(({ name }) => name === 'fillText').map(({ args }) => args[0]);
+    const redMarks = (calls: Call[]) =>
+        calls.filter((call) => call.name === 'fill' && call.fillStyle === INDICATOR_RED);
+
+    test('draws the box alone and centred, ticked, unticked and empty alike', () => {
+        const calls = paint([{ v: 'Yes', m: 'Yes' }, { v: 'No', m: 'No' }, null]);
+        expect(boxesAt(calls)).toEqual([
+            [105.5, 5],
+            [105.5, 25],
+            [105.5, 45],
+        ]);
+        expect(texts(calls)).toEqual([]);
+        expect(redMarks(calls)).toHaveLength(0);
+    });
+
+    test("the cell's own alignment moves the box to that side", () => {
+        const calls = paint([
+            { v: 'Yes', m: 'Yes', ht: 1 },
+            { v: 'No', m: 'No', ht: 2 },
+        ]);
+        expect(boxesAt(calls).map(([x]) => x)).toEqual([76.5, 134.5]);
+        expect(texts(calls)).toEqual([]);
+    });
+
+    test('a value the rule does not name paints as text with the invalid mark, and no box', () => {
+        const calls = paint([
+            { v: 'Maybe', m: 'Maybe' },
+            { v: 'Yes', m: 'Yes' },
+        ]);
+        expect(boxesAt(calls)).toEqual([[105.5, 25]]);
+        expect(texts(calls)).toEqual(['Maybe']);
+        expect(redMarks(calls)).toHaveLength(1);
+    });
+
+    // The grid as the browser lays it out: the canvas draws the cells past the headers, and the cell area, which
+    // measures a press, starts a pixel and a half before them, as the row and column headers' own elements end there.
+    test('every pixel of a painted box takes a press, and no pixel beside it, wherever the cell aligns it', () => {
+        const ctx = sheetWith([
+            { v: 'Yes', m: 'Yes' },
+            { v: 'No', m: 'No', ht: 1, vt: 1 },
+            { v: 'Yes', m: 'Yes', ht: 2, vt: 2 },
+        ]);
+        const boxes = tickBoxes(paintSheet(ctx, SHEET_ROW_HEADER_WIDTH, SHEET_COLUMN_HEADER_HEIGHT));
+        expect(boxes).toHaveLength(3);
+        const pressed = (x: number, y: number) =>
+            cellGlyphAt(ctx, x - (SHEET_ROW_HEADER_WIDTH - 1.5), y - (SHEET_COLUMN_HEADER_HEIGHT - 1.5)) === 'checkbox';
+        for (const { args } of boxes) {
+            // A one pixel stroke covers half a pixel on each side of its path, and a pixel counts by its centre.
+            const [x0, y0, width, height] = args.map(Number);
+            const left = x0 - 0.5;
+            const top = y0 - 0.5;
+            const inside = (at: number, from: number, size: number) => at + 0.5 >= from && at + 0.5 < from + size + 1;
+            const wrong: string[] = [];
+            for (let y = Math.floor(top) - 3; y < top + height + 4; y += 1) {
+                for (let x = Math.floor(left) - 3; x < left + width + 4; x += 1) {
+                    const painted = inside(x, left, width) && inside(y, top, height);
+                    if (pressed(x, y) !== painted) wrong.push(`${x - left},${y - top}`);
+                }
+            }
+            expect(wrong).toEqual([]);
+        }
     });
 });

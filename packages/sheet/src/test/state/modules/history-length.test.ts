@@ -1,33 +1,37 @@
 // An edit that changes an array's length has no per-cell undo: its inverse writes the array's `length`, which no check
 // can skip for a peer. Each case runs two tabs and a joiner through the real record, applyOp and undo steps, on a sheet
 // of 5 rows by 3 columns, and pins that a peer's batch ends such an entry as it ends a row op, and that alone nothing
-// changes.
+// changes. A conditional format is a record entry under its id, so adding or removing one is no such edit.
 
 import { describe, expect, test } from 'bun:test';
+import { nextRuleOrder } from '@workspace/lib/sheets';
 import { dataToCelldata } from '../../../engine/celldata';
 import type { InsertRowColOp } from '../../../engine/rowcol';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Context } from '../../../state/context';
 import { applyDataBarPreset, deleteSheetRule } from '../../../state/modules/condition-format';
 import { insertRowCol } from '../../../state/modules/rowcol';
-import type { ConditionalFormatRule, Op, Sheet } from '../../../state/types';
+import type { Op, Sheet } from '../../../state/types';
 import { pasteText } from '../factories/clipboard';
 import type { Tab } from '../factories/collab';
 import { join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { workbookContextFactory } from '../factories/context';
 import { sel, typed } from '../factories/edit-cycle';
+import { formatList, formatsOf } from '../factories/validations';
 
 const ONE = 's1';
 
-const rule = (cellColor: string): ConditionalFormatRule => ({
+type CfRule = ReturnType<typeof formatList>[number];
+
+const rule = (cellColor: string): CfRule => ({
     type: 'default',
-    cellrange: [{ row: [0, 0], column: [0, 0] }],
+    ranges: [{ row: [0, 0], column: [0, 0] }],
     format: { cellColor },
     conditionName: 'formula',
     conditionValue: ['=TRUE'],
 });
 
-function session(rules?: ConditionalFormatRule[]) {
+function session(rules?: CfRule[]) {
     const sheet: Sheet = {
         id: ONE,
         name: 'One',
@@ -36,7 +40,7 @@ function session(rules?: ConditionalFormatRule[]) {
         column: 3,
         config: {},
         data: Array.from({ length: 5 }, () => Array.from({ length: 3 }, () => null)),
-        conditionalFormatRules: rules,
+        conditionalFormats: rules && formatsOf(rules),
     };
     const base = workbookContextFactory({ currentSheetId: ONE, sheets: [sheet] });
     for (const s of base.sheets) normalizeSheetConfig(s);
@@ -164,22 +168,25 @@ describe('a paste that grew the grid', () => {
     });
 });
 
-describe('a rule list that changed length', () => {
-    const colors = (t: Tab) => t.ctx.sheets[0].conditionalFormatRules?.map(({ format }) => format);
+describe('a conditional format added or taken out', () => {
+    const colors = (t: Tab) => formatList(t.ctx.sheets[0].conditionalFormats).map(({ format }) => format);
     const color = (cellColor: string) => ({ cellColor });
     const push = (cellColor: string) => (ctx: Context) => {
-        ctx.sheets[0].conditionalFormatRules?.push(rule(cellColor));
+        const sheet = ctx.sheets[0];
+        const formats = sheet.conditionalFormats ?? {};
+        formats[cellColor] = { ...rule(cellColor), order: nextRuleOrder(formats) };
+        sheet.conditionalFormats = formats;
     };
-    const shift = (ctx: Context) => deleteSheetRule(ctx, 0);
+    const shift = (ctx: Context) => deleteSheetRule(ctx, 'f1');
 
     test("a peer's rule survives the undo of a rule pushed before it", () => {
         const s = session([rule('r0')]);
         s.edit(s.a, push('A'));
         s.edit(s.b, push('B'));
         s.undo(s.a);
-        expect(colors(s.a)).toEqual([color('r0'), color('A'), color('B')]);
+        expect(colors(s.a)).toEqual([color('r0'), color('B')]);
         expect(colors(s.b)).toEqual(colors(s.a));
-        expect(s.joiner()[0].conditionalFormatRules).toEqual(s.a.ctx.sheets[0].conditionalFormatRules);
+        expect(s.joiner()[0].conditionalFormats).toEqual(s.a.ctx.sheets[0].conditionalFormats);
     });
 
     test('so does one the toolbar adds', () => {
@@ -190,7 +197,7 @@ describe('a rule list that changed length', () => {
         });
         s.edit(s.b, push('B'));
         s.undo(s.a);
-        expect(colors(s.a)).toHaveLength(3);
+        expect(colors(s.a)).toHaveLength(2);
         expect(colors(s.b)).toEqual(colors(s.a));
     });
 
@@ -211,12 +218,12 @@ describe('a rule list that changed length', () => {
         expect(colors(s.b)).toEqual(colors(s.a));
     });
 
-    test("a peer's batch ends the undo of a rule taken out", () => {
+    test("a peer's batch leaves the undo of a rule taken out", () => {
         const s = session([rule('r0'), rule('r1')]);
         s.edit(s.a, shift);
         s.edit(s.b, push('B'));
         s.undo(s.a);
-        expect(colors(s.a)).toEqual([color('r1'), color('B')]);
+        expect(colors(s.a)).toEqual([color('r0'), color('r1'), color('B')]);
         expect(colors(s.b)).toEqual(colors(s.a));
     });
 });
@@ -226,7 +233,7 @@ describe('an array inside one target stays a plain entry', () => {
     test('a range added to a rule', () => {
         const s = session([rule('r0')]);
         s.edit(s.a, (ctx) => {
-            ctx.sheets[0].conditionalFormatRules?.[0].cellrange.push({ row: [1, 1], column: [1, 1] });
+            ctx.sheets[0].conditionalFormats?.f1.ranges.push({ row: [1, 1], column: [1, 1] });
         });
         s.edit(s.b, typed(0, 0, 'PEER'));
         expect(s.a.history.undoList).toHaveLength(1);

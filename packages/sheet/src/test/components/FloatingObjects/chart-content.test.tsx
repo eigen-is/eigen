@@ -2,12 +2,7 @@
 // sheet it reads changes, selecting it reports its panel, and its menu downloads it as an image. What every floating
 // object does is in floating-objects.test.tsx.
 import { afterEach, expect, spyOn, test } from 'bun:test';
-import {
-    DEFAULT_CHART_SERIES_STYLE,
-    FLAT_CHART_LOOK,
-    newSheetChartSpecParts,
-    sampleChartSpec,
-} from '@workspace/lib/charts';
+import { DEFAULT_CHART_SERIES_STYLE, FLAT_CHART_LOOK, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartLook } from '@workspace/lib/types/chart';
 import { serializeFill } from '@workspace/lib/vector';
@@ -37,7 +32,7 @@ const chart: SheetChart = {
     y: 10,
     width: 400,
     height: 300,
-    ...newSheetChartSpecParts({
+    ...newChartSpecParts({
         ...sampleChartSpec('column'),
         title: { text: 'Scores' },
         series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#2a78d6' } },

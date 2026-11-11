@@ -13,8 +13,10 @@ import type {
 } from '@workspace/lib/sheets';
 import {
     coalescedRanges,
-    MAX_VALIDATION_RANGES,
+    MAX_CONDITIONAL_FORMATS,
+    MAX_RULE_RANGES,
     MAX_VALIDATIONS,
+    nextRuleOrder,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
 } from '@workspace/lib/sheets';
@@ -52,17 +54,21 @@ export type RulesContext = {
     // Called with each reference of a sqref before it is parsed, whatever it emits; throws past the budget.
     chargeElements(count: number): void;
     // Counts a rule left out: a conditional format or a validation the engine has no rule for, a conditional format
-    // over no range of the grid, or a validation over more ranges than a rule may hold or past the rules a sheet may
-    // hold.
+    // over no range of the grid, or a rule over more ranges than a rule may hold or past the rules a sheet may hold.
     lost: Lost;
     // Writes the workbook's defined names into a rule's formula, so a list from a name reads the name's range.
     inline(formula: string): string;
 };
 
+// A conditional format as the file has it, before its place among the sheet's rules is known. Omit on all rules at
+// once would keep only the fields every kind shares, so the kinds with their own fields go apart.
+type ScaleRule = Extract<ConditionalFormatRule, { type: 'dataBar' | 'colorGradation' }>;
+type ReadFormat = Omit<DefaultConditionalFormatRule, 'order'> | Omit<ScaleRule, 'order'>;
+
 export function readRules(
     rest: XmlElement | undefined,
     context: RulesContext,
-): Pick<Sheet, 'conditionalFormatRules' | 'dataValidations'> {
+): Pick<Sheet, 'conditionalFormats' | 'dataValidations'> {
     if (!rest) return {};
     const extensions = (name: string) =>
         xmlChildren(rest, SML_NS, 'extLst')
@@ -91,7 +97,7 @@ export function readRules(
             lookOf: (rule: XmlElement) => dxfLook(xmlChild(rule, X14_NS, 'dxf'), context.palette),
         },
     ];
-    const formats: { priority: number; format: ConditionalFormatRule }[] = [];
+    const formats: { priority: number; format: ReadFormat }[] = [];
     for (const { blocks, sqrefOf, rulesOf, formulasOf, lookOf } of formatLists) {
         for (const block of blocks) {
             const rules = rulesOf(block);
@@ -103,7 +109,7 @@ export function readRules(
                 context.charge(rules.length, 0);
                 ranges.push(range);
             }
-            if (ranges.length === 0) {
+            if (ranges.length === 0 || ranges.length > MAX_RULE_RANGES) {
                 for (const _ of rules) context.lost('conditional-formats-dropped');
                 continue;
             }
@@ -124,9 +130,14 @@ export function readRules(
             }
         }
     }
-    // Excel resolves overlapping rules by priority, the lowest number winning a conflicting property; the engine
-    // applies rules in order, the last write winning, so the rules come highest number first.
+    // In Excel the lowest priority number wins a property two rules set, and in the engine the last rule does, so
+    // the rules come highest number first. Past the rules a sheet may hold, the ones Excel ranks lowest go.
     formats.sort((a, b) => b.priority - a.priority);
+    const conditionalFormats: NonNullable<Sheet['conditionalFormats']> = {};
+    for (const [i, { format }] of formats.entries()) {
+        if (i < formats.length - MAX_CONDITIONAL_FORMATS) context.lost('conditional-formats-dropped');
+        else conditionalFormats[`format-${i + 1}`] = { ...format, order: nextRuleOrder(conditionalFormats) };
+    }
 
     const validationLists = [
         {
@@ -170,17 +181,21 @@ export function readRules(
             // A sqref may repeat or stack its ranges, so the rule keeps the fewest that cover the same cells. More
             // than a rule may hold leaves the rule out, as a peer's would be.
             const covered = coalescedRanges(ranges);
-            if (covered.length > MAX_VALIDATION_RANGES || Object.keys(dataValidations).length >= MAX_VALIDATIONS) {
+            if (covered.length > MAX_RULE_RANGES || Object.keys(dataValidations).length >= MAX_VALIDATIONS) {
                 context.lost('validations-dropped');
                 continue;
             }
-            // Numbered in the file's order: a fresh sheet holds no other rule.
-            dataValidations[`validation-${Object.keys(dataValidations).length + 1}`] = { ranges: covered, rule };
+            // Numbered and ordered as the file has them: a fresh sheet holds no other rule.
+            dataValidations[`validation-${Object.keys(dataValidations).length + 1}`] = {
+                ranges: covered,
+                order: nextRuleOrder(dataValidations),
+                rule,
+            };
         }
     }
 
     return {
-        ...(formats.length > 0 && { conditionalFormatRules: formats.map(({ format }) => format) }),
+        ...(formats.length > 0 && { conditionalFormats }),
         ...(Object.keys(dataValidations).length > 0 && { dataValidations }),
     };
 }
@@ -233,7 +248,7 @@ function mapCfRule(
     ranges: SingleRange[],
     palette: ThemePalette,
     days: number,
-): ConditionalFormatRule | undefined {
+): ReadFormat | undefined {
     const type = xmlAttr(rule, '', 'type') ?? '';
     const flag = (name: string) => isOn(xmlAttr(rule, '', name));
     if (type === 'colorScale' || type === 'dataBar') {
@@ -241,16 +256,16 @@ function mapCfRule(
         const stops = scale ? xmlChildren(scale, SML_NS, 'color') : [];
         const colors = stops.map((stop) => resolveColor(stop, palette)).filter((color) => color !== null);
         // A data bar is solid, as the editor's presets are.
-        if (type === 'dataBar') return colors.length > 0 ? { type, cellrange: ranges, format: [colors[0]] } : undefined;
+        if (type === 'dataBar') return colors.length > 0 ? { type, ranges, format: [colors[0]] } : undefined;
         if (colors.length !== stops.length || (colors.length !== 2 && colors.length !== 3)) return undefined;
         // Excel lists a scale's stops from the minimum, the engine from the maximum.
-        return { type: 'colorGradation', cellrange: ranges, format: colors.reverse() };
+        return { type: 'colorGradation', ranges, format: colors.reverse() };
     }
 
     const format = { ...(look ?? { textColor: null, cellColor: null }) };
     const condition = (conditionName: ConditionalFormatConditionName, conditionValue: string[]) => ({
         type: 'default' as const,
-        cellrange: ranges,
+        ranges,
         format,
         conditionName,
         conditionRange: [],
@@ -302,10 +317,10 @@ function cfFormulaRule(
     formula: string,
     ranges: SingleRange[],
     format: DefaultConditionalFormatRule['format'],
-): DefaultConditionalFormatRule {
+): ReadFormat {
     return {
         type: 'default',
-        cellrange: ranges,
+        ranges,
         format,
         conditionName: 'formula',
         conditionRange: [],
@@ -396,10 +411,8 @@ function mapDataValidation(
     return rule;
 }
 
-// A quoted literal ('"Red,Green,Blue"') becomes the engine's comma-separated list. Anything else is kept as a range
-// reference when it is a valid one, so an edit to the source cells still changes the list. The editor resolves such a
-// reference itself, a quoted sheet name included. A defined name arrives as its range; one left as written, or one of
-// a formula, would make a one-option list of its text, worse than no rule, so the rule goes.
+// A quoted literal ('"Red,Green,Blue"') becomes the engine's comma-separated list, and a valid range reference stays
+// one, so an edit to its cells still changes the list. Any other text would make a one-option list, so the rule goes.
 function listSource(raw: string | undefined): string | null {
     if (!raw) return null;
     const inner = unquoteXlsxLiteral(raw);

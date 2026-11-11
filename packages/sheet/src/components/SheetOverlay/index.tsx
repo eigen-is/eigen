@@ -400,8 +400,7 @@ export const SheetOverlay: React.FC = () => {
                         cursor: context.cellSelectExtending
                             ? 'crosshair'
                             : context.filterButtonHover != null ||
-                                (context.allowEdit !== false &&
-                                    (context.cellGlyphHover === 'dropdown' || context.cellGlyphHover === 'checkbox'))
+                                (context.allowEdit !== false && context.cellGlyphHover != null)
                               ? 'pointer'
                               : 'default',
                     }}

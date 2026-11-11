@@ -4,27 +4,21 @@
 
 import {
     CHART_DEFAULT_SIZE,
+    chartSpecWrites,
     holdsUnknownChartData,
-    newSheetChartSpecParts,
+    newChartSpecParts,
     readChartLook,
     readChartSpec,
-    sheetChartSpecWrites,
 } from '@workspace/lib/charts';
 import { buildChartClipboardItem } from '@workspace/lib/clipboard';
 import type { SheetChart } from '@workspace/lib/sheets';
 import { nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
-import type {
-    CellRangeRef,
-    ChartLook,
-    ChartSpec,
-    ChartSpecChange,
-    SheetChartSpecParts,
-} from '@workspace/lib/types/chart';
+import type { CellRangeRef, ChartLook, ChartSpec, ChartSpecChange, ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { EigenClipboardChartItem } from '@workspace/lib/types/clipboard';
 import type { Box } from '@workspace/lib/vector';
 import { randomSeed } from '@workspace/lib/vector';
 import { createArrayResolver } from '../../engine/cell-resolver';
-import { inlineChartSpec, renderSheetChartSvg, writeSheetChartSpec } from '../../engine/chart-data';
+import { inlineChartSpec, renderSheetChartSvg } from '../../engine/chart-data';
 import type { ChartRangeRefusal } from '../../engine/chart-range';
 import { chartRangeChange, currentRegion, setUpChartRange, suggestChartSpec } from '../../engine/chart-range';
 import type { CellMatrix } from '../../engine/types';
@@ -38,11 +32,16 @@ export type ChartInsertBox = Omit<Box, 'angle'>;
 
 // Flat, as Google's is, with a seed of its own, so a sketch picked later jitters the same everywhere.
 export function insertChart(ctx: Context, id: string, box: ChartInsertBox, spec: ChartSpec) {
-    addChart(ctx, id, box, newSheetChartSpecParts(spec), { seed: randomSeed() });
+    addChart(ctx, id, box, newChartSpecParts(spec), { seed: randomSeed() });
 }
 
-// Every keyed part a record from the start, so a peer's first entry in one is never a write of the record.
-function addChart(ctx: Context, id: string, box: ChartInsertBox, parts: SheetChartSpecParts, look: Partial<ChartLook>) {
+function addChart(
+    ctx: Context,
+    id: string,
+    box: ChartInsertBox,
+    parts: Record<ChartSpecPartKey, string>,
+    look: Partial<ChartLook>,
+) {
     const sheet = editableCurrentSheet(ctx);
     if (!sheet) return;
     const charts = (sheet.charts ??= {});
@@ -53,7 +52,7 @@ function addChart(ctx: Context, id: string, box: ChartInsertBox, parts: SheetCha
 export function pasteChart(
     ctx: Context,
     id: string,
-    parts: SheetChartSpecParts,
+    parts: Record<ChartSpecPartKey, string>,
     size: Pick<ChartInsertBox, 'width' | 'height'>,
     look: ChartLook,
 ) {
@@ -63,11 +62,10 @@ export function pasteChart(
 }
 
 // Applied onto the chart as the recipe finds it, so a key this build doesn't know survives, and so does a peer's edit
-// of a field the change doesn't set. A keyed part is written an entry at a time, never assigned, so its patches name
-// the entries and a peer's edit of another entry stands.
+// of a part the change doesn't touch. Each part it changes is one replace of that part's string.
 export function setChartSpec(ctx: Context, id: string, change: ChartSpecChange) {
     const chart = editableCurrentSheet(ctx)?.charts?.[id];
-    if (chart) writeSheetChartSpec(chart, sheetChartSpecWrites(readChartSpec(chart).stored, change));
+    if (chart) Object.assign(chart, chartSpecWrites(readChartSpec(chart).stored, change));
 }
 
 // Writes only the look fields given, each its own op, so a peer's edit of another field merges.
@@ -76,9 +74,8 @@ export function setChartLook(ctx: Context, id: string, look: Partial<ChartLook>)
     if (chart) Object.assign(chart, look);
 }
 
-// Insert → Chart: a column chart of the selection, or of the table around a single selected cell, below
-// it at Google's default size, selected, so its panel shows. Inserts nothing and says why for a selection
-// that holds no chart.
+// Insert → Chart: a column chart of the selection, or of the table around a single selected cell, placed below it and
+// selected, so its panel shows. A selection that holds no chart inserts nothing and returns why.
 export function insertChartFromSelection(ctx: Context, id: string): ChartRangeRefusal | undefined {
     const selection = ctx.selections?.at(-1);
     if (!selection || ctx.allowEdit === false) return;
@@ -106,9 +103,8 @@ export function setChartDataRange(ctx: Context, id: string, ref: CellRangeRef) {
     if (typeof setup !== 'string') setChartSpec(ctx, id, chartRangeChange(setup.data));
 }
 
-// One drawing per chart record and the cell matrices its ranges read. immer replaces the matrix of a
-// sheet whose cells an edit touched, so an edit feeding a chart redraws it on the next render and
-// nothing else does: not a selection, not a cell on another sheet.
+// One drawing per chart record and the cell matrices its ranges read. immer replaces the matrix of a sheet an edit
+// touched, so only an edit that feeds a chart redraws it, not a selection or a cell on another sheet.
 const drawings = new WeakMap<SheetChart, { sheetIds: string[]; reads: (CellMatrix | undefined)[]; svg: string }>();
 
 export function sheetChartSvg(ctx: Context, chart: SheetChart): string {

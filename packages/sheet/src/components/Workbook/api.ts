@@ -23,6 +23,7 @@ import type {
     Presence,
     SearchHighlight,
     SearchResult,
+    Selection,
     Sheet,
 } from '../../state';
 import {
@@ -33,6 +34,7 @@ import {
     deleteFloatingObject,
     dropStructuralEntries,
     getFlowdata,
+    initSheetData,
     insertChart,
     insertImage,
     removeImageByMediaName,
@@ -64,6 +66,12 @@ function setStacksAfterPeer(history: Stacks, undoList: History[], redoList: Hist
     history.redoList = redoList;
 }
 
+function holdsSelections(sheets: Sheet[], sheetId: string, selections: Selection[] | undefined): boolean {
+    if (!selections) return true;
+    const data = sheets.find(({ id }) => id === sheetId)?.data;
+    return data != null && selections.every(({ row, column }) => row[1] < data.length && column[1] < data[0].length);
+}
+
 export function generateAPIs(
     getContext: () => Context,
     setContext: (recipe: (ctx: Context) => void, options?: SetContextOptions) => void,
@@ -72,15 +80,13 @@ export function generateAPIs(
     history: Stacks & Pick<GlobalCache, 'undoGesture'>,
 ) {
     return {
-        // True when the batch applied, false when an op failed and the whole batch was rolled back.
-        applyOp: (ops: Op[]): boolean => {
-            let accepted = false;
+        // A batch with an op that fails is rolled back whole.
+        applyOp: (ops: Op[]) => {
             const selected = getContext().selections != null;
             setContext(
                 (draftCtx) => {
                     const applied = applyOpBatch(current(draftCtx), ops);
                     if (!applied) return;
-                    accepted = true;
                     Object.assign(draftCtx, applied.ctx);
                     // An entry holds formula text naming tabs, so a peer's rename empties both stacks. It is rare.
                     if (ops.some(({ op }) => op === 'renameSheet')) {
@@ -100,47 +106,48 @@ export function generateAPIs(
             // A delete of the editor's cell drops the selection, and the grid gives up the focus too, as a replay
             // that loses the selection does, so a keystroke writes nowhere.
             if (selected && !getContext().selections) getContext().getRefs().cellInput.current?.blur();
-            return accepted;
         },
 
-        // Only the `fresh` batches move the view again. A fresh batch that moves rows ahead of an applied one loses
-        // the selection there, and the undo and redo entries fit an order that is gone, so both stacks empty.
-        replayOps: (base: Sheet[], batches: Op[][], fresh: ReadonlySet<Op[]>): boolean => {
-            let accepted = true;
-            const { currentSheetId } = getContext();
+        // Only the `fresh` batches move the view again, and the undo and redo entries fit an order that is gone, so
+        // both stacks empty.
+        replayOps: (base: Sheet[], batches: Op[][], fresh: ReadonlySet<Op[]>) => {
+            // A fresh batch that moves rows ahead of an applied one: the tab can't tell where a selection there went.
             const overtaken = (sheetId: string) => {
                 const movesRows = (ops: Op[]) => ops.some((op) => isRowColOp(op) && op.id === sheetId);
                 const firstMove = batches.findIndex((ops) => fresh.has(ops) && movesRows(ops));
                 return firstMove !== -1 && batches.slice(firstMove).some((ops) => !fresh.has(ops) && movesRows(ops));
             };
-            const lost = overtaken(currentSheetId);
             // The formula engine starts empty, so a replay of cell edits builds no formula graph, and it is built once
             // the browser is idle. A batch with a sheet or row op builds it for its recompute.
             getContext().formulaCache.resetEngine();
             setContext(
                 (draftCtx) => {
-                    if (lost) {
+                    // Sheets decoded from a snapshot hold no matrix yet, so they enter as at the mount.
+                    const sheets = base.map((sheet) => ({ ...sheet }));
+                    for (const sheet of sheets) initSheetData(sheet);
+                    let next: Context = { ...current(draftCtx), sheets };
+                    for (const ops of batches) {
+                        const applied = applyOpBatch(next, ops, fresh.has(ops));
+                        if (applied) next = applied.ctx;
+                    }
+                    Object.assign(draftCtx, next);
+                    // A new snapshot's grid can end before a selection made on the old one, which then has no cell.
+                    const lost = (sheetId: string, selections: Selection[] | undefined) =>
+                        overtaken(sheetId) || !holdsSelections(next.sheets, sheetId, selections);
+                    if (lost(next.currentSheetId, next.selections)) {
                         cancelNormalSelected(draftCtx);
                         draftCtx.selections = undefined;
                     }
                     for (const [sheetId, left] of Object.entries(draftCtx.sheetViewRecord)) {
-                        if (overtaken(sheetId)) left.selections = undefined;
+                        if (lost(sheetId, left.selections)) left.selections = undefined;
                     }
-                    let next: Context = { ...current(draftCtx), sheets: base };
-                    for (const ops of batches) {
-                        const applied = applyOpBatch(next, ops, fresh.has(ops));
-                        if (applied) next = applied.ctx;
-                        else accepted = false;
-                    }
-                    Object.assign(draftCtx, next);
                     settleCurrentSheet(draftCtx);
                 },
                 { noHistory: true },
             );
-            if (lost) getContext().getRefs().cellInput.current?.blur();
+            if (!getContext().selections) getContext().getRefs().cellInput.current?.blur();
             warmFormulaGraphOnIdle(getContext);
             setStacksAfterPeer(history, [], []);
-            return accepted;
         },
 
         setCellFormat: <K extends keyof Cell>(
@@ -153,7 +160,7 @@ export function generateAPIs(
 
         getAllSheets: () => getContext().sheets,
 
-        // The live set, whole each time, so a window that left is gone and a remount gets every peer back.
+        // The live set, whole each time, so a window that left is gone.
         setPresences: (presences: Presence[]) => {
             setContext((draftCtx) => {
                 draftCtx.presences = presences;

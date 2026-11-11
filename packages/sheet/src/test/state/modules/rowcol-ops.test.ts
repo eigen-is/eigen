@@ -21,6 +21,7 @@ import { filterPatch, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 import { cellLinks } from '../factories/links';
+import { formatList, formatsOf } from '../factories/validations';
 
 enablePatches();
 
@@ -58,6 +59,7 @@ function richContext(): Context {
                 dataValidations: {
                     v: {
                         ranges: [{ row: [1, 2], column: [1, 1] }],
+                        order: 'a0',
                         rule: { type: 'dropdown', type2: 'true', value1: 'a,b', value2: '' },
                     },
                 },
@@ -265,9 +267,8 @@ describe('structural sharing through the immer produce', () => {
 });
 
 // A row or column op writes each field of a sheet whole, a chart per object: a write inside a field a peer just
-// removed, such as the frozen pane's focus after an unfreeze, would fail on the peer and in the replay, taking the
-// whole batch with it, and would throw in the author's own undo. Which frozen pane wins follows the log's order
-// (SHEETS-TODO.md), so only the grid is compared.
+// removed, such as the frozen pane's focus after an unfreeze, would be skipped on the peer, in the replay and in the
+// author's own undo. Which frozen pane wins follows the log's order (SHEETS-TODO.md), so only the grid is compared.
 describe("a row or column op racing a peer's unfreeze", () => {
     const frozenContext = () =>
         produce(richContext(), (ctx: Context) => {
@@ -296,10 +297,11 @@ describe("a row or column op racing a peer's unfreeze", () => {
         ],
     ] as const;
 
-    // The undo entry puts each field back whole. Images, charts and validation rules are written one object at a time.
+    // The undo entry puts each field back whole. The maps every sheet holds, such as the config's, the images, the
+    // charts and the validation rules, are written one entry at a time.
     test.each(cases)('%s writes every sheet field whole, in the op and in its undo entry', (_, recipe, options) => {
         const op = author(frozenContext(), recipe, options);
-        const perObject = new Set(['images', 'charts', 'dataValidations']);
+        const perObject = new Set(['config', 'images', 'charts', 'dataValidations']);
         const into = [...op.patches, ...op.inverse].filter(
             (p) => p.path.length > 3 && !perObject.has(String(p.path[2])),
         );
@@ -361,6 +363,7 @@ test('a row insert inside a whole-column rule writes no rule', () => {
         ctx.sheets[0].dataValidations = {
             column: {
                 ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [0, 0] }],
+                order: 'a0',
                 rule: { type: 'dropdown', type2: '', value1: 'a,b', value2: '' },
             },
         };
@@ -420,15 +423,15 @@ describe('two row ops sent at once on a sheet with a merge', () => {
 
     test.each(cases)('%s', (_, first, rows, mergeRow) => {
         const base = produce(richContext(), (ctx: Context) => {
-            ctx.sheets[0].conditionalFormatRules = [
+            ctx.sheets[0].conditionalFormats = formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [3, 3], column: [2, 3] }],
+                    ranges: [{ row: [3, 3], column: [2, 3] }],
                     format: { cellColor: '#ff0000' },
                     conditionName: 'greaterThan',
                     conditionValue: [0],
                 },
-            ];
+            ]);
         });
         const a = author(base, (ctx) => run(ctx, first), first);
         const b = author(base, (ctx) => run(ctx, { insertRowColOp: inserted }), { insertRowColOp: inserted });
@@ -441,7 +444,7 @@ describe('two row ops sent at once on a sheet with a merge', () => {
             expect(sheet.config?.merge).toEqual({ [`${mergeRow}_2`]: merge });
             expect(sheet.data?.[mergeRow]?.[2]?.mc).toEqual(merge);
             expect(sheet.data?.[mergeRow]?.[3]?.mc).toEqual({ r: mergeRow, c: 2 });
-            expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([
+            expect(formatList(sheet.conditionalFormats)[0].ranges).toEqual([
                 { row: [mergeRow, mergeRow], column: [2, 3] },
             ]);
         }

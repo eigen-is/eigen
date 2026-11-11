@@ -53,7 +53,6 @@ const lifecycle = {
 };
 const sheet = {
     initialData: [{ id: 's1', name: 'One', order: 0 }],
-    snapshotVersion: 0,
     loadFailed: false,
     synced: true,
     offline: false,

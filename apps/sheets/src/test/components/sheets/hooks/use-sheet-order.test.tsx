@@ -12,7 +12,7 @@ const { WebsocketProvider } = await import('y-websocket');
 const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const realCollab = { ...(await import('@workspace/lib/collab')) };
-const { decodeSheetsSnapshot, encodeSheetsSnapshot, readSheetsBase, readSheetsSnapshotJson, writeSheetsSnapshot } =
+const { decodeSheetsSnapshot, encodeSheetsSnapshot, readSheetsLog, readSheetsSnapshotJson, writeSheetsSnapshot } =
     await import('@workspace/lib/sheets');
 const { Workbook } = await import('@workspace/sheet');
 const { replaySheetsOps, withMaterializedData } = await import('@workspace/sheet/engine');
@@ -80,14 +80,14 @@ const sheet = (cells: Record<string, string>): Sheet => ({
     row: 12,
     column: 4,
     config: {},
-    conditionalFormatRules: [],
+    conditionalFormats: {},
     celldata: Object.entries(cells).map(([key, v]) => {
         const [r, c] = key.split('_').map(Number);
         return { r, c, v: { v, m: v } };
     }),
 });
 
-// The server's doc: a stored workbook whose snapshot holds `cells`, stamped with a base, and an empty log.
+// The server's doc: a stored workbook whose snapshot holds `cells`, and an empty log.
 function server(cells: Record<string, string> = {}) {
     const doc = new Y.Doc();
     doc.clientID = 1000;
@@ -124,13 +124,11 @@ async function openTab(from: YDoc, clientID: number) {
     const pathId = `tab-${clientID}`;
     tabDocs.set(pathId, doc);
     const workbookRef = createRef<WorkbookInstance>();
-    const seen: { version: number; selection?: Selection } = { version: 0 };
+    const seen: { selection?: Selection } = {};
     function Host() {
-        const { initialData, snapshotVersion, handleOp } = useSheet('o', 'm', pathId, workbookRef);
-        seen.version = snapshotVersion;
+        const { initialData, handleOp } = useSheet('o', 'm', pathId, workbookRef);
         if (!initialData) return null;
         return createElement(Workbook, {
-            key: snapshotVersion,
             ref: workbookRef,
             data: initialData,
             onOp: handleOp,
@@ -196,13 +194,13 @@ const parts = (s: Sheet) =>
         JSON.stringify({
             data: s.data,
             borderInfo: s.config?.borderInfo ?? {},
-            rules: s.conditionalFormatRules ?? [],
+            rules: s.conditionalFormats ?? {},
         }),
     );
 
 function joined(doc: YDoc) {
     const stored = decodeSheetsSnapshot(readSheetsSnapshotJson(doc) ?? '');
-    const [first] = replaySheetsOps(stored, doc.getArray<Op[]>('ops').toArray());
+    const [first] = replaySheetsOps(stored, readSheetsLog(doc));
     return parts(withMaterializedData(first));
 }
 
@@ -219,12 +217,17 @@ const border = (color: string): Op[] => [
     },
 ];
 
-const rule = (type: string): Op[] => [
+const rule = (id: string, order: string, type: 'colorGradation' | 'dataBar'): Op[] => [
     {
         op: 'add',
         id: 's1',
-        path: ['conditionalFormatRules', 0],
-        value: { type, cellrange: [{ row: [0, 0], column: [0, 0] }], format: {} },
+        path: ['conditionalFormats', id],
+        value: {
+            type,
+            ranges: [{ row: [0, 0], column: [0, 0] }],
+            order,
+            format: type === 'dataBar' ? ['#638ec6'] : ['#ffffff', '#5a8ac6'],
+        },
     },
 ];
 
@@ -286,10 +289,11 @@ test('two conditional formats added at once keep the log order', async () => {
     const tab = await openTab(s, 3);
     const first = replica(s, 1);
     const second = replica(s, 2);
-    push(first, rule('colorGradation'));
-    push(second, rule('dataBar'));
+    push(first, rule('first', 'a0', 'colorGradation'));
+    push(second, rule('second', 'a1', 'dataBar'));
     await deliver(second, tab.doc);
     await deliver(first, tab.doc);
+    expect(Object.keys(parts(tab.workbook().getAllSheets()[0]).rules).sort()).toEqual(['first', 'second']);
     expectJoined(tab);
 });
 
@@ -332,7 +336,6 @@ test('two hundred batches an offline peer sent land at index 1 and the tab ends 
     await deliver(offline, s);
     await deliver(s, tab.doc);
     expect(s.getArray<Op[]>('ops').get(1)).toEqual(offline.getArray<Op[]>('ops').get(1));
-    expect(tab.seen.version).toBe(0);
     expect(tab.cell(0, 1)?.v).toBe('tab 0');
     expectJoined(tab);
 });
@@ -349,7 +352,6 @@ test('one update that lands batches at two places in the log leaves the tab as t
     await deliver(early, s);
     await deliver(late, s);
     await deliver(s, tab.doc);
-    expect(tab.seen.version).toBe(0);
     expect([tab.cell(0, 0)?.v, tab.cell(0, 1)?.v]).toEqual(['tab', 'late']);
     expectJoined(tab);
 });
@@ -376,7 +378,6 @@ test("a peer's edit of the tab's cell that lands before the tab's edits clears t
     await tab.edit((w) => w.setCellFormat(1, 1, 'bl', 1));
     await tab.edit((w) => w.undo());
     await deliver(peer, tab.doc);
-    expect(tab.seen.version).toBe(0);
     expect(tab.cell(0, 0)?.v).toBe('mine');
     expectJoined(tab);
     const sent = opsIn(tab.doc);
@@ -404,10 +405,10 @@ test('a formula typed while a peer overwrites another keeps recalculating on the
     expectJoined(b);
 });
 
-// A batch of the tab's own can apply before a peer's batch arrives and fail once the log puts the peer's first. The
-// formula map learned the batch's formula, so a replay that kept the map would let the next edit of a cell the formula
-// reads write the formula back.
-test("the tab's own formula that the log's order rejects stays gone after the next edit", async () => {
+// A batch of the tab's own can apply before a peer's batch arrives and lose a write once the log puts the peer's first:
+// the typed formula recomputed D1, which the peer cleared. Only the writes into D1 are skipped, on the tab as for a
+// joiner, and the next edit of a cell the formula reads does not bring D1 back.
+test("the tab's own batch keeps its formula where the log's order skips its write into a cleared cell", async () => {
     const s = server({ '0_0': '1' });
     push(s, [{ op: 'replace', id: 's1', path: ['data', 0, 3], value: { f: '=C1+1', v: 1, m: '1' } }]);
     const tab = await openTab(s, 50);
@@ -415,22 +416,24 @@ test("the tab's own formula that the log's order rejects stays gone after the ne
     push(peer, [{ op: 'replace', id: 's1', path: ['data', 0, 3], value: null }]);
     await tab.type(0, 2, '=A1*2');
     await deliver(peer, tab.doc);
-    expect(tab.cell(0, 2)).toBeNull();
+    expect(tab.cell(0, 2)?.f).toBe('=A1*2');
+    expect(tab.cell(0, 3)).toBeNull();
     await tab.type(0, 0, '5');
-    expect(tab.cell(0, 2)).toBeNull();
+    expect(tab.cell(0, 2)?.v).toBe(10);
+    expect(tab.cell(0, 3)).toBeNull();
     expectJoined(tab);
 });
 
-// The server's compaction: the log replayed over the snapshot, swapped in with a base that names the one it folded, and
-// the folded batches deleted, all in one transaction.
+// The server's compaction: the log replayed over the snapshot, swapped in with the folded batches deleted, all in one
+// transaction.
 function compact(doc: YDoc) {
     const batches = doc.getArray<Op[]>('ops').toArray();
     const stored = decodeSheetsSnapshot(readSheetsSnapshotJson(doc) ?? '');
     const json = encodeSheetsSnapshot(replaySheetsOps(stored, batches), { computed: true });
-    writeSheetsSnapshot(doc, json, { compactedFrom: readSheetsBase(doc)?.id ?? null, folded: batches.length });
+    writeSheetsSnapshot(doc, json, batches.length);
 }
 
-test('a batch that lands before what a kept compaction left keeps the grid and ends as the log', async () => {
+test('a batch that lands before what a compaction left ends as the log', async () => {
     const s = server();
     const tab = await openTab(s, 50);
     const peer = replica(s, 100);
@@ -442,11 +445,9 @@ test('a batch that lands before what a kept compaction left keeps the grid and e
     await deliver(tab.doc, s);
     compact(s);
     await deliver(s, tab.doc);
-    expect(tab.seen.version).toBe(0);
     await tab.edit((w) => w.setCellFormat(0, 1, 'v', 'after'));
     push(offline, typed(0, 1, 'offline'));
     await deliver(offline, tab.doc);
-    expect(tab.seen.version).toBe(0);
     expect(tab.cell(0, 1)?.v).toBe('after');
     expectJoined(tab);
 });
@@ -461,33 +462,30 @@ test('a batch that lands before the batches the tab replayed at load ends as the
     push(offline, typed(0, 0, 'offline'));
     await deliver(offline, tab.doc);
     expect(tab.doc.getArray<Op[]>('ops').get(0)).toEqual(typed(0, 0, 'offline'));
-    expect(tab.seen.version).toBe(1);
     expect(tab.cell(0, 0)?.v).toBe('two');
     expectJoined(tab);
 });
 
 // Yjs runs the snapshot's observer first when the server's client id is the lower one, and the log's otherwise.
 for (const peerID of [1, 2000]) {
-    test(`a batch the tab rejects in the update of a kept compaction remounts it on the next one (peer ${peerID})`, async () => {
+    test(`a batch the tab rejects in the update of a compaction leaves it as the log (peer ${peerID})`, async () => {
         const s = server();
         const tab = await openTab(s, 50);
         await tab.edit((w) => w.setCellFormat(0, 1, 'v', 'tab'));
         await deliver(tab.doc, s);
         compact(s);
         const peer = replica(s, peerID);
-        push(peer, [{ op: 'replace', id: 's1', path: ['data', 99, 0, 'v'], value: 1 }]);
+        push(peer, [{ op: 'insertRowCol', id: 's1', path: [], value: { type: 'row', index: -1 } }]);
         await deliver(peer, s);
         await deliver(s, tab.doc);
-        expect(tab.seen.version).toBe(0);
         compact(s);
         await deliver(s, tab.doc);
-        expect(tab.seen.version).toBe(1);
         expectJoined(tab);
     });
 }
 
 // 220 batches each render the whole workbook, toolbar included, which a loaded machine takes past the 5 s default.
-test('a batch that lands before the oldest anchor the tab keeps loads the grid again', async () => {
+test('a batch that lands before the oldest anchor the tab keeps loads the log again', async () => {
     const s = server();
     const tab = await openTab(s, 50);
     const offline = replica(s, 1);
@@ -501,12 +499,10 @@ test('a batch that lands before the oldest anchor the tab keeps loads the grid a
     push(recent, typed(0, 0, 'recent'));
     await deliver(recent, tab.doc);
     expect(tab.doc.getArray<Op[]>('ops').get(200)).toEqual(typed(0, 0, 'recent'));
-    expect(tab.seen.version).toBe(0);
     expectJoined(tab);
     push(offline, typed(0, 0, 'offline'));
     await deliver(offline, tab.doc);
     expect(tab.doc.getArray<Op[]>('ops').get(0)).toEqual(typed(0, 0, 'offline'));
-    expect(tab.seen.version).toBe(1);
     expect(tab.cell(0, 0)?.v).toBe('online 219');
     expectJoined(tab);
 }, 30_000);
@@ -555,7 +551,6 @@ for (const [name, open, first] of [
         push(late, rowInsert(1));
         await deliver(early, tab.doc);
         await deliver(late, tab.doc);
-        expect(tab.seen.version).toBe(0);
         expect(tab.cell(0, 0)?.v ?? null).toBe(first);
         await tab.edit((w) => w.setCellFormat(2, 2, 'v', 'typed'));
         expect(tab.cell(2, 2)?.v).toBe('typed');
@@ -578,7 +573,6 @@ test('rows a peer inserted at the bottom survive a compaction, and a cell typed 
     await deliver(s, tab.doc);
     compact(s);
     await deliver(s, tab.doc);
-    expect(tab.seen.version).toBe(0);
     await tab.edit((w) => w.setCellFormat(13, 0, 'v', 'typed'));
     expect(joined(tab.doc).data[13][0]?.v).toBe('typed');
     expectJoined(tab);
@@ -802,8 +796,7 @@ test("the tab's own edit reads no batch of the log", async () => {
 });
 
 // A sheet add or delete ships the orders its author left, and the replay only appends or drops the sheet. A tab that
-// also moved the other sheets would part from the joiner when two such batches cross, and a kept compaction would then
-// keep the tab's orders while the snapshot holds the joiner's.
+// also moved the other sheets would part from the joiner when two such batches cross.
 test('a sheet added and one deleted at once leave the tab with the orders a joiner has', async () => {
     const named = (id: string, order: number): Sheet => ({ ...sheet({}), id, name: id, order });
     const s = new Y.Doc();
@@ -827,20 +820,71 @@ test('a sheet added and one deleted at once leave the tab with the orders a join
     expect(orders(tab.workbook().getAllSheets())).toEqual(joiner());
     compact(s);
     await deliver(s, tab.doc);
-    expect(tab.seen.version).toBe(0);
     expect(orders(tab.workbook().getAllSheets())).toEqual(joiner());
 });
 
+test('a compaction the tab slept through leaves the cursor where it was, and typing goes on there', async () => {
+    const s = server({ '0_0': 'stored' });
+    const tab = await openTab(s, 50);
+    await tab.select(3, 2);
+    const peer = replica(s, 1);
+    push(peer, typed(1, 1, 'peer'));
+    await deliver(peer, s);
+    compact(s);
+    await deliver(s, tab.doc);
+    expect(tab.cell(1, 1)?.v).toBe('peer');
+    await tab.typeOver('typed');
+    expect(tab.cell(3, 2)?.v).toBe('typed');
+    await deliver(tab.doc, s);
+    expectJoined(tab);
+    expect(joined(s).data[3][2]?.v).toBe('typed');
+});
+
+test('an import of a smaller grid drops a cursor past its edge, and the keys typed next write nowhere', async () => {
+    const s = server({ '0_0': 'stored' });
+    const tab = await openTab(s, 50);
+    await tab.select(10, 3);
+    const small = { ...sheet({ '0_0': 'imported' }), row: 4, column: 2 };
+    writeSheetsSnapshot(s, encodeSheetsSnapshot([small], { computed: true }), null);
+    await deliver(s, tab.doc);
+    await tab.typeOver('typed');
+    expect(opsIn(tab.doc)).toBe(0);
+    expect(tab.cell(0, 0)?.v).toBe('imported');
+    expectJoined(tab);
+});
+
 // Only a compaction deletes batches, and it writes the snapshot they went into in the same transaction. A writer that
-// deletes the head of the log without one leaves the grid with batches no joiner applies, so the grid loads again.
-test('batches deleted from the head of the log without a new snapshot load the grid again', async () => {
+// deletes the head of the log without one leaves the grid with batches no joiner applies, so the tab loads the log again.
+test('batches deleted from the head of the log without a new snapshot load the log again', async () => {
     const s = server();
     push(s, typed(0, 0, 'first'), typed(1, 0, 'second'));
     const tab = await openTab(s, 50);
     const writer = replica(s, 1);
     writer.getArray<Op[]>('ops').delete(0, 1);
     await deliver(writer, tab.doc);
-    expect(tab.seen.version).toBe(1);
     expect(tab.cell(0, 0)).toBeNull();
     expectJoined(tab);
 });
+
+// A peer can store anything as a log entry. Every reader reads one that is no batch of well-formed ops as an empty
+// batch, so the tab applies the honest batch behind it and ends as a joiner.
+for (const [name, forged] of [
+    ['a number', 42],
+    ['a null op', [null]],
+    ['text', 'abc'],
+    ['an op with no path', [{ op: 'replace', id: 's1' }]],
+    ['a BigInt', [1n]],
+    ['a BigInt inside a value', [{ op: 'replace', id: 's1', path: ['data', 5, 1], value: { v: 1n } }]],
+] as const) {
+    test(`a forged log entry (${name}) that overtakes the tab's batch is skipped, and the batch after it lands`, async () => {
+        const s = server();
+        const tab = await openTab(s, 50);
+        const peer = replica(s, 2);
+        await tab.edit((w) => w.setCellFormat(0, 0, 'v', 'mine'));
+        peer.getArray('ops').push([forged, typed(3, 1, 'honest')]);
+        await deliver(peer, tab.doc);
+        expect(opsOf(tab.doc)).toHaveLength(3);
+        expect([tab.cell(0, 0)?.v, tab.cell(3, 1)?.v, tab.cell(5, 1)]).toEqual(['mine', 'honest', null]);
+        expectJoined(tab);
+    });
+}

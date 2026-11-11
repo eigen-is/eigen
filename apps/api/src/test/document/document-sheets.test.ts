@@ -1,11 +1,10 @@
 import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
-import { defaultChartSpec, newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
+import { defaultChartSpec, newChartSpecParts, readChartSpec } from '@workspace/lib/charts';
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import {
     decodeSheetsSnapshot,
     decodeSheetsWorkbook,
     encodeSheetsSnapshot,
-    readSheetsBase,
     readSheetsSnapshotJson,
     sheetsOpLog,
     sheetsStateMap,
@@ -24,6 +23,7 @@ import type { Mount } from '../../lib/mount';
 import { cellLinks } from '../fixtures/cell-links';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
 import { readPersistedDoc } from '../fixtures/transform-results';
+import { formatList, formatsOf } from '../fixtures/validations';
 import { rowsXml, xlsxFixture } from '../fixtures/xlsx';
 import { driveGet, drivePost, getTestContext, NO_MEDIA } from '../setup';
 
@@ -312,13 +312,10 @@ describe('document/sheets — patch op replay', () => {
         const home = await getHome(ctx.alice.user.id);
         const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
 
-        // A log from before the list went: A1 = "asdf", B1 = "=1+1", C1 = "test".
+        // A1 = "asdf", B1 = "=1+1", C1 = "test".
         const batches: Op[][] = [
             [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 0], value: { v: 'asdf', m: 'asdf' } }],
-            [
-                { op: 'replace', id: 'sheet-1', path: ['data', 0, 1], value: { v: 2, f: '=1+1', m: '2' } },
-                { op: 'add', id: 'sheet-1', path: ['calcChain', 0], value: { r: 0, c: 1, id: 'sheet-1' } },
-            ],
+            [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 1], value: { v: 2, f: '=1+1', m: '2' } }],
             [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 2], value: { v: 'test', m: 'test' } }],
         ];
         collab.doc.transact(() => {
@@ -784,24 +781,25 @@ describe('document/sheets — addSheetsBatch', () => {
                 { r: 1, c: 1, v: { link: { type: 'cellrange', address: 'Data!B2' } } },
             ],
             config: {},
-            conditionalFormatRules: [
+            conditionalFormats: formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 0] }],
+                    ranges: [{ row: [0, 0], column: [0, 0] }],
                     format: { textColor: '#ff0000', cellColor: null },
                     conditionName: 'formula',
                     conditionRange: [],
                     conditionValue: ['=A1>Data!A1'],
                 },
-            ],
+            ]),
             dataValidations: {
                 v1: {
                     ranges: [{ row: [2, 2], column: [0, 0] }],
+                    order: 'a0',
                     rule: { type: 'dropdown', type2: '', value1: 'Data!A1:A3', value2: '' },
                 },
             },
             charts: {
-                c1: { id: 'c1', index: 'a0', x: 0, y: 0, width: 300, height: 200, ...newSheetChartSpecParts(spec) },
+                c1: { id: 'c1', index: 'a0', x: 0, y: 0, width: 300, height: 200, ...newChartSpecParts(spec) },
             },
         },
     ];
@@ -860,7 +858,7 @@ describe('document/sheets — addSheetsBatch', () => {
         const cell = (r: number, c: number) => summary.celldata?.find((e) => e.r === r && e.c === c)?.v;
 
         expect(cell(0, 0)?.f).toBe("='Data(Copy)'!A1*2");
-        const rule = summary.conditionalFormatRules?.[0];
+        const rule = formatList(summary.conditionalFormats)[0];
         expect(rule?.type === 'default' && rule.conditionValue).toEqual(["=A1>'Data(Copy)'!A1"]);
         expect(summary.dataValidations?.['v1']?.rule.value1).toBe("'Data(Copy)'!A1:A3");
         expect(cellLinks(summary)).toEqual({
@@ -983,7 +981,6 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         sheetsStateMap(doc).set('snapshot', encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: false }));
         const typed: Op[] = [
             { op: 'replace', id: 'sheet-1', path: ['data', 0, 1], value: { v: 4, f: '=2+2', m: '4' } },
-            { op: 'add', id: 'sheet-1', path: ['calcChain', 0], value: { r: 0, c: 1, id: 'sheet-1' } },
         ];
         doc.getArray<Op[]>('ops').push([typed]);
         expect(readSheetsFromDoc(doc).sheets[0].celldata?.[0]?.v?.v).toBe(99);
@@ -1086,7 +1083,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
     test('a batch the replay rejects is dropped and counted, and the others still apply', () => {
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         try {
-            const poison: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['missing', 'deep'], value: 1 }];
+            const poison: Op[] = [{ op: 'insertRowCol', id: 'sheet-1', path: [], value: { type: 'row', index: -1 } }];
             const { snapshot, dropped } = compactSheetsSnapshot(
                 encodeSheetsSnapshot(sheets, { computed: true }),
                 JSON.stringify([edit(0, 'a'), poison, edit(1, 'b'), poison]),
@@ -1105,33 +1102,20 @@ describe('document/sheets — compactSheetsSnapshot', () => {
     });
 });
 
-describe('document/sheets — the base a snapshot starts', () => {
-    const sheets = (): Sheet[] => [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
-
-    test('a replacing import stamps a fresh base without compactedFrom, in the same transaction', () => {
+describe('document/sheets — a new snapshot', () => {
+    test('a replacing import writes its snapshot and empties the log in one update', () => {
         const doc = new Y.Doc();
-        writeSheetsSnapshot(doc, encodeSheetsSnapshot([], { computed: true }), { compactedFrom: 'older', folded: 0 });
-        const old = readSheetsBase(doc);
-        expect(old?.compactedFrom).toBe('older');
+        writeSheetsSnapshot(doc, encodeSheetsSnapshot([], { computed: true }), null);
         doc.getArray<Op[]>('ops').push([[{ op: 'replace', path: ['x'], value: 1 }]]);
 
         let updates = 0;
         doc.on('update', () => updates++);
-        writeSheetsSnapshot(doc, encodeSheetsSnapshot([], { computed: true }), null);
+        const imported = encodeSheetsSnapshot([], { computed: false });
+        writeSheetsSnapshot(doc, imported, null);
 
         expect(updates).toBe(1);
-        const base = readSheetsBase(doc);
-        expect(base).toEqual({ id: expect.any(String), compactedFrom: null });
-        expect(base?.id).not.toBe(old?.id);
-        doc.destroy();
-    });
-
-    test('appending tabs leaves the base alone', () => {
-        const doc = new Y.Doc();
-        writeSheetsSnapshot(doc, encodeSheetsSnapshot(sheets(), { computed: true }), null);
-        const base = readSheetsBase(doc);
-        append(doc, encodeSheetsSnapshot(sheets(), { computed: true }));
-        expect(readSheetsBase(doc)).toEqual(base);
+        expect(readSheetsSnapshotJson(doc)).toBe(imported);
+        expect(doc.getArray('ops').length).toBe(0);
         doc.destroy();
     });
 });

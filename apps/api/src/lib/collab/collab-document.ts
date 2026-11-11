@@ -6,7 +6,7 @@
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
-import { readSheetsBase, sheetsLogStartsWith, writeSheetsSnapshot } from '@workspace/lib/sheets';
+import { sheetsLogStartsWith, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_STICKIES, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'elysia/ws/bun';
@@ -17,7 +17,6 @@ import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import { ApiError } from '../core/errors';
-import { restampRestoredSheetsBase, stampMissingSheetsBase } from '../document/sheets';
 import { compactSheets, sheetsNeedCompaction } from '../document/sheets-compaction';
 import type { Drive } from '../drive';
 import type { Mount } from '../mount';
@@ -154,8 +153,6 @@ export class CollabDocument {
         let provider: DbProvider;
         try {
             provider = new DbProvider(doc, path.name, dataDb.db);
-            // Before the document listens for updates, so the stamp is saved but moves no Modified time.
-            stampMissingSheetsBase(path.type, doc);
         } catch (error) {
             // A document that fails to open is never destructed, so it lets go here.
             dataDb.release();
@@ -280,10 +277,7 @@ export class CollabDocument {
         }
         const roots = EIGEN_DOC_TYPE_INFO[this.path.type].yjsRoots;
         if (!roots) throw new Error(`No yjsRoots schema declared for ${this.path.type}`);
-        this.doc.transact(() => {
-            restoreYjsDoc(this.doc, state, roots);
-            restampRestoredSheetsBase(this.path.type, this.doc);
-        });
+        this.doc.transact(() => restoreYjsDoc(this.doc, state, roots));
     }
 
     private dropConnection(conn: ServerWebSocket<unknown>): void {
@@ -358,12 +352,8 @@ export class CollabDocument {
                 // Batches that arrived after the folded ones stay in the log. A version that failed stops the swap,
                 // and the document closes with its log, as after a failed run.
                 if (saved) {
-                    const compaction = {
-                        compactedFrom: readSheetsBase(this.doc)?.id ?? null,
-                        folded: compacted.folded.length,
-                    };
                     this.doc.transact(
-                        () => writeSheetsSnapshot(this.doc, compacted.snapshot, compaction),
+                        () => writeSheetsSnapshot(this.doc, compacted.snapshot, compacted.folded.length),
                         COMPACTION_ORIGIN,
                     );
                     // The version is the session's only one. A final version of the folded state would be newer, so

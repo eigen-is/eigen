@@ -28,9 +28,8 @@ import { jfrefreshgrid } from './refresh';
 import { diff, isdatetime, isRealNull, isRealNum } from './validation';
 import { addValidation, validationAt } from './validation-rules';
 
-// The words a hint sentence puts in for its rule type and its condition. The keys are loose strings because a rule's
-// type and condition are free-form. Text rules have sentences of their own, because "Text must equal to ACME" reads
-// wrong.
+// The words a hint sentence puts in for its rule type and its condition, keyed loosely because both are free-form. Text
+// rules have sentences of their own, because "Text must equal to ACME" reads wrong.
 const OPTION_LABEL: Record<string, string> = {
     number: 'a number',
     number_integer: 'a whole number',
@@ -88,7 +87,9 @@ export function validateCellData(ctx: Context, item: DataValidationRule, value: 
         return value != null && list.has(String(value));
     }
     if (type === 'checkbox') {
-        return true;
+        if (isRealNull(value)) return true;
+        const named = String(value).toUpperCase();
+        return named === value1.toUpperCase() || named === value2.toUpperCase();
     }
     if (type === 'number' || type === 'number_integer' || type === 'number_decimal') {
         if (!isRealNum(value)) return false;
@@ -161,16 +162,13 @@ function meetsCondition(n: number, condition: string, v1: number, v2: number) {
     }
 }
 
-// A tick box rule names the value that counts as checked, and the cell's value says whether it is. No second flag is
-// stored, so a TRUE that was imported, pasted, typed or computed by a formula shows ticked like any other. These are
-// the engine's own boolean texts, the ones a recalculated formula writes, so a computed TRUE matches.
+// A tick box rule names the value that counts as checked and stores no second flag, so a TRUE that was imported, typed
+// or computed shows ticked. These are the engine's own boolean texts, the ones a recalculated formula writes.
 export const CHECKBOX_CHECKED_VALUE = booleanDisplay(true);
 export const CHECKBOX_UNCHECKED_VALUE = booleanDisplay(false);
 
 // The tick box's side in px. The painter and the hit test both place it through checkboxRect, so they agree.
-export const CHECKBOX_SIZE = 10;
-// The gap between the box and the label beside it.
-export const CHECKBOX_LABEL_GAP = 4;
+const CHECKBOX_SIZE = 10;
 // The same padding the painter keeps inside a cell.
 const CHECKBOX_PADDING = 2;
 
@@ -178,22 +176,10 @@ const CHECKBOX_PADDING = 2;
 // pixels and the hit test in sheet pixels, and the glyph sits at the same offset from the box in both.
 export type CellGlyphRect = { x: number; y: number; size: number };
 
-// The box a cell lays its text out in, from the cell's bounds. It leaves out the grid lines: one pixel at the top, and
-// two off the width and the height. The painter and the hit test both use it, so a click lands where the glyph is
-// painted, in the top row too.
+// The box a cell lays its text out in, from the painter's edges of the cell less the grid lines: one pixel at the top,
+// two off the width and the height. A hit test passes the same edges in sheet pixels.
 export function cellTextBox(left: number, top: number, right: number, bottom: number): Rect {
     return { left, top: top + 1, width: right - left - 2, height: bottom - top - 2 };
-}
-
-// Whether a tick-box cell shows its value beside the box. A default TRUE/FALSE rule shows the box alone, as Google
-// Sheets does, and so does an empty cell, so the column looks the same all the way down. A custom rule keeps its label,
-// because the label is the only way to tell "Yes" from "No". A value the rule does not name keeps it too, so a tick box
-// put over a column of text does not hide the text.
-export function showsCheckboxLabel(item: DataValidationRule, cellValue: CellValueForValidation) {
-    if (item.value1 !== CHECKBOX_CHECKED_VALUE || item.value2 !== CHECKBOX_UNCHECKED_VALUE) return true;
-    if (isRealNull(cellValue)) return false;
-    const value = String(cellValue).toUpperCase();
-    return value !== item.value1.toUpperCase() && value !== item.value2.toUpperCase();
 }
 
 export function isCheckboxChecked(item: DataValidationRule, cellValue: CellValueForValidation) {
@@ -201,21 +187,13 @@ export function isCheckboxChecked(item: DataValidationRule, cellValue: CellValue
     return String(cellValue).toUpperCase() === item.value1.toUpperCase();
 }
 
-// A tick box sits where the cell's own alignment puts it. Without one, a box shown alone is centered, as in Google
-// Sheets, so ticked, unticked and empty boxes line up. A box with a label sits left, so the label keeps the cell's
-// width.
-export function checkboxAlign(
-    cell: Cell | null | undefined,
-    rule: DataValidationRule,
-    value: CellValueForValidation,
-): number {
-    if (cell?.ht != null) return Number(normalizedCellAttr(cell, 'ht'));
-    return showsCheckboxLabel(rule, value) ? 1 : 0;
+// A tick box sits where the cell's own alignment puts it, and in the center without one, as in Google Sheets.
+export function checkboxAlign(cell: Cell | null | undefined): number {
+    return cell?.ht != null ? Number(normalizedCellAttr(cell, 'ht')) : 0;
 }
 
-// The alignments use the cell's codes. For horizonAlign 0 is center, 1 is left and 2 is right. For verticalAlign 0 is
-// middle, 1 is top and 2 is bottom. An empty cell's vertical alignment is NaN, which falls to the middle, as in the
-// painter.
+// The alignments are the cell's codes: horizontally 0 is center, 1 left and 2 right, vertically 0 is middle, 1 top and
+// 2 bottom. An empty cell's vertical alignment is NaN, which falls to the middle, as in the painter.
 export function checkboxRect(box: Rect, horizonAlign: number, verticalAlign: number): CellGlyphRect {
     let x = box.left + CHECKBOX_PADDING;
     if (horizonAlign === 0) {
@@ -242,15 +220,14 @@ export function getCellDataValidation(ctx: Context, r: number, c: number) {
 }
 
 // Only a click on the box toggles it. A click anywhere else in the cell just selects the cell, so a tick box can be
-// copied, filled and read in the formula bar without flipping.
+// copied, filled and read in the formula bar without flipping. A cell that fails the rule paints no box to click.
 export function isCheckboxClick(ctx: Context, r: number, c: number, box: Rect, x: number, y: number) {
     const rule = getCellDataValidation(ctx, r, c);
     if (rule?.type !== 'checkbox') return false;
     const d = getFlowdata(ctx);
-    if (!d) return false;
-    const align = checkboxAlign(d[r]?.[c], rule, getRealCellValue(r, c, d));
-    const rect = checkboxRect(box, align, Number(normalizedAttr(d, r, c, 'vt')));
-    return x >= rect.x && x <= rect.x + rect.size && y >= rect.y && y <= rect.y + rect.size;
+    if (!d || !cellPassesRule(ctx, rule, d[r]?.[c])) return false;
+    const rect = checkboxRect(box, checkboxAlign(d[r]?.[c]), Number(normalizedAttr(d, r, c, 'vt')));
+    return x >= rect.x && x < rect.x + rect.size && y >= rect.y && y < rect.y + rect.size;
 }
 
 // Returns whether the cell toggled. When it did not, the mouse and keyboard callers go on with their normal handling.
@@ -260,8 +237,9 @@ export function checkboxChange(ctx: Context, r: number, c: number) {
     if (item?.type !== 'checkbox') return false;
     const d = getFlowdata(ctx);
     if (!d) return false;
-    // A tick box computed by a formula can't be clicked, because writing a value would replace the formula.
-    if (d[r]?.[c]?.f != null) return false;
+    // A tick box computed by a formula can't be clicked, because writing a value would replace the formula. A cell
+    // that fails the rule shows its value and no box, so a toggle from the keyboard would overwrite text.
+    if (d[r]?.[c]?.f != null || !cellPassesRule(ctx, item, d[r]?.[c])) return false;
     const checked = isCheckboxChecked(item, getRealCellValue(r, c, d));
     setCellValue(ctx, r, c, d, checked ? item.value2 : item.value1);
     // The write must recalculate the formulas that depend on this cell. The mousedown has not moved the selection here
@@ -270,13 +248,12 @@ export function checkboxChange(ctx: Context, r: number, c: number) {
     return true;
 }
 
-// A list rule paints its chevron on every cell it covers, selected or not, as the comment triangle and the filter
-// button are painted. Keyboard users and viewers who can't edit then see the list too. These are the glyph's side in
-// pixels and its gap from the cell's right edge.
-export const DROPDOWN_CHEVRON_SIZE = 8;
+// A list rule paints its chevron on every cell it covers, selected or not, so keyboard users and viewers who can't edit
+// see the list too. These are the glyph's side in pixels and its gap from the cell's right edge.
+const DROPDOWN_CHEVRON_SIZE = 8;
 const DROPDOWN_CHEVRON_PADDING = 2;
 // The click target around the glyph is wide enough for a finger, as the filter button's is.
-export const DROPDOWN_CHEVRON_HIT_WIDTH = 20;
+const DROPDOWN_CHEVRON_HIT_WIDTH = 20;
 // The narrowest text box that still gets a chevron: the glyph, its padding, and as much again clear to its left. In a
 // narrower cell the glyph would look like the cell's content, so it is left out, as Google Sheets does.
 const DROPDOWN_CHEVRON_MIN_WIDTH = DROPDOWN_CHEVRON_SIZE * 2 + DROPDOWN_CHEVRON_PADDING;
@@ -302,10 +279,8 @@ export function isDropdownChevronClick(ctx: Context, r: number, c: number, box: 
     return x >= right - DROPDOWN_CHEVRON_HIT_WIDTH && x <= right && y >= box.top && y <= box.top + box.height;
 }
 
-// Puts one rule on a range, in place of the rules its cells had. Tick boxes seed their unchecked value into EMPTY
-// cells only: pointing a tick box at a column of existing TRUE/FALSE must keep the data, and isCheckboxChecked reads
-// whatever was already there. The seeding stops where the sheet's cells stop, so a whole-column tick box writes no
-// million cells.
+// Puts one rule on a range, in place of the rules its cells had. A tick box seeds its unchecked value into empty cells
+// only, so existing TRUE/FALSE data stays, and only as far as the sheet's cells go.
 export function applyDataValidation(ctx: Context, range: SingleRange, item: DataValidationRule) {
     if (ctx.allowEdit === false) return;
     const d = getFlowdata(ctx);
@@ -327,9 +302,8 @@ export function applyDataValidation(ctx: Context, range: SingleRange, item: Data
     if (seeded) jfrefreshgrid(ctx, [seededRange]);
 }
 
-// The range the dialog's text names. A whole column such as B:B runs to the grid's last row, as Excel stores it, so
-// the rule also covers the rows added later. A whole row runs to the grid's last column. The formula reader would
-// stop both where the sheet's cells stop.
+// The range the dialog's text names. A whole column such as B:B runs to the grid's last row, as Excel stores it, so the
+// rule covers rows added later, and a whole row to its last column. The formula reader would stop at the cells.
 export function validationRange(ctx: Context, txt: string): SingleRange | undefined {
     const range = getRangeByTxt(ctx, txt).at(-1);
     if (!range) return undefined;
@@ -340,9 +314,8 @@ export function validationRange(ctx: Context, txt: string): SingleRange | undefi
     return { row: range.row, column: range.column };
 }
 
-// Insert > Tick box adds a tick box in one click, with no dialog, as in Google Sheets. With no dialog there is no
-// chance to check the range. So a whole column or row selected from its header stops where the sheet's cells stop,
-// because a tick box past them marks nothing. A range the user dragged out can still lay a checklist over empty cells.
+// Insert > Tick box has no dialog to check the range in, so a whole column or row selected from its header stops where
+// the sheet's cells stop, as a tick box past them marks nothing. A dragged range still covers empty cells.
 export function insertCheckbox(ctx: Context) {
     const selection = ctx.selections?.[ctx.selections.length - 1];
     if (!selection) return;
@@ -386,6 +359,7 @@ const HINT_FRAMES = {
     lengthInvalid: 'Text length must be ${condition}.',
     lengthPrompt: 'Enter text of length ${condition}.',
     dateInvalid: 'Date must be ${condition}.',
+    checkboxInvalid: 'Input must be ${value} or ${unchecked}.',
     datePrompt: 'Enter a date ${condition}.',
 };
 // biome-ignore-end lint/suspicious/noTemplateCurlyInString: replaceHtml fills these ${name} slots, not JavaScript
@@ -409,8 +383,10 @@ export function describeValidationRule(item: DataValidationRule, kind: Validatio
         frame = invalid ? HINT_FRAMES.lengthInvalid : HINT_FRAMES.lengthPrompt;
     } else if (type === 'date') {
         frame = invalid ? HINT_FRAMES.dateInvalid : HINT_FRAMES.datePrompt;
+    } else if (type === 'checkbox' && invalid) {
+        frame = HINT_FRAMES.checkboxInvalid;
     }
-    // A tick box can't hold an invalid value and needs no prompt, so it shows no card.
+    // A tick box needs no prompt, so a valid one shows no card.
     if (!frame) return '';
 
     // A rule's value comes from a collaborator or an imported file, and String.replace would read a `$&` or `$1` in it
@@ -419,6 +395,7 @@ export function describeValidationRule(item: DataValidationRule, kind: Validatio
         type: OPTION_LABEL[type] ?? '',
         condition: conditionPhrase(item),
         value: item.value1,
+        unchecked: item.value2,
     });
 }
 

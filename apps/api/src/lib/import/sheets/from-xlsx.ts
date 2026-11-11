@@ -3,7 +3,7 @@
 
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { Cell, Sheet, SheetConfig } from '@workspace/lib/sheets';
-import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
+import { MAX_GRID_SLOTS, sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
 import {
     cellDisplay,
     cellWrapsText,
@@ -28,7 +28,7 @@ import { IMPORT_MESSAGES, importError, TOO_MANY_CELLS } from '../messages';
 import { readGrid } from './cells';
 import type { Drawing } from './drawing';
 import { placeDrawings, readSheetDrawing } from './drawing';
-import { MAX_CELLS, MAX_GRID_SLOTS, MAX_SHARED_FORMULA_TEXT, MAX_TEXT } from './limits';
+import { MAX_CELLS, MAX_SHARED_FORMULA_TEXT, MAX_TEXT } from './limits';
 import { nameInliner } from './names';
 import { readBudget, readInBatches, readXlsxPackage } from './package';
 import { readRules } from './rules';

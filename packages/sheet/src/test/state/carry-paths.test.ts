@@ -4,8 +4,10 @@
 // cell whose source has none and joins a source's rule to the one on the sheet.
 
 import { describe, expect, test } from 'bun:test';
-import type { CellLink, ConditionalFormatRule, DataValidationRule } from '@workspace/lib/sheets';
+import type { CellLink, DataValidationRule } from '@workspace/lib/sheets';
+import { nextRuleOrder } from '@workspace/lib/sheets';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
+import type { SingleRange } from '../../engine/types';
 import type { Context } from '../../state/context';
 import { copy } from '../../state/modules/clipboard';
 import { mergeCells } from '../../state/modules/merge';
@@ -20,6 +22,7 @@ import { join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from './factories/co
 import { workbookContextFactory } from './factories/context';
 import { dragFill } from './factories/grid-dom';
 import { cellLinks } from './factories/links';
+import { formatList, formatsOf } from './factories/validations';
 
 const ONE = 's1';
 const TWO = 's2';
@@ -35,6 +38,12 @@ const select = (r1: number, r2: number, c1: number, c2: number) => [
     { ...range(r1, r2, c1, c2), row_focus: r1, column_focus: c1 },
 ];
 
+type CfRule = Parameters<typeof formatsOf>[0][number];
+function addFormat(sheet: Sheet, id: string, rule: CfRule) {
+    const formats = sheet.conditionalFormats ?? {};
+    formats[id] = { ...rule, order: nextRuleOrder(formats) };
+    sheet.conditionalFormats = formats;
+}
 const dropdown = (value1: string): DataValidationRule => ({
     type: 'dropdown',
     type2: '',
@@ -44,16 +53,16 @@ const dropdown = (value1: string): DataValidationRule => ({
     hintShow: false,
     hintValue: '',
 });
-const greater = (cellrange: ConditionalFormatRule['cellrange'], value = 5): ConditionalFormatRule => ({
+const greater = (ranges: SingleRange[], value = 5): CfRule => ({
     type: 'default',
-    cellrange,
+    ranges,
     format: { cellColor: '#ff0000' },
     conditionName: 'greaterThan',
     conditionValue: [value],
 });
-const formula = (cellrange: ConditionalFormatRule['cellrange'], value: string): ConditionalFormatRule => ({
+const formula = (ranges: SingleRange[], value: string): CfRule => ({
     type: 'default',
-    cellrange,
+    ranges,
     format: { cellColor: '#ff0000' },
     conditionName: 'formula',
     conditionValue: [value],
@@ -68,7 +77,7 @@ function emptySheet(id: string, order: number, seed: Partial<Sheet> = {}): Sheet
         column: 6,
         config: {},
         data: Array.from({ length: 12 }, () => Array.from({ length: 6 }, () => null)),
-        conditionalFormatRules: [],
+        conditionalFormats: {},
         ...seed,
     };
 }
@@ -116,8 +125,8 @@ function expectEveryoneAgrees(s: Session, check: (sheet: Sheet) => void) {
     }
 }
 
-function sideTables({ config, dataValidations, conditionalFormatRules, data }: Sheet) {
-    return { borderInfo: config?.borderInfo, dataValidations, conditionalFormatRules, data };
+function sideTables({ config, dataValidations, conditionalFormats, data }: Sheet) {
+    return { borderInfo: config?.borderInfo, dataValidations, conditionalFormats, data };
 }
 
 function expectUndoRestores(s: Session, edit: () => void) {
@@ -142,7 +151,7 @@ describe('a sort moves what a cell holds, and leaves the rest where it is', () =
             },
             {
                 config: { borderInfo: { '2_0': { t: SIDE } } },
-                dataValidations: { v: { ranges: [range(1, 1, 0, 0)], rule: dropdown('c') } },
+                dataValidations: { v: { ranges: [range(1, 1, 0, 0)], order: 'a0', rule: dropdown('c') } },
                 ...sheet,
             },
         );
@@ -167,12 +176,12 @@ describe('a sort moves what a cell holds, and leaves the rest where it is', () =
 
     test('it writes no border and no rule', () => {
         const s = rows({
-            conditionalFormatRules: [greater([range(1, 1, 0, 0)]), formula([range(0, 2, 0, 0)], '=$B1>0')],
+            conditionalFormats: formatsOf([greater([range(1, 1, 0, 0)]), formula([range(0, 2, 0, 0)], '=$B1>0')]),
         });
         const ops = s.edit(s.a, sort);
         expect(ops.filter((op) => op.path[0] !== 'data')).toEqual([]);
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([range(1, 1, 0, 0)]);
+            expect(formatList(sheet.conditionalFormats)[0].ranges).toEqual([range(1, 1, 0, 0)]);
         });
     });
 
@@ -331,8 +340,8 @@ describe('a table of formulas moves', () => {
             },
             {
                 config: { borderInfo: { '0_0': { t: SIDE } } },
-                dataValidations: { v: { ranges: [range(0, 0, 0, 0)], rule: dropdown('v') } },
-                conditionalFormatRules: [greater([range(0, 0, 0, 0)])],
+                dataValidations: { v: { ranges: [range(0, 0, 0, 0)], order: 'a0', rule: dropdown('v') } },
+                conditionalFormats: formatsOf([greater([range(0, 0, 0, 0)])]),
             },
         );
         const before = structuredClone(sideTables(s.a.ctx.sheets[0]));
@@ -363,19 +372,23 @@ describe('a source cell without a rule takes the destination rule away, cell by 
     };
 
     test('a paste leaves a hole in a conditional format', () => {
-        const s = columnC({ conditionalFormatRules: [greater([range(0, 2, 2, 2)])] });
+        const s = columnC({ conditionalFormats: formatsOf([greater([range(0, 2, 2, 2)])]) });
         s.edit(s.a, pasteOn(1, 2));
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.conditionalFormatRules).toEqual([greater([range(0, 0, 2, 2), range(2, 2, 2, 2)])]);
+            expect(formatList(sheet.conditionalFormats)).toEqual([greater([range(0, 0, 2, 2), range(2, 2, 2, 2)])]);
         });
     });
 
     test('and in a validation', () => {
         const rule = dropdown('v');
-        const s = columnC({ dataValidations: { v: { ranges: [range(0, 2, 2, 2)], rule } } });
+        const s = columnC({ dataValidations: { v: { ranges: [range(0, 2, 2, 2)], order: 'a0', rule } } });
         s.edit(s.a, pasteOn(1, 2));
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.dataValidations?.v).toEqual({ ranges: [range(0, 0, 2, 2), range(2, 2, 2, 2)], rule });
+            expect(sheet.dataValidations?.v).toEqual({
+                ranges: [range(0, 0, 2, 2), range(2, 2, 2, 2)],
+                order: 'a0',
+                rule,
+            });
         });
     });
 
@@ -387,8 +400,8 @@ describe('a source cell without a rule takes the destination rule away, cell by 
                 d[1][0] = text('kept');
             },
             {
-                dataValidations: { v: { ranges: [range(1, 3, 0, 0)], rule } },
-                conditionalFormatRules: [greater([range(1, 3, 0, 0)])],
+                dataValidations: { v: { ranges: [range(1, 3, 0, 0)], order: 'a0', rule } },
+                conditionalFormats: formatsOf([greater([range(1, 3, 0, 0)])]),
             },
         );
         s.edit(s.a, (ctx) => {
@@ -396,17 +409,21 @@ describe('a source cell without a rule takes the destination rule away, cell by 
         });
         expectEveryoneAgrees(s, (sheet) => {
             expect(sheet.dataValidations?.v.ranges).toEqual([range(3, 3, 0, 0)]);
-            expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([range(3, 3, 0, 0)]);
+            expect(formatList(sheet.conditionalFormats)[0].ranges).toEqual([range(3, 3, 0, 0)]);
         });
     });
 
     test('a rule left with no cell goes, and the rule after it stays', () => {
-        const s = columnC({ conditionalFormatRules: [greater([range(1, 1, 2, 2)]), greater([range(9, 9, 5, 5)], 1)] });
+        const s = columnC({
+            conditionalFormats: formatsOf([greater([range(1, 1, 2, 2)]), greater([range(9, 9, 5, 5)], 1)]),
+        });
         s.edit(s.a, pasteOn(1, 2));
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.conditionalFormatRules).toEqual([greater([range(9, 9, 5, 5)], 1)]);
+            expect(formatList(sheet.conditionalFormats)).toEqual([greater([range(9, 9, 5, 5)], 1)]);
         });
-        const u = columnC({ conditionalFormatRules: [greater([range(1, 1, 2, 2)]), greater([range(9, 9, 5, 5)], 1)] });
+        const u = columnC({
+            conditionalFormats: formatsOf([greater([range(1, 1, 2, 2)]), greater([range(9, 9, 5, 5)], 1)]),
+        });
         expectUndoRestores(u, () => u.edit(u.a, pasteOn(1, 2)));
     });
 
@@ -415,11 +432,11 @@ describe('a source cell without a rule takes the destination rule away, cell by 
             (d) => {
                 d[0][0] = number(9);
             },
-            { conditionalFormatRules: [greater([range(0, 0, 0, 0)]), greater([range(0, 2, 2, 2)], 1)] },
+            { conditionalFormats: formatsOf([greater([range(0, 0, 0, 0)]), greater([range(0, 2, 2, 2)], 1)]) },
         );
         s.edit(s.a, pasteOn(1, 2));
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.conditionalFormatRules).toEqual([
+            expect(formatList(sheet.conditionalFormats)).toEqual([
                 greater([range(0, 0, 0, 0), range(1, 1, 2, 2)]),
                 greater([range(0, 0, 2, 2), range(2, 2, 2, 2)], 1),
             ]);
@@ -430,15 +447,15 @@ describe('a source cell without a rule takes the destination rule away, cell by 
         ['the middle', 1, '=C1>0', [range(0, 0, 2, 2), range(2, 2, 2, 2)]],
         ['the corner', 0, '=C2>0', [range(1, 2, 2, 2)]],
     ] as const)('a formula rule still reads its own cells after a hole in %s', (_, r, shifted, ranges) => {
-        const s = columnC({ conditionalFormatRules: [formula([range(0, 2, 2, 2)], '=C1>0')] });
+        const s = columnC({ conditionalFormats: formatsOf([formula([range(0, 2, 2, 2)], '=C1>0')]) });
         s.edit(s.a, pasteOn(r, 2));
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.conditionalFormatRules).toEqual([formula([...ranges], shifted)]);
+            expect(formatList(sheet.conditionalFormats)).toEqual([formula([...ranges], shifted)]);
         });
     });
 
     test('a paste inside a formula rule that lands on its corner moves the corner', () => {
-        const s = columnC({ conditionalFormatRules: [formula([range(0, 2, 2, 2)], '=C1>0')] });
+        const s = columnC({ conditionalFormats: formatsOf([formula([range(0, 2, 2, 2)], '=C1>0')]) });
         s.edit(s.a, (ctx) => {
             ctx.selections = select(1, 1, 2, 2);
             copy(ctx, {});
@@ -446,40 +463,42 @@ describe('a source cell without a rule takes the destination rule away, cell by 
             pasteCopy(ctx);
         });
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.conditionalFormatRules).toEqual([formula([range(1, 2, 2, 2), range(0, 0, 2, 2)], '=C2>0')]);
+            expect(formatList(sheet.conditionalFormats)).toEqual([
+                formula([range(1, 2, 2, 2), range(0, 0, 2, 2)], '=C2>0'),
+            ]);
         });
     });
 
     test('only the landed cells change, on a sheet of rules, and an undo restores them', () => {
         const seed = {
-            dataValidations: { far: { ranges: [range(11, 11, 5, 5)], rule: dropdown('far') } },
-            conditionalFormatRules: [greater([range(11, 11, 4, 4)]), greater([range(0, 2, 2, 2)], 1)],
+            dataValidations: { far: { ranges: [range(11, 11, 5, 5)], order: 'a0', rule: dropdown('far') } },
+            conditionalFormats: formatsOf([greater([range(11, 11, 4, 4)]), greater([range(0, 2, 2, 2)], 1)]),
         };
         const s = columnC(seed);
         const ops = s.edit(s.a, pasteOn(1, 2));
         expect(writesTo(ops, 'dataValidations')).toEqual([]);
-        expect(writesTo(ops, 'conditionalFormatRules').map((op) => op.path)).toEqual([['conditionalFormatRules', 1]]);
+        expect(writesTo(ops, 'conditionalFormats').map((op) => op.path)).toEqual([['conditionalFormats', 'f2']]);
         const u = columnC(seed);
         expectUndoRestores(u, () => u.edit(u.a, pasteOn(1, 2)));
     });
 
     test('a rule beside the area is not written, whatever its ranges look like', () => {
-        const s = columnC({ conditionalFormatRules: [greater([range(0, 0, 2, 2), range(1, 1, 2, 2)])] });
+        const s = columnC({ conditionalFormats: formatsOf([greater([range(0, 0, 2, 2), range(1, 1, 2, 2)])]) });
         const ops = s.edit(s.a, pasteOn(5, 5));
-        expect(writesTo(ops, 'conditionalFormatRules')).toEqual([]);
+        expect(writesTo(ops, 'conditionalFormats')).toEqual([]);
     });
 
     test("a peer's new rule sent at once survives a hole", () => {
-        const s = columnC({ conditionalFormatRules: [greater([range(0, 2, 2, 2)])] });
+        const s = columnC({ conditionalFormats: formatsOf([greater([range(0, 2, 2, 2)])]) });
         const mine = tabEdit(s.a, pasteOn(1, 2));
         const theirs = tabEdit(s.b, (ctx) => {
-            ctx.sheets[0].conditionalFormatRules?.push(greater([range(9, 9, 5, 5)], 1));
+            addFormat(ctx.sheets[0], 'f2', greater([range(9, 9, 5, 5)], 1));
         });
         tabReceive(s.a, theirs);
         tabReceive(s.b, mine);
         s.batches.push(theirs, mine);
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.conditionalFormatRules).toEqual([
+            expect(formatList(sheet.conditionalFormats)).toEqual([
                 greater([range(0, 0, 2, 2), range(2, 2, 2, 2)]),
                 greater([range(9, 9, 5, 5)], 1),
             ]);
@@ -489,7 +508,7 @@ describe('a source cell without a rule takes the destination rule away, cell by 
     test('on another sheet a paste takes the rule off the cell it lands on', () => {
         const s = columnC();
         s.edit(s.a, (ctx) => {
-            ctx.sheets[1].conditionalFormatRules = [greater([range(0, 2, 2, 2)])];
+            addFormat(ctx.sheets[1], 'f1', greater([range(0, 2, 2, 2)]));
         });
         s.edit(s.a, (ctx) => {
             ctx.selections = select(0, 0, 0, 0);
@@ -500,7 +519,7 @@ describe('a source cell without a rule takes the destination rule away, cell by 
             ctx.currentSheetId = ONE;
         });
         for (const sheet of s.everyone(TWO)) {
-            expect(sheet?.conditionalFormatRules).toEqual([greater([range(0, 0, 2, 2), range(2, 2, 2, 2)])]);
+            expect(formatList(sheet?.conditionalFormats)).toEqual([greater([range(0, 0, 2, 2), range(2, 2, 2, 2)])]);
         }
     });
 });
@@ -512,8 +531,8 @@ describe('a source with a rule extends it', () => {
                 d[0][3] = number(9);
             },
             {
-                dataValidations: { v: { ranges: [range(0, 0, 3, 3)], rule: dropdown('v') } },
-                conditionalFormatRules: [greater([range(0, 0, 3, 3)])],
+                dataValidations: { v: { ranges: [range(0, 0, 3, 3)], order: 'a0', rule: dropdown('v') } },
+                conditionalFormats: formatsOf([greater([range(0, 0, 3, 3)])]),
             },
         );
         for (const c of [4, 5]) {
@@ -525,7 +544,7 @@ describe('a source with a rule extends it', () => {
             });
         }
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.conditionalFormatRules).toEqual([greater([range(0, 0, 3, 5)])]);
+            expect(formatList(sheet.conditionalFormats)).toEqual([greater([range(0, 0, 3, 5)])]);
             expect(sheet.dataValidations?.v.ranges).toEqual([range(0, 0, 3, 5)]);
         });
     });
@@ -536,8 +555,8 @@ describe('a source with a rule extends it', () => {
                 d[0][0] = number(9);
             },
             {
-                dataValidations: { v: { ranges: [range(0, 0, 0, 0)], rule: dropdown('v') } },
-                conditionalFormatRules: [greater([range(0, 0, 0, 0)])],
+                dataValidations: { v: { ranges: [range(0, 0, 0, 0)], order: 'a0', rule: dropdown('v') } },
+                conditionalFormats: formatsOf([greater([range(0, 0, 0, 0)])]),
             },
         );
         for (const c of [0, 1]) {
@@ -551,9 +570,9 @@ describe('a source with a rule extends it', () => {
             });
         }
         for (const sheet of s.everyone(TWO)) {
-            expect(sheet?.conditionalFormatRules).toEqual([greater([range(0, 0, 0, 1)])]);
+            expect(formatList(sheet?.conditionalFormats)).toEqual([greater([range(0, 0, 0, 1)])]);
             expect(Object.values(sheet?.dataValidations ?? {})).toEqual([
-                { ranges: [range(0, 0, 0, 1)], rule: dropdown('v') },
+                { ranges: [range(0, 0, 0, 1)], order: 'a0', rule: dropdown('v') },
             ]);
         }
     });
@@ -563,7 +582,7 @@ describe('a source with a rule extends it', () => {
             (d) => {
                 d[0][0] = number(9);
             },
-            { dataValidations: { v: { ranges: [range(0, 2, 0, 0)], rule: dropdown('v') } } },
+            { dataValidations: { v: { ranges: [range(0, 2, 0, 0)], order: 'a0', rule: dropdown('v') } } },
         );
         const ops = s.edit(s.a, (ctx) => {
             ctx.selections = select(0, 0, 0, 0);
@@ -580,15 +599,15 @@ describe('a source with a rule extends it', () => {
                 d[0][5] = number(9);
             },
             {
-                dataValidations: { v: { ranges: [range(0, 0, 5, 5)], rule: dropdown('v') } },
-                conditionalFormatRules: [greater([range(0, 0, 5, 5)])],
+                dataValidations: { v: { ranges: [range(0, 0, 5, 5)], order: 'a0', rule: dropdown('v') } },
+                conditionalFormats: formatsOf([greater([range(0, 0, 5, 5)])]),
             },
         );
         s.edit(s.a, (ctx) => {
             dragFill(ctx, range(0, 0, 5, 5), range(1, 3, 5, 5), 'down');
         });
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([range(0, 3, 5, 5)]);
+            expect(formatList(sheet.conditionalFormats)[0].ranges).toEqual([range(0, 3, 5, 5)]);
             expect(sheet.dataValidations?.v.ranges).toEqual([range(0, 3, 5, 5)]);
         });
     });
@@ -596,13 +615,13 @@ describe('a source with a rule extends it', () => {
 
 describe('a tab, a peer and a joiner agree through a whole session', () => {
     // What anyone can see of a sheet: its cells' formulas, values and formats, and the side tables.
-    const seen = ({ data, config, dataValidations, conditionalFormatRules }: Sheet) => ({
+    const seen = ({ data, config, dataValidations, conditionalFormats }: Sheet) => ({
         cells: data?.map((row) =>
             row.map((cell) => (cell ? { f: cell.f, v: cell.v, bg: cell.bg, t: cell.ct?.t, link: cell.link } : null)),
         ),
         borderInfo: config?.borderInfo,
         dataValidations,
-        conditionalFormatRules,
+        conditionalFormats,
     });
 
     test('a sort, a fill and a paste, each undone and redone', () => {
@@ -621,8 +640,8 @@ describe('a tab, a peer and a joiner agree through a whole session', () => {
             },
             {
                 config: { borderInfo: { '0_1': { t: SIDE } } },
-                dataValidations: { v: { ranges: [range(0, 5, 2, 2)], rule: dropdown('v') } },
-                conditionalFormatRules: [formula([range(0, 5, 1, 1)], '=B1>1')],
+                dataValidations: { v: { ranges: [range(0, 5, 2, 2)], order: 'a0', rule: dropdown('v') } },
+                conditionalFormats: formatsOf([formula([range(0, 5, 1, 1)], '=B1>1')]),
             },
         );
         const edits: ((ctx: Context) => void)[] = [
@@ -660,7 +679,7 @@ describe('a tab, a peer and a joiner agree through a whole session', () => {
         expect(sheet.data?.[0][0]).toMatchObject({ f: '=B1*2', v: 2 });
         expect(cellLinks(sheet)['2_2']).toEqual(LINK);
         expect(sheet.config?.borderInfo?.['0_1']).toEqual({ t: SIDE });
-        expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([range(0, 0, 1, 1), range(2, 5, 1, 1)]);
+        expect(formatList(sheet.conditionalFormats)[0].ranges).toEqual([range(0, 0, 1, 1), range(2, 5, 1, 1)]);
     });
 });
 
@@ -704,8 +723,8 @@ describe('a fill lands through the carry', () => {
             },
             {
                 config: { rowhidden: { 2: 0 } },
-                dataValidations: { v: { ranges: [range(0, 0, 0, 0)], rule: dropdown('v') } },
-                conditionalFormatRules: [greater([range(0, 0, 0, 0)])],
+                dataValidations: { v: { ranges: [range(0, 0, 0, 0)], order: 'a0', rule: dropdown('v') } },
+                conditionalFormats: formatsOf([greater([range(0, 0, 0, 0)])]),
             },
         );
         s.edit(s.a, fillDown([0, 0], [1, 3]));
@@ -714,7 +733,7 @@ describe('a fill lands through the carry', () => {
             expect(cellLinks(sheet)).toEqual({ '0_0': LINK, '1_0': LINK, '3_0': LINK });
             expect(validationAt(sheet.dataValidations, 2, 0)).toBeUndefined();
             expect(validationAt(sheet.dataValidations, 3, 0)).toEqual(dropdown('v'));
-            expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([range(0, 1, 0, 0), range(3, 3, 0, 0)]);
+            expect(formatList(sheet.conditionalFormats)[0].ranges).toEqual([range(0, 1, 0, 0), range(3, 3, 0, 0)]);
         });
     });
 
@@ -727,14 +746,14 @@ describe('a fill lands through the carry', () => {
             },
             {
                 config: { colhidden: { 1: 0 } },
-                conditionalFormatRules: [greater([range(0, 0, 0, 2)])],
+                conditionalFormats: formatsOf([greater([range(0, 0, 0, 2)])]),
             },
         );
         s.edit(s.a, fillDown([0, 0], [1, 2], 0, 2));
         expectEveryoneAgrees(s, (sheet) => {
             expect(shown(sheet, 1, 1)).toBeUndefined();
             expect(shown(sheet, 1, 2)).toBe('c');
-            expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([
+            expect(formatList(sheet.conditionalFormats)[0].ranges).toEqual([
                 range(0, 0, 0, 2),
                 range(1, 2, 0, 0),
                 range(1, 2, 2, 2),
@@ -748,11 +767,11 @@ describe('a fill lands through the carry', () => {
                 d[0][0] = number(1);
                 d[1][0] = text('x');
             },
-            { conditionalFormatRules: [greater([range(0, 0, 0, 0)])] },
+            { conditionalFormats: formatsOf([greater([range(0, 0, 0, 0)])]) },
         );
         s.edit(s.a, fillDown([0, 1], [2, 5]));
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([
+            expect(formatList(sheet.conditionalFormats)[0].ranges).toEqual([
                 range(0, 0, 0, 0),
                 range(2, 2, 0, 0),
                 range(4, 4, 0, 0),
@@ -765,7 +784,7 @@ describe('a fill lands through the carry', () => {
             (d) => {
                 d[0][0] = number(7);
             },
-            { conditionalFormatRules: [greater([range(0, 0, 0, 0)])] },
+            { conditionalFormats: formatsOf([greater([range(0, 0, 0, 0)])]) },
         );
         expectUndoRestores(s, () => s.edit(s.a, fillDown([0, 0], [1, 3])));
     });
@@ -775,18 +794,18 @@ describe('a fill lands through the carry', () => {
             (d) => {
                 d[0][0] = number(7);
             },
-            { conditionalFormatRules: [greater([range(0, 0, 0, 0)])] },
+            { conditionalFormats: formatsOf([greater([range(0, 0, 0, 0)])]) },
         );
         const mine = tabEdit(s.a, fillDown([0, 0], [1, 3]));
         const theirs = tabEdit(s.b, (ctx) => {
-            ctx.sheets[0].conditionalFormatRules?.push(greater([range(9, 9, 5, 5)], 1));
+            addFormat(ctx.sheets[0], 'f2', greater([range(9, 9, 5, 5)], 1));
         });
-        expect(writesTo(mine, 'conditionalFormatRules').map((op) => op.path)).toEqual([['conditionalFormatRules', 0]]);
+        expect(writesTo(mine, 'conditionalFormats').map((op) => op.path)).toEqual([['conditionalFormats', 'f1']]);
         tabReceive(s.a, theirs);
         tabReceive(s.b, mine);
         s.batches.push(theirs, mine);
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.conditionalFormatRules).toEqual([
+            expect(formatList(sheet.conditionalFormats)).toEqual([
                 greater([range(0, 3, 0, 0)]),
                 greater([range(9, 9, 5, 5)], 1),
             ]);
@@ -800,7 +819,7 @@ describe('a fill lands through the carry', () => {
                 d[5][0] = text('plain');
             },
             {
-                conditionalFormatRules: [greater([range(4, 4, 0, 0)])],
+                conditionalFormats: formatsOf([greater([range(4, 4, 0, 0)])]),
             },
         );
         s.edit(s.a, (ctx) => {
@@ -808,7 +827,7 @@ describe('a fill lands through the carry', () => {
         });
         expectEveryoneAgrees(s, (sheet) => {
             expect(Object.keys(cellLinks(sheet)).sort()).toEqual(['0_0', '2_0', '4_0']);
-            expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([
+            expect(formatList(sheet.conditionalFormats)[0].ranges).toEqual([
                 range(4, 4, 0, 0),
                 range(0, 0, 0, 0),
                 range(2, 2, 0, 0),
@@ -829,12 +848,12 @@ describe('a paste joins the rule on the sheet', () => {
             pasteCopy(ctx);
             ctx.currentSheetId = ONE;
         };
-    const withRule = (rule: ConditionalFormatRule) =>
+    const withRule = (rule: CfRule) =>
         session(
             (d) => {
                 d[1][1] = number(9);
             },
-            { conditionalFormatRules: [rule] },
+            { conditionalFormats: formatsOf([rule]) },
         );
 
     test('a copy adds no second rule, however often it lands', () => {
@@ -843,30 +862,32 @@ describe('a paste joins the rule on the sheet', () => {
         s.edit(s.a, copyPaste([1, 1, 1, 1], [6, 1]));
         s.edit(s.a, copyPaste([1, 1, 1, 1], [6, 1]));
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.conditionalFormatRules).toEqual([greater([range(1, 1, 1, 1), range(5, 6, 1, 1)])]);
+            expect(formatList(sheet.conditionalFormats)).toEqual([greater([range(1, 1, 1, 1), range(5, 6, 1, 1)])]);
         });
     });
 
     test('and writes that one entry, which an undo restores', () => {
         const s = withRule(greater([range(1, 1, 1, 1)]));
         const ops = s.edit(s.a, copyPaste([1, 1, 1, 1], [5, 1]));
-        expect(writesTo(ops, 'conditionalFormatRules').map((op) => op.path)).toEqual([['conditionalFormatRules', 0]]);
+        expect(writesTo(ops, 'conditionalFormats').map((op) => op.path)).toEqual([['conditionalFormats', 'f1']]);
         s.undo(s.a);
-        expect(s.b.ctx.sheets[0].conditionalFormatRules).toEqual([greater([range(1, 1, 1, 1)])]);
+        expect(formatList(s.b.ctx.sheets[0].conditionalFormats)).toEqual([greater([range(1, 1, 1, 1)])]);
     });
 
     test('a formula rule keeps its corner, so a copy above it stays alive', () => {
         const s = withRule(formula([range(4, 9, 0, 0)], '=A4>0'));
         s.edit(s.a, copyPaste([4, 4, 0, 0], [0, 0]));
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.conditionalFormatRules).toEqual([formula([range(4, 9, 0, 0), range(0, 0, 0, 0)], '=A4>0')]);
+            expect(formatList(sheet.conditionalFormats)).toEqual([
+                formula([range(4, 9, 0, 0), range(0, 0, 0, 0)], '=A4>0'),
+            ]);
         });
     });
 
     test('a copy onto a cell the rule covers changes nothing of the rule', () => {
         const s = withRule(greater([range(1, 5, 1, 1)]));
         const ops = s.edit(s.a, copyPaste([1, 1, 1, 1], [3, 1]));
-        expect(writesTo(ops, 'conditionalFormatRules')).toEqual([]);
+        expect(writesTo(ops, 'conditionalFormats')).toEqual([]);
     });
 
     test('on another sheet a second paste joins the rule the first one made', () => {
@@ -874,7 +895,9 @@ describe('a paste joins the rule on the sheet', () => {
         s.edit(s.a, copyPaste([1, 1, 1, 1], [3, 3], { sheet: TWO }));
         s.edit(s.a, copyPaste([1, 1, 1, 1], [7, 2], { sheet: TWO }));
         for (const sheet of s.everyone(TWO)) {
-            expect(sheet?.conditionalFormatRules).toEqual([formula([range(3, 3, 3, 3), range(7, 7, 2, 2)], '=D4>0')]);
+            expect(formatList(sheet?.conditionalFormats)).toEqual([
+                formula([range(3, 3, 3, 3), range(7, 7, 2, 2)], '=D4>0'),
+            ]);
         }
     });
 
@@ -883,23 +906,23 @@ describe('a paste joins the rule on the sheet', () => {
             (d) => {
                 d[1][1] = number(9);
             },
-            { conditionalFormatRules: [greater([range(1, 1, 1, 1)]), greater([range(9, 9, 5, 5)])] },
+            { conditionalFormats: formatsOf([greater([range(1, 1, 1, 1)]), greater([range(9, 9, 5, 5)])]) },
         );
         const ops = s.edit(s.a, copyPaste([1, 1, 1, 1], [5, 1], { cut: true }));
-        expect(writesTo(ops, 'conditionalFormatRules').map((op) => op.path)).toEqual([['conditionalFormatRules', 0]]);
+        expect(writesTo(ops, 'conditionalFormats').map((op) => op.path)).toEqual([['conditionalFormats', 'f1']]);
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([range(5, 5, 1, 1)]);
+            expect(formatList(sheet.conditionalFormats)[0].ranges).toEqual([range(5, 5, 1, 1)]);
         });
     });
 
     test("a cut to another sheet keeps a peer's rule on both sheets", () => {
         const s = withRule(greater([range(1, 2, 1, 1)]));
         const ops = s.edit(s.a, copyPaste([1, 1, 1, 1], [3, 3], { cut: true, sheet: TWO }));
-        for (const op of writesTo(ops, 'conditionalFormatRules')) expect(op.path.length).toBe(2);
+        for (const op of writesTo(ops, 'conditionalFormats')) expect(op.path.length).toBe(2);
         const [one] = s.everyone(ONE);
         const [two] = s.everyone(TWO);
-        expect(one?.conditionalFormatRules?.[0].cellrange).toEqual([range(2, 2, 1, 1)]);
-        expect(two?.conditionalFormatRules?.[0].cellrange).toEqual([range(3, 3, 3, 3)]);
+        expect(formatList(one?.conditionalFormats)[0].ranges).toEqual([range(2, 2, 1, 1)]);
+        expect(formatList(two?.conditionalFormats)[0].ranges).toEqual([range(3, 3, 3, 3)]);
     });
 });
 
@@ -922,14 +945,14 @@ describe('the format painter lands rules as a copy does', () => {
                 config: { rowhidden: { 1: 0 } },
                 filter: { 0: { rowhidden: { 1: 0 }, optionstate: true, str: 0, edr: 2, cindex: 0, stc: 0, edc: 0 } },
                 // The rule covers only the row the filter hides and the last one.
-                conditionalFormatRules: [greater([range(1, 2, 0, 0)])],
+                conditionalFormats: formatsOf([greater([range(1, 2, 0, 0)])]),
             },
         );
         s.edit(s.a, paint([5, 6, 2, 2]));
         s.edit(s.a, paint([5, 6, 2, 2]));
         expectEveryoneAgrees(s, (sheet) => {
             // The carried rows are 0 and 2, so only the second landed row is inside the rule.
-            expect(sheet.conditionalFormatRules).toEqual([greater([range(1, 2, 0, 0), range(6, 6, 2, 2)])]);
+            expect(formatList(sheet.conditionalFormats)).toEqual([greater([range(1, 2, 0, 0), range(6, 6, 2, 2)])]);
         });
     });
 });

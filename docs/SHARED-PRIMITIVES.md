@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2159 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2155 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -562,7 +562,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (452)
+## Types (448)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -625,16 +625,15 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CellStyle` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellType` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellWithRowAndCol` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `ColorGradationRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `ConditionalFormatConditionName` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `ConditionalFormatRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `DataBarRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `DataValidationRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `DefaultConditionalFormatRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `InlineStringSegment` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `MergeCell` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Op` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Range` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `RangeRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Sheet` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetChart` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetConfig` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
@@ -836,7 +835,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ChartShape` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartSpec` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartSpecChange` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
-| `ChartSpecKeyedPart` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartSpecOp` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartSpecPart` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartSpecPartKey` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
@@ -849,8 +847,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `LegendPosition` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `RangeChartData` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `RangeChartSeries` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
-| `SheetChartSpecParts` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
-| `SheetChartSpecWrite` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `StoredChartSpec` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `Command` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `CommandContext` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
@@ -1154,7 +1150,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `chartPaintOf` | `@workspace/lib/charts` | packages/lib/src/charts/look.ts |
 | `chartPointColor` | `@workspace/lib/charts` | packages/lib/src/charts/defaults.ts |
 | `chartPointIndex` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
-| `chartPointMoves` | `@workspace/lib/charts` | packages/lib/src/charts/change.ts |
 | `chartSearchText` | `@workspace/lib/charts` | packages/lib/src/charts/resolve.ts |
 | `chartSeriesStyle` | `@workspace/lib/charts` | packages/lib/src/charts/defaults.ts |
 | `chartSpecChange` | `@workspace/lib/charts` | packages/lib/src/charts/change.ts |
@@ -1176,28 +1171,22 @@ rather than inlining `queryClient.invalidateQueries`.
 | `inlineRowCount` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
 | `isCellRangeShape` | `@workspace/lib/charts` | packages/lib/src/charts/resolve.ts |
 | `isChartSeriesId` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
-| `isChartSpecKey` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
-| `isChartSpecPartKey` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `isInlineSketchCapped` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `isSketchCapped` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `layoutChart` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `layoutChartMessage` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
-| `mapChartSpecParts` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `MAX_CHART_LABEL_LENGTH` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
 | `MAX_CHART_POINTS` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
 | `MAX_CHART_SERIES` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
 | `MAX_CHART_SPEC_BYTES` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
-| `MAX_CHART_SPEC_ENTRIES` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
 | `MAX_SKETCH_POINTS` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `newChartSeriesId` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
 | `newChartSpecParts` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
-| `newSheetChartSpecParts` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `numberDisplay` | `@workspace/lib/charts` | packages/lib/src/charts/number-display.ts |
 | `parseChartSpec` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `readChartLook` | `@workspace/lib/charts` | packages/lib/src/charts/look.ts |
 | `readChartSpec` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `sampleChartSpec` | `@workspace/lib/charts` | packages/lib/src/charts/defaults.ts |
-| `sheetChartSpecWrites` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `commandNeedsSpace` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `COMMANDS_HELP` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `formatChatPreview` | `@workspace/lib/chat` | packages/lib/src/core/chat/format-preview.ts |
@@ -1229,7 +1218,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `materializeClipboardSvg` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `needsReUpload` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `parseTsv` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/table.ts |
-| `pastedChartFields` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `readClipboardBox` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `readEigenClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `readEigenClipboardAsync` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -1630,34 +1618,37 @@ rather than inlining `queryClient.invalidateQueries`.
 | `borderSidesToCss` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `cellFontName` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
 | `cellFontSize` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
-| `chartsWithinEntryCap` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
 | `cloneSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
-| `coalescedRanges` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
+| `coalescedRanges` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `columnIndexToLabel` | `@workspace/lib/sheets` | packages/lib/src/sheets/labels.ts |
 | `columnLabelToIndex` | `@workspace/lib/sheets` | packages/lib/src/sheets/labels.ts |
-| `compareValidationIds` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
+| `compareRules` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `decodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `decodeSheetsWorkbook` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `encodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `EXCEL_FUTURE_FUNCTIONS` | `@workspace/lib/sheets` | packages/lib/src/sheets/excel-functions.ts |
 | `floatingItems` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
-| `floatingWriteFilter` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
 | `forEachInRect` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `freezesColumns` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `freezesRows` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isCellLinkType` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isCurrentSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `isExcelFunction` | `@workspace/lib/sheets` | packages/lib/src/sheets/excel-functions.ts |
+| `isOpBatch` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isPatchOp` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isStructuralBatch` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `MAX_VALIDATION_RANGES` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
-| `MAX_VALIDATIONS` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
+| `MAX_CONDITIONAL_FORMATS` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
+| `MAX_GRID_SLOTS` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `MAX_RULE_RANGES` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
+| `MAX_VALIDATIONS` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `mergedBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `mergeEdgeSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `nextFloatingIndex` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
+| `nextRuleOrder` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
+| `orderedRules` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `parseCellKey` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
-| `rangesOverlap` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
-| `readSheetsBase` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
+| `rangesOverlap` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
+| `readSheetsLog` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `readSheetsSnapshotJson` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `REFERENCE_COLUMN_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `REFERENCE_ROW_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
@@ -1667,18 +1658,22 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SHEET_DEFAULT_FONT` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
 | `SHEET_DEFAULT_FONT_SIZE` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `SHEET_DEFAULT_ROW_HEIGHT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `SHEET_KEYED_MAPS` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SHEET_ROW_HEADER_WIDTH` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `sheetColumnsWidth` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `sheetDefaultColWidth` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `sheetDefaultRowHeight` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `sheetFitsGrid` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `sheetFloatingBox` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
+| `sheetKeyedMaps` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `sheetRowsHeight` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `sheetsBatchOf` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetsLogStartsWith` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetsOpLog` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetsStateMap` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetTrackAt` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
-| `stampSheetsBase` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
-| `wellFormedValidations` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
+| `wellFormedConditionalFormats` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
+| `wellFormedValidations` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `writeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `fetchImportBlob` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `postImportBytes` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
@@ -1782,6 +1777,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CHART_SPEC_PARTS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `CHART_STACKINGS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `CHART_TYPES` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `isChartSpecPartKey` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `isStackingChartType` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `LEGEND_POSITIONS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `commentMapName` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |

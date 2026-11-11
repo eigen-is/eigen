@@ -1,10 +1,18 @@
 // A carry lands a block of cells somewhere else with what belongs to them: borders, validation rules, merges and
-// conditional formats, each keyed by the source cell it came from. A cell whose source has none of these loses its
-// own, one cell at a time, as in Excel. Paths such as a paste, a cut, a fill and the format painter land through
-// carryCells, and each one's callback says what of a source cell lands, its value and link included.
+// conditional formats, each keyed by the source cell it came from, and each changed rule written under its id. A cell
+// whose source has none of these loses its own, one cell at a time, as in Excel. Paths such as a paste, a cut, a fill
+// and the format painter land through carryCells, and each one's callback says what of a source cell lands, its value
+// and link included.
 
 import type { ConditionalFormatRule } from '@workspace/lib/sheets';
-import { coalescedRanges, compareValidationIds, rangesOverlap } from '@workspace/lib/sheets';
+import {
+    coalescedRanges,
+    MAX_CONDITIONAL_FORMATS,
+    MAX_RULE_RANGES,
+    nextRuleOrder,
+    orderedRules,
+    rangesOverlap,
+} from '@workspace/lib/sheets';
 import { cloneDeep, isEqual } from 'es-toolkit/compat';
 import { sheetFinder } from '../../engine/a1-notation';
 import { rangeWithout, withCfRanges } from '../../engine/conditional-format';
@@ -92,7 +100,7 @@ export function carryCells(
     lines: CarriedLines,
     tiles: readonly CarryTile[],
     land: (cell: LandingCell) => Cell | null,
-    { cut = false }: { cut?: boolean } = {},
+    cut = false,
 ) {
     const { rows, columns } = lines;
     const from = getSheet(ctx, { id: lines.sheetId });
@@ -181,8 +189,8 @@ export function carryCells(
     }
 }
 
-// A rule leaves the cells a carry lands on and a cut's source cells, and covers the cells whose source it covered. The
-// rules go in the lookup's order, so where two validations overlap a landed cell takes the one its source cell shows.
+// A rule leaves the cells a carry lands on and a cut's source cells, and covers the cells whose source it covered.
+// The landed cells join the source rule, or on another sheet a rule that says the same, else a new rule that goes last.
 function carryRules(
     ctx: Context,
     snapshot: Context,
@@ -209,70 +217,76 @@ function carryRules(
 
     // Worked out on a plain copy: a rule that ends as it was, after a paste inside its own cells, is not written.
     const before = held.dataValidations ?? {};
-    const after = { ...before };
-    const working = { ...held, dataValidations: after };
+    const working = { ...held, dataValidations: { ...before } };
     if (cut) clearValidations(sameSheet ? working : from, block);
     for (const area of landing) clearValidations(working, area);
-    const sources = Object.entries(read.dataValidations ?? {}).sort(([a], [b]) => compareValidationIds(a, b));
-    for (const [id, { ranges, rule }] of sources) {
+    for (const [id, { ranges, rule }] of orderedRules(read.dataValidations)) {
         const landed = landedOver(ranges);
         if (landed.length === 0) continue;
-        // On another sheet a landed rule joins one that says the same, or is a new one.
         const twin = sameSheet ? id : Object.keys(before).find((target) => isEqual(before[target].rule, rule));
         addValidation(working, twin ?? crypto.randomUUID(), rule, landed);
     }
-    for (const id of Object.keys({ ...before, ...after })) {
-        if (isEqual(before[id], after[id])) continue;
-        if (after[id]) (to.dataValidations ??= {})[id] = after[id];
-        else delete to.dataValidations?.[id];
-    }
+    writeChanged((to.dataValidations ??= {}), before, working.dataValidations);
 
-    if (sameSheet) {
-        const cleared = cut ? [block, ...landing] : landing;
-        writeCfRanges(to, read.conditionalFormatRules, cleared, ({ cellrange }) => landedOver(cellrange));
-        return;
-    }
-    const joining = new Map<ConditionalFormatRule, SingleRange[]>();
+    const formats = held.conditionalFormats ?? {};
+    const landedOn = new Map<string, SingleRange[]>();
     const added: ConditionalFormatRule[] = [];
-    for (const rule of read.conditionalFormatRules ?? []) {
-        const landed = landedOver(rule.cellrange);
+    for (const [id, rule] of orderedRules(read.conditionalFormats)) {
+        const landed = landedOver(rule.ranges);
         if (landed.length === 0) continue;
-        const twin = held.conditionalFormatRules?.find((target) =>
-            isEqual(withCfRanges(rule, target.cellrange), target),
-        );
-        if (twin) joining.set(twin, [...(joining.get(twin) ?? []), ...landed]);
-        else added.push(withCfRanges(rule, coalescedRanges(landed)));
+        // On another sheet a rule joins one that would say the same over its ranges, whatever its place in the order.
+        const onto = ({ ranges, order }: ConditionalFormatRule) => ({ ...withCfRanges(rule, ranges), order });
+        const twin = sameSheet ? id : Object.keys(formats).find((key) => isEqual(onto(formats[key]), formats[key]));
+        if (twin === undefined) added.push(withCfRanges(rule, coalescedRanges(landed)));
+        else landedOn.set(twin, [...(landedOn.get(twin) ?? []), ...landed]);
     }
-    if (cut) writeCfRanges(from, read.conditionalFormatRules, [block], () => []);
-    writeCfRanges(to, held.conditionalFormatRules, landing, (rule) => joining.get(rule) ?? []);
-    if (added.length > 0) (to.conditionalFormatRules ??= []).push(...added);
+    const next = carriedFormats(formats, cut && sameSheet ? [block, ...landing] : landing, landedOn);
+    for (const rule of added) {
+        if (Object.keys(next).length >= MAX_CONDITIONAL_FORMATS) break;
+        next[crypto.randomUUID()] = { ...rule, order: nextRuleOrder(next) };
+    }
+    writeChanged((to.conditionalFormats ??= {}), formats, next);
+    if (cut && !sameSheet) {
+        const source = read.conditionalFormats ?? {};
+        writeChanged((from.conditionalFormats ??= {}), source, carriedFormats(source, [block], new Map()));
+    }
 }
 
-// Rewrites the rules of a sheet that lose the cleared areas or gain landed ranges, read from their plain view. Only a
-// rule that changes is written, as its own entry, so a peer's rule beside it survives.
-function writeCfRanges(
-    sheet: Sheet,
-    rules: readonly ConditionalFormatRule[] | undefined,
+// A sheet's conditional formats without the cleared areas and with the ranges landed on each rule; a rule left with
+// no cell goes, and one that would pass the range cap stays as it was.
+function carriedFormats(
+    rules: Readonly<Record<string, ConditionalFormatRule>>,
     cleared: readonly SingleRange[],
-    landedOf: (rule: ConditionalFormatRule) => readonly SingleRange[],
-) {
-    const written = sheet.conditionalFormatRules;
-    if (!rules || !written) return;
-    const emptied: number[] = [];
-    for (const [i, rule] of rules.entries()) {
-        const landed = landedOf(rule);
-        const touched = rule.cellrange.some((range) => cleared.some((area) => rangesOverlap(range, area)));
+    landedOn: ReadonlyMap<string, readonly SingleRange[]>,
+): Record<string, ConditionalFormatRule> {
+    const next = { ...rules };
+    for (const [id, rule] of Object.entries(rules)) {
+        const landed = landedOn.get(id) ?? [];
+        const touched = rule.ranges.some((range) => cleared.some((area) => rangesOverlap(range, area)));
         if (!touched && landed.length === 0) continue;
         const kept = cleared.reduce<SingleRange[]>(
             (ranges, area) => ranges.flatMap((range) => rangeWithout(range, area)),
-            rule.cellrange,
+            rule.ranges,
         );
-        const next = joinedRanges(kept, landed);
-        if (next.length === 0) emptied.push(i);
-        // A fill or a paste inside a rule's own cells leaves the rule as it was, unless it lands on the corner.
-        else if (!isEqual(next, rule.cellrange)) written[i] = withCfRanges(rule, next);
+        const ranges = joinedRanges(kept, landed);
+        if (ranges.length === 0) delete next[id];
+        else if (ranges.length <= MAX_RULE_RANGES) next[id] = withCfRanges(rule, ranges);
     }
-    for (const i of emptied.reverse()) written.splice(i, 1);
+    return next;
+}
+
+// Writes the rules that differ from the plain view they were read from, each under its id, so a peer's rule beside
+// them survives, and a fill or a paste inside a rule's own cells writes nothing.
+function writeChanged<R>(
+    written: Record<string, R>,
+    before: Readonly<Record<string, R>>,
+    after: Readonly<Record<string, R>>,
+) {
+    for (const id of Object.keys({ ...before, ...after })) {
+        if (isEqual(before[id], after[id])) continue;
+        if (after[id]) written[id] = after[id];
+        else delete written[id];
+    }
 }
 
 // A rule's ranges with the landed ones joined. A formula reads relative to the first range's corner, so that corner
@@ -305,7 +319,7 @@ export function moveCells(ctx: Context, lines: CarriedLines, range: SingleRange,
                       ...cloneDeep(source),
                       f: `=${moveFormulaRefs(source.f, range, rowOffset, colOffset, from, to, findSheet)}`,
                   },
-        { cut: true },
+        true,
     );
 }
 

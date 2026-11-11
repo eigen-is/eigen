@@ -6,9 +6,14 @@
 
 import { isRecord } from '@workspace/lib/guards';
 import type { Op, Sheet } from '@workspace/lib/sheets';
-import { isPatchOp, isStructuralBatch, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
-import { opToPatchOnSheets, sheetHoldsNoBadLink } from '@workspace/lib/sheets/yjs-ops';
-import { enablePatches, Immer } from 'immer';
+import {
+    isPatchOp,
+    isStructuralBatch,
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+    sheetFitsGrid,
+} from '@workspace/lib/sheets';
+import { applySheetWrites, opToPatchOnSheets, sheetHoldsNoBadLink } from '@workspace/lib/sheets/yjs-ops';
 import { sheetNameKey } from './a1-notation';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
@@ -24,12 +29,6 @@ import type { RenameSheetOp } from './sheet-name';
 import { applySheetDelete, applySheetRename, legalSheetNames } from './sheet-name';
 import type { ShiftedSheet } from './types';
 import { error } from './validation';
-
-// immer's patch plugin is global, and enabling it twice is harmless. Enabling it here means every caller of
-// replaySheetsOps has it without a setup step of its own.
-enablePatches();
-// The replay copies what it changes and nothing reads its sheets as frozen, so freezing them would be time for nothing.
-const immer = new Immer({ autoFreeze: false });
 
 type InsertValue = Omit<InsertRowColOp, 'id'>;
 type DeleteValue = Omit<DeleteRowColOp, 'id'>;
@@ -88,8 +87,8 @@ export function* replaySheetsSteps(
 // A row or column op a batch applied, with the sheets as they were before it.
 type AppliedRowColOp = { op: InsertRowColOp | DeleteRowColOp; sheets: Sheet[] };
 
-// One batch on plain sheets, as every reader applies it: sheet, row and column ops, then patches, then the recompute
-// they ask for, with `graph` following. A failed op throws; a recompute past `budgets` comes back as `skipped`.
+// One batch on plain sheets, as every reader applies it. A refused sheet, row or column op throws, a write whose
+// parent is gone is skipped alone, and a recompute past `budgets` comes back as `skipped`.
 export function applySheetsBatch(
     sheets: Sheet[],
     batch: Op[],
@@ -114,8 +113,7 @@ export function applySheetsBatch(
         batch.flatMap((op) => ((op.path[0] === 'data' || isRowColOp(op)) && op.id ? [op.id] : [])),
     );
     result = result.map((s) => (dataOpIds.has(s.id) ? withMaterializedData(s) : s));
-    // opToPatchOnSheets finds a sheet by its place in the array, so the sheet and row ops settle the array before the
-    // patches resolve.
+    // A write finds its sheet by its place in the array, so the sheet and row ops settle the array before the writes.
     for (const op of batch) {
         if (op.op === 'addSheet') {
             if (!isNewSheet(op.value, result)) {
@@ -143,11 +141,10 @@ export function applySheetsBatch(
             held = null;
         }
     }
-    const normalOps = batch.filter(isPatchOp);
-    const [patches] = opToPatchOnSheets(result, normalOps);
-    result = immer.applyPatches(result, patches);
+    const written = applySheetWrites(result, opToPatchOnSheets(result, batch));
+    result = written.sheets;
     if (hidesEverySheet(sheets, result)) throw new Error('A batch may not hide or delete every sheet');
-    if (patches.length > 0) withinBudget(() => held?.followPatches(result, patches));
+    if (written.applied.length > 0) withinBudget(() => held?.followPatches(result, written.applied));
     const seeds = seedsOf(batch, moved, result);
     let skipped: RangeError | null = null;
     if (seeds) {
@@ -271,7 +268,7 @@ function isNewSheet(v: unknown, sheets: readonly Sheet[]): v is Sheet {
     if (celldata != null && !(Array.isArray(celldata) && celldata.every(isRecord))) return false;
     if (config != null && !isRecord(config)) return false;
     if (typeof id !== 'string' || typeof name !== 'string') return false;
-    return !sheets.some((s) => s.id === id) && sheetHoldsNoBadLink(v);
+    return !sheets.some((s) => s.id === id) && sheetHoldsNoBadLink(v) && sheetFitsGrid(v);
 }
 
 // Whether a step leaves no sheet shown where one was. Two tabs each hiding or deleting one of the last two sheets shown
@@ -286,8 +283,8 @@ export function isRowColOp(op: Op): boolean {
     return op.op === 'insertRowCol' || op.op === 'deleteRowCol';
 }
 
-// The editor writes into `images` and `charts` key by key, and a patch against a missing collection fails and takes
-// its whole batch down, so every sheet leaves the replay with them.
+// The editor writes into `images` and `charts` key by key, and a write into a missing collection is skipped, so every
+// sheet enters the replay with them.
 function withNormalizedSheet(s: Sheet): Sheet {
     const next = { ...s, config: { ...s.config } };
     normalizeSheetConfig(next);

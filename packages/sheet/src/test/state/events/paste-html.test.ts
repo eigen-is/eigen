@@ -1,5 +1,10 @@
 import { describe, expect, it, spyOn } from 'bun:test';
-import { SHEET_DEFAULT_FONT_SIZE, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import {
+    MAX_GRID_SLOTS,
+    REFERENCE_COLUMN_COUNT,
+    SHEET_DEFAULT_FONT_SIZE,
+    SHEET_DEFAULT_ROW_HEIGHT,
+} from '@workspace/lib/sheets';
 import { pick } from 'es-toolkit/compat';
 import { Window } from 'happy-dom';
 import { produce, produceWithPatches } from 'immer';
@@ -620,6 +625,30 @@ describe('a refused paste writes nothing', () => {
         expect(next.warnDialog).toBe(
             `This action would increase the number of columns in the workbook above the limit of ${MAX_SHEET_COLUMN_COUNT}.`,
         );
+    });
+
+    // An imported sheet as wide as Excel's holds as many rows as the slot bound leaves it, and a paste may not add one.
+    // The rows share one array, which a refused paste never writes, and no draft, since immer would walk every slot.
+    it('text that grows the grid past the slot bound says so and writes nothing', () => {
+        const rows = Math.floor(MAX_GRID_SLOTS / REFERENCE_COLUMN_COUNT);
+        const ctx = makeCtx(1, 1);
+        const row = new Array(REFERENCE_COLUMN_COUNT).fill(null);
+        ctx.sheets[0].data = new Array(rows).fill(row);
+        ctx.selections = single(rows - 1, 0);
+        handlePaste(ctx, clipboardWith({ text: '9\n8' }));
+        expect(ctx.warnDialog).toBe(
+            'This action would increase the number of cells in the workbook above the limit of 110,000,000.',
+        );
+        expect(ctx.sheets[0].data).toHaveLength(rows);
+        expect(row.every((cell) => cell === null)).toBe(true);
+        expect(pick(ctx.sheets[0], ['row', 'column'])).toEqual({});
+
+        ctx.sheets[0].data = new Array(rows - 1).fill(row);
+        ctx.selections = single(rows - 2, 0);
+        ctx.warnDialog = undefined;
+        handlePaste(ctx, clipboardWith({ text: '9\n8' }));
+        expect(ctx.warnDialog).toBeUndefined();
+        expect(pick(ctx.sheets[0], ['row', 'column'])).toEqual({ row: rows, column: REFERENCE_COLUMN_COUNT });
     });
 
     for (const cut of [false, true]) {

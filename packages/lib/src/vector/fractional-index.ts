@@ -5,11 +5,8 @@
 
 const BASE_62_DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
-// `a` may be empty string, `b` is null or non-empty string.
-// `a < b` lexicographically if `b` is non-null.
-// no trailing zeros allowed.
-// digits is a string such as '0123456789' for base 10. Digits must be in
-// ascending character code order!
+// `a` may be empty and sorts before `b`, which is null or not empty. Neither ends in the zero digit. `digits` lists
+// the base's digits in ascending character code order.
 function midpoint(a: string, b: string | null | undefined, digits: string): string {
     const zero = digits[0];
     if (b != null && a >= b) {
@@ -246,13 +243,17 @@ export function generateNKeysBetween(
 
 type IndexedElement = { id: string; index: string };
 
+// Making the next key walks the last one character by character, so a peer's key of 40,000 would overflow the stack.
+// A key is at most 27 characters plus one for about every five inserts into one gap, so 128 leaves room for about 500.
+const MAX_KEY_LENGTH = 128;
+
 // Format-check `index`, then confirm it sits strictly between its neighbors.
 export function isValidFractionalIndex(
     index: string | undefined,
     predecessor: string | undefined,
     successor: string | undefined,
 ): boolean {
-    if (!index) {
+    if (!index || index.length > MAX_KEY_LENGTH) {
         return false;
     }
     try {
@@ -344,9 +345,8 @@ function getInvalidIndicesGroups(elements: readonly IndexedElement[]): number[][
     return indicesGroups;
 }
 
-// Repairs every invalid index so the keys follow the array's order, writing `index` in place. Use it on load or
-// restore, when nobody knows which elements moved. Excalidraw warns that it can then rewrite an element that did not
-// move, because the array alone can't tell which ones did.
+// Repairs every invalid index so the keys follow the array's order, writing `index` in place, for a load or a
+// restore. The array alone can't tell which elements moved, so it can rewrite one that did not.
 export function syncInvalidIndices<T extends IndexedElement>(elements: T[]): T[] {
     for (const indices of getInvalidIndicesGroups(elements)) {
         const lowerBoundIndex = indices.shift();
@@ -364,10 +364,8 @@ export function syncInvalidIndices<T extends IndexedElement>(elements: T[]): T[]
     return elements;
 }
 
-// `count` keys that place records directly after `afterId` in `ordered` (orderByFractionalIndex's order, key then id):
-// at the front for null, at the end when no record has that id. Records sharing the anchor's key, which concurrent
-// inserts leave behind, have no key between them, so the keys go above all of them: a key between two equal bounds
-// can't exist (generateKeyBetween throws), and this never asks for one.
+// `count` keys that place records directly after `afterId` in `ordered`: at the front for null, at the end when no
+// record has that id. Records that share the anchor's key have no key between them, so the keys go above all of them.
 export function keysAfter(ordered: readonly IndexedElement[], afterId: string | null, count: number): string[] {
     if (afterId === null) return generateNKeysBetween(null, ordered[0]?.index ?? null, count);
     const anchor = ordered.find((e) => e.id === afterId)?.index;
@@ -377,12 +375,8 @@ export function keysAfter(ordered: readonly IndexedElement[], afterId: string | 
 
 export type ZOp = 'backward' | 'forward' | 'toBack' | 'toFront';
 
-// The index writes for a z-order change, {id, index} per element whose key changes, [] for a no-op. The
-// selection moves as a block relative to the non-selected elements, so a non-contiguous selection collapses
-// into one clean gap (Excalidraw's raise/lower); for one element it is a one-step swap. Elements order by
-// index, then id, and the block goes after its anchor through keysAfter. A tied or malformed key is repaired
-// first and the repair rides along in the writes, so a block moved below a tied element lands below it, not
-// above the tie.
+// The index writes for a z-order change, one per element whose key changes. The selection moves as one block among
+// the other elements, as Excalidraw's does, and a tied or malformed key is repaired first, its repair among the writes.
 export function zOrderKeys(
     elements: readonly IndexedElement[],
     selectedIds: readonly string[],

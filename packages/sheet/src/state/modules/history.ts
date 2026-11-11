@@ -1,17 +1,19 @@
 // What ⌘Z and ⌘⇧Z do in this tab. An edit is recorded as an entry of immer patches that names its sheet by id, and
 // undo and redo turn an entry into the next context and the batch to send. A cell or field entry skips a target a peer
-// changed since and recalculates the formulas it writes back. A structural entry, such as a row op or a rename, leaves
-// the stacks at a peer's first batch, so it always finds the workbook as it left it, and its step applies exactly the
-// ops it sends, through applyOpBatch, as its peers will. The Workbook keeps the stacks.
+// changed since, applies the rest through applySheetWrites and recalculates the formulas it writes back. A structural
+// entry, such as a row op or a rename, leaves the stacks at a peer's first batch, so its step finds the workbook as it
+// left it and applies exactly the ops it sends, through applyOpBatch. The Workbook keeps the stacks.
 
 import type { MergeCell } from '@workspace/lib/sheets';
+import { applySheetWrites } from '@workspace/lib/sheets/yjs-ops';
 import { get, isEqual } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
-import { applyPatches, produce, produceWithPatches } from 'immer';
+import { produce, produceWithPatches } from 'immer';
 import { computedKey, createArrayResolver } from '../../engine/cell-resolver';
 import { applyRowColOp, hidesEverySheet } from '../../engine/replay-ops';
 import { RowColError } from '../../engine/rowcol';
-import type { Cell, CellMatrix } from '../../engine/types';
+import { SHEET_CONFIG_COLLECTIONS } from '../../engine/sheet-config';
+import type { Cell, CellMatrix, ExtendedSheetConfig } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import type { FormulaCell, History, Op, Sheet } from '../types';
@@ -29,7 +31,6 @@ import {
     storedCopy,
 } from '../utils';
 import { applyOpBatch } from './apply-ops';
-import { withoutDeletedFloatingEdits } from './floating';
 import { execFunctionGroup } from './formula-exec';
 import { namesStructuralOp, unitOf } from './history-shift';
 import { settleCurrentSheet, shiftSheetOrders } from './sheet';
@@ -74,7 +75,7 @@ function rewrittenByDelete(before: Context, after: Context): Patch[] {
     const recorded: Patch[] = [];
     for (const sheet of after.sheets) {
         const was = getSheet(before, { id: sheet.id });
-        for (const field of ['data', 'conditionalFormatRules', 'dataValidations'] as const) {
+        for (const field of ['data', 'conditionalFormats', 'dataValidations'] as const) {
             if (was[field] === sheet[field]) continue;
             recorded.push({ op: 'replace', path: ['sheets', sheet.id, field], value: was[field] });
         }
@@ -163,7 +164,7 @@ function batchStep(ctx: Context, ops: Op[]): Step {
 // author here, so it moves the other sheets' orders itself and sends them.
 function sheetStep(ctx: Context, batch: (after: Sheet[]) => Op[], recorded: Patch[] = []): Step {
     const [sheetOp] = batch(ctx.sheets);
-    const restored = restoredOps(ctx.sheets, recorded);
+    const restored = restoredOps(ctx, ctx.sheets, recorded);
     const applied = applyOpBatch(ctx, [sheetOp, ...restored]);
     if (!applied) return { ctx, ops: [] };
     const next = produce(applied.ctx, (draft: Context) => {
@@ -181,33 +182,38 @@ function sheetStep(ctx: Context, batch: (after: Sheet[]) => Op[], recorded: Patc
 // A cell or field entry: `apply` goes in, and `written`, the entry's other side, says what the targets should hold.
 // The formula values the entry recorded were right for the inputs of their time, so the step recalculates them.
 function patchStep(ctx: Context, apply: Patch[], written: Patch[]): Step {
-    const kept = stillWritten(
-        ctx,
-        withoutDeletedFloatingEdits(ctx, atSheetIndex(ctx, apply)),
-        atSheetIndex(ctx, written),
-    );
-    const patches = withoutComputedValues(ctx, kept);
-    if (patches.length === 0) return { ctx, ops: [] };
-    const applied = applyPatches(ctx, patches);
+    const kept = stillWritten(ctx, atSheetIndex(ctx, apply), atSheetIndex(ctx, written));
+    const { sheets, patches } = appliedWrites(ctx, withoutComputedValues(ctx, kept));
     // Every reader refuses a batch that would leave no sheet shown, so the step does nothing instead.
-    if (hidesEverySheet(ctx.sheets, applied.sheets)) return { ctx, ops: [] };
-    const restored = produce(applied, settleCurrentSheet);
+    if (patches.length === 0 || hidesEverySheet(ctx.sheets, sheets)) return { ctx, ops: [] };
+    const restored = produce(ctx, (draft: Context) => {
+        draft.sheets = sheets;
+        settleCurrentSheet(draft);
+    });
     restored.formulaCache.followPatches(restored, patches);
     const [next, recalculated] = produceWithPatches(restored, (draft: Context) => recalculate(draft, patches));
     return { ctx: next, ops: patchToOp(ctx, next, [...patches, ...filterPatch(recalculated)]) };
 }
 
+// The sheets the patches leave and the patches that applied, by the rule every reader applies to the batch they
+// ship: a write into an object or a cell a peer deleted is left out.
+function appliedWrites(ctx: Context, patches: Patch[]): { sheets: Sheet[]; patches: Patch[] } {
+    const writes = patches.map((patch) => ({ ...patch, path: patch.path.slice(1) }));
+    const { sheets, applied } = applySheetWrites(ctx.sheets, writes);
+    return { sheets, patches: applied.map((write) => ({ ...write, path: ['sheets', ...write.path] })) };
+}
+
 // The patches without the value and display text a formula cell computes once they apply, since a peer may have
 // changed the formula or its inputs since. One the engine can't evaluate keeps them, as a recompute does.
 function withoutComputedValues(ctx: Context, patches: Patch[]): Patch[] {
-    const after = applyPatches(ctx, patches);
+    const after = appliedWrites(ctx, patches).sheets;
     const { engine } = ctx.formulaCache;
-    const resolver = createArrayResolver(after.sheets);
+    const resolver = createArrayResolver(after);
     return patches.filter(({ path }) => {
         const [, index, field, r, c, key] = path;
         if (field !== 'data' || path.length !== 6 || (key !== 'v' && key !== 'm')) return true;
         if (typeof index !== 'number' || typeof r !== 'number' || typeof c !== 'number') return true;
-        const { id, data } = after.sheets[index];
+        const { id, data } = after[index];
         const f = data?.[r]?.[c]?.f;
         return f == null || engine.cantEvaluate(f, engine.evaluate(f, id, resolver));
     });
@@ -237,23 +243,41 @@ function undoRowCol(ctx: Context, marker: Op, recorded: Patch[]): Step {
         if (e instanceof RowColError) return { ctx, ops: [] };
         throw e;
     }
-    const restored = restoredOps(moved, recorded);
-    const ops = [marker, ...restored];
-    const applied = applyOpBatch(ctx, ops);
-    return applied ? { ctx: applied.ctx, ops } : { ctx, ops: [] };
+    return batchStep(ctx, [marker, ...restoredOps(ctx, moved, recorded)]);
 }
 
-// The recorded writes `sheets` don't hold yet, the cells one by one.
-function restoredOps(sheets: Sheet[], recorded: Patch[]): Op[] {
+// The recorded writes `sheets` don't hold yet, the cells one by one and the config entry by entry.
+function restoredOps(ctx: Context, sheets: Sheet[], recorded: Patch[]): Op[] {
     const restored: Op[] = [];
     for (const { op, path, value } of recorded) {
         const [, id, ...rest] = path;
         const sheet = sheets.find((s) => s.id === id);
-        if (!sheet) continue;
+        if (!sheet || rest[0] === 'config') continue;
         if (rest.length === 1 && rest[0] === 'data') restored.push(...repairOps(sheet, value));
         else if (!isEqual(get(sheet, rest), value)) restored.push({ op, id: sheet.id, path: rest, value });
     }
+    for (const was of appliedWrites(ctx, atSheetIndex(ctx, recorded)).sheets) {
+        const sheet = sheets.find((s) => s.id === was.id);
+        if (sheet) restored.push(...configOps(sheet, was.config ?? {}));
+    }
     return restored;
+}
+
+// The config entries the marker left other than the entry found them: those the op took, and those the marker made,
+// such as a border an inserted row takes from the row beside it. A map is never sent whole.
+function configOps({ id, config = {} }: Sheet, recorded: ExtendedSheetConfig): Op[] {
+    const left: ExtendedSheetConfig = config;
+    const ops: Op[] = [];
+    for (const map of SHEET_CONFIG_COLLECTIONS) {
+        const [from, to] = [left[map] ?? {}, recorded[map] ?? {}];
+        if (from === to) continue;
+        for (const key of Object.keys({ ...from, ...to })) {
+            if (isEqual(from[key], to[key])) continue;
+            const path = ['config', map, key];
+            ops.push(Object.hasOwn(to, key) ? { op: 'replace', id, path, value: to[key] } : { op: 'remove', id, path });
+        }
+    }
+    return ops;
 }
 
 // The cells the marker left different from the recorded matrix, such as rows a delete took and a formula it made #REF!.
@@ -297,32 +321,27 @@ function stillWritten(ctx: Context, apply: Patch[], written: Patch[]): Patch[] {
         }
     };
     for (const patch of apply) joinUnits(patch, JSON.stringify(unitOf(patch.path)));
-    const writes = new Map<string, { unit: (string | number)[]; patches: Patch[] }>();
+    const units = new Map<string, (string | number)[]>();
     for (const patch of written) {
         const unit = unitOf(patch.path);
         const key = JSON.stringify(unit);
         joinUnits(patch, key);
-        const write = writes.get(key) ?? { unit, patches: [] };
-        write.patches.push(patch);
-        writes.set(key, write);
+        units.set(key, unit);
     }
+    const rewritten = appliedWrites(ctx, written);
     const changed = new Set<string>();
-    for (const [key, { unit, patches }] of writes) if (!holds(ctx, unit, patches)) changed.add(find(key));
+    for (const [key, unit] of units) if (!holds(ctx, rewritten.sheets, unit)) changed.add(find(key));
     if (changed.size === 0) return apply;
     return apply.filter((patch) => !changed.has(find(JSON.stringify(unitOf(patch.path)))));
 }
 
-// The target holds what the entry wrote when writing it again changes nothing.
-function holds(ctx: Context, unit: (string | number)[], patches: Patch[]): boolean {
+// The target holds what the entry wrote when `rewritten`, the sheets with the entry's side written again, left it as
+// it is.
+function holds(ctx: Context, rewritten: Sheet[], unit: (string | number)[]): boolean {
     const current = get(ctx, unit);
-    const rebased = patches.map((patch) => ({ ...patch, path: ['value', ...patch.path.slice(unit.length)] }));
-    try {
-        const { value } = applyPatches({ value: current }, rebased);
-        if (unit[2] !== 'data' || unit.length !== 5) return isEqual(value, current);
-        return isEqual(authored(value), authored(current));
-    } catch {
-        return false;
-    }
+    const value = get({ sheets: rewritten }, unit);
+    if (unit[2] !== 'data' || unit.length !== 5) return isEqual(value, current);
+    return isEqual(authored(value), authored(current));
 }
 
 // What a person wrote into a cell: a formula's value, its display text and its value type are the engine's.

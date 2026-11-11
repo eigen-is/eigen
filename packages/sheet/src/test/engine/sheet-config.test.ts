@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import { createDefaultSheets } from '../../engine/defaults';
 import { replaySheetsOps } from '../../engine/replay-ops';
@@ -19,6 +19,7 @@ describe('normalizeSheetConfig', () => {
     test('keeps the well-formed validation rules a sheet has and leaves out the rest', () => {
         const entry = {
             ranges: [{ row: [0, 4], column: [1, 1] }],
+            order: 'a0',
             rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
         };
         const sheet: Sheet = JSON.parse(
@@ -36,7 +37,7 @@ describe('normalizeSheetConfig', () => {
             y: 0,
             width: 400,
             height: 300,
-            ...newSheetChartSpecParts(sampleChartSpec('column')),
+            ...newChartSpecParts(sampleChartSpec('column')),
         };
         const sheet: Sheet = { id: 's1', name: 'Sheet1', charts: { c1: chart } };
         normalizeSheetConfig(sheet);

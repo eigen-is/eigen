@@ -5,8 +5,9 @@
 
 import * as fs from 'node:fs';
 import path from 'node:path';
-import { isChartSpecKey, readChartSpec } from '@workspace/lib/charts';
+import { readChartSpec } from '@workspace/lib/charts';
 import type { ChartSpec } from '@workspace/lib/types/chart';
+import { isChartSpecPartKey } from '@workspace/lib/types/chart';
 import { peakRss } from '../lib/document/transform/peak-rss';
 import type { ExportMedia, TransformWarning } from '../lib/document/transform/protocol';
 import { toTransferableBuffer } from '../lib/document/transform/protocol';
@@ -126,9 +127,8 @@ export type DifferenceGroup = { kind: string; listed: boolean; count: number; ex
 const ROUNDTRIP_EXAMPLES = 3;
 const EXAMPLE_CHARS = 300;
 
-// A series id is identity for merging edits, not content, and our chart writer writes none, so a chart read back names
-// its series by c:idx where the source's had c16:uniqueId GUIDs. Two specs compare with every series id set to its
-// place, s-1 first, and the styles and points keyed by an id following it.
+// A series id is identity for merging edits, not content, and our chart writer writes none. So two specs compare
+// with every series id set to its place, s-1 first, and the styles and points keyed by an id following it.
 export function seriesIdsByPlace(spec: ChartSpec): ChartSpec {
     const { data } = spec;
     const ids = new Map(data.series.map(({ id }, i) => [id, `s-${i + 1}`]));
@@ -149,7 +149,7 @@ export function seriesIdsByPlace(spec: ChartSpec): ChartSpec {
 // A chart's stored fields with its spec's parts compared as one spec, its series ids by place.
 export function chartFields(chart: Record<string, unknown>): Record<string, unknown> {
     const { stored, spec } = readChartSpec(chart);
-    const rest = Object.entries(chart).filter(([key]) => !isChartSpecKey(key));
+    const rest = Object.entries(chart).filter(([key]) => !isChartSpecPartKey(key));
     return { ...Object.fromEntries(rest), spec: spec ? seriesIdsByPlace(spec) : stored };
 }
 
@@ -179,9 +179,8 @@ export function classify<D extends RoundtripDifference, C>(
     return [...groups.values()].sort((x, y) => y.count - x.count);
 }
 
-// The charts the first import left out: as many as its reader counted, and how many placeholders name each kind, the
-// kind the reader can't draw ("Scatter") or none for a part missing, damaged or past the budget. A chart that leaves no
-// placeholder (an xlsx's, a docx's in a header, footer or note) counts under no kind.
+// The charts the first import left out, and how many placeholders name each kind the reader can't draw, such as
+// "Scatter". A chart that leaves no placeholder, such as an xlsx's, counts under no kind.
 export type ChartsNotImported = { count: number; kinds: Record<string, number> };
 
 const NO_KIND = '(none named)';
@@ -278,9 +277,8 @@ export type RoundtripOptions = {
 
 export type Step = <T>(name: Stage, run: () => T | Promise<T>) => Promise<T>;
 
-// The round trip's child: `run` takes each stage through `step`, which reports it, and returns the writer's warnings,
-// by code, the differences classified and the charts the first import left out; a stage that throws is reported with
-// it. With `dump`, the bytes the export stage returns are written there.
+// The round trip's child. `run` takes each stage through `step`, which reports it, a stage that throws included.
+// With `dump`, the bytes the export stage returns are written there.
 export async function roundtripChild(
     { reports, dump }: { reports: string; dump?: string },
     run: (

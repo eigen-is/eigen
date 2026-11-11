@@ -5,18 +5,17 @@
 
 import { isRecord } from '../core/guards';
 import { cloneSides, parseCellKey } from './borders';
-import { chartsWithinEntryCap } from './floating';
+import { sheetFitsGrid } from './defaults';
+import { wellFormedConditionalFormats, wellFormedValidations } from './range-rules';
 import type {
     Cell,
     CellBorderSides,
     CellMatrix,
     CellWithRowAndCol,
+    SHEET_KEYED_MAPS,
     Sheet,
-    SheetChart,
     SheetConfig,
-    SheetImage,
 } from './types';
-import { wellFormedValidations } from './validations';
 
 const FORMAT = 'eigensheets/2';
 
@@ -32,17 +31,17 @@ type EncodedContent = string | number | boolean | Record<string, unknown>;
 // [row, col, borderIndex], one for each `config.borderInfo` key.
 type EncodedBorder = [number, number, number];
 
-type EncodedSheet = Omit<Sheet, 'celldata' | 'data' | 'config' | 'images' | 'charts' | 'dataValidations'> & {
-    config?: Omit<SheetConfig, 'borderInfo'>;
-    cells?: EncodedCell[];
-    borderCells?: EncodedBorder[];
-    // Floating images, charts and validation rules are a few small records per sheet, so they are written as they
-    // are. An empty map is left out, and the decoder adds it back. The validations are read as unknown, since the
-    // decoder keeps only the entries that are well formed.
-    images?: Record<string, SheetImage>;
-    charts?: Record<string, SheetChart>;
-    dataValidations?: unknown;
-};
+type KeyedMap = (typeof SHEET_KEYED_MAPS)[number];
+// Images, charts and rules are a few small records per sheet, written as they are; an empty map is left out and the
+// decoder adds it back. The rules are read as unknown, since the decoder keeps only the well-formed ones.
+type StoredKeyedMaps = Pick<Sheet, 'images' | 'charts'> & { conditionalFormats?: unknown; dataValidations?: unknown };
+
+type EncodedSheet = Omit<Sheet, 'celldata' | 'data' | 'config' | KeyedMap> &
+    StoredKeyedMaps & {
+        config?: Omit<SheetConfig, 'borderInfo'>;
+        cells?: EncodedCell[];
+        borderCells?: EncodedBorder[];
+    };
 
 type SnapshotV2 = {
     f: typeof FORMAT;
@@ -59,17 +58,20 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
     const borderIndex = new Map<string, number>();
 
     const encoded = sheets.map((sheet) => {
-        const { celldata, data, config, images, charts, dataValidations, ...rest } = sheet;
+        const { celldata, data, config, images, charts, conditionalFormats, dataValidations, ...rest } = sheet;
         const out: EncodedSheet = { ...rest };
         if (images && Object.keys(images).length > 0) out.images = images;
         if (charts && Object.keys(charts).length > 0) out.charts = charts;
+        if (conditionalFormats && Object.keys(conditionalFormats).length > 0) {
+            out.conditionalFormats = conditionalFormats;
+        }
         if (dataValidations && Object.keys(dataValidations).length > 0) out.dataValidations = dataValidations;
 
         // The dense matrix is never written, but where it exists it holds the latest cells. An editor edit writes
         // `data` and leaves `celldata` stale, so the cells come from `data`, as they do at the end of a replay.
         const entries = data ? denseToEntries(data) : celldata;
         // A row op or a paste can grow the dense matrix past the sheet's `row` and `column`. A reader builds its grid
-        // from those two, so they never say less than the matrix holds. An op recorded in a row the reader lacks fails.
+        // from those two, so they never say less than the matrix holds: a write into a row the reader lacks is skipped.
         if (data) {
             out.row = Math.max(rest.row ?? 0, data.length);
             out.column = data.reduce((widest, row) => Math.max(widest, row?.length ?? 0), rest.column ?? 0);
@@ -81,7 +83,7 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
         }
 
         // An empty config is still written. A replayed op that adds to it, such as a merge or a row height, can't
-        // resolve its path without one, and its whole batch fails.
+        // resolve its path without one, and is skipped.
         if (config) {
             const { borderInfo, ...restConfig } = config;
             out.config = restConfig;
@@ -119,20 +121,13 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
     if (f !== FORMAT) throw unknownFormat(f);
     const ids = new Set<string>();
     const decoded = sheets.map((encoded) => {
-        const { cells, borderCells, config, images, charts, dataValidations, ...rest } = encoded;
-        // Every op names its sheet by id, so a sheet without an id of its own is as corrupt as a bad style index. Minting
-        // one here would give each reader a different sheet.
+        const { cells, borderCells, config, images, charts, conditionalFormats, dataValidations, ...rest } = encoded;
+        const maps = { images, charts, conditionalFormats, dataValidations };
+        // Every op names its sheet by id, so a sheet without an id of its own is as corrupt as a bad style index.
+        // Making one here would give each reader a different sheet.
         if (typeof rest.id !== 'string' || ids.has(rest.id)) throw unknownFormat(rest.id);
         ids.add(rest.id);
-        // Every sheet gets all three maps, even empty ones. The editor writes each image, chart or validation under its
-        // own key, and that patch needs the map to exist. A value that is no map is dropped, and so is a chart past the
-        // entry cap and a validation that is not well formed.
-        const sheet: Sheet = {
-            ...rest,
-            images: isRecord(images) ? images : {},
-            charts: isRecord(charts) ? chartsWithinEntryCap(charts) : {},
-            dataValidations: wellFormedValidations(dataValidations),
-        };
+        const sheet: Sheet = { ...rest, ...sheetKeyedMaps(maps) };
 
         if (cells) {
             const celldata: CellWithRowAndCol[] = [];
@@ -141,6 +136,8 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
             }
             sheet.celldata = celldata;
         }
+        // Every reader builds the matrix at this size, so one no sheet may hold is as corrupt as a bad style index.
+        if (!sheetFitsGrid(sheet)) throw unknownFormat(`${rest.row}x${rest.column}`);
 
         if (config || borderCells) {
             sheet.config = { ...config };
@@ -160,6 +157,17 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
         return sheet;
     });
     return { sheets: decoded, computed };
+}
+
+// A sheet's keyed maps as every reader holds them, all there even when empty, since a write under a key needs its
+// map. A value that is no map is dropped, and so is a rule that is not well formed.
+export function sheetKeyedMaps(sheet: StoredKeyedMaps): Required<Pick<Sheet, KeyedMap>> {
+    return {
+        images: isRecord(sheet.images) ? sheet.images : {},
+        charts: isRecord(sheet.charts) ? sheet.charts : {},
+        conditionalFormats: wellFormedConditionalFormats(sheet.conditionalFormats),
+        dataValidations: wellFormedValidations(sheet.dataValidations),
+    };
 }
 
 function unknownFormat(found: unknown): Error {
@@ -224,8 +232,8 @@ function encodeCell(entry: CellWithRowAndCol, styles: StyleTuple[], styleIndex: 
 function decodeCell(styleIdx: number, content: EncodedContent | undefined, styles: StyleTuple[]): Cell | null {
     if (styleIdx === -1 && content === undefined) return null;
 
-    // An index past the styles dictionary is as corrupt as one past the borders. Read on, it would become a cell with no
-    // style that hides the problem.
+    // An index past the styles dictionary is as corrupt as one past the borders. Read on, it would become a cell with
+    // no style that hides the problem.
     if (styleIdx !== -1 && styles[styleIdx] === undefined) throw unknownFormat(styleIdx);
     const cell: Record<string, unknown> = styleIdx === -1 ? {} : materializeStyle(styles[styleIdx]);
     if (content === undefined) return cell as Cell;

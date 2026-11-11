@@ -201,8 +201,7 @@ function pdfPageCss({ width, height }: ContentSize): string {
 }
 
 // Every <img> repeats its whole source and the finished document crosses the API's heap, so the bytes the tags write
-// are held to the cap the media prep holds each file to once. One whose media resolves to nothing draws nothing and is
-// free.
+// are held to the cap the media prep holds each file to. One whose media resolves to nothing is free.
 function capFloating(
     floating: FloatingObject[],
     mediaUrls: MediaUrls,
@@ -312,7 +311,7 @@ function renderSheet(
     }
 
     // The rules need the dense `data` matrix, and a sheet without it draws none, as the canvas does.
-    const rules = sheet.conditionalFormatRules;
+    const rules = sheet.conditionalFormats;
     const cfMap: ComputeMap | null =
         rules && sheet.data
             ? evaluateConditionalFormat(rules, sheet.data, {

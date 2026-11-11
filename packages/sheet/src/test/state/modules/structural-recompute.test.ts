@@ -1019,10 +1019,12 @@ describe('a deleted sheet`s name', () => {
             d.sheets[1].dataValidations = {
                 list: {
                     ranges: [{ row: [0, 0], column: [1, 1] }],
+                    order: 'a0',
                     rule: { type: 'dropdown', type2: '', value1: 'One!$A$1:$A$3', value2: '' },
                 },
                 plain: {
                     ranges: [{ row: [0, 0], column: [1, 1] }],
+                    order: 'a0',
                     rule: { type: 'dropdown', type2: '', value1: 'One,Two', value2: '' },
                 },
             } as never;

@@ -4,21 +4,16 @@
 // resolving it by sheet NAME. Date rules carry YYYY-MM-DD operand strings.
 
 import { describe, expect, test } from 'bun:test';
-import {
-    MAX_VALIDATION_RANGES,
-    MAX_VALIDATIONS,
-    REFERENCE_COLUMN_COUNT,
-    REFERENCE_ROW_COUNT,
-} from '@workspace/lib/sheets';
+import { MAX_RULE_RANGES, MAX_VALIDATIONS, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { dateToSerial } from '../../../engine/parser/helper/number';
 import type { Context } from '../../../state/context';
 import {
     applyDataValidation,
+    cellPassesRule,
     cellTextBox,
     checkboxAlign,
     checkboxChange,
     checkboxRect,
-    DROPDOWN_CHEVRON_HIT_WIDTH,
     dropdownChevronRect,
     getCellDataValidation,
     getDropdownList,
@@ -27,7 +22,6 @@ import {
     isCheckboxChecked,
     isCheckboxClick,
     isDropdownChevronClick,
-    showsCheckboxLabel,
     validateCellData,
     validationRange,
     validationValueProblem,
@@ -117,35 +111,43 @@ describe('isCheckboxChecked', () => {
     });
 });
 
-describe('showsCheckboxLabel', () => {
-    test('a default rule draws the box alone over the values it names', () => {
-        expect(showsCheckboxLabel(TICK_BOX, 'TRUE')).toBe(false);
-        expect(showsCheckboxLabel(TICK_BOX, 'false')).toBe(false);
-        expect(showsCheckboxLabel(TICK_BOX, true)).toBe(false);
-        expect(showsCheckboxLabel(TICK_BOX, false)).toBe(false);
+describe('a tick box rule and the value its cell holds', () => {
+    const YES_NO: DataValidationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
+    const passes = (rule: DataValidationRule, value: string | number | boolean | null | undefined) =>
+        validateCellData(contextFactory() as Context, rule, value);
+
+    test('either value the rule names passes, whatever its case', () => {
+        expect([true, false, 'TRUE', 'false'].map((value) => passes(TICK_BOX, value))).toEqual([
+            true,
+            true,
+            true,
+            true,
+        ]);
+        expect(['Yes', 'No', 'yes'].map((value) => passes(YES_NO, value))).toEqual([true, true, true]);
     });
 
-    test('an empty cell in the range keeps the plain box, so the column reads as one', () => {
-        expect(showsCheckboxLabel(TICK_BOX, null)).toBe(false);
-        expect(showsCheckboxLabel(TICK_BOX, undefined)).toBe(false);
-        expect(showsCheckboxLabel(TICK_BOX, '')).toBe(false);
+    test('an empty cell passes, so a fresh range marks nothing', () => {
+        expect([null, undefined, ''].map((value) => passes(TICK_BOX, value))).toEqual([true, true, true]);
     });
 
-    test('a value the rule does not name keeps its label', () => {
-        // Insert -> Tick box over a column of Yes / Maybe / n/a used to paint an
-        // unchecked box over every one of them with the text suppressed: the data
-        // was still there, unreadable, and validateCellData flags nothing either.
-        expect(showsCheckboxLabel(TICK_BOX, 'Yes')).toBe(true);
-        expect(showsCheckboxLabel(TICK_BOX, 'Maybe')).toBe(true);
-        expect(showsCheckboxLabel(TICK_BOX, 'n/a')).toBe(true);
-        expect(showsCheckboxLabel(TICK_BOX, 0)).toBe(true);
+    test('a value the rule does not name fails, as under any other rule', () => {
+        expect(['Yes', 'Maybe', 'n/a', 0].map((value) => passes(TICK_BOX, value))).toEqual([
+            false,
+            false,
+            false,
+            false,
+        ]);
+        expect(['Maybe', 'TRUE', true].map((value) => passes(YES_NO, value))).toEqual([false, false, false]);
     });
+});
 
-    test('a custom rule always keeps its label — it is the only way to tell Yes from No', () => {
-        const rule: DataValidationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
-        expect(showsCheckboxLabel(rule, 'Yes')).toBe(true);
-        expect(showsCheckboxLabel(rule, 'No')).toBe(true);
-        expect(showsCheckboxLabel(rule, 'Maybe')).toBe(true);
+describe('cellPassesRule', () => {
+    test('a number rule reads the value, not the text a format shows', () => {
+        const ctx = contextFactory() as Context;
+        const over1000: DataValidationRule = { type: 'number', type2: 'moreThanThe', value1: '1000', value2: '' };
+        const under1: DataValidationRule = { type: 'number', type2: 'lessThan', value1: '1', value2: '' };
+        expect(cellPassesRule(ctx, over1000, { v: 1234.5, m: '1,234.50', ct: { fa: '#,##0.00', t: 'n' } })).toBe(true);
+        expect(cellPassesRule(ctx, under1, { v: 0.5, m: '50%', ct: { fa: '0%', t: 'n' } })).toBe(true);
     });
 });
 
@@ -173,6 +175,12 @@ describe('checkboxChange', () => {
         ]);
         expect(checkboxChange(ctx, 0, 0)).toBe(false);
         expect(ctx.sheets[0].data![0][0]).toEqual(cell);
+    });
+
+    test('leaves a cell holding a value its rule does not name alone, as it shows no box', () => {
+        const ctx = tickBoxContext([[{ v: 'Maybe', m: 'Maybe' }, null, null, null]]);
+        expect(checkboxChange(ctx, 0, 0)).toBe(false);
+        expect(ctx.sheets[0].data![0][0]).toEqual({ v: 'Maybe', m: 'Maybe' });
     });
 
     test('reports no toggle for a cell without a tick box', () => {
@@ -223,7 +231,7 @@ describe('applyDataValidation', () => {
         applyDataValidation(ctx, { row: [0, 1], column: [0, 0] }, rule);
         expect(ctx.sheets[0].data![0][0]).toBeNull();
         expect(Object.values(ctx.sheets[0].dataValidations ?? {})).toEqual([
-            { ranges: [{ row: [0, 1], column: [0, 0] }], rule },
+            { ranges: [{ row: [0, 1], column: [0, 0] }], order: 'a0', rule },
         ]);
     });
 
@@ -231,15 +239,15 @@ describe('applyDataValidation', () => {
         const ctx = contextFactory() as Context;
         applyDataValidation(ctx, { row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }, LIST_RULE);
         expect(Object.values(ctx.sheets[0].dataValidations ?? {})).toEqual([
-            { ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }], rule: LIST_RULE },
+            { ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }], order: 'a0', rule: LIST_RULE },
         ]);
     });
 
     test('takes its cells out of the rules they had, and drops a rule left with none', () => {
         const ctx = contextFactory() as Context;
         ctx.sheets[0].dataValidations = {
-            wide: { ranges: [{ row: [0, 3], column: [0, 1] }], rule: TICK_BOX },
-            inside: { ranges: [{ row: [1, 1], column: [0, 0] }], rule: TICK_BOX },
+            wide: { ranges: [{ row: [0, 3], column: [0, 1] }], order: 'a0', rule: TICK_BOX },
+            inside: { ranges: [{ row: [1, 1], column: [0, 0] }], order: 'a0', rule: TICK_BOX },
         };
         applyDataValidation(ctx, { row: [1, 2], column: [0, 0] }, LIST_RULE);
         const { wide, inside, ...added } = ctx.sheets[0].dataValidations;
@@ -249,7 +257,9 @@ describe('applyDataValidation', () => {
             { row: [1, 2], column: [1, 1] },
             { row: [3, 3], column: [0, 1] },
         ]);
-        expect(Object.values(added)).toEqual([{ ranges: [{ row: [1, 2], column: [0, 0] }], rule: LIST_RULE }]);
+        expect(Object.values(added)).toEqual([
+            { ranges: [{ row: [1, 2], column: [0, 0] }], order: 'a1', rule: LIST_RULE },
+        ]);
         expect(getCellDataValidation(ctx, 2, 0)).toEqual(LIST_RULE);
         expect(getCellDataValidation(ctx, 2, 1)).toEqual(TICK_BOX);
     });
@@ -267,15 +277,15 @@ describe('the rule over a cell', () => {
         const ctx = contextFactory() as Context;
         ctx.sheets[0].data = Array.from({ length: 6000 }, () => [null, null]);
         ctx.sheets[0].dataValidations = {
-            v: { ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }], rule: LIST_RULE },
+            v: { ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }], order: 'a0', rule: LIST_RULE },
         };
         expect(getCellDataValidation(ctx, 4999, 1)).toEqual(LIST_RULE);
         expect(getCellDataValidation(ctx, 4999, 0)).toBeUndefined();
     });
 
-    test('where two rules overlap, the highest id wins on every tab, whatever order the map holds them in', () => {
-        const a = { ranges: [{ row: [0, 1], column: [0, 0] }], rule: LIST_RULE };
-        const b = { ranges: [{ row: [1, 2], column: [0, 0] }], rule: TICK_BOX };
+    test('where two rules overlap, the last in order wins on every tab, whatever order the map holds them in', () => {
+        const a = { ranges: [{ row: [0, 1], column: [0, 0] }], order: 'a0', rule: LIST_RULE };
+        const b = { ranges: [{ row: [1, 2], column: [0, 0] }], order: 'a1', rule: TICK_BOX };
         for (const validations of [
             { a, b },
             { b, a },
@@ -283,9 +293,9 @@ describe('the rule over a cell', () => {
             expect(validationAt(validations, 1, 0)).toEqual(TICK_BOX);
             expect(validationLookup(validations, { row: [0, 5], column: [0, 5] })(1, 0)).toEqual(TICK_BOX);
         }
-        // An import numbers its rules in the file's order, and the last one wins.
-        const numbered = { 'validation-10': b, 'validation-9': a };
-        expect(validationAt(numbered, 1, 0)).toEqual(TICK_BOX);
+        // The order key decides, not the id: here the ids sort the other way.
+        const reversed = { z: a, y: b };
+        expect(validationAt(reversed, 1, 0)).toEqual(TICK_BOX);
     });
 
     // A cell checked every rule's ranges in view: 100 rules of 100 cells each took about 50 ms a frame.
@@ -298,6 +308,7 @@ describe('the rule over a cell', () => {
                         const [r, c] = [(i * 7 + k) % 61, (k + i) % 26];
                         return { row: [r, r], column: [c, c] };
                     }),
+                    order: 'a0',
                     rule: k % 2 === 0 ? LIST_RULE : TICK_BOX,
                 },
             ]),
@@ -321,12 +332,13 @@ describe('the rule over a cell', () => {
 
     test("the painter's lookup answers as the full lookup does, inside its window and outside it", () => {
         const validations = {
-            a: { ranges: [{ row: [0, 9], column: [2, 2] }], rule: LIST_RULE },
+            a: { ranges: [{ row: [0, 9], column: [2, 2] }], order: 'a0', rule: LIST_RULE },
             b: {
                 ranges: [
                     { row: [3, 3], column: [0, 5] },
                     { row: [20, 30], column: [0, 0] },
                 ],
+                order: 'a0',
                 rule: TICK_BOX,
             },
         };
@@ -346,21 +358,21 @@ describe('a write past the caps', () => {
 
     test('a clear that would split a rule past the ranges a rule may hold drops the rule', () => {
         const sheet = capSheet();
-        const rows = Array.from({ length: MAX_VALIDATION_RANGES }, (_, i) => ({ row: [2 * i, 2 * i], column: [0, 2] }));
+        const rows = Array.from({ length: MAX_RULE_RANGES }, (_, i) => ({ row: [2 * i, 2 * i], column: [0, 2] }));
         sheet.dataValidations = {
-            v: { ranges: rows, rule },
-            other: { ranges: [{ row: [0, 0], column: [5, 5] }], rule },
+            v: { ranges: rows, order: 'a0', rule },
+            other: { ranges: [{ row: [0, 0], column: [5, 5] }], order: 'a0', rule },
         };
         clearValidations(sheet, { row: [0, 0], column: [0, 0] });
-        expect(sheet.dataValidations.v.ranges).toHaveLength(MAX_VALIDATION_RANGES);
+        expect(sheet.dataValidations.v.ranges).toHaveLength(MAX_RULE_RANGES);
         clearValidations(sheet, { row: [2, 2], column: [1, 1] });
         expect(Object.keys(sheet.dataValidations)).toEqual(['other']);
     });
 
     test('a rule at the ranges a rule may hold keeps them and stops extending', () => {
         const sheet = capSheet();
-        const rows = Array.from({ length: MAX_VALIDATION_RANGES }, (_, i) => ({ row: [2 * i, 2 * i], column: [0, 0] }));
-        sheet.dataValidations = { v: { ranges: rows, rule } };
+        const rows = Array.from({ length: MAX_RULE_RANGES }, (_, i) => ({ row: [2 * i, 2 * i], column: [0, 0] }));
+        sheet.dataValidations = { v: { ranges: rows, order: 'a0', rule } };
         addValidation(sheet, 'v', rule, [{ row: [0, 0], column: [5, 5] }]);
         expect(sheet.dataValidations.v.ranges).toEqual(rows);
     });
@@ -370,7 +382,7 @@ describe('a write past the caps', () => {
         sheet.dataValidations = Object.fromEntries(
             Array.from({ length: MAX_VALIDATIONS }, (_, i) => [
                 `v${i}`,
-                { ranges: [{ row: [i, i], column: [0, 0] }], rule },
+                { ranges: [{ row: [i, i], column: [0, 0] }], order: 'a0', rule },
             ]),
         );
         const range = { row: [0, 0], column: [5, 5] };
@@ -427,64 +439,42 @@ describe('insertCheckbox', () => {
     });
 });
 
-// Cell A1 spans x 0..74, y 0..20 (contextFactory's visibledata*). The painter
-// and the hit test used to build its text box three different ways, so the box
-// was drawn one pixel below the box that answered a click.
 describe('cellTextBox', () => {
     test('insets the cell by the grid lines it must not paint over', () => {
         expect(cellTextBox(0, 0, 74, 20)).toEqual({ left: 0, top: 1, width: 72, height: 18 });
     });
-
-    test('painter and hit test describe the same box for the same cell', () => {
-        // The painter works in canvas space (the row/column headers already added
-        // in), the mousedown hit test in freeze-corrected sheet space. Take the
-        // offset back out and the two must be the same box, to the pixel.
-        const offsetLeft = 60;
-        const offsetTop = 20;
-        const painted = cellTextBox(0 + offsetLeft, 0 + offsetTop, 74 + offsetLeft, 20 + offsetTop);
-        const clickable = cellTextBox(0, 0, 74, 20);
-
-        expect(painted.left - offsetLeft).toBe(clickable.left);
-        expect(painted.top - offsetTop).toBe(clickable.top);
-        expect(painted.width).toBe(clickable.width);
-        expect(painted.height).toBe(clickable.height);
-    });
 });
 
 describe('isCheckboxClick', () => {
-    // A cell without its own alignment centres the 10px box, at x 31..41, y 5..15.
+    // A cell without its own alignment centres the 10px box, at x 31..40, y 5..14.
     const box = cellTextBox(0, 0, 74, 20);
 
-    // As Google centres it: ticked, unticked and empty boxes sit in one place. A box with a label beside it sits left,
-    // so the label keeps the cell's width; the cell's own alignment places either.
     const YES_NO: DataValidationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
     const ticked = { v: true, m: 'TRUE', ct: { fa: 'General', t: 'b' } };
-    test('a tick box drawn alone is centred, one with a label left, unless its cell is aligned', () => {
-        const alone = [
-            [ticked, 'TRUE'],
-            [{ ...ticked, v: false, m: 'FALSE' }, 'FALSE'],
-            [null, null],
-            [{}, ''],
-        ] as const;
-        expect(alone.map(([cell, value]) => checkboxAlign(cell, TICK_BOX, value))).toEqual([0, 0, 0, 0]);
-        expect(checkboxAlign({ v: 'Done', m: 'Done' }, TICK_BOX, 'Done')).toBe(1);
-        // A rule with its own values labels every box, so an empty one stays in its column.
-        expect(checkboxAlign({ v: 'Yes', m: 'Yes' }, YES_NO, 'Yes')).toBe(1);
-        expect(checkboxAlign(null, YES_NO, null)).toBe(1);
-        expect([1, 2, 0].map((ht) => checkboxAlign({ ...ticked, ht }, TICK_BOX, 'TRUE'))).toEqual([1, 2, 0]);
-        expect([1, 2, 0].map((ht) => checkboxAlign({ v: 'Yes', m: 'Yes', ht }, YES_NO, 'Yes'))).toEqual([1, 2, 0]);
+    const oneCell = (cell: Cell, rule: DataValidationRule) => {
+        const ctx = tickBoxContext([[cell, null, null, null]]);
+        ctx.sheets[0].dataValidations = validationsByCell({ '0_0': rule });
+        return ctx;
+    };
+
+    test('a tick box is centred, as in Google Sheets, unless its cell is aligned', () => {
+        const unaligned = [ticked, { ...ticked, v: false, m: 'FALSE' }, null, {}, { v: 'Yes', m: 'Yes' }];
+        expect(unaligned.map((cell) => checkboxAlign(cell))).toEqual([0, 0, 0, 0, 0]);
+        expect([1, 2, 0].map((ht) => checkboxAlign({ ...ticked, ht }))).toEqual([1, 2, 0]);
+        expect([1, 2, 0].map((ht) => checkboxAlign({ v: 'Yes', m: 'Yes', ht }))).toEqual([1, 2, 0]);
     });
 
-    test('a click finds a labelled box at the left, where the painter draws it', () => {
-        const ctx = tickBoxContext([
-            [{ v: 'Yes', m: 'Yes' }, null, null, null],
-            [null, null, null, null],
-            [null, null, null, null],
-            [null, null, null, null],
-        ]);
-        ctx.sheets[0].dataValidations = validationsByCell({ '0_0': YES_NO });
-        expect(isCheckboxClick(ctx, 0, 0, box, 7, 9)).toBe(true);
-        expect(isCheckboxClick(ctx, 0, 0, box, 36, 9)).toBe(false);
+    test('a click finds the box of a rule with its own values in the centre, where the painter draws it', () => {
+        const ctx = oneCell({ v: 'Yes', m: 'Yes' }, YES_NO);
+        expect(isCheckboxClick(ctx, 0, 0, box, 36, 9)).toBe(true);
+        expect(isCheckboxClick(ctx, 0, 0, box, 7, 9)).toBe(false);
+    });
+
+    test('a cell holding a value its rule does not name has no box to click', () => {
+        for (const ctx of [oneCell({ v: 'Maybe', m: 'Maybe' }, YES_NO), oneCell({ v: 'Yes', m: 'Yes' }, TICK_BOX)]) {
+            expect(isCheckboxClick(ctx, 0, 0, box, 36, 9)).toBe(false);
+            expect(isCheckboxClick(ctx, 0, 0, box, 7, 9)).toBe(false);
+        }
     });
 
     test('places the box by the cell alignment', () => {
@@ -502,12 +492,12 @@ describe('isCheckboxClick', () => {
         ]);
         expect(isCheckboxClick(ctx, 0, 0, box, 36, 9)).toBe(true);
         // Just outside the box on each axis, and out in the empty rest of the cell.
-        expect(isCheckboxClick(ctx, 0, 0, box, 42, 9)).toBe(false);
-        expect(isCheckboxClick(ctx, 0, 0, box, 36, 16)).toBe(false);
+        expect(isCheckboxClick(ctx, 0, 0, box, 41, 9)).toBe(false);
+        expect(isCheckboxClick(ctx, 0, 0, box, 36, 15)).toBe(false);
         expect(isCheckboxClick(ctx, 0, 0, box, 7, 9)).toBe(false);
     });
 
-    test('every pixel of the painted box answers a click, its top row included', () => {
+    test('every corner pixel of the box answers a click, and no pixel around it', () => {
         const ctx = tickBoxContext([
             [{ v: false, m: 'FALSE', ct: { fa: 'General', t: 'b' } }, null, null, null],
             [null, null, null, null],
@@ -515,16 +505,23 @@ describe('isCheckboxClick', () => {
             [null, null, null, null],
         ]);
         const rect = checkboxRect(box, 0, 0);
+        const last = rect.size - 1;
         for (const [x, y] of [
             [rect.x, rect.y],
-            [rect.x + rect.size, rect.y],
-            [rect.x, rect.y + rect.size],
-            [rect.x + rect.size, rect.y + rect.size],
+            [rect.x + last, rect.y],
+            [rect.x, rect.y + last],
+            [rect.x + last, rect.y + last],
         ]) {
             expect(isCheckboxClick(ctx, 0, 0, box, x, y)).toBe(true);
         }
-        // The row above the box is the cell, not the box.
-        expect(isCheckboxClick(ctx, 0, 0, box, rect.x, rect.y - 1)).toBe(false);
+        for (const [x, y] of [
+            [rect.x, rect.y - 1],
+            [rect.x - 1, rect.y],
+            [rect.x + rect.size, rect.y + last],
+            [rect.x + last, rect.y + rect.size],
+        ]) {
+            expect(isCheckboxClick(ctx, 0, 0, box, x, y)).toBe(false);
+        }
     });
 
     test('ignores cells without a tick box rule', () => {
@@ -574,6 +571,7 @@ describe('isDropdownChevronClick', () => {
     // Glyph at x 60..70 ⇒ the finger-sized hit box spans x 50..70, full height.
     const box = cellTextBox(0, 0, 74, 20);
     const RIGHT = 70;
+    const DROPDOWN_CHEVRON_HIT_WIDTH = 20;
 
     test('only a click on the chevron counts', () => {
         const ctx = listContext();
@@ -775,13 +773,16 @@ describe('getValidationHint', () => {
 
     test('stays silent where there is nothing to say', () => {
         const rule: DataValidationRule = { type: 'number', type2: 'between', value1: '1', value2: '10' };
-        // Valid value, empty cell, a cell with no rule, and a tick box — which
-        // can never be invalid and needs no prompt.
+        // A valid value, an empty cell, a cell with no rule, and a tick box holding one of its values.
         expect(getValidationHint(hintContext(rule, { v: 4, m: '4' }), 1, 1)).toBeUndefined();
         expect(getValidationHint(hintContext(rule), 1, 1)).toBeUndefined();
         expect(getValidationHint(hintContext(rule), 0, 0)).toBeUndefined();
-        expect(
-            getValidationHint(hintContext({ ...TICK_BOX, hintShow: true }, { v: 'nope', m: 'nope' }), 1, 1),
-        ).toBeUndefined();
+        const ticked = { v: true, m: 'TRUE', ct: { fa: 'General', t: 'b' } };
+        expect(getValidationHint(hintContext({ ...TICK_BOX, hintShow: true }, ticked), 1, 1)).toBeUndefined();
+    });
+
+    test('a tick box holding a value its rule does not name says which values it takes', () => {
+        const hint = getValidationHint(hintContext(TICK_BOX, { v: 'nope', m: 'nope' }), 1, 1);
+        expect(hint).toMatchObject({ kind: 'invalid', text: 'Input must be TRUE or FALSE.' });
     });
 });

@@ -9,21 +9,19 @@ import { useAwarenessPeers } from '@workspace/ui/components/collab';
 import { useCallback, useEffect, useRef } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 
-export type PublishSelection = (sheetId: string, r: number, c: number) => void;
+type PublishSelection = (sheetId: string, r: number, c: number) => void;
 
 export function usePresence(
     provider: WebsocketProvider | null,
     workbookRef: React.RefObject<WorkbookInstance | null>,
     user: AuthUser | null,
     synced: boolean,
-    snapshotVersion: number,
 ): PublishSelection {
     const lastSelectionRef = useRef<string>('');
 
     // The hook omits this client, so a same-user entry is the user's other window and shows like any peer.
     const peers = useAwarenessPeers<PeerPresence>(provider);
 
-    // A new snapshot remounts the Workbook and wipes its presences, so the identity is published again.
     useEffect(() => {
         if (!provider || !user || !synced) return;
         provider.awareness.setLocalStateField('user', {
@@ -31,14 +29,12 @@ export function usePresence(
             color: userColor(user.id),
             userId: user.id,
         });
-        lastSelectionRef.current = '';
-    }, [provider, user, synced, snapshotVersion]);
+    }, [provider, user, synced]);
 
-    // A remount wipes the workbook's presences, so the whole live set goes in again on snapshotVersion.
     useEffect(() => {
         if (!provider || !user || !synced) return;
         workbookRef.current?.setPresences(presencesFromPeers(peers));
-    }, [provider, user, synced, snapshotVersion, workbookRef, peers]);
+    }, [provider, user, synced, workbookRef, peers]);
 
     return useCallback(
         (sheetId: string, r: number, c: number) => {

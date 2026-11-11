@@ -1,13 +1,12 @@
+// Publishes the signed-in user's name, color and id on a collab document's Yjs awareness, in the `user` field every
+// presence host reads a peer from. An editor's presence hook, such as the canvas's or the stickies board's, calls it
+// once per provider. Sheets publishes its own, because it waits for the first sync.
+
 import type { AuthUser } from '@workspace/lib/auth';
 import { userColor } from '@workspace/lib/constants/colors';
 import { useEffect } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 
-// Publishes the local user's identity onto the provider's Yjs awareness in the shared CursorPeerState
-// `user` shape (name + deterministic `userColor(user.id)` + userId) — the one field every presence
-// host writes the same way. Extracted from the byte-identical effect in use-canvas-presence /
-// use-stickies-presence. Sheets keeps its own copy: it is synced-gated and
-// re-published on snapshotVersion (remount survival), so it doesn't fit this plain [provider, user] form.
 export function useAwarenessIdentity(provider: WebsocketProvider | null, user: AuthUser | null): void {
     useEffect(() => {
         if (!provider || !user) return;

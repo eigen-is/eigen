@@ -2,23 +2,24 @@ import { describe, expect, it } from 'bun:test';
 import type { SingleRange } from '@workspace/lib/sheets';
 import type { Context } from '../../../index';
 import type { ConditionRuleType } from '../../../state/modules/condition-format';
-import { conditionRuleError, getComputeMap, setConditionRules } from '../../../state/modules/condition-format';
+import { addConditionRule, conditionRuleError, getComputeMap } from '../../../state/modules/condition-format';
 import type { ConditionRulesProps } from '../../../state/types';
 import { contextFactory, workbookContextFactory } from '../factories/context';
+import { formatList, formatsOf } from '../factories/validations';
 
 function ctxWithRules(): Context {
     const ctx = contextFactory() as Context;
     for (const sheet of ctx.sheets) {
-        sheet.conditionalFormatRules = [
+        sheet.conditionalFormats = formatsOf([
             {
                 type: 'default',
-                cellrange: [{ row: [0, 3], column: [0, 3] }],
+                ranges: [{ row: [0, 3], column: [0, 3] }],
                 format: { cellColor: '#ff0000' },
                 conditionName: 'greaterThan',
                 conditionRange: [],
                 conditionValue: ['0'],
             },
-        ];
+        ]);
     }
     return ctx;
 }
@@ -92,7 +93,7 @@ describe('state/condition-format — getComputeMap cache', () => {
         const ctx = ctxWithRules();
 
         const first = getComputeMap(ctx);
-        ctx.sheets[0].conditionalFormatRules = [...ctx.sheets[0].conditionalFormatRules!];
+        ctx.sheets[0].conditionalFormats = formatsOf(formatList(ctx.sheets[0].conditionalFormats));
 
         expect(getComputeMap(ctx)).not.toBe(first);
     });
@@ -115,7 +116,7 @@ function numberRows(rows: number[][]) {
 const range = (r0: number, r1: number, c0: number, c1: number): SingleRange => ({ row: [r0, r1], column: [c0, c1] });
 
 // The cells a single formula rule paints, sorted.
-function painted(formula: string, cellrange: SingleRange[]): string[] {
+function painted(formula: string, ranges: SingleRange[]): string[] {
     const ctx = contextFactory() as Context;
     ctx.sheets[0].name = 'Sheet1';
     ctx.sheets[0].data = numberRows(GRID);
@@ -124,16 +125,16 @@ function painted(formula: string, cellrange: SingleRange[]): string[] {
         [1, 0],
         [0, 1],
     ]);
-    ctx.sheets[0].conditionalFormatRules = [
+    ctx.sheets[0].conditionalFormats = formatsOf([
         {
             type: 'default',
-            cellrange,
+            ranges,
             format: { cellColor: '#ff0000' },
             conditionName: 'formula',
             conditionRange: [],
             conditionValue: [formula],
         },
-    ];
+    ]);
     return Object.keys(getComputeMap(ctx) ?? {}).sort();
 }
 
@@ -211,7 +212,7 @@ describe('state/condition-format — formula rules resolve relative refs per cel
     });
 });
 
-// A rule the dialog hands to setConditionRules, with a value typed for its type.
+// A rule the dialog hands to addConditionRule, with a value typed for its type.
 function ruleDraft(rulesType: ConditionRuleType, typed: Partial<ConditionRulesProps> = {}): ConditionRulesProps {
     return {
         rulesType,
@@ -240,7 +241,7 @@ function ctxForRule(): Context {
     return ctx;
 }
 
-const savedRules = (ctx: Context) => ctx.sheets[0].conditionalFormatRules ?? [];
+const savedRules = (ctx: Context) => formatList(ctx.sheets[0].conditionalFormats);
 const savedValues = (ctx: Context) =>
     savedRules(ctx).flatMap((rule) => (rule.type === 'default' ? [rule.conditionValue] : []));
 
@@ -248,7 +249,7 @@ const savedValues = (ctx: Context) =>
 function refusal(draft: ConditionRulesProps): string | undefined {
     const ctx = ctxForRule();
     const error = conditionRuleError(ctx, draft);
-    setConditionRules(ctx, draft);
+    addConditionRule(ctx, draft);
     expect(savedRules(ctx)).toHaveLength(error ? 0 : 1);
     expect(ctx.warnDialog).toBeUndefined();
     return error;
@@ -256,7 +257,7 @@ function refusal(draft: ConditionRulesProps): string | undefined {
 
 const NUMBER_OR_CELL = 'Enter a number, or a cell such as =A1';
 
-describe('state/condition-format — setConditionRules', () => {
+describe('state/condition-format — addConditionRule', () => {
     it('stores a value typed with = as the formula Excel writes, so the rule reads the cell live', () => {
         const formulas: [ConditionRuleType, Partial<ConditionRulesProps>, string][] = [
             ['greaterThan', { rulesValue: '=A1' }, '=B2>A1'],
@@ -267,11 +268,11 @@ describe('state/condition-format — setConditionRules', () => {
         ];
         for (const [rulesType, typed, formula] of formulas) {
             const ctx = ctxForRule();
-            setConditionRules(ctx, ruleDraft(rulesType, typed));
+            addConditionRule(ctx, ruleDraft(rulesType, typed));
             expect(savedRules(ctx)).toEqual([
                 {
                     type: 'default',
-                    cellrange: [{ row: [1, 2], column: [1, 2] }],
+                    ranges: [{ row: [1, 2], column: [1, 2] }],
                     format: { textColor: null, cellColor: '#d0fae5' },
                     conditionName: 'formula',
                     conditionRange: [],
@@ -288,7 +289,7 @@ describe('state/condition-format — setConditionRules', () => {
             [0, 4, 6],
             [0, 8, 2],
         ]);
-        setConditionRules(ctx, ruleDraft('greaterThan', { rulesValue: '=$A$1' }));
+        addConditionRule(ctx, ruleDraft('greaterThan', { rulesValue: '=$A$1' }));
         expect(Object.keys(getComputeMap(ctx) ?? {}).sort()).toEqual(['1_2', '2_1']);
         ctx.sheets[0].data = numberRows([
             [3, 0, 0],
@@ -302,7 +303,7 @@ describe('state/condition-format — setConditionRules', () => {
         for (const rulesValue of ['FY2024', 'Q1', 'ID1', 'A1']) {
             for (const rulesType of ['equal', 'textContains'] as const) {
                 const ctx = ctxForRule();
-                setConditionRules(ctx, ruleDraft(rulesType, { rulesValue }));
+                addConditionRule(ctx, ruleDraft(rulesType, { rulesValue }));
                 expect(savedRules(ctx)).toMatchObject([{ conditionName: rulesType, conditionValue: [rulesValue] }]);
             }
             expect(refusal(ruleDraft('greaterThan', { rulesValue }))).toBe(NUMBER_OR_CELL);
@@ -334,7 +335,7 @@ describe('state/condition-format — setConditionRules', () => {
     it('takes text as the value of Equal to and Text contains, and refuses only an empty one', () => {
         for (const rulesType of ['equal', 'textContains'] as const) {
             const ctx = ctxForRule();
-            setConditionRules(ctx, ruleDraft(rulesType, { rulesValue: 'abc' }));
+            addConditionRule(ctx, ruleDraft(rulesType, { rulesValue: 'abc' }));
             expect(savedValues(ctx)).toEqual([['abc']]);
             expect(refusal(ruleDraft(rulesType))).toBe('Enter a value, or a cell such as =A1');
         }
@@ -363,7 +364,7 @@ describe('state/condition-format — setConditionRules', () => {
             [0, 4, 7],
             [0, 9, 1],
         ]);
-        setConditionRules(ctx, ruleDraft('greaterThan', { rulesValue: '=Data!$A$1' }));
+        addConditionRule(ctx, ruleDraft('greaterThan', { rulesValue: '=Data!$A$1' }));
         expect(savedValues(ctx)).toEqual([['=B2>Data!$A$1']]);
         expect(Object.keys(getComputeMap(ctx) ?? {}).sort()).toEqual(['1_2', '2_1']);
     });

@@ -5,7 +5,6 @@
 // grid's limits (an imported one), or whose data holds what this build can't edit, shows its data read-only.
 
 import {
-    chartPointMoves,
     chartSpecChange,
     exceedsInlineGridLimits,
     holdsUnknownChartData,
@@ -89,7 +88,6 @@ export function ChartDataDialog({ spec, stored, open, onOpenChange, onSave }: Ch
                 ) : (
                     <EditableGrid
                         spec={spec}
-                        stored={stored}
                         onCancel={() => onOpenChange(false)}
                         onSave={(next) => {
                             onSave(next);
@@ -155,12 +153,10 @@ const HIGHLIGHT = 'bg-linear-to-r from-(--sheet-header-highlight) to-(--sheet-he
 // it, and a canvas host's clipboard and keys stand down for a focused input.
 function EditableGrid({
     spec,
-    stored,
     onCancel,
     onSave,
 }: {
     spec: InlineChartSpec;
-    stored: StoredChartSpec;
     onCancel: () => void;
     onSave: (change: ChartSpecChange) => void;
 }) {
@@ -352,14 +348,7 @@ function EditableGrid({
             setEditing(null);
             return;
         }
-        // Every stored point follows its row: a deleted row's go, and the rows after it, past the data too, take
-        // theirs along.
-        const target = new Map(final.rows.flatMap((row, i) => (row.origin === null ? [] : [[row.origin, i]])));
-        const deleted = opened.rows.length - target.size;
-        const moves = chartPointMoves(stored, (index) =>
-            index < opened.rows.length ? (target.get(index) ?? null) : index - deleted,
-        );
-        onSave([...chartSpecChange(specOf(opened, spec), specOf(final, spec)), ...moves]);
+        onSave(chartSpecChange(specOf(opened, spec), specOf(final, spec)));
     };
 
     const activeText = cellText(grid, active);

@@ -63,6 +63,17 @@ describe('isValidFractionalIndex', () => {
         expect(isValidFractionalIndex('not a key', undefined, undefined)).toBe(false); // malformed
         expect(isValidFractionalIndex('a0', undefined, undefined)).toBe(true); // sole element
     });
+
+    // A key grows by a character every few inserts into one gap, and making the next key walks it character by
+    // character, so a peer's key of 40,000 characters would overflow the stack of every later insert.
+    test('a key longer than any writer makes is no key', () => {
+        const largest = `z${'z'.repeat(26)}`;
+        expect(isValidFractionalIndex(`${largest}${'z'.repeat(101)}`, undefined, undefined)).toBe(true);
+        expect(isValidFractionalIndex(`${largest}${'z'.repeat(102)}`, undefined, undefined)).toBe(false);
+        const forged = { id: 'forged', index: `${largest}${'z'.repeat(40_000)}` };
+        const healed = syncInvalidIndices([{ id: 'a', index: 'a0' }, forged]);
+        expect(healed.map((element) => element.index)).toEqual(['a0', 'a1']);
+    });
 });
 
 describe('syncInvalidIndices', () => {

@@ -5,7 +5,7 @@ import { afterEach, expect, test } from 'bun:test';
 import {
     DEFAULT_CHART_SERIES_STYLE,
     MAX_SKETCH_POINTS,
-    newSheetChartSpecParts,
+    newChartSpecParts,
     readChartSpec,
     sampleChartSpec,
 } from '@workspace/lib/charts';
@@ -41,7 +41,7 @@ const rangeChart = (): SheetChart => ({
     y: 10,
     width: 400,
     height: 300,
-    ...newSheetChartSpecParts({
+    ...newChartSpecParts({
         ...sampleChartSpec('column'),
         title: { text: 'Scores' },
         series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#000000' } },
@@ -53,7 +53,7 @@ const rangeChart = (): SheetChart => ({
     }),
 });
 
-const inlineChart = (): SheetChart => ({ ...rangeChart(), ...newSheetChartSpecParts(sampleChartSpec('column')) });
+const inlineChart = (): SheetChart => ({ ...rangeChart(), ...newChartSpecParts(sampleChartSpec('column')) });
 
 const cell = (r: number, c: number, v: string | number) => ({ r, c, v: { v, m: String(v) } });
 const table = [cell(0, 0, 'Team'), cell(0, 1, 'Points'), cell(1, 0, 'Ajax'), cell(1, 1, 42)];
@@ -267,7 +267,7 @@ test("a Setup toggle keeps what this build doesn't know beside the data: a key o
     expect(data.categories).toEqual(ref([0, 0], [1, 1]));
     expect([part(stored()?.specChart).future, part(stored()?.specLegend).position]).toEqual([1, 'inside']);
     expect(data.series[0].id).toBe('s-1');
-    expect(part(stored()?.specSeries['s-1']).color).toBe('#000000');
+    expect(part(stored()?.specSeries)['s-1'].color).toBe('#000000');
 });
 
 // Rebuilt values would fall out of step with an array a newer build keeps beside them, as in Edit data.
@@ -307,11 +307,11 @@ test('a title typed letter by letter is one undo step', async () => {
 
 test("a peer's colour landing after the panel rendered survives a title typed in the panel", async () => {
     const { workbook, spec, field } = await mount(rangeChart());
-    const value = JSON.stringify({ ...DEFAULT_CHART_SERIES_STYLE, color: '#00ff00' });
+    const value = JSON.stringify({ 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#00ff00' } });
     const title = field('input[placeholder="Chart title"]');
     // One act, so the title's handler is the one the panel rendered before the peer's write.
     await act(async () => {
-        workbook.current?.applyOp([{ op: 'replace', id: 's1', path: ['charts', 'c1', 'specSeries', 's-1'], value }]);
+        workbook.current?.applyOp([{ op: 'replace', id: 's1', path: ['charts', 'c1', 'specSeries'], value }]);
         title.focus();
         title.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
         setValue?.call(title, 'Goals');
@@ -387,7 +387,7 @@ test('a range chart past the sketch cap says so under Sketch', async () => {
     const chart = rangeChart();
     const { spec } = readChartSpec(chart);
     if (!spec) throw new Error('no spec');
-    const many = newSheetChartSpecParts({
+    const many = newChartSpecParts({
         ...spec,
         data: {
             source: 'range',

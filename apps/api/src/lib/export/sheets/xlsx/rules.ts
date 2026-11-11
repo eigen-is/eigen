@@ -11,14 +11,14 @@ import type {
 } from '@workspace/lib/sheets';
 import {
     coalescedRanges,
-    compareValidationIds,
-    MAX_VALIDATION_RANGES,
+    MAX_RULE_RANGES,
+    orderedRules,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
     rangesOverlap,
 } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
-import { iscelldata, isWellFormedCfRule, rangeToA1, rangeWithout, toA1, withCfRanges } from '@workspace/sheet/engine';
+import { iscelldata, rangeToA1, rangeWithout, toA1, withCfRanges } from '@workspace/sheet/engine';
 import type { Lost } from '../../../document/transform/protocol';
 import {
     CF_CELL_IS_CONDITION,
@@ -43,7 +43,7 @@ import { argbOf } from './styles';
 // A sheet's conditional formats and data validations: the slot CT_Worksheet keeps for them after mergeCells.
 export function rulesXml(sheet: Sheet, styles: StyleRegistry, lost: Lost): string {
     return (
-        conditionalFormattingXml(sheet.conditionalFormatRules ?? [], styles, lost) +
+        conditionalFormattingXml(sheet.conditionalFormats, styles, lost) +
         dataValidationsXml(sheet.dataValidations ?? {}, lost)
     );
 }
@@ -56,16 +56,16 @@ type CfRule = {
     body?: string;
 };
 
-function conditionalFormattingXml(rules: ConditionalFormatRule[], styles: StyleRegistry, lost: Lost): string {
+function conditionalFormattingXml(rules: Sheet['conditionalFormats'], styles: StyleRegistry, lost: Lost): string {
     const written: { sqref: string; rule: CfRule }[] = [];
-    for (const rule of rules) {
-        const cellrange = rangesInGrid(rule);
-        const cfRule = cellrange.length > 0 ? cfRuleOf(withCfRanges(rule, cellrange)) : undefined;
-        if (cfRule) written.push({ sqref: cellrange.map((range) => rangeToA1(range)).join(' '), rule: cfRule });
+    for (const [, rule] of orderedRules(rules)) {
+        const ranges = rangesInGrid(rule);
+        const cfRule = ranges.length > 0 ? cfRuleOf(withCfRanges(rule, ranges)) : undefined;
+        if (cfRule) written.push({ sqref: ranges.map((range) => rangeToA1(range)).join(' '), rule: cfRule });
         else lost('conditional-formats-dropped');
     }
-    // Excel resolves overlapping rules by the lowest priority number, the engine by the last rule. Excel keeps the
-    // rules of one range in one block.
+    // Excel resolves overlapping rules by the lowest priority number, the engine by the last rule in order, so the
+    // last rule gets priority 1. Excel keeps the rules of one range in one block.
     const blocks = new Map<string, string[]>();
     for (const [index, { sqref, rule }] of written.entries()) {
         const { type, look, attributes = '', formulas = [], body = '' } = rule;
@@ -82,11 +82,9 @@ function conditionalFormattingXml(rules: ConditionalFormatRule[], styles: StyleR
         .join('');
 }
 
-// A rule's ranges cut to Excel's grid, which drops one outside it. A peer can store anything, so a rule whose shape
-// the engine can't read has none.
+// A rule's ranges cut to Excel's grid, which drops one outside it.
 function rangesInGrid(rule: ConditionalFormatRule): SingleRange[] {
-    if (!isWellFormedCfRule(rule)) return [];
-    return rule.cellrange.flatMap(({ row, column }) => {
+    return rule.ranges.flatMap(({ row, column }) => {
         const rows = [Math.max(0, row[0]), Math.min(REFERENCE_ROW_COUNT - 1, row[1])];
         const columns = [Math.max(0, column[0]), Math.min(REFERENCE_COLUMN_COUNT - 1, column[1])];
         return rows[0] <= rows[1] && columns[0] <= columns[1] ? [{ row: rows, column: columns }] : [];
@@ -125,7 +123,7 @@ function cfRuleOf(rule: ConditionalFormatRule): CfRule | undefined {
     }
     if (name === 'textContains') {
         const text = String(values[0]);
-        const anchor = toA1(rule.cellrange[0].row[0], rule.cellrange[0].column[0]);
+        const anchor = toA1(rule.ranges[0].row[0], rule.ranges[0].column[0]);
         return fits({
             type: 'containsText',
             look,
@@ -164,13 +162,12 @@ function cfRuleOf(rule: ConditionalFormatRule): CfRule | undefined {
 }
 
 function dataValidationsXml(rules: Record<string, SheetValidation>, lost: Lost): string {
-    // Each rule is one validation over its ranges. The ranges go in order of their top-left cells, and the rules in
-    // order of their first range, so one workbook always writes the same file. A relative reference reads from the
-    // first range's top-left cell, as Excel reads it.
+    // The ranges go in order of their top-left cells and the rules in order of their first range, so one workbook
+    // always writes the same file. Excel reads a relative reference from the first range's top-left cell.
     const topLeft = (a: SingleRange, b: SingleRange) => a.row[0] - b.row[0] || a.column[0] - b.column[0];
     const entries = Object.entries(withoutOverlaps(rules, lost))
-        .map(([id, { ranges, rule }]) => ({ id, ranges: [...ranges].sort(topLeft), rule }))
-        .sort((a, b) => topLeft(a.ranges[0], b.ranges[0]) || compareValidationIds(a.id, b.id));
+        .map(([, { ranges, rule }]) => ({ ranges: [...ranges].sort(topLeft), rule }))
+        .sort((a, b) => topLeft(a.ranges[0], b.ranges[0]));
 
     const validations: string[] = [];
     for (const { rule, ranges } of entries) {
@@ -201,21 +198,19 @@ function dataValidationsXml(rules: Record<string, SheetValidation>, lost: Lost):
         : '';
 }
 
-// Where rules overlap, the highest id wins the cell, but a file read back numbers its rules in the file's order. So
-// each rule loses the cells a higher id holds, and no two rules overlap in the file. A rule left with no cell goes,
-// and loses nothing: it held no cell. A rule the cuts leave with more ranges than a rule may hold is dropped and
-// counted, since the importer would drop it.
-export function withoutOverlaps(rules: Record<string, SheetValidation>, lost: Lost): Record<string, SheetValidation> {
+// Where rules overlap the last in order wins the cell, but the file orders by cell, so each rule loses the cells a
+// later rule holds. A rule the cuts leave with more ranges than a rule may hold is dropped and counted.
+function withoutOverlaps(rules: Record<string, SheetValidation>, lost: Lost): Record<string, SheetValidation> {
     const kept: Record<string, SheetValidation> = {};
-    // The rules from the highest id down. The index holds the ranges of the rules already walked, the higher ones.
+    // The rules from the last down. The index holds the ranges of the rules already walked, the later ones.
     const above = rangeIndex();
     const aboveBounds: SingleRange[] = [];
-    for (const id of Object.keys(rules).sort((a, b) => compareValidationIds(b, a))) {
-        const { ranges } = rules[id];
+    for (const [id, rule] of orderedRules(rules).reverse()) {
+        const { ranges } = rule;
         const bounds = boundsOf(ranges);
         let cut = ranges;
-        // A rule whose bounds meet no higher rule's bounds loses no cell, and asks the index nothing.
-        if (aboveBounds.some((higher) => rangesOverlap(higher, bounds))) {
+        // A rule whose bounds meet no later rule's bounds loses no cell, and asks the index nothing.
+        if (aboveBounds.some((later) => rangesOverlap(later, bounds))) {
             let cuts = false;
             const pieces = ranges.flatMap((range) => {
                 const overlapping = above.overlapping(range);
@@ -227,8 +222,8 @@ export function withoutOverlaps(rules: Record<string, SheetValidation>, lost: Lo
         }
         aboveBounds.push(bounds);
         for (const range of ranges) above.add(range);
-        if (cut.length > MAX_VALIDATION_RANGES) lost('validations-dropped');
-        else if (cut.length > 0) kept[id] = { ...rules[id], ranges: cut };
+        if (cut.length > MAX_RULE_RANGES) lost('validations-dropped');
+        else if (cut.length > 0) kept[id] = { ...rule, ranges: cut };
     }
     return kept;
 }
@@ -243,16 +238,13 @@ function boundsOf(ranges: readonly SingleRange[]): SingleRange {
     return bounds;
 }
 
-// The index keeps each range in one of three grids: square tiles of this many rows and columns for a small range, bands
-// this many rows tall across the sheet for a wide one, such as a whole row, and bands this many columns wide down the
-// sheet for a tall one, such as a whole column. A range goes in the first grid where it covers at most MAX_TILES tiles.
+// The index keeps a range in the first of three grids where it covers at most MAX_TILES tiles: square tiles of this
+// size, bands this tall across the sheet for a wide range, and bands this wide down the sheet for a tall one.
 const TILE = 64;
 const MAX_TILES = 16;
 
-// The ranges added so far, which a range asks for the ones it overlaps without a check against each of them. A range
-// checks only the ranges in the tiles it covers of each grid. A range too large for every grid, such as the whole
-// sheet, is kept in a list every lookup checks. Such ranges are rare, and a rule of them mostly meets no other rule's
-// bounds.
+// The ranges added so far, which a range asks for the ones it overlaps: it checks only the tiles it covers of each
+// grid. A range too large for every grid, such as the whole sheet, is rare and kept in a list every lookup checks.
 function rangeIndex() {
     const grids = [tileGrid(TILE, TILE), tileGrid(TILE, REFERENCE_COLUMN_COUNT), tileGrid(REFERENCE_ROW_COUNT, TILE)];
     const large: SingleRange[] = [];

@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
 import type { TransformWarning } from '../../../../lib/document/transform/protocol';
 import { xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
 import { openZip } from '../../../../lib/ooxml/zip';
 import { cellLinks } from '../../../fixtures/cell-links';
-import { validationsByCell } from '../../../fixtures/validations';
+import { formatsOf, validationsByCell } from '../../../fixtures/validations';
 import { exportXlsx } from '../../../fixtures/xlsx';
 
 function entry(bytes: Uint8Array, path: string): string {
@@ -168,15 +168,15 @@ describe('an xlsx export read back by the import', () => {
                         v: { f: "=Q1!A1+q1!B2+R1C1!A1+2024!A1+TRUE!A1+History!A1+'My Sheet'!A1+Index!A1+1" },
                     },
                 ],
-                conditionalFormatRules: [
+                conditionalFormats: formatsOf([
                     {
                         type: 'default',
                         conditionName: 'formula',
                         conditionValue: ['=Q1!A1>0'],
-                        cellrange: [{ row: [0, 0], column: [0, 0] }],
+                        ranges: [{ row: [0, 0], column: [0, 0] }],
                         format: {},
                     },
-                ],
+                ]),
                 dataValidations: validationsByCell({
                     '1_0': {
                         type: 'dropdown',
@@ -368,7 +368,6 @@ describe('the export keeps what a plain writer loses', () => {
     });
 
     test('a color a peer forged as no string is left out, rather than failing the export', async () => {
-        const range = [{ row: [0, 0], column: [0, 0] }];
         const forged: unknown[] = [
             {
                 name: 'Sheet1',
@@ -379,18 +378,6 @@ describe('the export keeps what a plain writer loses', () => {
                         { rangeType: 'cell', value: { row_index: 0, col_index: 0, l: { style: 1, color: 5 } } },
                     ],
                 },
-                conditionalFormatRules: [
-                    { type: 'dataBar', cellrange: range, format: [5] },
-                    { type: 'colorGradation', cellrange: range, format: [1, 2] },
-                    {
-                        type: 'default',
-                        cellrange: range,
-                        format: { textColor: 5, cellColor: 6 },
-                        conditionName: 'greaterThan',
-                        conditionRange: [],
-                        conditionValue: ['1'],
-                    },
-                ],
             },
         ];
         // As a peer's update arrives: JSON no type checked.
@@ -400,7 +387,7 @@ describe('the export keeps what a plain writer loses', () => {
         expect(entry(bytes, 'xl/styles.xml')).not.toContain('rgb=');
         expect(entry(bytes, 'xl/worksheets/sheet1.xml')).not.toContain('tabColor');
         expect(cellAt(xlsxToSheets(bytes)[0], 0, 0)).toMatchObject({ v: 'x', bl: 1 });
-        expect(warnings).toEqual([{ code: 'conditional-formats-dropped', count: 2 }]);
+        expect(warnings).toEqual([]);
     });
 
     test('one workbook is always the same bytes', async () => {
@@ -412,19 +399,20 @@ describe('the export keeps what a plain writer loses', () => {
                     { r: 0, c: 0, v: { v: 'a', bl: 1, link: { type: 'webpage', address: 'https://example.com' } } },
                     { r: 0, c: 1, v: { v: 2, f: '=1+1' } },
                 ],
-                conditionalFormatRules: [
+                conditionalFormats: formatsOf([
                     {
                         type: 'default',
-                        cellrange: [{ row: [0, 3], column: [1, 1] }],
+                        ranges: [{ row: [0, 3], column: [1, 1] }],
                         format: { textColor: null, cellColor: '#FFC7CE' },
                         conditionName: 'greaterThan',
                         conditionRange: [],
                         conditionValue: ['1'],
                     },
-                ],
+                ]),
                 dataValidations: {
                     v: {
                         ranges: [{ row: [1, 1], column: [0, 0] }],
+                        order: 'a0',
                         rule: {
                             type: 'dropdown',
                             type2: '',
@@ -444,7 +432,7 @@ describe('the export keeps what a plain writer loses', () => {
                         y: 40,
                         width: 300,
                         height: 200,
-                        ...newSheetChartSpecParts(sampleChartSpec('column')),
+                        ...newChartSpecParts(sampleChartSpec('column')),
                     },
                 },
             },

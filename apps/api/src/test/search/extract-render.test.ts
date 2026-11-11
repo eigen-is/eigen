@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { encodeSheetsSnapshot, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import { DEFAULT_SCENE_META } from '@workspace/lib/vector';
 import { MATHML_NAMESPACE, readLatex, writeMathml } from '@workspace/math';
@@ -295,7 +295,7 @@ describe('extractCollabText', () => {
             y: 0,
             width: 400,
             height: 300,
-            ...newSheetChartSpecParts({ ...sampleChartSpec('column'), title: { text: 'Quarterly revenue' } }),
+            ...newChartSpecParts({ ...sampleChartSpec('column'), title: { text: 'Quarterly revenue' } }),
         };
         const sheet = {
             id: 'sheet-1',

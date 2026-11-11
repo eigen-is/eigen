@@ -1,16 +1,13 @@
-// Which painted cell glyph sits under a sheet-space point. The selection box
-// carries two DOM drag hit targets (the move band, the fill handle) that sit
-// over the canvas, and a glyph in the same corner used to lose to them: a press
-// on the list chevron at the fill corner started a fill drag instead of opening
-// the list. cellGlyphAt is the one predicate both the mousedown and the hover
-// path consult before the handles get their say.
+// Which painted cell glyph sits under a sheet-space point. The selection box carries two DOM drag targets, the move
+// band and the fill handle, over the canvas, and a press on a list chevron or a tick box in the same place belongs to
+// the glyph. A corner mark claims nothing, as in Google Sheets: a press on it is a press on the cell or the band.
 
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
-import { cellGlyphAt, cellIndicatorRect } from '../../../state/modules/cell-glyph';
+import { cellGlyphAt } from '../../../state/modules/cell-glyph';
 import { cellTextBox, dropdownChevronRect } from '../../../state/modules/data-validation';
-import type { Cell, DataValidationRule } from '../../../state/types';
-import { contextFactory, workbookContextFactory } from '../factories/context';
+import type { DataValidationRule } from '../../../state/types';
+import { contextFactory } from '../factories/context';
 import { validationsByCell } from '../factories/validations';
 
 const LIST_RULE: DataValidationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
@@ -19,13 +16,6 @@ const NUMBER_RULE: DataValidationRule = { type: 'number', type2: 'moreThanThe', 
 
 // A1 spans x 0..74, y 0..20 in the factory's grid; its text box is 72×18.
 const A1_BOX = cellTextBox(0, 0, 74, 20);
-
-describe('cellIndicatorRect', () => {
-    test('is the 11px square the corner triangle is drawn in, anchored on the cell corner', () => {
-        expect(cellIndicatorRect('left', 0, 0, 74)).toEqual({ x: -1, y: 0, size: 11 });
-        expect(cellIndicatorRect('right', 0, 0, 74)).toEqual({ x: 62, y: 0, size: 11 });
-    });
-});
 
 describe('cellGlyphAt', () => {
     test('the list chevron, on the same rect the painter uses', () => {
@@ -45,65 +35,24 @@ describe('cellGlyphAt', () => {
         expect(cellGlyphAt(ctx, 5, 10)).toBeUndefined();
     });
 
-    test('the comment triangle in the top-right corner', () => {
+    test('a tick box holding a value its rule does not name paints no box, so it answers none', () => {
+        const ctx = contextFactory({ selections: [] }) as Context;
+        ctx.sheets[0].data![0][0] = { v: 'Maybe', m: 'Maybe' };
+        ctx.sheets[0].dataValidations = validationsByCell({ '0_0': TICK_BOX });
+        expect(cellGlyphAt(ctx, 36, 10)).toBeUndefined();
+    });
+
+    test('a corner mark is no glyph: a comment, an invalid value and a number stored as text', () => {
         const ctx = contextFactory({ selections: [] }) as Context;
         ctx.sheets[0].data![0][0] = { v: 'hi', m: 'hi', commentCardIds: ['card'] };
-        expect(cellGlyphAt(ctx, 72, 1)).toBe('comment');
-        expect(cellGlyphAt(ctx, 72, 15)).toBeUndefined();
-        // The same corner of a cell without a comment is nothing.
-        expect(cellGlyphAt(ctx, 146, 1)).toBeUndefined();
-    });
+        expect(cellGlyphAt(ctx, 72, 1)).toBeUndefined();
 
-    test('the invalid-value triangle in the top-left corner, only while the value fails its rule', () => {
-        const ctx = contextFactory({ selections: [] }) as Context;
         ctx.sheets[0].data![0][0] = { v: 1, m: '1' };
         ctx.sheets[0].dataValidations = validationsByCell({ '0_0': NUMBER_RULE });
-        expect(cellGlyphAt(ctx, 1, 5)).toBe('invalid');
-
-        ctx.sheets[0].data![0][0] = { v: 5, m: '5' };
         expect(cellGlyphAt(ctx, 1, 5)).toBeUndefined();
-    });
 
-    test('a number rule reads the value, not the text a format shows', () => {
-        const glyphOver = (rule: DataValidationRule, cell: Cell) =>
-            cellGlyphAt(
-                workbookContextFactory({
-                    currentSheetId: 'id_1',
-                    visibledatarow: [20],
-                    visibledatacolumn: [74],
-                    sheets: [
-                        {
-                            name: 'sheet',
-                            id: 'id_1',
-                            order: 0,
-                            data: [[cell]],
-                            dataValidations: validationsByCell({ '0_0': rule }),
-                        },
-                    ],
-                }),
-                1,
-                5,
-            );
-        const shownFormatted = { v: 1234.5, m: '1,234.50', ct: { fa: '#,##0.00', t: 'n' } };
-        expect(glyphOver(NUMBER_RULE, shownFormatted)).toBeUndefined();
-        const under1 = { type: 'number', type2: 'lessThan', value1: '1', value2: '' };
-        expect(glyphOver(under1, { v: 0.5, m: '50%', ct: { fa: '0%', t: 'n' } })).toBeUndefined();
-    });
-
-    test('an empty validated cell paints no invalid mark, so it answers none', () => {
-        const ctx = contextFactory({ selections: [] }) as Context;
-        ctx.sheets[0].dataValidations = validationsByCell({ '0_0': NUMBER_RULE });
-        expect(cellGlyphAt(ctx, 1, 5)).toBeUndefined();
-    });
-
-    test('the forced-string triangle in the top-left corner, which the painter also draws there', () => {
-        const ctx = contextFactory({ selections: [] }) as Context;
-        // qp === 1 marks a number stored as text; the painter draws a green corner triangle. A
-        // press on it must belong to the cell, not fall through to the drag handle in that corner.
+        ctx.sheets[0].dataValidations = {};
         ctx.sheets[0].data![0][0] = { v: '00123', m: '00123', qp: 1 };
-        expect(cellGlyphAt(ctx, 1, 5)).toBe('forced-string');
-        // A plain numeric cell in the same corner has no triangle.
-        ctx.sheets[0].data![0][0] = { v: 123, m: '123' };
         expect(cellGlyphAt(ctx, 1, 5)).toBeUndefined();
     });
 });

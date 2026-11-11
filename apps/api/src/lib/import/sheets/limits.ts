@@ -15,9 +15,6 @@ export const MAX_CELLS = 4_000_000;
 export const MAX_TEXT = 250_000_000;
 // A shared formula's copy is translated, and a formula that uses a defined name is walked, before either is weighed.
 export const MAX_SHARED_FORMULA_TEXT = 16_000_000;
-// Recalc materializes a sheet's rows by its columns, each at least a default grid's, so a narrow sheet's span is far
-// smaller than its grid.
-export const MAX_GRID_SLOTS = 110_000_000;
 
 // A workbook's stored cells and the characters of their text.
 export type SheetsWeight = { cells: number; text: number };
