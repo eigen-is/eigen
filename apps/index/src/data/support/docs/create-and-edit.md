@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, editing, create, writing, outline, headings]
 related: [docs/format-text, docs/get-started]
 order: 20
-updated: 2026-10-27
+updated: 2026-11-11
 ---
 
 Docs is the document editor in Eigen. You can create a new document in seconds, write and format your content in the browser, and share it with others when you're ready. Everything saves as you go.
@@ -80,7 +80,7 @@ Open the **Edit** menu in the toolbar and choose **Undo** or **Redo**, or use th
 
 ## Cut, copy, and select
 
-The **Edit** menu also has **Cut**, **Copy**, **Select all**, and **Delete**. Select some text first for **Cut**, **Copy**, and **Delete**. To paste, press Cmd+V (Mac) or Ctrl+V (Windows).
+The **Edit** menu also has **Cut**, **Copy**, **Paste**, **Select all**, and **Delete**. Select some text first for **Cut**, **Copy**, and **Delete**. **Paste** needs your browser's permission to read the clipboard. If you don't allow it, nothing is pasted, and Cmd+V (Mac) or Ctrl+V (Windows) still works.
 
 If you can only view the document, you can still use **Copy** and **Select all**.
 
