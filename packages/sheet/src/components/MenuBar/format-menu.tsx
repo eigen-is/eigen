@@ -45,6 +45,7 @@ import type { Context, RunStyle } from '../../state';
 import {
     FONT_ARRAY,
     getFlowdata,
+    HORIZONTAL_ALIGNS,
     handleBold,
     handleBorder,
     handleClearFormat,
@@ -62,6 +63,7 @@ import {
     NUMBER_MENU_PRESETS,
     SHEET_HOTKEYS,
     updateFormat,
+    VERTICAL_ALIGNS,
 } from '../../state';
 import { CustomCurrencies } from '../FormatDialogs/CustomCurrencies';
 import { CustomDateTimeFormats } from '../FormatDialogs/CustomDateTimeFormats';
@@ -69,10 +71,7 @@ import { CustomNumberFormats } from '../FormatDialogs/CustomNumberFormats';
 import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
 import { CustomBorder } from './CustomBorder';
 import { ConditionalFormattingSubmenu } from './conditional-formatting-menu';
-
-// A cell stores its alignment as a code: `ht` 0 center, 1 left and 2 right, `vt` 0 middle, 1 top and 2 bottom.
-const HORIZONTAL_ALIGNS = ['center', 'left', 'right'] as const;
-const VERTICAL_ALIGNS = ['middle', 'top', 'bottom'] as const;
+import { useFormatCells } from './use-format-cells';
 
 const HORIZONTAL_ALIGN_OPTIONS = [
     { value: 'left', label: 'Left', icon: AlignLeft },
@@ -130,16 +129,6 @@ const MERGES = [
     { text: 'Merge vertically', value: 'merge-vertical' },
     { text: 'Unmerge', value: 'merge-cancel' },
 ];
-
-// Runs a format through the cell input, which holds the open editor's selection, as the format toolbar does.
-function useFormatCells() {
-    const { setContext, refs } = useContext(WorkbookContext);
-    return (apply: (ctx: Context, input: HTMLDivElement) => void) =>
-        setContext((ctx) => {
-            const input = refs.cellInput.current;
-            if (input) apply(ctx, input);
-        });
-}
 
 // Sets one property of every selected cell, such as its wrapping or rotation.
 function setCellProperty(ctx: Context, input: HTMLDivElement, attr: 'tb' | 'rt', value: string | number) {
@@ -262,7 +251,7 @@ function AlignmentSubmenu() {
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="sheet-mousedown-cancel">
                 <ChoiceMenuItems
-                    value={cell?.ht == null ? undefined : HORIZONTAL_ALIGNS[Number(cell.ht)]}
+                    value={cell?.ht == null ? undefined : HORIZONTAL_ALIGNS[cell.ht]}
                     options={HORIZONTAL_ALIGN_OPTIONS.map(({ value, label, icon: Icon }) => ({
                         value,
                         label: (
@@ -275,7 +264,7 @@ function AlignmentSubmenu() {
                 />
                 <DropdownMenuSeparator />
                 <ChoiceMenuItems
-                    value={cell?.vt == null ? undefined : VERTICAL_ALIGNS[Number(cell.vt)]}
+                    value={cell?.vt == null ? undefined : VERTICAL_ALIGNS[cell.vt]}
                     options={VERTICAL_ALIGN_OPTIONS.map(({ value, label, icon: Icon }) => ({
                         value,
                         label: (

@@ -6,7 +6,15 @@
 
 import type { Hotkey } from '@tanstack/react-hotkeys';
 import { matchesKeyboardEvent } from '@tanstack/react-hotkeys';
-import { REDO_ALT_HOTKEY, REDO_HOTKEY, UNDO_HOTKEY } from '@workspace/lib/constants/hotkeys';
+import {
+    COPY_HOTKEY,
+    CUT_HOTKEY,
+    PASTE_HOTKEY,
+    REDO_ALT_HOTKEY,
+    REDO_HOTKEY,
+    SELECT_ALL_HOTKEY,
+    UNDO_HOTKEY,
+} from '@workspace/lib/constants/hotkeys';
 import dayjs from 'dayjs';
 import { cloneDeep, isEmpty, isNil } from 'es-toolkit/compat';
 import { cellValue } from '../../engine/format';
@@ -24,20 +32,20 @@ import { getSheetIndex } from '../utils';
 import { clearSelectedContents } from './clear';
 import { handleCopy, handleCut } from './copy';
 
-// Mod is ⌘ on a Mac and Ctrl elsewhere. A menu row shows its shortcut with formatForDisplay. Undo and redo are the
-// keys of every other editor.
+// Mod is ⌘ on a Mac and Ctrl elsewhere. A menu row shows its shortcut with formatForDisplay. The undo, redo and
+// clipboard keys are every editor's, so the shared Edit menu shows the same ones.
 export const SHEET_HOTKEYS = {
     undo: UNDO_HOTKEY,
     redo: REDO_HOTKEY,
     redoAlt: REDO_ALT_HOTKEY,
-    cut: 'Mod+X',
-    copy: 'Mod+C',
-    paste: 'Mod+V',
+    cut: CUT_HOTKEY,
+    copy: COPY_HOTKEY,
+    paste: PASTE_HOTKEY,
     bold: 'Mod+B',
     italic: 'Mod+I',
     underline: 'Mod+U',
     clearFormatting: 'Mod+\\',
-    selectAll: 'Mod+A',
+    selectAll: SELECT_ALL_HOTKEY,
     fillDown: 'Mod+D',
     fillRight: 'Mod+R',
     focusLock: 'Control+Shift+F',
@@ -140,50 +148,19 @@ function handleControlPlusArrowKey(ctx: Context, e: KeyboardEvent, shiftPressed:
     const startC = last.column[0];
     const endC = last.column[1];
 
-    const horizontalOffset = currC - endC !== 0 ? currC - endC : currC - startC;
-    const verticalOffset = currR - endR !== 0 ? currR - endR : currR - startR;
-
-    let selectedLimit: number;
-
-    switch (e.key) {
-        case 'ArrowUp':
-            selectedLimit = moveToEdge(sheetData, e.key, currC, -1, 0, startR, endR, startC, endC, maxRow, maxCol);
-            if (shiftPressed) {
-                moveHighlightRange(ctx, 'down', verticalOffset, 'rangeOfSelect');
-                moveHighlightRange(ctx, 'down', selectedLimit - currR, 'rangeOfSelect');
-            } else {
-                moveHighlightCell(ctx, 'down', selectedLimit - currR, 'rangeOfSelect');
-            }
-            break;
-        case 'ArrowDown':
-            selectedLimit = moveToEdge(sheetData, e.key, currC, 1, 0, startR, endR, startC, endC, maxRow, maxCol);
-            if (shiftPressed) {
-                moveHighlightRange(ctx, 'down', verticalOffset, 'rangeOfSelect');
-                moveHighlightRange(ctx, 'down', selectedLimit - currR, 'rangeOfSelect');
-            } else {
-                moveHighlightCell(ctx, 'down', selectedLimit - currR, 'rangeOfSelect');
-            }
-            break;
-        case 'ArrowLeft':
-            selectedLimit = moveToEdge(sheetData, e.key, currR, 0, -1, startR, endR, startC, endC, maxRow, maxCol);
-            if (shiftPressed) {
-                moveHighlightRange(ctx, 'right', horizontalOffset, 'rangeOfSelect');
-                moveHighlightRange(ctx, 'right', selectedLimit - currC, 'rangeOfSelect');
-            } else {
-                moveHighlightCell(ctx, 'right', selectedLimit - currC, 'rangeOfSelect');
-            }
-            break;
-        case 'ArrowRight':
-            selectedLimit = moveToEdge(sheetData, e.key, currR, 0, 1, startR, endR, startC, endC, maxRow, maxCol);
-            if (shiftPressed) {
-                moveHighlightRange(ctx, 'right', horizontalOffset, 'rangeOfSelect');
-                moveHighlightRange(ctx, 'right', selectedLimit - currC, 'rangeOfSelect');
-            } else {
-                moveHighlightCell(ctx, 'right', selectedLimit - currC, 'rangeOfSelect');
-            }
-            break;
-        default:
-            break;
+    const vertical = e.key === 'ArrowUp' || e.key === 'ArrowDown';
+    const delta = e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 1;
+    const direction = vertical ? 'down' : 'right';
+    const curr = vertical ? currR : currC;
+    const limit = vertical
+        ? moveToEdge(sheetData, e.key, currC, delta, 0, startR, endR, startC, endC, maxRow, maxCol)
+        : moveToEdge(sheetData, e.key, currR, 0, delta, startR, endR, startC, endC, maxRow, maxCol);
+    if (shiftPressed) {
+        const offset = vertical ? currR - endR || currR - startR : currC - endC || currC - startC;
+        moveHighlightRange(ctx, direction, offset, 'rangeOfSelect');
+        moveHighlightRange(ctx, direction, limit - curr, 'rangeOfSelect');
+    } else {
+        moveHighlightCell(ctx, direction, limit - curr, 'rangeOfSelect');
     }
 }
 

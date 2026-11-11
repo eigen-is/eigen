@@ -17,6 +17,7 @@ const { Workbook } = await import('../../../components/Workbook');
 type Sheet = import('../../../state').Sheet;
 type CellWithRowAndCol = import('@workspace/lib/sheets').CellWithRowAndCol;
 type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
+type Hooks = import('../../../state').Hooks;
 
 let cleanup: (() => Promise<void>) | undefined;
 afterEach(async () => {
@@ -28,9 +29,11 @@ afterEach(async () => {
 async function mountWorkbook({
     celldata = [],
     allowEdit = true,
+    hooks = {},
 }: {
     celldata?: CellWithRowAndCol[];
     allowEdit?: boolean;
+    hooks?: Hooks;
 } = {}) {
     const container = document.createElement('div');
     document.body.append(container);
@@ -43,7 +46,7 @@ async function mountWorkbook({
                 ref: workbook,
                 data,
                 allowEdit,
-                hooks: {},
+                hooks,
                 toolbarLeftItems: createElement(AppBarMenu, {
                     label: 'File',
                     children: createElement(DropdownMenuItem, null, 'New sheet'),
@@ -205,7 +208,7 @@ test('Edit › Select all selects the whole sheet', async () => {
 });
 
 test('View, Insert and Data lead each command with its icon, and their submenus list plain rows', async () => {
-    const { container } = await mountWorkbook();
+    const { container } = await mountWorkbook({ hooks: { onInsertImage: () => {}, onAddComment: () => {} } });
 
     await openMenu(container, 'View');
     expect(iconRows()).toEqual(['+ Freeze']);
@@ -270,7 +273,9 @@ test('Format leads each command with its icon, and its choices have none', async
 });
 
 test("Format › Alignment checks the cell's alignment, each option with its icon", async () => {
-    const { container } = await mountWorkbook({ celldata: [{ r: 0, c: 0, v: { v: 'x', m: 'x', ht: 2, vt: 0 } }] });
+    const { container, cell } = await mountWorkbook({
+        celldata: [{ r: 0, c: 0, v: { v: 'x', m: 'x', ht: 2, vt: 0 } }],
+    });
 
     await openFormat(container);
     await openSubmenu('Alignment');
@@ -287,5 +292,17 @@ test("Format › Alignment checks the cell's alignment, each option with its ico
     await clickRow('Left');
     await openFormat(container);
     await openSubmenu('Alignment');
-    expect(checkRows()[0]).toEqual(['Left', 'true']);
+    await clickRow('Bottom');
+    // The cell stores each alignment as its number code: left is 1 and bottom 2.
+    expect([cell(0, 0)?.ht, cell(0, 0)?.vt]).toEqual([1, 2]);
+    await openFormat(container);
+    await openSubmenu('Alignment');
+    expect(checkRows()).toEqual([
+        ['Left', 'true'],
+        ['Center', 'false'],
+        ['Right', 'false'],
+        ['Top', 'false'],
+        ['Middle', 'false'],
+        ['Bottom', 'true'],
+    ]);
 });
