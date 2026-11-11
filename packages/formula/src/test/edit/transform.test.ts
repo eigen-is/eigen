@@ -1,6 +1,3 @@
-// The transform of one formula under a row or column edit: the proposal's host × target × sheet table, the range
-// rules through the span map, and the three flags.
-
 import { describe, expect, test } from 'bun:test';
 import type { LineEdit } from '../../text';
 import { GONE, mapIndex, parseStored, printStored, toA1, transformLines } from '../../text';

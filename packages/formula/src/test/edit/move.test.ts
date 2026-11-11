@@ -1,6 +1,3 @@
-// A move of a block of cells, as a cut and paste or a drag makes it: who follows the block, who reads an
-// overwritten cell, and what a formula inside the block keeps reading.
-
 import { describe, expect, test } from 'bun:test';
 import type { Move } from '../../text';
 import { GRID_ROWS, printStored, toA1, transformMove } from '../../text';

@@ -1,6 +1,3 @@
-// Sheets in formula text: ids rewritten through a map, names bound to a sheet that appears, a deleted sheet, and
-// the check a copy needs.
-
 import { describe, expect, test } from 'bun:test';
 import { bindSheet, offGrid, printA1, printStored, remapSheets, ShapeTable } from '../../text';
 import { treeStored } from '../text/support';

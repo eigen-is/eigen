@@ -1,8 +1,3 @@
-// The 219 structural cases of the reference research at the text boundary: A1 text typed at a host goes in, the edit
-// runs through the transforms, and the A1 text at the host's new place comes out. Each expectation is the oracle's
-// Excel text, but for the cases listed in OURS, where this engine answers otherwise on purpose, and those in
-// NOT_RUN, which need something this package does not hold.
-
 import { expect, test } from 'bun:test';
 import type { FormulaNode, LineEdit, Move, Span } from '../../text';
 import {

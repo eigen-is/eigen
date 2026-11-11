@@ -1,8 +1,3 @@
-// The fast path held against a slow version that shares nothing with it: on an axis of a few lines it writes the axis
-// out as a list, applies the edit to the list, and reads off where each line of a range went. The transform is held
-// to it host by host, in the cells it names, its three flags and the edit that takes it back, and the classes of
-// hosts are held to the transform for every host of a run.
-
 import { describe, expect, test } from 'bun:test';
 import type { FormulaNode, LineEdit } from '../../text';
 import {
