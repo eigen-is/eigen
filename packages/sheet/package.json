@@ -16,6 +16,7 @@
   "dependencies": {
     "@formulajs/formulajs": "^2.9.3",
     "@tanstack/react-hotkeys": "^0.1.3",
+    "@workspace/formula": "workspace:*",
     "@workspace/lib": "workspace:*",
     "@workspace/ui": "workspace:*",
     "dayjs": "^1.11.23",

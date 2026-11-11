@@ -286,6 +286,13 @@
         "@workspace/ui": "workspace:*",
       },
     },
+    "packages/formula": {
+      "name": "@workspace/formula",
+      "version": "0.0.0",
+      "dependencies": {
+        "numfmt": "^3.2.6",
+      },
+    },
     "packages/lib": {
       "name": "@workspace/lib",
       "version": "0.0.0",
@@ -294,6 +301,7 @@
         "@better-auth/api-key": "^1.7.14",
         "@elysiajs/eden": "^1.4.9",
         "@tanstack/react-hotkeys": "^0.1.3",
+        "@workspace/formula": "workspace:*",
         "@workspace/math": "workspace:*",
         "better-auth": "^1.7.14",
         "es-toolkit": "^1.53.0",
@@ -343,6 +351,7 @@
       "dependencies": {
         "@formulajs/formulajs": "^2.9.3",
         "@tanstack/react-hotkeys": "^0.1.3",
+        "@workspace/formula": "workspace:*",
         "@workspace/lib": "workspace:*",
         "@workspace/ui": "workspace:*",
         "dayjs": "^1.11.23",
@@ -1169,6 +1178,8 @@
     "@typescript/typescript-win32-x64": ["@typescript/typescript-win32-x64@7.0.2", "", { "os": "win32", "cpu": "x64" }, "sha512-0BQ3HkAHHlKLSp1qRvf3SUhGpGsDuhB/jgFw75guyqbxJqEaS0Cw/VFO8i2nHglJUzQCRtMMR/IBAKE3ETMC4g=="],
 
     "@vitejs/plugin-react": ["@vitejs/plugin-react@5.2.0", "", { "dependencies": { "@babel/core": "^7.29.0", "@babel/plugin-transform-react-jsx-self": "^7.27.1", "@babel/plugin-transform-react-jsx-source": "^7.27.1", "@rolldown/pluginutils": "1.0.0-rc.3", "@types/babel__core": "^7.20.5", "react-refresh": "^0.18.0" }, "peerDependencies": { "vite": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0" } }, "sha512-YmKkfhOAi3wsB1PhJq5Scj3GXMn3WvtQ/JC0xoopuHoXSdmtdStOpFrYaT1kie2YgFBcIe64ROzMYRjCrYOdYw=="],
+
+    "@workspace/formula": ["@workspace/formula@workspace:packages/formula"],
 
     "@workspace/lib": ["@workspace/lib@workspace:packages/lib"],
 

@@ -30,6 +30,7 @@
     "test": "bun --filter '*' test",
     "test:api": "bun --filter '@apps/api' test",
     "test:sheet": "bun --filter '@workspace/sheet' test",
+    "test:formula": "bun --filter '@workspace/formula' test",
     "primitives": "bun scripts/generate-shared-primitives.ts",
     "primitives:check": "bun scripts/generate-shared-primitives.ts --check",
     "standards": "bun scripts/check-standards.ts",

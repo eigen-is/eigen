@@ -1,0 +1,19 @@
+{
+  "name": "@workspace/formula",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./text": "./src/text.ts",
+    "./format": "./src/format.ts"
+  },
+  "scripts": {
+    "typecheck": "bun check --no-script && bun check --no-script -p tsconfig.test.json",
+    "test": "bun test --isolate"
+  },
+  "dependencies": {
+    "numfmt": "^3.2.6"
+  }
+}

@@ -122,6 +122,10 @@
                     "group": ["@workspace/sheet", "@workspace/sheet/**", "@workspace/ui", "@workspace/ui/**"],
                     "message": "lib must not import sheet or ui (would pull React into the backend). Put shared sheet types in packages/lib/src/sheets/types.ts."
                   },
+                  {
+                    "group": ["@workspace/formula", "@workspace/formula/text"],
+                    "message": "lib imports only the number-display entry of the engine: @workspace/formula/format."
+                  },
                   // Overrides replace the root rule options wholesale — restate the suffix ban.
                   {
                     "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
@@ -151,6 +155,36 @@
                   {
                     "group": ["**", "!./**", "!../**"],
                     "message": "@workspace/math is a leaf: no dependencies (see ARCHITECTURE.md § Dependency direction)."
+                  },
+                  // Overrides replace the root rule options wholesale — restate the suffix ban.
+                  {
+                    "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
+                    "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  },
+                  {
+                    "group": ["./**/*.ts", "./**/*.tsx", "../**/*.ts", "../**/*.tsx"],
+                    "message": "Relative imports resolve extensionless under moduleResolution: bundler — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // formula is the second leaf: the engine runs unchanged in the browser, Bun and Node, and numfmt is its one dependency.
+      "includes": ["packages/formula/**", "!packages/formula/src/test/**", "!packages/formula/scripts/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**", "!./**", "!../**", "!numfmt"],
+                    "message": "@workspace/formula is a leaf: numfmt is its only dependency (see ARCHITECTURE.md § Dependency direction)."
                   },
                   // Overrides replace the root rule options wholesale — restate the suffix ban.
                   {
