@@ -6,7 +6,7 @@ category: Formulas
 tags: [sheets, formulas, functions, autocomplete]
 related: [sheets/get-started, sheets/enter-and-edit-data]
 order: 40
-updated: 2026-11-09
+updated: 2026-11-11
 ---
 
 Formulas let you calculate values from other cells. You type them directly in the grid or in the formula bar, and Sheets updates the result whenever the referenced cells change.
@@ -34,7 +34,7 @@ As soon as you type one or more letters after the `=` sign, a dropdown list appe
 - Press **Enter** or **Tab** to insert the highlighted function. Sheets adds the function name and an opening bracket.
 - Press **Escape** to close the list without inserting anything.
 
-After you insert a function, a small hint panel appears below the cell. It shows the function signature, a short description, and the name and purpose of each parameter.
+After you insert a function, a small hint panel appears below the cell. It shows how the function is written, a short description, and the name and purpose of each argument.
 
 ## Quick functions with Auto SUM
 

@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, data-validation, dropdown, rules]
 related: [sheets/enter-and-edit-data, sheets/conditional-formatting]
 order: 50
-updated: 2026-11-09
+updated: 2026-11-11
 ---
 
 Data validation lets you control what goes into a cell. You can add a dropdown list so people pick from a fixed set of options, or write a rule that rejects a value if it falls outside a range, does not match a pattern, or fails another condition.
@@ -66,7 +66,7 @@ The cell displays a checkbox that toggles between the two values when clicked.
 Two checkboxes at the bottom of the dialog apply to every validation type:
 
 - **Prohibit input when input data is invalid**: blocks the entry and shows a failure notice if someone types a value that fails the rule.
-- **Show prompt when the cell is selected**: displays a hint message when the cell receives focus. When this is ticked, a text field appears where you can write the hint.
+- **Show prompt when the cell is selected**: displays a hint message when the cell is selected. When this is ticked, a text field appears where you can write the hint.
 
 Without **Prohibit input when input data is invalid**, a value that fails the rule is kept, and its cell shows a red triangle in the top-left corner. This goes for values already in the cells when you add the rule, too. Select the cell to see a card that starts with "Invalid:" and says what the rule expects. The card opens under the cell, or above it near the bottom of the sheet.
 
@@ -85,9 +85,3 @@ When you copy or cut cells and paste them in the same browser tab, their rules c
 A row or column you insert inside a rule's range gets the rule. One you insert above or right below the range doesn't.
 
 A rule can't be broken into too many separate pieces. Pasting a cell with a rule and one without down a long column can reach that limit, since the rule would land on every other row. The cells still land, but past the limit they get no rule. An edit that would cut an existing rule into too many pieces removes that rule. The same goes for a fill, a move and the format painter.
-
-<div class="eigen-callout">
-
-A spreadsheet whose rules were set up in an older version of Eigen opens without its dropdowns, checkboxes and other rules. Every cell keeps its value. Set the rules up again, or import the original Excel file again.
-
-</div>

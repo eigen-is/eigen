@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, tabs, sheets-tabs, rename, reorder]
 related: [sheets/create-and-edit]
 order: 100
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 A spreadsheet can contain as many sheets as you need. Each sheet has its own tab along the bottom of the editor. You can add, rename, reorder, and color-code them to keep your data organized.
@@ -16,7 +16,7 @@ Click the **+** button at the left of the tab bar. The new sheet is added at the
 
 You can also go to **Insert → Sheet** in the menu bar.
 
-If someone else adds a sheet at the same moment and both get the same name, the one that reaches the spreadsheet second gets a number after its name, such as **Sheet4 (2)**. Both sheets keep what was typed in them.
+If someone else adds a sheet at the same moment and both get the same name, the second one gets a number after its name, such as **Sheet4 (2)**. Both sheets keep what was typed in them.
 
 ## Switch between sheets
 

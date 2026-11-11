@@ -5,7 +5,7 @@ type: faq
 tags: [calendar, invitations, external, imip, rsvp]
 related: [calendar/invite-people, calendar/respond-to-invitation, calendar/create-event]
 order: 70
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 Eigen can exchange calendar invitations with people who use other calendar apps, such as Google Calendar, Apple Calendar, or Outlook. This works through standard invitation emails: when you invite an external guest, they receive an email they can accept or decline in their own app. When someone outside Eigen invites you, the invitation arrives in Mail and the event is added to your calendar automatically.
@@ -46,10 +46,10 @@ When the organizer cancels the event, a new email arrives in Mail. The calendar 
 
 ## Why did my invited guest not receive anything?
 
-Invitation emails are sent through your Eigen server's outbound mail setup. If your server does not have outbound email configured, the invitation will not be delivered. Contact your Eigen administrator if you are unsure whether outbound mail is set up.
+Your Eigen server has to be set up to send email. If it is not, the invitation is not delivered. Contact your Eigen administrator if you are unsure whether it is.
 
 <div class="eigen-callout">
 
-External guests receive standard iMIP calendar emails (RFC 6047). Most modern calendar apps and email clients handle them automatically, including Google Calendar, Apple Calendar, and Outlook.
+Most modern calendar apps and email clients handle these invitation emails automatically, including Google Calendar, Apple Calendar, and Outlook.
 
 </div>

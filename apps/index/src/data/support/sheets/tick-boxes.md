@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, tick boxes, checkboxes, data-validation]
 related: [sheets/data-validation, sheets/enter-and-edit-data]
 order: 55
-updated: 2026-11-02
+updated: 2026-11-11
 ---
 
 A tick box turns a cell into a box you click instead of a cell you type `TRUE` or `FALSE` into. Use them for checklists, or for a column that marks which rows are done.
@@ -31,7 +31,7 @@ A cell that holds a formula does not toggle. Writing `TRUE` into it would replac
 
 ## What the cell holds
 
-A ticked box is the value `TRUE` and an empty box is `FALSE`. Nothing else is stored, which means a `TRUE` that arrives some other way (typed in, pasted, imported from Excel, or produced by a formula) draws as a ticked box too.
+A ticked box is the value `TRUE` and an empty box is `FALSE`. So a `TRUE` that arrives some other way (typed in, pasted, imported from Excel, or produced by a formula) draws as a ticked box too.
 
 If a cell in the range holds something else, such as a word, the box appears and the text stays visible beside it.
 

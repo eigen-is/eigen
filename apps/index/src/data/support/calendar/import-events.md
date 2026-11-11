@@ -6,7 +6,7 @@ category: Basics
 tags: [calendar, import, ics]
 related: [calendar/get-started, calendar/export-events, calendar/external-invitations, drive/preview-a-file]
 order: 90
-updated: 2026-11-02
+updated: 2026-11-11
 ---
 
 Most calendar programs can save events as an `.ics` file, the standard calendar format. Eigen reads those files, so you can bring a conference schedule, a season of matches, or a whole calendar from another provider into one of your own calendars.
@@ -48,14 +48,14 @@ A calendar someone shared with you from their own account is not in the list, an
 - The title, the date and time, the time zone, the location, the description, and whether the event lasts all day.
 - Repeating events keep the rule that repeats them, and any single occurrence that was moved or changed keeps its change.
 - Reminders come across, however many the event carries.
-- Anything else the file holds comes across with it. Eigen keeps every line an event was written with, including the parts it does not show you itself.
+- Anything else the file holds comes across with it, including the parts Eigen does not show you itself.
 
 Two things are deliberately left behind, so an imported file never sends mail on your behalf:
 
 - **The organizer and the guest list.** An imported event is your own event, not an invitation from someone else. You can open it and invite people yourself.
 - **The file's purpose.** An invitation file and a cancellation file both import as plain events. To accept a real invitation, open the email it came with instead. See [Respond to an invitation](/support/calendar/respond-to-invitation).
 
-An event you already have is skipped rather than imported twice, and the message says how many were already in your calendars. Eigen matches on the identifier the event carries, across every calendar in the same account, so re-importing the same file adds nothing. Importing it into a second calendar of yours adds nothing either, because an event lives in one place per account. An invitation you already accepted never gets a twin. A team is its own account, so a file you have already imported for yourself still lands in a team calendar, and the message for a team calendar says "already in this team’s calendars".
+An event you already have is skipped rather than imported twice, and the message says how many were already in your calendars. Eigen checks every calendar in the same account, so re-importing the same file adds nothing. Importing it into a second calendar of yours adds nothing either. An invitation you already accepted never gets a twin. A team is its own account, so a file you have already imported for yourself still lands in a team calendar, and the message for a team calendar says "already in this team’s calendars".
 
 ## Limits
 

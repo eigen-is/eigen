@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, rsvp, invitations, attendees]
 related: [calendar/invite-people, calendar/external-invitations, calendar/create-event]
 order: 50
-updated: 2026-09-22
+updated: 2026-11-11
 ---
 
 When someone invites you to an event, it appears in your calendar straight away. You can accept, decline, or say maybe from the event detail in Calendar.
@@ -46,4 +46,4 @@ When someone who uses a different calendar app invites you, the invitation email
 
 Eigen adds the event to your default calendar automatically when the email arrives, as long as your server can verify the sender. From there, respond the same way: click the event, find the **RSVP** section, and choose **Accept**, **Maybe**, or **Decline**. Eigen sends a reply email to the organizer so their calendar app can update its attendee list.
 
-See [How invitations work with people outside Eigen](/support/calendar/external-invitations) for more detail on the full outbound and inbound flow.
+See [How invitations work with people outside Eigen](/support/calendar/external-invitations) for more detail.

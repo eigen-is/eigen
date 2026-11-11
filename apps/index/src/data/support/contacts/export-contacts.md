@@ -5,7 +5,7 @@ type: how-to
 tags: [contacts, export, download, vcard, vcf]
 related: [contacts/import-contacts, contacts/work-with-several-contacts, connect/contacts-client]
 order: 100
-updated: 2026-10-28
+updated: 2026-11-11
 ---
 
 Contacts can hand you a vCard file, the `.vcf` format address book apps read. Use it to move people into another app, to send someone a card, or to keep a copy of your own.
@@ -35,14 +35,14 @@ You get a single `contacts.vcf` file with all of them in it. See [Work with seve
 
 ## What the file contains
 
-Eigen writes out the card exactly as it is stored, so nothing is lost on the way:
+The file holds the whole card, so nothing is lost on the way:
 
 - Names, email addresses, phone numbers, postal addresses, company and job title, birthday, and notes.
 - The contact photo, stored inside the file.
 - Labels, stored on the card as its categories.
 - Any field another app put on the card that Contacts does not show you. It is kept and written back out.
 
-The file is plain text in the vCard 3.0 format, the same version Eigen serves to phones and desktop address books over CardDAV.
+The file is plain text in the vCard 3.0 format, the same version phones and desktop address books get when they sync with Eigen.
 
 ## What you can do with the file
 

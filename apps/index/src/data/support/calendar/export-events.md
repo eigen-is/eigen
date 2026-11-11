@@ -6,7 +6,7 @@ category: Basics
 tags: [calendar, export, download, ics]
 related: [calendar/import-events, calendar/show-hide-calendars, connect/calendar-client]
 order: 95
-updated: 2026-10-28
+updated: 2026-11-11
 ---
 
 Calendar can hand you an `.ics` file, the standard calendar format every calendar program reads. Use it to move a schedule into another app, to send one event to someone, or to keep a copy of your own.
@@ -32,7 +32,7 @@ For a repeating event you get the whole series in one file, whichever occurrence
 
 ## What the file contains
 
-Eigen writes out the event exactly as it is stored, so nothing is lost on the way:
+The file holds each event in full, so nothing is lost on the way:
 
 - Titles, dates and times, time zones, locations, descriptions, and all-day events.
 - Repeating events keep the rule that repeats them, along with every changed occurrence.

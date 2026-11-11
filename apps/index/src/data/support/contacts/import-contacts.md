@@ -6,7 +6,7 @@ category: Basics
 tags: [contacts, import, vcard, vcf]
 related: [contacts/export-contacts, contacts/get-started, connect/contacts-client, drive/preview-a-file]
 order: 90
-updated: 2026-10-28
+updated: 2026-11-11
 ---
 
 Most address books can save contacts as a vCard file, which has the extension `.vcf`. Contacts reads those files, so you can bring people over from a phone, from another mail provider, or from a colleague who sent you a card.
@@ -57,7 +57,7 @@ Skipped contacts are counted in the message at the end. Nothing you already had 
 ## Limits
 
 - A file can be up to 20 MB, and can hold up to 1000 contacts. A bigger file is refused as a whole, so split it before you import.
-- The file has to be saved as UTF-8, which is what every current address book writes. A file in an older encoding is refused with a message saying so; open it in a text editor and save it again as UTF-8.
+- The file has to be saved as UTF-8, which is what every current address book writes. A file in an older encoding is refused with a message saying so. Open it in a text editor and save it again as UTF-8.
 - A single contact can be up to 5 MB. That is only a problem when a card carries a very large photo. Such a card is counted as unreadable, and the rest of the file still goes in.
 - Contacts share a storage allowance with Mail. If you run out part way through, the import stops and tells you how many contacts went in. Those contacts stay.
 

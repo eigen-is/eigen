@@ -6,7 +6,7 @@ category: Export
 tags: [vector, export, download, svg, pdf, print]
 related: [vector/get-started, vector/share-and-comment]
 order: 80
-updated: 2026-11-01
+updated: 2026-11-11
 ---
 
 You can download a drawing from Vector as an SVG image or as a PDF. Both formats include the whole drawing, cropped to its content with a small margin around the edges.
@@ -18,7 +18,7 @@ You can download a drawing from Vector as an SVG image or as a PDF. Both formats
 3. Point to **Download** in the menu.
 4. Click **SVG image (.svg)** or **PDF (.pdf)**.
 
-Your browser makes the SVG from the drawing as you see it, so it downloads right away. For a PDF, a progress dialog appears while the file is prepared, and a large drawing can take a moment. The file downloads to your browser's default download folder.
+The SVG downloads right away. For a PDF, a progress dialog appears while the file is prepared, and a large drawing can take a moment. The file downloads to your browser's default download folder.
 
 ## Download from Drive
 

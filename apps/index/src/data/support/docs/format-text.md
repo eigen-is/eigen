@@ -6,7 +6,7 @@ category: Editing
 tags: [docs, formatting, fonts, font size, headings, normal text, lists, numbering, color, alignment, indent, line spacing, caps]
 related: [docs/clear-formatting, docs/create-and-edit]
 order: 30
-updated: 2026-11-02
+updated: 2026-11-11
 ---
 
 Docs has a full formatting toolbar above the editor. You can change the font and its size, set headings, make text bold or italic, pick a color, align paragraphs, and build lists, all without leaving the page.
@@ -45,7 +45,7 @@ The style selector sits next to the font picker. It shows the current style of t
 
 **Title** and **Subtitle** are only in the **Format** menu, under **Paragraph styles**, below **Heading 6**. Word and Google Docs files that use them keep them, and the style selector shows them.
 
-These are block styles: the whole paragraph changes, not just the selected words. Choosing **Normal text** removes the style and returns the paragraph to the default style.
+These styles change the whole paragraph, not only the selected words. Choosing **Normal text** removes the style and returns the paragraph to the default style.
 
 ## Change the document's normal text
 
@@ -109,7 +109,7 @@ Click the **Align** button in the toolbar, which shows the current alignment, an
 
 Open **Format**, then **Align and indent**, and choose **Increase indent** (Cmd+] / Ctrl+]) or **Decrease indent** (Cmd+[ / Ctrl+[). Each step moves the paragraph 1.27 cm. In a list, they move the item one level in or out instead.
 
-For an exact indent, choose **Indentation options…**. Set **Left** and **Right** in centimeters, and under **Special indent** choose **First line** to indent only the first line, or **Hanging** to start the first line that distance left of the others, with the distance beside it. **Left** is where the lines after the first one start. An indent stops at the right edge of the text. Click **Apply**.
+For an exact indent, choose **Indentation options…**. Set **Left** and **Right** in centimeters. Under **Special indent**, choose **First line** to indent only the first line, or **Hanging** to start the first line left of the others. The distance goes in the field beside it. **Left** is where the lines after the first one start. An indent stops at the right edge of the text. Click **Apply**.
 
 ## Change line and paragraph spacing
 

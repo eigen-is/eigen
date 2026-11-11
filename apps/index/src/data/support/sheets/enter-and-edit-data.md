@@ -6,7 +6,7 @@ category: Basics
 tags: [sheets, cells, data, editing, keyboard, formula-bar]
 related: [sheets/get-started, sheets/create-and-edit, sheets/formulas]
 order: 30
-updated: 2026-11-09
+updated: 2026-11-11
 ---
 
 You can enter text, numbers, and formulas into any cell in Sheets, then edit or clear them at any time. Changes are saved automatically.
@@ -72,6 +72,14 @@ A filled cell also takes the data validation and conditional formatting of its s
 
 Both are also available under **Edit → Undo** and **Edit → Redo**.
 
-Once someone else edits the spreadsheet, you can no longer undo or redo your last insert or delete of rows or columns, your last added, duplicated, deleted or renamed sheet, a paste that added rows or columns, a conditional format rule you removed or added to a sheet that already has rules, or anything you did before it. What you did after it still undoes. If someone else renames a sheet, you can no longer undo or redo anything you did before that. Your own edit in another tab or on another device counts too.
+Once someone else edits the spreadsheet, you can no longer undo or redo:
+
+- Your last insert or delete of rows or columns.
+- Your last added, duplicated, deleted or renamed sheet.
+- A paste that added rows or columns.
+- A conditional format rule you removed, or one you added to a sheet that already has rules.
+- Anything you did before one of these.
+
+What you did after it still undoes. If someone else renames a sheet, you can no longer undo or redo anything you did before that. Your own edit in another tab or on another device counts too.
 
 When there is nothing left to undo for this reason, pressing undo shows a notice: "Someone else edited this spreadsheet, so this can't be undone anymore." Pressing redo says: "Someone else edited this spreadsheet, so this can't be redone anymore." The notice stops once you make a new edit.

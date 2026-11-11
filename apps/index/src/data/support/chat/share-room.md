@@ -5,7 +5,7 @@ type: how-to
 tags: [chat, rooms, sharing, permissions, access]
 related: [chat/create-room, chat/personal-and-team-chats]
 order: 90
-updated: 2026-09-13
+updated: 2026-11-11
 ---
 
 You can share a room with specific people, with a whole team, or with anyone on your Eigen server who has the link.
@@ -53,7 +53,7 @@ Team rooms belong to a team, so access follows team membership rather than a per
 
 ## Invite someone with a slash command
 
-You can also invite someone directly from the message input without opening the dialog. Type `/invite` followed by their email address and press Enter:
+You can also invite someone directly from the message box without opening the dialog. Type `/invite` followed by their email address and press Enter:
 
 ```
 /invite alice@example.com

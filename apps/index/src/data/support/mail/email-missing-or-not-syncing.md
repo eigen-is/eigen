@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, imap, sync, troubleshooting]
 related: [mail/get-started, mail/move-email-between-folders, connect/mount-drive-on-your-computer]
 order: 210
-updated: 2026-09-21
+updated: 2026-11-11
 ---
 
 A message that seems to have vanished is usually in another mailbox, not gone. And if you read the same account in a separate mail app on your phone or computer, the two can fall out of step for a few clear reasons. This page covers both: finding a missing message, and keeping Mail and an external app in sync.
@@ -15,7 +15,7 @@ Most of the time the cause is one of two things: the message is in a mailbox you
 
 ## A message has disappeared from the Inbox
 
-**The message left the Inbox but you didn't delete it.** Archiving, reporting spam, and deleting all move or refile a message, so it's most likely in another mailbox. Check these, in order:
+**The message left the Inbox but you didn't delete it.** Archiving, reporting spam, and deleting all move a message, so it's most likely in another mailbox. Check these, in order:
 
 - **Archive**, if you or someone using the account archived it.
 - **Spam**, if it was reported as junk, or filtered there as suspected junk.
@@ -39,13 +39,13 @@ Mail doesn't create, rename, or delete folders. Make them in your other mail app
 
 **Mail updates on its own as messages arrive, are read, or are moved.** You don't need to reload the page, and there's no manual sync button. New mail, read and unread changes, and moves all appear within moments.
 
-If a view looks stale, reload the page in your browser. That refetches everything from the server.
+If a view looks stale, reload the page in your browser. That loads everything again.
 
 ## An external mail app isn't showing new mail
 
 If you read the account in a separate app such as Apple Mail, Thunderbird, or your phone's mail app, and new messages aren't arriving there, check the connection settings first.
 
-- **Set the account up as IMAP.** The mail server speaks IMAP, which keeps every app in step with the server, so what you read, move, or delete in one place shows up in the others. Pick IMAP when your app asks for an account type.
+- **Set the account up as IMAP.** IMAP keeps every app in step with the server, so what you read, move, or delete in one place shows up in the others. Pick IMAP when your app asks for an account type.
 - **Connect with SSL/TLS.** The mail server requires an encrypted connection on the IMAP port **993**. A plain, unencrypted connection is refused, so the app shows a connection error instead of your mail.
 - **Sign in with an app password, not your main password.** Create an app password on the [**Integrations** page](/space/services) in Space, under **App passwords**, and use that as the password in your mail app. If you have two-factor authentication switched on, your main password will not work for a mail app at all: an app password is required. See [Mount Drive on your computer](/support/connect/mount-drive-on-your-computer) for how app passwords work and how to create one.
 
@@ -53,6 +53,6 @@ If the app still won't connect after that, the most common cause is the app pass
 
 ## A folder you made in another app is missing from Mail
 
-**Mail lists the folders you make in another app, accents, ampersands, and emoji included.** A folder is left out only when its name would break the folder tree: a name holding a dot or a slash, a name that is empty or only spaces, or one longer than 200 characters. Such a folder stays on the server and keeps working in your other mail app, but Mail leaves it out of the sidebar.
+**Mail lists the folders you make in another app, accents, ampersands, and emoji included.** A folder is left out only when Mail can't use its name: a name holding a dot or a slash, a name that is empty or only spaces, or one longer than 200 characters. Such a folder stays on the server and keeps working in your other mail app, but Mail leaves it out of the sidebar.
 
 Rename the folder in your other app, or move the messages into a folder Mail lists.

@@ -6,7 +6,7 @@ category: Basics
 tags: [calendar, backup, restore, caldav, sharing]
 related: [admin/restore-home, calendar/share-calendar, connect/calendar-client]
 order: 110
-updated: 2026-09-21
+updated: 2026-11-11
 ---
 
 If an admin puts your account back from a backup, your events come back whole. A few things belong to a calendar rather than to the events in it, and those can need setting again. This page says which is which.
@@ -16,7 +16,7 @@ If an admin puts your account back from a backup, your events come back whole. A
 Every event comes back, with every detail it had:
 
 - The title, the date and time, the time zone, the location, the description, the guest list, and the reminders.
-- Anything your calendar app added that Eigen does not show itself. Each event is kept as its own calendar file, exactly as it was written.
+- Anything your calendar app added that Eigen does not show itself.
 - A repeating event comes back as the whole series, including every occurrence you moved, changed, or removed.
 
 Events keep their identity, so a phone or a laptop that already had an event recognizes the one that comes back instead of adding a second copy of it.

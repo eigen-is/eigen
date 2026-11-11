@@ -6,7 +6,7 @@ category: Editing
 tags: [docs, table of contents, headings, outline, layout]
 related: [docs/format-text, docs/export, docs/import-word]
 order: 58
-updated: 2026-11-01
+updated: 2026-11-11
 ---
 
 A table of contents lists your document's headings, each indented by its level. It keeps itself up to date: rename, add, or remove a heading and the table of contents changes with it, for everyone who has the document open.
@@ -41,7 +41,7 @@ The editor shows your document as one long page, so its table of contents never 
 |---|---|---|---|
 | **Plain text** | Page numbers at the right edge | Page numbers at the right edge | Headings, with no page numbers; a line underlines when the pointer is on it |
 | **Dotted** | Dots, then page numbers | Dots, then page numbers | Headings, with no page numbers; a line underlines when the pointer is on it |
-| **Links** | Underlined links, no page numbers | Headings, no page numbers; they jump to the heading but are not coloured | Underlined links, no page numbers |
+| **Links** | Underlined links, no page numbers | Headings, no page numbers; they jump to the heading but are not colored | Underlined links, no page numbers |
 
 In the Word file, the page numbers fill in when Word updates the table of contents. The fonts, sizes, bold, and italic you chose show in the PDF, the Word file, and the web page too.
 

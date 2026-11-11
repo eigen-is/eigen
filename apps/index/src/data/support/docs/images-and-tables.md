@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, images, charts, tables, formatting, editor]
 related: [docs/format-text, docs/get-started]
 order: 50
-updated: 2026-10-28
+updated: 2026-11-11
 ---
 
 You can insert images, charts, and tables anywhere in a document. Images can come from your device or from Drive. Charts start with sample data you then edit. Tables start as a 3×3 grid and you can grow them from there.
@@ -42,7 +42,7 @@ Click an image to select it. Resize handles appear at its corners. Drag a handle
 
 On a wide screen, selecting an image also opens the **Image** panel on the right side of the editor. From there you can:
 
-- **Width** and **Height**: type the image's width or height in centimeters and press Enter. While **Keep aspect ratio** is checked, the other side follows. Uncheck it to stretch the image. The image is no wider than the text (half of it for a floating image, and the width of the paper for an image behind or in front of the text, or for any image that doesn't float in a page-less document); a wider size shrinks to fit, keeping its shape.
+- **Width** and **Height**: type the image's width or height in centimeters and press Enter. While **Keep aspect ratio** is checked, the other side follows. Uncheck it to stretch the image. The image is no wider than the text. For a floating image the limit is half the text. For an image behind or in front of the text, or any image that doesn't float in a page-less document, it is the width of the paper. A wider size shrinks to fit, keeping its shape.
 - **Keep aspect ratio**: checked for an image when you select it. Unchecking it lasts while the image stays selected.
 - **Style**: set the image to sit on its own line (the default), float to the left, or float to the right with text wrapping around it, or place it behind or in front of the text (see below). An image wider than half the text shrinks to half when it starts to float, so the text has room beside it.
 - **Align**: when the image is on its own line, choose left, center, or right alignment.
@@ -84,7 +84,25 @@ The same menu has **Cut**, **Copy**, and **Delete** for the image, and **Add com
 
 Drag a handle to resize the chart. Its width and height change on their own, so you can make it wider without making it taller. While you drag, the size shows in centimeters. To keep the chart's shape, check **Keep aspect ratio** in the **Chart** panel: then only the corner handles show, and they keep the proportions.
 
-On a wide screen, selecting a chart opens the **Chart** panel on the right side of the editor. It starts with the chart's **Width** and **Height** in centimeters and **Keep aspect ratio**, unchecked for a chart, which work as they do for an image, except that a chart is at least 2.65 cm wide and 2.65 cm tall. Then **Style** and **Align** place the chart as they place an image, behind or in front of the text included, and **Cap** adds a caption beneath it, unless the chart is behind or in front of the text. Below those, the panel sets the **Type**, the **Stacking** of a bar or column chart (**None**, **Standard** or **100%**), the **Title**, where the **Legend** goes, the **Font** of all the chart's text, each axis's **Title** and **Show axis**, the category axis's **Reverse axis order**, the **Min**, **Max**, and **Gridlines** of the axis with the numbers, and the color of each series, or of each slice of a pie chart. **Min** and **Max** pick their own values while they're empty and are percents on a **100%** stack; switching **Stacking** to or from **100%** empties them. A color reads **Automatic** until you pick one; **Automatic** in a picked color's list puts it back. **Data labels**, above the series colors, writes each value on the chart: past the end of a bar, in the middle of a stacked bar, and above each point of a line. When two labels would overlap, one of them hides, and a bigger bar keeps its own. A chart with more than 200 values shows no data labels. The box shows a dash when only some series show their values, as in some imported charts; click it to show them on every series. Below them, **Labels** sets the **Color** of all the chart's text. **Fill** sets the chart's background, and its **Style** how the bars and slices are drawn: **Solid**, **Hachure**, **Cross-hatch**, or **Zigzag**. Solid bars and slices have no outline; hatched ones get an outline in their own color. **Stroke** sets the color, width, and style of the axes and gridlines, and the width of a line chart's lines, except in a chart imported from Office, which keeps its own, and **Sketch** how rough the chart looks, from **Architect** (clean) to **Cartoonist**. A new chart starts clean and solid, like a Google Docs chart. A chart with more than 200 values (for a pie, more than 200 slices) draws its bars, lines, and slices smooth and solid whatever the sketch, so it stays quick to show; the **Sketch** section says so.
+On a wide screen, selecting a chart opens the **Chart** panel on the right side of the editor. It starts with the chart's **Width** and **Height** in centimeters and **Keep aspect ratio**, unchecked for a chart. They work as they do for an image, except that a chart is at least 2.65 cm wide and 2.65 cm tall. Then **Style** and **Align** place the chart as they place an image, behind or in front of the text included. **Cap** adds a caption beneath it, unless the chart is behind or in front of the text.
+
+Below those, the panel sets:
+
+- The **Type**.
+- The **Stacking** of a bar or column chart (**None**, **Standard** or **100%**).
+- The **Title**.
+- Where the **Legend** goes.
+- The **Font** of all the chart's text.
+- Each axis's **Title** and **Show axis**.
+- The category axis's **Reverse axis order**.
+- The **Min**, **Max**, and **Gridlines** of the axis with the numbers.
+- The color of each series, or of each slice of a pie chart.
+
+**Min** and **Max** pick their own values while they're empty and are percents on a **100%** stack. Switching **Stacking** to or from **100%** empties them. A color reads **Automatic** until you pick one. **Automatic** in a picked color's list puts it back.
+
+**Data labels**, above the series colors, writes each value on the chart: past the end of a bar, in the middle of a stacked bar, and above each point of a line. When two labels would overlap, one of them hides, and a bigger bar keeps its own. A chart with more than 200 values shows no data labels. The box shows a dash when only some series show their values, as in some imported charts; click it to show them on every series.
+
+Below them, **Labels** sets the **Color** of all the chart's text. **Fill** sets the chart's background, and its **Style** how the bars and slices are drawn: **Solid**, **Hachure**, **Cross-hatch**, or **Zigzag**. Solid bars and slices have no outline. Hatched ones get an outline in their own color. **Stroke** sets the color, width, and style of the axes and gridlines, and the width of a line chart's lines, except in a chart imported from Office, which keeps its own. **Sketch** sets how rough the chart looks, from **Architect** (clean) to **Cartoonist**. A new chart starts clean and solid, like a Google Docs chart. A chart with more than 200 values (for a pie, more than 200 slices) draws its bars, lines, and slices smooth and solid whatever the sketch, so it stays quick to show. The **Sketch** section says so.
 
 ### Edit the numbers
 
@@ -99,7 +117,7 @@ You can copy a chart from Sheets, Slides, or Vector and paste it into a document
 
 Right-click a chart and choose **Download image** to save it as an SVG picture on a white background, named after its title. This works with view access too. The same menu has **Cut**, **Copy**, and **Delete**, and with view access **Copy**.
 
-A chart prints and downloads as a PDF or a web page in its look. In a Word file it is a Word chart with its numbers, kept the way Word keeps a chart's data. A sketched, hatched, or dashed look is drawn plain, and a gradient background becomes its middle color. See [Export to Word, PDF, or HTML](/support/docs/export).
+A chart prints and downloads as a PDF or a web page in its look. In a Word file it is a Word chart with its numbers. A sketched, hatched, or dashed look is drawn plain, and a gradient background becomes its middle color. See [Export to Word, PDF, or HTML](/support/docs/export).
 
 ## Insert a table
 
