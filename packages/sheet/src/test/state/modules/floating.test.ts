@@ -6,8 +6,6 @@ import { describe, expect, test } from 'bun:test';
 import { CHART_MAX_SIDE, MAX_CHART_SPEC_ENTRIES, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet as LibSheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
 import { floatingItems } from '@workspace/lib/sheets';
-import { applySheetWrites } from '@workspace/lib/sheets/yjs-ops';
-import type { Patch } from 'immer';
 import { applyPatches, produce } from 'immer';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
@@ -29,7 +27,6 @@ import {
 import { insertRowCol } from '../../../state/modules/rowcol';
 import { deleteSheet, initSheetData } from '../../../state/modules/sheet';
 import type { History, Op } from '../../../state/types';
-import { patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 
@@ -116,52 +113,65 @@ describe('floating writers', () => {
         });
     }
 
-    // setContextWithProduce merges every write of a panel gesture into one entry: its own earlier write can bring back
-    // the object a later one edits, so only an object missing where the write lands drops it, on the author, a peer
-    // and a joiner alike.
-    test("a merged entry's writes that delete or insert an object it edits land whole, everywhere", () => {
-        const merged = (base: Context, ...recipes: ((ctx: Context) => void)[]) => {
-            let next = base;
-            const entry = { patches: [] as Patch[], inverse: [] as Patch[] };
-            for (const recipe of recipes) {
-                const step = author(next, recipe);
-                next = step.next;
-                entry.patches.push(...step.patches);
-                entry.inverse.unshift(...step.inverse);
-            }
-            return { next, ops: patchToOp(base, next, entry.patches), ...entry };
-        };
-        // One side of the entry as every reader applies it, and the batch it ships.
-        const replay = (ctx: Context, patches: Patch[]) => {
-            const writes = patches.map((patch) => ({ ...patch, path: patch.path.slice(1) }));
-            const { sheets, applied } = applySheetWrites(ctx.sheets, writes);
-            const next = { ...ctx, sheets };
-            const kept = applied.map((write) => ({ ...write, path: ['sheets', ...write.path] }));
-            return { next, ops: patchToOp(ctx, next, kept) };
-        };
-        const base = workbook();
-        const deleted = merged(
-            base,
-            (ctx) => updateFloatingBox(ctx, { kind: 'chart', id: 'c1' }, { x: 300 }),
-            (ctx) => deleteFloatingObject(ctx, { kind: 'chart', id: 'c1' }),
-        );
-        const undone = replay(deleted.next, deleted.inverse);
-        expect(objects(undone.next.sheets)).toEqual(objects(base.sheets));
-        expect(objects(receive(deleted.next, undone.ops).sheets)).toEqual(objects(base.sheets));
-        expect(objects(join(base, [deleted.ops, undone.ops]))).toEqual(objects(base.sheets));
+    // setContextWithProduce merges every write of a gesture into one entry, each sent as its own batch: the entry's
+    // earlier write can bring back the object a later one edits, so only an object missing where the write lands drops
+    // it, on the author, a peer and a joiner alike.
+    for (const { kind, id, field } of KINDS) {
+        test(`a merged entry that edits then deletes a ${kind}, or inserts then edits one, steps whole, everywhere`, () => {
+            const merged = (base: Context, ...recipes: ((ctx: Context) => void)[]) => {
+                let next = base;
+                const entry: History = { patches: [], inversePatches: [], options: {} };
+                const batches: Op[][] = [];
+                for (const recipe of recipes) {
+                    const step = author(next, recipe);
+                    next = step.next;
+                    batches.push(step.ops);
+                    entry.patches.push(...step.entry.patches);
+                    entry.inversePatches.unshift(...step.entry.inversePatches);
+                }
+                return { next, batches, entry };
+            };
+            const base = workbook();
+            const deleted = merged(
+                base,
+                (ctx) => updateFloatingBox(ctx, { kind, id }, { x: 300 }),
+                (ctx) => deleteFloatingObject(ctx, { kind, id }),
+            );
+            const undone = undoEntry(deleted.next, deleted.entry);
+            expect(undone.ops.map((op) => op.path)).toEqual([
+                [field, id],
+                [field, id, 'x'],
+            ]);
+            expect(objects(undone.ctx.sheets)).toEqual(objects(base.sheets));
+            expect(objects(receive(deleted.next, undone.ops).sheets)).toEqual(objects(base.sheets));
+            expect(objects(join(base, [...deleted.batches, undone.ops]))).toEqual(objects(base.sheets));
+            const gone = redoEntry(undone.ctx, deleted.entry);
+            expect(gone.ctx.sheets[0][field]).toEqual({});
+            expect(objects(receive(undone.ctx, gone.ops).sheets)).toEqual(objects(gone.ctx.sheets));
+            expect(objects(join(base, [...deleted.batches, undone.ops, gone.ops]))).toEqual(objects(gone.ctx.sheets));
 
-        const inserted = merged(
-            base,
-            (ctx) => insertChart(ctx, 'c2', BOX, sampleChartSpec('line')),
-            (ctx) => updateFloatingBox(ctx, { kind: 'chart', id: 'c2' }, { x: 300 }),
-        );
-        const back = replay(inserted.next, inserted.inverse);
-        const redone = replay(back.next, inserted.patches);
-        const expected = objects(inserted.next.sheets);
-        expect(objects(redone.next.sheets)).toEqual(expected);
-        expect(objects(receive(back.next, redone.ops).sheets)).toEqual(expected);
-        expect(objects(join(base, [inserted.ops, back.ops, redone.ops]))).toEqual(expected);
-    });
+            const added = (ctx: Context) => Object.keys(ctx.sheets[0][field] ?? {}).filter((key) => key !== id)[0];
+            const inserted = merged(
+                base,
+                (ctx) =>
+                    kind === 'image'
+                        ? insertImage(ctx, 'new.png', 40, 30)
+                        : insertChart(ctx, 'c2', BOX, sampleChartSpec('line')),
+                (ctx) => updateFloatingBox(ctx, { kind, id: added(ctx) }, { x: 300 }),
+            );
+            const expected = objects(inserted.next.sheets);
+            const back = undoEntry(inserted.next, inserted.entry);
+            expect(objects(back.ctx.sheets)).toEqual(objects(base.sheets));
+            const redone = redoEntry(back.ctx, inserted.entry);
+            expect(redone.ops.map((op) => op.path)).toEqual([
+                [field, added(inserted.next)],
+                [field, added(inserted.next), 'x'],
+            ]);
+            expect(objects(redone.ctx.sheets)).toEqual(expected);
+            expect(objects(receive(back.ctx, redone.ops).sheets)).toEqual(expected);
+            expect(objects(join(base, [...inserted.batches, back.ops, redone.ops]))).toEqual(expected);
+        });
+    }
 
     // No build stores a keyed part as anything but a record, nor a chart past the entry cap: a peer's batch that does
     // costs those writes, and its other writes apply on every client and the joiner.

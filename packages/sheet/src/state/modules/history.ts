@@ -9,7 +9,7 @@ import type { MergeCell } from '@workspace/lib/sheets';
 import { applySheetWrites } from '@workspace/lib/sheets/yjs-ops';
 import { get, isEqual } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
-import { applyPatches, produce, produceWithPatches } from 'immer';
+import { produce, produceWithPatches } from 'immer';
 import { computedKey, createArrayResolver } from '../../engine/cell-resolver';
 import { applyRowColOp, hidesEverySheet } from '../../engine/replay-ops';
 import { RowColError } from '../../engine/rowcol';
@@ -279,8 +279,9 @@ function repairOps(sheet: Sheet, recorded: CellMatrix): Op[] {
     return ops;
 }
 
-// The patches whose targets still hold what the entry wrote there: a target a peer changed since keeps the peer's
-// value, as Google does. A merge and its cells pass or skip together.
+// The patches whose targets still hold what the entry wrote there, which is when writing the entry's side again, as
+// every reader would, changes nothing: a target a peer changed since keeps the peer's value, as Google does. A merge
+// and its cells pass or skip together.
 function stillWritten(ctx: Context, apply: Patch[], written: Patch[]): Patch[] {
     const parent = new Map<string, string>();
     const find = (key: string): string => {
@@ -303,32 +304,27 @@ function stillWritten(ctx: Context, apply: Patch[], written: Patch[]): Patch[] {
         }
     };
     for (const patch of apply) joinUnits(patch, JSON.stringify(unitOf(patch.path)));
-    const writes = new Map<string, { unit: (string | number)[]; patches: Patch[] }>();
+    const units = new Map<string, (string | number)[]>();
     for (const patch of written) {
         const unit = unitOf(patch.path);
         const key = JSON.stringify(unit);
         joinUnits(patch, key);
-        const write = writes.get(key) ?? { unit, patches: [] };
-        write.patches.push(patch);
-        writes.set(key, write);
+        units.set(key, unit);
     }
+    const rewritten = appliedWrites(ctx, written);
     const changed = new Set<string>();
-    for (const [key, { unit, patches }] of writes) if (!holds(ctx, unit, patches)) changed.add(find(key));
+    for (const [key, unit] of units) if (!holds(ctx, rewritten.sheets, unit)) changed.add(find(key));
     if (changed.size === 0) return apply;
     return apply.filter((patch) => !changed.has(find(JSON.stringify(unitOf(patch.path)))));
 }
 
-// The target holds what the entry wrote when writing it again changes nothing.
-function holds(ctx: Context, unit: (string | number)[], patches: Patch[]): boolean {
+// The target holds what the entry wrote when `rewritten`, the sheets with the entry's side written again, left it as
+// it is.
+function holds(ctx: Context, rewritten: Sheet[], unit: (string | number)[]): boolean {
     const current = get(ctx, unit);
-    const rebased = patches.map((patch) => ({ ...patch, path: ['value', ...patch.path.slice(unit.length)] }));
-    try {
-        const { value } = applyPatches({ value: current }, rebased);
-        if (unit[2] !== 'data' || unit.length !== 5) return isEqual(value, current);
-        return isEqual(authored(value), authored(current));
-    } catch {
-        return false;
-    }
+    const value = get({ sheets: rewritten }, unit);
+    if (unit[2] !== 'data' || unit.length !== 5) return isEqual(value, current);
+    return isEqual(authored(value), authored(current));
 }
 
 // What a person wrote into a cell: a formula's value, its display text and its value type are the engine's.
