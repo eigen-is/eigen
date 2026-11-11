@@ -2,7 +2,7 @@
 
 A self-hosted alternative to Google Workspace.
 
-Mail, drive, docs, sheets, slides, drawings, stickies, calendar, contacts and chat. Syncs with your own apps over IMAP, SMTP, CalDAV, CardDAV and WebDAV. Opens and saves Word, Excel and PowerPoint files.
+Mail, drive, docs, sheets, slides, drawings, stickies, calendar, contacts and chat.
 
 Try the demo at [demo.eigen.is](https://demo.eigen.is). It is a shared workspace that resets every hour.
 
