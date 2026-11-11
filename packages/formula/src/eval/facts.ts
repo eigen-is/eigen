@@ -40,7 +40,7 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
     }
     const entry = node.kind === NodeKind.Call ? functions.get(node.text) : undefined;
     // A range that takes its size from another names cells of its own only when the two are of one size.
-    if (entry !== undefined && !('flags' in entry) && entry.sized >= 0 && entry.sized < node.children.length) {
+    if (entry !== undefined && entry.sized >= 0 && entry.sized < node.children.length) {
         if (!sameSize(node.children[entry.sized - 2], node.children[entry.sized])) flags |= Fact.ReadsUnnamed;
     }
     return flags | ((depth + 1) << FACT_BITS);

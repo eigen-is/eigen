@@ -17,8 +17,7 @@ const SHEET: Cells = {
     ...{ E1: 1, E2: '=1/0', E3: 3, F1: 1, F2: '=NA()', F3: 3 },
 };
 
-const ROWS: Entry[] = [];
-for (const entry of FUNCTIONS.values()) if (!('flags' in entry)) ROWS.push(entry);
+const ROWS = [...FUNCTIONS.values()];
 
 // A row for which no call from the pools answers a value names one here.
 const BASES: Readonly<Record<string, readonly string[]>> = {

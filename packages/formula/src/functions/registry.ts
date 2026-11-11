@@ -12,13 +12,12 @@ import { toBoolean, toNumber, toText } from '../values/coerce';
 import type { FormulaError } from '../values/errors';
 import { REF, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
-import type { FunctionEntry } from './legacy';
 
 export type { Matches, Numbers, Room, Table } from '../eval/readers';
 export type { Vector } from '../eval/search';
 export { Find, PART } from '../eval/signature';
 
-export type Registry = ReadonlyMap<string, Entry | FunctionEntry>;
+export type Registry = ReadonlyMap<string, Entry>;
 
 const REQUIRED = { family: null, optional: false, fallback: undefined, skips: false, rest: false, union: null };
 

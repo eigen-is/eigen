@@ -15,7 +15,6 @@ import { isArray, isError, isReference, ValueType } from '../values/value';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Errors, TypedText } from './families';
-import { legacyCall } from './legacy';
 import { lift } from './lift';
 import { look } from './look';
 import { real } from './operators';
@@ -28,7 +27,6 @@ const LONGEST_TEXT = 32767;
 export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
     const entry = ctx.functions.get(node.text);
     if (entry === undefined) return NAME;
-    if ('flags' in entry) return legacyCall(ctx, entry, node, sheet, row, column);
     const given = node.children;
     const count = given.length;
     const { fixed } = entry;

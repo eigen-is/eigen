@@ -14,7 +14,7 @@ import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from '../text/tree';
 import type { FormulaError } from '../values/errors';
 import { errorOf, NAME, NULL, REF, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
-import { arrayOf, isArray, isError, isReference, OMITTED, ValueType } from '../values/value';
+import { arrayOf, isArray, isError, isReference, ValueType } from '../values/value';
 import { call } from './call';
 import { lift } from './lift';
 import { LIFTED_BINARY, LIFTED_NEGATE, LIFTED_PERCENT, negate, operate, percent } from './operators';
@@ -32,7 +32,6 @@ export class Evaluator {
     public readonly recalc: Recalc;
     // The argument lists of the calls in progress, one per level of nesting, reused from call to call.
     public readonly frames: Frame[] = [];
-    public readonly oldFrames: Value[][] = [];
     public calls = 0;
     public readonly walk = new Walk(this);
     public readonly room = new Room(this);
@@ -75,7 +74,7 @@ export class Evaluator {
             case NodeKind.Error:
                 return LITERAL_ERRORS[node.value - 1];
             case NodeKind.Empty:
-                return OMITTED;
+                return null;
             case NodeKind.Ref:
                 return this.reference(node, sheet, row, column);
             case NodeKind.Name:
@@ -131,8 +130,6 @@ export class Evaluator {
                     return this.recalc.valueOf(this.workbook.sheets[value.sheet], value.top, value.left);
                 }
                 return toArray(this, value);
-            case ValueType.Omitted:
-                return null;
             default:
                 return value;
         }

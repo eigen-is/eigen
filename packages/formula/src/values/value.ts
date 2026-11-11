@@ -1,11 +1,12 @@
 // What a formula can evaluate to. A number, a text and a boolean are the JS types and a blank is null, so most
 // arithmetic allocates nothing. The four kinds that need an object carry an integer `type`: an error, a reference
-// to cells that nobody has read yet, an array, and the argument a call leaves out. An array keeps the size that
+// to cells that nobody has read yet, an array, and the token a function gets for an argument that is not
+// evaluated yet. An array keeps the size that
 // was written apart from what it stores, so a whole column costs its cells and not the grid.
 
 import type { FormulaError } from './errors';
 
-export const ValueType = { Error: 1, Reference: 2, Array: 3, Omitted: 4, Lazy: 5 } as const;
+export const ValueType = { Error: 1, Reference: 2, Array: 3, Lazy: 4 } as const;
 
 export type Scalar = number | string | boolean | null | FormulaError;
 
@@ -42,12 +43,7 @@ export type ArrayValue = {
     readonly references: boolean;
 };
 
-export type Omitted = { readonly type: typeof ValueType.Omitted };
-
-export type Value = Scalar | Reference | ArrayValue | Omitted;
-
-// An argument left out between two separators, as in SUM(1,,2).
-export const OMITTED: Omitted = Object.freeze({ type: ValueType.Omitted });
+export type Value = Scalar | Reference | ArrayValue;
 
 // Anything a slot of a call can hold: a guard below asks only for its tag.
 type Tagged = { readonly type: number } | number | string | boolean | null | undefined;

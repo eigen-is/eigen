@@ -6,7 +6,7 @@ import type { FormulaError } from '../values/errors';
 import { CALC, NA } from '../values/errors';
 import { snapSum } from '../values/precision';
 import type { ArrayValue, Scalar, Value } from '../values/value';
-import { arrayOf, elementAt, isArray, isError, isReference, MOST_ELEMENTS, partOf } from '../values/value';
+import { arrayOf, elementAt, isArray, isReference, MOST_ELEMENTS, partOf } from '../values/value';
 import type { Tally } from './criteria';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
@@ -197,7 +197,7 @@ export class Table {
             return ctx.recalc.valueOf(ctx.workbook.sheets[value.sheet], value.top + row, value.left + column);
         }
         if (isArray(value)) return ctx.first(elementAt(value, row, column));
-        return typeof value !== 'object' || value === null || isError(value) ? value : null;
+        return value;
     }
 
     // A rectangle of the table, for a row that may answer with one. It is good until `part` is asked again.

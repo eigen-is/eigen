@@ -60,7 +60,7 @@ export function lift(
             }
             result ??= run(ctx, entry, held, count);
             if (isLazy(result)) picks[r * width + c] = result;
-            else if (isArray(result) || (!isReference(result) && !isScalar(result))) items[r * width + c] = CALC;
+            else if (isArray(result)) items[r * width + c] = CALC;
             else {
                 items[r * width + c] = result;
                 references ||= isReference(result);
@@ -91,10 +91,6 @@ function lineUp(ctx: Evaluator, arrays: readonly ArrayValue[]): Lined | null {
     const down = align(arrays, rows, true);
     const across = align(arrays, columns, false);
     return ctx.recalc.room(down.count * across.count, MOST_ELEMENTS) ? { rows, columns, down, across } : null;
-}
-
-function isScalar(value: Value): value is Scalar {
-    return typeof value !== 'object' || value === null || isError(value);
 }
 
 // Where array `k` stores its element for a run of rows and a run of columns, or -1 past its end.
