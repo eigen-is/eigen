@@ -258,7 +258,9 @@ export class ReverseIndex {
                 const block = column >> levels[l];
                 if (block < levels[l + 1] || block > levels[l + 2]) continue;
                 const slot = levels[l + 3] + block - levels[l + 1];
-                this.search(sheets, sheet, starts[slot], starts[slot + 1], column, from, to);
+                if (starts[slot] < starts[slot + 1]) {
+                    this.search(sheets, sheet, starts[slot], starts[slot + 1], column, from, to);
+                }
             }
         }
         for (let i = lowered.length - 3; i >= 0; i -= 3) this.lists[lowered[i]][lowered[i + 1]] = lowered[i + 2];
@@ -281,13 +283,12 @@ export class ReverseIndex {
         from: number,
         to: number,
     ): number {
-        if (low >= high) return -1;
         const list = this.lists[sheet];
         const middle = (low + high) >> 1;
         const at = middle * 4;
         const reach = list[at + REACH];
         if (reach < from) return reach;
-        const before = this.search(sheets, sheet, low, middle, column, from, to);
+        const before = low < middle ? this.search(sheets, sheet, low, middle, column, from, to) : -1;
         // The listings after this one start lower still.
         if (list[at + TOP] > to) return reach;
         let own = list[at + BOTTOM];
@@ -329,7 +330,8 @@ export class ReverseIndex {
                 if (all) own = -1;
             }
         }
-        const live = Math.max(before, own, this.search(sheets, sheet, middle + 1, high, column, from, to));
+        const after = middle + 1 < high ? this.search(sheets, sheet, middle + 1, high, column, from, to) : -1;
+        const live = Math.max(before, own, after);
         if (live < reach) {
             this.lowered.push(sheet, at + REACH, reach);
             list[at + REACH] = live;
