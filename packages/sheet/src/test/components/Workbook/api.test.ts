@@ -683,6 +683,15 @@ describe('replayOps', () => {
             const { ctx } = replay(shown, shown.sheets, [hide, typed], [hide]);
             expect(ctx.currentSheetId).toBe('id_2');
         });
+
+        it('a fresh hide that lands the tab on a sheet whose kept selection went leaves no selection', () => {
+            const base = makeCtx(null);
+            const shown = applyPeerOps(leftBehind(base), insertAbove);
+            const hide: Op[] = [{ op: 'replace', id: 'id_2', path: ['hide'], value: 1 }];
+            const { ctx } = replay(shown, base.sheets, [deleteAbove, insertAbove, hide], [deleteAbove, hide]);
+            expect(ctx.currentSheetId).toBe('id_1');
+            expect(ctx.selections).toBeUndefined();
+        });
     });
 });
 
