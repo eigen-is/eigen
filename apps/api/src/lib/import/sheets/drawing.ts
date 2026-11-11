@@ -86,11 +86,8 @@ export type DrawingContext = {
     lost: Lost;
 };
 
-// Each drawing's charts and pictures onto its sheet, painted in file order, the charts as chart-0, chart-1, … across the
-// workbook. Left out and counted: a chart the reader can't draw, a part missing or damaged, a place no anchor names, one
-// past the budget, and each of Excel 2016's charts; a picture of a type a sheet doesn't draw, its part missing or past
-// the media budget. A chart part is read once however many anchors name it, and each chart costs its elements and
-// points (chartCost) and every anchor the tracks walked to place it. A chart sheet shows its chart alone.
+// Each drawing's charts and pictures onto its sheet, in file order. One the reader can't place or draw is left out
+// and counted, and a chart part is read once however many anchors name it.
 export function placeDrawings(drawings: Drawing[], context: DrawingContext): void {
     const costs = new Map<XmlElement, number>();
     const specs = new Map<XmlElement, ChartSpec | undefined>();
@@ -159,9 +156,8 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
     }
 }
 
-// A picture over its box, turned by its a:xfrm's rot as Eigen turns it, clockwise. Excel and LibreOffice anchor a
-// picture turned sideways over its box turned a quarter, so its own box is that one turned back (anchoredBox). Its
-// part is its svgBlip's, else its blip's, its blipFill read through mc:AlternateContent as the anchor is.
+// Excel and LibreOffice anchor a picture turned sideways over its box turned a quarter, so its own box is that one
+// turned back. Its part is its svgBlip's, else its blip's.
 function pictureOf(
     picture: XmlElement,
     rels: ReadonlyMap<string, Relationship>,
@@ -198,9 +194,8 @@ function markerOf(element: XmlElement | undefined): Marker | undefined {
     return { col, colOff: emu(text('colOff')) ?? 0, row, rowOff: emu(text('rowOff')) ?? 0 };
 }
 
-// In grid px from A1: a two-cell anchor over the same cells as in Excel, through the sheet's own widths and heights,
-// between its corners whichever comes first; a one-cell anchor from its cell at its size; an absolute one where it
-// says.
+// In grid px from A1, through the sheet's own widths and heights. A two-cell anchor spans its corners, whichever
+// comes first.
 function anchorBox(
     anchor: XmlElement,
     from: Marker | undefined,

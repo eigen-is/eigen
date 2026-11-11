@@ -57,9 +57,8 @@ export function useSheet(
     // The mounted grid's anchors, in log order.
     const anchorsRef = useRef<Anchor[]>([]);
 
-    // The snapshot with the log replayed on top, which a mounted grid takes through `show`. A failure of either returns
-    // null and locks the workbook read-only, since what it shows may differ from the wire, and is caught because a
-    // throw escaping the Yjs handler kills the app.
+    // The snapshot with the log replayed on top, which a mounted grid takes through `show`. A failure of either locks
+    // the workbook read-only, and is caught because a throw escaping the Yjs handler kills the app.
     const readSheets = (doc: Y.Doc, show?: (sheets: Sheet[]) => void): Sheet[] | null => {
         let sheets: Sheet[] | null = null;
         try {

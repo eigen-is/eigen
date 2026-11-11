@@ -50,16 +50,14 @@ export const ELEMENT_KINDS: ElementKindRegistry = {
     arrow: arrowKind,
 };
 
-// What one element supports: its kind's table with the kind's overrides for that element. Some answers depend on
-// the element's shape, as an open freehand stroke paints no fill. So code holding an element calls this and never
-// reads `ELEMENT_KINDS[type].capabilities`.
+// What one element supports. Some answers depend on its shape, as an open freehand stroke paints no fill, so code
+// holding an element calls this and never reads `ELEMENT_KINDS[type].capabilities`.
 export function capabilitiesOf(el: VectorElement): Capabilities {
     return ELEMENT_KINDS[el.type].capabilitiesOf(el);
 }
 
-// Whether this element puts nothing on the page, such as an empty text box, a shape with neither fill nor border,
-// or an image with no picture. Only the editor uses it: the canvas rings such an element so it stays findable,
-// while a thumbnail, present mode and an export show the page as it is. Each kind answers for itself.
+// Whether this element puts nothing on the page, such as an empty text box or a shape with neither fill nor border.
+// The canvas rings such an element so it stays findable.
 export function paintsNothing(el: VectorElement): boolean {
     return ELEMENT_KINDS[el.type].paintsNothing(el);
 }
@@ -70,9 +68,8 @@ export function convertToShapes(el: VectorElement): VectorElement[] {
     return ELEMENT_KINDS[el.type].toShapes(el);
 }
 
-// Whether an arrow's end may bind to this element, read off its capabilities. Every caller, such as the reader
-// and the elbow router, asks this one guard, so they agree. A new kind opts in by declaring the capability and
-// not by joining a list.
+// Whether an arrow's end may bind to this element. A new kind opts in by declaring the capability, not by joining a
+// list.
 export function isBindable(el: VectorElement): el is VectorBindableElement {
     return capabilitiesOf(el).bindable;
 }
@@ -105,9 +102,8 @@ export function baseDefaultsFor(
     return { ...DEFAULT_ELEMENT_PROPS, roughness: style.roughness, ...ELEMENT_KINDS[type].baseDefaults };
 }
 
-// The kinds a tool can create, in toolbar order, which the toolbar's tools derive from. The literal tuple gives
-// `CreationToolType` a narrow union, so a UI table keyed by it must cover every kind. The registry test pins the
-// tuple to the capabilities, so the two can't disagree.
+// The kinds a tool can create, in toolbar order. The literal tuple gives `CreationToolType` a narrow union, so a UI
+// table keyed by it must cover every kind.
 const CREATION_ORDER = ['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw'] as const;
 
 type CreationToolType = (typeof CREATION_ORDER)[number];

@@ -1,12 +1,12 @@
+// The sizes every reader of a workbook must agree on: a row's and a column's default pixels, the header strips, the
+// pixels a run of tracks takes, and the largest grid a sheet may hold. The editor, the op replay and the server's
+// renderers read them here, since a floating image stored in pixels lands over other cells where two readers differ.
+
 import { isRecord } from '../core/guards';
 import type { Sheet } from './types';
 
-// The size, in CSS pixels, of a track the user never resized. A row or column without a
-// stored `rowlen`/`columnlen` falls back to its sheet's default, and a sheet without one
-// (all but an imported one) to these, so the editor grid, the op replay and the
-// server-side HTML/PDF/preview renderer must all read them through the two helpers below —
-// two spellings drift, and floating images (stored as pixel positions) then land over
-// different cells on screen than in an export.
+// In CSS pixels, for a row or column with no stored size on a sheet with no default of its own, which only an import
+// sets.
 export const SHEET_DEFAULT_COL_WIDTH = 100;
 export const SHEET_DEFAULT_ROW_HEIGHT = 20;
 
@@ -18,9 +18,8 @@ export function sheetDefaultRowHeight(sheet: Pick<Sheet, 'defaultRowHeight'>): n
     return sheet.defaultRowHeight ?? SHEET_DEFAULT_ROW_HEIGHT;
 }
 
-// The laid-out pixels across the columns or rows `from` to `to`, a hidden one none: the walk the server's HTML, PDF and
-// preview grid and overlay and the xlsx import's chart anchors share. Geometry is schemaless at the Yjs boundary, so a
-// stored length that isn't a number reads as the default.
+// The laid-out pixels across the columns or rows `from` to `to`, a hidden one none. A peer can store anything as a
+// length, so one that is no number reads as the default.
 export function sheetColumnsWidth(sheet: Pick<Sheet, 'config' | 'defaultColWidth'>, from: number, to: number): number {
     const { colhidden, columnlen } = sheet.config ?? {};
     return tracksLength(from, to, colhidden, columnlen, sheetDefaultColWidth(sheet));
@@ -31,9 +30,8 @@ export function sheetRowsHeight(sheet: Pick<Sheet, 'config' | 'defaultRowHeight'
     return tracksLength(from, to, rowhidden, rowlen, sheetDefaultRowHeight(sheet));
 }
 
-// Where `px` from the grid's start lands across the columns or rows: the track and the pixels into it, so the walk above
-// over the tracks before it plus the offset is `px` again. A hidden track holds no pixel, so a boundary starts the next
-// shown track; past the grid is the last track, the rest its offset. The xlsx export's chart anchors are its cells.
+// The track `px` from the grid's start lands in, and the pixels into it. A hidden track holds no pixel, so a boundary
+// starts the next shown one, and past the grid is the last track with the rest as its offset.
 export function sheetTrackAt(
     sheet: Pick<Sheet, 'config' | 'defaultColWidth' | 'defaultRowHeight'>,
     axis: 'column' | 'row',
@@ -78,8 +76,7 @@ function trackLength(
     return Number.isFinite(stored) ? stored : fallback;
 }
 
-// The header strips and the cell text size a fresh workbook starts with, which the chart Edit data
-// grid draws at too, so it looks like a sheet.
+// The header strips and the cell text size a fresh workbook starts with, which the chart's Edit data grid draws at too.
 export const SHEET_ROW_HEADER_WIDTH = 46;
 export const SHEET_COLUMN_HEADER_HEIGHT = 20;
 export const SHEET_DEFAULT_FONT_SIZE = 10; // points

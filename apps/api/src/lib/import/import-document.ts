@@ -172,11 +172,8 @@ export async function importIntoDocument(
     throw new ApiError(400, `Import into ${path.mimeType} is not supported`);
 }
 
-// Every format commits in one order. A replace saves a version first. The pictures are saved before the write that
-// names them, because an open tab looks each name up once, as the write arrives. Then the write is checked again. The
-// document is opened last, right before the synchronous write. The document can close during any earlier await, such
-// as when a compaction ends, and a write into a closed one is lost. Each import prefixes its picture names, so they
-// land beside the document's media, never over it.
+// Every format commits in one order: the pictures before the write that names them, since an open tab looks each name
+// up once, and the document opened last, since it can close during any earlier await and a write into it is lost.
 async function commitImport(
     { drive, path, user, signal }: { drive: DriveLike; path: DrivePath; user: User; signal?: AbortSignal },
     images: TransformMedia[],
@@ -271,9 +268,8 @@ async function requireWritePermission(drive: DriveLike, path: DrivePath, user: U
     if (!(await drive.canWrite(path.mountId, path.id, user))) throw new ApiError(403, 'No write permission');
 }
 
-// Through Drive, as an upload is: the ACL check, the drive event an open tab redraws on and the thumbnail. The images
-// count toward the quota at their inflated size. They are charged before the first is written.
-// Each import names its pictures with a prefix of its own, so every one is a create.
+// Through Drive, as an upload is, for the ACL check, the drive event and the thumbnail. The quota is charged for all
+// of them before the first is written, and each import's own name prefix makes every one a create.
 async function saveImportedImages(
     drive: DriveLike,
     docPath: DrivePath,
@@ -294,8 +290,7 @@ function imagesSize(images: TransformMedia[]): number {
     return images.reduce((sum, image) => sum + image.data.byteLength, 0);
 }
 
-// A convert saves the pictures, then opens the new document right before the write, as an import does. A convert that
-// fails after its create (quota another write spent) trashes the document it made through Drive's own delete, so the
+// A convert that fails after its create, such as on quota another write spent, trashes the document it made, so the
 // error it answers leaves no half-filled document behind.
 async function fillNewDocument(
     drive: DriveLike,

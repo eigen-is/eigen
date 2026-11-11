@@ -159,9 +159,8 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
     return { sheets: decoded, computed };
 }
 
-// A sheet's keyed maps as every reader holds them, all there even when empty: the editor writes each image, chart or
-// rule under its own key, and that write needs the map. A value that is no map is dropped, and so is a rule that is
-// not well formed.
+// A sheet's keyed maps as every reader holds them, all there even when empty, since a write under a key needs its
+// map. A value that is no map is dropped, and so is a rule that is not well formed.
 export function sheetKeyedMaps(sheet: StoredKeyedMaps): Required<Pick<Sheet, KeyedMap>> {
     return {
         images: isRecord(sheet.images) ? sheet.images : {},
