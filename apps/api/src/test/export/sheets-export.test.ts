@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
-import type { ConditionalFormatRule, DataValidationRule, Sheet } from '@workspace/lib/sheets';
+import type { DataValidationRule, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { replaySheetsOps } from '@workspace/sheet/engine';
 import type { XmlElement } from '../../lib/core/xml';
@@ -15,7 +15,7 @@ import { cpuClock } from '../cpu-time';
 import { cellLinks } from '../fixtures/cell-links';
 import { seedDocumentMedia } from '../fixtures/golden-documents';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
-import { ruleAt, rulesByCell, validationsByCell } from '../fixtures/validations';
+import { formatList, formatsOf, ruleAt, rulesByCell, validationsByCell } from '../fixtures/validations';
 import { exportXlsx, rowsXml, styleSheet, xlsxFixture } from '../fixtures/xlsx';
 import { driveGet, drivePost, getTestContext, TEST_PNG_BYTES } from '../setup';
 
@@ -465,12 +465,14 @@ describe('Sheets xlsx export — autofilter', () => {
     });
 });
 
+type FormatList = ReturnType<typeof formatList>;
+
 describe('Sheets xlsx export — conditional formatting', () => {
     test('exports cellIs rules with explicit last-wins priorities and pinned dxf colors', async () => {
-        const rules: ConditionalFormatRule[] = [
+        const rules: FormatList = [
             {
                 type: 'default',
-                cellrange: [{ row: [0, 4], column: [1, 1] }],
+                ranges: [{ row: [0, 4], column: [1, 1] }],
                 format: { textColor: null, cellColor: '#00FF00' },
                 conditionName: 'lessThanOrEqual',
                 conditionRange: [],
@@ -478,7 +480,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
             {
                 type: 'default',
-                cellrange: [{ row: [0, 4], column: [1, 1] }],
+                ranges: [{ row: [0, 4], column: [1, 1] }],
                 format: { textColor: '#FFFFFF', cellColor: '#FF0000' },
                 conditionName: 'greaterThan',
                 conditionRange: [],
@@ -486,7 +488,12 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
         ];
         const sheets: Sheet[] = [
-            { id: 'fixture-46', name: 'CF', celldata: [{ r: 0, c: 1, v: { v: 12 } }], conditionalFormatRules: rules },
+            {
+                id: 'fixture-46',
+                name: 'CF',
+                celldata: [{ r: 0, c: 1, v: { v: 12 } }],
+                conditionalFormats: formatsOf(rules),
+            },
         ];
         // Engine order is last-write-wins; Excel priority 1 wins → last rule gets priority 1. One range is one block.
         const written = writtenFormats(exportXlsx(sheets));
@@ -497,14 +504,14 @@ describe('Sheets xlsx export — conditional formatting', () => {
         ]);
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].conditionalFormatRules).toEqual(rules);
+        expect(formatList(rt[0].conditionalFormats)).toEqual(rules);
     });
 
     test('exports between/notBetween with two formulae and re-quotes text operands', async () => {
-        const rules: ConditionalFormatRule[] = [
+        const rules: FormatList = [
             {
                 type: 'default',
-                cellrange: [{ row: [0, 3], column: [0, 0] }],
+                ranges: [{ row: [0, 3], column: [0, 0] }],
                 format: { textColor: null, cellColor: '#112233' },
                 conditionName: 'between',
                 conditionRange: [],
@@ -512,7 +519,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
             {
                 type: 'default',
-                cellrange: [{ row: [0, 3], column: [0, 0] }],
+                ranges: [{ row: [0, 3], column: [0, 0] }],
                 format: { textColor: '#AA0000', cellColor: null },
                 conditionName: 'notEqual',
                 conditionRange: [],
@@ -520,7 +527,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
             {
                 type: 'default',
-                cellrange: [
+                ranges: [
                     { row: [0, 3], column: [0, 0] },
                     { row: [0, 3], column: [2, 2] },
                 ],
@@ -531,7 +538,12 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
         ];
         const sheets: Sheet[] = [
-            { id: 'fixture-45', name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 3 } }], conditionalFormatRules: rules },
+            {
+                id: 'fixture-45',
+                name: 'CF',
+                celldata: [{ r: 0, c: 0, v: { v: 3 } }],
+                conditionalFormats: formatsOf(rules),
+            },
         ];
         const written = writtenFormats(exportXlsx(sheets));
         expect(written.get('A1:A4')?.map(({ formulas }) => formulas)).toEqual([['2', '5'], ['"say ""hi"""']]);
@@ -544,16 +556,16 @@ describe('Sheets xlsx export — conditional formatting', () => {
         ]);
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].conditionalFormatRules).toEqual(rules);
+        expect(formatList(rt[0].conditionalFormats)).toEqual(rules);
     });
 
     // A number test that backtracks is quadratic in a run of digits: 100,000 of them took 9 s.
     // Past Excel's 255 characters a quoted string drops the rule, counted.
     test('weighs a text operand of 100,000 digits in linear time and drops it', async () => {
         const operand = `${'1'.repeat(100_000)}x`;
-        const rule: ConditionalFormatRule = {
+        const rule: FormatList[number] = {
             type: 'default',
-            cellrange: [{ row: [0, 0], column: [0, 0] }],
+            ranges: [{ row: [0, 0], column: [0, 0] }],
             format: { textColor: '#AA0000', cellColor: null },
             conditionName: 'equal',
             conditionRange: [],
@@ -561,19 +573,22 @@ describe('Sheets xlsx export — conditional formatting', () => {
         };
         const cpuMs = cpuClock();
         const warnings: TransformWarning[] = [];
-        const buffer = exportXlsx([{ id: 'fixture-44', name: 'CF', celldata: [], conditionalFormatRules: [rule] }], {
-            warnings,
-        });
+        const buffer = exportXlsx(
+            [{ id: 'fixture-44', name: 'CF', celldata: [], conditionalFormats: formatsOf([rule]) }],
+            {
+                warnings,
+            },
+        );
         expect(cpuMs()).toBeLessThan(1_000);
         expect(writtenFormats(buffer).size).toBe(0);
         expect(warnings).toEqual([{ code: 'conditional-formats-dropped', count: 1 }]);
     });
 
     test('exports formula rules as expression sans leading equals', async () => {
-        const rules: ConditionalFormatRule[] = [
+        const rules: FormatList = [
             {
                 type: 'default',
-                cellrange: [{ row: [1, 3], column: [1, 1] }],
+                ranges: [{ row: [1, 3], column: [1, 1] }],
                 format: { textColor: '#0000FF', cellColor: null },
                 conditionName: 'formula',
                 conditionRange: [],
@@ -585,7 +600,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
                 id: 'fixture-43',
                 name: 'CF',
                 celldata: [{ r: 1, c: 1, v: { v: 'longtext' } }],
-                conditionalFormatRules: rules,
+                conditionalFormats: formatsOf(rules),
             },
         ];
         expect(writtenFormats(exportXlsx(sheets)).get('B2:B4')).toMatchObject([
@@ -593,14 +608,14 @@ describe('Sheets xlsx export — conditional formatting', () => {
         ]);
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].conditionalFormatRules).toEqual(rules);
+        expect(formatList(rt[0].conditionalFormats)).toEqual(rules);
     });
 
     test('exports a formula rule over several ranges as one rule with a multi-range sqref', async () => {
-        const rules: ConditionalFormatRule[] = [
+        const rules: FormatList = [
             {
                 type: 'default',
-                cellrange: [
+                ranges: [
                     { row: [1, 3], column: [1, 1] },
                     { row: [1, 3], column: [3, 3] },
                 ],
@@ -615,7 +630,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
                 id: 'fixture-42',
                 name: 'CF',
                 celldata: [{ r: 1, c: 1, v: { v: 'longtext' } }],
-                conditionalFormatRules: rules,
+                conditionalFormats: formatsOf(rules),
             },
         ];
         const written = writtenFormats(exportXlsx(sheets));
@@ -625,11 +640,11 @@ describe('Sheets xlsx export — conditional formatting', () => {
         ]);
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].conditionalFormatRules).toEqual(rules);
+        expect(formatList(rt[0].conditionalFormats)).toEqual(rules);
     });
 
     test('exports the top10 family and above/below average', async () => {
-        const rules: ConditionalFormatRule[] = (
+        const rules: FormatList = (
             [
                 ['top10', ['7']],
                 ['top10_percent', ['15']],
@@ -640,14 +655,19 @@ describe('Sheets xlsx export — conditional formatting', () => {
             ] as const
         ).map(([conditionName, conditionValue]) => ({
             type: 'default',
-            cellrange: [{ row: [0, 9], column: [0, 0] }],
+            ranges: [{ row: [0, 9], column: [0, 0] }],
             format: { textColor: null, cellColor: '#FFEE00' },
             conditionName,
             conditionRange: [],
             conditionValue: [...conditionValue],
         }));
         const sheets: Sheet[] = [
-            { id: 'fixture-41', name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 5 } }], conditionalFormatRules: rules },
+            {
+                id: 'fixture-41',
+                name: 'CF',
+                celldata: [{ r: 0, c: 0, v: { v: 5 } }],
+                conditionalFormats: formatsOf(rules),
+            },
         ];
         const written = writtenFormats(exportXlsx(sheets)).get('A1:A10') ?? [];
         expect(written.map(({ attributes }) => attributes)).toMatchObject([
@@ -660,19 +680,19 @@ describe('Sheets xlsx export — conditional formatting', () => {
         ]);
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].conditionalFormatRules).toEqual(rules);
+        expect(formatList(rt[0].conditionalFormats)).toEqual(rules);
     });
 
     test('exports dataBar and colorScale with the stop order reversed back', async () => {
-        const rules: ConditionalFormatRule[] = [
-            { type: 'dataBar', cellrange: [{ row: [0, 4], column: [0, 0] }], format: ['#638EC6'] },
+        const rules: FormatList = [
+            { type: 'dataBar', ranges: [{ row: [0, 4], column: [0, 0] }], format: ['#638EC6'] },
             // Engine colorGradation is MAX→MID→MIN; xlsx colorScale lists MIN→MID→MAX.
             {
                 type: 'colorGradation',
-                cellrange: [{ row: [0, 4], column: [1, 1] }],
+                ranges: [{ row: [0, 4], column: [1, 1] }],
                 format: ['#FF0000', '#FFFF00', '#0000FF'],
             },
-            { type: 'colorGradation', cellrange: [{ row: [0, 4], column: [2, 2] }], format: ['#FF0000', '#FFFFFF'] },
+            { type: 'colorGradation', ranges: [{ row: [0, 4], column: [2, 2] }], format: ['#FF0000', '#FFFFFF'] },
         ];
         const sheets: Sheet[] = [
             {
@@ -683,7 +703,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
                     { r: 0, c: 1, v: { v: 2 } },
                     { r: 0, c: 2, v: { v: 3 } },
                 ],
-                conditionalFormatRules: rules,
+                conditionalFormats: formatsOf(rules),
             },
         ];
         const written = writtenFormats(exportXlsx(sheets));
@@ -693,14 +713,14 @@ describe('Sheets xlsx export — conditional formatting', () => {
         expect(written.get('A1:A5')).toMatchObject([{ cfvos: ['min', 'max'], colors: ['FF638EC6'] }]);
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].conditionalFormatRules).toEqual(rules);
+        expect(formatList(rt[0].conditionalFormats)).toEqual(rules);
     });
 
     test('skips an occurrenceDate rule without emitting an empty block', async () => {
-        const rules: ConditionalFormatRule[] = [
+        const rules: FormatList = [
             {
                 type: 'default',
-                cellrange: [{ row: [0, 4], column: [0, 0] }],
+                ranges: [{ row: [0, 4], column: [0, 0] }],
                 format: { textColor: null, cellColor: '#CCCCCC' },
                 conditionName: 'occurrenceDate',
                 conditionRange: [],
@@ -708,7 +728,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
             {
                 type: 'default',
-                cellrange: [{ row: [0, 4], column: [0, 0] }],
+                ranges: [{ row: [0, 4], column: [0, 0] }],
                 format: { textColor: '#00AA00', cellColor: null },
                 conditionName: 'equal',
                 conditionRange: [],
@@ -716,7 +736,12 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
         ];
         const sheets: Sheet[] = [
-            { id: 'fixture-39', name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
+            {
+                id: 'fixture-39',
+                name: 'CF',
+                celldata: [{ r: 0, c: 0, v: { v: 1 } }],
+                conditionalFormats: formatsOf(rules),
+            },
         ];
         const warnings: TransformWarning[] = [];
         const written = writtenFormats(exportXlsx(sheets, { warnings }));
@@ -727,14 +752,14 @@ describe('Sheets xlsx export — conditional formatting', () => {
         expect(warnings).toEqual([{ code: 'conditional-formats-dropped', count: 1 }]);
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].conditionalFormatRules).toEqual([rules[1]]);
+        expect(formatList(rt[0].conditionalFormats)).toEqual([rules[1]]);
     });
 
     test("exports duplicate and unique value rules as Excel's own, which re-import as themselves", async () => {
-        const rules: ConditionalFormatRule[] = [
+        const rules: FormatList = [
             {
                 type: 'default',
-                cellrange: [{ row: [0, 4], column: [0, 0] }], // A1:A5
+                ranges: [{ row: [0, 4], column: [0, 0] }], // A1:A5
                 format: { textColor: null, cellColor: '#FFDD00' },
                 conditionName: 'duplicateValue',
                 conditionRange: [],
@@ -742,7 +767,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
             {
                 type: 'default',
-                cellrange: [{ row: [1, 3], column: [2, 2] }], // C2:C4
+                ranges: [{ row: [1, 3], column: [2, 2] }], // C2:C4
                 format: { textColor: '#AA0000', cellColor: null },
                 conditionName: 'duplicateValue',
                 conditionRange: [],
@@ -750,23 +775,28 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
         ];
         const sheets: Sheet[] = [
-            { id: 'fixture-38', name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
+            {
+                id: 'fixture-38',
+                name: 'CF',
+                celldata: [{ r: 0, c: 0, v: { v: 1 } }],
+                conditionalFormats: formatsOf(rules),
+            },
         ];
         const written = writtenFormats(exportXlsx(sheets));
         expect(written.get('A1:A5')).toMatchObject([{ attributes: { type: 'duplicateValues', priority: '2' } }]);
         expect(written.get('C2:C4')).toMatchObject([{ attributes: { type: 'uniqueValues', priority: '1' } }]);
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].conditionalFormatRules).toEqual(rules);
+        expect(formatList(rt[0].conditionalFormats)).toEqual(rules);
     });
 
     test('writes a multi-range duplicateValue rule as one block over its ranges', async () => {
         const format = { textColor: null, cellColor: '#DDDDDD' };
-        const rules: ConditionalFormatRule[] = [
+        const rules: FormatList = [
             {
                 type: 'default',
                 // A1:A5, C1:C10 and the 1×1 range E1 (single absolute cell, no colon).
-                cellrange: [
+                ranges: [
                     { row: [0, 4], column: [0, 0] },
                     { row: [0, 9], column: [2, 2] },
                     { row: [0, 0], column: [4, 4] },
@@ -778,13 +808,18 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
         ];
         const sheets: Sheet[] = [
-            { id: 'fixture-37', name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
+            {
+                id: 'fixture-37',
+                name: 'CF',
+                celldata: [{ r: 0, c: 0, v: { v: 1 } }],
+                conditionalFormats: formatsOf(rules),
+            },
         ];
         const written = writtenFormats(exportXlsx(sheets));
         expect(written.get('A1:A5 C1:C10 E1')).toMatchObject([{ attributes: { type: 'duplicateValues' } }]);
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].conditionalFormatRules).toEqual(rules);
+        expect(formatList(rt[0].conditionalFormats)).toEqual(rules);
     });
 });
 
@@ -843,7 +878,7 @@ describe('Sheets xlsx export — data validation', () => {
                     { r: 2, c: 1, v: { v: 'Green' } },
                 ],
                 dataValidations: {
-                    literal: { ranges: [{ row: [1, 2], column: [1, 1] }], rule: literal },
+                    literal: { ranges: [{ row: [1, 2], column: [1, 1] }], order: 'a0', rule: literal },
                     ...validationsByCell({ '3_1': quoted, '4_1': ref }),
                 },
             },
@@ -1411,18 +1446,20 @@ describe('Sheets xlsx export — colors', () => {
     });
 
     test('and in the rules', async () => {
-        const rules: ConditionalFormatRule[] = [
+        const rules: FormatList = [
             {
                 type: 'default',
-                cellrange: [{ row: [0, 0], column: [0, 0] }],
+                ranges: [{ row: [0, 0], column: [0, 0] }],
                 format: { textColor: 'rgb(170, 0, 0)', cellColor: '#0f0' },
                 conditionName: 'greaterThan',
                 conditionRange: [],
                 conditionValue: ['0'],
             },
-            { type: 'dataBar', cellrange: [{ row: [0, 0], column: [2, 2] }], format: ['#63c'] },
+            { type: 'dataBar', ranges: [{ row: [0, 0], column: [2, 2] }], format: ['#63c'] },
         ];
-        const buffer = exportXlsx([{ id: 'fixture-3', name: 'Sheet1', celldata: [], conditionalFormatRules: rules }]);
+        const buffer = exportXlsx([
+            { id: 'fixture-3', name: 'Sheet1', celldata: [], conditionalFormats: formatsOf(rules) },
+        ]);
         const argbs = [...readZipEntry(buffer, 'xl/styles.xml').matchAll(/rgb="([0-9A-Fa-f]+)"/g)].map(
             ([, argb]) => argb,
         );

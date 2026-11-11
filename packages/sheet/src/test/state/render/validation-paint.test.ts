@@ -58,7 +58,7 @@ function sheetContext(): Context {
     }) as Context;
     ctx.sheets[0].data = data;
     ctx.sheets[0].dataValidations = {
-        ticks: { ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }], rule: TICK_BOX },
+        ticks: { ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }], order: 'a0', rule: TICK_BOX },
     };
     return ctx;
 }
@@ -95,7 +95,7 @@ describe('the painter and a whole-column tick box', () => {
     test('draws none where the rule does not reach', () => {
         const ctx = sheetContext();
         ctx.sheets[0].dataValidations = {
-            ticks: { ranges: [{ row: [0, 999], column: [1, 1] }], rule: TICK_BOX },
+            ticks: { ranges: [{ row: [0, 999], column: [1, 1] }], order: 'a0', rule: TICK_BOX },
         };
         expect(tickBoxes(paintAround5000(ctx))).toHaveLength(0);
     });
@@ -123,7 +123,7 @@ describe('the painter and a tick box with its own values', () => {
         }) as Context;
         ctx.sheets[0].data = cells.map((cell) => [null, cell, null]);
         ctx.sheets[0].dataValidations = {
-            ticks: { ranges: [{ row: [0, cells.length - 1], column: [1, 1] }], rule: YES_NO },
+            ticks: { ranges: [{ row: [0, cells.length - 1], column: [1, 1] }], order: 'a0', rule: YES_NO },
         };
         const canvas = recordingCanvas();
         new Canvas(canvas.element, ctx).drawMain({

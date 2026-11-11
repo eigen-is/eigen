@@ -5,6 +5,7 @@
 
 import { isRecord } from '../core/guards';
 import { cloneSides, parseCellKey } from './borders';
+import { wellFormedConditionalFormats, wellFormedValidations } from './range-rules';
 import type {
     Cell,
     CellBorderSides,
@@ -15,7 +16,6 @@ import type {
     SheetConfig,
     SheetImage,
 } from './types';
-import { wellFormedValidations } from './validations';
 
 const FORMAT = 'eigensheets/2';
 
@@ -31,15 +31,19 @@ type EncodedContent = string | number | boolean | Record<string, unknown>;
 // [row, col, borderIndex], one for each `config.borderInfo` key.
 type EncodedBorder = [number, number, number];
 
-type EncodedSheet = Omit<Sheet, 'celldata' | 'data' | 'config' | 'images' | 'charts' | 'dataValidations'> & {
+type EncodedSheet = Omit<
+    Sheet,
+    'celldata' | 'data' | 'config' | 'images' | 'charts' | 'conditionalFormats' | 'dataValidations'
+> & {
     config?: Omit<SheetConfig, 'borderInfo'>;
     cells?: EncodedCell[];
     borderCells?: EncodedBorder[];
-    // Floating images, charts and validation rules are a few small records per sheet, so they are written as they
-    // are. An empty map is left out, and the decoder adds it back. The validations are read as unknown, since the
-    // decoder keeps only the entries that are well formed.
+    // Floating images, charts and rules are a few small records per sheet, so they are written as they are. An empty
+    // map is left out, and the decoder adds it back. The rules are read as unknown, since the decoder keeps only the
+    // ones that are well formed.
     images?: Record<string, SheetImage>;
     charts?: Record<string, SheetChart>;
+    conditionalFormats?: unknown;
     dataValidations?: unknown;
 };
 
@@ -58,10 +62,13 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
     const borderIndex = new Map<string, number>();
 
     const encoded = sheets.map((sheet) => {
-        const { celldata, data, config, images, charts, dataValidations, ...rest } = sheet;
+        const { celldata, data, config, images, charts, conditionalFormats, dataValidations, ...rest } = sheet;
         const out: EncodedSheet = { ...rest };
         if (images && Object.keys(images).length > 0) out.images = images;
         if (charts && Object.keys(charts).length > 0) out.charts = charts;
+        if (conditionalFormats && Object.keys(conditionalFormats).length > 0) {
+            out.conditionalFormats = conditionalFormats;
+        }
         if (dataValidations && Object.keys(dataValidations).length > 0) out.dataValidations = dataValidations;
 
         // The dense matrix is never written, but where it exists it holds the latest cells. An editor edit writes
@@ -118,17 +125,18 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
     if (f !== FORMAT) throw unknownFormat(f);
     const ids = new Set<string>();
     const decoded = sheets.map((encoded) => {
-        const { cells, borderCells, config, images, charts, dataValidations, ...rest } = encoded;
+        const { cells, borderCells, config, images, charts, conditionalFormats, dataValidations, ...rest } = encoded;
         // Every op names its sheet by id, so a sheet without an id of its own is as corrupt as a bad style index. Minting
         // one here would give each reader a different sheet.
         if (typeof rest.id !== 'string' || ids.has(rest.id)) throw unknownFormat(rest.id);
         ids.add(rest.id);
-        // Every sheet gets all three maps, even empty: the editor writes each image, chart or rule under its own key,
+        // Every sheet gets all four maps, even empty: the editor writes each image, chart or rule under its own key,
         // and that patch needs the map. A value that is no map is dropped, and so is a rule that is not well formed.
         const sheet: Sheet = {
             ...rest,
             images: isRecord(images) ? images : {},
             charts: isRecord(charts) ? charts : {},
+            conditionalFormats: wellFormedConditionalFormats(conditionalFormats),
             dataValidations: wellFormedValidations(dataValidations),
         };
 

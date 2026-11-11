@@ -312,7 +312,7 @@ function renderSheet(
     }
 
     // The rules need the dense `data` matrix, and a sheet without it draws none, as the canvas does.
-    const rules = sheet.conditionalFormatRules;
+    const rules = sheet.conditionalFormats;
     const cfMap: ComputeMap | null =
         rules && sheet.data
             ? evaluateConditionalFormat(rules, sheet.data, {

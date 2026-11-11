@@ -10,7 +10,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { CellLink, DataValidationRule, SheetValidation } from '@workspace/lib/sheets';
-import { MAX_VALIDATION_RANGES } from '@workspace/lib/sheets';
+import { MAX_RULE_RANGES } from '@workspace/lib/sheets';
 import { Window } from 'happy-dom';
 import type { SingleRange } from '../../engine/types';
 import type { Context } from '../../state/context';
@@ -495,7 +495,11 @@ describe('a paste over cells with a rule and a link of their own', () => {
             [6, 7],
             [11, 11],
         ]) {
-            (s.dataValidations ??= {})[key(r, c)] = { ranges: [{ row: [r, r], column: [c, c] }], rule: rule(r, c) };
+            (s.dataValidations ??= {})[key(r, c)] = {
+                ranges: [{ row: [r, r], column: [c, c] }],
+                order: 'a0',
+                rule: rule(r, c),
+            };
             if (s.data) s.data[r][c] = { ...s.data[r][c], link: link(r, c) };
         }
         return ctx;
@@ -529,8 +533,8 @@ describe('a carried rule lands as ranges', () => {
     function rangesCtx() {
         const ctx = makeCtx();
         sheet(ctx).dataValidations = {
-            column: { ranges: [{ row: [0, 3], column: [0, 0] }], rule: rule(9, 9) },
-            wide: { ranges: [{ row: [5, 11], column: [5, 11] }], rule: rule(8, 8) },
+            column: { ranges: [{ row: [0, 3], column: [0, 0] }], order: 'a0', rule: rule(9, 9) },
+            wide: { ranges: [{ row: [5, 11], column: [5, 11] }], order: 'a0', rule: rule(8, 8) },
         };
         ctx.sheets.push({ name: 'other', id: 'id_2', order: 1, data: emptyGrid(), config: {}, dataValidations: {} });
         return ctx;
@@ -547,6 +551,7 @@ describe('a carried rule lands as ranges', () => {
                     { row: [0, 3], column: [0, 0] },
                     { row: [6, 9], column: [6, 6] },
                 ],
+                order: 'a0',
                 rule: rule(9, 9),
             },
             wide: {
@@ -556,6 +561,7 @@ describe('a carried rule lands as ranges', () => {
                     { row: [6, 9], column: [10, 11] },
                     { row: [10, 11], column: [5, 11] },
                 ],
+                order: 'a0',
                 rule: rule(8, 8),
             },
         });
@@ -576,7 +582,7 @@ describe('a carried rule lands as ranges', () => {
         ctx.selections = destination();
         pasteCopy(ctx);
         expect(Object.values(ctx.sheets[1].dataValidations ?? {})).toEqual([
-            { ranges: [{ row: [6, 9], column: [6, 6] }], rule: rule(9, 9) },
+            { ranges: [{ row: [6, 9], column: [6, 6] }], order: 'a0', rule: rule(9, 9) },
         ]);
         expect(Object.keys(sheet(ctx).dataValidations ?? {})).toEqual(['column', 'wide']);
     });
@@ -590,12 +596,12 @@ describe('a carried rule lands as ranges', () => {
             pasteCopy(draft);
         });
         expect(Object.values(ctx.sheets[1].dataValidations ?? {})).toEqual([
-            { ranges: [{ row: [6, 9], column: [6, 6] }], rule: rule(9, 9) },
+            { ranges: [{ row: [6, 9], column: [6, 6] }], order: 'a0', rule: rule(9, 9) },
         ]);
         expect(Object.keys(sheet(ctx).dataValidations ?? {})).toEqual(['wide']);
     });
 
-    // The lookup gives a cell two rules cover to the highest id, so the carry lands the rules in that order too.
+    // The lookup gives a cell two rules cover to the last in order, so the carry lands the rules in that order too.
     test('where two source rules overlap, the landed cell takes the rule the source cell shows', () => {
         const ctx = workbookContextFactory({
             currentSheetId: 'id_1',
@@ -606,8 +612,8 @@ describe('a carried rule lands as ranges', () => {
                     order: 0,
                     data: Array.from({ length: 4 }, () => [null, null, null, null]),
                     dataValidations: {
-                        b: { ranges: [{ row: [0, 1], column: [0, 0] }], rule: rule(0, 0) },
-                        a: { ranges: [{ row: [1, 2], column: [0, 0] }], rule: rule(2, 0) },
+                        b: { ranges: [{ row: [0, 1], column: [0, 0] }], order: 'a1', rule: rule(0, 0) },
+                        a: { ranges: [{ row: [1, 2], column: [0, 0] }], order: 'a0', rule: rule(2, 0) },
                     },
                 },
             ],
@@ -632,7 +638,9 @@ describe('a carried rule lands as ranges', () => {
                     id: 'id_1',
                     order: 0,
                     data: Array.from({ length: rows }, () => [null, null, null, null]),
-                    dataValidations: { v: { ranges: [{ row: [0, 0], column: [1, 1] }], rule: rule(0, 1) } },
+                    dataValidations: {
+                        v: { ranges: [{ row: [0, 0], column: [1, 1] }], order: 'a0', rule: rule(0, 1) },
+                    },
                 },
             ],
         });
@@ -665,7 +673,7 @@ describe('a carried rule lands as ranges', () => {
                     id: 'id_1',
                     order: 0,
                     data: Array.from({ length: rows }, () => [null, null, null, null]),
-                    dataValidations: { ...scattered, v: { ranges: [cellRange(0, 1)], rule: rule(0, 1) } },
+                    dataValidations: { ...scattered, v: { ranges: [cellRange(0, 1)], order: 'a0', rule: rule(0, 1) } },
                 },
             ],
         });
@@ -685,7 +693,7 @@ describe('a carried rule lands as ranges', () => {
     describe('a carry past the caps', () => {
         const rows = 20_000;
         const area = (rowEnd: number, column: number) => ({ row: [0, rowEnd], column: [column, column] });
-        const atCap = Array.from({ length: MAX_VALIDATION_RANGES }, (_, i) => ({
+        const atCap = Array.from({ length: MAX_RULE_RANGES }, (_, i) => ({
             row: [2 * i + 1, 2 * i + 1],
             column: [1, 3],
         }));
@@ -713,7 +721,7 @@ describe('a carried rule lands as ranges', () => {
         };
 
         test('a paste lands its cells, and the rule keeps the ranges it had', () => {
-            const v = { ranges: [{ row: [0, 0], column: [0, 0] }], rule: rule(0, 0) };
+            const v = { ranges: [{ row: [0, 0], column: [0, 0] }], order: 'a0', rule: rule(0, 0) };
             const base = capCtx({ v });
             const { next, ops } = paste(base, area(rows - 1, 2));
             expect(next.sheets[0].data?.[0]?.[2]?.v).toBe('a');
@@ -723,7 +731,7 @@ describe('a carried rule lands as ranges', () => {
         });
 
         test('a paste that would split a rule past the cap lands, and the rule goes', () => {
-            const base = capCtx({ wide: { ranges: atCap, rule: rule(1, 1) } });
+            const base = capCtx({ wide: { ranges: atCap, order: 'a0', rule: rule(1, 1) } });
             const { next, ops } = paste(base, area(3, 2));
             expect(next.sheets[0].data?.[0]?.[2]?.v).toBe('a');
             expect(next.sheets[0].dataValidations).toEqual({});

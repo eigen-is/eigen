@@ -25,7 +25,7 @@ import {
 } from '@workspace/lib/sheets';
 import type { Bounds, Box } from '@workspace/lib/vector';
 import { getElementBounds } from '@workspace/lib/vector';
-import { isWellFormedCfRule, richText, withCfRanges } from '@workspace/sheet/engine';
+import { richText, withCfRanges } from '@workspace/sheet/engine';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 
 // A window keeps at most maxRows shown rows and maxCols shown columns from the top-left of the used range, and at most
@@ -159,7 +159,7 @@ export function windowedSheet(
             borderInfo: windowBorders(config.borderInfo, range),
             merge: windowMerges(merges, range),
         },
-        conditionalFormatRules: sheet.conditionalFormatRules && clipRulesToWindow(sheet.conditionalFormatRules, range),
+        conditionalFormats: sheet.conditionalFormats && clipRulesToWindow(sheet.conditionalFormats, range),
     };
     return {
         sheet: windowed,
@@ -398,22 +398,20 @@ function windowMerges(merges: MergeCell[], range: GridRange): Record<string, Mer
 
 // A rule may name the whole sheet while the window is small, and the evaluator visits every cell of every range,
 // running a formula rule's engine once per cell. Clipping keeps that work to the window's rows and columns, its hidden
-// ones included. A rule that misses the window drops out, and a formula rule keeps its anchor (withCfRanges). So does
-// a rule whose shape the evaluator can't read, as a peer can store anything.
+// ones included. A rule that misses the window drops out, and a formula rule keeps its anchor (withCfRanges).
 function clipRulesToWindow(
-    rules: ConditionalFormatRule[],
+    rules: Readonly<Record<string, ConditionalFormatRule>>,
     [firstRow, lastRow, firstCol, lastCol]: GridRange,
-): ConditionalFormatRule[] {
-    const clipped: ConditionalFormatRule[] = [];
-    for (const rule of rules) {
-        if (!isWellFormedCfRule(rule)) continue;
-        const cellrange = rule.cellrange
+): Record<string, ConditionalFormatRule> {
+    const clipped: Record<string, ConditionalFormatRule> = {};
+    for (const [id, rule] of Object.entries(rules)) {
+        const ranges = rule.ranges
             .map((range) => ({
                 row: [Math.max(range.row[0], firstRow), Math.min(range.row[1], lastRow)],
                 column: [Math.max(range.column[0], firstCol), Math.min(range.column[1], lastCol)],
             }))
             .filter((range) => range.row[0] <= range.row[1] && range.column[0] <= range.column[1]);
-        if (cellrange.length > 0) clipped.push(withCfRanges(rule, cellrange));
+        if (ranges.length > 0) clipped[id] = withCfRanges(rule, ranges);
     }
     return clipped;
 }

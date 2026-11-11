@@ -7,7 +7,7 @@ import { readXlsx, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_GRID_SLOTS, MAX_SHARED_FORMULA_TEXT, MAX_TEXT } from '../../../lib/import/sheets/limits';
 import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../../lib/ooxml/zip';
 import { cellLinks } from '../../fixtures/cell-links';
-import { ruleAt, rulesByCell } from '../../fixtures/validations';
+import { formatList, ruleAt, rulesByCell } from '../../fixtures/validations';
 import { OFFICE_COLORS, rowsXml, styleSheet, xlsxFixture } from '../../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../../fixtures/zip-bomb';
 
@@ -501,7 +501,7 @@ describe("the reader's rules", () => {
             }),
         );
         // Excel's priority 1 last, as a later rule wins in the editor; an icon set, which it can't hold, is left out.
-        const rules = sheet.conditionalFormatRules ?? [];
+        const rules = formatList(sheet.conditionalFormats);
         expect(rules.map((rule): string => ('conditionName' in rule ? rule.conditionName : rule.type))).toEqual([
             ...['formula', 'dataBar', 'colorGradation', 'colorGradation', 'duplicateValue', 'duplicateValue'],
             ...['belowAverage', 'aboveAverage', 'last10_percent', 'top10'],
@@ -510,24 +510,24 @@ describe("the reader's rules", () => {
         ]);
         expect(rules[0]).toEqual({
             type: 'default',
-            cellrange: [{ row: [0, 9], column: [2, 2] }],
+            ranges: [{ row: [0, 9], column: [2, 2] }],
             format: { textColor: null, cellColor: null },
             conditionName: 'formula',
             conditionRange: [],
             conditionValue: ['=C1>0'],
         });
         expect(rules.slice(1, 4)).toEqual([
-            { type: 'dataBar', cellrange: [{ row: [0, 9], column: [2, 2] }], format: ['#638EC6'] },
+            { type: 'dataBar', ranges: [{ row: [0, 9], column: [2, 2] }], format: ['#638EC6'] },
             {
                 type: 'colorGradation',
-                cellrange: [{ row: [0, 9], column: [2, 2] }],
+                ranges: [{ row: [0, 9], column: [2, 2] }],
                 format: ['#63BE7B', '#FFEB84', '#F8696B'],
             },
             // Accent 2, Darker 25%, which Excel's swatch rounds to #C65911.
-            { type: 'colorGradation', cellrange: [{ row: [0, 9], column: [2, 2] }], format: ['#C55A11', '#F8696B'] },
+            { type: 'colorGradation', ranges: [{ row: [0, 9], column: [2, 2] }], format: ['#C55A11', '#F8696B'] },
         ]);
         expect(rules[10]).toMatchObject({
-            cellrange: [
+            ranges: [
                 { row: [1, 3], column: [1, 1] },
                 { row: [1, 3], column: [3, 3] },
                 { row: [6, 7], column: [0, 0] },
@@ -539,7 +539,7 @@ describe("the reader's rules", () => {
             format: { textColor: '#9C0006', cellColor: '#FFC7CE' },
             conditionValue: ['20'],
         });
-        expect(plain.conditionalFormatRules).toBeUndefined();
+        expect(plain.conditionalFormats).toBeUndefined();
     });
 
     test('validations of every type, their messages, overlaps and whole columns', () => {
@@ -625,9 +625,9 @@ describe("the reader's rules", () => {
                 colors: OFFICE_COLORS,
             }),
         );
-        expect(sheet.conditionalFormatRules).toMatchObject([
-            { cellrange: [{ row: [0, 9], column: [2, 2] }], conditionValue: ['=MOD(C1,2)=0'] },
-            { cellrange: [{ row: [0, 9], column: [0, 3] }], conditionName: 'greaterThan', conditionValue: ['20'] },
+        expect(formatList(sheet.conditionalFormats)).toMatchObject([
+            { ranges: [{ row: [0, 9], column: [2, 2] }], conditionValue: ['=MOD(C1,2)=0'] },
+            { ranges: [{ row: [0, 9], column: [0, 3] }], conditionName: 'greaterThan', conditionValue: ['20'] },
         ]);
         expect(cellLinks(sheet)).toEqual({ '1_2': { type: 'cellrange', address: "'Second sheet'!A1" } });
         expect(sheet.config?.merge).toMatchObject({ '0_0': { rs: 1, cs: 2 }, '11_4': { rs: 2, cs: 2 } });

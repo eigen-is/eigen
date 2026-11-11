@@ -23,6 +23,7 @@ import type { Mount } from '../../lib/mount';
 import { cellLinks } from '../fixtures/cell-links';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
 import { readPersistedDoc } from '../fixtures/transform-results';
+import { formatList, formatsOf } from '../fixtures/validations';
 import { rowsXml, xlsxFixture } from '../fixtures/xlsx';
 import { driveGet, drivePost, getTestContext, NO_MEDIA } from '../setup';
 
@@ -783,19 +784,20 @@ describe('document/sheets — addSheetsBatch', () => {
                 { r: 1, c: 1, v: { link: { type: 'cellrange', address: 'Data!B2' } } },
             ],
             config: {},
-            conditionalFormatRules: [
+            conditionalFormats: formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 0] }],
+                    ranges: [{ row: [0, 0], column: [0, 0] }],
                     format: { textColor: '#ff0000', cellColor: null },
                     conditionName: 'formula',
                     conditionRange: [],
                     conditionValue: ['=A1>Data!A1'],
                 },
-            ],
+            ]),
             dataValidations: {
                 v1: {
                     ranges: [{ row: [2, 2], column: [0, 0] }],
+                    order: 'a0',
                     rule: { type: 'dropdown', type2: '', value1: 'Data!A1:A3', value2: '' },
                 },
             },
@@ -859,7 +861,7 @@ describe('document/sheets — addSheetsBatch', () => {
         const cell = (r: number, c: number) => summary.celldata?.find((e) => e.r === r && e.c === c)?.v;
 
         expect(cell(0, 0)?.f).toBe("='Data(Copy)'!A1*2");
-        const rule = summary.conditionalFormatRules?.[0];
+        const rule = formatList(summary.conditionalFormats)[0];
         expect(rule?.type === 'default' && rule.conditionValue).toEqual(["=A1>'Data(Copy)'!A1"]);
         expect(summary.dataValidations?.['v1']?.rule.value1).toBe("'Data(Copy)'!A1:A3");
         expect(cellLinks(summary)).toEqual({

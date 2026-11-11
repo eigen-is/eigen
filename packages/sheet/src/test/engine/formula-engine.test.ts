@@ -403,7 +403,8 @@ describe('engine/formula-engine — a formula rule with an operator over a range
         const engine = new FormulaEngine();
         const rule: ConditionalFormatRule = {
             type: 'default',
-            cellrange: [{ row: [0, 2], column: [0, 0] }],
+            order: 'a0',
+            ranges: [{ row: [0, 2], column: [0, 0] }],
             format: { cellColor: '#ff0000' },
             conditionName: 'formula',
             conditionRange: [],
@@ -414,7 +415,7 @@ describe('engine/formula-engine — a formula rule with an operator over a range
             createArrayResolver([{ id: 's', name: 'S', data }]),
             's',
         );
-        return Object.keys(evaluateConditionalFormat([rule], data, { evaluateFormula })).sort();
+        return Object.keys(evaluateConditionalFormat({ f1: rule }, data, { evaluateFormula })).sort();
     };
 
     test('colors nothing, as the 0 it computed before colored nothing', () => {

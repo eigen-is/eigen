@@ -5,6 +5,7 @@ import { describe, expect, test } from 'bun:test';
 import type { CellLink } from '@workspace/lib/sheets';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { cellLinks } from '../factories/links';
+import { formatList, formatsOf } from '../factories/validations';
 
 installHappyDom();
 
@@ -180,22 +181,24 @@ describe('a tab rename rewrites the text that names the tab', () => {
         const t = workbookTab(
             {},
             {
-                conditionalFormatRules: [
+                conditionalFormats: formatsOf([
                     {
                         type: 'default',
                         conditionName: 'formula',
                         conditionValue: ['=One!A1>0'],
-                        cellrange: [{ row: [0, 0], column: [0, 0] }],
+                        ranges: [{ row: [0, 0], column: [0, 0] }],
                         format: {},
                     },
-                ],
+                ]),
                 dataValidations: {
                     list: {
                         ranges: [{ row: [0, 0], column: [0, 0] }],
+                        order: 'a0',
                         rule: { type: 'dropdown', type2: '', value1: 'One!$A$1:$A$3', value2: '' },
                     },
                     items: {
                         ranges: [{ row: [1, 1], column: [0, 0] }],
+                        order: 'a0',
                         rule: { type: 'dropdown', type2: '', value1: 'One,Two', value2: '' },
                     },
                 },
@@ -211,7 +214,7 @@ describe('a tab rename rewrites the text that names the tab', () => {
         );
         renameFirst(t, 'Q1 plan');
         const sheet = t.ctx.sheets[1];
-        const [rule] = sheet.conditionalFormatRules ?? [];
+        const [rule] = formatList(sheet.conditionalFormats);
         expect(rule.type === 'default' && rule.conditionValue).toEqual(["='Q1 plan'!A1>0"]);
         expect(sheet.dataValidations?.list.rule.value1).toBe("'Q1 plan'!$A$1:$A$3");
         expect(sheet.dataValidations?.items.rule.value1).toBe('One,Two');

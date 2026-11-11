@@ -8,6 +8,7 @@ import {
     clearSheetRules,
 } from '../../state/modules/condition-format';
 import { contextFactory } from './factories/context';
+import { formatList } from './factories/validations';
 
 describe('CF_PRESETS', () => {
     it('defines 12 colorGradation presets', () => {
@@ -47,7 +48,7 @@ describe('applyColorScalePreset', () => {
     it("appends a colorGradation rule with the preset's format array", () => {
         const ctx = contextFactory() as Context;
         applyColorScalePreset(ctx, 'colorGradation_1');
-        const rules = ctx.sheets[0].conditionalFormatRules!;
+        const rules = formatList(ctx.sheets[0].conditionalFormats);
         expect(rules).toHaveLength(1);
         const rule = rules[0];
         if (rule.type !== 'colorGradation') throw new Error(`expected colorGradation, got ${rule.type}`);
@@ -57,7 +58,7 @@ describe('applyColorScalePreset', () => {
     it('ignores unknown preset keys', () => {
         const ctx = contextFactory() as Context;
         applyColorScalePreset(ctx, 'nonsense_key');
-        expect(ctx.sheets[0].conditionalFormatRules ?? []).toHaveLength(0);
+        expect(formatList(ctx.sheets[0].conditionalFormats)).toHaveLength(0);
     });
 });
 
@@ -65,7 +66,7 @@ describe('applyDataBarPreset', () => {
     it("appends a dataBar rule with the preset's format array", () => {
         const ctx = contextFactory() as Context;
         applyDataBarPreset(ctx, 'solidColorDataBar_1');
-        const rules = ctx.sheets[0].conditionalFormatRules!;
+        const rules = formatList(ctx.sheets[0].conditionalFormats);
         expect(rules).toHaveLength(1);
         const rule = rules[0];
         if (rule.type !== 'dataBar') throw new Error(`expected dataBar, got ${rule.type}`);
@@ -75,7 +76,7 @@ describe('applyDataBarPreset', () => {
     it('ignores unknown preset keys', () => {
         const ctx = contextFactory() as Context;
         applyDataBarPreset(ctx, 'nonsense_key');
-        expect(ctx.sheets[0].conditionalFormatRules ?? []).toHaveLength(0);
+        expect(formatList(ctx.sheets[0].conditionalFormats)).toHaveLength(0);
     });
 });
 
@@ -84,6 +85,6 @@ describe('clearSheetRules', () => {
         const ctx = contextFactory() as Context;
         applyColorScalePreset(ctx, 'colorGradation_1');
         clearSheetRules(ctx);
-        expect(ctx.sheets[0].conditionalFormatRules).toHaveLength(0);
+        expect(formatList(ctx.sheets[0].conditionalFormats)).toHaveLength(0);
     });
 });

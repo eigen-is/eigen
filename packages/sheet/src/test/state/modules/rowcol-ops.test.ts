@@ -21,6 +21,7 @@ import { filterPatch, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 import { cellLinks } from '../factories/links';
+import { formatList, formatsOf } from '../factories/validations';
 
 enablePatches();
 
@@ -58,6 +59,7 @@ function richContext(): Context {
                 dataValidations: {
                     v: {
                         ranges: [{ row: [1, 2], column: [1, 1] }],
+                        order: 'a0',
                         rule: { type: 'dropdown', type2: 'true', value1: 'a,b', value2: '' },
                     },
                 },
@@ -360,6 +362,7 @@ test('a row insert inside a whole-column rule writes no rule', () => {
         ctx.sheets[0].dataValidations = {
             column: {
                 ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [0, 0] }],
+                order: 'a0',
                 rule: { type: 'dropdown', type2: '', value1: 'a,b', value2: '' },
             },
         };
@@ -419,15 +422,15 @@ describe('two row ops sent at once on a sheet with a merge', () => {
 
     test.each(cases)('%s', (_, first, rows, mergeRow) => {
         const base = produce(richContext(), (ctx: Context) => {
-            ctx.sheets[0].conditionalFormatRules = [
+            ctx.sheets[0].conditionalFormats = formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [3, 3], column: [2, 3] }],
+                    ranges: [{ row: [3, 3], column: [2, 3] }],
                     format: { cellColor: '#ff0000' },
                     conditionName: 'greaterThan',
                     conditionValue: [0],
                 },
-            ];
+            ]);
         });
         const a = author(base, (ctx) => run(ctx, first), first);
         const b = author(base, (ctx) => run(ctx, { insertRowColOp: inserted }), { insertRowColOp: inserted });
@@ -440,7 +443,7 @@ describe('two row ops sent at once on a sheet with a merge', () => {
             expect(sheet.config?.merge).toEqual({ [`${mergeRow}_2`]: merge });
             expect(sheet.data?.[mergeRow]?.[2]?.mc).toEqual(merge);
             expect(sheet.data?.[mergeRow]?.[3]?.mc).toEqual({ r: mergeRow, c: 2 });
-            expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([
+            expect(formatList(sheet.conditionalFormats)[0].ranges).toEqual([
                 { row: [mergeRow, mergeRow], column: [2, 3] },
             ]);
         }

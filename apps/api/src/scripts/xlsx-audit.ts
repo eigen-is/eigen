@@ -11,7 +11,7 @@ import type { Cell, DataValidationRule, Sheet, SingleRange } from '@workspace/li
 import {
     cellFontName,
     coalescedRanges,
-    compareValidationIds,
+    orderedRules,
     rangesOverlap,
     SHEET_DEFAULT_FONT,
     SHEET_DEFAULT_FONT_SIZE,
@@ -113,7 +113,7 @@ const SHEET_FIELDS = [
     'showGridLines',
     'filterRange',
     'dataValidations',
-    'conditionalFormatRules',
+    'conditionalFormats',
     'images',
     'charts',
     'hide',
@@ -256,7 +256,7 @@ export function tallySheets(sheets: Sheet[]): Snapshot {
         if (sheet.frozen) bump(counts, 'frozen');
         if (sheet.showGridLines === false || sheet.showGridLines === 0) bump(counts, 'gridlinesOff');
         if (sheet.filterRange) bump(counts, 'filters');
-        bump(counts, 'conditionalFormats', sheet.conditionalFormatRules?.length ?? 0);
+        bump(counts, 'conditionalFormats', size(sheet.conditionalFormats));
         bump(counts, 'validations', size(sheet.dataValidations));
         bump(counts, 'images', size(sheet.images));
         bump(counts, 'charts', size(sheet.charts));
@@ -976,8 +976,11 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
                 const configB = new Map<string, unknown>(Object.entries(sheetB.config ?? {}));
                 for (const key of new Set([...configA.keys(), ...configB.keys()]))
                     keyed(key, sheet, configA.get(key), configB.get(key));
-            } else if (field === 'conditionalFormatRules') keyed(field, sheet, x, y);
-            else if (field === 'dataValidations') {
+            } else if (field === 'conditionalFormats') {
+                // The sides compare by each rule's place in the order, as an import numbers its rules.
+                const placed = (formats: Sheet['conditionalFormats']) => orderedRules(formats).map(([, rule]) => rule);
+                keyed(field, sheet, placed(sheetA.conditionalFormats), placed(sheetB.conditionalFormats));
+            } else if (field === 'dataValidations') {
                 for (const difference of validationDifferences(sheetA.dataValidations, sheetB.dataValidations))
                     note(field, sheet, difference.at, difference.a, difference.b);
             } else if (field === 'charts') {
@@ -1018,11 +1021,9 @@ function validationDifferences(
     a: Sheet['dataValidations'],
     b: Sheet['dataValidations'],
 ): { at: string; a?: DataValidationRule; b?: DataValidationRule }[] {
-    // Each side's ranges, each with its rule's place in id order, so the highest place wins a cell.
-    const [rankedA, rankedB] = [a ?? {}, b ?? {}].map((rules) =>
-        Object.keys(rules)
-            .sort(compareValidationIds)
-            .flatMap((id, rank) => rules[id].ranges.map((range) => ({ range, rank, rule: rules[id].rule }))),
+    // Each side's ranges, each with its rule's place in the order, so the last place wins a cell.
+    const [rankedA, rankedB] = [a, b].map((rules) =>
+        orderedRules(rules).flatMap(([, { ranges, rule }], rank) => ranges.map((range) => ({ range, rank, rule }))),
     );
     const all = [...rankedA, ...rankedB];
     if (all.length === 0) return [];
@@ -1219,7 +1220,7 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
     },
     {
         kind: 'validations dropped',
-        why: "A rule Excel can't hold, or one the cuts of higher rules leave with more ranges than a rule may hold, is dropped and counted (validations-dropped), so its cells come back without a rule",
+        why: "A rule Excel can't hold, or one the cuts of later rules leave with more ranges than a rule may hold, is dropped and counted (validations-dropped), so its cells come back without a rule",
         matches: ({ feature, a, b }, { warnings }) =>
             feature === 'dataValidations' && warnings.has('validations-dropped') && isRecord(a) && b === undefined,
     },

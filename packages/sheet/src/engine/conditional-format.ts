@@ -1,9 +1,10 @@
 // Conditional formats as the canvas and the HTML export draw them: a sheet's rules evaluated into each cell's colors
-// and data bars. Beside the evaluator sit the rule edits a row op, a move or a paste makes, which keep a formula rule's
-// anchor, and the shape check every reader of a stored rule asks first, since a peer can store anything.
+// and data bars, the rules applied first to last by their order keys. Beside the evaluator sit the range edits a row
+// op, a move or a paste makes to a rule, which keep a formula rule's anchor.
 
 import { hexChannels, parseRgb } from '@workspace/lib/constants/colors';
-import { isRecord } from '@workspace/lib/guards';
+import type { Sheet } from '@workspace/lib/sheets';
+import { orderedRules } from '@workspace/lib/sheets';
 import { isNil } from 'es-toolkit/compat';
 import { cellValue, parseCellInput } from './format';
 import type { FormulaEngine } from './formula-engine';
@@ -88,8 +89,8 @@ function forEachCellInRanges(
     }
 }
 
-// A stop's red, green and blue, read from a hex or an rgb(). Its alpha is dropped. isWellFormedCfRule keeps any
-// stop that starts with '#', so a stop that is no hex color reads as black.
+// A stop's red, green and blue, read from a hex or an rgb(). Its alpha is dropped. A stored stop may be any text that
+// starts with '#', so a stop that is no hex color reads as black.
 function parseColorChannels(color: string): [number, number, number] {
     const { red, green, blue } = hexChannels(parseRgb(color)?.hex ?? color, [3, 6, 8]) ?? { red: 0, green: 0, blue: 0 };
     return [red, green, blue];
@@ -111,21 +112,20 @@ function getColorGradation(color1: string, color2: string, value1: number, value
 
 // Each cell's colors and data bar, keyed by `${r}_${c}`. Without options.evaluateFormula a formula rule is skipped.
 export function evaluateConditionalFormat(
-    rules: ConditionalFormatRule[] | null | undefined,
+    rules: Readonly<Sheet['conditionalFormats']>,
     data: CellMatrix,
     options?: EvaluateConditionalFormatOptions,
 ): ComputeMap {
-    const ruleArr = rules ?? [];
     const computeMap: ComputeMap = {};
     // Once per evaluation: finding the width walks every row, and a rule can hold thousands of ranges.
     const end = { lastRow: data.length - 1, lastColumn: matrixWidth(data) - 1 };
 
-    for (const rule of ruleArr) {
+    for (const [, rule] of orderedRules(rules)) {
         if (rule.type === 'dataBar') {
-            const { cellrange, format } = rule;
+            const { ranges, format } = rule;
             let max: number | null = null;
             let min: number | null = null;
-            forEachCellInRanges(end, cellrange, (r, c) => {
+            forEachCellInRanges(end, ranges, (r, c) => {
                 const cell = data[r]?.[c];
                 if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'n' || isNil(cell.v)) {
                     return;
@@ -146,7 +146,7 @@ export function evaluateConditionalFormat(
                     const plusLen = Math.round((maxNum / (maxNum - minNum)) * 10) / 10;
                     const minusLen = Math.round((Math.abs(minNum) / (maxNum - minNum)) * 10) / 10;
 
-                    forEachCellInRanges(end, cellrange, (r, c) => {
+                    forEachCellInRanges(end, ranges, (r, c) => {
                         const cell = data[r]?.[c];
                         if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'n' || isNil(cell.v)) {
                             return;
@@ -169,7 +169,7 @@ export function evaluateConditionalFormat(
                 } else {
                     const plusLen = 1;
 
-                    forEachCellInRanges(end, cellrange, (r, c) => {
+                    forEachCellInRanges(end, ranges, (r, c) => {
                         const cell = data[r]?.[c];
                         if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'n' || isNil(cell.v)) {
                             return;
@@ -183,12 +183,12 @@ export function evaluateConditionalFormat(
                 }
             }
         } else if (rule.type === 'colorGradation') {
-            const { cellrange, format } = rule;
+            const { ranges, format } = rule;
             let max: number | null = null;
             let min: number | null = null;
             let sum = 0;
             let count = 0;
-            forEachCellInRanges(end, cellrange, (r, c) => {
+            forEachCellInRanges(end, ranges, (r, c) => {
                 const cell = data[r]?.[c];
                 if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'n' || isNil(cell.v)) {
                     return;
@@ -225,7 +225,7 @@ export function evaluateConditionalFormat(
                     return null;
                 };
 
-                forEachCellInRanges(end, cellrange, (r, c) => {
+                forEachCellInRanges(end, ranges, (r, c) => {
                     const cell = data[r]?.[c];
                     if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'n' || isNil(cell.v)) {
                         return;
@@ -237,12 +237,12 @@ export function evaluateConditionalFormat(
                 });
             }
         } else {
-            const { cellrange, format, conditionName, conditionValue } = rule;
+            const { ranges, format, conditionName, conditionValue } = rule;
             const conditionValue0 = conditionValue[0];
             const conditionValue1 = conditionValue[1];
             const { textColor, cellColor } = format;
             // duplicateValue, top10 and the averages look at one range at a time.
-            for (const range of cellrange) {
+            for (const range of ranges) {
                 if (
                     conditionName === 'greaterThan' ||
                     conditionName === 'greaterThanOrEqual' ||
@@ -414,8 +414,8 @@ export function evaluateConditionalFormat(
                     }
                 } else if (conditionName === 'formula' && options?.evaluateFormula) {
                     const { evaluateFormula } = options;
-                    const anchorRow = cellrange[0].row[0];
-                    const anchorCol = cellrange[0].column[0];
+                    const anchorRow = ranges[0].row[0];
+                    const anchorCol = ranges[0].column[0];
 
                     const formulaSrc = String(conditionValue0);
                     const formulaTxt = formulaSrc.startsWith('=') ? formulaSrc : `=${formulaSrc}`;
@@ -433,59 +433,23 @@ export function evaluateConditionalFormat(
     return computeMap;
 }
 
-// Whether a stored rule has the shape the evaluator and withCfRanges read. No reader checks the rules a peer or a file
-// stored, so every writer that reads them asks this first. Each range spans whole rows and columns in order. A rule's
-// values are strings or numbers, its looks an object, and a scale's stops colors parseColorChannels reads.
-export function isWellFormedCfRule(rule: ConditionalFormatRule | null): boolean {
-    if (!isRecord(rule) || !Array.isArray(rule.cellrange) || rule.cellrange.length === 0) return false;
-    if (!rule.cellrange.every((range) => isRecord(range) && isSpan(range.row) && isSpan(range.column))) return false;
-    switch (rule.type) {
-        case 'default':
-            return (
-                isRecord(rule.format) &&
-                Array.isArray(rule.conditionValue) &&
-                rule.conditionValue.every((value) => typeof value === 'string' || typeof value === 'number')
-            );
-        case 'dataBar':
-            return Array.isArray(rule.format) && rule.format.every((color) => typeof color === 'string');
-        case 'colorGradation':
-            return (
-                Array.isArray(rule.format) &&
-                rule.format.every(
-                    (color) => typeof color === 'string' && (color.startsWith('#') || parseRgb(color) !== undefined),
-                )
-            );
-        default:
-            return false;
-    }
-}
-
-function isSpan(ends: unknown): boolean {
-    return Array.isArray(ends) && ends.length === 2 && ends.every(Number.isInteger) && ends[0] <= ends[1];
-}
-
 // A formula rule reads relative to its first range's top-left, as in Excel, so moving that corner re-expresses the
 // formula and every cell keeps its meaning. The shift is how far a row or column delete moved the new first range.
 export function withCfRanges(
     rule: ConditionalFormatRule,
-    cellrange: SingleRange[],
+    ranges: SingleRange[],
     rowShift = 0,
     columnShift = 0,
 ): ConditionalFormatRule {
-    if (
-        rule.type !== 'default' ||
-        rule.conditionName !== 'formula' ||
-        rule.cellrange.length === 0 ||
-        cellrange.length === 0
-    ) {
-        return { ...rule, cellrange };
+    if (rule.type !== 'default' || rule.conditionName !== 'formula' || ranges.length === 0) {
+        return { ...rule, ranges };
     }
-    const rowOffset = cellrange[0].row[0] - rowShift - rule.cellrange[0].row[0];
-    const columnOffset = cellrange[0].column[0] - columnShift - rule.cellrange[0].column[0];
-    if (rowOffset === 0 && columnOffset === 0) return { ...rule, cellrange };
+    const rowOffset = ranges[0].row[0] - rowShift - rule.ranges[0].row[0];
+    const columnOffset = ranges[0].column[0] - columnShift - rule.ranges[0].column[0];
+    if (rowOffset === 0 && columnOffset === 0) return { ...rule, ranges };
     return {
         ...rule,
-        cellrange,
+        ranges,
         conditionValue: [`=${functionCopy(String(rule.conditionValue[0]), rowOffset, columnOffset)}`],
     };
 }

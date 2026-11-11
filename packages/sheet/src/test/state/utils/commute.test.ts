@@ -33,7 +33,7 @@ describe('commutes', () => {
     });
 
     test('fails for two adds at an array index, which both move the array', () => {
-        expect(commutes([add(['conditionalFormatRules', 0])], [add(['conditionalFormatRules', 1])])).toBe(false);
+        expect(commutes([add(['data', 0])], [add(['data', 1])])).toBe(false);
     });
 
     test('fails for hides on two sheets, and for a hide and a write of its whole sheet', () => {

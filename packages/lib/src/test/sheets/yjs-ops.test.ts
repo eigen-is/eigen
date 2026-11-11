@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { newChartSpecParts, sampleChartSpec } from '../../charts';
-import type { Op, Sheet, SheetChart, SheetImage } from '../../sheets/types';
-import { MAX_VALIDATIONS } from '../../sheets/validations';
+import { MAX_CONDITIONAL_FORMATS, MAX_VALIDATIONS } from '../../sheets/range-rules';
+import type { ConditionalFormatRule, Op, Sheet, SheetChart, SheetImage } from '../../sheets/types';
 import { applySheetWrites, opToPatchOnSheets } from '../../sheets/yjs-ops';
 
 const SHEETS: Sheet[] = [
@@ -66,6 +66,7 @@ describe('opToPatchOnSheets', () => {
     test('a validation write applies only when it leaves every entry well formed', () => {
         const entry = {
             ranges: [{ row: [0, 9], column: [1, 1] }],
+            order: 'a0',
             rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
         };
         const ops: Op[] = [
@@ -76,6 +77,8 @@ describe('opToPatchOnSheets', () => {
             { op: 'replace', id: 'sheet-1', path: ['dataValidations'], value: { v1: entry, v2: {} } },
             { op: 'remove', id: 'sheet-1', path: ['dataValidations'] },
             { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'v1', 'ranges'], value: [] },
+            { op: 'add', id: 'sheet-1', path: ['dataValidations', 'v3'], value: { ...entry, order: undefined } },
+            { op: 'add', id: 'sheet-1', path: ['dataValidations', 'v4'], value: { ...entry, order: 'not a key' } },
         ];
         const patches = opToPatchOnSheets(SHEETS, ops);
         expect(patches).toEqual([
@@ -224,6 +227,7 @@ describe('applySheetWrites', () => {
     test('a whole-entry replace of a rule the sheet no longer holds is dropped', () => {
         const entry = {
             ranges: [{ row: [0, 9], column: [1, 1] }],
+            order: 'a0',
             rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
         };
         const sheets: Sheet[] = [{ ...SHEETS[0], dataValidations: { x: entry } }];
@@ -251,6 +255,7 @@ describe('applySheetWrites', () => {
     test('a new rule on a sheet that holds as many rules as a sheet may is dropped, and a changed one applies', () => {
         const entry = {
             ranges: [{ row: [0, 0], column: [0, 0] }],
+            order: 'a0',
             rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
         };
         const full = Object.fromEntries(Array.from({ length: MAX_VALIDATIONS }, (_, i) => [`v${i}`, entry]));
@@ -271,5 +276,77 @@ describe('applySheetWrites', () => {
             '',
             'two',
         ]);
+    });
+
+    const format = (order: string, cellColor = '#ff0000'): ConditionalFormatRule => ({
+        type: 'default',
+        ranges: [{ row: [0, 0], column: [0, 0] }],
+        order,
+        format: { cellColor },
+        conditionName: 'greaterThan',
+        conditionValue: [1],
+    });
+    const formats = (stored: Sheet[]) => Object.keys(stored[0].conditionalFormats ?? {});
+
+    test('two peers adding a conditional format at once keep both, on a sheet that had none', () => {
+        const base: Sheet[] = [{ ...SHEETS[0], conditionalFormats: {} }];
+        const fromA: Op[] = [{ op: 'add', id: 'sheet-1', path: ['conditionalFormats', 'a'], value: format('a0') }];
+        const fromB: Op[] = [{ op: 'add', id: 'sheet-1', path: ['conditionalFormats', 'b'], value: format('a0') }];
+        const after = landed(landed(base, fromA).sheets, fromB).sheets;
+        expect(formats(after)).toEqual(['a', 'b']);
+    });
+
+    test("a delete by id takes its own rule out after a peer's add and delete moved the others", () => {
+        const base: Sheet[] = [{ ...SHEETS[0], conditionalFormats: { x: format('a0'), y: format('a1') } }];
+        const peer: Op[] = [
+            { op: 'remove', id: 'sheet-1', path: ['conditionalFormats', 'x'] },
+            { op: 'add', id: 'sheet-1', path: ['conditionalFormats', 'w'], value: format('Zz') },
+        ];
+        const mine: Op[] = [
+            { op: 'remove', id: 'sheet-1', path: ['conditionalFormats', 'y'] },
+            { op: 'replace', id: 'sheet-1', path: ['conditionalFormats', 'x'], value: format('a0', '#00ff00') },
+        ];
+        const after = landed(landed(base, peer).sheets, mine);
+        expect(formats(after.sheets)).toEqual(['w']);
+        expect(after.applied.map(({ path }) => path[2])).toEqual(['y']);
+    });
+
+    test('a conditional format that is not well formed, or past the cap, is dropped', () => {
+        const full = Object.fromEntries(
+            Array.from({ length: MAX_CONDITIONAL_FORMATS - 1 }, (_, i) => [`f${i}`, format('a0')]),
+        );
+        const base: Sheet[] = [{ ...SHEETS[0], conditionalFormats: full }];
+        const add = (id: string, value: unknown): Op => ({
+            op: 'add',
+            id: 'sheet-1',
+            path: ['conditionalFormats', id],
+            value,
+        });
+        const ops: Op[] = [
+            add('noOrder', { ...format('a0'), order: undefined }),
+            add('badKey', { ...format('a0'), order: 'a0 ' }),
+            add('noRanges', { ...format('a0'), ranges: [] }),
+            add('oldShape', { type: 'default', cellrange: [{ row: [0, 0], column: [0, 0] }], format: {} }),
+            add('badStop', { type: 'colorGradation', ranges: format('a0').ranges, order: 'a0', format: ['red'] }),
+            { op: 'replace', id: 'sheet-1', path: ['conditionalFormats', 'f0', 'ranges'], value: [] },
+            add('last', format('a1')),
+            add('over', format('a2')),
+        ];
+        expect(landed(base, ops).applied.map(({ path }) => path[2])).toEqual(['last']);
+    });
+
+    // An op log an older build wrote names a conditional format by its place in a list no sheet holds any more.
+    test("an older build's write into the rule list by index is skipped, as its parent is gone", () => {
+        const base: Sheet[] = [{ ...SHEETS[0], conditionalFormats: { x: format('a0') } }];
+        const old = { type: 'default', cellrange: [{ row: [0, 0], column: [0, 0] }], format: {} };
+        const ops: Op[] = [
+            { op: 'add', id: 'sheet-1', path: ['conditionalFormatRules', 1], value: old },
+            { op: 'replace', id: 'sheet-1', path: ['conditionalFormatRules', 0, 'cellrange'], value: [] },
+            { op: 'remove', id: 'sheet-1', path: ['conditionalFormatRules', 0] },
+            { op: 'replace', id: 'sheet-1', path: ['conditionalFormatRules', 'length'], value: 0 },
+        ];
+        const after = landed(base, ops);
+        expect(after.applied).toEqual([]);
+        expect(after.sheets).toEqual(base);
     });
 });

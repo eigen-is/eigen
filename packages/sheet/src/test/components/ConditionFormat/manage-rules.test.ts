@@ -3,6 +3,7 @@
 
 import { expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { formatList, formatsOf } from '../../state/factories/validations';
 
 installHappyDom();
 
@@ -10,12 +11,12 @@ const { act, createElement } = await import('react');
 const { renderSheetDialog } = await import('../sheet-dialog');
 const { ManageRules } = await import('../../../components/ConditionFormat/ManageRules');
 
-type Rule = import('@workspace/lib/sheets').ConditionalFormatRule;
+type Rule = ReturnType<typeof formatList>[number];
 type SheetConfig = import('../../../state').SheetConfig;
 
 const GREATER_THAN: Rule = {
     type: 'default',
-    cellrange: [{ row: [0, 3], column: [0, 0] }],
+    ranges: [{ row: [0, 3], column: [0, 0] }],
     format: { textColor: null, cellColor: '#d0fae5' },
     conditionName: 'greaterThan',
     conditionRange: [],
@@ -23,13 +24,13 @@ const GREATER_THAN: Rule = {
 };
 const COLOR_SCALE: Rule = {
     type: 'colorGradation',
-    cellrange: [{ row: [1, 1], column: [1, 1] }],
+    ranges: [{ row: [1, 1], column: [1, 1] }],
     format: ['#f8696b', '#ffffff'],
 };
 
 const openManageRules = (rules: Rule[], config: SheetConfig = {}) =>
     renderSheetDialog((d) => d.showDialog(createElement(ManageRules)), {
-        sheets: [{ name: 'sheet', id: 'id_1', order: 0, config, data: [[null]], conditionalFormatRules: rules }],
+        sheets: [{ name: 'sheet', id: 'id_1', order: 0, config, data: [[null]], conditionalFormats: formatsOf(rules) }],
     });
 
 const deleteButtons = () => [
@@ -47,7 +48,7 @@ test('it lists the rules in one dialog with only Close, which closes it', async 
     expect(document.querySelector('[role="dialog"] .overflow-y-auto')?.classList).toContain('max-h-[40vh]');
     await dialog.click('Close');
     expect(dialog.dialogs()).toHaveLength(0);
-    expect(dialog.context().sheets[0]?.conditionalFormatRules).toEqual([GREATER_THAN, COLOR_SCALE]);
+    expect(formatList(dialog.context().sheets[0]?.conditionalFormats)).toEqual([GREATER_THAN, COLOR_SCALE]);
 });
 
 test('a sheet with no rules says so', async () => {
@@ -62,7 +63,7 @@ test('each rule has a named delete button that removes it at once', async () => 
     expect(dialog.dialogs()[0]?.textContent).toContain('B2');
     expect(deleteButtons()).toHaveLength(2);
     await act(async () => deleteButtons()[0]?.click());
-    expect(dialog.context().sheets[0]?.conditionalFormatRules).toEqual([COLOR_SCALE]);
+    expect(formatList(dialog.context().sheets[0]?.conditionalFormats)).toEqual([COLOR_SCALE]);
     expect(dialog.dialogs()).toHaveLength(1);
 });
 

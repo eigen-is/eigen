@@ -82,8 +82,7 @@ export function isPatchOp(op: Op): op is Op & { op: 'add' | 'remove' | 'replace'
     return op.op === 'add' || op.op === 'remove' || op.op === 'replace';
 }
 
-// Single rectangular range in row/column coordinates. Used both as a CF rule's
-// `cellrange` element and as the engine's range descriptor.
+// One rectangle of cells, each span its first and last index. A rule's ranges and the engine's ranges are these.
 export type SingleRange = { row: number[]; column: number[] };
 export type Range = SingleRange[];
 
@@ -162,9 +161,9 @@ export type DataValidationRule = {
     prohibitInput?: boolean;
 };
 
-// One rule over its ranges, stored under an id in `Sheet.dataValidations`, as a conditional format keeps its
-// `cellrange`. A cell has at most one rule, so applying a rule takes its cells out of every other entry.
-export type SheetValidation = { ranges: SingleRange[]; rule: DataValidationRule };
+// One rule over its ranges, stored under an id in `Sheet.dataValidations`. `order` is a fractional key: where two
+// rules cover a cell, the last in order has it. Applying a rule also takes its cells out of every other rule.
+export type SheetValidation = { ranges: SingleRange[]; order: string; rule: DataValidationRule };
 
 export type SheetConfig = {
     merge?: Record<string, MergeCell>;
@@ -175,8 +174,9 @@ export type SheetConfig = {
     borderInfo?: Record<string, CellBorderSides>;
 };
 
-// A conditional-format rule. The editor writes it, and the engine's `evaluateConditionalFormat` reads it for the
-// canvas painter and the API's HTML export.
+// A conditional-format rule over its ranges, stored under an id in `Sheet.conditionalFormats`. `order` is a
+// fractional key: the rules apply first to last, so the last rule's colors win a cell. The editor writes a rule, and
+// the engine's `evaluateConditionalFormat` reads it for the canvas painter and the API's HTML export.
 export type ConditionalFormatConditionName =
     | 'greaterThan'
     | 'greaterThanOrEqual'
@@ -197,10 +197,10 @@ export type ConditionalFormatConditionName =
     | 'belowAverage'
     | 'formula';
 
-type CFRuleBase = { cellrange: SingleRange[] };
+type CFRuleBase = { ranges: SingleRange[]; order: string };
 
-export type DataBarRule = CFRuleBase & { type: 'dataBar'; format: string[] };
-export type ColorGradationRule = CFRuleBase & { type: 'colorGradation'; format: string[] };
+type DataBarRule = CFRuleBase & { type: 'dataBar'; format: string[] };
+type ColorGradationRule = CFRuleBase & { type: 'colorGradation'; format: string[] };
 export type DefaultConditionalFormatRule = CFRuleBase & {
     type: 'default';
     format: { textColor?: string | null; cellColor?: string | null };
@@ -228,7 +228,6 @@ export type Sheet = {
     row?: number;
     column?: number;
     showGridLines?: boolean | number;
-    conditionalFormatRules?: ConditionalFormatRule[];
     // Frozen panes. `row_focus` and `column_focus` are the 0-based index of the last frozen row and column.
     // A bare type such as 'row' freezes the same axes as its range form, and its range applies the same way.
     frozen?: {
@@ -238,8 +237,10 @@ export type Sheet = {
     // The autofilter's range, whose header row shows the filter buttons. Each column's criteria live on the
     // editor-only `filter` field.
     filterRange?: SingleRange;
-    // The data-validation rules by id, each over its ranges. Materialized like the config collections, so a new rule
-    // or a changed one is written under its own id and two peers editing different rules don't overwrite each other.
+    // The conditional formats and the data-validation rules by id, each over its ranges. Materialized like the config
+    // collections, so a new rule or a changed one is written under its own id and two peers editing different rules
+    // don't overwrite each other.
+    conditionalFormats?: Record<string, ConditionalFormatRule>;
     dataValidations?: Record<string, SheetValidation>;
     // Floating images and charts by id. Materialized like the config collections, because each object is
     // written as its own key and a first write to a missing map would ship the whole map.

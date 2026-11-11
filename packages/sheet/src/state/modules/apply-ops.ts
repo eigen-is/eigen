@@ -67,6 +67,7 @@ export function applyBatch(ctx: Context, ops: Op[], moveView = true): AppliedRow
 // The sheet fields written entry by entry, with how many levels down; every other field is written whole.
 const WRITTEN_BY_ENTRY: ReadonlyMap<string, number> = new Map([
     ['charts', 2],
+    ['conditionalFormats', 1],
     ['dataValidations', 1],
 ]);
 

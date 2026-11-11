@@ -26,13 +26,14 @@ import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, changeSheet, deleteSheet, renameSheet } from '../../../state/modules/sheet';
 import { updateFormatCell } from '../../../state/modules/toolbar';
 import { clearValidations, validationAt } from '../../../state/modules/validation-rules';
-import type { ConditionalFormatRule, DataValidationRule, Op, Sheet } from '../../../state/types';
+import type { DataValidationRule, Op, Sheet } from '../../../state/types';
 import { commutes } from '../../../state/utils/commute';
 import type { Tab } from '../factories/collab';
 import { author, join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { heldGraph, workbookContextFactory } from '../factories/context';
 import { typed } from '../factories/edit-cycle';
 import { cellLinks } from '../factories/links';
+import { formatList, formatsOf } from '../factories/validations';
 
 const ONE = 's1';
 const TWO = 's2';
@@ -122,11 +123,11 @@ const chartReading = (id: string) => ({
     height: 100,
 });
 
-const formulaRule = (formula: string, first = 0, last = 0): ConditionalFormatRule => ({
+const formulaRule = (formula: string, first = 0, last = 0): ReturnType<typeof formatList>[number] => ({
     type: 'default',
     conditionName: 'formula',
     conditionValue: [formula],
-    cellrange: [{ row: [first, last], column: [0, 0] }],
+    ranges: [{ row: [first, last], column: [0, 0] }],
     format: {},
 });
 
@@ -143,7 +144,7 @@ const stored = (sheets: ShiftedSheet[]) =>
         cells: cells(s),
         config: s.config,
         dataValidations: s.dataValidations ?? {},
-        conditionalFormatRules: s.conditionalFormatRules,
+        conditionalFormats: s.conditionalFormats,
         frozen: s.frozen,
         filterRange: s.filterRange,
         filter: s.filter,
@@ -458,6 +459,7 @@ describe('working alone', () => {
             one.dataValidations = {
                 a: {
                     ranges: [{ row: [3, 5], column: [0, 0] }],
+                    order: 'a0',
                     rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
                 },
             };
@@ -468,9 +470,9 @@ describe('working alone', () => {
             one.filter = {
                 0: { rowhidden: { 6: 0 }, optionstate: true, str: 2, edr: 9, cindex: 0, stc: 0, edc: 2 },
             };
-            one.conditionalFormatRules = [formulaRule('=A5>0', 3, 5)];
+            one.conditionalFormats = formatsOf([formulaRule('=A5>0', 3, 5)]);
             one.charts = { c1: chartReading('c1') };
-            two.conditionalFormatRules = [formulaRule('=One!A5>0')];
+            two.conditionalFormats = formatsOf([formulaRule('=One!A5>0')]);
             two.charts = { c2: chartReading('c2') };
         });
     };
@@ -941,12 +943,12 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         'undoing a %s delete brings back a formula rule on another sheet that named it, and redo breaks it again',
         (_, deletion) => {
             const base = produce(workbook({ A5: num(3) }), (ctx: Context) => {
-                ctx.sheets[1].conditionalFormatRules = [formulaRule('=One!A5>0')];
+                ctx.sheets[1].conditionalFormats = formatsOf([formulaRule('=One!A5>0')]);
             });
             const s = session(base);
             const everyReaderReads = (formula: string) => {
                 for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
-                    const [rule] = sheets[1].conditionalFormatRules ?? [];
+                    const [rule] = formatList(sheets[1].conditionalFormats);
                     expect(rule.type === 'default' && rule.conditionValue).toEqual([formula]);
                 }
             };
@@ -1224,6 +1226,7 @@ describe('shiftEntries', () => {
     const replace = (path: Patch['path'], value?: unknown): Patch => ({ op: 'replace', path, value });
     const at = (...path: Patch['path']) => ['sheets', ONE, ...path];
     const range = (row: number[]) => ({ row, column: [1, 1] });
+    const greaterThan = { type: 'default', conditionName: 'greaterThan', conditionValue: [1], format: {}, order: 'a0' };
 
     test.each<[string, RowColMove, Patch, Patch | null]>([
         [
@@ -1308,19 +1311,31 @@ describe('shiftEntries', () => {
         [
             "a validation rule's ranges move, the one an insert is inside grows",
             rows(2, 2),
-            replace(at('dataValidations', 'v'), { ranges: [range([5, 6]), range([1, 3])], rule: { type: 'checkbox' } }),
-            replace(at('dataValidations', 'v'), { ranges: [range([7, 8]), range([1, 5])], rule: { type: 'checkbox' } }),
+            replace(at('dataValidations', 'v'), {
+                ranges: [range([5, 6]), range([1, 3])],
+                order: 'a0',
+                rule: { type: 'checkbox' },
+            }),
+            replace(at('dataValidations', 'v'), {
+                ranges: [range([7, 8]), range([1, 5])],
+                order: 'a0',
+                rule: { type: 'checkbox' },
+            }),
         ],
         [
             'a validation rule a delete shrinks keeps what is left',
             deletedRows(2, 3),
-            replace(at('dataValidations', 'v'), { ranges: [range([3, 6]), range([2, 3])], rule: { type: 'checkbox' } }),
-            replace(at('dataValidations', 'v'), { ranges: [range([2, 4])], rule: { type: 'checkbox' } }),
+            replace(at('dataValidations', 'v'), {
+                ranges: [range([3, 6]), range([2, 3])],
+                order: 'a0',
+                rule: { type: 'checkbox' },
+            }),
+            replace(at('dataValidations', 'v'), { ranges: [range([2, 4])], order: 'a0', rule: { type: 'checkbox' } }),
         ],
         [
             'a validation rule a delete takes whole drops the entry',
             deletedRows(2, 3),
-            replace(at('dataValidations', 'v'), { ranges: [range([2, 3])], rule: { type: 'checkbox' } }),
+            replace(at('dataValidations', 'v'), { ranges: [range([2, 3])], order: 'a0', rule: { type: 'checkbox' } }),
             null,
         ],
         [
@@ -1350,7 +1365,22 @@ describe('shiftEntries', () => {
             replace(at('data', 5), [{ v: 1 }]),
             replace(at('data', 7), [{ v: 1 }]),
         ],
-        ['a conditional format drops the entry', rows(2, 2), replace(at('conditionalFormatRules', 0), {}), null],
+        [
+            'a conditional format written under its id moves its ranges',
+            rows(2, 2),
+            replace(at('conditionalFormats', 'f1'), { ...greaterThan, ranges: [range([5, 6])] }),
+            replace(at('conditionalFormats', 'f1'), { ...greaterThan, ranges: [range([7, 8])] }),
+        ],
+        [
+            'a formula conditional format drops the entry',
+            rows(2, 2),
+            replace(at('conditionalFormats', 'f1'), {
+                ...greaterThan,
+                conditionName: 'formula',
+                ranges: [range([5, 6])],
+            }),
+            null,
+        ],
         ['a whole row drops the entry on a column insert', columns(2, 2), replace(at('data', 5), []), null],
         ["a chart's data on One drops the entry", rows(2, 2), replace(at('charts', 'c1', 'specData'), '{}'), null],
         [
@@ -1387,8 +1417,8 @@ describe('validation rules on two tabs and a joiner', () => {
     function ruled() {
         const base = workbook();
         base.sheets[0].dataValidations = {
-            a: { ranges: [{ row: [0, 9], column: [0, 0] }], rule: LIST },
-            b: { ranges: [{ row: [0, 9], column: [1, 1] }], rule: LIST },
+            a: { ranges: [{ row: [0, 9], column: [0, 0] }], order: 'a0', rule: LIST },
+            b: { ranges: [{ row: [0, 9], column: [1, 1] }], order: 'a0', rule: LIST },
         };
         return base;
     }
@@ -1463,7 +1493,7 @@ describe('validation rules on two tabs and a joiner', () => {
 
     test('two row inserts sent at once leave a rule on its cells on both tabs and the joiner', () => {
         const base = workbook({ A5: text('x'), A6: text('y') });
-        base.sheets[0].dataValidations = { a: { ranges: [{ row: [4, 5], column: [0, 0] }], rule: LIST } };
+        base.sheets[0].dataValidations = { a: { ranges: [{ row: [4, 5], column: [0, 0] }], order: 'a0', rule: LIST } };
         const a = tab(base);
         const b = tab(base);
         const fromA = tabEdit(a, ...insertRows(0, 1));

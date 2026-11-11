@@ -75,7 +75,7 @@ function rewrittenByDelete(before: Context, after: Context): Patch[] {
     const recorded: Patch[] = [];
     for (const sheet of after.sheets) {
         const was = getSheet(before, { id: sheet.id });
-        for (const field of ['data', 'conditionalFormatRules', 'dataValidations'] as const) {
+        for (const field of ['data', 'conditionalFormats', 'dataValidations'] as const) {
             if (was[field] === sheet[field]) continue;
             recorded.push({ op: 'replace', path: ['sheets', sheet.id, field], value: was[field] });
         }

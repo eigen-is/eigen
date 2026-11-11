@@ -17,6 +17,7 @@ import { calcSelectionInfo } from '../../state/modules/selection';
 import { sortSelection } from '../../state/modules/sort';
 import { handleMerge } from '../../state/modules/toolbar';
 import { contextFactory, selectionFactory } from './factories/context';
+import { formatsOf } from './factories/validations';
 
 function rich(text: string): Cell {
     return { ct: { fa: 'General', t: 'inlineStr', s: [{ v: text.slice(0, 2), bl: 1 }, { v: text.slice(2) }] } };
@@ -78,10 +79,10 @@ describe('readers of a rich cell', () => {
         const data = [[rich('Hello'), rich('World')]];
         const format = { textColor: '#000000', cellColor: '#ff0000' };
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 1] }],
+                    ranges: [{ row: [0, 0], column: [0, 1] }],
                     format,
                     conditionName: 'textContains',
                     conditionRange: [],
@@ -89,13 +90,13 @@ describe('readers of a rich cell', () => {
                 },
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 1] }],
+                    ranges: [{ row: [0, 0], column: [0, 1] }],
                     format: { textColor: '#0000ff', cellColor: '#00ff00' },
                     conditionName: 'equal',
                     conditionRange: [],
                     conditionValue: ['World'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles['0_0']?.cellColor).toBe('#ff0000');

@@ -1,20 +1,17 @@
 // Conditional formats in the editor: the check and the write of the rule the dialog builds for the selection, the
-// per-cell format map the painter reads (getComputeMap, checkCF), and the color-scale and data-bar presets. The
-// evaluation itself lives in the engine, which the server export shares.
+// per-cell format map the painter reads (getComputeMap, checkCF), and the color-scale and data-bar presets. A sheet
+// keeps its rules by id, so every write here adds or deletes one rule under its own id. The evaluation itself lives
+// in the engine, which the server export shares.
 
 import { eigenColor } from '@workspace/lib/constants/colors';
-import type {
-    ColorGradationRule,
-    ConditionalFormatConditionName,
-    DataBarRule,
-    DefaultConditionalFormatRule,
-} from '@workspace/lib/sheets';
+import type { ConditionalFormatConditionName, ConditionalFormatRule, Sheet } from '@workspace/lib/sheets';
+import { MAX_CONDITIONAL_FORMATS, nextRuleOrder } from '@workspace/lib/sheets';
 import { isNil } from 'es-toolkit/compat';
 import { toA1 } from '../../engine/a1-notation';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import { createCfFormulaEvaluator, evaluateConditionalFormat } from '../../engine/conditional-format';
-import type { CellMatrix, ConditionalFormatRule } from '../../engine/types';
+import type { CellMatrix } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import type { ConditionRulesProps } from '../types';
@@ -44,26 +41,27 @@ const REFERENCE_FORMULAS: Partial<Record<ConditionRuleType, (cell: string, value
 };
 
 // Why the dialog's rule can't be saved, or undefined when it can. The dialog shows the reason under its fields and stays
-// open, so the check runs before setConditionRules.
+// open, so the check runs before addConditionRule.
 export function conditionRuleError(ctx: Context, rules: ConditionRulesProps): string | undefined {
     const values = readRuleValues(ctx, rules);
     return typeof values === 'string' ? values : undefined;
 }
 
 // Adds the dialog's rule over the selection, unless conditionRuleError refuses it.
-export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
+export function addConditionRule(ctx: Context, rules: ConditionRulesProps) {
     const values = readRuleValues(ctx, rules);
-    const cellrange = ctx.selections ?? [];
-    const [anchor] = cellrange;
+    const ranges = ctx.selections ?? [];
+    const [anchor] = ranges;
     if (typeof values === 'string' || !anchor) return;
 
     const formula = REFERENCE_FORMULAS[rules.rulesType];
     const readsCell = formula && values.some(isCellReference);
     const topLeft = toA1(anchor.row[0], anchor.column[0]);
     const operands = values.map((value) => value.replace(/^=/, ''));
-    const rule: DefaultConditionalFormatRule = {
+    addRule(ctx, {
         type: 'default',
-        cellrange,
+        ranges,
+        order: lastOrder(ctx),
         format: {
             textColor: rules.textColor.check ? rules.textColor.color : null,
             cellColor: rules.cellColor.check ? rules.cellColor.color : null,
@@ -71,12 +69,7 @@ export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
         conditionName: readsCell ? 'formula' : rules.rulesType,
         conditionRange: [],
         conditionValue: readsCell ? [`=${formula(topLeft, operands)}`] : values,
-    };
-    const index = getSheetIndex(ctx, ctx.currentSheetId);
-    if (index == null) return;
-    const ruleArr = ctx.sheets[index].conditionalFormatRules ?? [];
-    ruleArr.push(rule);
-    ctx.sheets[index].conditionalFormatRules = ruleArr;
+    });
 }
 
 // The rule's values as the dialog typed them, or the message that refuses them.
@@ -145,24 +138,17 @@ function isCellReference(value: string): boolean {
 // The computed map per sheet, so a canvas paint doesn't evaluate every rule again. A single slot missed on every
 // switch between two sheets, which costs seconds on a sheet with formula rules. Immer replaces a sheet's rules and data
 // on any edit, so an entry is fresh while both are the same objects.
-const _cfCache = new Map<
-    string,
-    {
-        rules: ConditionalFormatRule[] | undefined;
-        data: CellMatrix;
-        result: ComputeMap;
-    }
->();
+const _cfCache = new Map<string, { rules: Sheet['conditionalFormats']; data: CellMatrix; result: ComputeMap }>();
 
 export function getComputeMap(ctx: Context): ComputeMap | null {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return null;
-    const ruleArr = ctx.sheets[index].conditionalFormatRules;
+    const rules = ctx.sheets[index].conditionalFormats;
     const { data } = ctx.sheets[index];
     if (isNil(data)) return null;
 
     const cached = _cfCache.get(ctx.currentSheetId);
-    if (cached && cached.rules === ruleArr && cached.data === data) {
+    if (cached && cached.rules === rules && cached.data === data) {
         return cached.result;
     }
 
@@ -172,20 +158,20 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
     const live = new Map(ctx.sheets.map((sheet) => [sheet.id, sheet]));
     for (const [id, entry] of _cfCache) {
         const sheet = live.get(id);
-        if (!sheet || sheet.data !== entry.data || sheet.conditionalFormatRules !== entry.rules) {
+        if (!sheet || sheet.data !== entry.data || sheet.conditionalFormats !== entry.rules) {
             _cfCache.delete(id);
         }
     }
 
     // A paint reads a frozen context, so formula rules evaluate through the engine directly, as the HTML export does.
-    const computeMap = evaluateConditionalFormat(ruleArr, data, {
+    const computeMap = evaluateConditionalFormat(rules, data, {
         evaluateFormula: createCfFormulaEvaluator(
             ctx.formulaCache.engine,
             createArrayResolver(ctx.sheets),
             ctx.currentSheetId,
         ),
     });
-    _cfCache.set(ctx.currentSheetId, { rules: ruleArr, data, result: computeMap });
+    _cfCache.set(ctx.currentSheetId, { rules, data, result: computeMap });
     return computeMap;
 }
 
@@ -228,34 +214,36 @@ export const CF_PRESETS: Record<string, string[]> = {
     solidColorDataBar_6: [eigenColor('violet', 400)],
 };
 
+// Each rule goes under its own id, so a rule a peer added at the same time stays.
 export function clearSheetRules(ctx: Context) {
-    getSheet(ctx).conditionalFormatRules = [];
+    const rules = getSheet(ctx).conditionalFormats ?? {};
+    for (const id of Object.keys(rules)) delete rules[id];
 }
 
-export function deleteSheetRule(ctx: Context, ruleIndex: number) {
-    getSheet(ctx).conditionalFormatRules?.splice(ruleIndex, 1);
+export function deleteSheetRule(ctx: Context, id: string) {
+    delete getSheet(ctx).conditionalFormats?.[id];
 }
 
 export function applyColorScalePreset(ctx: Context, presetKey: string) {
     const format = CF_PRESETS[presetKey];
     if (!format) return;
-    appendRule(ctx, 'colorGradation', format);
+    addRule(ctx, { type: 'colorGradation', ranges: ctx.selections ?? [], order: lastOrder(ctx), format });
 }
 
 export function applyDataBarPreset(ctx: Context, presetKey: string) {
     const format = CF_PRESETS[presetKey];
     if (!format) return;
-    appendRule(ctx, 'dataBar', format);
+    addRule(ctx, { type: 'dataBar', ranges: ctx.selections ?? [], order: lastOrder(ctx), format });
 }
 
-function appendRule(ctx: Context, type: 'colorGradation' | 'dataBar', format: string[]) {
-    const sheet = getSheet(ctx);
-    const rule: ColorGradationRule | DataBarRule = {
-        type,
-        cellrange: ctx.selections ?? [],
-        format,
-    };
-    const existing = sheet.conditionalFormatRules ?? [];
-    existing.push(rule);
-    sheet.conditionalFormatRules = existing;
+// A new rule goes last, so it wins the cells it shares with the rules before it.
+function lastOrder(ctx: Context): string {
+    return nextRuleOrder(getSheet(ctx).conditionalFormats);
+}
+
+// Every peer, the server and a reload drop a rule past the cap or over no range, so none is written.
+function addRule(ctx: Context, rule: ConditionalFormatRule) {
+    const rules = (getSheet(ctx).conditionalFormats ??= {});
+    if (rule.ranges.length === 0 || Object.keys(rules).length >= MAX_CONDITIONAL_FORMATS) return;
+    rules[crypto.randomUUID()] = rule;
 }

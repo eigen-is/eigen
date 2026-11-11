@@ -85,19 +85,16 @@ export function rewriteSheetFormulas<S extends Sheet>(sheet: S, rewrite: (txt: s
         return f === cell.f ? cell : { ...cell, f };
     });
 
-    const rules = sheet.conditionalFormatRules;
-    if (!rules) return next;
-    let newRules: typeof rules | null = null;
-    for (let i = 0; i < rules.length; i += 1) {
-        const rule = rules[i];
+    let formats: Sheet['conditionalFormats'] | null = null;
+    for (const [id, rule] of Object.entries(sheet.conditionalFormats ?? {})) {
         if (rule.type !== 'default' || rule.conditionName !== 'formula') continue;
         const txt = String(rule.conditionValue[0]);
         const rewritten = rewrite(txt);
         if (rewritten === txt) continue;
-        newRules ??= [...rules];
-        newRules[i] = { ...rule, conditionValue: [rewritten] };
+        formats ??= { ...sheet.conditionalFormats };
+        formats[id] = { ...rule, conditionValue: [rewritten] };
     }
-    return newRules ? { ...next, conditionalFormatRules: newRules } : next;
+    return formats ? { ...next, conditionalFormats: formats } : next;
 }
 
 // The sheet with `rewrite` run over its cells, in the matrix or, on a sheet stored without one, the list. A cell that

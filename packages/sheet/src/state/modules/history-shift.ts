@@ -20,7 +20,7 @@ import {
     shiftMergeForInsert,
     shiftRangeForDelete,
     shiftRangeForInsert,
-    shiftValidations,
+    shiftRules,
 } from '../../engine/rowcol';
 import type { Cell, SingleRange } from '../../engine/types';
 import type { History, Sheet } from '../types';
@@ -154,7 +154,7 @@ class Shifter {
         if (sheet !== this.id) return field === 'data' ? this.otherSheetData(patch, rest.length) : patch;
         if (field === 'data') return this.dataPatch(patch, rest);
         if (field === 'config') return this.configPatch(patch, rest);
-        if (field === 'dataValidations') return this.validations(patch, rest);
+        if (field === 'dataValidations' || field === 'conditionalFormats') return this.rule(patch, rest);
         return POSITION_FREE_FIELDS.has(field) ? patch : null;
     }
 
@@ -261,12 +261,13 @@ class Shifter {
         return { ...patch, path: [...patch.path.slice(0, depth), moved, ...below] };
     }
 
-    // A validation rule, whose ranges move as the engine moves the live ones. A rule the op leaves with no range drops
-    // the entry, as a write into deleted rows does.
-    private validations(patch: Patch, [id, ...below]: (string | number)[]): Patch | null {
+    // A conditional format or a validation rule, whose ranges move as the engine moves the live ones. A rule the op
+    // leaves with no range drops the entry, as a write into deleted rows does, and so does a formula rule, whose text
+    // the op rewrites.
+    private rule(patch: Patch, [id, ...below]: (string | number)[]): Patch | null {
         if (!('value' in patch) || patch.value == null) return patch;
-        if (id == null || below.length > 0) return null;
-        const value = shiftValidations({ [id]: patch.value }, this.move.range)[id];
+        if (id == null || below.length > 0 || patch.value.conditionName === 'formula') return null;
+        const value = shiftRules({ [id]: patch.value }, this.move.range)[id];
         return value ? { ...patch, value } : null;
     }
 
