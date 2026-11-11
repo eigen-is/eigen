@@ -30,8 +30,3 @@ export function recordProtocolAuthFailure(email: string, ip?: string): void {
 export function clearProtocolAuthFailures(email: string): void {
     emailFailures.release(email.toLowerCase());
 }
-
-export function _resetProtocolAuthLimitForTests(): void {
-    emailFailures.clear();
-    ipFailures.clear();
-}

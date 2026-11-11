@@ -55,7 +55,7 @@ describe('state/modules/cell — updateCell under a prohibiting rule', () => {
 // escapeHtml itself is pinned in packages/lib/src/test/core/html.test.ts.
 
 import { describe, expect, test } from 'bun:test';
-import { unescapeHtml } from '@workspace/lib/html';
+import { stripTagsServer } from '@workspace/lib/html';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { applyPatches, enablePatches, produce, produceWithPatches } from 'immer';
 import { evaluateConditionalFormat } from '../../../engine/conditional-format';
@@ -143,10 +143,7 @@ describe('state/modules/cell — getCellValue / getFormulaHtml', () => {
     });
 
     test('its text content is the formula, so it renders unescaped safely', () => {
-        const rendered = unescapeHtml(
-            (getFormulaHtml(0, 0, data) as string).replace(/<span.*?>/g, '').replace(/<\/span>/g, ''),
-        );
-        expect(rendered).toBe(formula);
+        expect(stripTagsServer(getFormulaHtml(0, 0, data) ?? '')).toBe(formula);
     });
 });
 

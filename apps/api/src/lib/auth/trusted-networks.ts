@@ -21,11 +21,6 @@ export function isIpTrusted(ip: string): boolean {
     return !gateways.includes(normalizeIp(ip)) && networks.some((entry) => matchesCidr(ip, entry));
 }
 
-export function _setRouteTableForTests(table: Route[]): void {
-    routes = table;
-    trust = null;
-}
-
 // A client of a published port can arrive from a bridge subnet's gateway (the host, Docker Desktop, rootless
 // Docker), so a trusted subnet this host sits on is trusted without it. Its gateway is the default route's when
 // that route leaves through the subnet's interface, as in docker/postfix/entrypoint.sh; otherwise, as when a
@@ -49,11 +44,6 @@ export function scopeTrustedNetworks(networks: string[], routes: Route[]): Trust
     return { networks: kept, gateways, untrusted };
 }
 
-// None outside Linux (macOS dev), where nothing is excluded.
-export function readRouteTable(): Route[] {
-    return existsSync(ROUTE_TABLE) ? parseRouteTable(readFileSync(ROUTE_TABLE, 'utf8')) : [];
-}
-
 export function parseRouteTable(text: string): Route[] {
     return text
         .split('\n')
@@ -72,7 +62,8 @@ function trustedNetworks(): TrustedNetworks {
     const source = process.env['TRUSTED_NETWORKS'] || DEFAULT_TRUSTED;
     if (trust?.source !== source) {
         const entries = source.split(',').map((entry) => entry.trim());
-        routes ??= readRouteTable();
+        // None outside Linux (macOS dev), where nothing is excluded.
+        routes ??= existsSync(ROUTE_TABLE) ? parseRouteTable(readFileSync(ROUTE_TABLE, 'utf8')) : [];
         trust = { source, ...scopeTrustedNetworks(entries, routes) };
         for (const network of trust.untrusted) {
             console.warn(

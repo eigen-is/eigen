@@ -9,7 +9,38 @@ import type { CommentCard, CommentMapName } from '../../../types/comments';
 import { getItemMapRoot } from '../../collab/yjs-utils';
 import { sanitizeCommentCardHtml } from '../../html-dom';
 
-export function readCards(map: Y.Map<unknown>): Record<string, CommentCard> {
+export function useCommentCards(doc: Y.Doc | null, mapName: CommentMapName = 'comments'): Record<string, CommentCard> {
+    // The first render reads the cards at once. A host that mounts after the Yjs sync, such as docs, must see its
+    // cards right away, or the ?chat= deep-link effect runs once against no cards and gives up.
+    const [cards, setCards] = useState<Record<string, CommentCard>>(() =>
+        doc ? readCards(getItemMapRoot(doc, mapName)) : {},
+    );
+
+    useEffect(() => {
+        if (!doc) {
+            setCards({});
+            return;
+        }
+        const map = getItemMapRoot(doc, mapName);
+        // A card whose fields are unchanged keeps its previous object, so a memoized card component skips the
+        // render when an edit elsewhere rebuilds the map.
+        const refresh = () =>
+            setCards((prev) => {
+                const next = readCards(map);
+                for (const id in next) {
+                    if (prev[id] && sameCard(prev[id], next[id])) next[id] = prev[id];
+                }
+                return next;
+            });
+        refresh();
+        map.observeDeep(refresh);
+        return () => map.unobserveDeep(refresh);
+    }, [doc, mapName]);
+
+    return cards;
+}
+
+function readCards(map: Y.Map<unknown>): Record<string, CommentCard> {
     const out: Record<string, CommentCard> = {};
     for (const [id, yCard] of map) {
         if (!(yCard instanceof Y.Map)) continue;
@@ -46,16 +77,6 @@ export function readCards(map: Y.Map<unknown>): Record<string, CommentCard> {
     return out;
 }
 
-function sameAttachments(a?: readonly ChatAttachment[], b?: readonly ChatAttachment[]): boolean {
-    if (a === b) return true;
-    if (!a || !b || a.length !== b.length) return false;
-    return a.every((x, i) => {
-        const y = b[i];
-        if (typeof x === 'string' || typeof y === 'string') return x === y;
-        return x.id === y.id && x.name === y.name;
-    });
-}
-
 function sameCard(a: CommentCard, b: CommentCard): boolean {
     return (
         a.title === b.title &&
@@ -69,33 +90,12 @@ function sameCard(a: CommentCard, b: CommentCard): boolean {
     );
 }
 
-export function useCommentCards(doc: Y.Doc | null, mapName: CommentMapName = 'comments'): Record<string, CommentCard> {
-    // The first render reads the cards at once. A host that mounts after the Yjs sync, such as docs, must see its
-    // cards right away, or the ?chat= deep-link effect runs once against no cards and gives up.
-    const [cards, setCards] = useState<Record<string, CommentCard>>(() =>
-        doc ? readCards(getItemMapRoot(doc, mapName)) : {},
-    );
-
-    useEffect(() => {
-        if (!doc) {
-            setCards({});
-            return;
-        }
-        const map = getItemMapRoot(doc, mapName);
-        // A card whose fields are unchanged keeps its previous object, so a memoized card component skips the
-        // render when an edit elsewhere rebuilds the map.
-        const refresh = () =>
-            setCards((prev) => {
-                const next = readCards(map);
-                for (const id in next) {
-                    if (prev[id] && sameCard(prev[id], next[id])) next[id] = prev[id];
-                }
-                return next;
-            });
-        refresh();
-        map.observeDeep(refresh);
-        return () => map.unobserveDeep(refresh);
-    }, [doc, mapName]);
-
-    return cards;
+function sameAttachments(a?: readonly ChatAttachment[], b?: readonly ChatAttachment[]): boolean {
+    if (a === b) return true;
+    if (!a || !b || a.length !== b.length) return false;
+    return a.every((x, i) => {
+        const y = b[i];
+        if (typeof x === 'string' || typeof y === 'string') return x === y;
+        return x.id === y.id && x.name === y.name;
+    });
 }

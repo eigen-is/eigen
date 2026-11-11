@@ -1,8 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import type { CommentFilter } from '../../../core/comments/filter';
-import { DEFAULT_COMMENT_FILTER, isCommentFilterActive, matchesCommentFilter } from '../../../core/comments/filter';
+import { matchesCommentFilter, useCommentFilter } from '../../../core/comments/filter';
 import type { CommentEntry } from '../../../types/chat';
 import type { CommentCard } from '../../../types/comments';
+import { installHappyDom } from '../../happy-dom';
+
+installHappyDom();
+
+type CommentFilter = Parameters<typeof matchesCommentFilter>[2];
 
 function makeCard(overrides: Partial<CommentCard> = {}): CommentCard {
     return { id: 'c1', title: 't', description: 'd', ...overrides };
@@ -25,7 +29,7 @@ function makeEntry(overrides: Partial<CommentEntry> = {}): CommentEntry {
 }
 
 function filter(overrides: Partial<CommentFilter> = {}): CommentFilter {
-    return { ...DEFAULT_COMMENT_FILTER, ...overrides };
+    return { assignee: 'all', colors: null, status: 'open', ...overrides };
 }
 
 describe('matchesCommentFilter — status', () => {
@@ -150,41 +154,89 @@ describe('matchesCommentFilter — combined', () => {
     });
 });
 
-describe('isCommentFilterActive', () => {
-    test('false on the defaults instance', () => {
-        expect(isCommentFilterActive(DEFAULT_COMMENT_FILTER, DEFAULT_COMMENT_FILTER)).toBe(false);
-        const stickyDefaults = filter({ status: 'all' });
-        expect(isCommentFilterActive(stickyDefaults, stickyDefaults)).toBe(false);
+describe('useCommentFilter', () => {
+    // The hook as a host holds it: `current()` is the latest render, and `change` runs a setter inside act.
+    async function mountFilter(defaults?: Partial<CommentFilter>) {
+        const { act, createElement } = await import('react');
+        const { createRoot } = await import('react-dom/client');
+        const renders: ReturnType<typeof useCommentFilter>[] = [];
+        function Harness() {
+            renders.push(useCommentFilter(defaults));
+            return null;
+        }
+        const root = createRoot(document.createElement('div'));
+        await act(async () => root.render(createElement(Harness)));
+        const current = () => {
+            const latest = renders.at(-1);
+            if (!latest) throw new Error('useCommentFilter never rendered');
+            return latest;
+        };
+        return {
+            current,
+            change: (run: (filter: ReturnType<typeof useCommentFilter>) => void) => act(async () => run(current())),
+            unmount: () => act(async () => root.unmount()),
+        };
+    }
+
+    test('starts on open comments of every assignee and color, and is not active', async () => {
+        const { current, unmount } = await mountFilter();
+        expect(current().filter).toEqual({ assignee: 'all', colors: null, status: 'open' });
+        expect(current().isActive).toBe(false);
+        await unmount();
     });
 
-    test('true after changing status', () => {
-        expect(isCommentFilterActive(filter({ status: 'all' }), DEFAULT_COMMENT_FILTER)).toBe(true);
+    test("a host's own defaults are not an active filter", async () => {
+        const { current, unmount } = await mountFilter({ status: 'all' });
+        expect(current().filter.status).toBe('all');
+        expect(current().isActive).toBe(false);
+        await unmount();
     });
 
-    test('true after changing assignee (string and email cases)', () => {
-        expect(isCommentFilterActive(filter({ assignee: 'me' }), DEFAULT_COMMENT_FILTER)).toBe(true);
-        expect(isCommentFilterActive(filter({ assignee: { email: 'a@x.com' } }), DEFAULT_COMMENT_FILTER)).toBe(true);
+    test('is active after changing status', async () => {
+        const { current, change, unmount } = await mountFilter();
+        await change((filter) => filter.setStatus('all'));
+        expect(current().isActive).toBe(true);
+        await unmount();
     });
 
-    test('email assignee equality is by value, not reference', () => {
-        const defaults = filter({ assignee: { email: 'a@x.com' } });
-        expect(isCommentFilterActive(filter({ assignee: { email: 'a@x.com' } }), defaults)).toBe(false);
-        expect(isCommentFilterActive(filter({ assignee: { email: 'b@x.com' } }), defaults)).toBe(true);
+    test('is active after changing assignee (string and email cases)', async () => {
+        const { current, change, unmount } = await mountFilter();
+        await change((filter) => filter.setAssignee('me'));
+        expect(current().isActive).toBe(true);
+        await change((filter) => filter.setAssignee({ email: 'a@x.com' }));
+        expect(current().isActive).toBe(true);
+        await unmount();
     });
 
-    test('true after changing colors; color equality is by contents', () => {
-        expect(isCommentFilterActive(filter({ colors: new Set(['#f00']) }), DEFAULT_COMMENT_FILTER)).toBe(true);
-        const defaults = filter({ colors: new Set(['#f00']) });
-        expect(isCommentFilterActive(filter({ colors: new Set(['#f00']) }), defaults)).toBe(false);
-        expect(isCommentFilterActive(filter({ colors: new Set(['#f00', '#0f0']) }), defaults)).toBe(true);
-        expect(isCommentFilterActive(filter({ colors: null }), defaults)).toBe(true);
+    test('email assignee equality is by value, not reference', async () => {
+        const { current, change, unmount } = await mountFilter({ assignee: { email: 'a@x.com' } });
+        await change((filter) => filter.setAssignee({ email: 'a@x.com' }));
+        expect(current().isActive).toBe(false);
+        await change((filter) => filter.setAssignee({ email: 'b@x.com' }));
+        expect(current().isActive).toBe(true);
+        await unmount();
     });
 
-    test('back to defaults reads inactive again', () => {
-        const stickyDefaults = filter({ status: 'all' });
-        const changed = filter({ status: 'all', assignee: 'me' });
-        expect(isCommentFilterActive(changed, stickyDefaults)).toBe(true);
-        // Resetting every facet to the defaults makes it inactive.
-        expect(isCommentFilterActive({ ...stickyDefaults }, stickyDefaults)).toBe(false);
+    test('is active after changing colors; color equality is by contents', async () => {
+        const { current, change, unmount } = await mountFilter({ colors: new Set(['#f00']) });
+        await change((filter) => filter.toggleColor('#0f0'));
+        expect(current().isActive).toBe(true);
+        await change((filter) => filter.toggleColor('#0f0'));
+        expect(current().filter.colors).toEqual(new Set(['#f00']));
+        expect(current().isActive).toBe(false);
+        await change((filter) => filter.toggleColor('#f00'));
+        expect(current().filter.colors).toBeNull();
+        expect(current().isActive).toBe(true);
+        await unmount();
+    });
+
+    test('clear goes back to the defaults and reads inactive again', async () => {
+        const { current, change, unmount } = await mountFilter({ status: 'all' });
+        await change((filter) => filter.setAssignee('me'));
+        expect(current().isActive).toBe(true);
+        await change((filter) => filter.clear());
+        expect(current().filter).toEqual({ assignee: 'all', colors: null, status: 'all' });
+        expect(current().isActive).toBe(false);
+        await unmount();
     });
 });

@@ -28,7 +28,7 @@ const EIGEN_COLOR_NAMES = [
     'pink',
     'rose',
 ] as const;
-export const EIGEN_COLORS_MAP = [
+const EIGEN_COLORS_MAP = [
     [
         '#fef2f2',
         '#ffe2e2',
@@ -253,7 +253,7 @@ export const EIGEN_COLORS_MAP = [
 ] as const;
 
 export const EIGEN_ACCENT_COLOR_ROW = 5;
-export const EIGEN_STICKIES_COLOR_ROW = 1;
+const EIGEN_STICKIES_COLOR_ROW = 1;
 
 export const EIGEN_COLORS: EigenColor[][] = EIGEN_COLORS_MAP.map((col, i) =>
     col.map((hex, s) => ({ label: `${EIGEN_COLOR_NAMES[i]}-${EIGEN_COLOR_STEPS[s]}`, value: hex })),
@@ -301,7 +301,7 @@ export const EIGEN_STICKIES_COLORS = [EIGEN_STICKIES_COLOR_ROW].map((ri) =>
     [1, 3, 5, 7, 9, 11, 13, 15].map((ci) => EIGEN_COLORS[ci][ri]),
 );
 
-export const EIGEN_STICKIES_INDICATOR_ROW = 4;
+const EIGEN_STICKIES_INDICATOR_ROW = 4;
 export const EIGEN_STICKIES_INDICATOR_MAP: Map<string, string> = new Map(
     [1, 3, 5, 7, 9, 11, 13, 15].map((ci) => [
         EIGEN_COLORS_MAP[ci][EIGEN_STICKIES_COLOR_ROW],

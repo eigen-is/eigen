@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, jest, test } from 'bun:test';
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
@@ -10,7 +10,6 @@ import { CONTENT_REINDEX_CAP_SECONDS } from '../../lib/mount/content-reindex-que
 import type { Mount } from '../../lib/mount/mount';
 import { setShutdownDrainDeadline } from '../../lib/mount/upload-limits';
 import { extractText } from '../../lib/search/extract-text';
-import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION, HOUR_MS } from '../../lib/versioning/retention';
 import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
@@ -19,10 +18,10 @@ import {
     createGetLocalDatabase,
     createS3MountConfig,
     FaultMount,
+    passStorageDeadline,
     provisionDoc,
     registerFaultMount,
     SETTLE_BOUND_MS,
-    SHRUNK_STORAGE_TIMEOUT_MS,
     STALL_BOUND_MS,
     settleContainer,
     settlesWithin,
@@ -82,7 +81,6 @@ beforeEach(async () => {
     await mount.init();
 });
 afterEach(async () => {
-    setStorageTimeoutMs(STORAGE_TIMEOUT_MS);
     fake.heal();
     await mount.closeAllDatabases();
     await fake.stop();
@@ -91,32 +89,34 @@ afterAll(() => rmSync(TEST_DIR, { recursive: true, force: true }));
 
 describe('Stalled S3 reads', () => {
     test('a download whose HEAD stalls answers 503 instead of waiting on the backend', async () => {
-        setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
         const rootId = (await mount.getRootFolder())!.id;
         const fileId = await mount.createFile(rootId, 'a.bin', 'application/octet-stream', 4, new Uint8Array(4));
         fake.faults.set(await mount.getStorageKey(fileId), 'stall');
+        jest.useFakeTimers();
         const failure = mount.readFile(fileId).catch((error: unknown) => error);
+        await passStorageDeadline(() => fake.heldCount > 0);
         expect(await settlesWithin([failure], STALL_BOUND_MS)).toBe(true);
         expect(await failure).toMatchObject({ status: 503 });
     });
 
     test('a document open whose data.db GET stalls mid-body answers 503', async () => {
-        setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
         const { dataDbId, dataKey } = await storedDoc(mount);
         fake.faults.set(dataKey, 'stall-body');
+        jest.useFakeTimers();
         const failure = mount.withDatabase(docConfig, dataDbId, async () => {}).catch((error: unknown) => error);
+        await passStorageDeadline(() => fake.heldCount > 0);
         expect(await settlesWithin([failure], STALL_BOUND_MS)).toBe(true);
         expect(await failure).toMatchObject({ status: 503 });
     });
 
     // The snapshot holds the lock across its GET, so the storage deadline is what bounds the wait.
     test('the container lock frees while a version snapshot waits on its S3 GET', async () => {
-        setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
         const { containerId, dataKey } = await storedDoc(mount);
         fake.faults.set(dataKey, 'stall-body');
+        jest.useFakeTimers();
         const snapshot = mount.snapshotContainerDataDb(containerId, DEFAULT_RETENTION);
         snapshot.catch(() => {});
-        await waitFor(() => fake.heldCount > 0);
+        await passStorageDeadline(() => fake.heldCount > 0);
         const next = mount.withPathLock(containerId, async () => 'free');
         try {
             expect(await settlesWithin([next], STALL_BOUND_MS)).toBe(true);
@@ -149,10 +149,11 @@ describe('Stalled S3 reads', () => {
 
 describe('Whole-body reads', () => {
     test('a whole-body read whose GET stalls mid-body answers 503', async () => {
-        setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
         const { fileId, key } = await storedFile('e.bin');
         fake.faults.set(key, 'stall-body');
+        jest.useFakeTimers();
         const failure = mount.readBytes(fileId).catch((error: unknown) => error);
+        await passStorageDeadline(() => fake.heldCount > 0);
         expect(await settlesWithin([failure], STALL_BOUND_MS)).toBe(true);
         expect(await failure).toMatchObject({ status: 503 });
     });
@@ -176,7 +177,6 @@ describe('Whole-body reads', () => {
     });
 
     test('mount teardown does not wait on a text extraction whose GET stalls', async () => {
-        setStorageTimeoutMs(3_000);
         const rootId = (await mount.getRootFolder())!.id;
         const fileId = await mount.createFile(rootId, 'notes.txt', 'text/plain', 5, new TextEncoder().encode('notes'));
         fake.faults.set(await mount.getStorageKey(fileId), 'stall-body');
@@ -317,7 +317,6 @@ describe('A stalled GET and the Home', () => {
     });
 
     test('turning a mount off does not wait on a document whose GET stalls', async () => {
-        setStorageTimeoutMs(3_000);
         const ctx = await getTestContext();
         const home = await getHome(ctx.alice.user.id);
         const homeMount = new FaultMount(

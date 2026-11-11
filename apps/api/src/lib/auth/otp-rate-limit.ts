@@ -70,12 +70,6 @@ export function resetOtpGuesses(email: string): void {
     guesses.delete(email.toLowerCase());
 }
 
-export function _resetOtpRateLimitForTests(): void {
-    emailHits.clear();
-    ipHits.clear();
-    guesses.clear();
-}
-
 function getPruned(buckets: Map<string, Hit[]>, key: string, now: number): Hit[] {
     return (buckets.get(key) ?? []).filter((hit) => now - hit.at < WINDOW_MS);
 }

@@ -36,7 +36,6 @@ afterAll(() => {
 });
 
 const { createElement } = await import('react');
-const { DEFAULT_COMMENT_FILTER } = await import('@workspace/lib/comments');
 const { CardDialog } = await import('../../../components/cards/card-dialog');
 const { CommentPanel } = await import('../../../components/comments/comment-panel');
 const { CommentThread } = await import('../../../components/comments/comment-thread');
@@ -156,7 +155,7 @@ test('an activity row of a comment whose card is gone opens it by its chat name'
 
 test('the pane card of a re-anchored comment whose thread was swept shows the deleted state', async () => {
     const filter = {
-        filter: DEFAULT_COMMENT_FILTER,
+        filter: { assignee: 'all', colors: null, status: 'open' } as const,
         setAssignee: () => {},
         toggleColor: () => {},
         setStatus: () => {},

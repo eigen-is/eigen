@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { APP_PASSWORD_LENGTH } from '../../lib/auth/auth';
 import type { TestUser } from '../setup';
 import { app, createTestGuest, createTestUser, getTestContext } from '../setup';
@@ -7,17 +7,17 @@ describe('Protocol Auth', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let verifyProtocolAuth: typeof import('../../lib/auth/protocol-auth').verifyProtocolAuth;
     let auth: typeof import('../../lib/auth/auth').auth;
-    let resetProtocolAuthLimit: typeof import('../../lib/auth/protocol-rate-limit')._resetProtocolAuthLimitForTests;
 
     beforeAll(async () => {
         ctx = await getTestContext();
         verifyProtocolAuth = (await import('../../lib/auth/protocol-auth')).verifyProtocolAuth;
         auth = (await import('../../lib/auth/auth')).auth;
-        resetProtocolAuthLimit = (await import('../../lib/auth/protocol-rate-limit'))._resetProtocolAuthLimitForTests;
     });
 
-    // Isolate the shared in-memory failure limiter so no test's failures leak into the next.
-    beforeEach(() => resetProtocolAuthLimit?.());
+    // The failure limiter lasts as long as the process, so a test that piles failures on an account makes its own.
+    function freshMember(): Promise<TestUser> {
+        return createTestUser(`protocol-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'Protocol Member');
+    }
 
     test('rejects unknown email', async () => {
         await expect(verifyProtocolAuth('nobody@test.eigen.is', 'anything')).rejects.toThrow();
@@ -62,34 +62,25 @@ describe('Protocol Auth', () => {
         });
 
         test('a wrong one is refused and counts toward the limit', async () => {
+            const { email } = await freshMember();
             for (let i = 0; i < 10; i++) {
-                await expect(verifyProtocolAuth(ctx.alice.user.email, 'wrongpassword')).rejects.toThrow('Unauthorized');
+                await expect(verifyProtocolAuth(email, 'wrongpassword')).rejects.toThrow('Unauthorized');
             }
-            await expect(verifyProtocolAuth(ctx.alice.user.email, 'testpassword123')).rejects.toThrow(
-                'Too many failed',
-            );
+            await expect(verifyProtocolAuth(email, 'testpassword123')).rejects.toThrow('Too many failed');
         });
     });
 
     // An unknown address, a guest and a 2FA account's account password all answer as a wrong password does, at the
     // cost of one password hash, so neither the answer nor its time tells them apart.
     describe('every refusal looks the same', () => {
-        let guest: TestUser;
-        let twoFactorEmail: string;
-        let bannedEmail: string;
-
-        beforeAll(async () => {
-            guest = await createTestGuest('Protocol Guest');
-            const member = await createTestUser('protocol-2fa@test.eigen.is', 'testpassword123', 'Protocol 2FA');
-            twoFactorEmail = member.email;
-            const banned = await createTestUser('protocol-banned@test.eigen.is', 'testpassword123', 'Protocol Banned');
-            bannedEmail = banned.email;
+        async function flaggedMember(flag: { twoFactorEnabled: true } | { banned: true }): Promise<string> {
+            const member = await freshMember();
             const { getAuthDrizzleDb } = await import('../../lib/auth/auth');
             const { user } = await import('../../../auth-schema');
             const { eq } = await import('drizzle-orm');
-            getAuthDrizzleDb().update(user).set({ twoFactorEnabled: true }).where(eq(user.id, member.id)).run();
-            getAuthDrizzleDb().update(user).set({ banned: true }).where(eq(user.id, banned.id)).run();
-        });
+            getAuthDrizzleDb().update(user).set(flag).where(eq(user.id, member.id)).run();
+            return member.email;
+        }
 
         async function passwordWork(run: () => Promise<unknown>): Promise<number> {
             const { password } = await auth.$context;
@@ -104,17 +95,23 @@ describe('Protocol Auth', () => {
             }
         }
 
-        const refusals: [string, () => [string, string]][] = [
-            ['an unknown address', () => ['nobody-protocol@test.eigen.is', 'testpassword123']],
-            ['a guest address', () => [guest.email, 'testpassword123']],
-            ['a 2FA account on its account password', () => [twoFactorEmail, 'testpassword123']],
-            ['a banned account on its account password', () => [bannedEmail, 'testpassword123']],
-            ['a wrong password', () => [ctx.alice.user.email, 'wrongpassword']],
+        const refusals: [string, () => Promise<[string, string]>][] = [
+            ['an unknown address', async () => [`nobody-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123']],
+            ['a guest address', async () => [(await createTestGuest('Protocol Guest')).email, 'testpassword123']],
+            [
+                'a 2FA account on its account password',
+                async () => [await flaggedMember({ twoFactorEnabled: true }), 'testpassword123'],
+            ],
+            [
+                'a banned account on its account password',
+                async () => [await flaggedMember({ banned: true }), 'testpassword123'],
+            ],
+            ['a wrong password', async () => [(await freshMember()).email, 'wrongpassword']],
         ];
 
         for (const [name, credentials] of refusals) {
             test(`${name} answers 401 and spends one password hash`, async () => {
-                const [email, password] = credentials();
+                const [email, password] = await credentials();
                 const res = await app.handle(
                     new Request('http://localhost/dav/', {
                         method: 'PROPFIND',
@@ -126,7 +123,7 @@ describe('Protocol Auth', () => {
             });
 
             test(`${name} counts toward the failure limit`, async () => {
-                const [email, password] = credentials();
+                const [email, password] = await credentials();
                 for (let i = 0; i < 10; i++) {
                     await expect(verifyProtocolAuth(email, password)).rejects.toThrow('Unauthorized');
                 }
@@ -159,6 +156,7 @@ describe('Protocol Auth', () => {
         });
 
         test("a guest's own app password is refused as well", async () => {
+            const guest = await createTestGuest('Protocol Guest');
             const created = await auth.api.createApiKey({
                 body: { name: 'guest-app-password' },
                 headers: { cookie: `better-auth.session_token=${guest.sessionToken}` },
@@ -414,7 +412,7 @@ describe('Protocol Auth', () => {
         });
 
         test('a successful auth clears the failure counter', async () => {
-            const email = ctx.alice.user.email;
+            const { email } = await freshMember();
             // Nine failures — one short of the per-email threshold.
             for (let i = 0; i < 9; i++) {
                 await expect(verifyProtocolAuth(email, 'wrongpassword')).rejects.toThrow('Unauthorized');
@@ -478,10 +476,11 @@ describe('Protocol Auth', () => {
         });
 
         test('a valid app password is accepted even when the email failure bucket is saturated', async () => {
-            const email = ctx.alice.user.email;
+            const member = await freshMember();
+            const email = member.email;
             const created = await auth.api.createApiKey({
                 body: { name: 'saturation-app-password' },
-                headers: { cookie: `better-auth.session_token=${ctx.alice.user.sessionToken}` },
+                headers: { cookie: `better-auth.session_token=${member.sessionToken}` },
             });
             const appPassword = created!.key!;
 
@@ -493,7 +492,7 @@ describe('Protocol Auth', () => {
 
             // The app password is checked before the limiter, so a valid credential still gets through.
             const u = await verifyProtocolAuth(email, appPassword);
-            expect(u.id).toBe(ctx.alice.user.id);
+            expect(u.id).toBe(member.id);
         });
     });
 });

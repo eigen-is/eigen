@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { unescapeHtml } from '@workspace/lib/html';
+import { stripTagsServer } from '@workspace/lib/html';
 import { functionHTMLGenerate } from '../../../state/modules/formula-editor';
 
 // The formula bar and the in-cell editor render this output through innerHTML, and a
@@ -40,12 +40,7 @@ describe('state/formula-editor — functionHTMLGenerate', () => {
 describe('state/formula-editor — generated HTML measures like its rendered text', () => {
     for (const formula of ['=A1&B1', '=A1<B1', '=IF(A1<>2,1,0)', '=A1>=5', '=CONCAT("a&b")']) {
         test(`${formula} decodes back to itself`, () => {
-            const html = functionHTMLGenerate(formula);
-            const segments = html
-                .replace(/<span.*?>/g, '')
-                .split('</span>')
-                .map(unescapeHtml);
-            expect(segments.join('')).toBe(formula);
+            expect(stripTagsServer(functionHTMLGenerate(formula))).toBe(formula);
         });
     }
 });
