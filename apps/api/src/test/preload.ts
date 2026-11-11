@@ -5,10 +5,6 @@ import { clearSucroseCache } from 'elysia/sucrose';
 // Eager on purpose: it also enters the app's module cycles in an order that works. Made lazy, 30 test files whose own
 // first import reaches Home or a DAV store first throw a TDZ ReferenceError at load.
 import { shutdownAllHomes } from '../lib/home';
-import { setRetryWaitsMs } from '../lib/storage/deadline';
-import { SHRUNK_RETRY_WAITS_MS } from './fault-storage-helpers';
-
-setRetryWaitsMs(SHRUNK_RETRY_WAITS_MS);
 
 // Every file runs in a fresh global (--isolate), so this hook runs once per file. An unref'd timer still
 // holds its callback until it fires, and two of them reach the whole module graph: each Home's idle

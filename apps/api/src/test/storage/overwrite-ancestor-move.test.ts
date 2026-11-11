@@ -9,7 +9,7 @@ import { Mount } from '../../lib/mount/mount';
 import { writeTempWithHash } from '../../lib/storage';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { createGetLocalDatabase, settlesWithin } from '../fault-storage-helpers';
-import { createTestMountConfig } from '../mount-test-helpers';
+import { createTestMountConfig, seedFile } from '../mount-test-helpers';
 
 // On `local` a key is its folder path: a key-derived write racing an ancestor rename, trash or a
 // delete must land at the key the row ends up with, never rebuild the old tree.
@@ -158,7 +158,7 @@ async function fileInFolder(id: string) {
     createdMounts.push(mount);
     const rootId = (await mount.getRootFolder())!.id;
     const folderId = await mount.createFolder(rootId, 'before');
-    const fileId = await mount.createFile(folderId, 'notes.txt', 'text/plain', 2, Buffer.from('v0'));
+    const fileId = await seedFile(mount, folderId, 'notes.txt', 'text/plain', 2, Buffer.from('v0'));
     const oldKey = await mount.getStorageKey(fileId);
     return { mount, storage, folderId, fileId, oldKey };
 }
@@ -246,7 +246,7 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
     test('a file created under a folder renamed mid-write lands under the new name', async () => {
         const { mount, storage, folderId } = await fileInFolder('create-under-rename');
         const gate = storage.armWrite();
-        const create = mount.createFile(folderId, 'new.txt', 'text/plain', 2, Buffer.from('v1'));
+        const create = seedFile(mount, folderId, 'new.txt', 'text/plain', 2, Buffer.from('v1'));
         await gate.parked;
         const waiting = mount.armTreeWait();
         const move = mount.updatePath(folderId, { name: 'after' });
@@ -345,7 +345,7 @@ describe('a file delete beside writes at its key on a path-based mount', () => {
         const del = mount.deletePath(fileId);
         await deleteWaiting;
         const createWaiting = mount.armTreeWait();
-        const create = mount.createFile(folderId, 'notes.txt', 'text/plain', 8, Buffer.from('new file'));
+        const create = seedFile(mount, folderId, 'notes.txt', 'text/plain', 8, Buffer.from('new file'));
         await createWaiting;
         gate.release();
         const [committed, , newId] = await Promise.all([overwrite, del, create]);
@@ -363,7 +363,7 @@ describe('a file delete beside writes at its key on a path-based mount', () => {
         const del = mount.deletePath(fileId);
         await gate.parked;
         const waiting = mount.armTreeWait();
-        const create = mount.createFile(folderId, 'notes.txt', 'text/plain', 8, Buffer.from('new file'));
+        const create = seedFile(mount, folderId, 'notes.txt', 'text/plain', 8, Buffer.from('new file'));
         await waiting;
         gate.release();
         const [, newId] = await Promise.all([del, create]);
@@ -381,7 +381,7 @@ describe('a restore, move or delete whose pre-lock check goes stale', () => {
         await mount.trashPath(fileId);
         const trashedKey = await mount.getStorageKey(fileId);
         const gate = storage.armWrite();
-        const create = mount.createFile(folderId, 'notes.txt', 'text/plain', 3, Buffer.from('NEW'));
+        const create = seedFile(mount, folderId, 'notes.txt', 'text/plain', 3, Buffer.from('NEW'));
         await gate.parked;
         const waiting = mount.armTreeWait();
         const restore = mount.restorePath(fileId);
@@ -418,7 +418,7 @@ describe('a restore, move or delete whose pre-lock check goes stale', () => {
                     ? mount.createFolder(folderId, 'new.txt')
                     : kind === 'temp'
                       ? mount.createFileFromTemp(folderId, 'new.txt', 'text/plain', size, hash, tempId)
-                      : mount.createFile(folderId, 'new.txt', 'text/plain', size, Buffer.from('UPLOAD'));
+                      : seedFile(mount, folderId, 'new.txt', 'text/plain', size, Buffer.from('UPLOAD'));
             await createQueued;
             hold.resolve();
             await Promise.all([held, rename]);

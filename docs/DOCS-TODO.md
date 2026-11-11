@@ -108,6 +108,8 @@ Verified, bounded, cheap to fix on the next touch.
 
 - **Enter on a selected text box on a phone does nothing** (XS): The text box's `Enter` shortcut (`addKeyboardShortcuts` in `apps/docs/src/components/docs/extensions/text-box.tsx`) calls `onOpen` and returns true, but a phone opens no story, so the key only reselects the box. Fix: return false where the host opens no story.
 
+- **A link's right-click rows miss three places** (S): A right-click on a link opens its Open, Copy, Edit and Remove rows only in body text (`linkAtPointer`, `apps/docs/src/components/docs/link-menu-sections.tsx`). In a table cell the table menu wins, on a comment's highlight the comment's menu wins, and in a header, footer or open note the browser's menu shows. Spread `linkMenuSections` into the table and comment menus, and wire the bands' and the story's editors.
+
 ## After 1.0
 
 Large builds that wait for a trigger or for the editor to draw pages.

@@ -22,13 +22,15 @@ The backlog for the canvas apps: Slides, Vector, Stickies and the canvas engine 
 
 - **Vector: Escape after a stroke keeps the Draw tool** (XS): Picking Draw and pressing Escape goes back to Select, but after drawing a stroke Escape leaves Draw active, so the next drag draws another stroke. Escape after a stroke returns to Select, as it does before one.
 
+- **Text on a curve in Slides and Vector** (M–L): A text block lays out in a straight box only ([CANVAS.md](CANVAS.md#text-is-one-block-that-the-closed-shapes-share)), so a round badge or an arched banner can't set its text along its shape ([PROPOSAL_CLIPART.md](proposals/PROPOSAL_CLIPART.md#6-poster-pieces)). Text along a circle or an arch, at least, in a new text field (additive). The live canvas and the SVG can use `textPath`. Check each export before promising it: pptx has warped text (`prstTxWarp`), and what WeasyPrint draws from an SVG `textPath` is unverified.
+
 ## Bugs and small fixes
 
 Verified, bounded, cheap to fix on the next touch.
 
 - **Canvas: no cap on one element's hatch or path fill work** (S–M): A hatched fill's cost grows with its area, unbounded per element: a hostile hatched path at 2000 × 2000 takes up to 4 s and 34 MiB of SVG, and a wild 400-command path (any pptx `custGeom` import) up to 3.3 s solid. Previews cap only element count (`PREVIEW_MAX_ELEMENTS`) and output bytes (`applyPreviewByteGuard`), both after the work. Fix: one per-element budget for every hatched kind in `packages/lib/src/vector/kinds/render-utils.ts` (wider `hachureGap` or a solid fallback) and a bound on a path's solid fill.
 
-- **Canvas: two files past the split line** (S): `packages/ui/src/components/vector/tools/use-drawing-tools.ts` (1,102 lines) and `packages/ui/src/components/vector/canvas-editor.tsx` (about 1,800, still holding the pointer-gesture handlers) each mix several concerns. Split along their seams (per-tool drawing state, gestures) on the next real touch of each. `packages/lib/src/vector/geometry.ts` (about 490 lines) is off this list: with its binding maths in `binding.ts`, it holds one concern.
+- **Canvas: two files past the split line** (S): `packages/ui/src/components/vector/tools/use-drawing-tools.ts` (1,102 lines) and `packages/ui/src/components/vector/canvas-editor.tsx` (about 1,800, still holding the pointer-gesture handlers) each mix several concerns. Split along their seams (per-tool drawing state; in the canvas editor the inserts, text editing, gestures, the chrome around the canvas and its menus) on the next real touch of each, one file per commit. `packages/lib/src/vector/geometry.ts` (about 490 lines) is off this list: with its binding maths in `binding.ts`, it holds one concern.
 
 - **A canvas shape or image copy pastes nothing into mail compose** (S): ⌘C writes a marker-only `text/html` and no `text/plain`. Mail's LightEditor (`packages/ui/src/components/editor/light-editor.tsx`) has no image node, so the menu copy's `<img>` is dropped too. Fix: an `image/png` flavor on the async copy path, never beside `text/plain` ([CLIPBOARD.md](CLIPBOARD.md#a-copy-never-writes-two-flavors-one-consumer-would-both-accept)). Left for now by the owner: it would fix the menu copy only, not ⌘C.
 

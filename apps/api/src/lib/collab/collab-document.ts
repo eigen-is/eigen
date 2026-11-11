@@ -31,7 +31,7 @@ import type { User } from '../user';
 import { COLLAB_DB_CONFIG } from './db-config';
 import { DbProvider } from './db-provider';
 
-export const MESSAGE_SYNC = 0;
+const MESSAGE_SYNC = 0;
 export const MESSAGE_AWARENESS = 1;
 
 // A tab that reconnects gets a new awareness client id, so a socket may own a few. The cap stops a flood that would

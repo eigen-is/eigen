@@ -13,7 +13,6 @@ import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, EIGEN_DOC_TYPE_INFO } from '@work
 import type { MountConfig } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { CONTROL_CHARS } from '@workspace/lib/validation';
-import type { BunFile } from 'bun';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { RWLock } from '../../utils/rw-lock';
@@ -224,9 +223,9 @@ export class Mount {
 
         const retentionDays = getServerSettings().quotas.trashRetentionDays;
         if (retentionDays > 0) {
-            this.trashPurge = this.purgeTrash(retentionDays).catch((e) =>
-                console.error(`[Mount] Failed to purge expired trash:`, e),
-            );
+            this.trashPurge = trash
+                .purgeTrash(this, retentionDays)
+                .catch((e) => console.error(`[Mount] Failed to purge expired trash:`, e));
         }
         // The prune scans whole tables, so it runs after the mount is ready.
         this.pruneTimer = setTimeout(() => {
@@ -386,19 +385,6 @@ export class Mount {
         return false;
     }
 
-    // The folders above pathId, nearest first. It reads synchronously, so a caller inside a transaction
-    // sees the tree as that transaction does.
-    public collectAncestorIds(pathId: string): string[] {
-        const ids: string[] = [];
-        let current = pathId;
-        for (;;) {
-            const row = this.db.select({ parentId: paths.parentId }).from(paths).where(eq(paths.id, current)).get();
-            if (!row?.parentId) return ids;
-            ids.push(row.parentId);
-            current = row.parentId;
-        }
-    }
-
     public collectDescendantIds(parentId: string): string[] {
         return this.db.all<{ id: string }>(descendantIds(parentId)).map((row) => row.id);
     }
@@ -541,20 +527,6 @@ export class Mount {
         return folderId;
     }
 
-    public async createFile(
-        parentId: string,
-        name: string,
-        mimeType: string,
-        size: number,
-        data: Buffer | Uint8Array | ArrayBuffer | BunFile | undefined,
-    ): Promise<string> {
-        name = validateName(name);
-        const hash = data !== undefined ? await this.computeHash(data) : null;
-        return this.insertFile(parentId, name, mimeType, size, hash, async (storageKey) => {
-            if (data !== undefined) await this.storage.write(storageKey, data);
-        });
-    }
-
     public async createFileFromTemp(
         parentId: string,
         name: string,
@@ -570,7 +542,7 @@ export class Mount {
 
     // An empty file row with no bytes yet, such as the one createDatabase then fills.
     public async touchFile(parentId: string, name: string, mimeType: string): Promise<string> {
-        return this.createFile(parentId, name, mimeType, 0, undefined);
+        return this.insertFile(parentId, validateName(name), mimeType, 0, null, async () => {});
     }
 
     // The name is validated already. writeBytes puts the bytes at the new storage key.
@@ -673,16 +645,6 @@ export class Mount {
         if (occupant === 'leftover') {
             await trash.moveAside(this.storage.rename.bind(this.storage), key, trashStorageKey(id, name));
         }
-    }
-
-    private async computeHash(data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<string> {
-        const hasher = new Bun.CryptoHasher('sha256');
-        if (data instanceof Blob) {
-            hasher.update(new Uint8Array(await data.arrayBuffer()));
-        } else {
-            hasher.update(data instanceof ArrayBuffer ? new Uint8Array(data) : data);
-        }
-        return hasher.digest('hex');
     }
 
     // ---- Renaming, moving and deleting ----
@@ -948,10 +910,6 @@ export class Mount {
         return trash.permanentlyDeleteFromTrash(this, pathId);
     }
 
-    public async purgeTrash(maxAgeDays: number): Promise<void> {
-        return trash.purgeTrash(this, maxAgeDays);
-    }
-
     // ---- Copy ----
 
     public async listCopy(srcPathId: string): Promise<CopyTree> {
@@ -1036,20 +994,15 @@ export class Mount {
     // ---- Overwriting ----
 
     // Answers the row it committed under the lock, so a later write's etag or updatedAt never reaches this caller.
-    public async writeFile(
-        pathId: string,
-        data: Buffer | Uint8Array | ArrayBuffer | BunFile,
-        ifMatch?: string,
-    ): Promise<DrivePath> {
-        const size = data instanceof Blob ? data.size : data.byteLength;
-        const hash = await this.computeHash(data);
+    public async writeFile(pathId: string, data: Buffer, ifMatch?: string): Promise<DrivePath> {
+        const hash = new Bun.CryptoHasher('sha256').update(data).digest('hex');
 
         return this.withPathLock(pathId, () =>
             this.withTreeShared(async () => {
                 await this.assertOverwritable(pathId, ifMatch);
                 const storageKey = await this.getStorageKey(pathId);
                 await this.storage.write(storageKey, data);
-                return this.commitOverwrite(pathId, storageKey, size, hash);
+                return this.commitOverwrite(pathId, storageKey, data.byteLength, hash);
             }),
         );
     }

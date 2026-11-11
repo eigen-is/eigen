@@ -7,7 +7,7 @@ import type { DatabaseConfig } from '../../lib/core';
 import type { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import type { FaultStorage, ParkedWrite } from '../fault-storage-helpers';
-import { createFaultMount, provisionDoc, restorePutTimeout, shrinkPutTimeout, waitFor } from '../fault-storage-helpers';
+import { createFaultMount, passPutDeadline, pendingUploadCount, provisionDoc, waitFor } from '../fault-storage-helpers';
 
 // Chaos verification for the "orphaned PUT lands after a newer PUT and regresses the object" class
 // (performUpload's Promise.race timeout; repaired in-process via trackOrphan). A PUT that stalls
@@ -105,22 +105,22 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
 
         // Write {2}: its PUT parks (body captured, like a request on the wire) and stalls past the
-        // shrunk client-side timeout → the queue treats it as failed and backs off, but the request
+        // client-side timeout → the queue treats it as failed and backs off, but the request
         // is still live server-side. This is the orphan.
-        shrinkPutTimeout(mount, 50);
         fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
-        await managed.flush();
-        await parkedWithRows(fault, 2);
-        restorePutTimeout(mount); // the parked PUT keeps its armed 50ms deadline; later PUTs get the real one
-        await Bun.sleep(120); // let the 50ms PUT deadline fire → timeout, inFlight cleared, row backed off
+        await passPutDeadline(
+            () => managed.flush(),
+            () => fault.parkedCount === 1,
+        );
+        await mount.uploadQueue?.drain(); // returns once the row backed off
 
         // Write {3}: a newer sync supersedes the row. Land its PUT → it acks, the row is cleared, the queue believes everything is synced.
         managed.db.insert(docSchema.items).values({ id: 3, data: 'c' }).run();
         await managed.flush();
         const newest = await parkedWithRows(fault, 3);
         await newest.land();
-        await waitFor(() => mount.uploadQueue?.pendingCount === 0);
+        await waitFor(() => pendingUploadCount(mount) === 0);
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(3); // newest write confirmed on "S3"
 
         // Doc closes cleanly: final sync is clean, so cleanupTemp deletes the local working copy.
@@ -133,7 +133,7 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         fault.parkWrites = false; // the repair PUT must go straight through
         const errorSpy = spyOn(console, 'error');
         await fault.landAllRemaining();
-        await waitFor(() => mount.uploadQueue?.pendingCount === 0);
+        await waitFor(() => pendingUploadCount(mount) === 0);
         expect(errorSpy.mock.calls.some((c) => String(c[0]).includes('landed after a newer upload acked'))).toBe(true);
         errorSpy.mockRestore();
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(3); // regression repaired
@@ -150,19 +150,20 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         await mount.init();
         const { dataDbId } = await provisionDoc(mount);
 
-        shrinkPutTimeout(mount, 50);
-        fault.parkWrites = true;
         const managed = await mount.createDatabase(docConfig, dataDbId);
+        await mount.uploadQueue?.drain({ flushNow: true }); // ack the create-time schema PUT
+        fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
-        await managed.flush();
-        await parkedWithRows(fault, 1);
-        restorePutTimeout(mount);
-        await Bun.sleep(120); // orphan the PUT
+        await passPutDeadline(
+            () => managed.flush(),
+            () => fault.parkedCount === 1,
+        );
+        await mount.uploadQueue?.drain(); // returns once the row backed off
 
         // Retry with a healthy backend: same staged bytes re-PUT and ack.
         fault.parkWrites = false;
         await mount.uploadQueue?.drain({ flushNow: true });
-        expect(mount.uploadQueue?.pendingCount).toBe(0);
+        expect(pendingUploadCount(mount)).toBe(0);
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
 
         // The orphan lands after the ack — identical bytes, so the object is unchanged. This is the
@@ -171,7 +172,7 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         // that repair PUT to finish before reading — otherwise the read races its overwrite.
         const writesBefore = fault.writeCount;
         await fault.landAllRemaining();
-        await waitFor(() => fault.writeCount > writesBefore && mount.uploadQueue?.pendingCount === 0);
+        await waitFor(() => fault.writeCount > writesBefore && pendingUploadCount(mount) === 0);
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
     });
 
@@ -181,19 +182,21 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         const { containerId, dataDbId } = await provisionDoc(mount);
         const key = buildStorageKey(dataDbId, 'data.db');
 
-        shrinkPutTimeout(mount, 50);
-        fault.parkWrites = true;
         const managed = await mount.createDatabase(docConfig, dataDbId);
+        await mount.uploadQueue?.drain({ flushNow: true }); // ack the create-time schema PUT
+        fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
-        await managed.flush();
-        await parkedWithRows(fault, 1);
-        await Bun.sleep(120); // orphan the PUT (timeout fired, inFlight cleared)
+        await passPutDeadline(
+            () => managed.flush(),
+            () => fault.parkedCount === 1,
+        );
+        await mount.uploadQueue?.drain(); // returns once the timeout fired and inFlight cleared
 
         // Permanent delete: cancel() removes the row + staged copy, and the mount deletes the object.
         // The existing cancel-mid-PUT resurrection guard (performUpload's post-PUT re-check) cannot
         // see this orphan — its performUpload call already returned at the timeout.
         await mount.deletePath(containerId);
-        expect(mount.uploadQueue?.pendingCount).toBe(0);
+        expect(pendingUploadCount(mount)).toBe(0);
         expect(await fault.inner.exists(key)).toBe(false);
 
         // The orphan lands after the delete, resurrecting the object — its settlement re-issues
@@ -219,12 +222,12 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
 
         // Write {2}: its PUT parks and stalls past the ceiling — the orphan.
-        shrinkPutTimeout(mount, 150);
         fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
-        await managed.flush();
-        await parkedWithRows(fault, 2);
-        restorePutTimeout(mount); // {3}'s PUT below parks mid-flight and must not time out
+        await passPutDeadline(
+            () => managed.flush(),
+            () => fault.parkedCount === 1,
+        );
         await mount.uploadQueue?.drain(); // returns once the ceiling fired and the row backed off
 
         // Write {3}: supersedes the row; its PUT parks mid-flight.
@@ -241,7 +244,7 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(2); // regressed
         fault.parkWrites = false; // the re-PUT must go straight through
         newest.respond();
-        await waitFor(() => mount.uploadQueue?.pendingCount === 0);
+        await waitFor(() => pendingUploadCount(mount) === 0);
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(3); // newest bytes re-asserted
     });
 });
@@ -273,7 +276,7 @@ describe('corrupted staged copy (integrity check between VACUUM INTO and PUT)', 
         // Retry refuses the garbage (SQLite magic check): the poison row + staged copy are dropped
         // loudly, and the good {1} object stays untouched in storage.
         await mount.uploadQueue?.drain({ flushNow: true });
-        expect(mount.uploadQueue?.pendingCount).toBe(0);
+        expect(pendingUploadCount(mount)).toBe(0);
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
 
         // Clean close deletes the local temp; the stored object is the only copy — stale-good:

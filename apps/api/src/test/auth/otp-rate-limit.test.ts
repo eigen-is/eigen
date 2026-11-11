@@ -1,6 +1,5 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import {
-    _resetOtpRateLimitForTests,
     checkOtpRateLimit,
     countOtpGuess,
     MAX_OTP_GUESSES,
@@ -10,60 +9,57 @@ import {
     resetOtpGuesses,
 } from '../../lib/auth/otp-rate-limit';
 
+// The limiter's state lasts as long as the process, so every test counts on emails and IPs of its own.
 describe('OTP rate limiter', () => {
-    beforeEach(() => {
-        _resetOtpRateLimitForTests();
-    });
-
     test('allows up to the per-email limit for one email', () => {
         for (let i = 0; i < MAX_OTP_REQUESTS_PER_EMAIL; i++) {
-            expect(() => checkOtpRateLimit('a@x.com', '1.1.1.1')).not.toThrow();
+            expect(() => checkOtpRateLimit('a@t1.example', '192.0.2.1')).not.toThrow();
         }
     });
 
     test('rejects the request past the per-email limit', () => {
         for (let i = 0; i < MAX_OTP_REQUESTS_PER_EMAIL; i++) {
-            checkOtpRateLimit('a@x.com', `1.1.1.${i}`);
+            checkOtpRateLimit('a@t2.example', `198.51.2.${i}`);
         }
-        expect(() => checkOtpRateLimit('a@x.com', '2.2.2.2')).toThrow(/Too many/);
+        expect(() => checkOtpRateLimit('a@t2.example', '203.0.113.2')).toThrow(/Too many/);
     });
 
     test('allows different emails from the same IP up to the per-IP limit', () => {
         for (let i = 0; i < MAX_OTP_REQUESTS_PER_IP; i++) {
-            checkOtpRateLimit(`u${i}@x.com`, '1.1.1.1');
+            checkOtpRateLimit(`u${i}@t3.example`, '192.0.2.3');
         }
-        expect(() => checkOtpRateLimit('one-more@x.com', '1.1.1.1')).toThrow(/Too many/);
+        expect(() => checkOtpRateLimit('one-more@t3.example', '192.0.2.3')).toThrow(/Too many/);
     });
 
     test('different IPs are tracked independently', () => {
         for (let i = 0; i < MAX_OTP_REQUESTS_PER_IP; i++) {
-            checkOtpRateLimit(`u${i}@x.com`, '1.1.1.1');
+            checkOtpRateLimit(`u${i}@t4.example`, '192.0.2.4');
         }
-        expect(() => checkOtpRateLimit('v@x.com', '2.2.2.2')).not.toThrow();
+        expect(() => checkOtpRateLimit('v@t4.example', '203.0.113.4')).not.toThrow();
     });
 
     test('email lookup is case-insensitive', () => {
         for (let i = 0; i < MAX_OTP_REQUESTS_PER_EMAIL; i++) {
-            checkOtpRateLimit('Alice@X.com', `1.1.1.${i}`);
+            checkOtpRateLimit('Alice@T5.example', `198.51.5.${i}`);
         }
-        expect(() => checkOtpRateLimit('ALICE@x.COM', '2.2.2.2')).toThrow(/Too many/);
+        expect(() => checkOtpRateLimit('ALICE@t5.EXAMPLE', '203.0.113.5')).toThrow(/Too many/);
     });
 
     test('a refund hands back the email and its share of the IP', () => {
         for (let i = 0; i < MAX_OTP_REQUESTS_PER_EMAIL; i++) {
-            checkOtpRateLimit('a@x.com', '1.1.1.1');
+            checkOtpRateLimit('a@t6.example', '192.0.2.6');
         }
         for (let i = 0; i < MAX_OTP_REQUESTS_PER_IP - MAX_OTP_REQUESTS_PER_EMAIL; i++) {
-            checkOtpRateLimit(`u${i}@x.com`, '1.1.1.1');
+            checkOtpRateLimit(`u${i}@t6.example`, '192.0.2.6');
         }
-        expect(() => checkOtpRateLimit('late@x.com', '1.1.1.1')).toThrow(/Too many/);
+        expect(() => checkOtpRateLimit('late@t6.example', '192.0.2.6')).toThrow(/Too many/);
 
-        refundOtpRequests('A@x.com', '1.1.1.1');
+        refundOtpRequests('A@t6.example', '192.0.2.6');
 
         for (let i = 0; i < MAX_OTP_REQUESTS_PER_EMAIL; i++) {
-            expect(() => checkOtpRateLimit('a@x.com', '1.1.1.1')).not.toThrow();
+            expect(() => checkOtpRateLimit('a@t6.example', '192.0.2.6')).not.toThrow();
         }
-        expect(() => checkOtpRateLimit('late@x.com', '1.1.1.1')).toThrow(/Too many/);
+        expect(() => checkOtpRateLimit('late@t6.example', '192.0.2.6')).toThrow(/Too many/);
     });
 
     describe('guesses per code', () => {
@@ -71,26 +67,26 @@ describe('OTP rate limiter', () => {
 
         test('allows the full set of guesses, then refuses', () => {
             for (let i = 0; i < MAX_OTP_GUESSES; i++) {
-                expect(countOtpGuess('a@x.com', expiresAt)).toBe(true);
+                expect(countOtpGuess('a@t7.example', expiresAt)).toBe(true);
             }
-            expect(countOtpGuess('a@x.com', expiresAt)).toBe(false);
+            expect(countOtpGuess('a@t7.example', expiresAt)).toBe(false);
         });
 
         test('emails are counted independently', () => {
-            for (let i = 0; i < MAX_OTP_GUESSES; i++) countOtpGuess('a@x.com', expiresAt);
-            expect(countOtpGuess('b@x.com', expiresAt)).toBe(true);
+            for (let i = 0; i < MAX_OTP_GUESSES; i++) countOtpGuess('a@t8.example', expiresAt);
+            expect(countOtpGuess('b@t8.example', expiresAt)).toBe(true);
         });
 
         test('a reset gives a new code its own guesses', () => {
-            for (let i = 0; i <= MAX_OTP_GUESSES; i++) countOtpGuess('a@x.com', expiresAt);
-            resetOtpGuesses('a@x.com');
-            expect(countOtpGuess('a@x.com', expiresAt)).toBe(true);
+            for (let i = 0; i <= MAX_OTP_GUESSES; i++) countOtpGuess('a@t9.example', expiresAt);
+            resetOtpGuesses('a@t9.example');
+            expect(countOtpGuess('a@t9.example', expiresAt)).toBe(true);
         });
 
         test('a count left behind by an expired code does not carry over', () => {
             const past = new Date(Date.now() - 1);
-            for (let i = 0; i <= MAX_OTP_GUESSES; i++) countOtpGuess('a@x.com', past);
-            expect(countOtpGuess('a@x.com', expiresAt)).toBe(true);
+            for (let i = 0; i <= MAX_OTP_GUESSES; i++) countOtpGuess('a@t10.example', past);
+            expect(countOtpGuess('a@t10.example', expiresAt)).toBe(true);
         });
     });
 });

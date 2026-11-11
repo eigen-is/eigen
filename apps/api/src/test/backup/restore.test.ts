@@ -54,6 +54,7 @@ import * as registryModule from '../../lib/share/registry';
 import { shareRegistry } from '../../lib/share/schema';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
 import { createHomeFaultMount, registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
+import { seedFile } from '../mount-test-helpers';
 import type { TestUser } from '../setup';
 import {
     addMember,
@@ -1665,7 +1666,7 @@ describe('Backup restore refuses a member that is not a complete home', () => {
         registerFaultMount(home.drive, mount);
         try {
             const s3Root = (await mount.getRootFolder())!.id;
-            await mount.createFile(s3Root, 'remote.png', 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
+            await seedFile(mount, s3Root, 'remote.png', 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
             await mount.uploadQueue?.drain({ flushNow: true });
             const before = await rootNames(user.sessionToken, user.id, mountId, rootId);
             const epoch = getDataEpoch(user.id);

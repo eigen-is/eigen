@@ -87,6 +87,7 @@ import {
     readPersistedDoc,
 } from '../fixtures/transform-results';
 import { linkRels, OFFICE_COLORS, rowsXml, styleSheet, xlsxFixture } from '../fixtures/xlsx';
+import { seedFile } from '../mount-test-helpers';
 import {
     authedRequest,
     driveGet,
@@ -1170,7 +1171,7 @@ describe('document transform (eigendoc)', () => {
             const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"/>');
             for (const [name, mime, size] of files) {
                 const bytes = mime === 'image/svg+xml' ? svg : TEST_PNG_BYTES;
-                await doc.mount.createFile(mediaFolder.id, name, mime, size, bytes);
+                await seedFile(doc.mount, mediaFolder.id, name, mime, size, bytes);
             }
             await run(doc);
         } finally {

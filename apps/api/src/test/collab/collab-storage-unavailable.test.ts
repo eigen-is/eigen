@@ -10,7 +10,6 @@ import {
 } from '@workspace/lib/constants/collab';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import * as decoding from 'lib0/decoding';
-import { MESSAGE_SYNC } from '../../lib/collab/collab-document';
 import type { Drive } from '../../lib/drive/drive';
 import { getHome } from '../../lib/home';
 import type { Mount } from '../../lib/mount/mount';
@@ -23,6 +22,9 @@ import { authedRequest, getTestContext } from '../setup';
 // Any server-side (5xx) failure closes the collab WS with 1013 'storage-unavailable', unreachable storage
 // or a local one, a stored object that is gone with 4410 'storage-gone', every other failed open with 1008.
 // The mount's real S3Storage talks to a FakeS3Server. Needs a real listening server: app.handle() never completes the upgrade.
+
+// The y-websocket message type of a sync frame.
+const MESSAGE_SYNC = 0;
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-collab-unavailable-${Date.now()}`);
 const MOUNT_ID = 'fault-collab';

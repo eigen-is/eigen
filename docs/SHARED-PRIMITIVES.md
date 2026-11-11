@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2168 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2159 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -562,7 +562,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (453)
+## Types (452)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -574,7 +574,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CollabDoc` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-collab-doc.ts |
 | `CommandPaletteContextValue` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `CommentAssigneeFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
-| `CommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `CreateCommentCardInput` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `BundledFontFace` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `BytesTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
@@ -1020,7 +1019,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1184)
+## Utilities & constants (1176)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1247,14 +1246,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `normalizeParentChildRefs` | `@workspace/lib/collab` | packages/lib/src/core/collab/normalize-refs.ts |
 | `restoreYjsDoc` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
 | `parseQuery` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/parse-query.ts |
-| `applyCardPatch` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-update-comment-card.ts |
 | `COMMENT_STATUS_FILTERS` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `COMMENT_STATUS_LABELS` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
-| `DEFAULT_COMMENT_FILTER` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `findCardIdByChatName` | `@workspace/lib/comments` | packages/lib/src/core/comments/find-card-id-by-chat-name.ts |
-| `isCommentFilterActive` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `matchesCommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
-| `readCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `writeCardToDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `APP_URLS` | `@workspace/lib/constants` | packages/lib/src/constants/app-urls.ts |
 | `BACKUP_KEEP_MAX` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
@@ -1297,13 +1292,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_ACCENT_COLORS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_ACCENT_COLORS_SHUFFLED` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_COLORS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
-| `EIGEN_COLORS_MAP` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_FONT_NAMES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `EIGEN_FONTS` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
-| `EIGEN_STICKIES_COLOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_STICKIES_COLORS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_STICKIES_INDICATOR_MAP` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
-| `EIGEN_STICKIES_INDICATOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `eigenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EML_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `EMOJI_FAMILIES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
@@ -1583,7 +1575,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `RAW_TEXT_DROP_TAGS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `stripTagsServer` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `textToParagraphHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
-| `unescapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `htmlToPlainText` | `@workspace/lib/html-dom` | packages/lib/src/core/html-dom.ts |
 | `readDominantTextAlign` | `@workspace/lib/html-dom` | packages/lib/src/core/html-dom.ts |
 | `sanitizeCommentCardHtml` | `@workspace/lib/html-dom` | packages/lib/src/core/html-dom.ts |
