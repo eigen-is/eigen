@@ -1,10 +1,10 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types';
 import { eq } from 'drizzle-orm';
 import { user as userSchema, verification as verificationSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { signInWithScopedPassword } from '../../lib/auth/guest-auth';
-import { _resetOtpRateLimitForTests, MAX_OTP_GUESSES, MAX_OTP_REQUESTS_PER_EMAIL } from '../../lib/auth/otp-rate-limit';
+import { MAX_OTP_GUESSES, MAX_OTP_REQUESTS_PER_EMAIL } from '../../lib/auth/otp-rate-limit';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { getOrgRole } from '../../lib/user';
 import { assertJson, authedRequest, getTestContext } from '../setup';
@@ -68,10 +68,6 @@ describe('Guest Auth', () => {
         const rootRes = await authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/default/root`);
         const root = await assertJson<DrivePath>(rootRes);
         aliceRootId = root.id;
-    });
-
-    beforeEach(() => {
-        _resetOtpRateLimitForTests();
     });
 
     describe('open signup setting', () => {
@@ -395,8 +391,7 @@ describe('Guest Auth', () => {
             }
             const late = await verifyOtp(email, otp);
             expect(late.status).toBe(429);
-            // The row is gone, so the code stays dead after the counter is forgotten.
-            _resetOtpRateLimitForTests();
+            // The row is gone, so the code stays dead.
             const retry = await verifyOtp(email, otp);
             expect(retry.status).toBe(400);
         });
@@ -508,7 +503,6 @@ describe('Guest Auth', () => {
             sharedDb.delete(sharedPaths).run();
 
             // Second login.
-            _resetOtpRateLimitForTests();
             const otp2 = await requestOtpAndCapture(email);
             const verify2 = await verifyOtp(email, otp2);
             expect(verify2.status).toBe(200);
