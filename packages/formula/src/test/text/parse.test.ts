@@ -325,9 +325,41 @@ describe('references and sheets (parsing.md 2.4)', () => {
         expect(treeStored("='No''such'!RC")).toMatchObject({ sheetKind: SheetKind.Name, sheet: "No'such" });
     });
 
-    test('a range ends on one sheet', () => {
-        expect(failure('=A1:Sheet2!B2')).toBe('syntax');
-        expect(failure('=Sheet1!A1:Sheet2!B2')).toBe('syntax');
+    test.each([
+        '=A1:Sheet2!B2',
+        '=Sheet1!A1:Sheet2!B2',
+        '=A1:Sheet1!B2',
+        '=A1:B1x!C1',
+        '=SUM(A1:B2Data!C1)',
+        '=A1:A1Sheet!B2',
+        '=Sheet2!A1:NoSuch!B2',
+        "=NoSuch!A1:'No Such'!B2",
+        '=Sheet2!A1:Sheet1!Rate',
+        '=SUM(A1):Sheet2!A1',
+        '=Sheet2!A1:B2!C1',
+    ])('a range ends on one sheet: %s does not parse', (text) => {
+        expect(failure(text)).toBe('syntax');
+    });
+
+    test.each(['=RC:[s2]!RC', "=RC:'x'!RC", '=[s1]!RC:[s2]!RC', "='x'!RC:[s2]!RC", '=R1C1:RC!RC'])(
+        'a range ends on one sheet in stored text too: %s does not parse',
+        (text) => {
+            expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
+        },
+    );
+
+    test.each([
+        ['=NoSuch!A1:NoSuch!B2', "='NoSuch'!RC[-13]:R[1]C[-12]", '=NoSuch!A1:B2'],
+        ["='No Such'!$A$1:'No Such'!B2", "='No Such'!R1C1:R[1]C[-12]", "='No Such'!$A$1:B2"],
+        ['=Sheet2!A1: Sheet2!B2', '=[s2]!RC[-13]: [s2]!R[1]C[-12]', '=Sheet2!A1: Sheet2!B2'],
+        ['=Sheet2!A1:Sheet2!B2:C3', '=[s2]!RC[-13]:[s2]!R[1]C[-12]:R[2]C[-11]', '=Sheet2!A1:Sheet2!B2:C3'],
+        ['=Sheet2!A1:Sheet2!B2:Sheet2!C3', '=[s2]!RC[-13]:R[1]C[-12]:[s2]!R[2]C[-11]', '=Sheet2!A1:B2:Sheet2!C3'],
+        ['=Sheet2!A1:Sheet2!Rate', '=[s2]!RC[-13]:[s2]!Rate', '=Sheet2!A1:Sheet2!Rate'],
+        ['=A1:INDEX(Sheet2!B:B,5)', '=RC[-13]:INDEX([s2]!C[-12]:C[-12],5)', '=A1:INDEX(Sheet2!B:B,5)'],
+    ])('a second corner may repeat the sheet of the first: %s is stored as %s and shows as %s', (text, kept, a1) => {
+        expect(stored(text)).toBe(kept);
+        expect(treeStored(kept)).toEqual(treeA1(text));
+        expect(shown(text)).toBe(a1);
     });
 
     test('a 3-D reference parses and is kept', () => {

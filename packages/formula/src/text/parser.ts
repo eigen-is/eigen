@@ -74,6 +74,10 @@ function returnsFunction(node: FormulaNode): boolean {
     return node.kind === NodeKind.Call || node.kind === NodeKind.Invoke || node.kind === NodeKind.Paren;
 }
 
+function isCell(node: FormulaNode): boolean {
+    return node.kind === NodeKind.Ref && node.op === RefKind.Cell;
+}
+
 class Parser {
     private readonly text: string;
     private readonly stored: boolean;
@@ -196,8 +200,29 @@ class Parser {
             // An intersection is written as the whitespace itself, so its right operand starts with none.
             if (op === Token.Space) this.space = '';
             else this.next();
-            left = branch(NodeKind.Binary, op, '', [left, this.expression(power + 1, union)], space, '');
+            const right = this.expression(power + 1, union);
             height = Math.max(height, this.height);
+            if (op === Token.Colon && right.sheetKind !== SheetKind.Host) {
+                // A second corner may repeat the sheet of the first, as in HR!B9:HR!M9, and name no other.
+                if (left.sheetKind !== right.sheetKind || left.sheet !== right.sheet) return this.fail();
+                if (isCell(left) && isCell(right) && space === '' && right.space === '') {
+                    const { sheetKind, sheet, row, column } = left;
+                    const flags = left.flags | (right.flags << 2);
+                    left = referenceNode(
+                        RefKind.Range,
+                        left.space,
+                        sheetKind,
+                        sheet,
+                        row,
+                        column,
+                        right.row,
+                        right.column,
+                        flags,
+                    );
+                    continue;
+                }
+            }
+            left = branch(NodeKind.Binary, op, '', [left, right], space, '');
         }
         // A postfix operator wraps what was already read, so the limit on nesting is checked on the way out too.
         if (height > MAX_NESTING) return this.fail('too-deep');
@@ -433,7 +458,7 @@ class Parser {
     }
 
     // A reference at the current token: a cell, or two legs of one kind around a colon, such as A1:B2, A:C or 1:5.
-    // Null when the token is none. A second sheet prefix must repeat the first.
+    // Null when the token is none.
     private reference(space: string, sheetKind: FormulaNode['sheetKind'], sheet: string): FormulaNode | null {
         const { text } = this;
         const end = this.leg(this.pos);
@@ -443,21 +468,7 @@ class Parser {
         const column = this.legColumn;
         const flags = this.legFlags;
         if (text.charCodeAt(end) === 58) {
-            let second = end + 1;
-            let legEnd = this.leg(second);
-            if (legEnd === -1 || text.charCodeAt(legEnd) === 33) {
-                const prefix = lexAt(text, second);
-                const quoted = tokenKind(prefix) === Token.Quote;
-                legEnd = -1;
-                if ((quoted || tokenKind(prefix) === Token.Word) && text.charCodeAt(tokenEnd(prefix)) === 33) {
-                    this.nameSheet(
-                        quoted ? this.unquoted(second, tokenEnd(prefix)) : text.slice(second, tokenEnd(prefix)),
-                    );
-                    if (this.sheetKind !== sheetKind || this.sheet !== sheet) return this.fail();
-                    second = tokenEnd(prefix) + 1;
-                    legEnd = this.leg(second);
-                }
-            }
+            const legEnd = this.leg(end + 1);
             const after = text.charCodeAt(legEnd);
             if (legEnd !== -1 && this.legKind === kind && after !== 40 && after !== 33 && !continuesWord(after)) {
                 this.end = legEnd;
