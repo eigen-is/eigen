@@ -24,9 +24,10 @@ export type RecalcResult = {
     readonly stopped: boolean;
 };
 
-// How deep cells and tree nodes may nest, together, before the calls in progress are dropped: well under half of
-// what the smallest default stack measured holds, since a worker's stack is smaller.
+// How deep cells and tree nodes may nest, together, before the calls in progress are dropped. A cell counts CELL
+// on top of its nodes, since reading it takes more calls than a node does, and a worker's stack is small.
 const BUDGET = 400;
+const CELL = 6;
 
 const UNWIND = Object.freeze({ reason: 'the evaluation nests too deep' });
 const STOP = Object.freeze({ reason: 'the recalc computed as many formulas as its cap' });
@@ -115,7 +116,7 @@ export class Recalc {
                         this.enter(sheet, column, c, row);
                         // After a throw for depth the innermost cell in progress goes first, with no call above it.
                         while (this.current >= 0) {
-                            this.depth = 0;
+                            this.depth = this.nesting(this.columns[this.current].shape[this.rows[this.current]]);
                             this.evaluator.calls = 0;
                             try {
                                 this.compute();
@@ -202,7 +203,7 @@ export class Recalc {
             return;
         }
         this.enter(sheet, column, c, row);
-        const cost = this.factsOf(column.shape[row]) >> FACT_BITS;
+        const cost = this.nesting(column.shape[row]);
         this.depth += cost;
         if (this.depth > BUDGET) throw UNWIND;
         this.compute();
@@ -289,6 +290,11 @@ export class Recalc {
             this.columns[i].computed(this.rows[i]);
         }
         this.size = at;
+    }
+
+    // What one cell of a shape adds to the nesting.
+    private nesting(shape: number): number {
+        return (this.factsOf(shape) >> FACT_BITS) + CELL;
     }
 
     private factsOf(shape: number): number {
