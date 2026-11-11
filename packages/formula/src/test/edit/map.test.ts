@@ -1,7 +1,3 @@
-// The two maps every holder of a row or column index goes through, pinned three ways: a table of every position of
-// an edit against one span, the cases of other spreadsheets on a grid of Excel's size, and every edit against every
-// span of a small grid, held to a slow version that moves the lines themselves.
-
 import { describe, expect, test } from 'bun:test';
 import type { Edit } from '../../text';
 import { GONE, mapIndex, mapSpan } from '../../text';

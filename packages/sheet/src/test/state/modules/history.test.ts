@@ -1023,6 +1023,26 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         expectAgree(s);
     });
 
+    test('undoing a delete that cut a merge to one cell brings the merge back everywhere', () => {
+        const merge = { r: 4, c: 0, rs: 2, cs: 1 };
+        const base = produce(
+            workbook({ A5: { v: 'm', m: 'm', mc: merge }, A6: { mc: { r: 4, c: 0 } } }),
+            (ctx: Context) => {
+                ctx.sheets[0].config = { ...ctx.sheets[0].config, merge: { '4_0': merge } };
+            },
+        );
+        const s = session(base);
+        s.edit(s.a, ...deleteRows(5, 5));
+        expect(s.a.ctx.sheets[0].config?.merge).toEqual({});
+        expect(cellAt(s.a, 'A5')?.mc).toBeUndefined();
+        expectAgree(s);
+        s.undo(s.a);
+        expect(s.a.ctx.sheets[0].config?.merge).toEqual({ '4_0': merge });
+        expect(cellAt(s.a, 'A5')?.mc).toEqual(merge);
+        expect(cellAt(s.a, 'A6')?.mc).toEqual({ r: 4, c: 0 });
+        expectAgree(s);
+    });
+
     // B's batch sits before A's undo in the log, and A's undo was built without it.
     function undoBehindPeer(base: Context, deletion: Structural, onB: (ctx: Context) => void) {
         const s = session(base);
