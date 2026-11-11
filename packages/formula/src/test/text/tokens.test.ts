@@ -137,4 +137,32 @@ describe('tokens', () => {
             'Plus:+',
         ]);
     });
+
+    test('a word before whitespace and ( is a function, unless it is a reference', () => {
+        expect(cut('=SUM (1)+TRUE ()+A1 (B1)+RC (1)')).toEqual([
+            'Equal:=',
+            'Function:SUM',
+            'Space: ',
+            'Open:(',
+            'Number:1',
+            'Close:)',
+            'Plus:+',
+            'Function:TRUE',
+            'Space: ',
+            'Open:(',
+            'Close:)',
+            'Plus:+',
+            'Reference:A1',
+            'Space: ',
+            'Open:(',
+            'Reference:B1',
+            'Close:)',
+            'Plus:+',
+            'Name:RC',
+            'Space: ',
+            'Open:(',
+            'Number:1',
+            'Close:)',
+        ]);
+    });
 });

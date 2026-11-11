@@ -77,6 +77,14 @@ function noSheet(): undefined {
     return undefined;
 }
 
+// Whether the word from `pos` to `end` is a function called with whitespace before its parenthesis, as in SUM (1).
+// A word that reads as a reference in either notation is none: with the whitespace, that is an intersection.
+export function callsSpaced(text: string, pos: number, end: number): boolean {
+    const gap = lexAt(text, end);
+    if (tokenKind(gap) !== Token.Space || text.charCodeAt(tokenEnd(gap)) !== OPEN) return false;
+    return !READS_AS_REFERENCE.test(text.slice(pos, end));
+}
+
 // The reference that starts at `from` in typed text, and where it ends. Its sheet, if any, stays a name.
 export function referenceAt(text: string, from: number): { readonly node: FormulaNode; readonly end: number } | null {
     return new Parser(text, false, 0, 0, noSheet).referenceFrom(from);
@@ -114,6 +122,10 @@ for (const [power, ...operators] of [
 ]) {
     for (const operator of operators) BINDING[operator] = power;
 }
+
+// A cell label or a stored reference by its form alone, in any letter case and on or off the grid, and a word that
+// holds what no name does.
+const READS_AS_REFERENCE = /^(?:[A-Z]{1,3}\d+|(?:R\d*)?(?:C\d*)?)$|[$[]/i;
 
 const LEG_CELL = 1;
 const LEG_COLUMN = 2;
@@ -229,13 +241,13 @@ class Parser {
             if (op === Token.Hash && !yieldsReference(left)) return this.fail();
             if (op === Token.Hash || op === Token.Percent) {
                 this.next();
-                left = branch(NodeKind.Postfix, op, '', [left], space, '');
+                left = branch(NodeKind.Postfix, op, '', [left], space, '', '');
                 height += 1;
                 continue;
             }
             if (op === Token.Open) {
                 const called = [left];
-                left = branch(NodeKind.Invoke, 0, '', called, '', this.argumentList(called));
+                left = branch(NodeKind.Invoke, 0, '', called, '', '', this.argumentList(called));
                 height = Math.max(height, this.height) + 1;
                 continue;
             }
@@ -247,7 +259,7 @@ class Parser {
             left =
                 op === Token.Colon
                     ? this.colon(left, right, space)
-                    : branch(NodeKind.Binary, op, '', [left, right], space, '');
+                    : branch(NodeKind.Binary, op, '', [left, right], space, '', '');
         }
         // A postfix operator wraps what was already read, so the limit on nesting is checked on the way out too.
         if (height > MAX_NESTING) return this.fail('too-deep');
@@ -277,7 +289,7 @@ class Parser {
             const column = after.kind === NodeKind.Ref ? after.op === RefKind.Columns : isColumnName(after);
             if (isColumnName(before) && column && after.space === '') return this.fail();
         }
-        return branch(NodeKind.Binary, Token.Colon, '', [left, right], space, '');
+        return branch(NodeKind.Binary, Token.Colon, '', [left, right], space, '', '');
     }
 
     private startsReference(): boolean {
@@ -331,7 +343,7 @@ class Parser {
                 const child = this.expression(PREFIX_POWER, union);
                 this.depth -= 1;
                 this.height += 1;
-                return branch(NodeKind.Prefix, kind, '', [child], space, '');
+                return branch(NodeKind.Prefix, kind, '', [child], space, '', '');
             }
             case Token.Open: {
                 if (!this.enter()) return EMPTY;
@@ -342,7 +354,7 @@ class Parser {
                 this.next();
                 this.depth -= 1;
                 this.height += 1;
-                return branch(NodeKind.Paren, 0, '', [child], space, spaceEnd);
+                return branch(NodeKind.Paren, 0, '', [child], space, '', spaceEnd);
             }
             case Token.BraceOpen:
                 return this.array(space);
@@ -369,22 +381,16 @@ class Parser {
         }
     }
 
-    // A word is whole before it is anything: a function before (, a sheet before !, else a reference, a boolean, the
-    // first sheet of a 3-D reference, or a name.
+    // A word is whole before it is anything: a function before (, a sheet before !, else a reference, a function
+    // with whitespace before its (, a boolean, the first sheet of a 3-D reference, or a name.
     private word(space: string): FormulaNode {
         const { text, pos, end } = this;
         const after = text.charCodeAt(end);
-        if (after === OPEN) {
-            const name = text.slice(pos, end).toUpperCase();
-            this.next();
-            const args: FormulaNode[] = [];
-            const spaceEnd = this.argumentList(args);
-            this.height += 1;
-            return branch(NodeKind.Call, 0, name, args, space, spaceEnd);
-        }
+        if (after === OPEN) return this.call(space);
         if (after === BANG) return this.bare(space, end);
         const reference = this.reference(space, SheetKind.Host, '');
         if (reference) return reference;
+        if (callsSpaced(text, pos, end)) return this.call(space);
         if (end - pos === 4 || end - pos === 5) {
             const upper = text.slice(pos, end).toUpperCase();
             if (upper === 'TRUE' || upper === 'FALSE') {
@@ -399,6 +405,16 @@ class Parser {
             }
         }
         return this.name(space, SheetKind.Host, '');
+    }
+
+    private call(space: string): FormulaNode {
+        const name = this.text.slice(this.pos, this.end).toUpperCase();
+        this.next();
+        const spaceOpen = this.space;
+        const args: FormulaNode[] = [];
+        const spaceEnd = this.argumentList(args);
+        this.height += 1;
+        return branch(NodeKind.Call, 0, name, args, space, spaceOpen, spaceEnd);
     }
 
     // A name must not read as a reference in the other grammar, or it would come back as one: typed, it is stored
@@ -473,7 +489,7 @@ class Parser {
         this.next();
         this.depth -= 1;
         this.height = height + 1;
-        return branch(NodeKind.Array, columns, '', elements, space, spaceEnd);
+        return branch(NodeKind.Array, columns, '', elements, space, '', spaceEnd);
     }
 
     // A sheet prefix written without quotes, from the current word to `bang`: one name, or the two of a 3-D

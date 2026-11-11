@@ -52,6 +52,8 @@ export type FormulaNode = {
     readonly children: readonly FormulaNode[];
     // The whitespace before the node's own token, which for a binary or postfix node is its operator.
     readonly space: string;
+    // The whitespace between the name of a call and its parenthesis.
+    readonly spaceOpen: string;
     // The whitespace before the closing bracket of a call, a parenthesis or an array.
     readonly spaceEnd: string;
     readonly sheetKind: (typeof SheetKind)[keyof typeof SheetKind];
@@ -82,6 +84,7 @@ export function leaf(
         text,
         children: NO_CHILDREN,
         space,
+        spaceOpen: '',
         spaceEnd: '',
         sheetKind,
         sheet,
@@ -99,6 +102,7 @@ export function branch(
     text: string,
     children: readonly FormulaNode[],
     space: string,
+    spaceOpen: string,
     spaceEnd: string,
 ): FormulaNode {
     return {
@@ -108,6 +112,7 @@ export function branch(
         text,
         children,
         space,
+        spaceOpen,
         spaceEnd,
         sheetKind: SheetKind.Host,
         sheet: '',
@@ -137,6 +142,7 @@ export function referenceNode(
         text: '',
         children: NO_CHILDREN,
         space,
+        spaceOpen: '',
         spaceEnd: '',
         sheetKind,
         sheet,

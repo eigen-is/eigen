@@ -46,7 +46,7 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
         case NodeKind.Ref:
             return space + reference(node, stored, row, column, sheetName);
         case NodeKind.Call:
-            return `${space}${node.text}(${list(node, 0, 0, stored, row, column, sheetName)}${node.spaceEnd})`;
+            return `${space}${node.text}${node.spaceOpen}(${list(node, 0, 0, stored, row, column, sheetName)}${node.spaceEnd})`;
         case NodeKind.Invoke: {
             const callee = print(children[0], stored, row, column, sheetName);
             return `${callee}(${list(node, 1, 0, stored, row, column, sheetName)}${node.spaceEnd})`;

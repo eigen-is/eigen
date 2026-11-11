@@ -229,6 +229,51 @@ describe('literals and names (parsing.md 2.3)', () => {
         expect(treeA1('=nosuchfn(1)')).toMatchObject({ kind: NodeKind.Call, text: 'NOSUCHFN' });
     });
 
+    test.each([
+        ['=SUM (1,2)', 'SUM(1,2)', '=SUM (1,2)', ' '],
+        ['=IF (A1,1,2)', 'IF(RC[-13],1,2)', '=IF (A1,1,2)', ' '],
+        ['=sum  (A1:A3)', 'SUM(RC[-13]:R[2]C[-13])', '=SUM  (A1:A3)', '  '],
+        ['=TRUE ()', 'TRUE()', '=TRUE ()', ' '],
+        ['=false\n()', 'FALSE()', '=FALSE\n()', '\n'],
+        ['=MyRange (A1:B2)', 'MYRANGE(RC[-13]:R[1]C[-12])', '=MYRANGE (A1:B2)', ' '],
+        ['=A (1)', 'A(1)', '=A (1)', ' '],
+    ])('a word, whitespace and ( is a call, and keeps its whitespace: %p', (text, expected, a1, spaceOpen) => {
+        const tree = treeA1(text);
+        expect(tree).toMatchObject({ kind: NodeKind.Call, spaceOpen });
+        expect(grouped(tree)).toBe(expected);
+        expect(shown(text)).toBe(a1);
+        expect(treeStored(printStored(tree))).toEqual(tree);
+        expect(treeA1(a1)).toEqual(tree);
+    });
+
+    test('a call nested in a call keeps the whitespace of each', () => {
+        expect(shown('=IF (SUM  (A1)>0, MAX (1,2) ,3)')).toBe('=IF (SUM  (A1)>0, MAX (1,2),3)');
+        expect(stored('=1+SUM (A1)', 'A1')).toBe('=1+SUM (RC)');
+    });
+
+    test.each([
+        ['=A1 (B1:C1)', '(RC[-13] [RC[-12]:RC[-11]])'],
+        ['=LOG10 (100)', '(R[9]C[8495] [100])'],
+        ['=A1:B2 (B1)', '(RC[-13]:R[1]C[-12] [RC[-12]])'],
+        ['=SUM(A1:B2) (B1)', '(SUM(RC[-13]:R[1]C[-12]) [RC[-12]])'],
+        ['=(A1:B2) (B1)', '([RC[-13]:R[1]C[-12]] [RC[-12]])'],
+        ['=Sheet2!Rate (B1)', '([s2]!Rate [RC[-12]])'],
+        ['=RC (B1)', '(rc [RC[-12]])'],
+        ['=r1c1 (B1)', '(r1c1 [RC[-12]])'],
+    ])('a reference, whitespace and ( stays an intersection: %s', (text, expected) => {
+        const tree = treeA1(text);
+        expect(grouped(tree)).toBe(expected);
+        expect(treeStored(printStored(tree))).toEqual(tree);
+        expect(treeA1(shown(text))).toEqual(tree);
+    });
+
+    test('stored text reads a word, whitespace and ( the same way', () => {
+        expect(treeStored('=SUM (RC)')).toEqual(treeA1('=SUM (N1)'));
+        expect(grouped(treeStored('=RC (R1C1)'))).toBe('(RC [R1C1])');
+        expect(parseStored('=A1 (1)')).toMatchObject({ reason: 'syntax' });
+        expect(grouped(treeStored('=rc (1)'))).toBe('(rc [1])');
+    });
+
     test('a left-out argument is a node of its own', () => {
         expect(treeA1('=IF(A1,,2)').children.map((child) => child.kind)).toEqual([
             NodeKind.Ref,
