@@ -20,7 +20,7 @@ Runs on your own hardware, and the code is MIT licensed. Your mail, contacts and
 
 ## Why
 
-The name is Dutch and German for "own". Given the power large tech companies hold over our data, I think a self-hosted European alternative is needed. [Eigen: Building a Workspace](https://reindernijhoff.net/2025/10/eigen-building-a-workspace/) tells how it started. The help center has [a tour of the apps](https://eigen.is/support/getting-started/about-eigen).
+The name Eigen, is Dutch and German for "own". Given the power large tech companies hold over our data, I think a self-hosted European alternative is needed. [Eigen: Building a Workspace](https://reindernijhoff.net/2025/10/eigen-building-a-workspace/) tells how it started. The help center has [a tour of the apps](https://eigen.is/support/getting-started/about-eigen).
 
 Why not Nextcloud? Nextcloud is mature and has a large ecosystem. If you need something proven today, it is the safer choice. Eigen is one codebase: the apps share one API and one login, and several people can edit a doc, sheet, deck, drawing or board at the same time without a separate office server. It runs from one compose file on SQLite, with no PHP, MySQL or Redis.
 
