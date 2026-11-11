@@ -30,7 +30,7 @@ The access dialog opens from the toolbar's Share button, which only a writer see
 
 ## A chat inside a document is a comment thread
 
-A document container has a `chat/` folder, and every `.eigenchat` in it is the thread behind one comment card ([COMMENTS.md](COMMENTS.md)). `ChatRoom.open` finds the room's container once per request (`findContainerPath`). With a container, every message also updates the container's `comments.db` index, and notifications name the document plus the thread instead of the chat file. Whispers never reach the index.
+A document container has a `chat/` folder, and every `.eigenchat` in it is the thread behind one comment card ([COMMENTS.md](COMMENTS.md)). `ChatRoom.open` finds the room's container once per request (`findContainerPath`). With a container, every message also updates the container's `comments.db` index, and notifications name the document plus the thread instead of the chat file. Whispers never reach the index. Delete history removes a thread whose comment is deleted, and a reply in the 30 s before it can go with the thread, which is accepted ([COMMENTS.md](COMMENTS.md#delete-history-and-a-copy-remove-a-thread-nothing-names)).
 
 ## Commands split between the server and the client
 
