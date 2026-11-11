@@ -19,7 +19,8 @@ import { ReverseIndex } from './reverse-index';
 export type CellAddress = { readonly sheet: string; readonly row: number; readonly column: number };
 
 export type RecalcResult = {
-    // Every cell of the workbook that is on a circular reference, in sheet, column, row order.
+    // Every cell of the workbook that is on a circular reference, in sheet, column, row order. Final only when
+    // `stopped` is false: a pass that stopped can still list a loop that a write broke, until a later one computes it.
     readonly loops: readonly CellAddress[];
     // True when the pass met its cap with formulas still to compute. What it computed stays, and the next goes on.
     readonly stopped: boolean;
@@ -53,7 +54,8 @@ export class Recalc {
     // The cell whose formula was reading when this one was entered, or -1.
     private readonly parents: number[] = [];
     // A cell of the list this one is on a loop with, at or before it: itself while it is on none. Once two loops
-    // have joined it can lag behind the first cell of the loop, which no reader of it needs to be exact.
+    // have joined it can lag behind the first cell of the loop. What is relied on is that `lows[i] < i` exactly
+    // when cell i waits on an earlier cell in progress.
     private readonly lows: number[] = [];
     // Where in the list a cell that is on a loop sits, which the chain alone does not tell once its formula ran.
     private readonly looped = new Map<Column, Map<number, number>>();
