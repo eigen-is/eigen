@@ -83,8 +83,8 @@ What already exists, so the design extends rather than reinvents:
 - **Write-behind pipeline** (`lib/mount/upload-queue.ts`, `lib/mount/upload-limits.ts`, `lib/mount/document-db.ts`):
   per-mount durable queue in `metadata.db.pending_uploads`, per-destination semaphore, backoff,
   replay on reopen. `performUpload` treats a resolved PUT as an ack — no post-PUT verification that
-  the object landed whole. A row can back off indefinitely; `pendingCount` exists but nothing reads
-  it on a schedule.
+  the object landed whole. A row can back off indefinitely, and nothing counts the
+  `pending_uploads` rows on a schedule.
 - **Recovery guards** (`lib/mount/helpers.ts`): `isSqliteFile` (16-byte magic probe, used by the
   crash-temp check and the upload queue's drain) and `isViableRecoveryTemp` (magic +
   collapse-ratio vs last-known size, used on the crash-temp adoption path). Both are

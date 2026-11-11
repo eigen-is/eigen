@@ -74,7 +74,7 @@ The thread goes first, through `Mount.deletePath`, and only then its row in `com
 
 The card stays in the document's card map as dead bytes, because the sweep never writes the document. The activity rows that name the thread keep their entries ([FILE-HISTORY.md](FILE-HISTORY.md)).
 
-A thread's last write is the newer of its own `createdAt` and the `updatedAt` of its `data.db` row. A write stamps that row when the database syncs, within 30 s, so a reply through a notification keeps the thread for another 72 hours, and a reply in the last seconds before a sweep may not. A database stays open for five idle minutes after any use, and on a disk mount its close stamps the row too, so a thread someone just read counts as written.
+A thread's last write is the newer of its own `createdAt` and the `updatedAt` of its `data.db` row. A write stamps that row when the database syncs, within 30 s, so a reply through a notification keeps the thread for another 72 hours, and a reply in the last seconds before a sweep may not. That is accepted: it takes a reply to a deleted comment's thread, untouched for 72 hours, within 30 s of Delete history. A database stays open for five idle minutes after any use, and on a disk mount its close stamps the row too, so a thread someone just read counts as written.
 
 ## A thread's own media go when no message names them
 
