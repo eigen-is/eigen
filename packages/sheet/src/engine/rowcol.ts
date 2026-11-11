@@ -56,16 +56,11 @@ export function lineEdit(op: InsertLines | DeleteLines): Edit {
 
 type AxisRange = { row: readonly number[]; column: readonly number[] };
 
-// A range the edit leaves as it was comes back as itself, so its owner writes nothing. Null is a range a delete took.
+// A range the edit leaves as it was comes back as itself, so its owner writes nothing. Null is a range that is gone.
 export function shiftRange<R extends AxisRange>(range: R, type: 'row' | 'column', edit: Edit): R | null {
     const [start, end] = type === 'row' ? range.row : range.column;
     const span = { start, end };
-    if (!mapSpan(edit, start, end, span)) {
-        if (!edit.insert) return null;
-        // A range an insert pushes off the grid stays on the last line, where a chart can still read it.
-        span.start = edit.lines - 1;
-        span.end = edit.lines - 1;
-    }
+    if (!mapSpan(edit, start, end, span)) return null;
     if (span.start === start && span.end === end) return range;
     const moved: [number, number] = [span.start, span.end];
     return type === 'row' ? { ...range, row: moved } : { ...range, column: moved };

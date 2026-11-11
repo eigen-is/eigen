@@ -1068,7 +1068,7 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
         expect(s.charts!.c1).toBe(sheets[0].charts!.c1);
     });
 
-    test('an insert stops a ref at the last row and column of the grid', () => {
+    test('an insert stops a ref at the last row of the grid, and one it pushes off the grid is gone', () => {
         const [rows] = applySheetsInsertRowCol(
             workbook({ c1: chart({ categories: null, series: [series(ref('S', [0, REFERENCE_ROW_COUNT - 1]))] }) }),
             insertRows(0, 2, 'lefttop'),
@@ -1079,7 +1079,7 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
             workbook({ c1: chart({ categories: null, series: [series(ref('S', [0, 3], [lastColumn, lastColumn]))] }) }),
             { type: 'column', index: 0, count: 1, direction: 'lefttop', id: 'S' },
         );
-        expect(rangeData(columns)?.series[0].values?.column).toEqual([lastColumn, lastColumn]);
+        expect(rangeData(columns)?.series[0].values).toBeNull();
     });
 
     test('a malformed spec is kept untouched', () => {
