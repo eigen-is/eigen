@@ -233,20 +233,23 @@ describe('errors', () => {
     test('a reference that leaves the grid is #REF!', () => {
         const engine = engineOf({ s1: { B2: '=A1' } });
         engine.setFormula('s1', 0, 0, '=R[-1]C[-1]');
-        expect(valueAt(engine, 'A1')).toBe(REF);
         engine.setFormula('s1', 0, 2, '=SUM(R[-1]C[1]:RC[1])');
+        engine.recalc(Number.POSITIVE_INFINITY);
+        expect(valueAt(engine, 'A1')).toBe(REF);
         expect(valueAt(engine, 'C1')).toBe(REF);
     });
 
     test('text that does not parse is kept and shows #ERROR!', () => {
         const engine = engineOf({ s1: { A1: 1 } });
         engine.setFormula('s1', 0, 1, '==R[1]C[1](');
+        engine.recalc(Number.POSITIVE_INFINITY);
         expect(valueAt(engine, 'B1')).toMatchObject({ text: '#ERROR!' });
     });
 
     test('an error only a file knows is carried, and is an error to a formula', () => {
         const engine = engineOf({ s1: { B1: '=IFERROR(A1,"caught")', C1: '=A1' } });
         engine.setValue('s1', 0, 0, { ...NA, text: '#BUSY!', code: 0 });
+        engine.recalc(Number.POSITIVE_INFINITY);
         expect(valueAt(engine, 'B1')).toBe('caught');
         expect(valueAt(engine, 'C1')).toMatchObject({ text: '#BUSY!' });
     });
@@ -272,6 +275,7 @@ describe('references', () => {
         ['=((A1:A3)) A2:B2', 2],
     ])('%s is %p', (formula, expected) => {
         const engine = engineOf({ s1: { ...cells, N1: formula }, s2: { A1: 100, A2: 200 } });
+        engine.recalc(Number.POSITIVE_INFINITY);
         expect(valueAt(engine, 'N1')).toBe(expected);
     });
 

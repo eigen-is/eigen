@@ -353,45 +353,42 @@ function shiftFrozen(frozen: Sheet['frozen'], type: 'row' | 'column', edit: Edit
 }
 
 // An entry is keyed by its column's offset from the filter's first column, so a column op re-keys the entries.
-// Deleting the filter's first row, the header that holds its buttons, removes the filter.
+// Deleting the filter's first row, the header that holds its buttons, removes the filter. The rows a filter hides are
+// hidden rows of the sheet too, so the rows of an entry the op removes show again and the rows of one it keeps stay
+// hidden. The hidden-row map may still be the one the sheet had before the op, so the write is on a copy.
 function shiftFilter(sheet: ShiftedSheet, cfg: ExtendedSheetConfig, type: 'row' | 'column', edit: Edit) {
     const { filterRange, filter } = sheet;
     if (!filterRange?.row) return;
     const deletesHeader = type === 'row' && !edit.insert && mapIndex(edit, filterRange.row[0]) === GONE;
     const range = deletesHeader ? null : shiftRange(filterRange, type, edit);
-    if (!range) {
-        writeFilter(sheet, cfg, undefined, undefined);
-        return;
-    }
-    const shifted: Record<string, FilterEntry> = {};
+    const kept: Record<string, FilterEntry> = {};
+    const removed: FilterEntry[] = [];
     for (const [key, entry] of Object.entries(filter ?? {})) {
         if (type === 'row') {
-            const rowhidden = shiftKeyedMap(entry.rowhidden ?? {}, edit);
-            shifted[key] = { ...entry, rowhidden, str: range.row[0], edr: range.row[1] };
+            const moved = { ...entry, rowhidden: shiftKeyedMap(entry.rowhidden ?? {}, edit) };
+            if (range) kept[key] = { ...moved, str: range.row[0], edr: range.row[1] };
+            else removed.push(moved);
         } else {
             const cindex = mapIndex(edit, entry.cindex);
-            if (cindex === GONE) continue;
-            shifted[cindex - range.column[0]] = { ...entry, cindex, stc: range.column[0], edc: range.column[1] };
+            if (range && cindex !== GONE) {
+                kept[cindex - range.column[0]] = { ...entry, cindex, stc: range.column[0], edc: range.column[1] };
+            } else removed.push(entry);
         }
     }
-    writeFilter(sheet, cfg, range, filter && shifted);
+    sheet.filterRange = range ?? undefined;
+    sheet.filter = range && filter ? kept : undefined;
+    if (!sheet.filter && !cfg.rowhidden) return;
+    const rowhidden = { ...cfg.rowhidden };
+    showFilterRows(rowhidden, removed);
+    for (const entry of Object.values(kept)) Object.assign(rowhidden, entry.rowhidden);
+    cfg.rowhidden = rowhidden;
 }
 
-// The rows a filter hides are hidden rows of the sheet too. The sheet and its config are the op's own copies, but
-// the hidden-row map may still be the one the sheet had before the op, so it is copied before a write.
-function writeFilter(
-    sheet: ShiftedSheet,
-    cfg: ExtendedSheetConfig,
-    range: SingleRange | undefined,
-    filter: Record<string, FilterEntry> | undefined,
-) {
-    sheet.filterRange = range;
-    sheet.filter = filter;
-    if (!filter) return;
-    const hidden = Object.values(filter).flatMap((entry) => Object.keys(entry.rowhidden ?? {}));
-    if (cfg.rowhidden && hidden.every((row) => cfg.rowhidden?.[row] != null)) return;
-    cfg.rowhidden = { ...cfg.rowhidden };
-    for (const row of hidden) cfg.rowhidden[row] = 0;
+// Shows again, in the map given, the rows these filter entries hide. A row hidden by hand is in no entry.
+export function showFilterRows(rowhidden: Record<string, number>, entries: FilterEntry[]) {
+    for (const entry of entries) {
+        for (const row of Object.keys(entry.rowhidden ?? {})) delete rowhidden[row];
+    }
 }
 
 // The op moved the cells from `from` on but not their `mc` stamps, so each merge reaching that far, or ending right

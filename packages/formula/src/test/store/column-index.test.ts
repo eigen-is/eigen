@@ -225,6 +225,7 @@ describe('the column index against a walk over the cells', () => {
         const engine = engineOf({ s1: { A1: 'x', A2: 'y', A3: 'x', B1: 1, B2: 2, B3: 3 } });
         const ask = (label: string, formula: string) => {
             engine.setFormula('s1', ...at(label), stored(formula, label));
+            engine.recalc(Number.POSITIVE_INFINITY);
             return valueAt(engine, label);
         };
         expect(ask('D1', '=MATCH("y",A1:A3,0)')).toBe(2);

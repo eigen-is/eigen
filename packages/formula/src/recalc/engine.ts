@@ -1,6 +1,6 @@
 // The engine as a host holds it: one workbook loaded from a description of its sheets, the three writes of a cell,
-// a full recalc, and the value of a cell. A sheet is named by its id and a cell by its row and column from 0. The
-// functions are the library's list, the same for every engine.
+// a recalc of what the writes reach, and the value of a cell. A sheet is named by its id and a cell by its row and
+// column from 0. The functions are the library's list, the same for every engine.
 
 import { FUNCTIONS } from '../functions/library';
 import type { Sheet } from '../store/sheet';
@@ -12,33 +12,42 @@ import { Recalc } from './recalc';
 
 export class Engine {
     private readonly workbook: Workbook;
-    private readonly cells: Recalc;
+    private readonly calc: Recalc;
 
     public constructor(sheets: readonly SheetSource[]) {
         this.workbook = new Workbook(sheets);
-        this.cells = new Recalc(this.workbook, FUNCTIONS);
+        this.calc = new Recalc(this.workbook, FUNCTIONS);
     }
 
     public setValue(sheet: string, row: number, column: number, value: Literal): void {
-        this.workbook.setValue(this.sheet(sheet), row, column, value);
+        const target = this.sheet(sheet);
+        this.calc.touch(target, row, column, false);
+        this.workbook.setValue(target, row, column, value);
     }
 
-    // The formula in its stored text. It is computed when its value is next asked for, or by a recalc.
+    // The formula in its stored text. It holds no value until a recalc computes it.
     public setFormula(sheet: string, row: number, column: number, text: string): void {
-        this.workbook.setFormula(this.sheet(sheet), row, column, text);
+        const target = this.sheet(sheet);
+        this.calc.touch(target, row, column, true);
+        this.workbook.setFormula(target, row, column, text);
     }
 
     public clear(sheet: string, row: number, column: number): void {
-        this.workbook.clear(this.sheet(sheet), row, column);
+        const target = this.sheet(sheet);
+        this.calc.touch(target, row, column, false);
+        this.workbook.clear(target, row, column);
     }
 
-    // Computes every formula again. `cap` is how many cells the pass may read before it is abandoned whole.
+    // Computes the formulas that the writes since the last recalc reach: one that came with a value and reads
+    // nothing written keeps it. After `cap` formulas the pass stops, and the next recalc goes on from there.
     public recalc(cap: number): RecalcResult {
-        return this.cells.all(cap);
+        return this.calc.pass(cap);
     }
 
+    // The value a cell holds. For a formula that is the last one a recalc computed.
     public valueOf(sheet: string, row: number, column: number): Scalar {
-        return this.cells.valueOf(this.sheet(sheet), column, row);
+        const cells = this.sheet(sheet).columns[column];
+        return cells === undefined ? null : this.workbook.value(cells, row);
     }
 
     private sheet(id: string): Sheet {

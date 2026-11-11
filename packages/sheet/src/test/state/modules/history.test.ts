@@ -485,6 +485,8 @@ describe('working alone', () => {
         ['a column insert', insertColumns(0, 2)],
         ['a row insert inside a merge', insertRows(8, 1)],
         ['a row delete', deleteRows(4, 5)],
+        ["a row delete of the filter's header row", deleteRows(2, 2)],
+        ["a column delete of the filter's columns", deleteColumns(0, 2)],
         ['a column delete', deleteColumns(0, 1)],
         ['a row delete through a merge', deleteRows(8, 8)],
         ['a column delete through a merge', deleteColumns(1, 1)],

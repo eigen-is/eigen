@@ -307,11 +307,13 @@ describe('the cells that are added, averaged and compared', () => {
                 C4: 8,
             },
         });
+        engine.recalc(Number.POSITIVE_INFINITY);
         expect(valueAt(engine, 'A1')).toBe(6);
     });
 
     test('a formula that counts its own column is on a loop only when it reads itself', () => {
         const engine = engineOf({ s1: { A1: 1, A2: 1, A3: '=COUNTIF(A1:A2,1)', A4: '=COUNTIF(A1:A4,1)', A5: '=A3' } });
+        engine.recalc(Number.POSITIVE_INFINITY);
         expect(valueAt(engine, 'A3')).toBe(2);
         expect(valueAt(engine, 'A5')).toBe(2);
         expect(valueAt(engine, 'A4')).toBe(REF);

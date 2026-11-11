@@ -65,6 +65,8 @@ function chainFacts(top: FormulaNode, functions: Registry): number {
         depth = Math.max(depth, right >> FACT_BITS);
         flags |= right & ((1 << FACT_BITS) - 1);
         if (link.op === Token.Colon || link.op === Token.Comma || link.op === Token.Space) flags |= Fact.Array;
+        // The box around two references holds cells that neither of them names.
+        if (link.op === Token.Colon) flags |= Fact.ReadsUnnamed;
     }
     const first = shapeFacts(link, functions);
     flags |= first & ((1 << FACT_BITS) - 1);

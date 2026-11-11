@@ -48,7 +48,18 @@ function axisAfter(edit: LineEdit): (number | null)[] {
     return axis.slice(0, edit.lines);
 }
 
-type Expected = { gone: boolean; first: number; second: number; lost: boolean; cut: boolean; resized: boolean };
+type Expected = {
+    gone: boolean;
+    first: number;
+    second: number;
+    lost: boolean;
+    cut: boolean;
+    resized: boolean;
+    // A cell it named is at another place or gone.
+    reached: boolean;
+    // The lines it named on the edited sheet, or null when it reads no cell there.
+    span: [number, number] | null;
+};
 
 // What a reference names after the edit, from a host on line `host` before it.
 function slow(
@@ -61,7 +72,7 @@ function slow(
     const [first, second = first] = reference.ends.map((end) => (end.absolute ? end.value : host + end.value));
     const low = Math.min(first, second);
     const high = Math.max(first, second);
-    const same = { gone: false, first, second, lost: false, cut: false, resized: false };
+    const same = { gone: false, first, second, lost: false, cut: false, resized: false, reached: false, span: null };
     if ((reference.sheet ?? hostSheet) !== edit.sheet || low < 0 || high >= edit.lines) return same;
     // A new line joins the range when the lines on both sides of it belonged to it.
     const joins = edit.insert && low < edit.index && edit.index <= high;
@@ -71,7 +82,9 @@ function slow(
     });
     let lost = false;
     for (let line = low; line <= high; line += 1) if (!axis.includes(line)) lost = true;
-    if (held.length === 0) return { ...same, gone: true, lost: true, cut: true };
+    const span: [number, number] = [low, high];
+    const reached = changedPlace(axis, low, high);
+    if (held.length === 0) return { ...same, gone: true, lost: true, cut: true, reached, span };
     const [start, end] = [held[0], held[held.length - 1]];
     return {
         gone: false,
@@ -80,19 +93,39 @@ function slow(
         lost,
         cut: !axis.includes(low) || !axis.includes(high),
         resized: end - start !== high - low,
+        reached,
+        span,
     };
 }
 
-type Sample = { edit: LineEdit; hostSheet: string; references: Reference[]; tree: FormulaNode };
+// Whether any of the lines `low` to `high` is at another place after the edit, or gone.
+function changedPlace(axis: (number | null)[], low: number, high: number): boolean {
+    for (let line = low; line <= high; line += 1) if (axis.indexOf(line) !== line) return true;
+    return false;
+}
 
-const asArguments = (texts: string[]) => `=SUM(${texts.join(',')})`;
+// The first `joined` references are the operands of one range the `:` operator builds, when the writer asks for it.
+type Sample = { edit: LineEdit; hostSheet: string; references: Reference[]; joined: number; tree: FormulaNode };
+
+// Arguments of one call, the first `joined` of them in parentheses with the `:` operator between them.
+function asArguments(texts: string[], joined: number): string {
+    const range = texts.slice(0, joined).map((text) => `(${text})`);
+    return `=SUM(${[...(joined > 0 ? [range.join(':')] : []), ...texts.slice(joined)].join(',')})`;
+}
 
 function anywhere(pick: (below: number) => number): (texts: string[]) => string {
     return (texts) => CONTEXTS[pick(CONTEXTS.length)](texts[0], texts[1 % texts.length], texts[2 % texts.length]);
 }
 
+// The leaves of a tree in the order they were written.
+function leaves(node: FormulaNode, into: FormulaNode[] = []): FormulaNode[] {
+    if (node.children.length === 0) into.push(node);
+    for (const child of node.children) leaves(child, into);
+    return into;
+}
+
 // A formula of one to three references and an edit, on an axis of 6 to 13 lines, with targets on and off the grid.
-function sample(pick: (below: number) => number, write: (texts: string[]) => string): Sample {
+function sample(pick: (below: number) => number, write: (texts: string[], joined: number) => string): Sample {
     const rows = pick(2) === 0;
     const lines = 6 + pick(8);
     const insert = pick(2) === 0;
@@ -116,10 +149,14 @@ function sample(pick: (below: number) => number, write: (texts: string[]) => str
         const ends = kind === 9 ? [] : kind < 3 ? [end()] : [end(), end()];
         references.push({ prefix, sheet, whole: kind === 8, ends });
     }
-    const text = write(references.map((reference) => storedText(rows, reference)));
+    const joined = references.length > 1 && pick(3) === 0 ? 2 + pick(references.length - 1) : 0;
+    const text = write(
+        references.map((reference) => storedText(rows, reference)),
+        joined,
+    );
     const parsed = parseStored(text);
     if ('reason' in parsed) throw new Error(`${text}: ${parsed.reason}`);
-    return { edit, hostSheet: ['s1', 's1', 's2'][pick(3)], references, tree: parsed };
+    return { edit, hostSheet: ['s1', 's1', 's2'][pick(3)], references, joined, tree: parsed };
 }
 
 // The two lines a reference leaf names on the edited axis at a host, read from its fields.
@@ -133,12 +170,13 @@ function named(rows: boolean, leaf: FormulaNode, host: number): [number, number]
 describe('the fast path against the slow version', () => {
     test('the transform: the cells it names, its flags and the edit that takes it back', () => {
         const pick = random(20261111);
-        const seen = { changed: 0, gone: 0, lossy: 0, recompute: 0, resized: 0, offGrid: 0, undone: 0 };
+        const seen = { changed: 0, gone: 0, lossy: 0, recompute: 0, resized: 0, offGrid: 0, undone: 0, operator: 0 };
         for (let run = 0; run < 20000; run += 1) {
-            const { edit, hostSheet, references, tree: before } = sample(pick, asArguments);
+            const { edit, hostSheet, references, joined, tree: before } = sample(pick, asArguments);
             const { rows, lines } = edit;
             const axis = axisAfter(edit);
             const text = printStored(before);
+            const written = leaves(before);
             for (let host = 0; host < lines; host += 1) {
                 const hostAfter = hostSheet === edit.sheet ? axis.indexOf(host) : host;
                 if (hostAfter === -1) continue;
@@ -148,15 +186,25 @@ describe('the fast path against the slow version', () => {
                 expect(`${where}: ${result.tree === before}`).toBe(`${where}: ${stored === text}`);
                 expect([where, reread(result.tree)]).toEqual([where, result.tree]);
                 const flags = { lossy: false, recompute: false, resized: false };
+                const mapped = leaves(result.tree);
+                // The lines the range of the `:` operator reads when every operand reads cells of the edited sheet.
+                let box: [number, number] | null = joined > 0 ? [lines, -1] : null;
+                let reached = false;
                 references.forEach((reference, i) => {
-                    const leaf = result.tree.children[i];
-                    const was = before.children[i];
+                    const leaf = mapped[i];
+                    const was = written[i];
                     if (reference.ends.length === 0) {
                         if ((reference.sheet ?? hostSheet) === edit.sheet) flags.recompute = true;
+                        if (i < joined) box = null;
                         expect(leaf).toBe(was);
                         return;
                     }
                     const expected = slow(edit, axis, hostSheet, reference, host);
+                    if (i < joined) {
+                        if (expected.reached) reached = true;
+                        box = box &&
+                            expected.span && [Math.min(box[0], expected.span[0]), Math.max(box[1], expected.span[1])];
+                    }
                     if (expected.lost) flags.recompute = true;
                     if (expected.cut) flags.lossy = true;
                     if (expected.resized) flags.resized = true;
@@ -180,7 +228,16 @@ describe('the fast path against the slow version', () => {
                         rows ? [was.column, was.column2] : [was.row, was.row2],
                     );
                 });
+                // A reference under the `:` operator with a cell at another place makes a seed, which covers every
+                // case where a cell of the range it builds changed place or vanished.
+                if (reached && !flags.recompute) {
+                    seen.operator += 1;
+                    flags.recompute = true;
+                }
                 const { lossy, recompute, resized } = result;
+                if (box && changedPlace(axis, box[0], box[1])) {
+                    expect(`${where}: a seed ${recompute}`).toBe(`${where}: a seed true`);
+                }
                 expect(`${where}: ${JSON.stringify({ lossy, recompute, resized })}`).toBe(
                     `${where}: ${JSON.stringify(flags)}`,
                 );
@@ -204,6 +261,7 @@ describe('the fast path against the slow version', () => {
         expect(seen.resized).toBeGreaterThan(10000);
         expect(seen.offGrid).toBeGreaterThan(5000);
         expect(seen.undone).toBeGreaterThan(40000);
+        expect(seen.operator).toBeGreaterThan(2000);
     });
 
     test('wherever a reference stands, what comes out is stored text that reads back as the same tree', () => {

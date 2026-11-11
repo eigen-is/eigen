@@ -183,6 +183,7 @@ describe('VLOOKUP and HLOOKUP', () => {
             s1: { A1: '=VLOOKUP("k"&2,Data!A1:B3,2,FALSE)' },
             data: { A1: 'k1', A2: '="K"&(1+1)', A3: 'k3', B1: 1, B2: '=B1+41', B3: 3 },
         });
+        engine.recalc(Number.POSITIVE_INFINITY);
         expect(valueAt(engine, 'A1')).toBe(42);
     });
 });

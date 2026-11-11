@@ -92,7 +92,7 @@ export class Evaluator {
             const r = node.flags & RefFlag.RowAbsolute ? node.row : row + node.row;
             const c = node.flags & RefFlag.ColumnAbsolute ? node.column : column + node.column;
             if (target === undefined || r < 0 || r >= GRID_ROWS || c < 0 || c >= GRID_COLUMNS) return REF;
-            return this.cells.valueOf(target, c, r);
+            return this.cells.valueOf(target, r, c);
         }
         return this.read(this.evaluate(node, sheet, row, column));
     }
@@ -103,7 +103,7 @@ export class Evaluator {
             case ValueType.Reference:
                 if (value.next !== null) return VALUE;
                 if (value.top === value.bottom && value.left === value.right) {
-                    return this.cells.valueOf(value.sheet, value.left, value.top);
+                    return this.cells.valueOf(value.sheet, value.top, value.left);
                 }
                 return toArray(this, value);
             case ValueType.Omitted:
