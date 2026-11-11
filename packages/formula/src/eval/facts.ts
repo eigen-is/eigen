@@ -19,6 +19,7 @@ export const Fact = {
 export const FACT_BITS = 8;
 
 export function shapeFacts(node: FormulaNode, functions: Registry): number {
+    if (node.kind === NodeKind.Binary) return chainFacts(node, functions);
     const entry = node.kind === NodeKind.Call ? functions.get(node.text) : undefined;
     let flags = node.sheetKind === SheetKind.External || node.sheetKind === SheetKind.Span ? Fact.Kept : 0;
     let depth = 0;
@@ -40,9 +41,6 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
         case NodeKind.Array:
             flags |= Fact.Array;
             break;
-        case NodeKind.Binary:
-            if (node.op === Token.Colon || node.op === Token.Comma || node.op === Token.Space) flags |= Fact.Array;
-            break;
         case NodeKind.Prefix:
             if (node.op === Token.At) flags &= ~Fact.Array;
             break;
@@ -54,4 +52,21 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
             break;
     }
     return flags | ((depth + 1) << FACT_BITS);
+}
+
+// A chain of operators is evaluated in a loop down its left operands, so it is one level deep however long it is,
+// and it is read in a loop here too.
+function chainFacts(top: FormulaNode, functions: Registry): number {
+    let flags = 0;
+    let depth = 0;
+    let link = top;
+    for (; link.kind === NodeKind.Binary; link = link.children[0]) {
+        const right = shapeFacts(link.children[1], functions);
+        depth = Math.max(depth, right >> FACT_BITS);
+        flags |= right & ((1 << FACT_BITS) - 1);
+        if (link.op === Token.Colon || link.op === Token.Comma || link.op === Token.Space) flags |= Fact.Array;
+    }
+    const first = shapeFacts(link, functions);
+    flags |= first & ((1 << FACT_BITS) - 1);
+    return flags | ((Math.max(depth, first >> FACT_BITS) + 1) << FACT_BITS);
 }

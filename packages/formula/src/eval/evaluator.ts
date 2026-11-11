@@ -177,16 +177,31 @@ export class Evaluator {
         return VALUE;
     }
 
+    // A long sum is a chain thousands of nodes deep down its left operands, so it runs in a loop from its first
+    // operation up, and only a right operand is a call deeper.
     private binary(node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
+        const chain: FormulaNode[] = [];
+        let first = node;
+        for (; first.children[0].kind === NodeKind.Binary; first = first.children[0]) chain.push(first);
+        const start = first.children[0];
+        const left = isReferenceOperator(first.op)
+            ? this.evaluate(start, sheet, row, column)
+            : this.operand(start, sheet, row, column);
+        let value = this.operation(first, left, sheet, row, column);
+        for (let i = chain.length - 1; i >= 0; i -= 1) value = this.operation(chain[i], value, sheet, row, column);
+        return value;
+    }
+
+    // One operator, with its left operand already evaluated.
+    private operation(node: FormulaNode, left: Value, sheet: Sheet, row: number, column: number): Value {
         const { op } = node;
-        if (op === Token.Colon || op === Token.Space || op === Token.Comma) {
-            const a = this.evaluate(node.children[0], sheet, row, column);
-            if (isError(a)) return a;
-            const b = this.evaluate(node.children[1], sheet, row, column);
-            if (isError(b)) return b;
-            return isReference(a) && isReference(b) ? combine(op, a, b) : VALUE;
+        if (isReferenceOperator(op)) {
+            if (isError(left)) return left;
+            const right = this.evaluate(node.children[1], sheet, row, column);
+            if (isError(right)) return right;
+            return isReference(left) && isReference(right) ? combine(op, left, right) : VALUE;
         }
-        const a = this.operand(node.children[0], sheet, row, column);
+        const a = this.read(left);
         const b = this.operand(node.children[1], sheet, row, column);
         if (isArray(a) || isArray(b)) return lift(this, LIFTED_BINARY[op], [a, b], node, sheet, row, column);
         return operate(op, a, b);
@@ -211,6 +226,10 @@ export class Evaluator {
     }
 }
 
+function isReferenceOperator(op: number): boolean {
+    return op === Token.Colon || op === Token.Space || op === Token.Comma;
+}
+
 // The three operators on references: the box around two, the cells two share, and one after the other.
 function combine(op: number, a: Reference, b: Reference): Reference | FormulaError {
     if (op === Token.Comma) return union(a, b);
@@ -232,6 +251,11 @@ function combine(op: number, a: Reference, b: Reference): Reference | FormulaErr
     return a.sheet !== b.sheet || top > bottom || left > right ? NULL : { ...a, top, left, bottom, right };
 }
 
+// A union can be thousands of areas long, so the areas of `a` are copied in a loop, last one first.
 function union(a: Reference, b: Reference): Reference {
-    return { ...a, next: a.next === null ? b : union(a.next, b) };
+    const areas: Reference[] = [];
+    for (let area: Reference | null = a; area !== null; area = area.next) areas.push(area);
+    let joined = b;
+    for (let i = areas.length - 1; i >= 0; i -= 1) joined = { ...areas[i], next: joined };
+    return joined;
 }
