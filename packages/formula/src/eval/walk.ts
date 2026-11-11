@@ -116,38 +116,47 @@ export class Walk {
         let sum = 0;
         let before = 0;
         while (this.next()) {
-            const { num, from, to, reps, rows } = this;
-            if (reps === null && rows === 1) {
-                for (let i = from; i < to - 1; i += 1) sum += num[i];
-                before = sum;
-                sum += num[to - 1];
+            if (this.reps !== null || this.rows !== 1) {
+                sum = this.addRow(sum);
+                before = this.before;
                 continue;
             }
-            let cells = 0;
-            let equal = true;
-            for (let i = from; i < to; i += 1) {
-                cells += reps === null ? 1 : reps[i];
-                equal &&= num[i] === num[from];
-            }
-            if (equal) {
-                before = repeated(sum, num[from], cells * rows - 1);
-                sum = before + num[from];
-                continue;
-            }
-            const more = (rows - 1) * (to - from);
-            if (!this.ctx.recalc.room(more, MOST_ADDITIONS - this.unstored)) {
-                this.fail(CALC);
-                break;
-            }
-            this.unstored += more;
-            for (let row = 0; row < rows; row += 1) {
-                for (let i = from; i < to; i += 1) {
-                    before = reps === null ? sum : repeated(sum, num[i], reps[i] - 1);
-                    sum = before + num[i];
-                }
-            }
+            const { num, to } = this;
+            for (let i = this.from; i < to - 1; i += 1) sum += num[i];
+            before = sum;
+            sum += num[to - 1];
         }
         this.before = this.blank ? sum : before;
+        return sum;
+    }
+
+    // `start` and a stored row of an array that stands for more than its own numbers, with the sum before the
+    // last addition left in `before`. Only a row of different numbers that stands for many rows is a loop.
+    private addRow(start: number): number {
+        const { num, from, to, reps, rows } = this;
+        let sum = start;
+        let cells = 0;
+        let equal = true;
+        for (let i = from; i < to; i += 1) {
+            cells += reps === null ? 1 : reps[i];
+            equal &&= num[i] === num[from];
+        }
+        if (equal) {
+            this.before = repeated(sum, num[from], cells * rows - 1);
+            return this.before + num[from];
+        }
+        const more = (rows - 1) * (to - from);
+        if (!this.ctx.recalc.room(more, MOST_ADDITIONS - this.unstored)) {
+            this.fail(CALC);
+            return sum;
+        }
+        this.unstored += more;
+        for (let row = 0; row < rows; row += 1) {
+            for (let i = from; i < to; i += 1) {
+                this.before = reps === null ? sum : repeated(sum, num[i], reps[i] - 1);
+                sum = this.before + num[i];
+            }
+        }
         return sum;
     }
 

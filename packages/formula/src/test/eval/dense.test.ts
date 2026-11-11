@@ -31,7 +31,7 @@ const OTHERS: readonly Literal[] = ['a', 'B', 'x', '', true, false, NA, DIV0];
 function gridOf(dice: Dice): Grid {
     const grid: Grid = Array.from({ length: SIZE }, () => new Array<Literal | null>(SIZE).fill(null));
     // A few cells anywhere, and now and then a filled block, so that runs of every length come up.
-    for (let count = dice.below(30); count > 0; count -= 1) {
+    for (let count = dice.below(dice.next() < 0.3 ? 300 : 30); count > 0; count -= 1) {
         grid[dice.below(SIZE)][dice.below(SIZE)] = dice.next() < 0.7 ? dice.pick(NUMBERS) : dice.pick(OTHERS);
     }
     if (dice.next() < 0.4) {
@@ -115,11 +115,27 @@ function questions(dice: Dice, expr: Expr, grid: Grid): [string, Plain][] {
             asked.push([`=SUMPRODUCT(${print(factor)},${text},${text})`, sumproduct([second, value, value])]);
         }
     }
-    if (expr.kind === 'ref') {
-        const top = dice.below(SIZE - height + 1);
-        const left = dice.below(SIZE - width + 1);
-        const moved: Expr = { kind: 'ref', top, left, bottom: top + height - 1, right: left + width - 1 };
-        asked.push([`=SUMPRODUCT(${text},${print(moved)})`, sumproduct([value, dense(moved, grid)])]);
+    // Two ranges of one size that run differently, as they are and as arrays.
+    const first = reference(dice);
+    if (first.kind === 'ref' && (first.bottom > first.top || first.right > first.left)) {
+        const top = dice.below(SIZE - (first.bottom - first.top));
+        const left = dice.below(SIZE - (first.right - first.left));
+        const moved: Expr = {
+            ...first,
+            top,
+            left,
+            bottom: top + first.bottom - first.top,
+            right: left + first.right - first.left,
+        };
+        const once: Expr = { kind: 'binary', op: '*', a: first, b: { kind: 'value', value: 1 } };
+        const twice: Expr = { kind: 'binary', op: '*', a: moved, b: { kind: 'value', value: 2 } };
+        for (const [a, b] of [
+            [first, moved],
+            [once, twice],
+            [once, moved],
+        ]) {
+            asked.push([`=SUMPRODUCT(${print(a)},${print(b)})`, sumproduct([dense(a, grid), dense(b, grid)])]);
+        }
     }
     const joined: Dense = dense({ kind: 'binary', op: '&', a: expr, b: { kind: 'value', value: 'z' } }, grid);
     asked.push([`=COUNTA(${text}&"z")`, aggregate('COUNTA', joined)]);

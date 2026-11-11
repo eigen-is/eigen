@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { FUNCTIONS } from '../../functions/library';
 import { define, FunctionFlag, SCALAR } from '../../functions/registry';
-import { NAME } from '../../index';
+import { NA, NAME } from '../../index';
 import { Recalc } from '../../recalc/recalc';
 import { Workbook } from '../../store/workbook';
 import { engineOf, stored, valueAt } from '../recalc/support';
@@ -77,20 +77,21 @@ describe('a function answers the same for the same arguments, which is what lets
 // No function of this build is volatile, so this one test goes past the engine to give the recalc one that is.
 test('a volatile function is called for every written element of an array, another one once per run', () => {
     let calls = 0;
-    const counting = () => {
+    // Counts its calls, and adds a million where its second argument is the #N/A past the end of a shorter array.
+    const counting = (args: readonly unknown[]) => {
         calls += 1;
-        return calls;
+        return calls + (args[1] === NA ? 1000000 : 0);
     };
     const functions = new Map(FUNCTIONS);
-    functions.set('DRAW', define('DRAW', [SCALAR], counting, FunctionFlag.Volatile));
-    functions.set('SAME', define('SAME', [SCALAR], counting));
+    functions.set('DRAW', define('DRAW', [SCALAR, SCALAR], counting, FunctionFlag.Volatile));
+    functions.set('SAME', define('SAME', [SCALAR, SCALAR], counting));
     const sum = (name: string) => {
-        const formula = stored(`=SUM(${name}(B1:B1000=""))`, 'A1');
+        const formula = stored(`=SUM(${name}(B1:B1000="",{1;2;3}))`, 'A1');
         const workbook = new Workbook([{ id: 's1', name: 'Sheet1', cells: (cell) => cell(0, 0, null, formula) }]);
         calls = 0;
         new Recalc(workbook, functions).pass(Number.POSITIVE_INFINITY);
         return workbook.value(workbook.sheets[0].columns[0], 0);
     };
-    expect(sum('SAME')).toBe(1000);
-    expect(sum('DRAW')).toBe((1000 * 1001) / 2);
+    expect(sum('SAME')).toBe(1 + 2 + 3 + 997 * 1000004);
+    expect(sum('DRAW')).toBe((1000 * 1001) / 2 + 997 * 1000000);
 });
