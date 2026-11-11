@@ -20,14 +20,17 @@ function loopsOf(engine: Engine): string[] {
 }
 
 describe('recalc', () => {
-    test('a loaded formula keeps its stored value until a recalc', () => {
+    test('a loaded formula keeps its stored value until a write reaches it', () => {
         const engine = sheetOf((cell) => {
             cell(0, 0, 5, null);
             cell(0, 1, 99, '=RC[-1]*2');
         });
-        expect(valueAt(engine, 'B1')).toBe(99);
         expect(engine.recalc(NO_CAP)).toEqual({ loops: [], abandoned: false });
-        expect(valueAt(engine, 'B1')).toBe(10);
+        expect(valueAt(engine, 'B1')).toBe(99);
+        engine.setValue('s1', 0, 0, 6);
+        expect(valueAt(engine, 'B1')).toBe(99);
+        engine.recalc(NO_CAP);
+        expect(valueAt(engine, 'B1')).toBe(12);
     });
 
     test('a recalc follows a write, through every sheet', () => {

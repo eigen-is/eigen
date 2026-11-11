@@ -1,6 +1,6 @@
 // The engine as a host holds it: one workbook loaded from a description of its sheets, the three writes of a cell,
-// a full recalc, and the value of a cell. A sheet is named by its id and a cell by its row and column from 0. The
-// functions are the library's list, the same for every engine.
+// a recalc of what the writes reach, and the value of a cell. A sheet is named by its id and a cell by its row and
+// column from 0. The functions are the library's list, the same for every engine.
 
 import { FUNCTIONS } from '../functions/library';
 import type { Sheet } from '../store/sheet';
@@ -20,21 +20,28 @@ export class Engine {
     }
 
     public setValue(sheet: string, row: number, column: number, value: Literal): void {
-        this.workbook.setValue(this.sheet(sheet), row, column, value);
+        const held = this.sheet(sheet);
+        this.cells.touch(held, row, column, false);
+        this.workbook.setValue(held, row, column, value);
     }
 
     // The formula in its stored text. It is computed when its value is next asked for, or by a recalc.
     public setFormula(sheet: string, row: number, column: number, text: string): void {
-        this.workbook.setFormula(this.sheet(sheet), row, column, text);
+        const held = this.sheet(sheet);
+        this.cells.touch(held, row, column, true);
+        this.workbook.setFormula(held, row, column, text);
     }
 
     public clear(sheet: string, row: number, column: number): void {
-        this.workbook.clear(this.sheet(sheet), row, column);
+        const held = this.sheet(sheet);
+        this.cells.touch(held, row, column, false);
+        this.workbook.clear(held, row, column);
     }
 
-    // Computes every formula again. `cap` is how many cells the pass may read before it is abandoned whole.
+    // Computes the formulas that the writes since the last recalc reach: one that came with a value and reads
+    // nothing written keeps it. Past `cap` cells read the pass is abandoned whole and computes again next time.
     public recalc(cap: number): RecalcResult {
-        return this.cells.all(cap);
+        return this.cells.pass(cap);
     }
 
     public valueOf(sheet: string, row: number, column: number): Scalar {

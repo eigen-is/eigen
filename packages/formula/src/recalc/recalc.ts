@@ -1,8 +1,8 @@
-// Recalc on demand. Reading a cell whose formula is still to be computed computes it first, so a formula always
-// sees final values and no order is worked out ahead. A cell met while it is being computed is on a loop, with
-// every cell that was reading towards it, and all of them get the loop's result whatever they computed. Nesting is
-// bounded by one budget: past it the calls in progress are dropped by a throw and the cells computed again from
-// the list of cells in progress, innermost first.
+// Recalc on demand. A pass flags the formulas that the cells written since the last one reach, then computes them.
+// Reading a cell whose formula is still to be computed computes it first, so a formula always sees final values and
+// no order is worked out ahead. A cell met while it is being computed is on a loop, with every cell that was reading
+// towards it, and all of them get the loop's result whatever they computed. Nesting is bounded by one budget: past
+// it the calls in progress are dropped by a throw and the cells computed again from the list of cells in progress.
 
 import type { Evaluator as EvaluatorType } from '../eval/evaluator';
 import { Evaluator } from '../eval/evaluator';
@@ -14,11 +14,12 @@ import type { Sheet } from '../store/sheet';
 import type { Workbook } from '../store/workbook';
 import { ERROR, REF } from '../values/errors';
 import type { Reference, Scalar } from '../values/value';
+import { ReverseIndex } from './reverse-index';
 
 export type CellAddress = { readonly sheet: string; readonly row: number; readonly column: number };
 
 export type RecalcResult = {
-    // The cells that are on a circular reference.
+    // The cells this pass found on a circular reference.
     readonly loops: readonly CellAddress[];
     // True when the pass read more cells than its cap: the store is as it was before the pass.
     readonly abandoned: boolean;
@@ -35,6 +36,11 @@ export class Recalc {
     private readonly workbook: Workbook;
     private readonly functions: Registry;
     private readonly evaluator: EvaluatorType;
+    private readonly index = new ReverseIndex();
+    // Whether a formula came or went since the index was built.
+    private stale = true;
+    // The spans of rows written since the last pass that was not abandoned: sheet, column, first and last row.
+    private readonly seeds: number[] = [];
     // Per shape id, its facts, learned when a cell of the shape is first computed.
     private readonly facts: number[] = [];
     // The cells in progress, in the order they were entered. One stays here after its formula ran when it is on a
@@ -63,20 +69,35 @@ export class Recalc {
         this.workbook = workbook;
         this.functions = functions;
         this.evaluator = new Evaluator(workbook, functions, this);
-    }
-
-    // Computes every formula, in sheet, column, row order where the reads do not ask for another.
-    public all(cap: number): RecalcResult {
-        const waiting: { column: Column; row: number }[] = [];
-        for (const sheet of this.workbook.sheets) {
-            for (const column of sheet.columns) {
-                for (let row = 0; row < column.length; row += 1) {
-                    if (column.shape[row] === 0) continue;
-                    if (column.kind[row] > KIND_MASK) waiting.push({ column, row });
-                    else column.markDirty(row);
+        // A formula that came without a value was never computed, which its readers have to hear.
+        for (let s = 0; s < workbook.sheets.length; s += 1) {
+            const { columns } = workbook.sheets[s];
+            for (let c = 0; c < columns.length; c += 1) {
+                const { kind, length } = columns[c];
+                for (let row = 0; columns[c].pending > 0 && row < length; row += 1) {
+                    if (kind[row] > KIND_MASK) this.seed(s, c, row);
                 }
             }
         }
+    }
+
+    // To be called before a cell is written, with whether a formula is: the cell is a seed of the next pass.
+    public touch(sheet: Sheet, row: number, column: number, formula: boolean): void {
+        const held = sheet.columns[column];
+        if (formula || (held !== undefined && held.shape[row] > 0)) this.stale = true;
+        this.seed(this.workbook.sheets.indexOf(sheet), column, row);
+    }
+
+    // Computes the formulas that the cells written since the last pass reach, and those that read cells they do
+    // not name, in sheet, column, row order where the reads do not ask for another.
+    public pass(cap: number): RecalcResult {
+        const { seeds, workbook } = this;
+        if (this.stale) {
+            for (let shape = 1; shape <= workbook.shapes.size; shape += 1) this.factsOf(shape);
+            this.index.rebuild(workbook, this.facts);
+            this.stale = false;
+        }
+        this.index.mark(workbook, seeds);
         this.loops = [];
         this.reads = 0;
         this.cap = cap;
@@ -90,6 +111,7 @@ export class Recalc {
                     }
                 }
             }
+            seeds.length = 0;
             return { loops: this.loops, abandoned: false };
         } catch (thrown) {
             if (thrown !== ABANDON) throw thrown;
@@ -99,7 +121,16 @@ export class Recalc {
                     for (let row = 0; column.pending > 0 && row < column.length; row += 1) column.settle(row);
                 }
             }
-            for (const { column, row } of waiting) column.markDirty(row);
+            // What the pass flagged is flagged again by the next one, from the same seeds. A formula among them
+            // was written or never computed: it is still to be computed.
+            for (let i = 0; i < seeds.length; i += 4) {
+                const held = workbook.sheets[seeds[i]].columns[seeds[i + 1]];
+                if (held === undefined) continue;
+                const end = Math.min(seeds[i + 3] + 1, held.length);
+                for (let row = seeds[i + 2]; row < end; row += 1) {
+                    if (held.shape[row] !== 0) held.markDirty(row);
+                }
+            }
             this.size = 0;
             this.current = -1;
             this.looped.clear();
@@ -136,6 +167,15 @@ export class Recalc {
             }
         }
         this.count(cells);
+    }
+
+    private seed(sheet: number, column: number, row: number): void {
+        const { seeds } = this;
+        const last = seeds.length - 4;
+        // Cells written down one column are one span.
+        if (last >= 0 && seeds[last] === sheet && seeds[last + 1] === column && seeds[last + 3] === row - 1) {
+            seeds[last + 3] = row;
+        } else seeds.push(sheet, column, row, row);
     }
 
     private count(cells: number): void {
