@@ -14,7 +14,8 @@ export const NodeKind = {
     Ref: 5,
     Name: 6,
     Call: 7,
-    // A call of what an expression returns, as in LAMBDA(x,x+1)(2): the first child is called with the rest.
+    // A call of what an expression returns, as in LAMBDA(x,x+1)(2), or of another workbook's name, as in
+    // [1]!Rate(2): the first child is called with the rest.
     Invoke: 8,
     Prefix: 9,
     Postfix: 10,
@@ -33,7 +34,7 @@ export const SheetKind = {
     Id: 1,
     // A sheet that does not exist, kept as the name that was typed.
     Name: 2,
-    // Another workbook, kept as its prefix text, such as [1]Sheet1.
+    // Another workbook, kept as its prefix text, such as [1]Sheet1, on a reference or a name.
     External: 3,
     // A 3-D reference, kept as its two names with the colon between them.
     Span: 4,
