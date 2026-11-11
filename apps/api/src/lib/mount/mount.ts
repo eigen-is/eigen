@@ -13,7 +13,6 @@ import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, EIGEN_DOC_TYPE_INFO } from '@work
 import type { MountConfig } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { CONTROL_CHARS } from '@workspace/lib/validation';
-import type { BunFile } from 'bun';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { RWLock } from '../../utils/rw-lock';
@@ -648,16 +647,6 @@ export class Mount {
         }
     }
 
-    private async computeHash(data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<string> {
-        const hasher = new Bun.CryptoHasher('sha256');
-        if (data instanceof Blob) {
-            hasher.update(new Uint8Array(await data.arrayBuffer()));
-        } else {
-            hasher.update(data instanceof ArrayBuffer ? new Uint8Array(data) : data);
-        }
-        return hasher.digest('hex');
-    }
-
     // ---- Renaming, moving and deleting ----
 
     public async updatePath(
@@ -1005,20 +994,15 @@ export class Mount {
     // ---- Overwriting ----
 
     // Answers the row it committed under the lock, so a later write's etag or updatedAt never reaches this caller.
-    public async writeFile(
-        pathId: string,
-        data: Buffer | Uint8Array | ArrayBuffer | BunFile,
-        ifMatch?: string,
-    ): Promise<DrivePath> {
-        const size = data instanceof Blob ? data.size : data.byteLength;
-        const hash = await this.computeHash(data);
+    public async writeFile(pathId: string, data: Buffer, ifMatch?: string): Promise<DrivePath> {
+        const hash = new Bun.CryptoHasher('sha256').update(data).digest('hex');
 
         return this.withPathLock(pathId, () =>
             this.withTreeShared(async () => {
                 await this.assertOverwritable(pathId, ifMatch);
                 const storageKey = await this.getStorageKey(pathId);
                 await this.storage.write(storageKey, data);
-                return this.commitOverwrite(pathId, storageKey, size, hash);
+                return this.commitOverwrite(pathId, storageKey, data.byteLength, hash);
             }),
         );
     }
