@@ -11,11 +11,10 @@ import type { FormulaError } from '../values/errors';
 import { CALC, VALUE } from '../values/errors';
 import { roundDecimal } from '../values/precision';
 import type { Value } from '../values/value';
-import { arrayOf, isArray, isError, isReference, MOST_ELEMENTS, OMITTED } from '../values/value';
-import { tally } from './criteria';
+import { arrayOf, isArray, isError, isReference, MOST_ELEMENTS } from '../values/value';
 import type { FunctionBody } from './legacy';
-import { define, FunctionFlag, optional, RANGE, SCALAR } from './legacy';
-import { fn, INTEGER, NUMBER, NUMBERS, rest } from './registry';
+import { define, RANGE } from './legacy';
+import { fn, INTEGER, MATCHED, NUMBER, NUMBERS, optional, rest, WHERE } from './registry';
 
 // The first error among the values of one argument, row by row, once the formulas in it are computed.
 function errorIn(ctx: Evaluator, arg: Value): FormulaError | null {
@@ -116,23 +115,6 @@ export const MATH = [
     fn('ROUND', [NUMBER, INTEGER], roundDecimal),
     fn('SUM', [rest(NUMBERS)], (numbers) => numbers.sum()),
     define('SUMPRODUCT', [RANGE], sumproduct, 0, 1),
-    define(
-        'SUMIF',
-        [RANGE, SCALAR, optional(RANGE, OMITTED)],
-        (args, ctx) => {
-            const total = tally(ctx, args.slice(0, 2), args[2], true);
-            return total.error ?? total.sum;
-        },
-        FunctionFlag.Resizes,
-    ),
-    define(
-        'SUMIFS',
-        [RANGE, RANGE, SCALAR],
-        (args, ctx) => {
-            const total = tally(ctx, args.slice(1), args[0], false);
-            return total.error ?? total.sum;
-        },
-        0,
-        2,
-    ),
+    fn('SUMIF', [WHERE, optional(MATCHED)], (_where, numbers) => numbers.sum()),
+    fn('SUMIFS', [MATCHED, rest(WHERE)], (numbers) => numbers.sum()),
 ];

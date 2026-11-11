@@ -31,8 +31,9 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
     if ('flags' in entry) return legacyCall(ctx, entry, node, sheet, row, column);
     const given = node.children;
     const count = given.length;
-    if (count < entry.min || count > entry.max) return VALUE;
     const { fixed } = entry;
+    // The arguments that repeat come in whole groups.
+    if (count < entry.min || count > entry.max || (count > fixed && (count - fixed) % entry.group !== 0)) return VALUE;
     const level = ctx.calls;
     const { held } = (ctx.frames[level] ??= new Frame(ctx));
     ctx.calls = level + 1;
@@ -93,10 +94,10 @@ export function picked(
     return child.kind === NodeKind.Empty ? null : ctx.evaluate(child, sheet, row, column);
 }
 
-// The parameter that takes the argument at a place.
+// What the argument at a place is read as.
 export function slotOf(entry: Entry, at: number): Param<unknown> {
     const { fixed } = entry;
-    return entry.params[at < fixed ? at : fixed + ((at - fixed) % entry.group)];
+    return entry.slots[at < fixed ? at : fixed + ((at - fixed) % entry.group)];
 }
 
 // One prepared argument as the body gets it, or the error that ends the call.
@@ -119,12 +120,16 @@ export function read(param: Param<unknown>, value: Held): Held {
         case Read.Table:
             return isReference(value) && value.next !== null && param.union !== null ? param.union : value;
         case Read.Here:
+        case Read.Only:
             if (!isReference(value)) return isError(value) ? value : VALUE;
             return value.next !== null && param.union !== null ? param.union : value;
         case Read.Plain:
         case Read.Any:
         case Read.Lazy:
         case Read.Room:
+        case Read.Where:
+        case Read.Matched:
+        case Read.Blanks:
             return value;
         default: {
             const unknown: never = param.read;

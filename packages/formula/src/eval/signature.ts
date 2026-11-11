@@ -37,9 +37,16 @@ export const Read = {
     Walked: 5,
     Table: 6,
     Here: 7,
-    Any: 8,
-    Lazy: 9,
-    Room: 10,
+    // A reference and nothing else, unread: a criteria range, or the range of the numbers beside it.
+    Only: 8,
+    Any: 9,
+    Lazy: 10,
+    Room: 11,
+    // Readings of a whole parameter, whose arguments are read as Only and Any: a criteria range with its
+    // criterion, the numbers beside the cells every criterion accepts, and the cells that show nothing.
+    Where: 12,
+    Matched: 13,
+    Blanks: 14,
 } as const;
 
 export type Read = (typeof Read)[keyof typeof Read];
@@ -93,12 +100,16 @@ export type Result = Scalar | ArrayValue | Lazy | Table;
 export type Entry = {
     readonly name: string;
     readonly params: readonly Param<unknown>[];
+    // One record per argument place: a parameter that spans two arguments has two.
+    readonly slots: readonly Param<unknown>[];
     readonly returns: Returns;
     readonly min: number;
     readonly max: number;
     // How many arguments come before the ones that repeat, and how many repeat together.
     readonly fixed: number;
     readonly group: number;
+    // The place of the range of numbers that takes its size from the criteria range before it, or -1.
+    readonly sized: number;
     // Whether the body gets its arguments as they are read, one per argument: no reader, no list.
     readonly plain: boolean;
     // A method on purpose: a body typed by its parameters is stored here without a cast, since TypeScript compares

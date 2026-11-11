@@ -5,7 +5,7 @@
 
 import type { Family } from '../eval/families';
 import { Families } from '../eval/families';
-import type { Numbers, Room, Table } from '../eval/readers';
+import type { Matches, Numbers, Room, Table } from '../eval/readers';
 import type { Entry, Lazy, PART, Param, Returns, Walked } from '../eval/signature';
 import { MAX_ARGUMENTS, Prepare, Read } from '../eval/signature';
 import { toBoolean, toNumber, toText } from '../values/coerce';
@@ -14,7 +14,7 @@ import { REF, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
 import type { FunctionEntry } from './legacy';
 
-export type { Numbers, Room, Table } from '../eval/readers';
+export type { Matches, Numbers, Room, Table } from '../eval/readers';
 export type { Vector } from '../eval/search';
 export { Find, PART } from '../eval/signature';
 
@@ -75,9 +75,26 @@ export const ROOM: Param<Room> = Object.freeze({
     optional: true,
 });
 
+// What the arguments of the three readings below are read as: a reference and nothing else, and any value.
+const ONLY: Param<Reference> = Object.freeze({
+    ...REQUIRED,
+    prepare: Prepare.Reference,
+    read: Read.Only,
+    union: VALUE,
+});
+// Two arguments, a criteria range and its criterion: the cells of the range that meet it. With several in a row,
+// the cells at one place that meet them all. A criterion that is an array runs the call once per element.
+export const WHERE: Walked<Matches> = Object.freeze({ ...REQUIRED, prepare: Prepare.Walked, read: Read.Where });
+// The numbers beside the cells every WHERE of the row accepts. After its WHERE it takes the size of that range
+// from its own first cell, and left out it is that range; before, the sizes must be equal.
+export const MATCHED: Walked<Numbers> = Object.freeze({ ...REQUIRED, prepare: Prepare.Walked, read: Read.Matched });
+// The cells of a range that show nothing: a blank or empty text.
+export const BLANKS: Param<Matches> = Object.freeze({ ...REQUIRED, prepare: Prepare.Walked, read: Read.Blanks });
+
 // The argument may be left out at the end, and the body then gets `fallback`. An empty argument is still a blank.
 // Of a lazy argument the fallback is what the call answers when its token comes back.
-// With no fallback the body gets undefined.
+// With no fallback the body gets undefined, or a reader of nothing where a reader is what it gets.
+export function optional<T>(param: Walked<T>): Param<T>;
 export function optional(param: Param<Lazy>, fallback: Scalar): Param<Lazy>;
 export function optional<T>(param: Param<T>, fallback: NoInfer<T> & Scalar): Param<T>;
 export function optional<T>(param: Param<T>): Param<T | undefined>;
@@ -129,12 +146,26 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
     body: (...args: Args<P>) => Out<P, R>,
     returns?: R,
 ): Entry {
+    const slots: Param<unknown>[] = [];
     let min = 0;
     let fixed = 0;
-    let plain = true;
-    params.forEach((param, at) => {
+    let group = 1;
+    let sized = -1;
+    // Whether an optional parameter was met, and one that repeats or takes no argument.
+    let optionals = false;
+    let closed = false;
+    for (const param of params) {
         const ambient = param.prepare === Prepare.Ambient;
-        if (!ambient && fixed < at) throw new Error(`${name}: a parameter after a repeating or an ambient one`);
+        const own = ambient
+            ? []
+            : param.read === Read.Where
+              ? [ONLY, ANY]
+              : [
+                    param.prepare === Prepare.Walked && param.family === null
+                        ? { ...ONLY, optional: param.optional }
+                        : param,
+                ];
+        if (closed && !ambient) throw new Error(`${name}: a parameter after a repeating or an ambient one`);
         if (
             param.optional &&
             param.fallback !== undefined &&
@@ -143,14 +174,34 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
         ) {
             throw new Error(`${name}: a fallback of another kind`);
         }
-        if (!param.optional && min < at) throw new Error(`${name}: a required parameter after an optional one`);
-        if (!param.optional) min += 1;
-        if (!ambient && !param.rest) fixed += 1;
-        plain &&= !param.rest && param.prepare !== Prepare.Walked && param.prepare !== Prepare.Whole && !ambient;
+        if (!param.optional && optionals) throw new Error(`${name}: a required parameter after an optional one`);
+        if (param.read === Read.Matched && slots.includes(ONLY)) sized = slots.length;
+        optionals ||= param.optional && !ambient;
+        closed ||= ambient || param.rest;
+        if (!param.optional) min += own.length;
+        if (param.rest) group = own.length;
+        else fixed += own.length;
+        slots.push(...own);
+    }
+    const plain = params.every(
+        (param) =>
+            !param.rest &&
+            (param.prepare === Prepare.Scalar || param.prepare === Prepare.Lazy || param.prepare === Prepare.Reference),
+    );
+    const max = params.some((param) => param.rest) ? MAX_ARGUMENTS : fixed;
+    return Object.freeze({
+        name,
+        params,
+        slots,
+        returns: returns ?? 0,
+        min,
+        max,
+        fixed,
+        group,
+        sized,
+        plain,
+        run: body,
     });
-    const repeats = params.some((param) => param.rest);
-    const max = repeats ? MAX_ARGUMENTS : fixed;
-    return Object.freeze({ name, params, returns: returns ?? 0, min, max, fixed, group: 1, plain, run: body });
 }
 
 // What a reading makes of its fallback: the fallback itself when it is a value of that reading.

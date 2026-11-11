@@ -3,14 +3,17 @@
 // body never meets a cell that is still to be computed, or an error inside a range.
 
 import type { FormulaError } from '../values/errors';
-import { isArray, isError, isReference } from '../values/value';
+import { VALUE } from '../values/errors';
+import type { Reference } from '../values/value';
+import { arrayOf, isArray, isError, isReference } from '../values/value';
 import { isLazy } from './call';
+import { tally } from './criteria';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
-import { Errors } from './families';
+import { Errors, Families } from './families';
 import type { Frame } from './readers';
-import type { Entry, Held } from './signature';
-import { Prepare } from './signature';
+import type { Entry, Held, Param } from './signature';
+import { Prepare, Read } from './signature';
 import { firstError } from './views';
 
 // The error that ends the call, or null with `frame.args` ready for the body. `count` arguments were written.
@@ -18,25 +21,39 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
     const { params } = entry;
     const { held, args } = frame;
     frame.failed = null;
+    if (entry.sized !== -2) {
+        const error = weigh(ctx, entry, frame, count);
+        if (error !== null) return error;
+    }
+    let at = 0;
     for (let p = 0; p < params.length; p += 1) {
-        const { family, rest } = params[p];
-        if (family === null) {
-            const value = held[p];
-            if (params[p].prepare === Prepare.Ambient) args[p] = ctx.room;
-            else if (params[p].prepare !== Prepare.Whole) args[p] = rest ? held.slice(p, count) : value;
-            else args[p] = value === undefined || isLazy(value) ? undefined : frame.table(p).over(value);
-            continue;
+        const param = params[p];
+        const { family } = param;
+        const to = param.rest ? count : at + spanOf(param);
+        const value = held[at];
+        if (param.prepare === Prepare.Ambient) args[p] = ctx.room;
+        else if (param.prepare === Prepare.Whole) {
+            args[p] = value === undefined || isLazy(value) ? undefined : frame.table(p).over(value);
+        } else if (param.prepare !== Prepare.Walked) args[p] = param.rest ? held.slice(at, count) : value;
+        else if (param.read === Read.Matched) args[p] = frame.numbers(p).bind(at, to, Families.Numbers, false);
+        else if (family === null) args[p] = frame.matches;
+        else {
+            for (let i = at; i < to; i += 1) settle(ctx, held[i], family);
+            for (let i = at; family.errors === Errors.Result && i < to; i += 1) {
+                const error = errorIn(ctx, held[i], family);
+                if (error !== null) return error;
+            }
+            args[p] = frame.numbers(p).bind(at, to, family, true);
         }
-        const to = rest ? count : p + 1;
-        for (let i = p; i < to; i += 1) settle(ctx, held[i], family);
-        for (let i = p; family.errors === Errors.Result && i < to; i += 1) {
-            const error = errorIn(ctx, held[i], family);
-            if (error !== null) return error;
-        }
-        args[p] = frame.numbers(p).bind(p, to, family);
+        at = to;
     }
     if (args.length !== params.length) args.length = params.length;
     return null;
+}
+
+// How many arguments one occurrence of a parameter takes.
+function spanOf(param: Param<unknown>): number {
+    return param.prepare === Prepare.Ambient ? 0 : param.read === Read.Where ? 2 : 1;
 }
 
 function settle(ctx: Evaluator, value: Held, family: Family): void {
@@ -57,4 +74,53 @@ function errorIn(ctx: Evaluator, value: Held, family: Family): FormulaError | nu
         if (isError(item)) return item;
     }
     return null;
+}
+
+// The criteria of a call, walked: the count for its Matches, and the numbers beside the matching cells in the
+// place of the range they came from, for its Numbers. Ranges of unequal size are #VALUE!, and so the first error
+// is the one beside a cell that matched.
+function weigh(ctx: Evaluator, entry: Entry, frame: Frame, count: number): FormulaError | null {
+    const { held } = frame;
+    const ranges: Reference[] = [];
+    const criteria: Held[] = [];
+    let values: Reference | null = null;
+    let place = -1;
+    let at = 0;
+    for (const param of entry.params) {
+        const to = param.rest ? count : at + spanOf(param);
+        const first = held[at];
+        if (param.read === Read.Matched) {
+            place = at;
+            if (isReference(first)) values = first;
+        } else if (param.read === Read.Blanks && isReference(first)) {
+            ranges.push(first);
+            criteria.push('');
+        }
+        for (let i = at; param.read === Read.Where && i < to; i += 2) {
+            const range = held[i];
+            if (isReference(range)) ranges.push(range);
+            criteria.push(held[i + 1]);
+        }
+        at = to;
+    }
+    if (ranges.length === 0) return null;
+    const rows = ranges[0].bottom - ranges[0].top;
+    const columns = ranges[0].right - ranges[0].left;
+    for (const range of ranges) {
+        if (range.bottom - range.top !== rows || range.right - range.left !== columns) return VALUE;
+    }
+    if (place >= 0 && entry.sized >= 0) {
+        values = values === null ? ranges[0] : { ...values, bottom: values.top + rows, right: values.left + columns };
+    } else if (values !== null && (values.bottom - values.top !== rows || values.right - values.left !== columns)) {
+        return VALUE;
+    }
+    // Every cell is computed before a criterion is read: a text is known by its id only once a cell holds it.
+    for (const range of ranges) ctx.recalc.settleArea(range);
+    if (values !== null) ctx.recalc.settleArea(values);
+    const { tally: found } = frame;
+    tally(ctx, ranges, criteria, values, found);
+    frame.matches.count = found.count;
+    if (place >= 0)
+        held[place] = found.found === 0 ? undefined : arrayOf(found.found, 1, found.numbers.subarray(0, found.found));
+    return found.error;
 }

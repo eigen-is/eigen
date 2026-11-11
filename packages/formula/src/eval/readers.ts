@@ -7,6 +7,7 @@ import { CALC, NA } from '../values/errors';
 import { snapSum } from '../values/precision';
 import type { ArrayValue, Scalar, Value } from '../values/value';
 import { arrayOf, elementAt, isArray, isError, isReference, MOST_ELEMENTS, partOf } from '../values/value';
+import type { Tally } from './criteria';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Families } from './families';
@@ -21,6 +22,9 @@ export class Frame {
     // Set by a reader that could not answer: the result of the call, whatever the body made of it.
     public failed: FormulaError | null = null;
     private readonly ctx: Evaluator;
+    // What the criteria of the call in progress matched.
+    public readonly matches = new Matches();
+    public readonly tally: Tally = { count: 0, numbers: new Float64Array(8), found: 0, error: null };
     private readonly readers: Numbers[] = [];
     private readonly tables: Table[] = [];
 
@@ -38,6 +42,11 @@ export class Frame {
     }
 }
 
+// The cells that every criterion of a call accepts.
+export class Matches {
+    public count = 0;
+}
+
 // The numbers a family counts among the arguments of one parameter.
 export class Numbers {
     private readonly ctx: Evaluator;
@@ -47,6 +56,7 @@ export class Numbers {
     private family: Family = Families.Numbers;
     // How many cells count, once a walk has found out.
     private counted = -1;
+    private snaps = true;
     private gathered: Float64Array = new Float64Array(8);
 
     public constructor(ctx: Evaluator, frame: Frame) {
@@ -55,7 +65,8 @@ export class Numbers {
     }
 
     // The arguments `from` up to `to` of the frame.
-    public bind(from: number, to: number, family: Family): this {
+    public bind(from: number, to: number, family: Family, snaps: boolean): this {
+        this.snaps = snaps;
         this.from = from;
         this.to = to;
         this.family = family;
@@ -63,12 +74,13 @@ export class Numbers {
         return this;
     }
 
-    // Added number by number in written order, and 0 when the last addition leaves next to nothing.
+    // Added number by number in written order. Of a family's numbers the sum is 0 when the last addition leaves
+    // next to nothing.
     public sum(): number {
         const { walk } = this.start();
         const sum = walk.add();
         this.done();
-        return snapSum(sum, walk.before);
+        return this.snaps ? snapSum(sum, walk.before) : sum;
     }
 
     // How many cells count, a repeated one as often as it is written.

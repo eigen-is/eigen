@@ -21,7 +21,10 @@ const ROWS: Entry[] = [];
 for (const entry of FUNCTIONS.values()) if (!('flags' in entry)) ROWS.push(entry);
 
 // A row for which no call from the pools answers a value names one here.
-const BASES: Readonly<Record<string, readonly string[]>> = { XMATCH: ['20', 'A1:A5', '0', '1'] };
+const BASES: Readonly<Record<string, readonly string[]>> = {
+    XMATCH: ['20', 'A1:A5', '0', '1'],
+    AVERAGEIFS: ['A1:A5', 'A1:A5', '">5"'],
+};
 // The one row whose answer is an error by definition.
 const ERRORS = new Set(['NA']);
 
@@ -43,6 +46,8 @@ function pool(param: Param<unknown>): readonly string[] {
             return ['A1:B5', 'A1:A5', 'A1:E1'];
         case Read.Here:
             return ['A2', 'C1:C3'];
+        case Read.Only:
+            return ['A1:A5', 'C1:C3'];
         default:
             return ['1', '"abc"', 'TRUE'];
     }
@@ -69,7 +74,7 @@ function isFailure(value: unknown): value is FormulaError {
 
 // The first argument list from the pools, or from BASES, whose call answers a value.
 function baseOf(entry: Entry): readonly string[] | undefined {
-    const taken = entry.params.filter((param) => param.prepare !== Prepare.Ambient);
+    const taken = entry.slots;
     const tries: (readonly string[])[] = [];
     if (BASES[entry.name] !== undefined) tries.push(BASES[entry.name]);
     for (let k = 0; k < 4; k += 1) {
@@ -87,7 +92,7 @@ function withArg(args: readonly string[], at: number, put: string): string[] {
 
 describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, entry) => {
     const base = BASE.get(entry.name) ?? [];
-    const params = entry.params.filter((param) => param.prepare !== Prepare.Ambient);
+    const params = entry.slots;
     const scalars = params.map((param, at) => (param.prepare === Prepare.Scalar ? at : -1)).filter((at) => at >= 0);
     // The parameters whose reading an error ends, and those read as a number or a truth value.
     const ends = (param: Param<unknown>) =>
@@ -104,6 +109,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         if (entry.min > 0) formulas.push(written(entry, base.slice(0, entry.min - 1)));
         if (entry.max < 255) formulas.push(written(entry, [...base, ...base, '1'].slice(0, entry.max + 1)));
         for (const value of evaluateAll(formulas)) expect(value).toBe(VALUE);
+        if (entry.group > 1) expect(evaluateAll([written(entry, [...base, base[entry.fixed]])])[0]).toBe(VALUE);
         const fewest = evaluateAll([written(entry, base.slice(0, entry.min))])[0];
         expect(fewest).not.toBe(VALUE);
     });
@@ -216,7 +222,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
     });
 
     // The parameter that takes every value of its arguments, when the row ends in one.
-    const family = params.at(-1)?.rest === true ? params.at(-1)?.family : undefined;
+    const family = entry.params.at(-1)?.rest === true ? entry.params.at(-1)?.family : undefined;
     // What the call answers with one more argument, and whether two forms of that argument answer alike.
     const same = (a: string, b: string | null) => {
         const [first, second] = evaluateAll([
