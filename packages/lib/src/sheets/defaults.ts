@@ -1,3 +1,4 @@
+import { isRecord } from '../core/guards';
 import type { Sheet } from './types';
 
 // The size, in CSS pixels, of a track the user never resized. A row or column without a
@@ -86,3 +87,27 @@ export const SHEET_DEFAULT_FONT_SIZE = 10; // points
 // Excel's grid (A1:XFD1048576): imported workbooks carry refs this far out, past the sheet's own insert limits.
 export const REFERENCE_ROW_COUNT = 1048576;
 export const REFERENCE_COLUMN_COUNT = 16384;
+
+// The most slots one sheet's matrix holds, its rows by its columns. Every reader builds the matrix whole, and recalc
+// builds each row at least a default grid wide, so the xlsx reader charges a file's sheets against it together.
+export const MAX_GRID_SLOTS = 110_000_000;
+
+// Whether a reader may build the sheet's matrix: its stated size and its farthest stored cell lie within Excel's
+// grid, and the rows by the columns within the slot cap. A peer can store any number as a size or a cell's place.
+export function sheetFitsGrid({ row = 0, column = 0, celldata }: Record<string, unknown>): boolean {
+    if (!isCount(row, REFERENCE_ROW_COUNT) || !isCount(column, REFERENCE_COLUMN_COUNT)) return false;
+    let rows = row;
+    let columns = column;
+    for (const cell of Array.isArray(celldata) ? celldata : []) {
+        if (!isRecord(cell)) return false;
+        const { r, c } = cell;
+        if (!isCount(r, REFERENCE_ROW_COUNT - 1) || !isCount(c, REFERENCE_COLUMN_COUNT - 1)) return false;
+        rows = Math.max(rows, r + 1);
+        columns = Math.max(columns, c + 1);
+    }
+    return rows * columns <= MAX_GRID_SLOTS;
+}
+
+function isCount(value: unknown, max: number): value is number {
+    return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= max;
+}

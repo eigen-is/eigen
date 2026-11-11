@@ -1,7 +1,7 @@
 // The sheet's op log on a real mounted Workbook over a real Y.Doc, with a second Y.Doc as the server. The grid mounts
 // once: a batch that arrives while it mounts lands in it, and a new snapshot loads into it in place, which keeps the
 // view and ends as a joiner's replay. A tab never writes the snapshot.
-import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -482,4 +482,31 @@ test('a restore that brings back an older snapshot keeps the view and drops the 
     await act(async () => workbookRef.current?.undo());
     expect([cell(1, 1)?.v, cell(2, 2)]).toEqual(['restored', null]);
     expect(doc.getArray('ops').length).toBe(0);
+});
+
+// The grid's own code can throw on what a peer stored. A throw must not escape the doc's observer, which would leave
+// the doc ahead of the grid for good.
+test("a throw while the grid applies a peer's batch loads the log again", async () => {
+    const error = spyOn(console, 'error').mockImplementation(() => {});
+    const { cell, seen, workbookRef } = await open();
+    if (!workbookRef.current) throw new Error('no workbook');
+    workbookRef.current.applyOp = () => {
+        throw new Error('the grid failed');
+    };
+    await act(async () => peerSends(typed(0, 0, 'peer')));
+    expect(cell(0, 0)?.v).toBe('peer');
+    expect(seen.loadFailed).toBe(false);
+    error.mockRestore();
+});
+
+test('a throw while the grid loads a new snapshot locks the workbook', async () => {
+    const error = spyOn(console, 'error').mockImplementation(() => {});
+    const { seen, workbookRef } = await open({ '1_1': 'stored' });
+    if (!workbookRef.current) throw new Error('no workbook');
+    workbookRef.current.replayOps = () => {
+        throw new Error('the grid failed');
+    };
+    await act(async () => importOver({ '1_1': 'imported' }));
+    expect(seen.loadFailed).toBe(true);
+    error.mockRestore();
 });

@@ -7,9 +7,8 @@
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { boardCardIds, getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { commentCardIdsIn } from '@workspace/lib/docs/eigendoc';
-import { isRecord } from '@workspace/lib/guards';
 import type { Cell } from '@workspace/lib/sheets';
-import { decodeSheetsSnapshot, readSheetsSnapshotJson, sheetsOpLog } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot, readSheetsLog, readSheetsSnapshotJson } from '@workspace/lib/sheets';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CommentCard, CommentMapName } from '@workspace/lib/types/comments';
 import { commentMapName } from '@workspace/lib/types/comments';
@@ -55,15 +54,9 @@ export function documentReferences(type: DriveCollabType, doc: Y.Doc): DocumentR
             // The sheets the snapshot stores and every op still pending, read without a replay. An op that writes one field holds
             // that field's name only in its path, so each op is read as the object it writes.
             const snapshot = readSheetsSnapshotJson(doc);
-            const ops = sheetsOpLog(doc)
-                .toArray()
-                .flatMap((batch) => {
-                    if (!Array.isArray(batch)) throw new Error('Unreadable sheets op batch');
-                    return batch.map((op) => {
-                        if (!isRecord(op) || !Array.isArray(op.path)) throw new Error('Unreadable sheets op');
-                        return op.path.reduceRight<unknown>((value, key) => ({ [key]: value }), op.value);
-                    });
-                });
+            const ops = readSheetsLog(doc)
+                .flat()
+                .map((op) => op.path.reduceRight<unknown>((value, key) => ({ [key]: value }), op.value));
             const sheets = [snapshot ? decodeSheetsSnapshot(snapshot) : [], ops];
             media = mediaNamesIn(sheets);
             inUse = cellCardIds(sheets);

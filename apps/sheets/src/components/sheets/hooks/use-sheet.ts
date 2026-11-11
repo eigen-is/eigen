@@ -7,7 +7,14 @@
 import type { CollabDoc } from '@workspace/lib/collab';
 import { useCollabDoc } from '@workspace/lib/collab';
 import type { Sheet } from '@workspace/lib/sheets';
-import { readSheetsSnapshotJson, sheetsLogStartsWith, sheetsOpLog, sheetsStateMap } from '@workspace/lib/sheets';
+import {
+    readSheetsLog,
+    readSheetsSnapshotJson,
+    sheetsBatchOf,
+    sheetsLogStartsWith,
+    sheetsOpLog,
+    sheetsStateMap,
+} from '@workspace/lib/sheets';
 import type { Op, WorkbookInstance, Sheet as WorkbookSheet } from '@workspace/sheet';
 import { commutes } from '@workspace/sheet';
 import { createDefaultSheets, decodeOrDefault, replaySheetsOps } from '@workspace/sheet/engine';
@@ -45,19 +52,22 @@ export function useSheet(
     const readyForOpsRef = useRef(false);
     // False while the grid shows the defaults after a failed load. A batch built on those must not reach peers.
     const loadedRef = useRef(false);
-    // The snapshot and the log's batches that the sheets a grid mounts on hold, until that grid caught up with the doc.
-    const mountingRef = useRef<{ snapshot: string | undefined; batches: Op[][] } | null>(null);
+    // The snapshot and the log's entries that the sheets a grid mounts on hold, until that grid caught up with the doc.
+    const mountingRef = useRef<{ snapshot: string | undefined; entries: unknown[] } | null>(null);
     // The mounted grid's anchors, in log order.
     const anchorsRef = useRef<Anchor[]>([]);
 
-    // The snapshot with the log replayed on top. A failure returns null and locks the workbook read-only, since what it
-    // shows may differ from the wire, and is caught because a throw escaping the Yjs handler kills the app.
-    const readSheets = (doc: Y.Doc): Sheet[] | null => {
+    // The snapshot with the log replayed on top, which a mounted grid takes through `show`. A failure of either returns
+    // null and locks the workbook read-only, since what it shows may differ from the wire, and is caught because a
+    // throw escaping the Yjs handler kills the app.
+    const readSheets = (doc: Y.Doc, show?: (sheets: Sheet[]) => void): Sheet[] | null => {
         let sheets: Sheet[] | null = null;
         try {
-            sheets = replaySheetsOps(decodeOrDefault(readSheetsSnapshotJson(doc)).sheets, sheetsOpLog(doc).toArray());
+            const read = replaySheetsOps(decodeOrDefault(readSheetsSnapshotJson(doc)).sheets, readSheetsLog(doc));
+            show?.(read);
+            sheets = read;
         } catch (e) {
-            console.error('[sheet] Failed to load the snapshot, opening read-only:', e);
+            console.error('[sheet] Failed to load the workbook, now read-only:', e);
         }
         loadedRef.current = sheets !== null;
         setLoadFailed(sheets === null);
@@ -68,11 +78,8 @@ export function useSheet(
     // it can't read, the grid keeps the workbook on screen, because defaults would wipe the user's view.
     const reset = (doc: Y.Doc) => {
         const workbook = workbookRef.current;
-        if (!workbook) return;
-        const sheets = readSheets(doc);
-        if (!sheets) return;
+        if (!workbook || !readSheets(doc, (sheets) => workbook.replayOps(sheets, [], new Set()))) return;
         mountingRef.current = null;
-        workbook.replayOps(sheets, [], new Set());
         anchorsRef.current = [{ at: sheetsOpLog(doc).length, sheets: workbook.getAllSheets() }];
     };
 
@@ -93,12 +100,12 @@ export function useSheet(
 
             // Yjs calls this once per transaction, with one change that holds every batch it added or deleted and, in
             // its retains, their places in the log. The tab's own batch, one per keystroke, reads nothing of the log.
-            const handleOps = (event: Y.YArrayEvent<Op[]>) => {
+            const handleOps = (event: Y.YArrayEvent<unknown>) => {
                 // A grid that mounts catches up once it mounted, and a new snapshot loads the whole log, these batches
                 // too. Yjs runs this observer and the map's in no fixed order.
                 if (!readyForOpsRef.current || mountingRef.current || event.transaction.changed.has(stateRoot)) return;
                 // What the transaction added, and the log index of the first.
-                const added: Op[][] = [];
+                const added: unknown[] = [];
                 let from = -1;
                 let kept = 0;
                 for (const change of event.changes.delta) {
@@ -112,31 +119,31 @@ export function useSheet(
                 }
                 // The batches the grid has not applied yet. It applied the tab's own at its call, and a peer's arrive
                 // through Y.applyUpdate, whose transaction is never local, so a transaction adds one kind or the other.
-                const fresh = new Set(event.transaction.local ? [] : added);
+                const fresh = new Set(event.transaction.local ? [] : added.map(sheetsBatchOf));
                 // Every batch after the first fresh one is fresh too, or the fresh ones overtook it.
                 const overtaken =
                     fresh.size === 0 || opsArray.length - from === fresh.size
                         ? []
-                        : opsArray.slice(from).filter((ops) => !fresh.has(ops));
+                        : readSheetsLog(doc, from).filter((ops) => !fresh.has(ops));
 
                 const workbook = workbookRef.current;
                 if (!workbook) return;
                 // An anchor stays true up to the first fresh batch.
                 const anchors = anchorsRef.current.filter((anchor) => fresh.size === 0 || anchor.at <= from);
-                if (overtaken.length === 0 || commutes(fresh, overtaken)) {
-                    for (const ops of fresh) applyBatch(workbook, ops);
-                } else {
-                    const anchor = anchors.at(-1);
-                    // A batch that lands before the oldest anchor, such as one before the batches the grid replayed at
-                    // load, has none.
-                    if (!anchor) return reset(doc);
-                    try {
-                        workbook.replayOps(anchor.sheets, opsArray.slice(anchor.at), fresh);
-                    } catch (e) {
-                        // A throw escaping the Yjs observer would kill the app.
-                        console.error('[sheet] Failed to apply the log again:', e);
-                        return reset(doc);
+                try {
+                    if (overtaken.length === 0 || commutes(fresh, overtaken)) {
+                        for (const ops of fresh) workbook.applyOp(ops);
+                    } else {
+                        const anchor = anchors.at(-1);
+                        // A batch that lands before the oldest anchor, such as one before the batches the grid replayed
+                        // at load, has none.
+                        if (!anchor) return reset(doc);
+                        workbook.replayOps(anchor.sheets, readSheetsLog(doc, anchor.at), fresh);
                     }
+                } catch (e) {
+                    // A throw escaping the Yjs observer would kill the app, and the grid may hold part of a batch.
+                    console.error('[sheet] Failed to apply the log, loading it again:', e);
+                    return reset(doc);
                 }
                 keepAnchor(anchors, opsArray.length, workbook);
                 anchorsRef.current = anchors;
@@ -159,7 +166,7 @@ export function useSheet(
         onSync: ({ doc }, isSynced) => {
             if (!isSynced) return;
             if (!readyForOpsRef.current) {
-                mountingRef.current = { snapshot: readSheetsSnapshotJson(doc), batches: sheetsOpLog(doc).toArray() };
+                mountingRef.current = { snapshot: readSheetsSnapshotJson(doc), entries: sheetsOpLog(doc).toArray() };
                 // After a failed first load the tab shows the blank defaults.
                 setInitialData(readSheets(doc) ?? createDefaultSheets());
                 readyForOpsRef.current = true;
@@ -178,14 +185,20 @@ export function useSheet(
         const doc = docRef.current;
         if (!mounting || !workbook || !doc) return;
         mountingRef.current = null;
-        if (readSheetsSnapshotJson(doc) !== mounting.snapshot || !sheetsLogStartsWith(doc, mounting.batches)) {
+        if (readSheetsSnapshotJson(doc) !== mounting.snapshot || !sheetsLogStartsWith(doc, mounting.entries)) {
             reset(doc);
             return;
         }
-        const at = mounting.batches.length;
-        const late = sheetsOpLog(doc).slice(at);
+        const at = mounting.entries.length;
+        const late = readSheetsLog(doc, at);
         anchorsRef.current = [{ at, sheets: workbook.getAllSheets() }];
-        for (const ops of late) applyBatch(workbook, ops);
+        try {
+            for (const ops of late) workbook.applyOp(ops);
+        } catch (e) {
+            console.error('[sheet] Failed to apply the log, loading it again:', e);
+            reset(doc);
+            return;
+        }
         keepAnchor(anchorsRef.current, at + late.length, workbook);
     }, [initialData, workbookRef, docRef]);
 
@@ -211,16 +224,6 @@ export function useSheet(
         docRef,
         provider,
     };
-}
-
-// Applies a peer's batch to the grid. A throw escaping the Yjs observer would kill the app, so a batch that fails is
-// logged.
-function applyBatch(workbook: WorkbookInstance, ops: Op[]) {
-    try {
-        workbook.applyOp(ops);
-    } catch (e) {
-        console.error('[sheet] Failed to apply remote op:', e);
-    }
 }
 
 // Keeps the sheets the grid shows as the anchor at `at`, when the last anchor lies far enough back, and drops the

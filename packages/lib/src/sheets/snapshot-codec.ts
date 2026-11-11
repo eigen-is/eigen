@@ -5,16 +5,16 @@
 
 import { isRecord } from '../core/guards';
 import { cloneSides, parseCellKey } from './borders';
+import { sheetFitsGrid } from './defaults';
 import { wellFormedConditionalFormats, wellFormedValidations } from './range-rules';
 import type {
     Cell,
     CellBorderSides,
     CellMatrix,
     CellWithRowAndCol,
+    SHEET_KEYED_MAPS,
     Sheet,
-    SheetChart,
     SheetConfig,
-    SheetImage,
 } from './types';
 
 const FORMAT = 'eigensheets/2';
@@ -31,20 +31,17 @@ type EncodedContent = string | number | boolean | Record<string, unknown>;
 // [row, col, borderIndex], one for each `config.borderInfo` key.
 type EncodedBorder = [number, number, number];
 
-type EncodedSheet = Omit<
-    Sheet,
-    'celldata' | 'data' | 'config' | 'images' | 'charts' | 'conditionalFormats' | 'dataValidations'
-> & {
-    config?: Omit<SheetConfig, 'borderInfo'>;
-    cells?: EncodedCell[];
-    borderCells?: EncodedBorder[];
-    // Images, charts and rules are a few small records per sheet, written as they are; an empty map is left out and
-    // the decoder adds it back. The rules are read as unknown, since the decoder keeps only the well-formed ones.
-    images?: Record<string, SheetImage>;
-    charts?: Record<string, SheetChart>;
-    conditionalFormats?: unknown;
-    dataValidations?: unknown;
-};
+type KeyedMap = (typeof SHEET_KEYED_MAPS)[number];
+// Images, charts and rules are a few small records per sheet, written as they are; an empty map is left out and the
+// decoder adds it back. The rules are read as unknown, since the decoder keeps only the well-formed ones.
+type StoredKeyedMaps = Pick<Sheet, 'images' | 'charts'> & { conditionalFormats?: unknown; dataValidations?: unknown };
+
+type EncodedSheet = Omit<Sheet, 'celldata' | 'data' | 'config' | KeyedMap> &
+    StoredKeyedMaps & {
+        config?: Omit<SheetConfig, 'borderInfo'>;
+        cells?: EncodedCell[];
+        borderCells?: EncodedBorder[];
+    };
 
 type SnapshotV2 = {
     f: typeof FORMAT;
@@ -125,19 +122,12 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
     const ids = new Set<string>();
     const decoded = sheets.map((encoded) => {
         const { cells, borderCells, config, images, charts, conditionalFormats, dataValidations, ...rest } = encoded;
+        const maps = { images, charts, conditionalFormats, dataValidations };
         // Every op names its sheet by id, so a sheet without an id of its own is as corrupt as a bad style index.
         // Making one here would give each reader a different sheet.
         if (typeof rest.id !== 'string' || ids.has(rest.id)) throw unknownFormat(rest.id);
         ids.add(rest.id);
-        // Every sheet gets all four maps, even empty: the editor writes each image, chart or rule under its own key,
-        // and that patch needs the map. A value that is no map is dropped, and so is a rule that is not well formed.
-        const sheet: Sheet = {
-            ...rest,
-            images: isRecord(images) ? images : {},
-            charts: isRecord(charts) ? charts : {},
-            conditionalFormats: wellFormedConditionalFormats(conditionalFormats),
-            dataValidations: wellFormedValidations(dataValidations),
-        };
+        const sheet: Sheet = { ...rest, ...sheetKeyedMaps(maps) };
 
         if (cells) {
             const celldata: CellWithRowAndCol[] = [];
@@ -146,6 +136,8 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
             }
             sheet.celldata = celldata;
         }
+        // Every reader builds the matrix at this size, so one no sheet may hold is as corrupt as a bad style index.
+        if (!sheetFitsGrid(sheet)) throw unknownFormat(`${rest.row}x${rest.column}`);
 
         if (config || borderCells) {
             sheet.config = { ...config };
@@ -165,6 +157,18 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
         return sheet;
     });
     return { sheets: decoded, computed };
+}
+
+// A sheet's keyed maps as every reader holds them, all there even when empty: the editor writes each image, chart or
+// rule under its own key, and that write needs the map. A value that is no map is dropped, and so is a rule that is
+// not well formed.
+export function sheetKeyedMaps(sheet: StoredKeyedMaps): Required<Pick<Sheet, KeyedMap>> {
+    return {
+        images: isRecord(sheet.images) ? sheet.images : {},
+        charts: isRecord(sheet.charts) ? sheet.charts : {},
+        conditionalFormats: wellFormedConditionalFormats(sheet.conditionalFormats),
+        dataValidations: wellFormedValidations(sheet.dataValidations),
+    };
 }
 
 function unknownFormat(found: unknown): Error {

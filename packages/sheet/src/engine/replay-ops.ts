@@ -6,7 +6,13 @@
 
 import { isRecord } from '@workspace/lib/guards';
 import type { Op, Sheet } from '@workspace/lib/sheets';
-import { isPatchOp, isStructuralBatch, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import {
+    isPatchOp,
+    isStructuralBatch,
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+    sheetFitsGrid,
+} from '@workspace/lib/sheets';
 import { applySheetWrites, opToPatchOnSheets, sheetHoldsNoBadLink } from '@workspace/lib/sheets/yjs-ops';
 import { sheetNameKey } from './a1-notation';
 import { celldataToData, dataToCelldata } from './celldata';
@@ -262,7 +268,7 @@ function isNewSheet(v: unknown, sheets: readonly Sheet[]): v is Sheet {
     if (celldata != null && !(Array.isArray(celldata) && celldata.every(isRecord))) return false;
     if (config != null && !isRecord(config)) return false;
     if (typeof id !== 'string' || typeof name !== 'string') return false;
-    return !sheets.some((s) => s.id === id) && sheetHoldsNoBadLink(v);
+    return !sheets.some((s) => s.id === id) && sheetHoldsNoBadLink(v) && sheetFitsGrid(v);
 }
 
 // Whether a step leaves no sheet shown where one was. Two tabs each hiding or deleting one of the last two sheets shown

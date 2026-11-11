@@ -3,6 +3,7 @@ import type { Op, Sheet } from '@workspace/lib/sheets';
 import {
     decodeSheetsWorkbook,
     encodeSheetsSnapshot,
+    readSheetsLog,
     readSheetsSnapshotJson,
     sheetsOpLog,
     sheetsStateMap,
@@ -222,7 +223,7 @@ describe('CollabDocument compacts a workbook at close', () => {
 
     // A workbook built outside the registry, with a snapshot and the given log. The drive's close is counted and
     // does nothing, so the test reads the document after it. The timers are fake from here on.
-    async function openLingeringSheet(fileName: string, batches: Op[][], computed = false) {
+    async function openLingeringSheet(fileName: string, batches: unknown[], computed = false) {
         const created = await home.drive.create(mountId, rootId, fileName, 'sheets', home.user);
         const { path } = await home.drive.resolveFile(mountId, created.id);
         const doc = await CollabDocument.open(home.drive, path);
@@ -312,7 +313,7 @@ describe('CollabDocument compacts a workbook at close', () => {
         try {
             const doc = new Y.Doc();
             Y.applyUpdate(doc, readYjsStateFromFile(await mount.downloadToTemp(newest.id, tempId)));
-            return sheetsOpLog(doc).toArray();
+            return readSheetsLog(doc);
         } finally {
             await mount.cleanupTemp(tempId);
         }
@@ -345,6 +346,29 @@ describe('CollabDocument compacts a workbook at close', () => {
             expect(sheetsLines).toEqual([`[sheets] compaction dropped 2 op batches path=${sheet.id}`]);
         } finally {
             warn.mockRestore();
+            sheet.restore();
+            sheet.doc.destruct();
+        }
+    }, 30_000);
+
+    // A peer can store anything as a log entry, a BigInt included, which no JSON carries to the transform process.
+    test('a close folds a log with entries that are no op batches, which change nothing', async () => {
+        const bigIntValue = [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 2], value: { v: 1n } }];
+        const forged = [[1n], 42, [null], 'abc', [{ op: 'replace', id: 'sheet-1' }], bigIntValue];
+        const sheet = await openLingeringSheet('compaction-forged', [edit(0, 0, 7), ...forged, edit(0, 1, 'x')]);
+        try {
+            const closed = sheet.nextClose();
+            lingerOut(sheet.doc);
+            jest.useRealTimers();
+            await closed;
+
+            const { sheets } = decodeSheetsWorkbook(readSheetsSnapshotJson(sheet.doc.doc) ?? '');
+            expect(sheets[0].celldata?.map(({ r, c, v }) => [r, c, v?.v])).toEqual([
+                [0, 0, 7],
+                [0, 1, 'x'],
+            ]);
+            expect(sheet.ops.length).toBe(0);
+        } finally {
             sheet.restore();
             sheet.doc.destruct();
         }

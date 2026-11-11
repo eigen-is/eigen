@@ -4,9 +4,8 @@
 // overwrite each other. So every sheet that enters a reader, such as the editor's mount, the replay base or an
 // addSheet op, passes through normalizeSheetConfig first.
 
-import { isRecord } from '@workspace/lib/guards';
 import type { Sheet } from '@workspace/lib/sheets';
-import { wellFormedConditionalFormats, wellFormedValidations } from '@workspace/lib/sheets';
+import { sheetKeyedMaps } from '@workspace/lib/sheets';
 import type { ExtendedSheetConfig } from './types';
 
 // One list: a collection missing from it brings the overwrite back for its own first write. `satisfies` checks that
@@ -36,10 +35,6 @@ export function normalizeSheetConfig(sheet: Sheet) {
     // `Sheet.config` is lib's wire shape; the editor extras ride along on the same object.
     const cfg: ExtendedSheetConfig = (sheet.config ??= {});
     for (const key of SHEET_CONFIG_COLLECTIONS) cfg[key] ??= {};
-    // Images, charts and rules live outside config but are written per key the same way. Only a forged sheet holds a
-    // value that is no map or a rule that is not well formed, and it is left out.
-    sheet.images = isRecord(sheet.images) ? sheet.images : {};
-    sheet.charts = isRecord(sheet.charts) ? sheet.charts : {};
-    sheet.conditionalFormats = wellFormedConditionalFormats(sheet.conditionalFormats);
-    sheet.dataValidations = wellFormedValidations(sheet.dataValidations);
+    // Images, charts and rules live outside config but are written per key the same way.
+    Object.assign(sheet, sheetKeyedMaps(sheet));
 }

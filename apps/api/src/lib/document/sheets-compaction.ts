@@ -3,8 +3,7 @@
 // trying a workbook whose compactions keep failing. The collab document asks for it at the end of its linger, and swaps
 // the new snapshot in only while the log still opens with the batches it folded.
 
-import type { Op } from '@workspace/lib/sheets';
-import { isCurrentSheetsSnapshot, readSheetsSnapshotJson, sheetsOpLog } from '@workspace/lib/sheets';
+import { isCurrentSheetsSnapshot, readSheetsSnapshotJson, sheetsBatchOf, sheetsOpLog } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_SHEETS } from '@workspace/lib/types/drive';
 import type * as Y from 'yjs';
@@ -36,14 +35,14 @@ export async function compactSheets(
     path: DrivePath,
     doc: Y.Doc,
     signal: AbortSignal,
-): Promise<{ snapshot: string; folded: readonly Op[][] } | null> {
-    // Read from the live doc in one step, as data.db can lag behind.
+): Promise<{ snapshot: string; folded: readonly unknown[] } | null> {
+    // Read from the live doc in one step, as data.db can lag behind. The swap compares the entries themselves.
     const log = sheetsOpLog(doc).toArray();
     try {
         const budget = AbortSignal.any([signal, AbortSignal.timeout(COMPACTION_BUDGET_MS)]);
         const { snapshot, dropped, folded } = await runSheetsCompaction(
             readSheetsSnapshotJson(doc) ?? null,
-            log,
+            log.map(sheetsBatchOf),
             budget,
         );
         compactionFailures.delete(path.id);

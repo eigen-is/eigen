@@ -5,10 +5,11 @@
 
 import type { Patch } from 'immer';
 import { isRecord } from '../core/guards';
+import { sheetFitsGrid } from './defaults';
 import type { RuleStore } from './range-rules';
 import { holdsOnlyRules, ruleStoreOf } from './range-rules';
 import type { Op, Sheet } from './types';
-import { isCellLinkType, isPatchOp } from './types';
+import { isCellLinkType, isPatchOp, SHEET_KEYED_MAPS } from './types';
 
 // The batch's cell and field ops as writes on `sheets`, the sheet's index first. A sheet, row or column op is the
 // caller's to apply, before this, since it settles which sheets there are.
@@ -18,9 +19,7 @@ export function opToPatchOnSheets(sheets: readonly Sheet[], ops: readonly Op[]):
         if (!isPatchOp(op)) continue;
         // An op without a sheet id names no sheet, such as the whole `sheets` replace immer emits beside a row op.
         // The row op's own marker carries what changed.
-        if (!op.id || !op.path.every(isKey)) continue;
-        // A log written before a cell's `f` became the one record of its formula holds writes to a list no sheet has.
-        if (op.path[0] === 'calcChain') continue;
+        if (!op.id) continue;
         // No writer ships a sheet whole or its stored cell list, and a reader with no matrix would be the only one to
         // apply it.
         if (op.path.length === 0 || op.path[0] === 'celldata') continue;
@@ -51,7 +50,6 @@ export function applySheetWrites(
 ): { sheets: Sheet[]; applied: Patch[] } {
     const result = [...sheets];
     const copied = new Set<unknown>();
-    const sizes = new Map<string, number>();
     const applied: Patch[] = [];
     for (const write of writes) {
         const { op, path, value } = write;
@@ -64,7 +62,7 @@ export function applySheetWrites(
         }
         const parent = above[last];
         if (last < 1 || !parent || !resolves(parent, path[last], op, value)) continue;
-        if (!withinCap(above, write, sizes)) continue;
+        if (!withinCap(above, write)) continue;
         applied.push(write);
         if (op === 'replace' && Object.is(held(parent, path[last]), value)) continue;
         let owner: Container = result;
@@ -121,9 +119,8 @@ function isLink(value: unknown): boolean {
 type Container = Record<string, unknown> | unknown[];
 type Key = string | number;
 
-const SHEET_MAPS = new Set<unknown>(['config', 'images', 'charts', 'conditionalFormats', 'dataValidations']);
+const SHEET_MAPS = new Set<unknown>(['config', ...SHEET_KEYED_MAPS]);
 
-const isKey = (key: unknown): key is Key => typeof key === 'string' || typeof key === 'number';
 const isContainer = (value: unknown): value is Container => typeof value === 'object' && value !== null;
 const isIndex = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
 
@@ -150,19 +147,15 @@ function put(parent: Container, key: Key, op: Patch['op'], value: unknown) {
     else parent.splice(key, 1);
 }
 
-// A peer's op is untrusted, so a sheet's rules of each kind stay within their cap as the batch goes, counted once in
-// `sizes`. A `replace` of a rule that is gone is skipped too, so a peer's delete wins.
-function withinCap(above: readonly Container[], { op, path }: Patch, sizes: Map<string, number>): boolean {
-    const [sheet, field, id] = path;
-    const [, , rules] = above;
+// A peer's op is untrusted, so a sheet's rules of each kind stay within their cap as the batch goes, and its `row`
+// and `column` within the grid a reader may build. A `replace` of a rule that is gone is skipped, so a peer's delete wins.
+function withinCap(above: readonly Container[], { op, path, value }: Patch): boolean {
+    const [, field, id] = path;
+    const [, sheet, rules] = above;
+    if (path.length === 2 && (field === 'row' || field === 'column') && op !== 'remove') {
+        return sheetFitsGrid({ row: held(sheet, 'row'), column: held(sheet, 'column'), [field]: value });
+    }
     const store = ruleStoreOf(field);
-    if (!store) return true;
-    const counted = `${sheet} ${field}`;
-    if (path.length === 2) sizes.delete(counted);
-    if (path.length !== 3 || !isRecord(rules)) return true;
-    const known = Object.hasOwn(rules, id);
-    const size = (sizes.get(counted) ?? Object.keys(rules).length) + Number(op !== 'remove') - Number(known);
-    if (!known && (op === 'replace' || size > store.max)) return false;
-    sizes.set(counted, size);
-    return true;
+    if (!store || path.length !== 3 || !isRecord(rules) || Object.hasOwn(rules, id)) return true;
+    return op !== 'replace' && Object.keys(rules).length < store.max;
 }

@@ -8,18 +8,17 @@ import { parseRgb } from '../constants/colors';
 import { isRecord } from '../core/guards';
 import { generateKeyBetween, isValidFractionalIndex } from '../vector/fractional-index';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from './defaults';
-import type { ConditionalFormatRule, DataValidationRule, SheetValidation, SingleRange } from './types';
+import type { ConditionalFormatRule, DataValidationRule, RangeRule, SheetValidation, SingleRange } from './types';
 
 // The most ranges one rule holds, which bounds what one write of a rule costs every tab. Excel's selection holds at
 // most 2,048 ranges, and the editor's cuts split a range into up to four.
 export const MAX_RULE_RANGES = 4 * 2048;
 
-// The most rules of one kind a sheet holds; the fullest sheet in our xlsx corpus has 16 validation rules. With the
-// range cap it bounds what a reader that walks every rule pays, such as the painter and the export.
+// The most rules of one kind a sheet holds. With the range cap it bounds what a reader that walks every rule pays,
+// such as the painter and the export.
 export const MAX_VALIDATIONS = 1024;
 export const MAX_CONDITIONAL_FORMATS = 1024;
 
-type RangeRule = { ranges: SingleRange[]; order: string };
 export type RuleStore<R extends RangeRule = RangeRule> = { max: number; holds: (value: unknown) => value is R };
 
 const VALIDATIONS: RuleStore<SheetValidation> = { max: MAX_VALIDATIONS, holds: isSheetValidation };

@@ -3,7 +3,7 @@
 // Parsing, guards, recalc and serialization run in the transform process, so an import whose transform fails creates
 // and changes nothing. Drive's import and convert routes, for example, call it.
 
-import { readSheetsSnapshotJson, sheetsOpLog, writeSheetsSnapshot } from '@workspace/lib/sheets';
+import { readSheetsLog, readSheetsSnapshotJson, sheetsOpLog, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { ConvertTarget, DocumentImportOptions, DrivePath } from '@workspace/lib/types/drive';
 import {
     CONVERT_SOURCES,
@@ -217,7 +217,7 @@ async function insertXlsxSheets(
     const { doc } = await drive.getCollabDocument(path.mountId, path.id);
     const workbook = {
         snapshot: readSheetsSnapshotJson(doc) ?? null,
-        batches: JSON.stringify(sheetsOpLog(doc).toArray()),
+        batches: JSON.stringify(readSheetsLog(doc)),
     };
     return runInsertToSheetsBatch(
         {

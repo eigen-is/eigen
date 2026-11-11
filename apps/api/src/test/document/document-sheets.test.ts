@@ -312,13 +312,10 @@ describe('document/sheets — patch op replay', () => {
         const home = await getHome(ctx.alice.user.id);
         const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
 
-        // A log from before the list went: A1 = "asdf", B1 = "=1+1", C1 = "test".
+        // A1 = "asdf", B1 = "=1+1", C1 = "test".
         const batches: Op[][] = [
             [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 0], value: { v: 'asdf', m: 'asdf' } }],
-            [
-                { op: 'replace', id: 'sheet-1', path: ['data', 0, 1], value: { v: 2, f: '=1+1', m: '2' } },
-                { op: 'add', id: 'sheet-1', path: ['calcChain', 0], value: { r: 0, c: 1, id: 'sheet-1' } },
-            ],
+            [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 1], value: { v: 2, f: '=1+1', m: '2' } }],
             [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 2], value: { v: 'test', m: 'test' } }],
         ];
         collab.doc.transact(() => {
@@ -984,7 +981,6 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         sheetsStateMap(doc).set('snapshot', encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: false }));
         const typed: Op[] = [
             { op: 'replace', id: 'sheet-1', path: ['data', 0, 1], value: { v: 4, f: '=2+2', m: '4' } },
-            { op: 'add', id: 'sheet-1', path: ['calcChain', 0], value: { r: 0, c: 1, id: 'sheet-1' } },
         ];
         doc.getArray<Op[]>('ops').push([typed]);
         expect(readSheetsFromDoc(doc).sheets[0].celldata?.[0]?.v?.v).toBe(99);

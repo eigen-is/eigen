@@ -10,6 +10,7 @@ export {
     parseCellKey,
 } from './borders';
 export {
+    MAX_GRID_SLOTS,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
     SHEET_COLUMN_HEADER_HEIGHT,
@@ -20,6 +21,7 @@ export {
     sheetColumnsWidth,
     sheetDefaultColWidth,
     sheetDefaultRowHeight,
+    sheetFitsGrid,
     sheetRowsHeight,
     sheetTrackAt,
 } from './defaults';
@@ -50,10 +52,13 @@ export {
     decodeSheetsWorkbook,
     encodeSheetsSnapshot,
     isCurrentSheetsSnapshot,
+    sheetKeyedMaps,
 } from './snapshot-codec';
 export * from './types';
 export {
+    readSheetsLog,
     readSheetsSnapshotJson,
+    sheetsBatchOf,
     sheetsLogStartsWith,
     sheetsOpLog,
     sheetsStateMap,

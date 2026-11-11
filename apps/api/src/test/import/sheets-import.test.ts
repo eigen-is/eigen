@@ -1,6 +1,12 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { Cell, CellWithRowAndCol, Op, Sheet } from '@workspace/lib/sheets';
-import { decodeSheetsSnapshot, encodeSheetsSnapshot, sheetsOpLog, writeSheetsSnapshot } from '@workspace/lib/sheets';
+import {
+    decodeSheetsSnapshot,
+    encodeSheetsSnapshot,
+    readSheetsLog,
+    sheetsOpLog,
+    writeSheetsSnapshot,
+} from '@workspace/lib/sheets';
 import type { DrivePath, ImportResult } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_SHEETS } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
@@ -329,6 +335,17 @@ describe('Sheets xlsx import/convert', () => {
         expect(await listVersions(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, sheetsDoc.id)).toEqual([]);
     });
 
+    test('an insert into a workbook whose log holds an entry no JSON carries adds its sheets', async () => {
+        const sheetsDoc = await uploadAndConvert(buildXlsxBuffer([{ a1: 'A1', value: 'Mine' }], 'Data'), 'forged.xlsx');
+        const home = await getHome(ctx.alice.user.id);
+        const { doc } = await home.drive.getCollabDocument(mountId, sheetsDoc.id);
+        sheetsOpLog(doc).push([[1n]]);
+
+        await assertJson<ImportResult>(await importRequest(sheetsDoc.id, dataAndSummary(), 'insert'));
+
+        expect((await readLive(sheetsDoc.id)).map((sheet) => sheet.name)).toEqual(['Data', 'Data(Copy)', 'Summary']);
+    });
+
     // A running total of 2,000 rows recomputes about 2M cells at each of the three row inserts, a second or more of
     // replay, which the transform process runs while the event loop keeps turning.
     test('an insert replays the workbook in the transform process, its row inserts recomputed off the event loop', async () => {
@@ -487,7 +504,8 @@ describe('Sheets xlsx import/convert', () => {
         const { path } = await home.drive.resolveFile(mountId, sheetsDoc.id);
         const user = await getUserById(ctx.alice.user.id);
         if (!user) throw new Error('alice missing');
-        const ops = sheetsOpLog((await home.drive.getCollabDocument(mountId, sheetsDoc.id)).doc);
+        const { doc } = await home.drive.getCollabDocument(mountId, sheetsDoc.id);
+        const ops = sheetsOpLog(doc);
         // The first open reads the workbook for the transform; it grows before the write opens it again.
         const realGet = home.drive.getCollabDocument.bind(home.drive);
         let opens = 0;
@@ -502,7 +520,8 @@ describe('Sheets xlsx import/convert', () => {
         }
         try {
             expect(opens).toBe(2);
-            expect(ops.toArray().map((batch) => batch.map((op) => op.value.name))).toEqual([['Full'], ['Pictures']]);
+            const names = readSheetsLog(doc).map((batch) => batch.map((op) => op.value.name));
+            expect(names).toEqual([['Full'], ['Pictures']]);
         } finally {
             ops.delete(0, ops.length);
         }

@@ -3,7 +3,12 @@
 // ops into a new snapshot when the document closes, and builds the addSheet ops an Import… as new tabs pushes.
 
 import type { Op, Sheet } from '@workspace/lib/sheets';
-import { decodeSheetsSnapshot, encodeSheetsSnapshot, readSheetsSnapshotJson, sheetsOpLog } from '@workspace/lib/sheets';
+import {
+    decodeSheetsSnapshot,
+    encodeSheetsSnapshot,
+    readSheetsLog,
+    readSheetsSnapshotJson,
+} from '@workspace/lib/sheets';
 import {
     copySheetName,
     decodeOrDefault,
@@ -51,7 +56,7 @@ export function readSheetsFromDoc(
     const { sheets, computed } = decodeOrDefault(readSheetsSnapshotJson(doc));
     // The snapshot stores cells as a list, but conditional formats and the cross-sheet formula resolver read the dense
     // `data` matrix. One far-flung cell makes a huge grid, which the transform's deadline bounds.
-    const replayed = replaySheetsOps(sheets, sheetsOpLog(doc).toArray(), undefined, SERVER_RECALC_BUDGET).map(
+    const replayed = replaySheetsOps(sheets, readSheetsLog(doc), undefined, SERVER_RECALC_BUDGET).map(
         withMaterializedData,
     );
 
