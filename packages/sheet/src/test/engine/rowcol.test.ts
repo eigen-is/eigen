@@ -916,31 +916,39 @@ describe('validation ranges follow the membership rule, as conditional formats d
         expect(sheet.dataValidations?.v.ranges).toEqual([{ row: [0, 3], column: [0, 0] }]);
     });
 
-    test('a whole-column rule keeps covering every row of the grid after an insert', () => {
+    test('a whole-column rule stays whole under a row insert and a row delete, and a column op moves it', () => {
         const last = REFERENCE_ROW_COUNT - 1;
+        const whole = { row: [0, last], column: [1, 1] };
         const sheets = [
             makeSheet('s1', 'Sheet1', grid(), {
-                dataValidations: { v: { ranges: [{ row: [0, last], column: [1, 1] }], order: 'a0', rule } },
+                dataValidations: { v: { ranges: [whole], order: 'a0', rule } },
                 conditionalFormats: formatsOf([
                     {
                         type: 'default',
                         conditionName: 'greaterThan',
-                        ranges: [{ row: [0, last], column: [1, 1] }],
+                        ranges: [whole],
                         conditionValue: [0],
                         format: { textColor: '#ff0000' },
                     },
                 ]),
             }),
         ];
-        const [sheet] = applySheetsInsertRowCol(sheets, {
-            type: 'row',
-            index: 2,
-            count: 3,
+        const stays = (sheet: TestSheet) => {
+            expect(sheet.dataValidations).toBe(sheets[0].dataValidations);
+            expect(sheet.conditionalFormats).toBe(sheets[0].conditionalFormats);
+        };
+        for (const index of [0, 2]) {
+            stays(applySheetsInsertRowCol(sheets, { type: 'row', index, count: 3, direction: 'lefttop', id: 's1' })[0]);
+        }
+        stays(applySheetsDeleteRowCol(sheets, { type: 'row', start: 0, end: 1, id: 's1' })[0]);
+        const [moved] = applySheetsInsertRowCol(sheets, {
+            type: 'column',
+            index: 0,
+            count: 1,
             direction: 'lefttop',
             id: 's1',
         });
-        expect(sheet.dataValidations?.v.ranges).toEqual([{ row: [0, last], column: [1, 1] }]);
-        expect(formatList(sheet.conditionalFormats)[0].ranges).toEqual([{ row: [0, last], column: [1, 1] }]);
+        expect(moved.dataValidations?.v.ranges).toEqual([{ row: [0, last], column: [2, 2] }]);
     });
 
     test('a rule over several ranges keeps the ones a delete leaves', () => {
@@ -1068,12 +1076,16 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
         expect(s.charts!.c1).toBe(sheets[0].charts!.c1);
     });
 
-    test('an insert stops a ref at the last row of the grid, and one it pushes off the grid is gone', () => {
+    test('an insert stops a ref at the last row of the grid, one it pushes off is gone and a whole column stays', () => {
         const [rows] = applySheetsInsertRowCol(
-            workbook({ c1: chart({ categories: null, series: [series(ref('S', [0, REFERENCE_ROW_COUNT - 1]))] }) }),
+            workbook({ c1: chart({ categories: null, series: [series(ref('S', [1, REFERENCE_ROW_COUNT - 1]))] }) }),
             insertRows(0, 2, 'lefttop'),
         );
-        expect(valuesRows(rows)).toEqual([2, REFERENCE_ROW_COUNT - 1]);
+        expect(valuesRows(rows)).toEqual([3, REFERENCE_ROW_COUNT - 1]);
+        const whole = workbook({
+            c1: chart({ categories: null, series: [series(ref('S', [0, REFERENCE_ROW_COUNT - 1]))] }),
+        });
+        expect(applySheetsInsertRowCol(whole, insertRows(0, 2, 'lefttop'))[0].charts!.c1).toBe(whole[0].charts!.c1);
         const lastColumn = REFERENCE_COLUMN_COUNT - 1;
         const [columns] = applySheetsInsertRowCol(
             workbook({ c1: chart({ categories: null, series: [series(ref('S', [0, 3], [lastColumn, lastColumn]))] }) }),

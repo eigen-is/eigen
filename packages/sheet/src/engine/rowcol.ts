@@ -59,6 +59,8 @@ type AxisRange = { row: readonly number[]; column: readonly number[] };
 // A range the edit leaves as it was comes back as itself, so its owner writes nothing. Null is a range that is gone.
 export function shiftRange<R extends AxisRange>(range: R, type: 'row' | 'column', edit: Edit): R | null {
     const [start, end] = type === 'row' ? range.row : range.column;
+    // A range over the whole axis, Excel's `A:A`, has no lines of its own to move.
+    if (start === 0 && end === edit.lines - 1) return range;
     const span = { start, end };
     if (!mapSpan(edit, start, end, span)) return null;
     if (span.start === start && span.end === end) return range;
