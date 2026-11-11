@@ -127,7 +127,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Undo while others type formulas in Sheets** — two people typing formulas at once no longer lose their undo
 - **Undo of an image or chart in Sheets** — undoing a step that edited an image or chart and then deleted it brings it back, and redoing one that added and then edited it adds it again. Both did nothing
 - **Rules while others edit in Sheets** — two people adding conditional formats at once both keep theirs, and deleting a rule no longer hits another one when someone else just removed a rule before it
-- **Whole-column rules in Sheets** — a conditional format or validation rule on a whole column still covers the whole column after you insert or delete rows
+- **Whole-column rules in Sheets** — a conditional format or validation rule on a whole column, such as `B:B`, still covers the whole column after you insert or delete rows
 - **Undo after a paste or a new rule in Sheets** — undoing a paste that added rows or columns, or a conditional format rule you added, no longer deletes what someone else put there. Once someone else edits, you can't undo such a paste or anything before it
 - **Excel downloads from Sheets** — a tab named like a cell, such as Q1, gets the quotes Excel expects in formulas, a formula follows a tab the file has to rename, and a fill down from a linked cell no longer makes the download fail
 - **Tab names from a file in Sheets** — an import repairs a tab name Sheets would refuse, such as one past 31 characters, and the formulas naming it follow

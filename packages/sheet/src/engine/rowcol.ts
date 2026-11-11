@@ -412,6 +412,12 @@ function stampMerges(
         }
         return data[i];
     };
+    for (const { r, c } of unmerged) {
+        const cell = data[r]?.[c];
+        if (!cell) continue;
+        const { mc: _, ...rest } = cell;
+        own(r)[c] = rest;
+    }
     for (const { r, c, rs, cs } of Object.values(merges)) {
         if ((type === 'row' ? r + rs : c + cs) < from) continue;
         for (let i = r; i < r + rs; i += 1) {
@@ -422,12 +428,6 @@ function stampMerges(
                 row[j] = { ...row[j], mc };
             }
         }
-    }
-    for (const { r, c } of unmerged) {
-        const cell = data[r]?.[c];
-        if (!cell) continue;
-        const { mc: _, ...rest } = cell;
-        own(r)[c] = rest;
     }
 }
 

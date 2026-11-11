@@ -351,6 +351,22 @@ describe('applySheetsDeleteRowCol — a merge cut to one cell is removed', () =>
         return [makeSheet('s1', 'Sheet1', data, { config: { merge: { [`${merge.r}_${merge.c}`]: merge } } })];
     };
 
+    test('a cut merge that lands on a live one leaves the live merge its stamps', () => {
+        const data: (Cell | null)[][] = [
+            [{ mc: { r: 0, c: 0, rs: 2, cs: 1 } }, null],
+            [{ mc: { r: 1, c: 0, rs: 1, cs: 2 } }, { mc: { r: 1, c: 0 } }],
+        ];
+        const merge = { '0_0': { r: 0, c: 0, rs: 2, cs: 1 }, '1_0': { r: 1, c: 0, rs: 1, cs: 2 } };
+        const [sheet] = applySheetsDeleteRowCol([makeSheet('s1', 'Sheet1', data, { config: { merge } })], {
+            type: 'row',
+            start: 0,
+            end: 0,
+            id: 's1',
+        });
+        expect(sheet.config?.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 1, cs: 2 } });
+        expect(sheet.data?.[0]).toEqual([{ mc: { r: 0, c: 0, rs: 1, cs: 2 } }, { mc: { r: 0, c: 0 } }]);
+    });
+
     test('a row delete that leaves the head leaves a plain cell', () => {
         const [sheet] = applySheetsDeleteRowCol(merged({ r: 0, c: 0, rs: 2, cs: 1 }), {
             type: 'row',
