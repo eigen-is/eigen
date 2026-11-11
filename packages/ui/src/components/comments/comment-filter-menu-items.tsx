@@ -1,3 +1,7 @@
+// The comment filter as menu rows, for a host's own Filter menu such as the one on Stickies' bar: who a comment is
+// assigned to, its color and its status, each a submenu, and Clear filters. The filter state comes from
+// useCommentFilter, which CommentFilterButton's popover reads too, so both filter the same way.
+
 import type { useCommentFilter } from '@workspace/lib/comments';
 import { COMMENT_STATUS_FILTERS, COMMENT_STATUS_LABELS } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
@@ -17,12 +21,10 @@ type CommentFilterMenuItemsProps = {
     filter: ReturnType<typeof useCommentFilter>;
     members: EffectiveMember[];
     currentUserEmail: string;
-    // Assignee rows are cmdk/buttons that don't trigger Radix's close; hosts pass this to dismiss.
+    // The assignee rows are command-list buttons, which Radix doesn't close the menu on.
     onClose?: () => void;
 };
 
-// The three comment-filter groups (assignee / color / status) as submenus. Mirrors
-// CommentFilterButton's popover, restyled as menu rows (see label-assign-sub-menu.tsx for the color swatches).
 export function CommentFilterMenuItems({ filter, members, currentUserEmail, onClose }: CommentFilterMenuItemsProps) {
     const { assignee, colors, status } = filter.filter;
     const memberSelected = typeof assignee === 'object' ? assignee.email : null;
@@ -73,7 +75,7 @@ export function CommentFilterMenuItems({ filter, members, currentUserEmail, onCl
                                 className="size-4 rounded-full shrink-0 border border-border/50"
                                 style={{ backgroundColor: c.value }}
                             />
-                            {c.label.replace(/-\d+$/, '')}
+                            {c.name}
                         </DropdownMenuCheckboxItem>
                     ))}
                 </DropdownMenuSubContent>

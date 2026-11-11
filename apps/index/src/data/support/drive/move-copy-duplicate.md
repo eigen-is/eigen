@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, files, folders, move, copy, duplicate, organize]
 related: [drive/rename-move-organise, drive/share-a-file]
 order: 75
-updated: 2026-11-05
+updated: 2026-11-11
 ---
 
 Dragging works well for a folder you can see on screen. When the destination is somewhere else, or in another drive, the right-click menu has three options that open a folder picker instead: **Move to…**, **Copy to…**, and **Duplicate**.
@@ -45,6 +45,8 @@ Copying a folder copies everything inside it. A folder or a document only needs 
 ## Duplicate a file in place
 
 To make a second copy next to the original, right-click it and choose **Duplicate**. The new item appears in the same folder, named **Copy of** followed by the original name. Eigen shows no message when it is done.
+
+With a document, spreadsheet, presentation, board, or drawing open, choose **File → Make a copy** for the same copy. A message says **Copy made**, with an **Open** button for the copy, and you stay in the original. The option is grayed out for a file you can only read or that someone shared with you.
 
 **Duplicate** is also in the menu when you browse a list of files from several folders, such as a type filter, but not for a drive's top-level folder or for files you can only read.
 

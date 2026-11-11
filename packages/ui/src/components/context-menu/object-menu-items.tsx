@@ -1,7 +1,15 @@
-// The object menus' shared rows, one set of labels and order for every host (the writes stay host-side), plus the two
-// download rows: an embedded image's original file and the image the browser draws of a chart or a selection.
+// The object menus' and Edit menus' shared rows, one set of labels and order for every host (the writes stay
+// host-side), plus the two download rows: an embedded image's original file and the image the browser draws of a
+// chart or a selection.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
+import {
+    COPY_HOTKEY,
+    CUT_HOTKEY,
+    DUPLICATE_HOTKEY,
+    PASTE_HOTKEY,
+    SELECT_ALL_HOTKEY,
+} from '@workspace/lib/constants/hotkeys';
 import { downloadDriveFile } from '@workspace/lib/download';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ZOp } from '@workspace/lib/vector';
@@ -12,13 +20,17 @@ import {
     ChevronUp,
     ClipboardPaste,
     Copy,
+    CopyPlus,
     Download,
     ImageDown,
     Layers,
     Scissors,
+    TextSelect,
+    Trash2,
 } from 'lucide-react';
 import {
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuShortcut,
     DropdownMenuSub,
     DropdownMenuSubContent,
@@ -50,35 +62,66 @@ export function OrderMenuSub({ onApply }: { onApply: (op: ZOp) => void }) {
     );
 }
 
-// Cut, Copy, Paste, the order of every Edit menu. Each row appears only when its callback is supplied, so a host
-// that can only paste here (an empty canvas) and one with the full set compose the same rows.
+// Cut, Copy and Paste, then Select all, Duplicate and Delete, the order of every Edit menu. Each row appears only when
+// its callback is supplied, so a host that can only paste here (an empty canvas) and one with the full set compose the
+// same rows. With nothing selected, the rows that act on the selection grey out; while the host is locked, all do.
 export function ClipboardMenuItems({
     onCut,
     onCopy,
     onPaste,
+    onSelectAll,
+    onDuplicate,
+    onDelete,
+    selectionEmpty = false,
+    locked = false,
 }: {
     onCut?: () => void;
     onCopy?: () => void;
     onPaste?: () => void;
+    onSelectAll?: () => void;
+    onDuplicate?: () => void;
+    onDelete?: () => void;
+    selectionEmpty?: boolean;
+    // The host's clipboard keys stand down, such as while a canvas edits a text box, so every row greys as well.
+    locked?: boolean;
 }) {
+    const actsOnSelection = !selectionEmpty && !locked;
     return (
         <>
             {onCut && (
-                <DropdownMenuItem onClick={onCut}>
+                <DropdownMenuItem onClick={onCut} disabled={!actsOnSelection}>
                     <Scissors className="h-4 w-4" /> Cut
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+X')}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>{formatForDisplay(CUT_HOTKEY)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
             {onCopy && (
-                <DropdownMenuItem onClick={onCopy}>
+                <DropdownMenuItem onClick={onCopy} disabled={!actsOnSelection}>
                     <Copy className="h-4 w-4" /> Copy
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+C')}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>{formatForDisplay(COPY_HOTKEY)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
             {onPaste && (
-                <DropdownMenuItem onClick={onPaste}>
+                <DropdownMenuItem onClick={onPaste} disabled={locked}>
                     <ClipboardPaste className="h-4 w-4" /> Paste
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+V')}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>{formatForDisplay(PASTE_HOTKEY)}</DropdownMenuShortcut>
+                </DropdownMenuItem>
+            )}
+            {(onSelectAll || onDuplicate || onDelete) && <DropdownMenuSeparator />}
+            {onSelectAll && (
+                <DropdownMenuItem onClick={onSelectAll} disabled={locked}>
+                    <TextSelect className="h-4 w-4" /> Select all
+                    <DropdownMenuShortcut>{formatForDisplay(SELECT_ALL_HOTKEY)}</DropdownMenuShortcut>
+                </DropdownMenuItem>
+            )}
+            {onDuplicate && (
+                <DropdownMenuItem onClick={onDuplicate} disabled={!actsOnSelection}>
+                    <CopyPlus className="h-4 w-4" /> Duplicate
+                    <DropdownMenuShortcut>{formatForDisplay(DUPLICATE_HOTKEY)}</DropdownMenuShortcut>
+                </DropdownMenuItem>
+            )}
+            {onDelete && (
+                <DropdownMenuItem variant="destructive" onClick={onDelete} disabled={!actsOnSelection}>
+                    <Trash2 className="h-4 w-4" /> Delete
                 </DropdownMenuItem>
             )}
         </>

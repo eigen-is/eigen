@@ -52,6 +52,8 @@ export function VectorEditor({
     const doc = useCanvasDoc(ownerId, path.mountId, path.id, VECTOR_STYLE_DEFAULTS);
     const { tool, setTool, toolLocked, setToolLocked } = useTool();
     const { selectedIds, setSelectedIds, toggle } = useSelection();
+    // The canvas reports an open text editor, so the toolbar's Edit rows stand down as the canvas's keys do.
+    const [textEditing, setTextEditing] = useState(false);
     // Peers see this user's name and selection, and the canvas gets a throttled publisher for the cursor. The selection
     // comes from here, because the editor owns it.
     const { user } = useAuth();
@@ -90,6 +92,7 @@ export function VectorEditor({
         isMobile,
         onReveal: revealElement,
     });
+    const addComment = canWrite && chatFolderId ? comments.addCommentTo : undefined;
 
     // ⌘F over the scene: a reveal selects the matching element. The reveal keeps its identity, or the controller would
     // start over on every render.
@@ -131,9 +134,12 @@ export function VectorEditor({
                     undoManager={doc.undoManager}
                     tool={tool}
                     setTool={setTool}
+                    selectedIds={selectedIds}
+                    textEditing={textEditing}
                     toolLocked={toolLocked}
                     setToolLocked={setToolLocked}
                     onInsertImage={insertImage}
+                    onAddComment={addComment}
                     canvasRef={canvasRef}
                     onAccessDialogOpen={onAccessDialogOpen}
                     createLabel="New vector"
@@ -191,9 +197,10 @@ export function VectorEditor({
                     aspectLocked={aspectLocked}
                     publishCursor={publishCursor}
                     canvasRef={canvasRef}
+                    onTextEditingChange={setTextEditing}
                     onOpenCard={comments.openCard}
                     commentCards={comments.lifecycle.cards}
-                    onAddComment={canWrite && chatFolderId ? comments.addCommentTo : undefined}
+                    onAddComment={addComment}
                     onCommentHover={comments.onCommentHover}
                     searchMatchedIds={searchMatchedIds}
                     searchActiveId={searchActiveId}

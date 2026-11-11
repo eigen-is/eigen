@@ -97,6 +97,7 @@ test('the Edit menu shows each shortcut the grid answers to', async () => {
             ['Cut', 'Mod+X'],
             ['Copy', 'Mod+C'],
             ['Paste', 'Mod+V'],
+            ['Select all', 'Mod+A'],
             ['Find', 'Mod+F'],
             ['Find and replace', 'Mod+Shift+H'],
         ].map(([label, hotkey]) => [label, formatForDisplay(hotkey)]),
@@ -114,6 +115,20 @@ test('Format › Text shows the bold, italic and underline shortcuts', async () 
             ['Underline', 'Mod+U'],
         ].map(([label, hotkey]) => [label, formatForDisplay(hotkey)]),
     );
+});
+
+test('Format shows the clear formatting shortcut', async () => {
+    const { container } = await mount();
+    await openMenu(container, 'Format');
+    expect(shortcutRows()).toEqual([['Clear formatting', formatForDisplay('Mod+\\')]]);
+});
+
+test("⌘\\ clears the selection's formatting, as Format › Clear formatting does", async () => {
+    const { input, a1 } = await mount();
+    await press(input, 'Mod+B');
+    expect(a1()?.bl).toBe(1);
+    await press(input, 'Mod+\\');
+    expect(a1()?.bl).toBeFalsy();
 });
 
 test('⌘Z undoes in the grid, and ⇧⌘Z and ⌘Y redo', async () => {

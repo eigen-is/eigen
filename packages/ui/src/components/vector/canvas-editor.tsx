@@ -65,7 +65,7 @@ import { sealed } from '@workspace/ui/components/properties-panel';
 import { cn } from '@workspace/ui/lib/utils';
 import { ImageIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { isTypingTarget } from '../../hooks/is-typing-target';
 import { useDialogOpen, useMenuOpen } from '../../hooks/use-dialog-open';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
@@ -92,6 +92,7 @@ import {
     convertElementToShapes,
     deleteSelection,
     duplicateSelection,
+    selectAllElements,
     selectionShapes,
 } from './hooks/selection-ops';
 import { dropOutsideTextSelection, useCanvasClipboard } from './hooks/use-canvas-clipboard';
@@ -148,8 +149,8 @@ type Gesture = { pointerId: number } & (
     | { kind: 'marquee'; startX: number; startY: number; additive: boolean; base: string[] }
 );
 
-// The imperative surface the canvas publishes for its host: the toolbar's Insert entries, which need the live viewport
-// to place, and a reveal, such as for ⌘F or a comment card, which pans the element to the center at the current zoom.
+// What the canvas offers its host, such as the toolbar's Insert and Edit rows, which need the live viewport or act on
+// the selection as the object menu's rows do, and a reveal for ⌘F or a comment card, which pans at the current zoom.
 export type CanvasHandle = {
     insertFiles: (files: File[]) => void;
     insertDrivePaths: (paths: DrivePath[]) => Promise<void>;
@@ -157,6 +158,12 @@ export type CanvasHandle = {
     centerOn: (el: VectorElement) => void;
     // Every element the canvas shows, on its background, as the SVG the browser draws, such as for File › Download.
     downloadDrawing: () => void;
+    cut: () => void;
+    copy: () => void;
+    paste: () => void;
+    selectAll: () => void;
+    duplicate: () => void;
+    delete: () => void;
 };
 
 type CanvasEditorProps = {
@@ -190,8 +197,9 @@ type CanvasEditorProps = {
     // Awareness: doc.provider drives the CursorLayer's own subscription, and publishCursor sends the local pointer's
     // scene position, throttled downstream.
     publishCursor: PublishCursor;
-    // The canvas publishes and clears it itself. It is optional, so a read-only host can leave it out.
-    canvasRef?: { current: CanvasHandle | null };
+    canvasRef: { current: CanvasHandle | null };
+    // Whether a text editor is open on the canvas, for the host's toolbar, whose Edit rows stand down as the keys do.
+    onTextEditingChange: (textEditing: boolean) => void;
     // Comments. A commented element shows a mark at its top-right corner, and a click on the mark opens its first card,
     // which the host reveals. Without onOpenCard there are no marks, and without onAddComment no menu row.
     onOpenCard?: (cardId: string) => void;
@@ -230,6 +238,7 @@ export function CanvasEditor({
     aspectLocked,
     publishCursor,
     canvasRef,
+    onTextEditingChange,
     onOpenCard,
     commentCards,
     onAddComment,
@@ -488,14 +497,16 @@ export function CanvasEditor({
     });
 
     // The viewport freezes while a text editor is open, through the gestures' latch, because a pan or zoom would move
-    // the page away from the editor over it.
+    // the page away from the editor over it. The host hears of the session too, so its menus grey what the keys skip.
     useEffect(() => {
         if (!textEditing) return;
         frozenRef.current = true;
+        onTextEditingChange(true);
         return () => {
             frozenRef.current = false;
+            onTextEditingChange(false);
         };
-    }, [textEditing, frozenRef]);
+    }, [textEditing, frozenRef, onTextEditingChange]);
 
     // Safety net: any pointerup ends the freeze and drops leftover previews, because ObjectTransform's Escape and a
     // press that never moved fire no onCommit. A blur can swallow the pointerup, so it finishes a live gesture first.
@@ -843,34 +854,28 @@ export function CanvasEditor({
         uploadFile: uploadFile.mutateAsync,
     });
 
-    // Publishes the handle for the host. It is cleared on unmount, so a stale canvas never places or pans.
-    useEffect(() => {
-        if (!canvasRef) return;
-        canvasRef.current = {
-            insertFiles: (files) => void insertImageFiles(files, viewportCenterScene()),
-            insertDrivePaths,
-            insertChart,
-            centerOn: (el) => {
-                const box = elementBox(el);
-                centerOn(box.x + box.width / 2, box.y + box.height / 2);
-            },
-            downloadDrawing: () => downloadImage(imageName, ordered, meta.background),
-        };
-        return () => {
-            canvasRef.current = null;
-        };
-    }, [
-        canvasRef,
-        insertImageFiles,
-        viewportCenterScene,
+    // The menus act on the whole selection through the same writes as the keys, each in one undo step.
+    const onMenuDuplicate = () => duplicateSelection(selectedIds, duplicateElements, setSelectedIds, undoManager);
+    const onMenuDelete = () => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
+
+    // Built again on every render, because its rows act on the selection and the scene as last drawn. React clears it
+    // on unmount, so a stale canvas never places or pans.
+    useImperativeHandle(canvasRef, () => ({
+        insertFiles: (files) => void insertImageFiles(files, viewportCenterScene()),
         insertDrivePaths,
         insertChart,
-        centerOn,
-        downloadImage,
-        imageName,
-        ordered,
-        meta.background,
-    ]);
+        centerOn: (el) => {
+            const box = elementBox(el);
+            centerOn(box.x + box.width / 2, box.y + box.height / 2);
+        },
+        downloadDrawing: () => downloadImage(imageName, ordered, meta.background),
+        cut: onMenuCut,
+        copy: onMenuCopy,
+        paste: onMenuPaste,
+        selectAll: () => selectAllElements(visibleElements, setSelectedIds),
+        duplicate: onMenuDuplicate,
+        delete: onMenuDelete,
+    }));
 
     // In frame mode the backdrop around the page is not the canvas: the frame clips what overhangs it, so an element
     // created there, and the editor over it, would be invisible. The infinite canvas has no page, so nothing is off it.
@@ -961,11 +966,7 @@ export function CanvasEditor({
         objectContextMenu.handleContextMenu(e, hitId);
     };
 
-    // The menu acts on the whole selection through the same writes as ⌘[, ⌘], ⌘D and Delete, so the menu and the keys
-    // behave as one, each in one undo step.
     const onMenuArrange = (op: ZOp) => applyZOrder(op, visibleElements, selectedIds, reorderElements, undoManager);
-    const onMenuDuplicate = () => duplicateSelection(selectedIds, duplicateElements, setSelectedIds, undoManager);
-    const onMenuDelete = () => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
     // A comment is raised on the right-clicked element, not on the selection: a card anchors to one element.
     const menuItemId = objectContextMenu.item;
     const menuElement = menuItemId ? committedById.get(menuItemId) : undefined;

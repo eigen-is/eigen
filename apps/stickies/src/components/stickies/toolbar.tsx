@@ -104,7 +104,7 @@ export function Toolbar({
                                             )}
                                         </button>
                                     </TooltipTrigger>
-                                    <TooltipContent>Filter by {c.label.replace(/-\d+$/, '')}</TooltipContent>
+                                    <TooltipContent>Filter by {c.name.toLowerCase()}</TooltipContent>
                                 </Tooltip>
                             );
                         })}

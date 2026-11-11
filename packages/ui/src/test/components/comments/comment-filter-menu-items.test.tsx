@@ -1,4 +1,5 @@
-// The comment filter's Color is a set of toggles that keeps the menu open, and its Status a choice.
+// The comment filter's Color is a set of toggles that keeps the menu open, each named in sentence case, and its Status
+// a choice.
 import { afterEach, expect, mock, test } from 'bun:test';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { installHappyDom } from '../../happy-dom';
@@ -13,7 +14,6 @@ let unmount = async () => {};
 afterEach(() => unmount());
 
 const [first, second] = EIGEN_STICKIES_COLORS[0];
-const name = (label: string) => label.replace(/-\d+$/, '');
 const toggleColor = mock((_color: string) => {});
 const setStatus = mock((_status: 'open' | 'resolved' | 'all') => {});
 
@@ -42,10 +42,10 @@ test('Color checks the colors filtered on and a pick toggles one, the menu stayi
     await render();
     await openSubmenu('Color');
     expect(checkRows().slice(0, 2)).toEqual([
-        [name(first.label), 'true'],
-        [name(second.label), 'false'],
+        ['Orange', 'true'],
+        ['Yellow', 'false'],
     ]);
-    await clickRow(name(second.label));
+    await clickRow('Yellow');
     expect(toggleColor.mock.calls).toEqual([[second.value]]);
     expect(checkRows().length).toBe(EIGEN_STICKIES_COLORS[0].length);
 });

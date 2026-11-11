@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, spreadsheet, create, edit, cells, data]
 related: [sheets/get-started, sheets/enter-and-edit-data]
 order: 20
-updated: 2026-11-09
+updated: 2026-11-11
 ---
 
 You can create a spreadsheet directly in Drive or from inside Sheets, then enter data and edit it using the toolbar menus and keyboard shortcuts.
@@ -47,7 +47,7 @@ To delete the contents of one or more cells, select them and press **Backspace**
 
 Click a single cell to select it. To select a range, click and drag. To select a whole column or row, click its header letter or number.
 
-You can select multiple separate ranges by holding **Ctrl** (Windows and Linux) or **⌘** (Mac) while clicking.
+You can select multiple separate ranges by holding **Ctrl** (Windows and Linux) or **⌘** (Mac) while clicking. To select every cell of the sheet, press **Ctrl+A** (Mac: **⌘A**) or choose **Edit → Select all**.
 
 ## Copy, cut, and paste
 

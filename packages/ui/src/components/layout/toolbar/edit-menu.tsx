@@ -21,11 +21,11 @@ type EditMenuProps = {
     canRedo: boolean;
     onUndo: () => void;
     onRedo: () => void;
-    // Host-app edit entries (vector's tool-lock toggle), rendered after Undo/Redo when canEdit.
-    children?: ReactNode;
-    // Host-app selection entries (docs' Cut, Copy, Select all, Delete), a group of their own between Undo and Find, for
-    // viewers too: the host gates each entry.
+    // Host-app entries, such as the clipboard rows or the canvas's tools, between Undo and Find, for viewers too: the
+    // host gates each entry.
     selectionItems?: ReactNode;
+    // Classes for the menu content, such as Sheets' width.
+    contentClassName?: string;
     // An editor that takes focus back on Undo or Redo passes its keep-focus handler; a Find pick still focuses the bar.
     onCloseAutoFocus?: (event: Event) => void;
 };
@@ -36,8 +36,8 @@ export function EditMenu({
     canRedo,
     onUndo,
     onRedo,
-    children,
     selectionItems,
+    contentClassName,
     onCloseAutoFocus,
 }: EditMenuProps) {
     const { docSearchBar, focusFindBarRef, onCloseAutoFocus: refocusFindBar } = useFindBarRefocus();
@@ -45,6 +45,7 @@ export function EditMenu({
     return (
         <AppBarMenu
             label="Edit"
+            contentClassName={contentClassName}
             onCloseAutoFocus={(event) => {
                 refocusFindBar(event);
                 if (!event.defaultPrevented) onCloseAutoFocus?.(event);
@@ -60,7 +61,6 @@ export function EditMenu({
                         <Redo className="h-4 w-4" /> Redo
                         <DropdownMenuShortcut>{formatForDisplay(REDO_HOTKEY)}</DropdownMenuShortcut>
                     </DropdownMenuItem>
-                    {children}
                 </>
             )}
             <DropdownMenuSeparator />

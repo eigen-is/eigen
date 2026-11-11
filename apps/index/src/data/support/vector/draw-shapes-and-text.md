@@ -6,7 +6,7 @@ category: Editing
 tags: [vector, drawing, shapes, text, images, charts]
 related: [vector/get-started, vector/connect-with-arrows, vector/style-objects]
 order: 20
-updated: 2026-10-28
+updated: 2026-11-11
 ---
 
 You build a drawing in Vector by placing objects on the canvas. Pick a tool, then click or drag to add a shape, a freehand line, a text box, or an image. Charts come from the **Insert** menu. This page covers each tool and what happens after you place something.
@@ -58,7 +58,7 @@ The text belongs to the shape. When you move, rotate, copy, or delete the shape,
 ## Add an image
 
 1. Click **Add image** in the toolbar, choose **Image** from the **Insert** menu, or press `9`.
-2. The **Add image** dialog opens. Do one of two things:
+2. The **Insert image** dialog opens. Do one of two things:
    - Click **Upload from device** to pick a file from your computer.
    - Browse your Drive, click an image to select it, then click **Select**.
 3. The image appears on the canvas.

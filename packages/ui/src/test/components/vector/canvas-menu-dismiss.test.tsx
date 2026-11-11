@@ -96,6 +96,8 @@ async function render(tool: VectorTool, selected: string[] = []) {
             toggle: () => {},
             aspectLocked: false,
             publishCursor: () => {},
+            canvasRef: { current: null },
+            onTextEditingChange: () => {},
         });
     }
     const rendered = await renderInDocument(

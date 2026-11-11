@@ -4,6 +4,7 @@
 // the comment panel's state as decorations, which the editor component updates and a figure's node view draws as its
 // corner mark.
 
+import type { Hotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
@@ -22,6 +23,7 @@ import {
 } from '@workspace/lib/docs/eigendoc';
 import type { CommentHover } from '@workspace/lib/types/comments';
 import type React from 'react';
+import { proseMirrorKey } from './prosemirror-key';
 import { textOutsideStories } from './story';
 
 type CommentMarkOptions = {
@@ -45,6 +47,8 @@ declare module '@tiptap/core' {
 }
 
 const decorationKey = new PluginKey('commentDecorations');
+
+export const ADD_COMMENT_HOTKEY = 'Mod+Alt+M' satisfies Hotkey;
 
 // A node whose schema gives it the card attribute, such as an image, a text box or an equation, holds its card there:
 // the Yjs binding persists a mark only on text.
@@ -188,7 +192,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions, CommentP
 
     addKeyboardShortcuts() {
         return {
-            'Mod-Alt-m': () => {
+            [proseMirrorKey(ADD_COMMENT_HOTKEY)]: () => {
                 if (canAnchorComment(this.editor.state) && this.options.onAddComment) {
                     this.options.onAddComment();
                     return true;

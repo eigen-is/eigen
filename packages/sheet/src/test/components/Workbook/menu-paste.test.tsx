@@ -92,7 +92,7 @@ async function mount(rows = 10) {
             edit?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
         });
         const row = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]')].find((item) =>
-            item.textContent?.startsWith(label),
+            item.textContent?.trim().startsWith(label),
         );
         if (!row) throw new Error(`no ${label} row`);
         await act(async () => {

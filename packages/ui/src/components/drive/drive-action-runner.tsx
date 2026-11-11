@@ -6,6 +6,7 @@
 import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import {
+    copiesBeside,
     PartialCopyError,
     useCopyPaths,
     useCopyToFolder,
@@ -90,24 +91,6 @@ export function useDriveActionRunner({
         });
     };
 
-    const handleDuplicate = (items: readonly DrivePath[]) => {
-        copyPaths(
-            items.flatMap((source) =>
-                source.parentId
-                    ? [
-                          {
-                              source,
-                              targetOwnerId: source.ownerId,
-                              targetMountId: source.mountId,
-                              targetParentId: source.parentId,
-                              name: `Copy of ${source.name}`,
-                          },
-                      ]
-                    : [],
-            ),
-        );
-    };
-
     const handlePickDestination = async (location: { ownerId: string; mountId: string; folderId: string }) => {
         const items = dialogs.copyMove.items;
         if (dialogs.copyMove.mode === 'move') {
@@ -148,7 +131,7 @@ export function useDriveActionRunner({
                 dialogs.rename.openDialog(item);
                 return;
             case 'duplicate':
-                handleDuplicate(items);
+                copyPaths(copiesBeside(items));
                 return;
             case 'move-to':
                 dialogs.copyMove.openDialog(items, 'move');
