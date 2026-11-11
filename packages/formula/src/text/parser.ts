@@ -3,7 +3,7 @@
 // relative references into offsets from that cell; parseStored reads the stored shape text, where they already are.
 // Text that does not parse is a result, never a throw, and the limits on length, nesting and arguments are kept here.
 
-import { GRID_COLUMNS, GRID_ROWS } from './a1';
+import { columnIndex, GRID_COLUMNS, GRID_ROWS } from './a1';
 import { continuesWord, ERROR_LITERALS, errorCode, lexAt, Token, tokenEnd, tokenKind } from './lexer';
 import type { FormulaNode } from './tree';
 import { branch, EMPTY, leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from './tree';
@@ -205,7 +205,15 @@ class Parser {
             else this.next();
             const right = this.expression(power + 1, union);
             height = Math.max(height, this.height);
-            if (op === Token.Colon && right.sheetKind !== SheetKind.Host) {
+            if (op === Token.Colon && right.sheetKind === SheetKind.Host) {
+                // Two numbers, or two stored names that are column labels, would show as text that reads as one
+                // reference.
+                const joined = space === '' && right.space === '' && left.kind === right.kind;
+                const columns = this.stored && columnIndex(left.text) !== -1 && columnIndex(right.text) !== -1;
+                if (joined && (left.kind === NodeKind.Number || (left.kind === NodeKind.Name && columns))) {
+                    return this.fail();
+                }
+            } else if (op === Token.Colon) {
                 // A second corner may repeat the sheet of the first, as in HR!B9:HR!M9, and name no other.
                 if (left.sheetKind !== right.sheetKind || left.sheet !== right.sheet) return this.fail();
                 if (isCell(left) && isCell(right) && space === '' && right.space === '') {
@@ -365,6 +373,7 @@ class Parser {
         let name = this.text.slice(pos, end);
         if (name.includes('$') || name.includes('[')) return this.fail();
         if (this.stored) {
+            if (this.storedLeg(pos) === end) return this.fail();
             if (this.a1Leg(pos) === end && this.legKind === LEG_CELL) return this.fail();
         } else if (this.storedLeg(pos) === end) {
             name = name.toLowerCase();

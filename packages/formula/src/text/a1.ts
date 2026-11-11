@@ -6,7 +6,7 @@
 export const GRID_ROWS = 1048576;
 export const GRID_COLUMNS = 16384;
 
-// The column a label names, from 0, or -1 for text that is not one to three letters.
+// The column a label names, from 0, or -1 for text that names no column of the grid.
 export function columnIndex(label: string): number {
     if (label.length === 0 || label.length > 3) return -1;
     let column = 0;
@@ -15,7 +15,7 @@ export function columnIndex(label: string): number {
         if (letter < 1 || letter > 26) return -1;
         column = column * 26 + letter;
     }
-    return column - 1;
+    return column > GRID_COLUMNS ? -1 : column - 1;
 }
 
 export function columnLabel(column: number): string {

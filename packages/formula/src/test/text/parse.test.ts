@@ -578,6 +578,49 @@ describe('the stored form (parsing.md 2.6)', () => {
         expect('reason' in lone && lone.reason).toBe('syntax');
     });
 
+    test.each([
+        '=R',
+        '=C',
+        '=R5',
+        '=C3',
+        '=R+1',
+        '=SUM(C)',
+        '=[s2]!R',
+        "='x'!C2",
+        '=A:B',
+        '=a:xfd',
+        '=[s2]!A:B',
+        '=Jan:Dec',
+    ])('stored text that would show as a reference is refused: %s', (text) => {
+        expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
+    });
+
+    test.each([
+        ['=R', '=r'],
+        ['=LET(C,1,C)', '=LET(c,1,c)'],
+        ['=Sheet2!RC', '=[s2]!rc'],
+        ['=A :B', '=A :B'],
+        ['=A: B', '=A: B'],
+        ['=XFE:XFF', '=XFE:XFF'],
+        ['=Rate:Total', '=Rate:Total'],
+        ['=Sheet2!Rate:Sheet2!B', '=[s2]!Rate:[s2]!B'],
+        ['=1 :11', '=1 :11'],
+        ['=1:A', '=1:A'],
+    ])('what a person types that looks like one is kept apart: %s is stored as %s', (text, kept) => {
+        const tree = treeA1(text);
+        expect(printStored(tree)).toBe(kept);
+        expect(treeStored(kept)).toEqual(tree);
+        expect(stored(printA1(tree, ...at('N1'), sheetName))).toBe(kept);
+    });
+
+    test.each(['=1:11.', '=1.:11', '=1:1E1', '=1:2.5', '=0:5', '=1:9999999', '=SUM(1.0:2)'])(
+        'two numbers around a colon are rows or nothing: %s does not parse',
+        (text) => {
+            expect(failure(text)).toBe('syntax');
+            expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
+        },
+    );
+
     test('a sheet id is read as written', () => {
         expect(treeStored('=[k3f9]!R2C1')).toMatchObject({ sheetKind: SheetKind.Id, sheet: 'k3f9', row: 1 });
         expect(printStored(treeStored('=SUM(R[-3]C:R[-1]C)*[k3f9]!R2C1'))).toBe('=SUM(R[-3]C:R[-1]C)*[k3f9]!R2C1');
