@@ -5,6 +5,7 @@
 
 import { formatForDisplay, useHotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
+import { PRINT_HOTKEY } from '@workspace/lib/constants/hotkeys';
 import type { BandEdge, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { usePrintPdf } from '@workspace/lib/drive';
 import { useIsMobile, useMediaQuery } from '@workspace/lib/media';
@@ -67,8 +68,6 @@ import { RestartNumberingDialog } from './restart-numbering-dialog';
 import { StylePicker } from './style-picker';
 import { ShowOutlineItem, ToolsMenu, WORD_COUNT_HOTKEY, WordCountItem } from './tools-menu';
 import { WordCountDialog } from './word-count-dialog';
-
-const PRINT_HOTKEY = 'Mod+P';
 
 // After a pick or Esc, a closing menu hands the focus to the editor the caret is in. Its trigger would swallow the next
 // keystrokes. A pick's own command focuses the editor a frame later. Whatever took the focus as the menu closed keeps
