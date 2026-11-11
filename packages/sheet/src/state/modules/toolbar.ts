@@ -3,11 +3,11 @@
 // text, a font format goes to the editor's selected characters rather than to the cells.
 
 import type { BorderType } from '@workspace/lib/sheets';
-import { isNil, isPlainObject, pick } from 'es-toolkit/compat';
+import { pick } from 'es-toolkit/compat';
 import { is_date, numberDisplay, writeFormulaResult } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
-import { getFlowdata, getSheetConfig } from '../context';
+import { getFlowdata } from '../context';
 import { clipToUsedExtent, getSheetIndex } from '../utils';
 import { applyBorder, clearSides } from './border';
 import { isAllSelectedCellsInStatus } from './cell';
@@ -23,33 +23,34 @@ import { selectIsOverlap } from './selection';
 import { growRowToFit } from './text';
 import { hasPartMC, isRealNum } from './validation';
 
+// A cell stores its alignment as the index of its name here: `ht` 0 is center, 1 left and 2 right.
+export const HORIZONTAL_ALIGNS = ['center', 'left', 'right'] as const;
+export const VERTICAL_ALIGNS = ['middle', 'top', 'bottom'] as const;
+
+const WRAP_CODES: Record<string, string> = { overflow: '1', clip: '0', wrap: '2' };
+
 export function updateFormatCell(
     ctx: Context,
     d: CellMatrix,
     attr: keyof Cell,
-    status: string | number,
-    row_st: number,
-    row_ed: number,
-    col_st: number,
-    col_ed: number,
+    value: string | number,
+    rowStart: number,
+    rowEnd: number,
+    colStart: number,
+    colEnd: number,
 ) {
-    if (isNil(d) || isNil(attr)) {
-        return;
-    }
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    if (sheetIndex == null) {
-        return;
-    }
+    if (sheetIndex == null) return;
     const cfg = (ctx.sheets[sheetIndex].config ??= {});
-    if (attr === 'ct') {
-        const fa = String(status);
-        for (let r = row_st; r <= row_ed; r += 1) {
-            if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[r])) {
-                continue;
-            }
+    if (attr === 'tb') value = WRAP_CODES[value] ?? value;
 
-            for (let c = col_st; c <= col_ed; c += 1) {
-                const cell = d[r][c];
+    for (let r = rowStart; r <= rowEnd; r += 1) {
+        if (cfg.rowhidden?.[r] != null) continue;
+
+        for (let c = colStart; c <= colEnd; c += 1) {
+            const cell = d[r][c];
+            if (attr === 'ct') {
+                const fa = String(value);
                 if (cell?.f != null) {
                     // The result keeps the type it has, so a format makes no number of a text result.
                     (cell.ct ??= {}).fa = fa;
@@ -57,80 +58,26 @@ export function updateFormatCell(
                     continue;
                 }
 
-                let value = cell?.v;
-                if (fa !== '@' && isRealNum(value)) {
-                    value = Number(value);
-                }
+                const v = fa !== '@' && isRealNum(cell?.v) ? Number(cell?.v) : cell?.v;
+                const m = numberDisplay(v, fa);
+                let t = 'n';
+                if (is_date(fa)) t = 'd';
+                else if (fa === '@') t = 's';
+                else if (fa === 'General' && !isRealNum(v)) t = 'g';
 
-                const mask = numberDisplay(value, fa);
-                let type = 'n';
-                if (is_date(fa)) {
-                    type = 'd';
-                } else if (fa === '@') {
-                    type = 's';
-                } else if (fa === 'General') {
-                    type = isRealNum(value) ? 'n' : 'g';
-                }
-
-                if (cell && isPlainObject(cell)) {
-                    cell.m = `${mask}`;
-                    if (isNil(cell.ct)) {
-                        cell.ct = {};
-                    }
-                    cell.ct.fa = fa;
-                    cell.ct.t = type;
+                if (cell) {
+                    cell.m = `${m}`;
+                    Object.assign((cell.ct ??= {}), { fa, t });
                 } else {
-                    d[r][c] = {
-                        ct: { fa, t: type },
-                        v: value,
-                        m: mask,
-                    };
+                    d[r][c] = { ct: { fa, t }, v, m };
                 }
-            }
-        }
-    } else {
-        if (attr === 'ht') {
-            if (status === 'left') {
-                status = '1';
-            } else if (status === 'center') {
-                status = '0';
-            } else if (status === 'right') {
-                status = '2';
-            }
-        } else if (attr === 'vt') {
-            if (status === 'top') {
-                status = '1';
-            } else if (status === 'middle') {
-                status = '0';
-            } else if (status === 'bottom') {
-                status = '2';
-            }
-        } else if (attr === 'tb') {
-            if (status === 'overflow') {
-                status = '1';
-            } else if (status === 'clip') {
-                status = '0';
-            } else if (status === 'wrap') {
-                status = '2';
-            }
-        }
-
-        for (let r = row_st; r <= row_ed; r += 1) {
-            if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[r])) {
-                continue;
-            }
-
-            for (let c = col_st; c <= col_ed; c += 1) {
-                const value = d[r][c];
-
-                if (value && isPlainObject(value)) {
-                    if (isRunStyleKey(attr)) updateInlineStringFormatOutside(value, attr, status);
-                    Object.assign(value, { [attr]: status });
-                    // A larger size or wrapped lines need a taller row.
-                    if (attr === 'fs' || (attr === 'tb' && status === '2')) growRowToFit(ctx, cfg, value, r, c);
-                } else {
-                    d[r][c] = { [attr]: status };
-                }
+            } else if (cell) {
+                if (isRunStyleKey(attr)) updateInlineStringFormatOutside(cell, attr, value);
+                Object.assign(cell, { [attr]: value });
+                // A larger size or wrapped lines need a taller row.
+                if (attr === 'fs' || (attr === 'tb' && value === '2')) growRowToFit(ctx, cfg, cell, r, c);
+            } else {
+                d[r][c] = { [attr]: value };
             }
         }
     }
@@ -138,28 +85,28 @@ export function updateFormatCell(
 
 export function updateFormat(
     ctx: Context,
-    $input: HTMLDivElement,
+    cellInput: HTMLDivElement,
     d: CellMatrix,
     attr: keyof Cell,
-    status: string | number,
+    value: string | number,
 ) {
     if (ctx.allowEdit === false) return;
 
-    if (isRunStyleKey(attr) && isEditingText(ctx, $input)) {
+    if (isRunStyleKey(attr) && isEditingText(ctx, cellInput)) {
         const [r, c] = ctx.editingCellPosition;
-        formatEditorSelection($input, d[r]?.[c], attr, status);
+        formatEditorSelection(cellInput, d[r]?.[c], attr, value);
         return;
     }
 
     for (const { row, column } of ctx.selections ?? []) {
-        updateFormatCell(ctx, d, attr, status, row[0], row[1], column[0], column[1]);
+        updateFormatCell(ctx, d, attr, value, row[0], row[1], column[0], column[1]);
     }
 }
 
 // While a cell is open on text, not a formula, a font format applies to the editor's selected
 // characters, and to a new cell as well as a filled one.
-function isEditingText(ctx: Context, $input: HTMLDivElement) {
-    return ctx.editingCellPosition.length > 0 && !$input.innerText.startsWith('=');
+function isEditingText(ctx: Context, cellInput: HTMLDivElement) {
+    return ctx.editingCellPosition.length > 0 && !cellInput.innerText.startsWith('=');
 }
 
 function toggleAttr(ctx: Context, cellInput: HTMLDivElement, attr: 'bl' | 'it' | 'un' | 'cl') {
@@ -212,12 +159,16 @@ export function handleUnderline(ctx: Context, cellInput: HTMLDivElement) {
     toggleAttr(ctx, cellInput, 'un');
 }
 
-export function handleHorizontalAlign(ctx: Context, cellInput: HTMLDivElement, value: string) {
-    setAttr(ctx, cellInput, 'ht', value);
+export function handleHorizontalAlign(
+    ctx: Context,
+    cellInput: HTMLDivElement,
+    align: (typeof HORIZONTAL_ALIGNS)[number],
+) {
+    setAttr(ctx, cellInput, 'ht', HORIZONTAL_ALIGNS.indexOf(align));
 }
 
-export function handleVerticalAlign(ctx: Context, cellInput: HTMLDivElement, value: string) {
-    setAttr(ctx, cellInput, 'vt', value);
+export function handleVerticalAlign(ctx: Context, cellInput: HTMLDivElement, align: (typeof VERTICAL_ALIGNS)[number]) {
+    setAttr(ctx, cellInput, 'vt', VERTICAL_ALIGNS.indexOf(align));
 }
 
 export function handleFormatPainter(ctx: Context) {
@@ -243,9 +194,7 @@ export function handleClearFormat(ctx: Context) {
         const [rowSt, rowEd] = selection.row;
         const [colSt, colEd] = selection.column;
         for (let r = rowSt; r <= rowEd; r += 1) {
-            if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[r])) {
-                continue;
-            }
+            if (cfg.rowhidden?.[r] != null) continue;
             for (let c = colSt; c <= colEd; c += 1) {
                 const cell = flowdata[r][c];
                 if (!cell) continue;
@@ -270,48 +219,19 @@ export function handleBorder(ctx: Context, type: BorderType, borderColor?: strin
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
 
-    const color = borderColor == null || borderColor === '' ? '#000' : borderColor;
-    const style = borderStyle == null || borderStyle === '' ? 1 : Number(borderStyle);
+    const color = borderColor || '#000';
+    const style = borderStyle ? Number(borderStyle) : 1;
     // Four sides per cell: a header click over 130k rows must not become half a million patches.
     const ranges = clipToUsedExtent(ctx, ctx.selections ?? []);
     applyBorder((ctx.sheets[index].config ??= {}), type, { style, color }, ranges);
 }
 
 export function handleMerge(ctx: Context, type: string) {
-    if (ctx.allowEdit === false) return;
+    const { selections } = ctx;
+    if (ctx.allowEdit === false || !selections || selectIsOverlap(ctx)) return;
+    if (selections.some(({ row, column }) => hasPartMC(ctx, row[0], row[1], column[0], column[1]))) return;
 
-    if (selectIsOverlap(ctx)) {
-        return;
-    }
-
-    const merge = getSheetConfig(ctx)?.merge;
-    if (merge != null) {
-        let has_PartMC = false;
-        if (!ctx.selections) return;
-        for (let s = 0; s < ctx.selections.length; s += 1) {
-            const r1 = ctx.selections[s].row[0];
-            const r2 = ctx.selections[s].row[1];
-            const c1 = ctx.selections[s].column[0];
-            const c2 = ctx.selections[s].column[1];
-
-            has_PartMC = hasPartMC(ctx, r1, r2, c1, c2);
-
-            if (has_PartMC) {
-                break;
-            }
-        }
-
-        if (has_PartMC) {
-            return;
-        }
-    }
-
-    const flowdata = getFlowdata(ctx);
-    if (!flowdata) return;
-
-    if (!ctx.selections) return;
-
-    mergeCells(ctx, ctx.currentSheetId, ctx.selections, type);
+    mergeCells(ctx, ctx.currentSheetId, selections, type);
 }
 
 export function handleFreeze(ctx: Context, type: string) {

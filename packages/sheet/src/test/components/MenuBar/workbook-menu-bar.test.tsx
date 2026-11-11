@@ -273,7 +273,9 @@ test('Format leads each command with its icon, and its choices have none', async
 });
 
 test("Format › Alignment checks the cell's alignment, each option with its icon", async () => {
-    const { container } = await mountWorkbook({ celldata: [{ r: 0, c: 0, v: { v: 'x', m: 'x', ht: 2, vt: 0 } }] });
+    const { container, cell } = await mountWorkbook({
+        celldata: [{ r: 0, c: 0, v: { v: 'x', m: 'x', ht: 2, vt: 0 } }],
+    });
 
     await openFormat(container);
     await openSubmenu('Alignment');
@@ -290,5 +292,17 @@ test("Format › Alignment checks the cell's alignment, each option with its ico
     await clickRow('Left');
     await openFormat(container);
     await openSubmenu('Alignment');
-    expect(checkRows()[0]).toEqual(['Left', 'true']);
+    await clickRow('Bottom');
+    // The cell stores each alignment as its number code: left is 1 and bottom 2.
+    expect([cell(0, 0)?.ht, cell(0, 0)?.vt]).toEqual([1, 2]);
+    await openFormat(container);
+    await openSubmenu('Alignment');
+    expect(checkRows()).toEqual([
+        ['Left', 'true'],
+        ['Center', 'false'],
+        ['Right', 'false'],
+        ['Top', 'false'],
+        ['Middle', 'false'],
+        ['Bottom', 'true'],
+    ]);
 });
