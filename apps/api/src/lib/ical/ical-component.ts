@@ -312,7 +312,7 @@ export function stampInvitationLink(
     }
 }
 
-export function stripEigenStamps(comp: ICAL.Component): void {
+function stripEigenStamps(comp: ICAL.Component): void {
     keepProperties(comp, (prop) => !isEigenName(prop.name));
     for (const prop of comp.getAllProperties()) {
         const [, params]: JCalProperty = prop.toJSON();

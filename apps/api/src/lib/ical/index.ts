@@ -19,6 +19,5 @@ export {
     storedOrganizerAddress,
     storedRecurrenceIds,
     storedRevisions,
-    stripEigenStamps,
 } from './ical-component';
 export { parseCalendarStream, parseIcs, parseResource, projectResource } from './ical-parse';
