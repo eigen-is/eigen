@@ -393,22 +393,6 @@ describe('charts converge over real ops', () => {
         }
     });
 
-    // Moving a chart's points writes away those of a series its data doesn't name, and every receiver's engine does the
-    // same.
-    test("a row op's removes of an orphan series' points reach a peer and a joiner", () => {
-        const base = produce(workbook(), (ctx: Context) => {
-            ctx.sheets[0].charts!.c1 = chart('c1', {
-                ...rangeSpec(ref(S, [2, 5])),
-                points: { 's-1': { 3: { color: '#333333' } }, gone: { 0: { color: '#000000' } } },
-            });
-        });
-        const op = { type: 'row', index: 4, count: 1, direction: 'lefttop', id: S } as const;
-        const insert = author(base, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
-        expect(Object.keys(insert.next.sheets[0].charts!.c1.specPoints)).toEqual(['s-1/4']);
-        expect(charts(receive(base, insert.ops).sheets)).toEqual(charts(insert.next.sheets));
-        expect(charts(join(base, [insert.ops]))).toEqual(charts(insert.next.sheets));
-    });
-
     // A row op ships no chart write, since every receiver shifts the chart, so a peer's move or delete of it survives.
     test.each<[string, Op[], number[]]>([
         ['moves', [{ op: 'replace', id: T, path: ['charts', 't1', 'x'], value: 300 }], [300]],
@@ -536,8 +520,7 @@ describe('two peers editing one chart keep both edits', () => {
         expect(charts(converge(base, a, b))).toEqual(charts(joiner));
     });
 
-    // c1's points run along its values, rows 2 to 5: the insert at row 4 moves point 3 to 4, the delete of row 3
-    // removes point 1 and moves 3 to 2. Point 0, which a peer recolours, moves with neither.
+    // c1's points run along its values, rows 2 to 5. Both ops land inside them and leave every point at its index.
     const slices = (): Context =>
         withChart('c1', {
             ...rangeSpec(ref(S, [2, 5])),
@@ -550,13 +533,11 @@ describe('two peers editing one chart keep both edits', () => {
             name: 'insert',
             run: (ctx: Context) => insertRowCol(ctx, insertOp),
             options: { insertRowColOp: insertOp },
-            points: { 0: { color: '#ff0000' }, 1: { color: '#111111' }, 4: { color: '#333333' } },
         },
         {
             name: 'delete',
             run: (ctx: Context) => deleteRowCol(ctx, deleteOp),
             options: { deleteRowColOp: deleteOp },
-            points: { 0: { color: '#ff0000' }, 2: { color: '#333333' } },
         },
     ] as const;
     const PEER_EDITS = [
@@ -576,7 +557,13 @@ describe('two peers editing one chart keep both edits', () => {
                 const peer = author(base, (ctx) => setChartSpec(ctx, 'c1', [...edit.change]));
                 const sheets = converge(base, op, peer);
                 expect(spec(sheets)).toMatchObject(edit.kept);
-                if (edit.name === 'slice colour') expect(spec(sheets)?.points['s-1']).toEqual(rowOp.points);
+                if (edit.name === 'slice colour') {
+                    expect(spec(sheets)?.points['s-1']).toEqual({
+                        0: { color: '#ff0000' },
+                        1: { color: '#111111' },
+                        3: { color: '#333333' },
+                    });
+                }
             });
         }
     }

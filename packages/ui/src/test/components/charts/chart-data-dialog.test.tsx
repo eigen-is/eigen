@@ -408,25 +408,6 @@ describe('ChartDataDialog: Save is a change', () => {
             ['#00ff00', 58],
         ]);
     });
-
-    test("a peer's slice colour past a deleted row moves with its row", async () => {
-        const dialog = await open(scores('pie'));
-        await dialog.rerender({ ...scores('pie'), points: { 's-1': { 3: { color: '#000004' } } } });
-        await dialog.mouseDown(dialog.rowHeader('2'));
-        await dialog.key('Delete');
-        const spec = await dialog.save();
-        expect(spec.data.categories).toEqual(['Team 2', 'Team 3', 'Team 4']);
-        expect(spec.points).toEqual({ 's-1': { 2: { color: '#000004' } } });
-    });
-
-    test('a stored point past the rows, or on a series the data does not name, moves with a deleted row', async () => {
-        const pie = scores('pie');
-        const dialog = await open(pie, { ...pie, points: { 's-1': { 9: { color: '#000009' } }, other: { 1: {} } } });
-        await dialog.mouseDown(dialog.rowHeader('2'));
-        await dialog.key('Delete');
-        await dialog.save();
-        expect(dialog.stored().points).toEqual({ 's-1': { 8: { color: '#000009' } }, other: { 0: {} } });
-    });
 });
 
 describe('ChartDataDialog: the keyboard is Sheets', () => {
@@ -510,7 +491,8 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
         expect(spec.data.categories).toEqual(['', 'Team 2', 'Team 3', 'Team 4']);
     });
 
-    test('a row header selects the row, and Delete removes it with its points, the rows after keeping theirs', async () => {
+    // Google's rule: a slice color belongs to its index, so the row that moves up takes the deleted row's color.
+    test('a row header selects the row, and Delete removes it, every stored point staying at its index', async () => {
         const dialog = await open(coloredPie());
         await dialog.mouseDown(dialog.rowHeader('3'));
         expect(dialog.highlighted('columnheader')).toEqual(
@@ -519,15 +501,7 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
         await dialog.key('Delete');
         const spec = await dialog.save();
         expect(spec.data.categories).toEqual(['Team 1', 'Team 3', 'Team 4']);
-        expect(spec.points).toEqual({
-            's-1': { 0: { color: '#000001' }, 1: { color: '#000003' }, 2: { color: '#000004' } },
-        });
-        // Each point moves whole, so what this build doesn't read on it goes along.
-        expect(JSON.parse(JSON.stringify(dialog.stored())).points['s-1']).toEqual({
-            0: { color: '#000001', future: '#000001' },
-            1: { color: '#000003', future: '#000003' },
-            2: { color: '#000004', future: '#000004' },
-        });
+        expect(JSON.parse(JSON.stringify(dialog.stored())).points).toEqual(coloredPie().points);
     });
 
     test('a column header selects the column, and Delete removes its series', async () => {
