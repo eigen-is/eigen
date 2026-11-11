@@ -1,13 +1,18 @@
 // The functions that work on where cells are. ROW and COLUMN look at a reference without reading it, and INDEX
-// gives back a reference when it was given one, so A1:INDEX(B:B,5) is a range.
+// gives back a reference when it was given one, so A1:INDEX(B:B,5) is a range. The lookups each turn their
+// arguments into one search of a row or a column and pick their result at the position it found.
 
+import type { Evaluator } from '../eval/evaluator';
 import { columnsOf, rowsOf } from '../eval/views';
-import { toNumber } from '../values/coerce';
-import { REF, VALUE } from '../values/errors';
+import { toBoolean, toNumber } from '../values/coerce';
+import type { FormulaError } from '../values/errors';
+import { NA, REF, VALUE } from '../values/errors';
 import type { Reference, Scalar, Value } from '../values/value';
 import { arrayOf, isArray, isError, isReference, OMITTED } from '../values/value';
 import type { FunctionBody } from './registry';
-import { define, FunctionFlag, optional, RANGE, REF as REF_PARAM, SCALAR } from './registry';
+import { define, FunctionFlag, LAZY, optional, RANGE, REF as REF_PARAM, SCALAR } from './registry';
+import type { Key, Vector } from './search';
+import { bisect, edgeOf, exact, heightOf, nearest, widthOf } from './search';
 
 // The row or column numbers of a reference, from 1, or the formula's own when there is none.
 function position(reference: Value, own: number, rows: boolean): Value {
@@ -67,6 +72,127 @@ const index: FunctionBody = (args, _ctx, node) => {
     return arrayOf(bottom - top + 1, right - left + 1, items);
 };
 
+// What a lookup searches for: a blank key is the number 0.
+function keyOf(value: Value): Key | FormulaError {
+    if (typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean') return value;
+    return isError(value) ? value : 0;
+}
+
+// One cell of a range or one element of an array, by its row and column from 0.
+function pick(ctx: Evaluator, source: Value, row: number, column: number): Value {
+    if (isReference(source)) return ctx.cells.valueOf(source.sheet, source.left + column, source.top + row);
+    return isArray(source) ? source.items[row * source.columns + column] : source;
+}
+
+const match: FunctionBody = (args, ctx) => {
+    const key = keyOf(args[0]);
+    if (isError(key)) return key;
+    const range = args[1];
+    if (isError(range)) return range;
+    const type = toNumber(args[2]);
+    if (typeof type !== 'number') return type;
+    if (heightOf(range) > 1 && widthOf(range) > 1) return NA;
+    const vector = edgeOf(ctx, range, widthOf(range) === 1);
+    const at =
+        type === 0 ? exact(vector, key, true, false) : bisect(vector, key, type < 0, type < 0 ? 1 : -1, type > 0);
+    return at < 0 ? NA : at + 1;
+};
+
+// VLOOKUP when `down`, else HLOOKUP: the key is searched in the first column or row of the table.
+function tableLookup(args: readonly Value[], ctx: Evaluator, down: boolean): Value {
+    const key = keyOf(args[0]);
+    if (isError(key)) return key;
+    const table = args[1];
+    if (isError(table)) return table;
+    const index = toNumber(args[2]);
+    if (typeof index !== 'number') return index;
+    const sorted = toBoolean(args[3]);
+    if (typeof sorted !== 'boolean') return sorted;
+    const line = Math.trunc(index) - 1;
+    if (line < 0) return VALUE;
+    if (line >= (down ? widthOf(table) : heightOf(table))) return REF;
+    const vector = edgeOf(ctx, table, down);
+    const at = sorted ? bisect(vector, key, false, -1, true) : exact(vector, key, true, false);
+    return at < 0 ? NA : pick(ctx, table, down ? at : line, down ? line : at);
+}
+
+// The values are searched down the first column when the range is at least as high as it is wide, else along the
+// first row, and the result comes from the last column or row, or from the result range at the same position.
+const lookup: FunctionBody = (args, ctx) => {
+    const key = keyOf(args[0]);
+    if (isError(key)) return key;
+    const [, range, result] = args;
+    if (isError(range)) return range;
+    if (isError(result)) return result;
+    const rows = heightOf(range);
+    const columns = widthOf(range);
+    const down = rows >= columns;
+    const at = bisect(edgeOf(ctx, range, down), key, false, -1, true);
+    if (at < 0) return NA;
+    if (result === OMITTED) return pick(ctx, range, down ? at : rows - 1, down ? columns - 1 : at);
+    if (at >= Math.max(heightOf(result), widthOf(result))) return NA;
+    return heightOf(result) > 1 ? pick(ctx, result, at, 0) : pick(ctx, result, 0, at);
+};
+
+// The two modes of XMATCH and XLOOKUP. `match` is 0 for the key itself, -1 for it or the next smaller value, 1 for
+// it or the next larger one and 2 for the key as a pattern. `search` is 1 from the first value on, -1 from the last
+// one back, and 2 or -2 for a bisection of ascending or descending values. A blank key finds a blank.
+function seek(vector: Vector, key: Value, match: Value, search: Value): number | FormulaError {
+    const how = toNumber(match);
+    if (typeof how !== 'number') return how;
+    const order = search === null ? 1 : toNumber(search);
+    if (typeof order !== 'number') return order;
+    if (how !== 0 && how !== -1 && how !== 1 && how !== 2) return VALUE;
+    const sought = typeof key === 'number' || typeof key === 'string' || typeof key === 'boolean' ? key : null;
+    if (order === 1 || order === -1) {
+        if (how === 0 || how === 2) return exact(vector, sought, how === 2, order < 0);
+        return nearest(vector, sought ?? 0, how > 0, order < 0);
+    }
+    if ((order !== 2 && order !== -2) || how === 2) return VALUE;
+    return bisect(vector, sought ?? 0, order < 0, how, false);
+}
+
+const xmatch: FunctionBody = (args, ctx) => {
+    const [key, range] = args;
+    if (isError(key)) return key;
+    if (isError(range)) return range;
+    if (heightOf(range) > 1 && widthOf(range) > 1) return VALUE;
+    const at = seek(edgeOf(ctx, range, widthOf(range) === 1), key, args[2], args[3]);
+    if (typeof at !== 'number') return at;
+    return at < 0 ? NA : at + 1;
+};
+
+// The result is the row of the result range beside the value found in a column, or its column under the value
+// found in a row: a reference when the result range is one.
+const xlookup: FunctionBody = (args, ctx, node, sheet, row, column) => {
+    const [key, range, source] = args;
+    if (isError(key)) return key;
+    if (isError(range)) return range;
+    if (isError(source)) return source;
+    const down = widthOf(range) === 1;
+    const length = down ? heightOf(range) : widthOf(range);
+    if (!down && heightOf(range) > 1) return VALUE;
+    if (length !== (down ? heightOf(source) : widthOf(source))) return VALUE;
+    const at = seek(edgeOf(ctx, range, down), key, args[4], args[5]);
+    if (typeof at !== 'number') return at;
+    if (at < 0) {
+        const missing = ctx.force(args[3], node.children[3], sheet, row, column);
+        return missing === OMITTED || missing === null ? NA : missing;
+    }
+    if (isReference(source)) {
+        return down
+            ? { ...source, top: source.top + at, bottom: source.top + at, next: null }
+            : { ...source, left: source.left + at, right: source.left + at, next: null };
+    }
+    if (!isArray(source)) return source;
+    const count = down ? source.columns : source.rows;
+    const items: Scalar[] = [];
+    for (let i = 0; i < count; i += 1) {
+        items.push(source.items[down ? at * source.columns + i : i * source.columns + at]);
+    }
+    return down ? arrayOf(1, count, items) : arrayOf(count, 1, items);
+};
+
 export const LOOKUP = [
     define(
         'ROW',
@@ -81,4 +207,15 @@ export const LOOKUP = [
         FunctionFlag.Positional,
     ),
     define('INDEX', [RANGE, SCALAR, optional(SCALAR, null), optional(SCALAR, 1)], index, FunctionFlag.ReturnsReference),
+    define('MATCH', [SCALAR, RANGE, optional(SCALAR, 1)], match),
+    define('XMATCH', [SCALAR, RANGE, optional(SCALAR, 0), optional(SCALAR, 1)], xmatch),
+    define('VLOOKUP', [SCALAR, RANGE, SCALAR, optional(SCALAR, true)], (args, ctx) => tableLookup(args, ctx, true)),
+    define('HLOOKUP', [SCALAR, RANGE, SCALAR, optional(SCALAR, true)], (args, ctx) => tableLookup(args, ctx, false)),
+    define('LOOKUP', [SCALAR, RANGE, optional(RANGE, OMITTED)], lookup),
+    define(
+        'XLOOKUP',
+        [SCALAR, RANGE, RANGE, optional(LAZY, NA), optional(SCALAR, 0), optional(SCALAR, 1)],
+        xlookup,
+        FunctionFlag.ReturnsReference,
+    ),
 ];

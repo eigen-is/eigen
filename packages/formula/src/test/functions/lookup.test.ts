@@ -1,0 +1,284 @@
+import { describe, expect, test } from 'bun:test';
+import { DIV0, NA, REF, VALUE } from '../../index';
+import type { Cells } from '../recalc/support';
+import { engineOf, evaluate, valueAt } from '../recalc/support';
+
+// A is sorted with one value twice, D is not sorted, F mixes kinds around a blank, H is text for the wildcards.
+const TABLES: Cells = {
+    A1: 1,
+    A2: 3,
+    A3: 5,
+    A4: 5,
+    A5: 9,
+    A6: 11,
+    B1: 'a',
+    B2: 'b',
+    B3: 'c',
+    B4: 'd',
+    B5: 'e',
+    B6: 'f',
+    D1: 1,
+    D2: 9,
+    D3: 3,
+    D4: 7,
+    D5: 5,
+    F1: 1,
+    F2: 'x',
+    F3: 3,
+    F5: '5',
+    F6: 7,
+    H1: 'apple',
+    H2: 'Apple pie',
+    H3: 'a*b',
+    H4: 'banana',
+    I1: 1,
+    I2: 2,
+    I3: 3,
+    I4: 4,
+};
+
+describe('MATCH', () => {
+    test.each([
+        ['=MATCH(5,A1:A6,0)', 3],
+        ['=MATCH(5,A1:A6,1)', 4],
+        ['=MATCH(5,A1:A6)', 4],
+        ['=MATCH(6,A1:A6,1)', 4],
+        ['=MATCH(0,A1:A6,1)', NA],
+        ['=MATCH(100,A1:A6,1)', 6],
+        ['=MATCH(6,A1:A6,0)', NA],
+        ['=MATCH("5",A1:A6,0)', NA],
+        ['=MATCH(5,A1:B6,0)', NA],
+        ['=MATCH(5,D1:D5,1)', 3],
+        ['=MATCH(9,D1:D5,1)', 5],
+        ['=MATCH(9,D1:D5,0)', 2],
+        ['=MATCH(4,F1:F6,1)', 3],
+        ['=MATCH(5,F1:F6,0)', NA],
+        ['=MATCH("5",F1:F6,0)', 5],
+        ['=MATCH("y",F1:F6,1)', 5],
+        ['=MATCH("APPLE",H1:H4,0)', 1],
+        ['=MATCH("app*",H1:H4,0)', 1],
+        ['=MATCH("a~*b",H1:H4,0)', 3],
+        ['=MATCH("*",H1:H4,0)', 1],
+        ['=MATCH("b?nana",H1:H4,0)', 4],
+        ['=MATCH("*",F1:F6,0)', 2],
+        ['=MATCH(9,{11,9,5,5,3,1},-1)', 2],
+        ['=MATCH(4,{11,9,5,5,3,1},-1)', 4],
+        ['=MATCH(12,{11,9,5,5,3,1},-1)', NA],
+        ['=MATCH(5,{20,19,18,17,16,15,14,13,12,11,10,6,6,5,5,4,4,3,2,1},-1)', 14],
+        ['=MATCH(3,{1,"",3},1)', 3],
+        ['=MATCH(TRUE,{FALSE,TRUE},0)', 2],
+        ['=MATCH(1,{FALSE,TRUE},0)', NA],
+        ['=MATCH("a",{1,3,"b","d"},1)', NA],
+        ['=MATCH("c",{1,3,"b","d"},1)', 3],
+        ['=MATCH(9,A:A,0)', 5],
+        ['=MATCH(10,A:A)', 5],
+        ['=MATCH(3,A1:A6,)', 2],
+        ['=MATCH(C1,A1:A6,0)', NA],
+        ['=MATCH(1/0,A1:A6,0)', DIV0],
+        ['=MATCH(5,#REF!,0)', REF],
+        ['=MATCH(5,A1:A6,"x")', VALUE],
+        ['=MATCH(5,5,0)', 1],
+        ['=MATCH(0.1+0.2,{0.1,0.3},0)', 2],
+        ['=SUM(MATCH({5,9},A1:A6,0))', 8],
+    ])('%s is %p', (formula, expected) => {
+        expect(evaluate(formula, TABLES)).toBe(expected);
+    });
+
+    test('a blank key is 0, and an error in the cells searched is skipped', () => {
+        expect(evaluate('=MATCH(C1,A1:A3,0)', { A1: 5, A2: 0 })).toBe(2);
+        expect(evaluate('=MATCH(0,G77:G79,0)', { G77: NA, G78: 0, G79: 1 })).toBe(2);
+        expect(evaluate('=MATCH(1,G77:G79,0)', { G77: NA, G78: 0, G79: 1 })).toBe(3);
+        expect(evaluate('=MATCH(5,G77:G79,0)', { G77: NA, G78: 0, G79: 1 })).toBe(NA);
+        expect(evaluate('=MATCH("",A1:A1,0)')).toBe(NA);
+    });
+
+    test('a row of mixed kinds is searched among the cells of the key own kind', () => {
+        const row = { F5: 2, G5: 4, H5: 4, I5: 8, J5: 'B', K5: 'B', L5: 'D', M5: 'H' };
+        const of = (key: string) => evaluate(`=MATCH(${key},F5:M5,1)`, row, 'A1');
+        expect([1, 2, 3, 4, 7, 8, 9].map((key) => of(String(key)))).toEqual([NA, 1, 1, 3, 3, 4, 4]);
+        expect(['A', 'B', 'C', 'D', 'G', 'H', 'I'].map((key) => of(`"${key}"`))).toEqual([NA, 6, 6, 7, 7, 8, 8]);
+    });
+
+    test('a descending search takes the first of equal keys and the last larger one', () => {
+        const cells = { I1: 10, I2: 8, I3: 6, I4: 4, I5: 2 };
+        expect([10, 9, 8, 7].map((key) => evaluate(`=MATCH(${key},I1:I5,-1)`, cells))).toEqual([1, 1, 2, 2]);
+    });
+});
+
+describe('VLOOKUP and HLOOKUP', () => {
+    test.each([
+        ['=VLOOKUP(5,A1:B6,2,FALSE)', 'c'],
+        ['=VLOOKUP(5,A1:B6,2,TRUE)', 'd'],
+        ['=VLOOKUP(5,A1:B6,2)', 'd'],
+        ['=VLOOKUP(4,A1:B6,2)', 'b'],
+        ['=VLOOKUP(0,A1:B6,2)', NA],
+        ['=VLOOKUP(5,A1:B6,3,FALSE)', REF],
+        ['=VLOOKUP(5,A1:B6,0,FALSE)', VALUE],
+        ['=VLOOKUP("app*",H1:I4,2,FALSE)', 1],
+        ['=VLOOKUP("APPLE PIE",H1:I4,2,FALSE)', 2],
+        ['=VLOOKUP(C1,A1:B6,2,FALSE)', NA],
+        ['=VLOOKUP(5,A1:B6,2,0)', 'c'],
+        ['=VLOOKUP(5,A1:B6,2,)', 'c'],
+        ['=VLOOKUP(5,A1:B6,2.9,FALSE)', 'c'],
+        ['=VLOOKUP(9,A:B,2,FALSE)', 'e'],
+        ['=VLOOKUP(11,A1:C6,3,FALSE)', 0],
+        ['=VLOOKUP(9,A3:A3,1,FALSE)', NA],
+        ['=VLOOKUP("b",{"a",1;"B",2},2,FALSE)', 2],
+        ['=VLOOKUP("a",{1;3;"b";"d"},1,1)', NA],
+        ['=VLOOKUP(1/0,A1:B6,2)', DIV0],
+        ['=VLOOKUP(5,A1:B6,"x")', VALUE],
+        ['=VLOOKUP({1,2},A1:B6,2,FALSE)', 'a'],
+        ['=HLOOKUP(3,{1,3,5;"a","b","c"},2,FALSE)', 'b'],
+        ['=HLOOKUP(4,{1,3,5;"a","b","c"},2)', 'b'],
+        ['=HLOOKUP(3,{1,3,5;"a","b","c"},3,FALSE)', REF],
+        ['=HLOOKUP(9,A2:F4,2,FALSE)', 3],
+        ['=HLOOKUP("X",A2:F2,1,FALSE)', 'x'],
+        ['=HLOOKUP(2,D1:F1,1)', 1],
+    ])('%s is %p', (formula, expected) => {
+        expect(evaluate(formula, TABLES)).toBe(expected);
+    });
+
+    test('a found cell that is blank gives 0 in a cell and nothing in a text', () => {
+        expect(evaluate('=VLOOKUP(1,A1:B6,2,FALSE)', { A1: 1 })).toBe(0);
+        expect(evaluate('=VLOOKUP(1,D1:E1,2)', { D1: 1 })).toBe(0);
+        expect(evaluate('=VLOOKUP(1,A1:B6,2,FALSE)&"."', { A1: 1 })).toBe('.');
+    });
+
+    test('a sorted column is searched among the cells of the key own kind', () => {
+        const mixed = { U1: 1, U2: 3, U3: 'b', U4: 'd', V1: 'one', V2: 'two', V3: 'three', V4: 'four' };
+        const of = (key: string) => evaluate(`=VLOOKUP(${key},U1:V4,2)`, mixed);
+        expect(['0', '1', '2', '3', '4'].map(of)).toEqual([NA, 'one', 'one', 'two', 'two']);
+        expect(['"a"', '"b"', '"c"', '"d"', '"e"'].map(of)).toEqual([NA, 'three', 'three', 'four', 'four']);
+        const numbers = { J2: 1, J3: 2, J4: 4, K2: 11, K3: 12, K4: 14 };
+        expect(
+            ['1', '4', '3.5', '5', '-0.5', '11'].map((key) => evaluate(`=VLOOKUP(${key},J2:K4,2,1)`, numbers)),
+        ).toEqual([11, 14, 12, 14, NA, 14]);
+        const unsorted = { J2: 5, J3: 8, J4: 6, K2: 21, K3: 24, K4: 22 };
+        expect(['5', '6', '8', '7'].map((key) => evaluate(`=VLOOKUP(${key},J2:K4,2,0)`, unsorted))).toEqual([
+            21,
+            22,
+            24,
+            NA,
+        ]);
+    });
+
+    test('text is found in any case and with its accents', () => {
+        expect(evaluate('=VLOOKUP("ABCD",A1:A1,1,0)', { A1: 'abcd' })).toBe('abcd');
+        const accents = { A1: 'coté', A2: 'côte', A3: 'côté', B1: 1, B2: 2, B3: 3 };
+        expect(evaluate('=VLOOKUP("coté",A1:B3,2,0)', accents)).toBe(1);
+        expect(evaluate('=VLOOKUP("côte",A1:B3,2,0)', accents)).toBe(2);
+        expect(evaluate('=VLOOKUP("CÔTÉ",A1:B3,2,0)', accents)).toBe(3);
+        expect(evaluate('=VLOOKUP("cote",A1:B3,2,0)', accents)).toBe(NA);
+    });
+
+    test('a key has no length limit', () => {
+        const long = 'a'.repeat(300);
+        expect(evaluate('=VLOOKUP(C1,H1:I4,2,FALSE)', { ...TABLES, C1: long })).toBe(NA);
+        expect(evaluate('=VLOOKUP(C1,H1:I5,2,FALSE)', { ...TABLES, C1: long, H5: long.toUpperCase(), I5: 5 })).toBe(5);
+        expect(evaluate('=MATCH(C1&"*",H1:H5,0)', { ...TABLES, C1: long, H5: `${long}b` })).toBe(5);
+    });
+
+    test('the result cell is computed when it is still to be', () => {
+        const engine = engineOf({
+            s1: { A1: '=VLOOKUP("k"&2,Data!A1:B3,2,FALSE)' },
+            data: { A1: 'k1', A2: '="K"&(1+1)', A3: 'k3', B1: 1, B2: '=B1+41', B3: 3 },
+        });
+        expect(valueAt(engine, 'A1')).toBe(42);
+    });
+});
+
+describe('LOOKUP', () => {
+    test.each([
+        ['=LOOKUP(6,A1:A6,B1:B6)', 'd'],
+        ['=LOOKUP(6,A1:B6)', 'd'],
+        ['=LOOKUP(0,A1:A6,B1:B6)', NA],
+        ['=LOOKUP(2,1/(A1:A6=5),B1:B6)', 'd'],
+        ['=LOOKUP(100,A1:A6)', 11],
+        ['=LOOKUP(3,{1,3,5;"a","b","c"})', 'b'],
+        ['=LOOKUP(3,{1,"a";3,"b";5,"c"})', 'b'],
+        ['=LOOKUP(3,{1,"a";3,"b"})', 'b'],
+        ['=LOOKUP(3,D1:F1,A1:A3)', 5],
+        ['=LOOKUP(11,A1:A6,B1:B3)', NA],
+        ['=LOOKUP(9,A1:A6,#N/A)', NA],
+        ['=LOOKUP(1/0,A1:A6)', DIV0],
+    ])('%s is %p', (formula, expected) => {
+        expect(evaluate(formula, TABLES)).toBe(expected);
+    });
+});
+
+describe('XLOOKUP and XMATCH', () => {
+    test.each([
+        ['=XLOOKUP(5,A1:A6,B1:B6)', 'c'],
+        ['=XLOOKUP(5,A1:A6,B1:B6,,0,-1)', 'd'],
+        ['=XLOOKUP(6,A1:A6,B1:B6)', NA],
+        ['=XLOOKUP(6,A1:A6,B1:B6,"none")', 'none'],
+        ['=XLOOKUP(6,A1:A6,B1:B6,,-1)', 'c'],
+        ['=XLOOKUP(6,A1:A6,B1:B6,,-1,-1)', 'd'],
+        ['=XLOOKUP(6,A1:A6,B1:B6,,1)', 'e'],
+        ['=XLOOKUP(6,D1:D5,D1:D5,,-1)', 5],
+        ['=XLOOKUP(6,D1:D5,D1:D5,,1)', 7],
+        ['=XLOOKUP(0,D1:D5,D1:D5,,-1)', NA],
+        ['=XLOOKUP(10,D1:D5,D1:D5,,1)', NA],
+        ['=XLOOKUP("app*",H1:H4,I1:I4)', NA],
+        ['=XLOOKUP("app*",H1:H4,I1:I4,,2)', 1],
+        ['=XLOOKUP("app*",H1:H4,I1:I4,,2,-1)', 2],
+        ['=XLOOKUP("b",H1:H4,I1:I4,,-1)', 2],
+        ['=XLOOKUP("b",H1:H4,I1:I4,,1)', 4],
+        ['=XLOOKUP(5,A1:A6,B1:B6,,0,2)', 'c'],
+        ['=XLOOKUP(9,D1:D5,D1:D5,,0,2)', NA],
+        ['=XLOOKUP(6,A1:A6,B1:B6,,-1,2)', 'd'],
+        ['=XLOOKUP(6,A1:A6,B1:B6,,1,2)', 'e'],
+        ['=XLOOKUP(4,{11,9,5,5,3,1},{"a","b","c","d","e","f"},,1,-2)', 'd'],
+        ['=XLOOKUP(4,{11,9,5,5,3,1},{"a","b","c","d","e","f"},,-1,-2)', 'e'],
+        ['=XLOOKUP(5,{11,9,5,5,3,1},{"a","b","c","d","e","f"},,0,-2)', 'c'],
+        ['=XLOOKUP(5,A1:A6,B1:C6)', 'c'],
+        ['=INDEX(XLOOKUP(5,A1:A6,B1:C6),1,2)', 0],
+        ['=XLOOKUP(5,A1:B6,B1:B6)', VALUE],
+        ['=XLOOKUP(5,A1:A6,B1:B5)', VALUE],
+        ['=XLOOKUP(1,A:A,B:B)', 'a'],
+        ['=XLOOKUP(3,D3:F3,D2:F2)', 9],
+        ['=XLOOKUP(3,D3:F3,D2:F2,,0,-1)', 'x'],
+        ['=XLOOKUP("x",D2:F2,D1:F4)', 1],
+        ['=SUM(XLOOKUP("x",D2:F2,D1:F6))', 11],
+        ['=XLOOKUP(3,{1,3,5},{"a","b","c"})', 'b'],
+        ['=XLOOKUP(3,{1;3;5},{"a",1;"b",2;"c",3})', 'b'],
+        ['=SUM(XLOOKUP(3,{1;3;5},{4,1;5,2;6,3}))', 7],
+        ['=XLOOKUP(5,A1:A6,B1:B6,1/0)', 'c'],
+        ['=XLOOKUP(6,A1:A6,B1:B6,1/0)', DIV0],
+        ['=XLOOKUP(5,A1:A6,B1:B6,N1)', 'c'],
+        ['=XLOOKUP(1/0,A1:A6,B1:B6,"none")', DIV0],
+        ['=XLOOKUP(5,A1:A6,B1:B6,,3)', VALUE],
+        ['=XLOOKUP(5,A1:A6,B1:B6,,0,0)', VALUE],
+        ['=XLOOKUP("a*",H1:H4,I1:I4,,2,2)', VALUE],
+        ['=COUNTA(XLOOKUP(1,A1:A6,B1:B6):XLOOKUP(9,A1:A6,B1:B6))', 5],
+        ['=XMATCH(5,A1:A6)', 3],
+        ['=XMATCH(6,A1:A6,-1)', 3],
+        ['=XMATCH(5,A1:A6,0,-1)', 4],
+        ['=XMATCH("app*",H1:H4)', NA],
+        ['=XMATCH("app*",H1:H4,2)', 1],
+        ['=XMATCH("x",D2:F2)', 3],
+        ['=XMATCH(5,A1:B6)', VALUE],
+        ['=XMATCH(5,A1:A6,5)', VALUE],
+        ['=XMATCH(5,A1:A6,0,3)', VALUE],
+        ['=XMATCH(TRUE,{1,"TRUE",TRUE})', 3],
+    ])('%s is %p', (formula, expected) => {
+        expect(evaluate(formula, TABLES)).toBe(expected);
+    });
+
+    test('a key left out finds the first blank cell, also past the last used row', () => {
+        const names = { A2: 'n1', A3: 'n2', A4: 'n3' };
+        expect(evaluate('=XMATCH(,A2:A9)', names)).toBe(4);
+        expect(evaluate('=XMATCH(C1,A2:A9)', names)).toBe(4);
+        expect(evaluate('=XMATCH(,A2:A4)', names)).toBe(NA);
+        expect(evaluate('=XMATCH(,A2:A9,0,-1)', names)).toBe(8);
+        expect(evaluate('=XMATCH(,A1:A9)', names)).toBe(1);
+        expect(evaluate('=XLOOKUP(,B1:D1,B2:D2)', { B1: 1, D1: 3, B2: 'x', C2: 'y', D2: 'z' })).toBe('y');
+    });
+
+    test('a sorted column with a blank in it is searched as if the blank were not there', () => {
+        const cells = { A1: 1, A2: 2, A4: 3 };
+        expect(evaluate('=XLOOKUP(3,A1:A4,A1:A4,"NF",0,2)', cells)).toBe(3);
+        expect(evaluate('=MATCH(3,A1:A4,1)', cells)).toBe(4);
+        expect(evaluate('=MATCH(2.5,A1:A9,1)', cells)).toBe(2);
+    });
+});
