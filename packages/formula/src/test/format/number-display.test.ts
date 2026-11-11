@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { numberDisplay } from '../../charts/number-display';
+import { numberDisplay } from '../../format';
 
 describe('numberDisplay', () => {
     test('General clears float noise', () => {

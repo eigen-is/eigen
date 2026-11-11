@@ -3,6 +3,7 @@
 // Column and line put the value axis upright left of the plot; bar turns both. The layout calls it with the frame the
 // title and legend leave, and with a second context in which the marks draw, flat when the chart is past its sketch cap.
 
+import { numberDisplay } from '@workspace/formula/format';
 import type { ChartLabel, ChartSeriesStyle, ChartShape, ChartSpec, InlineChartSeries } from '../types/chart';
 import { isStackingChartType } from '../types/chart';
 import { serializeFill } from '../vector/fill';
@@ -11,7 +12,6 @@ import type { VectorLinearElement } from '../vector/types';
 import type { Context, Frame } from './context';
 import { LABEL_SHARE } from './context';
 import { fit, hideCrowded, keepUntouched, label, labelBox, measure } from './labels';
-import { numberDisplay } from './number-display';
 import type { Band, ChartTickFormat, ValueAxis } from './scales';
 import { bandScale, MAX_TICK_COUNT, shares, valueAxis, valueExtent } from './scales';
 import { ellipse, isOutlined, line, outlineOf, rectangle } from './shapes';

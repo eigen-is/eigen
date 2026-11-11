@@ -4,9 +4,10 @@
 // ending in a number counts by one. Anything else repeats. The canvas overlay's mouse handlers and the keyboard
 // handler call in.
 
+import { numberDisplay } from '@workspace/formula/format';
 import dayjs from 'dayjs';
 import { cloneDeep } from 'es-toolkit/compat';
-import { numberDisplay, parseCellInput, update, writeFormulaResult } from '../../engine/format';
+import { parseCellInput, update, writeFormulaResult } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, SingleRange } from '../../engine/types';
 import type { Context } from '../context';

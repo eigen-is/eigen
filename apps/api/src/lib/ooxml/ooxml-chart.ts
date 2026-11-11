@@ -3,6 +3,7 @@
 // can't draw as the file draws it is never read as a different chart: it is no spec, with its title and kind for the
 // caller to show instead. The writer shares this module's tables of OOXML names.
 
+import { numberDisplay } from '@workspace/formula/format';
 import { gradientStops } from '@workspace/lib/background';
 import {
     chartColor,
@@ -29,9 +30,8 @@ import type {
 } from '@workspace/lib/types/chart';
 import { CHART_BLANKS } from '@workspace/lib/types/chart';
 import { solidFill, TRANSPARENT_COLOR } from '@workspace/lib/vector';
-// The two engine modules a chart reads, not the engine: a docx or pptx import never evaluates the formula engine.
+// The one engine module a chart reads, not the engine: a docx or pptx import never evaluates the formula engine.
 import { a1RangeRef, parseA1Range, unquoteSheetName } from '@workspace/sheet/engine/a1-notation';
-import { numberDisplay } from '@workspace/sheet/engine/format';
 import type { XmlElement } from '../core/xml';
 import {
     hasXmlName,
