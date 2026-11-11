@@ -14,6 +14,7 @@ import { CONTENT_REINDEX_CAP_SECONDS, ContentReindexQueue } from '../../lib/moun
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { paths } from '../../lib/mount/schema';
+import { purgeTrash } from '../../lib/mount/trash';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { parseSnapshotTimestamp } from '../../lib/versioning/timestamp';
@@ -1750,7 +1751,7 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         await mount2.updatePath(f1, { trashedAt });
         await mount2.updatePath(f2, { trashedAt });
 
-        await mount2.purgeTrash(0);
+        await purgeTrash(mount2, 0);
 
         expect(await mount2.getPath(f1)).toBeNull();
         expect(await mount2.getPath(f2)).toBeNull();
@@ -1764,7 +1765,7 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         const mount3 = new Mount(OWNER_ID, TEST_DIR, config3, createGetLocalDatabase(TEST_DIR));
         await mount3.init();
 
-        await expect(mount3.purgeTrash(0)).resolves.toBeUndefined();
+        await expect(purgeTrash(mount3, 0)).resolves.toBeUndefined();
     });
 
     test('purgeTrash(30) deletes old items, keeps recent ones', async () => {
@@ -1783,7 +1784,7 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         const oldDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
         await mount4.updatePath(oldId, { trashedAt: oldDate });
 
-        await mount4.purgeTrash(30);
+        await purgeTrash(mount4, 30);
 
         // The old item should be deleted
         expect(await mount4.getPath(oldId)).toBeNull();
