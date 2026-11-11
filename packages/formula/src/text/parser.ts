@@ -342,7 +342,10 @@ class Parser {
                 this.next();
                 // Typed text may hold Excel's spelling of a reference to a deleted sheet, #REF!A1. The error forgets
                 // the cells, so they are read and dropped.
-                if (code === REF_ERROR && !this.stored && this.space === '') this.reference('', SheetKind.Host, '');
+                const cells = this.kind === Token.Word || this.kind === Token.Number;
+                if (code === REF_ERROR && !this.stored && this.space === '' && cells) {
+                    this.reference('', SheetKind.Host, '');
+                }
                 return leaf(NodeKind.Error, code, '', space, SheetKind.Host, '');
             }
             case Token.Plus:

@@ -65,14 +65,15 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
             let chain = node;
             let text = '';
             while (chain.kind === NodeKind.Binary) {
-                const [left, operand] = chain.children;
-                let right = print(operand, stored, row, column, sheetName);
-                // A name, a colon and a bare sheet read as the two sheets of a 3-D reference, so that sheet is quoted.
-                const before = left.kind === NodeKind.Binary ? left.children[1] : left;
-                const named = before.kind === NodeKind.Name && before.sheetKind === SheetKind.Host;
-                if (chain.op === Token.Colon && chain.space === '' && named) {
+                const left = chain.children[0];
+                let right = print(chain.children[1], stored, row, column, sheetName);
+                if (chain.op === Token.Colon && chain.space === '') {
+                    // A name, a colon and a bare sheet read as the two sheets of a 3-D reference, so that sheet is
+                    // quoted.
+                    const before = left.kind === NodeKind.Binary ? left.children[1] : left;
                     const sheet = right.slice(0, Math.max(0, right.indexOf('!')));
-                    if (isWord(sheet)) right = quotedSheetName(sheet) + right.slice(sheet.length);
+                    const named = before.kind === NodeKind.Name && before.sheetKind === SheetKind.Host;
+                    if (named && isWord(sheet)) right = quotedSheetName(sheet) + right.slice(sheet.length);
                 }
                 text = chain.space + SYMBOLS[chain.op] + right + text;
                 chain = left;
