@@ -64,6 +64,8 @@ export class Recalc {
     // What the pass has cost so far, in formulas computed and array elements made, and how much it may.
     private cost = 0;
     private cap = 0;
+    // Whether the pass has stored a formula yet.
+    private stored = false;
 
     public constructor(workbook: Workbook, functions: Registry) {
         this.workbook = workbook;
@@ -100,6 +102,7 @@ export class Recalc {
         this.index.mark(workbook, this.seeds);
         this.seeds.length = 0;
         this.cost = 0;
+        this.stored = false;
         this.cap = cap;
         let stopped = false;
         try {
@@ -267,8 +270,10 @@ export class Recalc {
         this.current = this.parents[at];
         // On a loop that an earlier cell has still to close: it stays in the list for whoever reads it.
         if (this.lows[at] < at) return;
-        // The cap is met before a formula is stored, never inside a loop that is being stored.
-        if (this.cost >= this.cap) throw STOP;
+        // The cap is met before a formula is stored, never inside a loop that is being stored. The first formula a
+        // pass finishes is stored whatever it cost, so one that costs more than the cap alone holds no pass up.
+        if (this.cost >= this.cap && this.stored) throw STOP;
+        this.stored = true;
         this.cost += this.size - at;
         if ((column.kind[row] & LOOP) === 0 && !kept) this.workbook.put(column, row, value);
         for (let i = at; i < this.size; i += 1) this.columns[i].computed(this.rows[i]);

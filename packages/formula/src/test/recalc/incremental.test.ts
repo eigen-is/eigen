@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { Literal } from '../../index';
 import { Engine, REF } from '../../index';
 import type { Cells } from './support';
-import { at, stored, valueAt } from './support';
+import { at, engineOf, stored, valueAt } from './support';
 
 const NO_CAP = Number.POSITIVE_INFINITY;
 const KEPT = 'kept';
@@ -337,5 +337,26 @@ describe('the cap of an edit', () => {
         expect(engine.recalc(1)).toEqual({ loops: [], stopped: false });
         expect(engine.valueOf('s1', 0, 4)).toBe(16);
         expect(engine.recalc(0).stopped).toBe(false);
+    });
+
+    test('a formula that costs more than the cap alone is stored by one pass, so stopped passes come to an end', () => {
+        const cells: Record<string, Literal> = {
+            N1: '=SUM(A1:A50*2)',
+            N2: '=N1+SUMPRODUCT(A1:B50,A1:B50)',
+            P1: '=P2+SUM(A1:A50*1)',
+            P2: '=P1',
+            Q1: '=N2+1',
+        };
+        for (let row = 1; row <= 50; row += 1) cells[`A${row}`] = row;
+        for (let cap = 0; cap <= 8; cap += 1) {
+            const engine = engineOf({ s1: cells });
+            let result = engine.recalc(cap);
+            expect(valueAt(engine, 'N1')).toBe(2550);
+            for (let pass = 0; result.stopped && pass < 20; pass += 1) result = engine.recalc(cap);
+            expect(result.stopped).toBe(false);
+            expect(result.loops).toHaveLength(2);
+            expect(valueAt(engine, 'Q1')).toBe(2550 + 42925 + 1);
+            expect(valueAt(engine, 'P2')).toBe(REF);
+        }
     });
 });
