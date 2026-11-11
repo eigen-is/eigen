@@ -13,13 +13,13 @@ import {
     DOLLAR,
     DOT,
     EQUALS,
-    ERROR_LITERALS,
     errorCode,
     LOWER_A,
     LOWER_E,
     lexAt,
     MINUS,
     OPEN,
+    REF_ERROR,
     Token,
     tokenEnd,
     tokenKind,
@@ -114,9 +114,6 @@ for (const [power, ...operators] of [
 ]) {
     for (const operator of operators) BINDING[operator] = power;
 }
-
-// What is left of a reference whose cells or sheet are gone. It stands wherever a reference may.
-const REF_ERROR = ERROR_LITERALS.indexOf('#REF!') + 1;
 
 const LEG_CELL = 1;
 const LEG_COLUMN = 2;

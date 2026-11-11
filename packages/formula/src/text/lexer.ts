@@ -93,6 +93,9 @@ export const ERROR_LITERALS = [
     '#EXTERNAL!',
 ] as const;
 
+// What is left of a reference whose cells or sheet are gone. It stands wherever a reference may.
+export const REF_ERROR = ERROR_LITERALS.indexOf('#REF!') + 1;
+
 const OTHER = 0;
 const SPACE = 1;
 const DIGIT = 2;

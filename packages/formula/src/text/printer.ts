@@ -6,8 +6,8 @@
 import { columnLabel, GRID_COLUMNS, GRID_ROWS } from './a1';
 import { ERROR_LITERALS, SYMBOLS } from './lexer';
 import { quotedSheetName, quoteSheetName } from './sheet-name';
-import type { FormulaNode } from './tree';
-import { NodeKind, RefFlag, RefKind, SheetKind } from './tree';
+import type { Ends, FormulaNode } from './tree';
+import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from './tree';
 
 export type SheetNames = (id: string) => string | undefined;
 
@@ -133,21 +133,19 @@ function reference(
             (columns ? `C${storedIndex(node.column2, flags & RefFlag.Column2Absolute)}` : '');
         return `${prefix}${start}:${end}`;
     }
-    // A whole column holds no row and a cell no second corner, and both resolve to the host's own, inside the grid.
-    const row = flags & RefFlag.RowAbsolute ? node.row : hostRow + node.row;
-    const column = flags & RefFlag.ColumnAbsolute ? node.column : hostColumn + node.column;
-    const row2 = flags & RefFlag.Row2Absolute ? node.row2 : hostRow + node.row2;
-    const column2 = flags & RefFlag.Column2Absolute ? node.column2 : hostColumn + node.column2;
-    if (Math.min(row, row2, column, column2) < 0 || Math.max(row, row2) >= GRID_ROWS) return `${prefix}#REF!`;
-    if (Math.max(column, column2) >= GRID_COLUMNS) return `${prefix}#REF!`;
-    let top = (flags & RefFlag.RowAbsolute ? '$' : '') + (row + 1);
-    let left = (flags & RefFlag.ColumnAbsolute ? '$' : '') + columnLabel(column);
+    const rowEnds: Ends = { first: 0, second: 0 };
+    const columnEnds: Ends = { first: 0, second: 0 };
+    const onGrid =
+        endsAt(node, true, hostRow, GRID_ROWS, rowEnds) && endsAt(node, false, hostColumn, GRID_COLUMNS, columnEnds);
+    if (!onGrid) return `${prefix}#REF!`;
+    let top = (flags & RefFlag.RowAbsolute ? '$' : '') + (rowEnds.first + 1);
+    let left = (flags & RefFlag.ColumnAbsolute ? '$' : '') + columnLabel(columnEnds.first);
     if (op === RefKind.Cell) return prefix + left + top;
-    let bottom = (flags & RefFlag.Row2Absolute ? '$' : '') + (row2 + 1);
-    let right = (flags & RefFlag.Column2Absolute ? '$' : '') + columnLabel(column2);
+    let bottom = (flags & RefFlag.Row2Absolute ? '$' : '') + (rowEnds.second + 1);
+    let right = (flags & RefFlag.Column2Absolute ? '$' : '') + columnLabel(columnEnds.second);
     // The corners print in order at this host, each coordinate taking its $ along, as Excel shows a range.
-    if (row > row2) [top, bottom] = [bottom, top];
-    if (column > column2) [left, right] = [right, left];
+    if (rowEnds.first > rowEnds.second) [top, bottom] = [bottom, top];
+    if (columnEnds.first > columnEnds.second) [left, right] = [right, left];
     if (op === RefKind.Columns) return `${prefix}${left}:${right}`;
     if (op === RefKind.Rows) return `${prefix}${top}:${bottom}`;
     return `${prefix}${left}${top}:${right}${bottom}`;
