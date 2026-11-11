@@ -75,20 +75,16 @@ export class Recalc {
         this.workbook = workbook;
         this.functions = functions;
         this.evaluator = new Evaluator(workbook, functions, this);
-        // A formula that came without a value was never computed, which the ones that came with a value have to
-        // hear. When none did, every formula is computed anyway and there is nothing to flag.
-        let settled = false;
+        // A formula that came without a value was never computed, which the ones that came with a value have to hear.
         for (let s = 0; s < workbook.sheets.length; s += 1) {
             const { columns } = workbook.sheets[s];
             for (let c = 0; c < columns.length; c += 1) {
-                const { kind, shape, length } = columns[c];
-                for (let row = 0; (columns[c].pending > 0 || !settled) && row < length; row += 1) {
+                const { kind, length } = columns[c];
+                for (let row = 0; columns[c].pending > 0 && row < length; row += 1) {
                     if (kind[row] > SETTLED) this.seed(s, c, row);
-                    else if (shape[row] > 0) settled = true;
                 }
             }
         }
-        if (!settled) this.seeds.length = 0;
     }
 
     // To be called before a cell is written, with whether a formula is: the cell is a seed of the next pass.
@@ -108,8 +104,21 @@ export class Recalc {
             this.index.rebuild(workbook, this.facts);
             this.stale = false;
         }
-        this.index.mark(workbook, this.seeds);
-        this.seeds.length = 0;
+        // A cell written twice is one seed: the spans in sheet, column and row order, those that meet as one.
+        const { seeds } = this;
+        const order: number[] = [];
+        for (let at = 0; at < seeds.length; at += 4) order.push(at);
+        order.sort((a, b) => seeds[a] - seeds[b] || seeds[a + 1] - seeds[b + 1] || seeds[a + 2] - seeds[b + 2]);
+        const spans: number[] = [];
+        for (const at of order) {
+            const last = spans.length - 4;
+            const sameColumn = last >= 0 && spans[last] === seeds[at] && spans[last + 1] === seeds[at + 1];
+            if (sameColumn && spans[last + 3] >= seeds[at + 2] - 1) {
+                spans[last + 3] = Math.max(spans[last + 3], seeds[at + 3]);
+            } else spans.push(seeds[at], seeds[at + 1], seeds[at + 2], seeds[at + 3]);
+        }
+        this.index.mark(workbook, spans);
+        seeds.length = 0;
         this.cost = 0;
         this.stored = false;
         this.cap = cap;

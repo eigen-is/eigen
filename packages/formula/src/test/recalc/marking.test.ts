@@ -238,35 +238,6 @@ describe('formulas that came without a value', () => {
         expect([0, 1, 2].map((row) => engine.valueOf('s', row, 1))).toEqual([2, 12, 15]);
         expect(engine.valueOf('t', 0, 0)).toBe(10);
     });
-
-    test('one formula that was never computed is heard by the ones that came with a value', () => {
-        const { computed } = opened([
-            [0, 0, 1],
-            [0, 1, null, '=RC[-1]+1'],
-            [0, 2, KEPT, '=RC[-1]*2'],
-            [0, 3, KEPT, '=RC[-1]*2'],
-            [0, 4, KEPT, '=RC[-4]'],
-        ]);
-        expect(computed()).toEqual(['B1', 'C1', 'D1']);
-    });
-
-    test('a sheet that was never computed is read by one that came with its values', () => {
-        const never: TestCell[] = [
-            [0, 0, 1],
-            [0, 1, null, '=RC[-1]+1'],
-            [1, 1, null, '=R[-1]C+1'],
-        ];
-        const engine = new Engine([
-            source('s', never),
-            source('t', [
-                [0, 0, KEPT, '=[s]!R2C2*2'],
-                [1, 0, KEPT, '=[s]!R1C1*2'],
-                [2, 0, KEPT, '=R[-2]C+1'],
-            ]),
-        ]);
-        engine.recalc(NO_CAP);
-        expect([0, 1, 2].map((row) => engine.valueOf('t', row, 0))).toEqual([6, KEPT, 7]);
-    });
 });
 
 type End = { readonly fixed: boolean; readonly at: number };

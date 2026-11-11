@@ -1,9 +1,8 @@
-// The reverse index of a workbook: which formulas read a cell. Nothing else stores a dependency, and this is
-// derived whole from the shape planes, never patched, so it answers for the formulas as they were at its rebuild.
-// Cells that hold one shape in a block are one rectangle, and each reference of the shape is one entry for all of
-// it. The sheet an entry reads lists it under the few aligned blocks of columns, each a power of two wide, that
-// tile its columns, sorted by row in each, so a lookup for a cell tests rows only. A marking starts from its seeds:
-// an entry that reads a span gives the hosts that read it by arithmetic, and each formula flagged is followed.
+// The reverse index of a workbook: which formulas read a cell. `Recalc` rebuilds it whole from the shape planes when
+// a formula came or went, and has it mark: flag every formula that reads a written cell or a formula flagged here.
+// Cells of one shape in a block share their entries, about one per reference, each listed under the aligned blocks
+// of columns that tile the columns it reads, sorted by row, so a lookup tests rows only. A marking writes scratch
+// into `entries` and `lists`, the rows a range flagged and the listings it is done with, and puts it back at its end.
 
 import { Fact } from '../eval/facts';
 import type { Column } from '../store/column';
@@ -24,6 +23,7 @@ const ROW_ENDS = 5;
 const COLUMN_ENDS = 7;
 const MOVES = 9;
 const FLAGGED = 10;
+// One past the last of those rows, and -1 while the entry flagged none.
 const FLAGGED_END = 11;
 // Beside the four bits of `MOVES`: the reference is a range.
 const RANGE = 16;
@@ -93,7 +93,7 @@ export class ReverseIndex {
                 opened = ran;
             }
         }
-        const ids = sheets.map((sheet) => sheet.id);
+        const places = new Map(sheets.map((sheet, s) => [sheet.id, s] as const));
         const entries: number[] = [];
         // Per sheet, what each entry reads of it: first and last row, first and last column, and the entry.
         const areas: number[][] = sheets.map(() => []);
@@ -106,8 +106,8 @@ export class ReverseIndex {
             for (const ref of shapes.shape(id).refs) {
                 const { op, sheetKind, flags } = ref;
                 const target =
-                    sheetKind === SheetKind.Host ? s : sheetKind === SheetKind.Id ? ids.indexOf(ref.sheet) : -1;
-                if (target < 0) continue;
+                    sheetKind === SheetKind.Host ? s : sheetKind === SheetKind.Id ? places.get(ref.sheet) : undefined;
+                if (target === undefined) continue;
                 // Each end as where it sits for a host at 0 and how far it moves with the host, 0 or 1.
                 let { row, row2, column, column2 } = ref;
                 let rowStep = flags & RefFlag.RowAbsolute ? 0 : 1;
@@ -158,7 +158,7 @@ export class ReverseIndex {
                         Math.max(column + last * columnStep, column2 + last * column2Step),
                         entries.length,
                     );
-                    entries.push(s, top, bottom, first, last, row, row2, column, column2, moves, 0, 0);
+                    entries.push(s, top, bottom, first, last, row, row2, column, column2, moves, 0, -1);
                 }
             }
         }
@@ -169,8 +169,7 @@ export class ReverseIndex {
         for (const read of areas) this.list(read);
     }
 
-    // Builds the listings of one sheet from what its entries read of it: first and last row, first and last
-    // column, and the entry. A method of its own, so that it is called often enough to be compiled early.
+    // Lists what the entries read of one sheet. Not a loop in `rebuild`: a method called per sheet is compiled early.
     private list(read: readonly number[]): void {
         const count = read.length / 5;
         // The first row and the place of each area in one number, so that a plain sort orders them by row.
@@ -268,10 +267,7 @@ export class ReverseIndex {
             }
         }
         for (let i = lowered.length - 3; i >= 0; i -= 3) this.lists[lowered[i]][lowered[i + 1]] = lowered[i + 2];
-        for (const entry of recorded) {
-            entries[entry + FLAGGED] = 0;
-            entries[entry + FLAGGED_END] = 0;
-        }
+        for (const entry of recorded) entries[entry + FLAGGED_END] = -1;
         lowered.length = 0;
         recorded.length = 0;
     }
@@ -325,7 +321,7 @@ export class ReverseIndex {
                 }
             }
             if (moves & RANGE && top <= bottom) {
-                if (end === 0) this.recorded.push(entry);
+                if (end < 0) this.recorded.push(entry);
                 entries[entry + FLAGGED] = apart ? top : Math.min(top, flagged);
                 entries[entry + FLAGGED_END] = apart ? bottom + 1 : Math.max(bottom + 1, end);
                 const all =
@@ -377,16 +373,15 @@ function reachOf(list: Int32Array, low: number, high: number): number {
 // Along one axis, the first host whose reference reaches `from` or past it, which it does as soon as one of its
 // two ends does. The ends sit at `ends` in the entries, and the two low bits of `moves` say which move with the host.
 function firstHost(from: number, entries: Int32Array, ends: number, moves: number): number {
-    const all = Number.NEGATIVE_INFINITY;
-    const first = moves & 1 ? from - entries[ends] : entries[ends] >= from ? all : -all;
-    const first2 = moves & 2 ? from - entries[ends + 1] : entries[ends + 1] >= from ? all : -all;
+    // An end that stays reaches it at every host, from 0 on, or at none: a place past the grid.
+    const first = moves & 1 ? from - entries[ends] : entries[ends] >= from ? 0 : GRID_ROWS;
+    const first2 = moves & 2 ? from - entries[ends + 1] : entries[ends + 1] >= from ? 0 : GRID_ROWS;
     return Math.min(first, first2);
 }
 
 // The last host whose reference starts at `to` or before it.
 function lastHost(to: number, entries: Int32Array, ends: number, moves: number): number {
-    const all = Number.POSITIVE_INFINITY;
-    const last = moves & 1 ? to - entries[ends] : entries[ends] <= to ? all : -all;
-    const last2 = moves & 2 ? to - entries[ends + 1] : entries[ends + 1] <= to ? all : -all;
+    const last = moves & 1 ? to - entries[ends] : entries[ends] <= to ? GRID_ROWS : -1;
+    const last2 = moves & 2 ? to - entries[ends + 1] : entries[ends + 1] <= to ? GRID_ROWS : -1;
     return Math.max(last, last2);
 }
