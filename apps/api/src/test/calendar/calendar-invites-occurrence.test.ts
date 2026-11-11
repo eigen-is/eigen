@@ -1,8 +1,8 @@
 // One occurrence of an invited series, over the Home relay: the organizer's "this event" edit must reach
 // the guest as an exception on their linked series — never as an update of the whole series — and the
-// same for a second edit, a cancellation and a guest's RSVP. Every date stores its whole guest list, and follows the
-// series' guest changes and each guest's answer for the whole series. Driven through the routes the calendar app
-// calls (docs/CALENDAR.md § An occurrence message names the series).
+// same for a second edit, a cancellation and a guest's RSVP. Every date stores its whole guest list, follows the
+// series' guest changes and each guest's answer for the whole series, and a recolour tells no guest. Driven through
+// the routes the calendar app calls (docs/CALENDAR.md § An occurrence message names the series).
 import { beforeAll, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, EventData } from '@workspace/lib/types/calendar';
 import { processInboundImip } from '../../lib/calendar/imip';
@@ -798,6 +798,41 @@ describe('Occurrence edits of an invited series', () => {
 
         const date = findOrFail(await aliceOccurrences(series.uid), (e) => e.occurrenceDate === target);
         expect(date.data?.attendees?.map((a) => a.email)).toEqual([ERIN]);
+    });
+
+    // A colour is the organizer's own display choice: guests keep their own on their copy, so neither a date nor the
+    // series recoloured is a message or a new revision.
+    test('recolouring one date or the whole series tells no guest and raises no SEQUENCE', async () => {
+        const CAROL = 'carol.recolour@example.org';
+        const { series, attendees } = await seededWithExternal('Weekly Recolour', CAROL);
+        const date = '2027-02-16';
+        const held = findOrFail(await aliceOccurrences(series.uid), (e) => !e.parentEventId).sequence;
+        const relay = await import('../../lib/home/home-relay');
+        const relayed = spyOn(relay, 'sendToHome');
+        const mail = await catchMail();
+        try {
+            relayed.mockClear();
+            const recoloured = { title: series.title, ...slotOf(date), data: { attendees, color: '#dc2626' } };
+            await editOccurrence(series.id, date, recoloured);
+            expect((await putEvent(series.id, { data: { color: '#16a34a' } })).status).toBe(200);
+
+            const mine = await aliceOccurrences(series.uid);
+            const recolouredDate = findOrFail(mine, (e) => e.occurrenceDate === date);
+            expect(recolouredDate.parentEventId).toBe(series.id);
+            expect(recolouredDate.data?.color).toBe('#dc2626');
+            expect(recolouredDate.sequence).toBe(held);
+            expect(findOrFail(mine, (e) => !e.parentEventId).sequence).toBe(held);
+
+            // Absence only counts behind what IS expected: a rename, made last, takes the path the recolours must not.
+            expect((await putEvent(series.id, { title: 'Weekly Recolour Renamed' })).status).toBe(200);
+            await mail.to(CAROL, 'Updated invitation: Weekly Recolour Renamed');
+            await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Weekly Recolour Renamed'));
+            expect(mail.sent(CAROL)).toHaveLength(1);
+            expect(relayed.mock.calls.filter(([, message]) => message.type === 'calendar:request')).toHaveLength(1);
+        } finally {
+            mail.restore();
+            relayed.mockRestore();
+        }
     });
 
     // An external guest has no relay, so the series reaches them as one VCALENDAR holding the master, its EXDATEs and its overrides (RFC 5546).

@@ -183,7 +183,12 @@ export function applyEdits(resource: ICAL.Component, edits: ReadonlyMap<string |
         unexcluded.add(key);
         const { sequence, dtstamp } = heldFor(key);
         const override = buildVEvent({ ...edit.event, sequence, updatedAt: dtstamp ?? edit.ctx.now }, { master });
-        touch(override, edit.ctx, raised, edit.ctx.sequence);
+        // A date reschedules against what its guests held there: its own VEVENT, else the occurrence its master yields
+        // where the master doesn't exclude it.
+        const before = vevent
+            ? scheduleOf(vevent)
+            : master && !held.has(key) && scheduleOf(master, instantOf(override, 'recurrence-id', null));
+        touch(override, edit.ctx, scheduleOf(override) === before ? null : raised, edit.ctx.sequence);
         resource.addSubcomponent(override);
     }
     if (replaced.size) keepSubcomponents(resource, (sub) => !replaced.has(sub));
@@ -498,18 +503,15 @@ function patchVEvent(
     const tzid = patch.timezone !== undefined ? normalizeTimezone(patch.timezone) : storedTz;
     const storedStart = dtstart?.getFirstValue();
     const allDay = patch.allDay ?? (storedStart instanceof ICAL.Time && storedStart.isDate);
+    const scheduled = scheduleOf(vevent);
 
     let changed = isMaster && followMaster(resource, vevent, patch, ctx, raised);
-    let scheduling = false;
 
     changed = setOptional(vevent, 'summary', patch.title) || changed;
     changed = setOptional(vevent, 'description', patch.description) || changed;
     changed = setOptional(vevent, 'location', patch.location) || changed;
-
     if (patch.status !== undefined) {
-        const moved = setProperty(vevent, textProperty('status', patch.status.toUpperCase()));
-        scheduling = scheduling || moved;
-        changed = changed || moved;
+        changed = setProperty(vevent, textProperty('status', patch.status.toUpperCase())) || changed;
     }
 
     // A submitted bound is one the caller found moved against the index row; a zone only Eigen named is re-spelled.
@@ -530,17 +532,12 @@ function patchVEvent(
         }
         // RFC 5545 §3.6.1: a VEVENT states its length as a DTEND or as a DURATION, never both.
         if (vevent.getFirstProperty('dtend')) changed = clearProperty(vevent, 'duration') || changed;
-        // Re-spelling the same instants in another zone is a byte change, not a reason to mail the guests.
-        scheduling = scheduling || whenChanged;
     }
 
     // A null incoming rrule never removes a stored one: the projection nulls the rules the index cannot expand, such as
     // sub-daily or an out-of-range dtstart.
-    if (patch.rrule) {
-        const moved = setProperty(vevent, rruleProperty(patch.rrule));
-        scheduling = scheduling || moved;
-        changed = changed || moved;
-    }
+    const ruleMoved = !!patch.rrule && setProperty(vevent, rruleProperty(patch.rrule));
+    changed = ruleMoved || changed;
 
     const data = patch.data;
     if (data) {
@@ -550,18 +547,14 @@ function patchVEvent(
             changed =
                 setProperty(vevent, addressProperty('organizer', data.organizer.email, data.organizer.name)) || changed;
         }
-        if (data.attendees) {
-            const attendees = patchAttendees(vevent, data.attendees);
-            scheduling = scheduling || attendees.membersChanged;
-            changed = changed || attendees.changed;
-        }
+        if (data.attendees) changed = patchAttendees(vevent, data.attendees) || changed;
         if (data.reminders) changed = patchReminders(vevent, data.reminders) || changed;
     }
 
     if (ctx.sequence !== undefined && sequenceOf(vevent) !== ctx.sequence) changed = true;
 
     if (!changed) return false;
-    touch(vevent, ctx, scheduling ? raised : null, ctx.sequence);
+    touch(vevent, ctx, ruleMoved || scheduleOf(vevent) !== scheduled ? raised : null, ctx.sequence);
     return true;
 }
 
@@ -624,7 +617,7 @@ function shapeForImip(vevent: ICAL.Component, method: ImipMethod): void {
 
 // A series-wide edit reaches an override whose value equals the master's BEFORE the edit; one that set its own keeps
 // it. Times never follow. A guest the edit adds to or drops from the series joins or leaves every override's list,
-// which is a new revision of that date. It has to run before the master is patched.
+// which reschedules that date. It has to run before the master is patched.
 function followMaster(
     resource: ICAL.Component,
     master: ICAL.Component,
@@ -650,12 +643,12 @@ function followMaster(
     let changed = false;
     for (const vevent of resource.getAllSubcomponents('vevent')) {
         if (vevent === master || uidOf(vevent) !== uid || !vevent.getFirstProperty('recurrence-id')) continue;
+        const scheduled = scheduleOf(vevent);
         let followed = false;
         for (const [name, before, after] of fields) {
             if (String(vevent.getFirstPropertyValue(name) ?? '') !== before) continue;
             followed = setOptional(vevent, name, after) || followed;
         }
-        let membersChanged = false;
         if (guests) {
             const listed = vevent.getAllProperties('attendee');
             const own = new Set(listed.map(addressOf));
@@ -663,15 +656,36 @@ function followMaster(
             const joined = guests.filter(
                 ({ email }) => !wasGuest.has(email.toLowerCase()) && !own.has(email.toLowerCase()),
             );
-            const attendees = patchAttendees(vevent, [...kept.map(projectAttendee), ...joined]);
-            followed = attendees.changed || followed;
-            membersChanged = attendees.membersChanged;
+            followed = patchAttendees(vevent, [...kept.map(projectAttendee), ...joined]) || followed;
         }
         if (!followed) continue;
-        touch(vevent, ctx, membersChanged ? raised : null);
+        touch(vevent, ctx, scheduleOf(vevent) === scheduled ? null : raised);
         changed = true;
     }
     return changed;
+}
+
+// What a guest's calendar is rescheduled by (RFC 5546 § 2.1.4): when the VEVENT starts, which `start` restates for a
+// master read as one occurrence, how long it runs, whether it is a day, its status and who is on it. Another zone's
+// spelling of the same instants, a title or a color is none of it.
+function scheduleOf(vevent: ICAL.Component, start?: Date | null): string {
+    const value = vevent.getFirstPropertyValue('dtstart');
+    const begin = instantOf(vevent, 'dtstart', null);
+    const end = instantOf(vevent, 'dtend', null);
+    const duration = vevent.getFirstPropertyValue('duration');
+    const length =
+        begin && end
+            ? end.getTime() - begin.getTime()
+            : duration instanceof ICAL.Duration
+              ? duration.toSeconds() * 1000
+              : null;
+    return JSON.stringify([
+        (start ?? begin)?.getTime(),
+        length,
+        value instanceof ICAL.Time && value.isDate,
+        String(vevent.getFirstPropertyValue('status') ?? 'CONFIRMED').toUpperCase(),
+        vevent.getAllProperties('attendee').map(addressOf).toSorted(),
+    ]);
 }
 
 function addressOf(prop: ICAL.Property): string {
@@ -680,10 +694,7 @@ function addressOf(prop: ICAL.Property): string {
 
 // Each property is touched in place rather than re-emitted, so CUTYPE, RSVP, SCHEDULE-STATUS and every X- parameter a
 // client hung on it survive.
-function patchAttendees(
-    vevent: ICAL.Component,
-    attendees: readonly Attendee[],
-): { changed: boolean; membersChanged: boolean } {
+function patchAttendees(vevent: ICAL.Component, attendees: readonly Attendee[]): boolean {
     const current = vevent.getAllProperties('attendee');
     const byEmail = new Map<string, ICAL.Property[]>();
     for (const prop of current) {
@@ -695,16 +706,14 @@ function patchAttendees(
     const wanted = new Set(attendees.map((a) => a.email.toLowerCase()));
     const isWanted = (prop: ICAL.Property) => wanted.has(addressOf(prop));
 
-    let membersChanged = !current.every(isWanted);
-    if (membersChanged) keepProperties(vevent, (prop) => prop.name !== 'attendee' || isWanted(prop));
-    let changed = membersChanged;
+    let changed = !current.every(isWanted);
+    if (changed) keepProperties(vevent, (prop) => prop.name !== 'attendee' || isWanted(prop));
 
     for (const attendee of attendees) {
         const listed = byEmail.get(attendee.email.toLowerCase());
         if (!listed) {
             vevent.addProperty(attendeeProperty(attendee));
             changed = true;
-            membersChanged = true;
             continue;
         }
         for (const prop of listed) {
@@ -718,7 +727,7 @@ function patchAttendees(
         }
     }
 
-    return { changed, membersChanged };
+    return changed;
 }
 
 function patchReminders(vevent: ICAL.Component, reminders: readonly Reminder[]): boolean {

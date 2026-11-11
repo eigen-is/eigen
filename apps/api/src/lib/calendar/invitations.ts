@@ -428,7 +428,7 @@ async function fileNewInvitation(
                         : parsed.data?.attendees,
                     // A linked copy lets the guest keep their own reminders and color.
                     reminders: kept?.reminders ?? parsed.data?.reminders,
-                    color: kept?.color ?? parsed.data?.color,
+                    color: kept?.color,
                 },
                 createByUserId: link.createByUserId,
             },

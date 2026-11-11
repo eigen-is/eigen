@@ -21,7 +21,7 @@ import {
     storedRevisions,
 } from '../ical';
 import type { EventPatch, EventToBuild, Revision, VEventEdit, WriteContext } from '../ical/ical-component';
-import { parseRecurrenceKey } from '../ical/wall-clock';
+import { computeOccurrenceTimes, parseRecurrenceKey } from '../ical/wall-clock';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
 import type { Calendar } from './calendar';
@@ -349,12 +349,23 @@ async function propagateWrite(
     previous: CalendarEvent | null,
 ): Promise<void> {
     const series = event.parentEventId ? eventById(calendar, event.parentEventId) : null;
-    // A name missing from the list the guests held cancels that instance. A new date held its series' guests.
-    const held = (previous ?? series)?.data?.attendees ?? [];
+    // A new date replaces the occurrence its series yielded there, which is what its guests held.
+    const before =
+        previous ??
+        (series && event.recurrenceDate
+            ? {
+                  ...series,
+                  ...computeOccurrenceTimes(series, event.recurrenceDate),
+                  rrule: null,
+                  recurrenceDate: event.recurrenceDate,
+              }
+            : null);
+    // A name missing from the list the guests held cancels that instance.
+    const held = before?.data?.attendees ?? [];
     const attendees = event.data?.attendees ?? [];
     if (!attendees.length && !held.length) return;
     if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
-    if (previous && guestView(previous, series) === guestView(event, series)) return;
+    if (before && guestView(before, series) === guestView(event, series)) return;
     if (series && event.status === 'cancelled') {
         await propagateCancellation(calendar.home, user, event, held, series);
         return;
