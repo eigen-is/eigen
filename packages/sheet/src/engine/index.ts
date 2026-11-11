@@ -33,7 +33,6 @@ export {
     generalAlign,
     is_date,
     isValidNumberFormat,
-    numberDisplay,
     richText,
     update,
 } from './format';

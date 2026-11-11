@@ -2,10 +2,11 @@
 // the borders, the row heights and the hidden rows. Only what the file holds is walked, never the row or column
 // numbers. The xlsx reader calls it for each worksheet, after the merges and links that place cells of their own.
 
+import { numberDisplay } from '@workspace/formula/format';
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { Cell, CellBorderSides, CellStyle, InlineStringSegment } from '@workspace/lib/sheets';
 import { columnLabelToIndex, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
-import { booleanDisplay, functionCopy, numberDisplay, update } from '@workspace/sheet/engine';
+import { booleanDisplay, functionCopy, update } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';

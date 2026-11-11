@@ -4,6 +4,7 @@
 // shapes the editor stores, and the formulas are computed here once, as the xlsx importer does, so the snapshot is
 // stored as computed and opens with its values. Deterministic ids: a reseed builds the same workbook.
 
+import { numberDisplay } from '@workspace/formula/format';
 import { CHART_DEFAULT_SIZE, defaultChartSpec, newChartSpecParts } from '@workspace/lib/charts';
 import { eigenColor } from '@workspace/lib/constants/colors';
 import type {
@@ -25,7 +26,7 @@ import {
     writeSheetsSnapshot,
 } from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
-import { normalizeSheetConfig, numberDisplay, parseA1Range, recalcSheets } from '@workspace/sheet/engine';
+import { normalizeSheetConfig, parseA1Range, recalcSheets } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
 import type { SheetCellSpec, SheetRowSpec, SheetSpec } from './content';
 

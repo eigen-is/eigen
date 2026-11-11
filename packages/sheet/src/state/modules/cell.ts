@@ -3,6 +3,7 @@
 // it runs the formula engine, data validation and the row's auto height. Range helpers that read cells,
 // such as getRangeByTxt, live here too.
 
+import { numberDisplay } from '@workspace/formula/format';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
 import { cellFontName, columnIndexToLabel, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
@@ -14,7 +15,6 @@ import {
     cellWrapsText,
     dropRuns,
     generalAlign,
-    numberDisplay,
     parseCellInput,
     richText,
     writeFormulaResult,

@@ -1,11 +1,11 @@
 // A cell's value as text: what the grid shows, how General aligns it, the type and format that typed input infers,
 // such as "25%" read as 0.25 in a percent format, and the type and display a formula's result writes. Its callers
-// include the grid, recalc and the xlsx import. The number format itself is lib's numberDisplay, which a chart's ticks
-// share, passed on from here.
+// include the grid, recalc and the xlsx import. The number format itself is the formula package's numberDisplay, which
+// a chart's ticks share.
 
-import { numberDisplay } from '@workspace/lib/charts';
+import { isDateFormat, numberDisplay } from '@workspace/formula/format';
 import numeral from 'numeral';
-import { format, isDateFormat } from 'numfmt';
+import { format } from 'numfmt';
 import { dateToSerial } from './parser/helper/number';
 import type { Cell, CellMatrix, CellType, FormulaArg } from './types';
 import { ID_CARD_NUMBER, isdatetime, isPlainNumber, isRealNum, valueIsError } from './validation';
@@ -346,7 +346,6 @@ export function update(fmt: string, v: string | number | boolean | null | undefi
     return format(fmt, v);
 }
 
-export { numberDisplay } from '@workspace/lib/charts';
 export { isValidFormat as isValidNumberFormat } from 'numfmt';
 
 export function is_date(fmt: number | string): boolean {
