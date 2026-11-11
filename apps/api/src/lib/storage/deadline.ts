@@ -1,16 +1,16 @@
+// The limits Eigen puts on a storage read, which Bun's S3Client does not: a deadline on a metadata call and on a body
+// that stops delivering bytes, and a few retries of a read the provider shed. The storage backends and a mount's
+// reads go through here, such as storageRead for a HEAD and streamStorageFile for a body, and so do the writers
+// that hash a body while they stream it to a temp file.
+
 import { setTimeout as sleep } from 'node:timers/promises';
 import { ApiError, storageUnavailable } from '../core/errors';
 import { consumeStream, eventLoopTurn } from '../core/stream';
 import type { StorageFile } from './types';
 
 // Eigen's own bound on an S3 metadata call and on a storage read that stops delivering bytes: Bun's
-// S3Client gives up only after about 360 s of silence. A setter so tests can shrink it.
+// S3Client gives up only after about 360 s of silence.
 export const STORAGE_TIMEOUT_MS = 30_000;
-let storageTimeoutMs = STORAGE_TIMEOUT_MS;
-
-export function setStorageTimeoutMs(ms: number): void {
-    storageTimeoutMs = ms;
-}
 
 // Node puts the errno on the Error as `code`; a thrown value that is not one has none.
 export function errnoOf(error: unknown): string | null {
@@ -40,7 +40,7 @@ export function withStorageDeadline<T>(request: (deadline: AbortSignal) => Promi
             timer = setTimeout(() => {
                 deadline.abort();
                 reject(storageUnavailable());
-            }, storageTimeoutMs);
+            }, STORAGE_TIMEOUT_MS);
         }),
     ]).finally(() => clearTimeout(timer));
 }
@@ -115,7 +115,7 @@ export function streamStorageFile(
                 started = true;
                 onChunk(chunk);
             },
-            { ...opts, idleMs: storageTimeoutMs },
+            { ...opts, idleMs: STORAGE_TIMEOUT_MS },
         );
     return retryStorageRead('read', file.name ?? '', read, { signal: opts.signal, canRetry: () => !started });
 }

@@ -1,15 +1,17 @@
 import { Database } from 'bun:sqlite';
+import { jest } from 'bun:test';
 import { join } from 'node:path';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
 import { EMPTY_S3 } from '@workspace/lib/types/mount';
 import type { BunFile } from 'bun';
 import type { DatabaseConfig, SchemaType } from '../lib/core';
-import { ManagedDatabase, storageUnavailable } from '../lib/core';
+import { eventLoopTurn, ManagedDatabase, storageUnavailable } from '../lib/core';
 import type { Drive } from '../lib/drive/drive';
 import type { Home } from '../lib/home';
 import { Mount } from '../lib/mount/mount';
 import { UPLOAD_PUT_TIMEOUT_MS } from '../lib/mount/upload-queue';
 import type { StorageBackend, StorageFile } from '../lib/storage';
+import { STORAGE_TIMEOUT_MS } from '../lib/storage/deadline';
 import { LocalStorage } from '../lib/storage/local-storage';
 import * as timing from '../utils/timing';
 import { FakeS3Server } from './fake-s3-server';
@@ -362,8 +364,20 @@ export const STALL_BOUND_MS = 250;
 // The same for a settle of several steps (a mount teardown, a backup job and its cleanup) on a slow CI runner.
 export const SETTLE_BOUND_MS = 1_500;
 
-// The storage deadline a test shrinks to (setStorageTimeoutMs), so it fires inside STALL_BOUND_MS.
-export const SHRUNK_STORAGE_TIMEOUT_MS = 100;
+// For a storage call started under jest.useFakeTimers(): once the backend holds its request, runs the clock past the
+// storage deadline and gives the real clock back. It waits by event-loop turn, as a faked clock stops Bun.sleep and
+// every clock a bound could read.
+export async function passStorageDeadline(held: () => boolean): Promise<void> {
+    try {
+        for (let turn = 0; !held(); turn++) {
+            if (turn > 1_000_000) throw new Error('the backend never held the request');
+            await eventLoopTurn();
+        }
+        jest.advanceTimersByTime(STORAGE_TIMEOUT_MS);
+    } finally {
+        jest.useRealTimers();
+    }
+}
 
 // The retry waits every test file starts with (preload.ts): an injected 5xx would otherwise cost a second per read.
 export const SHRUNK_RETRY_WAITS_MS = [1, 1];

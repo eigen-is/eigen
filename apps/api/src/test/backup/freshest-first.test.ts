@@ -1,5 +1,5 @@
 import { constants, Database } from 'bun:sqlite';
-import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import { chmodSync, existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
@@ -9,7 +9,6 @@ import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
 import type { Mount } from '../../lib/mount/mount';
-import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { FakeS3Server } from '../fake-s3-server';
 import type { FaultStorage } from '../fault-storage-helpers';
@@ -18,14 +17,13 @@ import {
     createHomeFaultMount,
     createS3MountConfig,
     FaultMount,
+    passStorageDeadline,
     provisionDoc,
     registerFaultMount,
     SETTLE_BOUND_MS,
-    SHRUNK_STORAGE_TIMEOUT_MS,
     settleContainer,
     settlesWithin,
     unregisterFaultMount,
-    waitFor,
 } from '../fault-storage-helpers';
 import { createTestUser, findOrFail, getTestContext, TEST_DATA_DIR, TEST_PNG_BYTES } from '../setup';
 import { MARKER_DB_CONFIG, MARKER_SCHEMA, readMarkers, snapshotInto } from './backup-test-helpers';
@@ -643,15 +641,14 @@ describe('Backup job on an s3 mount whose bucket stalls', () => {
                 );
                 const storageKey = await mount.getStorageKey(fileId);
                 fake.faults.set(storageKey, 'stall-body');
-                setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
+                jest.useFakeTimers();
                 jobId = startBackupJob('backup', home.user.id, home.user.id, (job, onProgress) =>
                     runHomeBackup(home.user.id, job, onProgress),
                 ).id;
-                await waitFor(() => fake.gets.has(storageKey), 10_000);
+                await passStorageDeadline(() => fake.heldCount > 0);
                 expect(await settlesWithin([drainBackupJobs()], SETTLE_BOUND_MS)).toBe(true);
                 expect(getBackupJob(jobId)?.state).toBe('failed');
             } finally {
-                setStorageTimeoutMs(STORAGE_TIMEOUT_MS);
                 fake.heal();
                 await drainBackupJobs();
                 const artifact = jobId && getBackupJob(jobId)?.artifact;

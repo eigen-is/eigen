@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import * as nodeFs from 'node:fs';
 import {
     cpSync,
@@ -28,15 +28,14 @@ import { getDataEpoch } from '../../lib/home/data-epoch';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import * as mountHelpers from '../../lib/mount/helpers';
 import type { Mount } from '../../lib/mount/mount';
-import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
 import { FakeS3Server } from '../fake-s3-server';
 import {
     createHomeFaultMount,
+    passStorageDeadline,
     registerFaultMount,
     SETTLE_BOUND_MS,
-    SHRUNK_STORAGE_TIMEOUT_MS,
     settleContainer,
     settlesWithin,
     unregisterFaultMount,
@@ -303,14 +302,14 @@ describe('Backup safety copies of an s3 home', () => {
             join(copyDir, 'settings.json'),
             JSON.stringify({ mounts: { [MOUNT_ID]: { storageType: 's3', enabled: true, s3Config } } }),
         );
-        setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
+        jest.useFakeTimers();
         const deleting = withHomeSlot(userId, () => deleteSafetyCopy(copyDir, homeDir)).catch(() => {});
         try {
+            await passStorageDeadline(() => fake.heldCount > 0);
             expect(await settlesWithin([deleting], SETTLE_BOUND_MS)).toBe(true);
             expect(existsSync(copyDir)).toBe(true);
             expect(fake.heldCount + fake.abandoned).toBe(1);
         } finally {
-            setStorageTimeoutMs(STORAGE_TIMEOUT_MS);
             // Never heal: an answered DELETE would take the objects the next test needs.
             await fake.stop();
             await deleting;
