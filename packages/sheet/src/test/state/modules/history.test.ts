@@ -530,16 +530,19 @@ describe('working alone', () => {
         expectAgree(s);
     });
 
-    test('an undo ships only the fields its marker did not bring back', () => {
-        const fieldsOfUndo = (...structural: Structural) => {
+    test('an undo ships only the entries its marker did not bring back', () => {
+        const writesOfUndo = (...structural: Structural) => {
             const t = tab(rich());
             tabEdit(t, ...structural);
-            return tabUndo(t).flatMap(({ path }) => (path.length === 1 ? [path[0]] : []));
+            return tabUndo(t).flatMap(({ path }) => (path.length > 0 && path[0] !== 'data' ? [path.join('/')] : []));
         };
-        expect(fieldsOfUndo(...insertRows(4, 1))).toEqual([]);
-        const fields = fieldsOfUndo(...deleteRows(4, 4));
-        expect(fields).toContain('config');
-        for (const field of ['name', 'color', 'hide', 'order', 'row', 'data']) expect(fields).not.toContain(field);
+        expect(writesOfUndo(...insertRows(4, 1))).toEqual([]);
+        expect(writesOfUndo(...deleteRows(4, 4))).toEqual([
+            'conditionalFormats/f1',
+            'conditionalFormats/f1',
+            'config/rowlen/4',
+            'config/borderInfo/4_0',
+        ]);
     });
 
     // A sheet past the row limit, as an import may bring: the delete applies, but the insert that would undo it fails.
@@ -1025,6 +1028,57 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         expect(s.a.ctx.sheets[0].config?.merge).toEqual({ '4_0': merge });
         expect(cellAt(s.a, 'B6')?.mc).toEqual({ r: 4, c: 0 });
         expectAgree(s);
+    });
+
+    // B's batch sits before A's undo in the log, and A's undo was built without it.
+    function undoBehindPeer(base: Context, deletion: Structural, onB: (ctx: Context) => void) {
+        const s = session(base);
+        s.edit(s.a, ...deletion);
+        const fromB = tabEdit(s.b, onB);
+        const step = tabUndo(s.a);
+        tabReceive(s.a, fromB);
+        tabReceive(s.b, step);
+        return [s.a.ctx.sheets, s.b.ctx.sheets, join(base, [...s.batches, fromB, step])];
+    }
+    const side = { style: 1, color: '#000000' };
+    const widenAndBorder = (ctx: Context) => {
+        const { columnlen, borderInfo } = ctx.sheets[0].config ?? {};
+        if (columnlen) columnlen[1] = 200;
+        if (borderInfo) borderInfo['0_1'] = { b: side };
+    };
+
+    test('undoing your row delete keeps a column width and a border a peer set meanwhile', () => {
+        const base = produce(workbook({ A5: text('kept') }), (ctx: Context) => {
+            ctx.sheets[0].config = { ...ctx.sheets[0].config, rowlen: { 4: 40 } };
+        });
+        for (const sheets of undoBehindPeer(base, deleteRows(4, 4), widenAndBorder)) {
+            expect(sheets[0].config).toMatchObject({
+                rowlen: { 4: 40 },
+                columnlen: { 1: 200 },
+                borderInfo: { '0_1': { b: side } },
+            });
+        }
+    });
+
+    test("undoing a delete of merged rows keeps a peer's merge and border, and brings its own back whole", () => {
+        const merge = { r: 4, c: 0, rs: 2, cs: 2 };
+        const corner = { mc: { r: 4, c: 0 } };
+        const base = produce(
+            workbook({ A5: { v: 'm', m: 'm', mc: merge }, B5: corner, A6: corner, B6: corner }),
+            (ctx: Context) => {
+                ctx.sheets[0].config = { ...ctx.sheets[0].config, merge: { '4_0': merge } };
+            },
+        );
+        const readers = undoBehindPeer(base, deleteRows(4, 5), (ctx) => {
+            widenAndBorder(ctx);
+            mergeCells(ctx, ONE, [{ row: [0, 1], column: [3, 4] }], 'merge-all');
+        });
+        for (const sheets of readers) {
+            expect(sheets[0].config?.merge).toEqual({ '4_0': merge, '0_3': { r: 0, c: 3, rs: 2, cs: 2 } });
+            expect(sheets[0].config?.borderInfo).toEqual({ '0_1': { b: side } });
+            const mcs = cells(sheets[0]).flatMap(({ r, c, v }) => (v?.mc ? [`${r}_${c}`] : []));
+            expect(mcs.toSorted()).toEqual(['0_3', '0_4', '1_3', '1_4', '4_0', '4_1', '5_0', '5_1']);
+        }
     });
 
     test('undoing a row delete while another sheet is current restores the sheet it was made on', () => {

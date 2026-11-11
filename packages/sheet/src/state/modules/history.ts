@@ -12,7 +12,8 @@ import { produce, produceWithPatches } from 'immer';
 import { computedKey, createArrayResolver } from '../../engine/cell-resolver';
 import { applyRowColOp, hidesEverySheet } from '../../engine/replay-ops';
 import { RowColError } from '../../engine/rowcol';
-import type { Cell, CellMatrix } from '../../engine/types';
+import { SHEET_CONFIG_COLLECTIONS } from '../../engine/sheet-config';
+import type { Cell, CellMatrix, ExtendedSheetConfig } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import type { FormulaCell, History, Op, Sheet } from '../types';
@@ -163,7 +164,7 @@ function batchStep(ctx: Context, ops: Op[]): Step {
 // author here, so it moves the other sheets' orders itself and sends them.
 function sheetStep(ctx: Context, batch: (after: Sheet[]) => Op[], recorded: Patch[] = []): Step {
     const [sheetOp] = batch(ctx.sheets);
-    const restored = restoredOps(ctx.sheets, recorded);
+    const restored = restoredOps(ctx, ctx.sheets, recorded);
     const applied = applyOpBatch(ctx, [sheetOp, ...restored]);
     if (!applied) return { ctx, ops: [] };
     const next = produce(applied.ctx, (draft: Context) => {
@@ -242,23 +243,44 @@ function undoRowCol(ctx: Context, marker: Op, recorded: Patch[]): Step {
         if (e instanceof RowColError) return { ctx, ops: [] };
         throw e;
     }
-    const restored = restoredOps(moved, recorded);
+    const restored = restoredOps(ctx, moved, recorded);
     const ops = [marker, ...restored];
     const applied = applyOpBatch(ctx, ops);
     return applied ? { ctx: applied.ctx, ops } : { ctx, ops: [] };
 }
 
-// The recorded writes `sheets` don't hold yet, the cells one by one.
-function restoredOps(sheets: Sheet[], recorded: Patch[]): Op[] {
+// The recorded writes `sheets` don't hold yet, the cells one by one and the config entry by entry.
+function restoredOps(ctx: Context, sheets: Sheet[], recorded: Patch[]): Op[] {
     const restored: Op[] = [];
     for (const { op, path, value } of recorded) {
         const [, id, ...rest] = path;
         const sheet = sheets.find((s) => s.id === id);
-        if (!sheet) continue;
+        if (!sheet || rest[0] === 'config') continue;
         if (rest.length === 1 && rest[0] === 'data') restored.push(...repairOps(sheet, value));
         else if (!isEqual(get(sheet, rest), value)) restored.push({ op, id: sheet.id, path: rest, value });
     }
+    for (const was of appliedWrites(ctx, atSheetIndex(ctx, recorded)).sheets) {
+        const sheet = sheets.find((s) => s.id === was.id);
+        if (sheet) restored.push(...configOps(sheet, was.config ?? {}));
+    }
     return restored;
+}
+
+// The config entries the marker left other than the entry found them: those the op took, and those the marker made,
+// such as a border an inserted row takes from the row beside it. A map is never sent whole.
+function configOps({ id, config = {} }: Sheet, recorded: ExtendedSheetConfig): Op[] {
+    const left: ExtendedSheetConfig = config;
+    const ops: Op[] = [];
+    for (const map of SHEET_CONFIG_COLLECTIONS) {
+        const [from, to] = [left[map] ?? {}, recorded[map] ?? {}];
+        if (from === to) continue;
+        for (const key of Object.keys({ ...from, ...to })) {
+            if (isEqual(from[key], to[key])) continue;
+            const path = ['config', map, key];
+            ops.push(Object.hasOwn(to, key) ? { op: 'replace', id, path, value: to[key] } : { op: 'remove', id, path });
+        }
+    }
+    return ops;
 }
 
 // The cells the marker left different from the recorded matrix, such as rows a delete took and a formula it made #REF!.
