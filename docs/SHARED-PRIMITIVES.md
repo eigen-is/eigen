@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2153 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2155 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -562,7 +562,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (450)
+## Types (448)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -626,10 +626,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CellStyle` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellType` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellWithRowAndCol` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `ColorGradationRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `ConditionalFormatConditionName` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `ConditionalFormatRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `DataBarRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `DataValidationRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `DefaultConditionalFormatRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `InlineStringSegment` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
@@ -1017,7 +1015,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1172)
+## Utilities & constants (1176)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1629,10 +1627,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `cellFontName` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
 | `cellFontSize` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
 | `cloneSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
-| `coalescedRanges` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
+| `coalescedRanges` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `columnIndexToLabel` | `@workspace/lib/sheets` | packages/lib/src/sheets/labels.ts |
 | `columnLabelToIndex` | `@workspace/lib/sheets` | packages/lib/src/sheets/labels.ts |
-| `compareValidationIds` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
+| `compareRules` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `decodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `decodeSheetsWorkbook` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `encodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
@@ -1646,13 +1644,16 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isExcelFunction` | `@workspace/lib/sheets` | packages/lib/src/sheets/excel-functions.ts |
 | `isPatchOp` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isStructuralBatch` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `MAX_VALIDATION_RANGES` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
-| `MAX_VALIDATIONS` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
+| `MAX_CONDITIONAL_FORMATS` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
+| `MAX_RULE_RANGES` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
+| `MAX_VALIDATIONS` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `mergedBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `mergeEdgeSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `nextFloatingIndex` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
+| `nextRuleOrder` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
+| `orderedRules` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `parseCellKey` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
-| `rangesOverlap` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
+| `rangesOverlap` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `readSheetsSnapshotJson` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `REFERENCE_COLUMN_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `REFERENCE_ROW_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
@@ -1672,7 +1673,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `sheetsOpLog` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetsStateMap` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetTrackAt` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
-| `wellFormedValidations` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
+| `wellFormedConditionalFormats` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
+| `wellFormedValidations` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `writeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `fetchImportBlob` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `postImportBytes` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |

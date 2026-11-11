@@ -1,6 +1,7 @@
 import type { CellMatrix, Op, Sheet } from '@workspace/lib/sheets';
 import { encodeSheetsSnapshot, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import type * as Y from 'yjs';
+import { formatsOf } from './validations';
 
 // Deterministic sheet fixtures for the document-transform work (preview golden tests
 // and the responsiveness benchmark). Everything is derived from cell coordinates —
@@ -93,29 +94,29 @@ export function buildGoldenSheets(): Sheet[] {
             columnlen: { '0': 120 },
             rowlen: { '0': 28 },
         },
-        conditionalFormatRules: [
+        conditionalFormats: formatsOf([
             {
                 type: 'default',
-                cellrange: [{ row: [1, GOLDEN_ROWS - 1], column: [1, 4] }],
+                ranges: [{ row: [1, GOLDEN_ROWS - 1], column: [1, 4] }],
                 format: { cellColor: '#ffe08a', textColor: '#7a1f1f' },
                 conditionName: 'greaterThan',
                 conditionValue: [500],
             },
             {
                 type: 'dataBar',
-                cellrange: [{ row: [1, GOLDEN_ROWS - 1], column: [1, 1] }],
+                ranges: [{ row: [1, GOLDEN_ROWS - 1], column: [1, 1] }],
                 format: ['#638ec6'],
             },
             // Cross-sheet formula rule — pins the resolver spanning every sheet, not
             // only the rendered first one.
             {
                 type: 'default',
-                cellrange: [{ row: [1, GOLDEN_ROWS - 1], column: [2, 2] }],
+                ranges: [{ row: [1, GOLDEN_ROWS - 1], column: [2, 2] }],
                 format: { cellColor: '#d1f0d1' },
                 conditionName: 'formula',
                 conditionValue: ['=Data!A1>10'],
             },
-        ],
+        ]),
     };
 
     const sheet2: Sheet = {
@@ -169,20 +170,20 @@ export function buildHeavySheets(rows = 600, cols = 45): Sheet[] {
         order: 0,
         data,
         config: {},
-        conditionalFormatRules: [
+        conditionalFormats: formatsOf([
             {
                 type: 'default',
-                cellrange: [{ row: [1, rows - 1], column: [0, cols - 1] }],
+                ranges: [{ row: [1, rows - 1], column: [0, cols - 1] }],
                 format: { cellColor: '#fde3e3' },
                 conditionName: 'greaterThan',
                 conditionValue: [900],
             },
             {
                 type: 'dataBar',
-                cellrange: [{ row: [1, rows - 1], column: [1, 1] }],
+                ranges: [{ row: [1, rows - 1], column: [1, 1] }],
                 format: ['#638ec6'],
             },
-        ],
+        ]),
     };
 
     const refRows = Math.min(rows, 200);

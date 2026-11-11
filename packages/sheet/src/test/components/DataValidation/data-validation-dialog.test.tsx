@@ -75,7 +75,7 @@ test('a column header selection is named B:B, and OK puts the rule on the whole 
     await dialog.type('Options', 'Yes,No');
     await dialog.click('OK');
     expect(Object.values(rules(dialog) ?? {})).toMatchObject([
-        { ranges: [{ row: [0, LAST], column: [1, 1] }], rule: { type: 'dropdown', value1: 'Yes,No' } },
+        { ranges: [{ row: [0, LAST], column: [1, 1] }], order: 'a0', rule: { type: 'dropdown', value1: 'Yes,No' } },
     ]);
     expect(dialog.dialogs()).toHaveLength(0);
 });
@@ -87,7 +87,7 @@ const choices = () =>
     );
 
 test('the rule types and their conditions read as plain words', async () => {
-    await openDialog(B3, { v: { ranges: [{ row: [0, 9], column: [1, 1] }], rule: NUMBER } });
+    await openDialog(B3, { v: { ranges: [{ row: [0, 9], column: [1, 1] }], order: 'a0', rule: NUMBER } });
     expect(choices()).toEqual([
         ['Drop-down list', 'Checkbox', 'Number', 'Whole number', 'Decimal number', 'Text', 'Text length', 'Date'],
         [
@@ -104,7 +104,9 @@ test('the rule types and their conditions read as plain words', async () => {
 });
 
 test('the reason a value is refused is an alert the field points at', async () => {
-    const dialog = await openDialog(B3, { v: { ranges: [{ row: [0, 9], column: [1, 1] }], rule: NUMBER } });
+    const dialog = await openDialog(B3, {
+        v: { ranges: [{ row: [0, 9], column: [1, 1] }], order: 'a0', rule: NUMBER },
+    });
     await dialog.type('Value 2', '0');
     await dialog.click('OK');
     const id = dialog.field('Value 2').getAttribute('aria-describedby');
@@ -120,13 +122,15 @@ test('Enter in a text field submits', async () => {
 });
 
 test('a refused value keeps the dialog open, says why, and keeps what was typed until it changes', async () => {
-    const dialog = await openDialog(B3, { v: { ranges: [{ row: [0, 9], column: [1, 1] }], rule: NUMBER } });
+    const dialog = await openDialog(B3, {
+        v: { ranges: [{ row: [0, 9], column: [1, 1] }], order: 'a0', rule: NUMBER },
+    });
     await dialog.type('Value 2', '0');
     await dialog.click('OK');
     expect(dialog.dialogs()).toHaveLength(1);
     expect(problemOf(dialog.field('Value 2'))).toBe('The value 2 cannot be less than the value 1');
     expect(dialog.field('Value 2').value).toBe('0');
-    expect(rules(dialog)).toEqual({ v: { ranges: [{ row: [0, 9], column: [1, 1] }], rule: NUMBER } });
+    expect(rules(dialog)).toEqual({ v: { ranges: [{ row: [0, 9], column: [1, 1] }], order: 'a0', rule: NUMBER } });
     expect(dialog.context().warnDialog).toBeUndefined();
     await dialog.type('Value 2', '20');
     expect(problemOf(dialog.field('Value 2'))).toBeUndefined();
@@ -144,7 +148,9 @@ test('a range that names no cells keeps the dialog open and says why under the r
 });
 
 test("opening on a rule's cell reads the rule, and Delete validation takes its range out of the rule", async () => {
-    const dialog = await openDialog(B3, { v: { ranges: [{ row: [0, LAST], column: [1, 1] }], rule: LIST } });
+    const dialog = await openDialog(B3, {
+        v: { ranges: [{ row: [0, LAST], column: [1, 1] }], order: 'a0', rule: LIST },
+    });
     expect(dialog.field('Cell range').value).toBe('B3');
     expect(dialog.field('Options').value).toBe('Yes,No');
     await dialog.type('Cell range', 'B2:B3');
@@ -155,6 +161,7 @@ test("opening on a rule's cell reads the rule, and Delete validation takes its r
                 { row: [0, 0], column: [1, 1] },
                 { row: [3, LAST], column: [1, 1] },
             ],
+            order: 'a0',
             rule: LIST,
         },
     });
@@ -162,7 +169,9 @@ test("opening on a rule's cell reads the rule, and Delete validation takes its r
 });
 
 test('Delete with no range to take the rule from stays open and says why under the range', async () => {
-    const dialog = await openDialog(B3, { v: { ranges: [{ row: [0, LAST], column: [1, 1] }], rule: LIST } });
+    const dialog = await openDialog(B3, {
+        v: { ranges: [{ row: [0, LAST], column: [1, 1] }], order: 'a0', rule: LIST },
+    });
     await dialog.type('Cell range', '');
     await dialog.click('Delete validation');
     expect(dialog.dialogs()).toHaveLength(1);
@@ -172,7 +181,9 @@ test('Delete with no range to take the rule from stays open and says why under t
 });
 
 test('back from the range picker, the draft keeps every value the user typed', async () => {
-    const dialog = await openDialog(B3, { v: { ranges: [{ row: [0, 9], column: [1, 1] }], rule: NUMBER } });
+    const dialog = await openDialog(B3, {
+        v: { ranges: [{ row: [0, 9], column: [1, 1] }], order: 'a0', rule: NUMBER },
+    });
     await dialog.type('Value 2', '50');
     await pickWith('Select cell range');
     expect(dialog.title()).toBe('Select cell range');
@@ -184,7 +195,9 @@ test('back from the range picker, the draft keeps every value the user typed', a
 });
 
 test('Cancel in the range picker brings the dialog back with its draft too', async () => {
-    const dialog = await openDialog(B3, { v: { ranges: [{ row: [0, 9], column: [1, 1] }], rule: NUMBER } });
+    const dialog = await openDialog(B3, {
+        v: { ranges: [{ row: [0, 9], column: [1, 1] }], order: 'a0', rule: NUMBER },
+    });
     await dialog.type('Value 2', '50');
     await pickWith('Select cell range');
     await dialog.click('Cancel');

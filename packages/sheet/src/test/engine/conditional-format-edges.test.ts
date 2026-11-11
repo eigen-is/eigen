@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { evaluateConditionalFormat } from '../../engine/conditional-format';
 import type { Cell, CellMatrix, ConditionalFormatRule } from '../../engine/types';
+import { formatsOf } from '../state/factories/validations';
 
 // Pinning tests for evaluateConditionalFormat behaviors the base
 // conditional-format.test.ts does not cover — especially the loop/guard quirks
@@ -29,16 +30,16 @@ describe('engine/conditional-format edges — remaining comparison ops', () => {
     test('lessThan matches numeric cells strictly below the threshold', () => {
         const data: CellMatrix = [[numCell(5), numCell(10), numCell(15)]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    ranges: [{ row: [0, 0], column: [0, 2] }],
                     format: RED,
                     conditionName: 'lessThan',
                     conditionRange: [],
                     conditionValue: ['10'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles['0_0']?.cellColor).toBe('#ff0000');
@@ -49,16 +50,16 @@ describe('engine/conditional-format edges — remaining comparison ops', () => {
     test('between includes both bounds', () => {
         const data: CellMatrix = [[numCell(1), numCell(2), numCell(5), numCell(8), numCell(9)]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 4] }],
+                    ranges: [{ row: [0, 0], column: [0, 4] }],
                     format: RED,
                     conditionName: 'between',
                     conditionRange: [],
                     conditionValue: ['2', '8'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles['0_0']).toBeUndefined();
@@ -71,16 +72,16 @@ describe('engine/conditional-format edges — remaining comparison ops', () => {
     test('textContains substring-matches text and stringified numeric cells', () => {
         const data: CellMatrix = [[textCell('hello'), numCell(123), textCell('world')]];
         const ell = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    ranges: [{ row: [0, 0], column: [0, 2] }],
                     format: RED,
                     conditionName: 'textContains',
                     conditionRange: [],
                     conditionValue: ['ell'],
                 },
-            ],
+            ]),
             data,
         );
         expect(ell['0_0']?.cellColor).toBe('#ff0000');
@@ -88,16 +89,16 @@ describe('engine/conditional-format edges — remaining comparison ops', () => {
         expect(ell['0_2']).toBeUndefined();
 
         const two = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    ranges: [{ row: [0, 0], column: [0, 2] }],
                     format: RED,
                     conditionName: 'textContains',
                     conditionRange: [],
                     conditionValue: ['2'],
                 },
-            ],
+            ]),
             data,
         );
         expect(two['0_0']).toBeUndefined();
@@ -111,16 +112,16 @@ describe('engine/conditional-format edges — remaining comparison ops', () => {
         const data: CellMatrix = [[textCell('abc'), textCell('ABC'), textCell('xbx'), textCell('zzz')]];
         const apply = (needle: string) =>
             evaluateConditionalFormat(
-                [
+                formatsOf([
                     {
                         type: 'default',
-                        cellrange: [{ row: [0, 0], column: [0, 3] }],
+                        ranges: [{ row: [0, 0], column: [0, 3] }],
                         format: RED,
                         conditionName: 'textContains',
                         conditionRange: [],
                         conditionValue: [needle],
                     },
-                ],
+                ]),
                 data,
             );
         expect(apply('b')).toEqual({ '0_0': RED, '0_1': RED, '0_2': RED });
@@ -130,16 +131,16 @@ describe('engine/conditional-format edges — remaining comparison ops', () => {
     test('textContains still matches a digit against numeric and text cells', () => {
         const data: CellMatrix = [[numCell(5), textCell('5'), textCell('six')]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    ranges: [{ row: [0, 0], column: [0, 2] }],
                     format: RED,
                     conditionName: 'textContains',
                     conditionRange: [],
                     conditionValue: ['5'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles).toEqual({ '0_0': RED, '0_1': RED });
@@ -148,16 +149,16 @@ describe('engine/conditional-format edges — remaining comparison ops', () => {
     test('comparison rules skip missing rows in the apply range without throwing', () => {
         const data: CellMatrix = [[numCell(5)]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 2], column: [0, 0] }],
+                    ranges: [{ row: [0, 2], column: [0, 0] }],
                     format: RED,
                     conditionName: 'greaterThan',
                     conditionRange: [],
                     conditionValue: ['0'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles).toEqual({ '0_0': RED });
@@ -170,16 +171,16 @@ describe('engine/conditional-format edges — occurrenceDate', () => {
     test('single date matches only date-typed cells with that serial', () => {
         const data: CellMatrix = [[dateCell(45306), dateCell(45307), numCell(45306)]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    ranges: [{ row: [0, 0], column: [0, 2] }],
                     format: RED,
                     conditionName: 'occurrenceDate',
                     conditionRange: [],
                     conditionValue: ['2024/1/15'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles['0_0']?.cellColor).toBe('#ff0000');
@@ -193,16 +194,16 @@ describe('engine/conditional-format edges — occurrenceDate', () => {
             [dateCell(45301), dateCell(45306), dateCell(45311), dateCell(45312), dateCell(45300)],
         ];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 4] }],
+                    ranges: [{ row: [0, 0], column: [0, 4] }],
                     format: RED,
                     conditionName: 'occurrenceDate',
                     conditionRange: [],
                     conditionValue: ['2024/1/10 - 2024/1/20'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles['0_0']?.cellColor).toBe('#ff0000');
@@ -217,16 +218,16 @@ describe('engine/conditional-format edges — duplicateValue', () => {
     test("'0' styles every occurrence of a duplicated value", () => {
         const data: CellMatrix = [[numCell(7), numCell(8), numCell(7)]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    ranges: [{ row: [0, 0], column: [0, 2] }],
                     format: RED,
                     conditionName: 'duplicateValue',
                     conditionRange: [],
                     conditionValue: ['0'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles).toEqual({ '0_0': RED, '0_2': RED });
@@ -237,16 +238,16 @@ describe('engine/conditional-format edges — duplicateValue', () => {
         // is normally drawn over a whole column of mostly empty cells.
         const data: CellMatrix = [[numCell(5), null, null, textCell(''), textCell('')]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 4] }],
+                    ranges: [{ row: [0, 0], column: [0, 4] }],
                     format: RED,
                     conditionName: 'duplicateValue',
                     conditionRange: [],
                     conditionValue: ['0'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles).toEqual({});
@@ -255,16 +256,16 @@ describe('engine/conditional-format edges — duplicateValue', () => {
     test("'1' styles unique values but never a blank cell", () => {
         const data: CellMatrix = [[numCell(7), numCell(8), numCell(7), null]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 3] }],
+                    ranges: [{ row: [0, 0], column: [0, 3] }],
                     format: RED,
                     conditionName: 'duplicateValue',
                     conditionRange: [],
                     conditionValue: ['1'],
                 },
-            ],
+            ]),
             data,
         );
         // 8 is the only unique value; the hole at 0_3 is not a value at all.
@@ -275,7 +276,8 @@ describe('engine/conditional-format edges — duplicateValue', () => {
         const data: CellMatrix = [[numCell(9), numCell(9)]];
         const rule = (mode: string): ConditionalFormatRule => ({
             type: 'default',
-            cellrange: [
+            order: 'a0',
+            ranges: [
                 { row: [0, 0], column: [0, 0] },
                 { row: [0, 0], column: [1, 1] },
             ],
@@ -284,8 +286,8 @@ describe('engine/conditional-format edges — duplicateValue', () => {
             conditionRange: [],
             conditionValue: [mode],
         });
-        expect(evaluateConditionalFormat([rule('0')], data)).toEqual({});
-        expect(evaluateConditionalFormat([rule('1')], data)).toEqual({ '0_0': RED, '0_1': RED });
+        expect(evaluateConditionalFormat(formatsOf([rule('0')]), data)).toEqual({});
+        expect(evaluateConditionalFormat(formatsOf([rule('1')]), data)).toEqual({ '0_0': RED, '0_1': RED });
     });
 });
 
@@ -293,16 +295,16 @@ describe('engine/conditional-format edges — top10 family', () => {
     test('top10 aggregates numeric-typed cells but applies by Number() coercion — a text "30" matches', () => {
         const data: CellMatrix = [[numCell(10), numCell(20), numCell(30), textCell('30')]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 3] }],
+                    ranges: [{ row: [0, 0], column: [0, 3] }],
                     format: RED,
                     conditionName: 'top10',
                     conditionRange: [],
                     conditionValue: ['2'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles).toEqual({ '0_1': RED, '0_2': RED, '0_3': RED });
@@ -312,16 +314,16 @@ describe('engine/conditional-format edges — top10 family', () => {
         const nilV: Cell = { ct: { t: 'n', fa: 'General' } };
         const data: CellMatrix = [[numCell(0), numCell(-5), nilV]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    ranges: [{ row: [0, 0], column: [0, 2] }],
                     format: RED,
                     conditionName: 'top10',
                     conditionRange: [],
                     conditionValue: ['1'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles).toEqual({ '0_0': RED, '0_2': RED });
@@ -330,16 +332,16 @@ describe('engine/conditional-format edges — top10 family', () => {
     test('top10_percent takes floor(n% of count) items from the top', () => {
         const data: CellMatrix = [[numCell(1), numCell(2), numCell(3), numCell(4)]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 3] }],
+                    ranges: [{ row: [0, 0], column: [0, 3] }],
                     format: RED,
                     conditionName: 'top10_percent',
                     conditionRange: [],
                     conditionValue: ['50'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles).toEqual({ '0_2': RED, '0_3': RED });
@@ -348,16 +350,16 @@ describe('engine/conditional-format edges — top10 family', () => {
     test('last10 takes the bottom n items', () => {
         const data: CellMatrix = [[numCell(1), numCell(2), numCell(3), numCell(4)]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 3] }],
+                    ranges: [{ row: [0, 0], column: [0, 3] }],
                     format: RED,
                     conditionName: 'last10',
                     conditionRange: [],
                     conditionValue: ['2'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles).toEqual({ '0_0': RED, '0_1': RED });
@@ -366,16 +368,16 @@ describe('engine/conditional-format edges — top10 family', () => {
     test('last10_percent takes floor(n% of count) items from the bottom', () => {
         const data: CellMatrix = [[numCell(1), numCell(2), numCell(3), numCell(4)]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 3] }],
+                    ranges: [{ row: [0, 0], column: [0, 3] }],
                     format: RED,
                     conditionName: 'last10_percent',
                     conditionRange: [],
                     conditionValue: ['50'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles).toEqual({ '0_0': RED, '0_1': RED });
@@ -388,16 +390,16 @@ describe('engine/conditional-format edges — above/belowAverage coercion', () =
         // dArr = [1, 3] (numeric-typed only), mean = 2; nil-v cell applies as 0 < 2.
         const data: CellMatrix = [[numCell(1), numCell(3), nilV]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    ranges: [{ row: [0, 0], column: [0, 2] }],
                     format: RED,
                     conditionName: 'belowAverage',
                     conditionRange: [],
                     conditionValue: [],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles).toEqual({ '0_0': RED, '0_2': RED });
@@ -407,16 +409,16 @@ describe('engine/conditional-format edges — above/belowAverage coercion', () =
         // mean over numeric-typed cells = 2; text '100' coerces to 100 > 2.
         const data: CellMatrix = [[numCell(1), numCell(3), textCell('100')]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    ranges: [{ row: [0, 0], column: [0, 2] }],
                     format: RED,
                     conditionName: 'aboveAverage',
                     conditionRange: [],
                     conditionValue: [],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles).toEqual({ '0_1': RED, '0_2': RED });
@@ -427,16 +429,16 @@ describe('engine/conditional-format edges — cross-range aggregation', () => {
     test('dataBar min/max aggregate across ALL ranges of the rule', () => {
         const data: CellMatrix = [[numCell(-5), numCell(10)]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'dataBar',
-                    cellrange: [
+                    ranges: [
                         { row: [0, 0], column: [0, 0] },
                         { row: [0, 0], column: [1, 1] },
                     ],
                     format: ['#638ec6'],
                 },
-            ],
+            ]),
             data,
         );
         // Global min=-5/max=10: plusLen=round(10/15*10)/10, minusLen=round(5/15*10)/10.
@@ -458,16 +460,16 @@ describe('engine/conditional-format edges — cross-range aggregation', () => {
     test('colorGradation min/max aggregate across ALL ranges of the rule', () => {
         const data: CellMatrix = [[numCell(1), numCell(10)]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'colorGradation',
-                    cellrange: [
+                    ranges: [
                         { row: [0, 0], column: [0, 0] },
                         { row: [0, 0], column: [1, 1] },
                     ],
                     format: ['#00ff00', '#ff0000'],
                 },
-            ],
+            ]),
             data,
         );
         // If aggregation were per-range each cell would be its own min AND max
@@ -484,15 +486,15 @@ describe('engine/conditional-format edges — apply-range clamping', () => {
     test('the column bound is the widest row, so a matrix whose first rows are holes still scans', () => {
         const data = [undefined, undefined, [numCell(7), numCell(9)]] as unknown as CellMatrix;
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 10], column: [0, 5] }],
+                    ranges: [{ row: [0, 10], column: [0, 5] }],
                     format: RED,
                     conditionName: 'greaterThan',
                     conditionValue: [8],
                 },
-            ],
+            ]),
             data,
         );
         expect(Object.keys(styles)).toEqual(['2_1']);
@@ -501,16 +503,16 @@ describe('engine/conditional-format edges — apply-range clamping', () => {
     test('a whole-column duplicateValue rule only reaches the rows the matrix holds', () => {
         const data: CellMatrix = [[numCell(7)], [numCell(8)], [numCell(7)]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 1048575], column: [0, 0] }],
+                    ranges: [{ row: [0, 1048575], column: [0, 0] }],
                     format: RED,
                     conditionName: 'duplicateValue',
                     conditionRange: [],
                     conditionValue: ['0'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles).toEqual({ '0_0': RED, '2_0': RED });
@@ -522,16 +524,16 @@ describe('engine/conditional-format edges — apply-range clamping', () => {
             [numCell(3), null],
         ];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 1048575], column: [0, 16383] }],
+                    ranges: [{ row: [0, 1048575], column: [0, 16383] }],
                     format: RED,
                     conditionName: 'greaterThan',
                     conditionRange: [],
                     conditionValue: ['0'],
                 },
-            ],
+            ]),
             data,
         );
         expect(styles).toEqual({ '0_0': RED, '0_1': RED, '1_0': RED });
@@ -541,16 +543,16 @@ describe('engine/conditional-format edges — apply-range clamping', () => {
         const data: CellMatrix = [[numCell(1)], [numCell(2)], [numCell(3)]];
         const seen: string[] = [];
         evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 1048575], column: [0, 0] }],
+                    ranges: [{ row: [0, 1048575], column: [0, 0] }],
                     format: RED,
                     conditionName: 'formula',
                     conditionRange: [],
                     conditionValue: ['=A1>0'],
                 },
-            ],
+            ]),
             data,
             {
                 evaluateFormula: (_f, _sr, _sc, r, c) => {
@@ -572,10 +574,10 @@ describe('engine/conditional-format edges — formula scan', () => {
         ];
         const calls: [string, number, number, number, number][] = [];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [
+                    ranges: [
                         { row: [0, 0], column: [0, 1] },
                         { row: [1, 1], column: [0, 0] },
                     ],
@@ -584,7 +586,7 @@ describe('engine/conditional-format edges — formula scan', () => {
                     conditionRange: [],
                     conditionValue: ['A1>0'],
                 },
-            ],
+            ]),
             data,
             {
                 evaluateFormula: (formula, anchorRow, anchorCol, targetRow, targetCol) => {
@@ -604,16 +606,16 @@ describe('engine/conditional-format edges — formula scan', () => {
     test('non-boolean evaluator results pass through !!Number(): "2" applies, "0" and "x" do not', () => {
         const data: CellMatrix = [[numCell(1), numCell(1), numCell(1)]];
         const styles = evaluateConditionalFormat(
-            [
+            formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    ranges: [{ row: [0, 0], column: [0, 2] }],
                     format: RED,
                     conditionName: 'formula',
                     conditionRange: [],
                     conditionValue: ['=X'],
                 },
-            ],
+            ]),
             data,
             {
                 evaluateFormula: (_formula, _ar, _ac, _r, c) => (c === 0 ? '2' : c === 1 ? '0' : 'x'),
@@ -632,9 +634,9 @@ describe('a rule of many ranges', () => {
             walks += 1;
             return walk();
         };
-        const cellrange = Array.from({ length: 50 }, (_, i) => ({ row: [i * 2, i * 2], column: [0, 0] }));
+        const ranges = Array.from({ length: 50 }, (_, i) => ({ row: [i * 2, i * 2], column: [0, 0] }));
         evaluateConditionalFormat(
-            [{ type: 'default', cellrange, format: {}, conditionName: 'greaterThan', conditionValue: [1] }],
+            formatsOf([{ type: 'default', ranges, format: {}, conditionName: 'greaterThan', conditionValue: [1] }]),
             data,
         );
         expect(walks).toBe(1);

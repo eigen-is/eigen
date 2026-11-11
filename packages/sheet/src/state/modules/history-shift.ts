@@ -4,7 +4,7 @@
 // sheets, so an undo lands where its cell now is. The Workbook's applyOp runs both, and a RowColMove also moves the
 // open editor and the selection along an op.
 
-import type { MergeCell, SheetChart } from '@workspace/lib/sheets';
+import type { ConditionalFormatRule, MergeCell, SheetChart } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
 import { sheetFinder } from '../../engine/a1-notation';
 import { mapChartRefs } from '../../engine/chart-data';
@@ -20,7 +20,7 @@ import {
     shiftMergeForInsert,
     shiftRangeForDelete,
     shiftRangeForInsert,
-    shiftValidations,
+    shiftRules,
 } from '../../engine/rowcol';
 import type { Cell, SingleRange } from '../../engine/types';
 import type { History, Sheet } from '../types';
@@ -151,10 +151,11 @@ class Shifter {
     private patch(patch: Patch): Patch | null {
         const [, sheet, field, ...rest] = patch.path;
         if (field === 'charts') return this.chartNamesSheet(patch) ? null : patch;
+        if (field === 'conditionalFormats' && this.rewritesRule(patch.value, sheet === this.id)) return null;
         if (sheet !== this.id) return field === 'data' ? this.otherSheetData(patch, rest.length) : patch;
         if (field === 'data') return this.dataPatch(patch, rest);
         if (field === 'config') return this.configPatch(patch, rest);
-        if (field === 'dataValidations') return this.validations(patch, rest);
+        if (field === 'dataValidations' || field === 'conditionalFormats') return this.rule(patch, rest);
         return POSITION_FREE_FIELDS.has(field) ? patch : null;
     }
 
@@ -261,13 +262,20 @@ class Shifter {
         return { ...patch, path: [...patch.path.slice(0, depth), moved, ...below] };
     }
 
-    // A validation rule, whose ranges move as the engine moves the live ones. A rule the op leaves with no range drops
-    // the entry, as a write into deleted rows does.
-    private validations(patch: Patch, [id, ...below]: (string | number)[]): Patch | null {
+    // A conditional format or a validation rule, whose ranges move as the engine moves the live ones. A rule the op
+    // leaves with no range drops the entry, as a write into deleted rows does.
+    private rule(patch: Patch, [id, ...below]: (string | number)[]): Patch | null {
         if (!('value' in patch) || patch.value == null) return patch;
         if (id == null || below.length > 0) return null;
-        const value = shiftValidations({ [id]: patch.value }, this.move.range)[id];
+        const value = shiftRules({ [id]: patch.value }, this.move.range)[id];
         return value ? { ...patch, value } : null;
+    }
+
+    // The engine rewrites a formula rule's text on the op's sheet, and on any other sheet where the text names the
+    // op's sheet, so an entry that holds the rule would bring back its old text.
+    private rewritesRule(rule: Partial<ConditionalFormatRule> | undefined, onTargetSheet: boolean): boolean {
+        if (rule?.type !== 'default' || rule.conditionName !== 'formula') return false;
+        return onTargetSheet || this.mayShift(String(rule.conditionValue?.[0]));
     }
 
     private formula(f: string, onTargetSheet: boolean): string {

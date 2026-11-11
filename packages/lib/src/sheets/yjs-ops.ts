@@ -1,13 +1,14 @@
 // How a batch's cell and field ops land on a workbook's sheets, for a live tab, a joiner's replay and the server
 // alike. opToPatchOnSheets leaves out the ops no sheet can take, such as a matrix that is no array or a peer's
-// malformed validation rule, and applySheetWrites applies the rest one by one, skipping a write whose parent is gone.
+// malformed rule, and applySheetWrites applies the rest one by one, skipping a write whose parent is gone.
 // It lives in lib so the API can replay ops without the sheet package's state barrel, which reaches DOM code.
 
 import type { Patch } from 'immer';
 import { isRecord } from '../core/guards';
+import type { RuleStore } from './range-rules';
+import { holdsOnlyRules, ruleStoreOf } from './range-rules';
 import type { Op, Sheet } from './types';
 import { isCellLinkType, isPatchOp } from './types';
-import { isSheetValidation, isSheetValidations, MAX_VALIDATIONS } from './validations';
 
 // The batch's cell and field ops as writes on `sheets`, the sheet's index first. A sheet, row or column op is the
 // caller's to apply, before this, since it settles which sheets there are.
@@ -28,7 +29,11 @@ export function opToPatchOnSheets(sheets: readonly Sheet[], ops: readonly Op[]):
         // Every reader walks a sheet's matrix and its rows, so a write that would leave either no array is dropped.
         const writesMatrixOrRow = op.path.length === 1 || (op.path.length === 2 && typeof op.path[1] === 'number');
         if (op.path[0] === 'data' && writesMatrixOrRow && !Array.isArray(op.value)) continue;
-        if (op.path[0] === 'dataValidations' && !isValidationWrite(op)) continue;
+        // Every reader gives a sheet these maps and a joiner's decoder adds a missing one back, so a tab that took one
+        // away, or left it no map, would skip the writes into it that the joiner applies.
+        if (op.path.length === 1 && SHEET_MAPS.has(op.path[0]) && (op.op === 'remove' || !isRecord(op.value))) continue;
+        const store = ruleStoreOf(op.path[0]);
+        if (store && !isRuleWrite(store, op)) continue;
         if (op.path[0] === 'data' && !isCellWrite(op)) continue;
         // A chart's fields are plain values, a part of its spec one string, so no writer writes below one.
         if (op.path[0] === 'charts' && op.path.length > 3) continue;
@@ -46,7 +51,7 @@ export function applySheetWrites(
 ): { sheets: Sheet[]; applied: Patch[] } {
     const result = [...sheets];
     const copied = new Set<unknown>();
-    const sizes = new Map<Key, number>();
+    const sizes = new Map<string, number>();
     const applied: Patch[] = [];
     for (const write of writes) {
         const { op, path, value } = write;
@@ -83,11 +88,11 @@ export function sheetHoldsNoBadLink({ data, celldata }: Record<string, unknown>)
     return !Array.isArray(celldata) || celldata.every((entry) => !isRecord(entry) || holdsNoBadLink(entry['v']));
 }
 
-// The editor writes a sheet's validations whole or one entry at a time. A write that would leave an entry not well
-// formed, or one into an entry's fields, which the editor never sends, is dropped.
-function isValidationWrite(op: Op): boolean {
-    if (op.path.length === 1) return isSheetValidations(op.value);
-    return op.path.length === 2 && (op.op === 'remove' || isSheetValidation(op.value));
+// The editor writes a rule whole under its id, and a sheet's rules whole when the undo of a sheet delete brings them
+// back. A write that would leave a rule not well formed, or one into a rule's fields, is dropped.
+function isRuleWrite(store: RuleStore, { op, path, value }: Op): boolean {
+    if (path.length === 1) return holdsOnlyRules(store, value);
+    return path.length === 2 && (op === 'remove' || store.holds(value));
 }
 
 // A rename and the exports read every link's type and address, so a write that leaves a link without them, or of a
@@ -116,6 +121,8 @@ function isLink(value: unknown): boolean {
 type Container = Record<string, unknown> | unknown[];
 type Key = string | number;
 
+const SHEET_MAPS = new Set<unknown>(['config', 'images', 'charts', 'conditionalFormats', 'dataValidations']);
+
 const isKey = (key: unknown): key is Key => typeof key === 'string' || typeof key === 'number';
 const isContainer = (value: unknown): value is Container => typeof value === 'object' && value !== null;
 const isIndex = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
@@ -143,17 +150,19 @@ function put(parent: Container, key: Key, op: Patch['op'], value: unknown) {
     else parent.splice(key, 1);
 }
 
-// A peer's op is untrusted, so a sheet's rules stay within their cap as the batch goes, counted once in `sizes`. A
-// `replace` of a rule that is gone is skipped too, so a peer's delete wins.
-function withinCap(above: readonly Container[], { op, path }: Patch, sizes: Map<Key, number>): boolean {
+// A peer's op is untrusted, so a sheet's rules of each kind stay within their cap as the batch goes, counted once in
+// `sizes`. A `replace` of a rule that is gone is skipped too, so a peer's delete wins.
+function withinCap(above: readonly Container[], { op, path }: Patch, sizes: Map<string, number>): boolean {
     const [sheet, field, id] = path;
     const [, , rules] = above;
-    if (field !== 'dataValidations') return true;
-    if (path.length === 2) sizes.delete(sheet);
+    const store = ruleStoreOf(field);
+    if (!store) return true;
+    const counted = `${sheet} ${field}`;
+    if (path.length === 2) sizes.delete(counted);
     if (path.length !== 3 || !isRecord(rules)) return true;
     const known = Object.hasOwn(rules, id);
-    const size = (sizes.get(sheet) ?? Object.keys(rules).length) + Number(op !== 'remove') - Number(known);
-    if (!known && (op === 'replace' || size > MAX_VALIDATIONS)) return false;
-    sizes.set(sheet, size);
+    const size = (sizes.get(counted) ?? Object.keys(rules).length) + Number(op !== 'remove') - Number(known);
+    if (!known && (op === 'replace' || size > store.max)) return false;
+    sizes.set(counted, size);
     return true;
 }

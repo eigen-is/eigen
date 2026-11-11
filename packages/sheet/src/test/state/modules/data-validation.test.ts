@@ -4,12 +4,7 @@
 // resolving it by sheet NAME. Date rules carry YYYY-MM-DD operand strings.
 
 import { describe, expect, test } from 'bun:test';
-import {
-    MAX_VALIDATION_RANGES,
-    MAX_VALIDATIONS,
-    REFERENCE_COLUMN_COUNT,
-    REFERENCE_ROW_COUNT,
-} from '@workspace/lib/sheets';
+import { MAX_RULE_RANGES, MAX_VALIDATIONS, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { dateToSerial } from '../../../engine/parser/helper/number';
 import type { Context } from '../../../state/context';
 import {
@@ -237,7 +232,7 @@ describe('applyDataValidation', () => {
         applyDataValidation(ctx, { row: [0, 1], column: [0, 0] }, rule);
         expect(ctx.sheets[0].data![0][0]).toBeNull();
         expect(Object.values(ctx.sheets[0].dataValidations ?? {})).toEqual([
-            { ranges: [{ row: [0, 1], column: [0, 0] }], rule },
+            { ranges: [{ row: [0, 1], column: [0, 0] }], order: 'a0', rule },
         ]);
     });
 
@@ -245,15 +240,15 @@ describe('applyDataValidation', () => {
         const ctx = contextFactory() as Context;
         applyDataValidation(ctx, { row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }, LIST_RULE);
         expect(Object.values(ctx.sheets[0].dataValidations ?? {})).toEqual([
-            { ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }], rule: LIST_RULE },
+            { ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }], order: 'a0', rule: LIST_RULE },
         ]);
     });
 
     test('takes its cells out of the rules they had, and drops a rule left with none', () => {
         const ctx = contextFactory() as Context;
         ctx.sheets[0].dataValidations = {
-            wide: { ranges: [{ row: [0, 3], column: [0, 1] }], rule: TICK_BOX },
-            inside: { ranges: [{ row: [1, 1], column: [0, 0] }], rule: TICK_BOX },
+            wide: { ranges: [{ row: [0, 3], column: [0, 1] }], order: 'a0', rule: TICK_BOX },
+            inside: { ranges: [{ row: [1, 1], column: [0, 0] }], order: 'a0', rule: TICK_BOX },
         };
         applyDataValidation(ctx, { row: [1, 2], column: [0, 0] }, LIST_RULE);
         const { wide, inside, ...added } = ctx.sheets[0].dataValidations;
@@ -263,7 +258,9 @@ describe('applyDataValidation', () => {
             { row: [1, 2], column: [1, 1] },
             { row: [3, 3], column: [0, 1] },
         ]);
-        expect(Object.values(added)).toEqual([{ ranges: [{ row: [1, 2], column: [0, 0] }], rule: LIST_RULE }]);
+        expect(Object.values(added)).toEqual([
+            { ranges: [{ row: [1, 2], column: [0, 0] }], order: 'a1', rule: LIST_RULE },
+        ]);
         expect(getCellDataValidation(ctx, 2, 0)).toEqual(LIST_RULE);
         expect(getCellDataValidation(ctx, 2, 1)).toEqual(TICK_BOX);
     });
@@ -281,15 +278,15 @@ describe('the rule over a cell', () => {
         const ctx = contextFactory() as Context;
         ctx.sheets[0].data = Array.from({ length: 6000 }, () => [null, null]);
         ctx.sheets[0].dataValidations = {
-            v: { ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }], rule: LIST_RULE },
+            v: { ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }], order: 'a0', rule: LIST_RULE },
         };
         expect(getCellDataValidation(ctx, 4999, 1)).toEqual(LIST_RULE);
         expect(getCellDataValidation(ctx, 4999, 0)).toBeUndefined();
     });
 
-    test('where two rules overlap, the highest id wins on every tab, whatever order the map holds them in', () => {
-        const a = { ranges: [{ row: [0, 1], column: [0, 0] }], rule: LIST_RULE };
-        const b = { ranges: [{ row: [1, 2], column: [0, 0] }], rule: TICK_BOX };
+    test('where two rules overlap, the last in order wins on every tab, whatever order the map holds them in', () => {
+        const a = { ranges: [{ row: [0, 1], column: [0, 0] }], order: 'a0', rule: LIST_RULE };
+        const b = { ranges: [{ row: [1, 2], column: [0, 0] }], order: 'a1', rule: TICK_BOX };
         for (const validations of [
             { a, b },
             { b, a },
@@ -297,9 +294,9 @@ describe('the rule over a cell', () => {
             expect(validationAt(validations, 1, 0)).toEqual(TICK_BOX);
             expect(validationLookup(validations, { row: [0, 5], column: [0, 5] })(1, 0)).toEqual(TICK_BOX);
         }
-        // An import numbers its rules in the file's order, and the last one wins.
-        const numbered = { 'validation-10': b, 'validation-9': a };
-        expect(validationAt(numbered, 1, 0)).toEqual(TICK_BOX);
+        // The order key decides, not the id: here the ids sort the other way.
+        const reversed = { z: a, y: b };
+        expect(validationAt(reversed, 1, 0)).toEqual(TICK_BOX);
     });
 
     // A cell checked every rule's ranges in view: 100 rules of 100 cells each took about 50 ms a frame.
@@ -312,6 +309,7 @@ describe('the rule over a cell', () => {
                         const [r, c] = [(i * 7 + k) % 61, (k + i) % 26];
                         return { row: [r, r], column: [c, c] };
                     }),
+                    order: 'a0',
                     rule: k % 2 === 0 ? LIST_RULE : TICK_BOX,
                 },
             ]),
@@ -335,12 +333,13 @@ describe('the rule over a cell', () => {
 
     test("the painter's lookup answers as the full lookup does, inside its window and outside it", () => {
         const validations = {
-            a: { ranges: [{ row: [0, 9], column: [2, 2] }], rule: LIST_RULE },
+            a: { ranges: [{ row: [0, 9], column: [2, 2] }], order: 'a0', rule: LIST_RULE },
             b: {
                 ranges: [
                     { row: [3, 3], column: [0, 5] },
                     { row: [20, 30], column: [0, 0] },
                 ],
+                order: 'a0',
                 rule: TICK_BOX,
             },
         };
@@ -360,21 +359,21 @@ describe('a write past the caps', () => {
 
     test('a clear that would split a rule past the ranges a rule may hold drops the rule', () => {
         const sheet = capSheet();
-        const rows = Array.from({ length: MAX_VALIDATION_RANGES }, (_, i) => ({ row: [2 * i, 2 * i], column: [0, 2] }));
+        const rows = Array.from({ length: MAX_RULE_RANGES }, (_, i) => ({ row: [2 * i, 2 * i], column: [0, 2] }));
         sheet.dataValidations = {
-            v: { ranges: rows, rule },
-            other: { ranges: [{ row: [0, 0], column: [5, 5] }], rule },
+            v: { ranges: rows, order: 'a0', rule },
+            other: { ranges: [{ row: [0, 0], column: [5, 5] }], order: 'a0', rule },
         };
         clearValidations(sheet, { row: [0, 0], column: [0, 0] });
-        expect(sheet.dataValidations.v.ranges).toHaveLength(MAX_VALIDATION_RANGES);
+        expect(sheet.dataValidations.v.ranges).toHaveLength(MAX_RULE_RANGES);
         clearValidations(sheet, { row: [2, 2], column: [1, 1] });
         expect(Object.keys(sheet.dataValidations)).toEqual(['other']);
     });
 
     test('a rule at the ranges a rule may hold keeps them and stops extending', () => {
         const sheet = capSheet();
-        const rows = Array.from({ length: MAX_VALIDATION_RANGES }, (_, i) => ({ row: [2 * i, 2 * i], column: [0, 0] }));
-        sheet.dataValidations = { v: { ranges: rows, rule } };
+        const rows = Array.from({ length: MAX_RULE_RANGES }, (_, i) => ({ row: [2 * i, 2 * i], column: [0, 0] }));
+        sheet.dataValidations = { v: { ranges: rows, order: 'a0', rule } };
         addValidation(sheet, 'v', rule, [{ row: [0, 0], column: [5, 5] }]);
         expect(sheet.dataValidations.v.ranges).toEqual(rows);
     });
@@ -384,7 +383,7 @@ describe('a write past the caps', () => {
         sheet.dataValidations = Object.fromEntries(
             Array.from({ length: MAX_VALIDATIONS }, (_, i) => [
                 `v${i}`,
-                { ranges: [{ row: [i, i], column: [0, 0] }], rule },
+                { ranges: [{ row: [i, i], column: [0, 0] }], order: 'a0', rule },
             ]),
         );
         const range = { row: [0, 0], column: [5, 5] };

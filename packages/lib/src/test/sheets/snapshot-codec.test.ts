@@ -64,18 +64,20 @@ const WORKBOOK: Sheet[] = [
         dataValidations: {
             v1: {
                 ranges: [{ row: [2, 2], column: [2, 2] }],
+                order: 'a0',
                 rule: { type: 'dropdown', type2: '', value1: 'a,b,c', value2: '' },
             },
         },
-        conditionalFormatRules: [
-            {
+        conditionalFormats: {
+            f1: {
                 type: 'default',
-                cellrange: [{ row: [0, 2], column: [0, 2] }],
+                ranges: [{ row: [0, 2], column: [0, 2] }],
+                order: 'a0',
                 format: { textColor: '#ff0000', cellColor: null },
                 conditionName: 'greaterThan',
                 conditionValue: [10],
             },
-        ],
+        },
     },
     {
         id: 'sheet-2',
@@ -108,7 +110,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
     test('round-trips every cell, border and sheet branch (only empty maps are added)', () => {
         const decoded = decodeSheetsSnapshot(encodeSheetsSnapshot(WORKBOOK, { computed: true }));
         expect(decoded.map(({ images: _images, charts: _charts, ...sheet }) => sheet)).toEqual(
-            WORKBOOK.map((sheet) => ({ dataValidations: {}, ...sheet })),
+            WORKBOOK.map((sheet) => ({ conditionalFormats: {}, dataValidations: {}, ...sheet })),
         );
     });
 
@@ -137,7 +139,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(encoded.split('#a1b2c3')).toHaveLength(2);
         const decoded = decodeSheetsSnapshot(encoded);
         expect(decoded.map(({ images: _images, charts: _charts, ...sheet }) => sheet)).toEqual(
-            BULK.map((sheet) => ({ dataValidations: {}, ...sheet })),
+            BULK.map((sheet) => ({ conditionalFormats: {}, dataValidations: {}, ...sheet })),
         );
     });
 
@@ -160,6 +162,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
             celldata: [],
             images: {},
             charts: {},
+            conditionalFormats: {},
             dataValidations: {},
         });
         expect(decoded[1]).toEqual({
@@ -168,6 +171,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
             order: 1,
             images: {},
             charts: {},
+            conditionalFormats: {},
             dataValidations: {},
         });
     });
@@ -177,7 +181,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         // `config.merge.0_0` op unreplayable.
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
         expect(decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: false }))).toEqual(
-            sheets.map((sheet) => ({ ...sheet, images: {}, charts: {}, dataValidations: {} })),
+            sheets.map((sheet) => ({ ...sheet, images: {}, charts: {}, conditionalFormats: {}, dataValidations: {} })),
         );
     });
 
@@ -229,7 +233,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: { borderInfo: {} } }];
         const encoded = encodeSheetsSnapshot(sheets, { computed: false });
         expect(decodeSheetsSnapshot(encoded)).toEqual(
-            sheets.map((sheet) => ({ ...sheet, images: {}, charts: {}, dataValidations: {} })),
+            sheets.map((sheet) => ({ ...sheet, images: {}, charts: {}, conditionalFormats: {}, dataValidations: {} })),
         );
     });
 
@@ -298,10 +302,12 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
                     { row: [0, 1048575], column: [1, 1] },
                     { row: [2, 4], column: [3, 5] },
                 ],
+                order: 'a0',
                 rule: { type: 'dropdown', type2: '', value1: 'a,b', value2: '' },
             },
             v2: {
                 ranges: [{ row: [0, 0], column: [0, 0] }],
+                order: 'a1',
                 rule: { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' },
             },
         };
@@ -322,16 +328,41 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         const rule = { type: 'dropdown', type2: '', value1: 'a', value2: '' };
         const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
         envelope.sheets[0]!['dataValidations'] = {
-            kept: { ranges: [{ row: [0, 0], column: [0, 0] }], rule },
-            noRanges: { ranges: [], rule },
-            pastTheGrid: { ranges: [{ row: [0, 1048576], column: [0, 0] }], rule },
-            backwards: { ranges: [{ row: [3, 2], column: [0, 0] }], rule },
-            noRule: { ranges: [{ row: [0, 0], column: [0, 0] }] },
-            badValue: { ranges: [{ row: [0, 0], column: [0, 0] }], rule: { ...rule, value1: 1 } },
+            kept: { ranges: [{ row: [0, 0], column: [0, 0] }], order: 'a0', rule },
+            noRanges: { ranges: [], order: 'a0', rule },
+            pastTheGrid: { ranges: [{ row: [0, 1048576], column: [0, 0] }], order: 'a0', rule },
+            backwards: { ranges: [{ row: [3, 2], column: [0, 0] }], order: 'a0', rule },
+            noRule: { ranges: [{ row: [0, 0], column: [0, 0] }], order: 'a0' },
+            badValue: { ranges: [{ row: [0, 0], column: [0, 0] }], order: 'a0', rule: { ...rule, value1: 1 } },
         };
         envelope.sheets[1]!['dataValidations'] = ['forged'];
         const decoded = decodeSheetsSnapshot(JSON.stringify(envelope));
         expect(decoded.map((sheet) => Object.keys(sheet.dataValidations ?? {}))).toEqual([['kept'], []]);
+    });
+
+    // No reader converts what an older build stored: a list of conditional formats, and validation rules without an
+    // order key.
+    test("an older build's conditional formats and validation rules are not read", () => {
+        const rule = { type: 'dropdown', type2: '', value1: 'a', value2: '' };
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        envelope.sheets[0]!['conditionalFormatRules'] = [
+            { type: 'default', cellrange: [{ row: [0, 0], column: [0, 0] }], format: {}, conditionValue: [1] },
+        ];
+        envelope.sheets[0]!['conditionalFormats'] = undefined;
+        envelope.sheets[0]!['dataValidations'] = { old: { ranges: [{ row: [0, 0], column: [0, 0] }], rule } };
+        const [decoded] = decodeSheetsSnapshot(JSON.stringify(envelope));
+        expect(decoded.conditionalFormats).toEqual({});
+        expect(decoded.dataValidations).toEqual({});
+    });
+
+    test('conditional formats round-trip as a map keyed by id, and one that is not well formed is left out', () => {
+        const kept = WORKBOOK[0].conditionalFormats?.['f1'];
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        expect(envelope.sheets[0]!['conditionalFormats']).toEqual({ f1: kept });
+        envelope.sheets[0]!['conditionalFormats'] = { f1: kept, noOrder: { ...kept, order: 5 }, list: [kept] };
+        envelope.sheets[1]!['conditionalFormats'] = [kept];
+        const decoded = decodeSheetsSnapshot(JSON.stringify(envelope));
+        expect(decoded.map((sheet) => Object.keys(sheet.conditionalFormats ?? {}))).toEqual([['f1'], []]);
     });
 
     test("a sheet's default column width and row height round-trip", () => {
@@ -414,7 +445,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         const encoded = encodeSheetsSnapshot(WORKBOOK, { computed: true });
         const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded));
         const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-        expect(hex).toBe('8de41024dbd14655d7bfa937f39463bebc4ca1bf7c75fd91d1a3c4a1d4d1c7ec');
+        expect(hex).toBe('c3b6f74e29c6e8b68a8e2b02efdd813b1181fcdcba8659d774aa780a21960a8b');
     });
 
     test('a link stays out of the style dictionary, so cells of one look share an entry', () => {

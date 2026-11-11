@@ -41,6 +41,7 @@ import {
     TRYING_EIGEN,
     VCARD_FILES,
 } from '../../scripts/demo/content';
+import { formatList } from '../fixtures/validations';
 
 // Contract test for the demo-world seeder. The seeder relies on module-level singletons
 // (the Elysia app, the auth DB, the Home map), so it cannot run in-process alongside the
@@ -386,7 +387,7 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             const [budgetSheet, chartsSheet] = sheets;
             const margin = budgetSheet.celldata?.find((cell) => cell.v?.f === '=B8-B17');
             expect(margin?.v?.v).toBe(16000);
-            const rules = budgetSheet.conditionalFormatRules ?? [];
+            const rules = formatList(budgetSheet.conditionalFormats);
             expect(rules.filter((rule) => rule.type === 'dataBar').length).toBe(2);
             expect(
                 rules.some(

@@ -4,7 +4,7 @@
 // applies, for example in the editor's own insert and in the server's replay of the op log. The shifters for one kind
 // of map are exported for code that moves the same maps, such as the undo stacks.
 
-import type { CellMatrix, MergeCell, Sheet, SheetChart, SheetValidation } from '@workspace/lib/sheets';
+import type { CellMatrix, MergeCell, Sheet, SheetChart } from '@workspace/lib/sheets';
 import {
     cloneSides,
     freezesColumns,
@@ -278,15 +278,9 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     newTarget.config = newCfg;
     setSize(newTarget, newData, op.type);
 
-    if (target.conditionalFormatRules != null) {
-        newTarget.conditionalFormatRules = target.conditionalFormatRules.map((cf) => ({
-            ...cf,
-            cellrange: cf.cellrange.map((range) => shiftRangeForInsert(range, op)),
-        }));
-    }
-    if (target.dataValidations != null) {
-        newTarget.dataValidations = shiftValidations(target.dataValidations, (range) => shiftRangeForInsert(range, op));
-    }
+    const moved = (range: SingleRange) => shiftRangeForInsert(range, op);
+    if (target.conditionalFormats != null) newTarget.conditionalFormats = shiftRules(target.conditionalFormats, moved);
+    if (target.dataValidations != null) newTarget.dataValidations = shiftRules(target.dataValidations, moved);
     const frozen = shiftFrozen(target.frozen, op.type, move);
     if (frozen !== target.frozen) newTarget.frozen = frozen;
     shiftFilterForInsert(newTarget, newCfg, op);
@@ -330,25 +324,16 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
     newTarget.config = newCfg;
     setSize(newTarget, newData, op.type);
 
-    if (target.conditionalFormatRules != null) {
-        const rules = [];
-        for (const cf of target.conditionalFormatRules) {
-            const ranges: SingleRange[] = [];
-            for (const range of cf.cellrange) {
-                const shifted = shiftRangeForDelete(range, op);
-                if (shifted) ranges.push(shifted);
-            }
-            if (ranges.length > 0) {
-                const first = op.type === 'row' ? ranges[0].row[0] : ranges[0].column[0];
-                const shift = first >= op.start ? -removeCount : 0;
-                rules.push(op.type === 'row' ? withCfRanges(cf, ranges, shift, 0) : withCfRanges(cf, ranges, 0, shift));
-            }
-        }
-        newTarget.conditionalFormatRules = rules;
+    const kept = (range: SingleRange) => shiftRangeForDelete(range, op);
+    if (target.conditionalFormats != null) {
+        // A formula rule reads from its first range's corner, which moves up or left when the delete is before it.
+        newTarget.conditionalFormats = shiftRules(target.conditionalFormats, kept, (rule, ranges) => {
+            const first = op.type === 'row' ? ranges[0].row[0] : ranges[0].column[0];
+            const shift = first >= op.start ? -removeCount : 0;
+            return op.type === 'row' ? withCfRanges(rule, ranges, shift, 0) : withCfRanges(rule, ranges, 0, shift);
+        });
     }
-    if (target.dataValidations != null) {
-        newTarget.dataValidations = shiftValidations(target.dataValidations, (range) => shiftRangeForDelete(range, op));
-    }
+    if (target.dataValidations != null) newTarget.dataValidations = shiftRules(target.dataValidations, kept);
     const frozen = shiftFrozen(target.frozen, op.type, move);
     if (frozen !== target.frozen) newTarget.frozen = frozen;
     shiftFilterForDelete(newTarget, newCfg, op);
@@ -372,21 +357,22 @@ function shiftLineMaps(cfg: ExtendedSheetConfig, next: ExtendedSheetConfig, type
     }
 }
 
-// Moves every validation rule's ranges, and drops a rule left with none. A rule whose ranges stay where they were is
-// kept as the same object, and so is the map when no rule moved.
-export function shiftValidations(
-    validations: Readonly<Record<string, SheetValidation>>,
+// Moves the ranges of every rule in a sheet's conditional formats or validation rules, and drops a rule left with
+// none. A rule that stays is the same object, and so is the record, so only a rule that moved is written, by its id.
+export function shiftRules<R extends { ranges: SingleRange[] }>(
+    rules: Readonly<Record<string, R>>,
     shift: (range: SingleRange) => SingleRange | null,
-): Record<string, SheetValidation> {
-    let shifted: Record<string, SheetValidation> | null = null;
-    for (const [id, entry] of Object.entries(validations)) {
-        const ranges = entry.ranges.flatMap((range) => shift(range) ?? []);
-        if (ranges.length === entry.ranges.length && ranges.every((range, i) => range === entry.ranges[i])) continue;
-        shifted ??= { ...validations };
-        if (ranges.length > 0) shifted[id] = { ...entry, ranges };
+    withRanges: (rule: R, ranges: SingleRange[]) => R = (rule, ranges) => ({ ...rule, ranges }),
+): Record<string, R> {
+    let shifted: Record<string, R> | null = null;
+    for (const [id, rule] of Object.entries(rules)) {
+        const ranges = rule.ranges.flatMap((range) => shift(range) ?? []);
+        if (ranges.length === rule.ranges.length && ranges.every((range, i) => range === rule.ranges[i])) continue;
+        shifted ??= { ...rules };
+        if (ranges.length > 0) shifted[id] = withRanges(rule, ranges);
         else delete shifted[id];
     }
-    return shifted ?? validations;
+    return shifted ?? rules;
 }
 
 // The frozen pane, moved whole, since a peer's unfreeze removes `frozen` and a write into it would not apply. A delete

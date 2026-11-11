@@ -28,7 +28,7 @@ export function handleCut(ctx: Context) {
 }
 
 function holdsConditionalFormat(ctx: Context, ranges: readonly SingleRange[]): boolean {
-    if (!getSheet(ctx).conditionalFormatRules?.length) return false;
+    if (Object.keys(getSheet(ctx).conditionalFormats ?? {}).length === 0) return false;
     const computed = getComputeMap(ctx);
     return ranges.some(({ row, column }) => {
         for (let r = row[0]; r <= row[1]; r += 1) {

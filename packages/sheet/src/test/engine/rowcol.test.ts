@@ -14,6 +14,7 @@ import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from '.
 import { applySheetRename } from '../../engine/sheet-name';
 import type { EditorSheetConfigExtras, ShiftedSheet, SingleRange } from '../../engine/types';
 import { cellLinks } from '../state/factories/links';
+import { formatList, formatsOf } from '../state/factories/validations';
 import type { Span } from './range-oracle';
 import { expectedDelete, expectedInsert, SPANS } from './range-oracle';
 
@@ -145,18 +146,18 @@ describe('applySheetsInsertRowCol — row', () => {
         expect(result[0].config?.rowhidden).toEqual({ '2': 0, '3': 0 });
     });
 
-    test('insert shifts conditionalFormatRules range row[0]', () => {
+    test('insert shifts conditionalFormats range row[0]', () => {
         const sheets: Sheet[] = [
             makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]], {
-                conditionalFormatRules: [
+                conditionalFormats: formatsOf([
                     {
                         type: 'default',
                         conditionName: 'greaterThan',
-                        cellrange: [{ row: [1, 2], column: [0, 0] }],
+                        ranges: [{ row: [1, 2], column: [0, 0] }],
                         conditionValue: [0],
                         format: { textColor: '#ff0000' },
                     },
-                ],
+                ]),
             }),
         ];
         const result = applySheetsInsertRowCol(sheets, {
@@ -166,8 +167,8 @@ describe('applySheetsInsertRowCol — row', () => {
             direction: 'lefttop',
             id: 's1',
         });
-        const cf = result[0].conditionalFormatRules![0];
-        expect(cf.cellrange[0].row).toEqual([2, 3]);
+        const cf = formatList(result[0].conditionalFormats)[0];
+        expect(cf.ranges[0].row).toEqual([2, 3]);
     });
 });
 
@@ -436,20 +437,21 @@ describe('applySheetsInsertRowCol/Delete — cross-sheet formula refs', () => {
 });
 
 describe('applySheetsInsertRowCol/Delete — conditional-format formula rules', () => {
-    const formulaRule = (): Sheet['conditionalFormatRules'] => [
-        {
-            type: 'default',
-            conditionName: 'formula',
-            cellrange: [{ row: [1, 2], column: [0, 0] }],
-            conditionValue: ['=B2>0'],
-            format: { textColor: '#ff0000' },
-        },
-    ];
+    const formulaRule = (): Sheet['conditionalFormats'] =>
+        formatsOf([
+            {
+                type: 'default',
+                conditionName: 'formula',
+                ranges: [{ row: [1, 2], column: [0, 0] }],
+                conditionValue: ['=B2>0'],
+                format: { textColor: '#ff0000' },
+            },
+        ]);
 
     test('insert shifts the rule formula along with its range', () => {
         const sheets: Sheet[] = [
             makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]], {
-                conditionalFormatRules: formulaRule(),
+                conditionalFormats: formulaRule(),
             }),
         ];
         const result = applySheetsInsertRowCol(sheets, {
@@ -459,35 +461,35 @@ describe('applySheetsInsertRowCol/Delete — conditional-format formula rules', 
             direction: 'lefttop',
             id: 's1',
         });
-        const cf = result[0].conditionalFormatRules![0];
-        expect(cf.cellrange[0].row).toEqual([2, 3]);
+        const cf = formatList(result[0].conditionalFormats)[0];
+        expect(cf.ranges[0].row).toEqual([2, 3]);
         expect(cf).toMatchObject({ conditionValue: ['=B3>0'] });
     });
 
     test('delete shifts the rule formula along with its range', () => {
         const sheets: Sheet[] = [
             makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]], {
-                conditionalFormatRules: formulaRule(),
+                conditionalFormats: formulaRule(),
             }),
         ];
         const result = applySheetsDeleteRowCol(sheets, { type: 'row', start: 0, end: 0, id: 's1' });
-        const cf = result[0].conditionalFormatRules![0];
-        expect(cf.cellrange[0].row).toEqual([0, 1]);
+        const cf = formatList(result[0].conditionalFormats)[0];
+        expect(cf.ranges[0].row).toEqual([0, 1]);
         expect(cf).toMatchObject({ conditionValue: ['=B1>0'] });
     });
 
     test('shifts a qualified ref in a rule on another sheet', () => {
         const sheets: Sheet[] = [
             makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]], {
-                conditionalFormatRules: [
+                conditionalFormats: formatsOf([
                     {
                         type: 'default',
                         conditionName: 'formula',
-                        cellrange: [{ row: [1, 2], column: [0, 0] }],
+                        ranges: [{ row: [1, 2], column: [0, 0] }],
                         conditionValue: ['=Sheet2!A2>0'],
                         format: { textColor: '#ff0000' },
                     },
-                ],
+                ]),
             }),
             makeSheet('s2', 'Sheet2', [[cell('x')], [cell('y')]]),
         ];
@@ -498,23 +500,23 @@ describe('applySheetsInsertRowCol/Delete — conditional-format formula rules', 
             direction: 'lefttop',
             id: 's2',
         });
-        const cf = result[0].conditionalFormatRules![0];
+        const cf = formatList(result[0].conditionalFormats)[0];
         expect(cf).toMatchObject({ conditionValue: ['=Sheet2!A3>0'] });
-        expect(cf.cellrange[0].row).toEqual([1, 2]);
+        expect(cf.ranges[0].row).toEqual([1, 2]);
     });
 
     test('leaves a non-formula rule conditionValue alone', () => {
         const sheets: Sheet[] = [
             makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]], {
-                conditionalFormatRules: [
+                conditionalFormats: formatsOf([
                     {
                         type: 'default',
                         conditionName: 'greaterThan',
-                        cellrange: [{ row: [1, 2], column: [0, 0] }],
+                        ranges: [{ row: [1, 2], column: [0, 0] }],
                         conditionValue: [2],
                         format: { textColor: '#ff0000' },
                     },
-                ],
+                ]),
             }),
         ];
         const result = applySheetsInsertRowCol(sheets, {
@@ -524,27 +526,27 @@ describe('applySheetsInsertRowCol/Delete — conditional-format formula rules', 
             direction: 'lefttop',
             id: 's1',
         });
-        expect(result[0].conditionalFormatRules![0]).toMatchObject({ conditionValue: [2] });
+        expect(formatList(result[0].conditionalFormats)[0]).toMatchObject({ conditionValue: [2] });
     });
 });
 
 describe('applySheetsInsertRowCol/Delete — a formula rule keeps its colors', () => {
     // Column A holds 1..8; the rule colors a cell greater than 1, read relative to the first range.
-    const sheetWithRule = (cellrange: SingleRange[], formula: string) =>
+    const sheetWithRule = (ranges: SingleRange[], formula: string) =>
         makeSheet(
             's1',
             'Sheet1',
             Array.from({ length: 8 }, (_, r) => [cell(r + 1)]),
             {
-                conditionalFormatRules: [
+                conditionalFormats: formatsOf([
                     {
                         type: 'default',
                         conditionName: 'formula',
-                        cellrange,
+                        ranges,
                         conditionValue: [formula],
                         format: { cellColor: '#ff0000' },
                     },
-                ],
+                ]),
             },
         );
     const styled = (sheet: Sheet) => {
@@ -554,7 +556,7 @@ describe('applySheetsInsertRowCol/Delete — a formula rule keeps its colors', (
             createArrayResolver([{ id: 's1', name: sheet.name, data }]),
             's1',
         );
-        return Object.keys(evaluateConditionalFormat(sheet.conditionalFormatRules, data, { evaluateFormula })).sort();
+        return Object.keys(evaluateConditionalFormat(sheet.conditionalFormats, data, { evaluateFormula })).sort();
     };
 
     test('rows inserted between two ranges move the second range and its colors', () => {
@@ -586,14 +588,14 @@ describe('applySheetsInsertRowCol/Delete — a formula rule keeps its colors', (
             '=A1>1',
         );
         const [after] = applySheetsDeleteRowCol([sheet], { type: 'row', start: 0, end: 1, id: 's1' });
-        expect(after.conditionalFormatRules?.[0].cellrange).toEqual([{ row: [2, 3], column: [0, 0] }]);
+        expect(formatList(after.conditionalFormats)[0].ranges).toEqual([{ row: [2, 3], column: [0, 0] }]);
         expect(styled(after)).toEqual(['2_0', '3_0']);
     });
 
     test('deleting the anchor row keeps the rest of the range colored', () => {
         const sheet = sheetWithRule([{ row: [1, 3], column: [0, 0] }], '=A2>1');
         const [after] = applySheetsDeleteRowCol([sheet], { type: 'row', start: 1, end: 1, id: 's1' });
-        expect(after.conditionalFormatRules?.[0]).toMatchObject({ conditionValue: ['=A2>1'] });
+        expect(formatList(after.conditionalFormats)[0]).toMatchObject({ conditionValue: ['=A2>1'] });
         expect(styled(after)).toEqual(['1_0', '2_0']);
     });
 });
@@ -684,13 +686,15 @@ describe('applySheetsInsertRowCol/Delete — links', () => {
 describe('conditional-format ranges follow the membership rule', () => {
     const cfSheet = (type: 'row' | 'column') =>
         makeSheet('s1', 'Sheet1', grid(), {
-            conditionalFormatRules: SPANS.map((span) => ({
-                type: 'default',
-                conditionName: 'greaterThan',
-                cellrange: [onAxis(type, span)],
-                conditionValue: [0],
-                format: { textColor: '#ff0000' },
-            })),
+            conditionalFormats: formatsOf(
+                SPANS.map((span) => ({
+                    type: 'default',
+                    conditionName: 'greaterThan',
+                    ranges: [onAxis(type, span)],
+                    conditionValue: [0],
+                    format: { textColor: '#ff0000' },
+                })),
+            ),
         });
 
     for (const type of ['row', 'column'] as const) {
@@ -706,7 +710,7 @@ describe('conditional-format ranges follow the membership rule', () => {
                             id: 's1',
                         });
                         const insertAt = direction === 'lefttop' ? index : index + 1;
-                        expect(sheet.conditionalFormatRules!.map((cf) => cf.cellrange[0])).toEqual(
+                        expect(formatList(sheet.conditionalFormats).map((cf) => cf.ranges[0])).toEqual(
                             SPANS.map((span) => onAxis(type, expectedInsert(span, insertAt, count))),
                         );
                     }
@@ -721,7 +725,7 @@ describe('conditional-format ranges follow the membership rule', () => {
                     const expected = SPANS.map((span) => expectedDelete(span, start, end)).filter(
                         (span) => span !== null,
                     );
-                    expect(sheet.conditionalFormatRules!.map((cf) => cf.cellrange[0])).toEqual(
+                    expect(formatList(sheet.conditionalFormats).map((cf) => cf.ranges[0])).toEqual(
                         expected.map((span) => onAxis(type, span)),
                     );
                 }
@@ -735,7 +739,7 @@ describe('validation ranges follow the membership rule, as conditional formats d
     const dvSheet = (type: 'row' | 'column') =>
         makeSheet('s1', 'Sheet1', grid(), {
             dataValidations: Object.fromEntries(
-                SPANS.map((span, i) => [`v${i}`, { ranges: [onAxis(type, span)], rule }]),
+                SPANS.map((span, i) => [`v${i}`, { ranges: [onAxis(type, span)], order: 'a0', rule }]),
             ),
         });
     const firstRanges = (sheet: Sheet) => Object.values(sheet.dataValidations ?? {}).map((entry) => entry.ranges[0]);
@@ -777,7 +781,7 @@ describe('validation ranges follow the membership rule, as conditional formats d
     test('an insert right below a bounded rule leaves it as it is', () => {
         const sheets = [
             makeSheet('s1', 'Sheet1', grid(), {
-                dataValidations: { v: { ranges: [{ row: [0, 3], column: [0, 0] }], rule } },
+                dataValidations: { v: { ranges: [{ row: [0, 3], column: [0, 0] }], order: 'a0', rule } },
             }),
         ];
         const [sheet] = applySheetsInsertRowCol(sheets, {
@@ -794,16 +798,16 @@ describe('validation ranges follow the membership rule, as conditional formats d
         const last = REFERENCE_ROW_COUNT - 1;
         const sheets = [
             makeSheet('s1', 'Sheet1', grid(), {
-                dataValidations: { v: { ranges: [{ row: [0, last], column: [1, 1] }], rule } },
-                conditionalFormatRules: [
+                dataValidations: { v: { ranges: [{ row: [0, last], column: [1, 1] }], order: 'a0', rule } },
+                conditionalFormats: formatsOf([
                     {
                         type: 'default',
                         conditionName: 'greaterThan',
-                        cellrange: [{ row: [0, last], column: [1, 1] }],
+                        ranges: [{ row: [0, last], column: [1, 1] }],
                         conditionValue: [0],
                         format: { textColor: '#ff0000' },
                     },
-                ],
+                ]),
             }),
         ];
         const [sheet] = applySheetsInsertRowCol(sheets, {
@@ -814,7 +818,7 @@ describe('validation ranges follow the membership rule, as conditional formats d
             id: 's1',
         });
         expect(sheet.dataValidations?.v.ranges).toEqual([{ row: [0, last], column: [1, 1] }]);
-        expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([{ row: [0, last], column: [1, 1] }]);
+        expect(formatList(sheet.conditionalFormats)[0].ranges).toEqual([{ row: [0, last], column: [1, 1] }]);
     });
 
     test('a rule over several ranges keeps the ones a delete leaves', () => {
@@ -826,6 +830,7 @@ describe('validation ranges follow the membership rule, as conditional formats d
                             { row: [1, 1], column: [0, 0] },
                             { row: [4, 6], column: [0, 0] },
                         ],
+                        order: 'a0',
                         rule,
                     },
                 },
@@ -838,7 +843,7 @@ describe('validation ranges follow the membership rule, as conditional formats d
     test('an op on another sheet leaves the rules the same object', () => {
         const sheets = [
             makeSheet('s1', 'Sheet1', grid(), {
-                dataValidations: { v: { ranges: [{ row: [0, 3], column: [0, 0] }], rule } },
+                dataValidations: { v: { ranges: [{ row: [0, 3], column: [0, 0] }], order: 'a0', rule } },
             }),
             makeSheet('s2', 'Sheet2', grid()),
         ];
@@ -1081,17 +1086,18 @@ describe('applySheetsInsertRowCol/Delete — formulas on the other sheets', () =
             Array.from({ length: 8 }, () =>
                 Array.from({ length: 5 }, () => (pick(5) < 3 ? { ...cell(0), f: formula(pick) } : cell(1))),
             );
-        const rules = (): Sheet['conditionalFormatRules'] => [
-            {
-                type: 'default',
-                conditionName: 'formula',
-                cellrange: [{ row: [0, 2], column: [0, 0] }],
-                conditionValue: [formula(pick)],
-                format: { textColor: '#ff0000' },
-            },
-        ];
+        const rules = (): Sheet['conditionalFormats'] =>
+            formatsOf([
+                {
+                    type: 'default',
+                    conditionName: 'formula',
+                    ranges: [{ row: [0, 2], column: [0, 0] }],
+                    conditionValue: [formula(pick)],
+                    format: { textColor: '#ff0000' },
+                },
+            ]);
         const sheets = NAMES.map((name, i) =>
-            makeSheet(`s${i}`, name, grid(), { order: i, conditionalFormatRules: rules() }),
+            makeSheet(`s${i}`, name, grid(), { order: i, conditionalFormats: rules() }),
         );
         // A sheet the replay holds only as its stored list.
         const stored: Sheet = {
@@ -1122,8 +1128,8 @@ describe('applySheetsInsertRowCol/Delete — formulas on the other sheets', () =
             for (const [k, entry] of (sheet.celldata ?? []).entries()) {
                 if (entry.v?.f != null) check(`${sheet.name} #${k}`, entry.v.f, next.celldata?.[k]?.v?.f ?? '');
             }
-            for (const [k, rule] of (sheet.conditionalFormatRules ?? []).entries()) {
-                const now = next.conditionalFormatRules?.[k];
+            for (const [k, rule] of formatList(sheet.conditionalFormats).entries()) {
+                const now = formatList(next.conditionalFormats)[k];
                 if (rule.type !== 'default' || now?.type !== 'default') continue;
                 check(`${sheet.name} rule ${k}`, String(rule.conditionValue[0]), String(now.conditionValue[0]), true);
             }

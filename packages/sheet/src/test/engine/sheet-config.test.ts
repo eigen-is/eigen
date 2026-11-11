@@ -19,6 +19,7 @@ describe('normalizeSheetConfig', () => {
     test('keeps the well-formed validation rules a sheet has and leaves out the rest', () => {
         const entry = {
             ranges: [{ row: [0, 4], column: [1, 1] }],
+            order: 'a0',
             rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
         };
         const sheet: Sheet = JSON.parse(

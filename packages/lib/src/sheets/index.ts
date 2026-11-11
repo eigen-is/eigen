@@ -34,20 +34,24 @@ export {
 export { cellFontName, cellFontSize, SHEET_DEFAULT_DIGIT_WIDTH, SHEET_DEFAULT_FONT } from './fonts';
 export { columnIndexToLabel, columnLabelToIndex } from './labels';
 export {
+    coalescedRanges,
+    compareRules,
+    MAX_CONDITIONAL_FORMATS,
+    MAX_RULE_RANGES,
+    MAX_VALIDATIONS,
+    nextRuleOrder,
+    orderedRules,
+    rangesOverlap,
+    wellFormedConditionalFormats,
+    wellFormedValidations,
+} from './range-rules';
+export {
     decodeSheetsSnapshot,
     decodeSheetsWorkbook,
     encodeSheetsSnapshot,
     isCurrentSheetsSnapshot,
 } from './snapshot-codec';
 export * from './types';
-export {
-    coalescedRanges,
-    compareValidationIds,
-    MAX_VALIDATION_RANGES,
-    MAX_VALIDATIONS,
-    rangesOverlap,
-    wellFormedValidations,
-} from './validations';
 export {
     readSheetsSnapshotJson,
     sheetsLogStartsWith,

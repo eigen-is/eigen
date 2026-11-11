@@ -520,9 +520,9 @@ describe('a rule a peer deleted', () => {
             row: 5,
             column: 2,
             config: {},
-            dataValidations: { x: { ranges: [{ row: [0, 3], column: [0, 0] }], rule } },
+            dataValidations: { x: { ranges: [{ row: [0, 3], column: [0, 0] }], order: 'a0', rule } },
         };
-        const shrunk = { ranges: [{ row: [0, 1], column: [0, 0] }], rule };
+        const shrunk = { ranges: [{ row: [0, 1], column: [0, 0] }], order: 'a0', rule };
         const [sheet] = replaySheetsOps(
             [base],
             [

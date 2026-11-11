@@ -21,7 +21,6 @@ export type {
 export {
     createCfFormulaEvaluator,
     evaluateConditionalFormat,
-    isWellFormedCfRule,
     rangeWithout,
     withCfRanges,
 } from './conditional-format';

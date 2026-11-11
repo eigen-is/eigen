@@ -77,7 +77,6 @@ Once someone else edits the spreadsheet, you can no longer undo or redo:
 - Your last insert or delete of rows or columns.
 - Your last added, duplicated, deleted or renamed sheet.
 - A paste that added rows or columns.
-- A conditional format rule you removed, or one you added to a sheet that already has rules.
 - Anything you did before one of these.
 
 What you did after it still undoes. If someone else renames a sheet, you can no longer undo or redo anything you did before that. Your own edit in another tab or on another device counts too.

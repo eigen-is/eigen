@@ -5,6 +5,7 @@
 import { expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
+import { formatList } from '../../state/factories/validations';
 
 installHappyDom();
 
@@ -35,7 +36,7 @@ const openRule = (type: RuleType) =>
         selections: [{ row: [1, 2], column: [1, 2] }],
     });
 
-const rules = (context: import('../../../state').Context) => context.sheets[0]?.conditionalFormatRules ?? [];
+const rules = (context: import('../../../state').Context) => formatList(context.sheets[0]?.conditionalFormats);
 const values = (context: import('../../../state').Context) =>
     rules(context).flatMap((rule) => (rule.type === 'default' ? [rule.conditionValue] : []));
 const alert = () => document.querySelector('[role="dialog"] [role="alert"]')?.textContent;
@@ -64,7 +65,7 @@ test('it adds a Greater than rule over the selection on OK and closes', async ()
     expect(rules(dialog.context())).toEqual([
         {
             type: 'default',
-            cellrange: [{ row: [1, 2], column: [1, 2] }],
+            ranges: [{ row: [1, 2], column: [1, 2] }],
             format: { textColor: null, cellColor: '#d0fae5' },
             conditionName: 'greaterThan',
             conditionRange: [],

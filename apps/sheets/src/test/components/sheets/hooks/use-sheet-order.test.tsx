@@ -81,7 +81,7 @@ const sheet = (cells: Record<string, string>): Sheet => ({
     row: 12,
     column: 4,
     config: {},
-    conditionalFormatRules: [],
+    conditionalFormats: {},
     celldata: Object.entries(cells).map(([key, v]) => {
         const [r, c] = key.split('_').map(Number);
         return { r, c, v: { v, m: v } };
@@ -195,7 +195,7 @@ const parts = (s: Sheet) =>
         JSON.stringify({
             data: s.data,
             borderInfo: s.config?.borderInfo ?? {},
-            rules: s.conditionalFormatRules ?? [],
+            rules: s.conditionalFormats ?? {},
         }),
     );
 
@@ -218,12 +218,17 @@ const border = (color: string): Op[] => [
     },
 ];
 
-const rule = (type: string): Op[] => [
+const rule = (id: string, order: string, type: 'colorGradation' | 'dataBar'): Op[] => [
     {
         op: 'add',
         id: 's1',
-        path: ['conditionalFormatRules', 0],
-        value: { type, cellrange: [{ row: [0, 0], column: [0, 0] }], format: {} },
+        path: ['conditionalFormats', id],
+        value: {
+            type,
+            ranges: [{ row: [0, 0], column: [0, 0] }],
+            order,
+            format: type === 'dataBar' ? ['#638ec6'] : ['#ffffff', '#5a8ac6'],
+        },
     },
 ];
 
@@ -285,10 +290,11 @@ test('two conditional formats added at once keep the log order', async () => {
     const tab = await openTab(s, 3);
     const first = replica(s, 1);
     const second = replica(s, 2);
-    push(first, rule('colorGradation'));
-    push(second, rule('dataBar'));
+    push(first, rule('first', 'a0', 'colorGradation'));
+    push(second, rule('second', 'a1', 'dataBar'));
     await deliver(second, tab.doc);
     await deliver(first, tab.doc);
+    expect(Object.keys(parts(tab.workbook().getAllSheets()[0]).rules).sort()).toEqual(['first', 'second']);
     expectJoined(tab);
 });
 

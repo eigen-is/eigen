@@ -28,6 +28,7 @@ import {
     seedSheetsDoc,
     writeSheetsToYjs,
 } from '../fixtures/heavy-sheets';
+import { formatsOf } from '../fixtures/validations';
 import { authedRequest, driveGet, drivePost, getTestContext, NO_MEDIA } from '../setup';
 
 // Golden output assertions for the eigensheets preview pipeline. The hash at
@@ -494,15 +495,15 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
             celldata: [{ r: 0, c: 0, v: cell }],
             data: [[cell]],
             config: {},
-            conditionalFormatRules: [
+            conditionalFormats: formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 100_000], column: [0, 0] }],
+                    ranges: [{ row: [0, 100_000], column: [0, 0] }],
                     format: { cellColor: '#d1f0d1' },
                     conditionName: 'formula',
                     conditionValue: ['=A1>1'],
                 },
-            ],
+            ]),
         };
 
         const evaluate = spyOn(FormulaEngine.prototype, 'evaluateCompiled');
@@ -526,15 +527,15 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
             celldata: [{ r: 2, c: 0, v: cell }],
             data: [undefined as never, undefined as never, [cell]],
             config: {},
-            conditionalFormatRules: [
+            conditionalFormats: formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 10], column: [0, 0] }],
+                    ranges: [{ row: [0, 10], column: [0, 0] }],
                     format: { cellColor: '#d1f0d1' },
                     conditionName: 'formula',
                     conditionValue: ['=A1>1'],
                 },
-            ],
+            ]),
         };
 
         const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
@@ -551,15 +552,15 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
             celldata: [{ r: 1_000_000, c: 0, v: cell }],
             data,
             config: {},
-            conditionalFormatRules: [
+            conditionalFormats: formatsOf([
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 10_000_000], column: [0, 0] }],
+                    ranges: [{ row: [0, 10_000_000], column: [0, 0] }],
                     format: { cellColor: '#d1f0d1' },
                     conditionName: 'formula',
                     conditionValue: ['=A1>1'],
                 },
-            ],
+            ]),
         };
 
         const evaluate = spyOn(FormulaEngine.prototype, 'evaluateCompiled');
@@ -579,10 +580,10 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
             celldata: [{ r: 0, c: 0, v: cell }],
             data: [[cell]],
             config: {},
-            conditionalFormatRules: [
+            conditionalFormats: formatsOf([
                 {
                     type: 'default',
-                    cellrange: [
+                    ranges: [
                         { row: [299, 310], column: [0, 0] },
                         { row: [0, 2], column: [0, 0] },
                     ],
@@ -590,7 +591,7 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
                     conditionName: 'formula',
                     conditionValue: ['=A300>1'],
                 },
-            ],
+            ]),
         };
 
         const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
