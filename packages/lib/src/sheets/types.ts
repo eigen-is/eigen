@@ -84,7 +84,7 @@ export type Op = {
 };
 
 // Whether a log entry, which a peer can store as anything, is a batch every reader can walk and send on as JSON: each
-// op a known kind, its sheet id text, its path text and numbers, and no BigInt in its value.
+// op a known kind, its sheet id text, its path text and finite numbers, and no BigInt anywhere in it.
 export function isOpBatch(entry: unknown): entry is Op[] {
     return Array.isArray(entry) && entry.every(isOp);
 }
@@ -93,9 +93,9 @@ function isOp(value: unknown): value is Op {
     if (!isRecord(value)) return false;
     const { op, id, path } = value;
     if (!OP_NAMES.some((name) => name === op) || (id !== undefined && typeof id !== 'string')) return false;
-    if (!Array.isArray(path) || !path.every((key) => typeof key === 'string' || typeof key === 'number')) return false;
+    if (!Array.isArray(path) || !path.every((key) => typeof key === 'string' || Number.isFinite(key))) return false;
     // Walked with a list, since a value nested deep enough would overflow the stack of a walk that calls itself.
-    const pending: unknown[] = [value['value']];
+    const pending: unknown[] = [value];
     while (pending.length > 0) {
         const next = pending.pop();
         if (typeof next === 'bigint') return false;

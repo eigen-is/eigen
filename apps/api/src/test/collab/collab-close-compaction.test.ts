@@ -354,7 +354,8 @@ describe('CollabDocument compacts a workbook at close', () => {
     // A peer can store anything as a log entry, a BigInt included, which no JSON carries to the transform process.
     test('a close folds a log with entries that are no op batches, which change nothing', async () => {
         const bigIntValue = [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 2], value: { v: 1n } }];
-        const forged = [[1n], 42, [null], 'abc', [{ op: 'replace', id: 'sheet-1' }], bigIntValue];
+        const bigIntBeside = [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 2], value: 1, extra: 1n }];
+        const forged = [[1n], 42, [null], 'abc', [{ op: 'replace', id: 'sheet-1' }], bigIntValue, bigIntBeside];
         const sheet = await openLingeringSheet('compaction-forged', [edit(0, 0, 7), ...forged, edit(0, 1, 'x')]);
         try {
             const closed = sheet.nextClose();
