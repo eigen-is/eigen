@@ -283,19 +283,7 @@ export class Table {
 
     // Makes `table` the table of what an argument was evaluated to.
     public static over(table: Table, value: Value): Table {
-        table.value = value;
-        table.areas = 1;
-        table.reference = false;
-        if (isReference(value)) {
-            table.reference = true;
-            table.rows = value.bottom - value.top + 1;
-            table.columns = value.right - value.left + 1;
-            for (let area = value.next; area !== null; area = area.next) table.areas += 1;
-        } else {
-            table.rows = isArray(value) ? value.rows : 1;
-            table.columns = isArray(value) ? value.columns : 1;
-        }
-        return table;
+        return table.aim(value);
     }
 
     // One area of a range that a union made, from 0, as a table of its own.
@@ -303,9 +291,7 @@ export class Table {
         if (index === 0 && this.areas === 1) return this;
         let area = isReference(this.value) ? this.value : null;
         for (let skip = index; skip > 0 && area !== null; skip -= 1) area = area.next;
-        return area === null
-            ? undefined
-            : Table.over(this.spare(), area.next === null ? area : { ...area, next: null });
+        return area === null ? undefined : this.spare().aim(area.next === null ? area : { ...area, next: null });
     }
 
     public column(index: number): Vector {
@@ -333,12 +319,12 @@ export class Table {
         const { value } = this;
         const piece = this.spare();
         const inside = top >= 0 && left >= 0 && rows > 0 && columns > 0;
-        if (!inside || top + rows > heightOf(value) || left + columns > widthOf(value)) return Table.over(piece, NA);
+        if (!inside || top + rows > heightOf(value) || left + columns > widthOf(value)) return piece.aim(NA);
         if (isReference(value)) {
             const first = value.top + top;
             const start = value.left + left;
             const { type, sheet } = value;
-            return Table.over(piece, {
+            return piece.aim({
                 type,
                 sheet,
                 top: first,
@@ -348,7 +334,23 @@ export class Table {
                 next: null,
             });
         }
-        return Table.over(piece, isArray(value) ? partOf(value, top, left, rows, columns) : value);
+        return piece.aim(isArray(value) ? partOf(value, top, left, rows, columns) : value);
+    }
+
+    private aim(value: Value): this {
+        this.value = value;
+        this.areas = 1;
+        this.reference = false;
+        if (isReference(value)) {
+            this.reference = true;
+            this.rows = value.bottom - value.top + 1;
+            this.columns = value.right - value.left + 1;
+            for (let area = value.next; area !== null; area = area.next) this.areas += 1;
+        } else {
+            this.rows = isArray(value) ? value.rows : 1;
+            this.columns = isArray(value) ? value.columns : 1;
+        }
+        return this;
     }
 
     private spare(): Table {
