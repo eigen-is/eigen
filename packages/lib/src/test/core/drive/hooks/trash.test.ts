@@ -1,6 +1,6 @@
 // The Trash lists what was deleted from every drive the viewer owns or co-owns: each of their own mounts and
 // each mount of their teams. Its length is the sidebar's count. A drive whose trash fails to load is left out
-// and the others still list. A teammate's trash or restore refetches the team drive's list. Restore and Delete
+// and named, and the others still list. A teammate's trash or restore refetches the team drive's list. Restore and Delete
 // permanently go to the item's own drive, and Empty trash empties the viewer's own mounts only.
 import { beforeEach, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
@@ -63,7 +63,12 @@ beforeEach(() => {
         server.requests.push(`${method} ${route}`);
         if (server.failing.has(route)) return Response.json({ message: 'Storage is gone' }, { status: 500 });
         if (method !== 'GET') return Response.json({ success: true });
-        if (route === `/drive/${OWNER}/mounts`) return Response.json([{ id: 'default' }, { id: 'archive' }]);
+        if (route === `/drive/${OWNER}/mounts`) {
+            return Response.json([
+                { id: 'default', name: 'My Drive' },
+                { id: 'archive', name: 'Archive' },
+            ]);
+        }
         if (route === `/home/${OWNER}/my-teams`) {
             return Response.json([{ id: 'design', name: 'Design', mounts: [{ id: 'shared', name: 'Design files' }] }]);
         }
@@ -124,14 +129,35 @@ test('the trash lists every own mount and every team mount, and its length is th
     expect(trash().items).toHaveLength(3);
     expect(trash().isLoading).toBe(false);
     expect(trash().error).toBeNull();
+    expect(trash().failedDrives).toEqual([]);
     await unmount();
 });
 
-test('a drive whose trash fails to load is left out, and the others still list', async () => {
+test('a drive whose trash fails to load is left out and named, and the others still list', async () => {
     server.failing.add(`/drive/${OWNER}/default/trash`);
     const { trash, unmount } = await openTrash();
     expect(ids(trash())).toEqual(['archived', 'teams']);
     expect(trash().error).toBeNull();
+    expect(trash().failedDrives).toEqual(['My Drive']);
+    await unmount();
+});
+
+test('a team drive whose trash fails to load is named by its mount, as the sidebar names it', async () => {
+    server.failing.add(`/drive/${TEAM}/shared/trash`);
+    const { trash, unmount } = await openTrash();
+    expect(ids(trash())).toEqual(['archived', 'own']);
+    expect(trash().failedDrives).toEqual(['Design files']);
+    await unmount();
+});
+
+test('a failed drive is no longer named once a refetch loads it', async () => {
+    server.failing.add(`/drive/${TEAM}/shared/trash`);
+    const { trash, queryClient, act, flush, unmount } = await openTrash();
+    server.failing.clear();
+    await act(() => queryClient.refetchQueries());
+    await flush();
+    expect(ids(trash())).toEqual(['archived', 'own', 'teams']);
+    expect(trash().failedDrives).toEqual([]);
     await unmount();
 });
 

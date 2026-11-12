@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, recent, files, find]
 related: [drive/shared-with-you, drive/watch-for-changes]
 order: 87
-updated: 2026-11-09
+updated: 2026-11-12
 ---
 
 **Recent files** gathers the files you worked on lately in one list, newest first. It finds them wherever they live: your own drive, a team drive, or a folder someone shared with you.
@@ -14,7 +14,7 @@ updated: 2026-11-09
 ## Open Recent files
 
 1. In the sidebar, click **Recent files**. In Drive, Docs, Sheets, Slides, Stickies, and Vector, it sits right below **Drive**. In Chat, Calendar, Mail, and Contacts, it has a section of its own in the sidebar.
-2. Click a file to see its details in the panel on the right, including what happened to it lately.
+2. Click a file to see its details in the panel on the right, including where it lives and what happened to it lately. The **Location** row names its drive and the folders it is in. When you can open that folder, click the row to go there.
 3. Click **Open** in that panel to open it. You can also press Enter, or click the file again. A document opens in its app and a folder opens in Drive. A picture or a PDF has no **Open** button and opens in a preview instead.
 
 Every one of those links opens the same page in Drive. This page is for finding things, so you cannot upload or create files in it.

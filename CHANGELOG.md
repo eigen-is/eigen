@@ -4,10 +4,23 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Added
+
+- **Location in Drive** — the details panel shows the drive and folders a file is in, and links to its folder. For a file shared with you, it starts at the owner's name where you can't see the folders above
+
+### Changed
+
+- **Documents over WebDAV** — a WebDAV client can add a file to a document's `media` folder by saving or copying it there. Moving a file into a document is refused, since the next **Delete history…** would delete it
+
 ### Fixed
 
-- **Trash in Drive** — the Trash and its sidebar count include what was deleted from your team drives, so anyone in the team can restore it. **Empty trash** empties only your own drive
+- **Trash in Drive** — the Trash and its sidebar count include what was deleted from every drive of yours and from your team drives, so anyone in the team can restore it. **Empty trash** empties only your own drives, and its dialog says so. A drive whose trash fails to load is named above the list
 - **Moving several items in Drive** — when some of them fail, the **Move to** dialog keeps only those, so **Move here** again leaves the moved ones alone. **Delete permanently** in the Trash does the same
+- **Copying to another drive** — the copy appears once it is complete, and a copied document is found by searching its text right away
+- **All images in Drive** — the list includes the images someone shared with you directly
+- **Saving from Word and Excel over WebDAV** — **Save as** into a mounted drive works. A save, move or copy over an existing file that the server refuses leaves that file in place instead of in the Trash
+- **Folders over WebDAV** — renaming a file in Finder to change only its capitals works, and copying a folder without its contents onto an existing one is refused instead of replacing it. Folder listings give addresses a client can follow on a standard install
+- **Locks over WebDAV** — a file someone locked stays locked to everyone else, and only they can renew the lock
 - **Dialogs in Drive that close** — a dialog keeps its text while it fades out, where **Move to trash** flashed "Remove 0 shared items". **Email collaborators** now fades out like the others
 - **Move to in Drive** — for an item of another drive, such as a team's file in a document app's list, the **Move to** dialog starts in that item's drive
 
