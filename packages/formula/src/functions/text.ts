@@ -32,11 +32,9 @@ import {
 // Past this a position is no position: MID("abc",2^31,1) is #VALUE!.
 const MOST = 2 ** 31;
 
-// REPT, CODE and UNICODE still refuse a text longer than the one Excel once held, and FIXED and DOLLAR write none.
-const OLD_LONGEST_TEXT = 255;
-
-// The most decimals FIXED and DOLLAR write.
+// The most decimals FIXED and DOLLAR write, and the longest text.
 const MOST_DECIMALS = 127;
+const LONGEST_FIXED = 255;
 
 const LAST_CODE_POINT = 0x10ffff;
 
@@ -47,7 +45,7 @@ const UNSEEN = /[^\P{Cc}\x7f]/gu;
 function fixed(number: number, decimals: number, grouped: boolean) {
     if (decimals > MOST_DECIMALS) return VALUE;
     const text = fixedText(roundDecimal(number, decimals), decimals, grouped);
-    return countCharacters(text) > OLD_LONGEST_TEXT ? VALUE : text;
+    return countCharacters(text) > LONGEST_FIXED ? VALUE : text;
 }
 
 // TEXTBEFORE and TEXTAFTER. An instance that was written is refused when the text has no room for that many
@@ -150,12 +148,9 @@ export const TEXT_FUNCTIONS = [
             ? VALUE
             : searchCharacters(sought, text, Math.trunc(start)) || VALUE,
     ),
-    fn('REPT', [TEXT, NUMBER], (text, count) => {
-        const length = countCharacters(text);
-        return count < 0 || length > OLD_LONGEST_TEXT || length * Math.trunc(count) > LONGEST_TEXT
-            ? VALUE
-            : text.repeat(Math.trunc(count));
-    }),
+    fn('REPT', [TEXT, NUMBER], (text, count) =>
+        count < 0 || countCharacters(text) * Math.trunc(count) > LONGEST_TEXT ? VALUE : text.repeat(Math.trunc(count)),
+    ),
     fn('EXACT', [TEXT, TEXT], (one, other) => one === other),
     fn('LEN', [TEXT], countCharacters),
     fn('LOWER', [TEXT], lowerCase),
@@ -167,7 +162,7 @@ export const TEXT_FUNCTIONS = [
     fn('CHAR', [INTEGER], (code) => (code < 1 || code > 255 ? VALUE : ansiCharacter(code))),
     fn('CODE', [TEXT], (text) => {
         const code = firstCode(text);
-        return code === undefined || countCharacters(text) > OLD_LONGEST_TEXT ? VALUE : ansiCode(code);
+        return code === undefined ? VALUE : ansiCode(code);
     }),
     // Half of a surrogate pair is no character, and neither are the code points Unicode sets aside for good: the
     // last two of a plane and the 32 from U+FDD0.
@@ -176,7 +171,7 @@ export const TEXT_FUNCTIONS = [
         const none = (code >= 0xd800 && code <= 0xdfff) || (code >= 0xfdd0 && code <= 0xfdef);
         return none || (code & 0xfffe) === 0xfffe ? NA : String.fromCodePoint(code);
     }),
-    fn('UNICODE', [TEXT], (text) => (countCharacters(text) > OLD_LONGEST_TEXT ? VALUE : (firstCode(text) ?? VALUE))),
+    fn('UNICODE', [TEXT], (text) => firstCode(text) ?? VALUE),
     // An empty text is 0, as it is wherever a number is read.
     fn('VALUE', [TEXT], (text) => (text === '' ? 0 : (parseNumber(text) ?? VALUE))),
     // The first character of each separator counts. Left out, the comma groups unless it is the decimal sign. A
