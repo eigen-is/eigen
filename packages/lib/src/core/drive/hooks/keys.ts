@@ -63,10 +63,8 @@ export const driveKeys = {
 // Where an item is listed: its folder, and the lists of its type when it has one.
 type Listed = { ownerId: string; mountId: string; parentId?: string | null; mimeType?: string | null };
 
-// The viewer's lists that hold what others shared with them: Shared with me and their own lists of one type.
 export function invalidateAclSharedOrUnshared(queryClient: QueryClient, viewerId: string): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.shared(viewerId, 'with-me') });
-    queryClient.invalidateQueries({ queryKey: driveKeys.mimeTypes(viewerId) });
 }
 
 // The viewer's own lists of items from several owners, which show each item by name wherever it lives.

@@ -88,12 +88,11 @@ describe('handleDriveSSEvent — DRIVE_ACL_SHARED / DRIVE_ACL_UNSHARED', () => {
         }
     });
 
-    // The viewer's own lists of one type hold what others shared with them, so a share adds a row there.
-    test("refreshes the viewer's own lists of one type", () => {
+    // The viewer's lists of one type span their teams and what others shared with them, so a share adds a row there.
+    test("refreshes the viewer's lists of one type", () => {
         for (const type of [SSEventType.DRIVE_ACL_SHARED, SSEventType.DRIVE_ACL_UNSHARED] as const) {
             const { queryClient, invalidated } = trackingClient();
             handleDriveSSEvent(driveEvent(type), queryClient, VIEWER);
-            expect(hasKey(invalidated, driveKeys.mimeTypes(VIEWER))).toBe(true);
             expect(hasKey(invalidated, driveKeys.mimeAllTypes())).toBe(true);
         }
     });
@@ -224,7 +223,6 @@ test.each([
     handleDriveSSEvent(driveEvent(type), queryClient, VIEWER);
     await Bun.sleep(400);
     expect(hasKey(invalidated, driveKeys.shared(VIEWER, 'with-me'))).toBe(true);
-    expect(hasKey(invalidated, driveKeys.mimeTypes(VIEWER))).toBe(true);
     expect(hasKey(invalidated, driveKeys.mimeAllTypes())).toBe(true);
 });
 
