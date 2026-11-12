@@ -15,7 +15,7 @@ import type { User } from '../user';
 import { actorDisplayName, getMemberships } from '../user';
 import { matchesACL } from './acl';
 import type { SharedDb } from './shared';
-import { sharedPaths } from './sharedschema';
+import { sharedPaths } from './shared-schema';
 import { buildDriveEvent } from './sse-events';
 
 export async function receiveSharedPathChange(

@@ -3,7 +3,7 @@
 // loads.
 
 import type { DatabaseConfig } from '../core/managed-database';
-import * as schema from './sharedschema';
+import * as schema from './shared-schema';
 
 export const SHARED_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'shared',

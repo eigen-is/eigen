@@ -499,7 +499,7 @@ describe('Guest Auth', () => {
             const home = await getHome(guestId);
             // biome-ignore lint/suspicious/noExplicitAny: test reaches into private state on purpose
             const sharedDb = (home.drive as any).sharedDb as ReturnType<typeof getAuthDrizzleDb>;
-            const { sharedPaths } = await import('../../lib/drive/sharedschema');
+            const { sharedPaths } = await import('../../lib/drive/shared-schema');
             sharedDb.delete(sharedPaths).run();
 
             // Second login.

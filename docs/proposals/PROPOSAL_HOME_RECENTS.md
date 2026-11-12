@@ -30,7 +30,7 @@ Non-goals for now: guests, removing one row by hand, a Clear button, per-type Re
 
 ## Data
 
-One table in the viewer's own `shared.db` (`apps/api/src/lib/drive/sharedschema.ts`), added as schema version 2 in `apps/api/src/lib/drive/db-config.ts`. `shared.db` is already in `HOME_DATABASES`, so backups carry it with no new registration, and no new database file or class is needed.
+One table in the viewer's own `shared.db` (`apps/api/src/lib/drive/shared-schema.ts`), added as schema version 2 in `apps/api/src/lib/drive/db-config.ts`. `shared.db` is already in `HOME_DATABASES`, so backups carry it with no new registration, and no new database file or class is needed.
 
 ```sql
 CREATE TABLE recent_paths (

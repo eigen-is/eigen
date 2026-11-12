@@ -5,7 +5,7 @@ import { teamOwnerId } from '@workspace/lib/types/owner';
 import { and, eq } from 'drizzle-orm';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getSharedDatabase } from '../../lib/drive/shared';
-import { sharedPaths } from '../../lib/drive/sharedschema';
+import { sharedPaths } from '../../lib/drive/shared-schema';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import { drainHomeDeliveries } from '../../lib/home/home-relay';

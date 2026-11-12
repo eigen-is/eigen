@@ -6,7 +6,7 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { PATHS } from '../config/paths';
 import type { Home } from '../home';
 import { SHARED_DB_CONFIG } from './db-config';
-import type * as sharedSchema from './sharedschema';
+import type * as sharedSchema from './shared-schema';
 
 export type SharedDb = BunSQLiteDatabase<typeof sharedSchema>;
 

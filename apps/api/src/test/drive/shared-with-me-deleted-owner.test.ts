@@ -5,7 +5,7 @@ import type { Notification } from '@workspace/lib/types/notification';
 import { eq } from 'drizzle-orm';
 import { getPublicConfig } from '../../lib/config/server-config';
 import { getSharedDatabase } from '../../lib/drive/shared';
-import { sharedPaths } from '../../lib/drive/sharedschema';
+import { sharedPaths } from '../../lib/drive/shared-schema';
 import { getHome } from '../../lib/home/get-home';
 import * as userModule from '../../lib/user/user';
 import type { TestUser } from '../setup';

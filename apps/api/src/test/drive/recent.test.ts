@@ -10,7 +10,7 @@ import * as inlineEdit from '../../lib/drive/inline-edit';
 import { MAX_INLINE_EDIT_SIZE } from '../../lib/drive/inline-edit';
 import { touchRecent } from '../../lib/drive/recent';
 import { getSharedDatabase } from '../../lib/drive/shared';
-import { recentPaths } from '../../lib/drive/sharedschema';
+import { recentPaths } from '../../lib/drive/shared-schema';
 import { clearHomeRestoring, getHome, markHomeRestoring } from '../../lib/home/get-home';
 import type { TestUser } from '../setup';
 import {

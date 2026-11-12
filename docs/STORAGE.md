@@ -192,7 +192,7 @@ A move never crosses mounts. It would change the row's owner, mount and id, and 
 
 ## Recent files stores only which path and when
 
-The list lives in the `recent_paths` table of the user's own `shared.db` (`apps/api/src/lib/drive/sharedschema.ts`, schema version 2 in `db-config.ts`): one row per owner, mount and path, with `lastActivityAt` in seconds. It holds no name, type or reason. A stored name would go stale on a rename and would keep showing a file the user lost access to, so a load reads everything else from the path's owner. `apps/api/src/lib/drive/recent.ts` is the only file that reads or writes the table. `shared.db` is already in every backup, so the table needed no registration. A team home gets the empty table and nothing writes to it. A guest home can collect rows from notifications, and nothing reads them, because the route refuses a guest.
+The list lives in the `recent_paths` table of the user's own `shared.db` (`apps/api/src/lib/drive/shared-schema.ts`, schema version 2 in `db-config.ts`): one row per owner, mount and path, with `lastActivityAt` in seconds. It holds no name, type or reason. A stored name would go stale on a rename and would keep showing a file the user lost access to, so a load reads everything else from the path's owner. `apps/api/src/lib/drive/recent.ts` is the only file that reads or writes the table. `shared.db` is already in every backup, so the table needed no registration. A team home gets the empty table and nothing writes to it. A guest home can collect rows from notifications, and nothing reads them, because the route refuses a guest.
 
 ## The server records an open where it already serves one
 
