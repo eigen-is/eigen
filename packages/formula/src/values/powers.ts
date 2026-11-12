@@ -38,9 +38,8 @@ export function power(base: number, exponent: number): number | FormulaError {
     return Number.isFinite(result) || exponent > 0 ? result : DIV0;
 }
 
-// The root of the product of numbers above 0, as many times as there are numbers: their geometric mean. The
-// logarithms give it to twelve digits or so, and the product itself against that estimate raised says by how
-// much it is off.
+// The geometric mean of numbers above 0. The logarithms give it to twelve digits or so, and the product itself
+// against that estimate raised says by how much it is off.
 export function rootOfProduct(values: Float64Array): number {
     const product = Float64Array.of(1, 0, 0);
     const factor = new Float64Array(3);

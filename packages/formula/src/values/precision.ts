@@ -91,8 +91,7 @@ export function roundDecimal(n: number, digits: number): number {
 }
 
 // Cuts at `digits` decimals toward zero, or with `away` steps to the next number of that many decimals away from
-// zero when anything is cut off. As roundDecimal it works on the 15 digit decimal, so 0.29 times 100, a double
-// just under 29, cuts to 29. A step past the largest number is an infinity.
+// zero when anything is cut off. As roundDecimal it works on the 15 digit decimal.
 export function cutDecimal(n: number, digits: number, away: boolean): number {
     const power = POWERS_OF_TEN[Math.abs(digits)];
     if (power !== undefined) {

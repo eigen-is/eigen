@@ -18,7 +18,7 @@ export function countWorkdays(
 ): number | FormulaError {
     const off = daysOff(weekend);
     if (typeof off !== 'number') return off;
-    if (!allDates(holidays)) return NUM;
+    if (!flooredToDates(holidays)) return NUM;
     const from = Math.min(start, end);
     const to = Math.max(start, end);
     const weeks = Math.floor((to - from + 1) / 7);
@@ -45,7 +45,7 @@ export function addWorkdays(
     if (typeof off !== 'number') return off;
     const perWeek = workingIn(off);
     if (perWeek === 0) return VALUE;
-    if (!allDates(holidays)) return NUM;
+    if (!flooredToDates(holidays)) return NUM;
     const step = count < 0 ? -1 : 1;
     // Whole weeks first, keeping at least one day to walk so that the walk ends on a working day.
     const weeks = Math.trunc((count - step) / perWeek);
@@ -99,8 +99,8 @@ function next(day: number, step: number, off: number): number {
     return at;
 }
 
-// Cuts each holiday down to its day, and says whether every one is a date.
-function allDates(holidays: Float64Array): boolean {
+// Cuts each holiday down to its day, in place, and says whether every one is a date.
+function flooredToDates(holidays: Float64Array): boolean {
     for (let at = 0; at < holidays.length; at += 1) {
         holidays[at] = Math.floor(holidays[at]);
         if (!isDate(holidays[at])) return false;

@@ -1,8 +1,8 @@
 // What a character is to every function that counts, cuts or finds by position, such as LEN, MID and FIND: one
-// UTF-16 code unit, so an emoji is two characters where Excel on the web counts one. That choice lives here and
-// nowhere else: a function or kernel that measures a text, cuts it, finds a place in it or asks for its first code
-// does it through these, and their positions count from 1. Two kernels walk a text by rule of their own: a ? in a
-// pattern stands for one code unit, and letter case goes by code point, since half a pair has no case.
+// UTF-16 code unit, so an emoji is two characters where Excel on the web counts one. A function or kernel that
+// measures a text, cuts it, finds a place in it or asks for its first code does it through these, and their
+// positions count from 1. Some kernels walk a text by a rule of their own, such as letter case, which goes by code
+// point, since half a pair has no case.
 
 import { upperCase } from './letter-case';
 import { patternStart } from './wildcard';
@@ -32,7 +32,7 @@ export function searchCharacters(sought: string, text: string, start: number): n
 }
 
 // The Unicode code point the text starts with, and undefined for an empty text. Both halves of a pair are read
-// here, as UNICODE reads them, though they count as two characters.
+// here, though they count as two characters.
 export function firstCode(text: string): number | undefined {
     return text.codePointAt(0);
 }

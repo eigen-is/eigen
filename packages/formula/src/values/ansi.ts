@@ -15,9 +15,8 @@ export function ansiCharacter(code: number): string {
     return String.fromCharCode(HIGH[code - 128] ?? code);
 }
 
-// Takes the Unicode code point of a character.
-export function ansiCode(point: number): number {
-    if (point < 128 || (point >= 160 && point < 256)) return point;
-    const at = HIGH.indexOf(point);
+export function ansiCode(codePoint: number): number {
+    if (codePoint < 128 || (codePoint >= 160 && codePoint < 256)) return codePoint;
+    const at = HIGH.indexOf(codePoint);
     return at < 0 ? QUESTION : at + 128;
 }

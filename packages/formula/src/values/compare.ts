@@ -6,10 +6,6 @@ import { compare15 } from './precision';
 import { compareText, textKey } from './text-order';
 import type { Plain } from './value';
 
-function rank(value: Plain): number {
-    return typeof value === 'number' ? 0 : typeof value === 'string' ? 1 : 2;
-}
-
 function blankLike(other: Plain): Plain {
     return typeof other === 'number' ? 0 : typeof other === 'string' ? '' : false;
 }
@@ -24,5 +20,7 @@ export function compareValues(a: Plain | null, b: Plain | null): number {
     if (typeof a === 'number' && typeof b === 'number') return compare15(a, b);
     if (typeof a === 'string' && typeof b === 'string') return a === b ? 0 : compareText(textKey(a), textKey(b));
     if (typeof a === 'boolean' && typeof b === 'boolean') return Number(a) - Number(b);
-    return rank(a) - rank(b);
+    // Of two kinds, a number comes first and a boolean last.
+    const rank = typeof a === 'number' ? 0 : typeof a === 'string' ? 1 : 2;
+    return rank - (typeof b === 'number' ? 0 : typeof b === 'string' ? 1 : 2);
 }

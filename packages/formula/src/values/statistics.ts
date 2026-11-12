@@ -4,7 +4,6 @@
 
 import { compare15 } from './precision';
 
-// No number of an empty list.
 export function mean(values: Float64Array): number {
     let sum = 0;
     for (let i = 0; i < values.length; i += 1) sum += values[i];
@@ -31,9 +30,8 @@ export function interpolated(sorted: Float64Array, position: number): number {
     return part === 0 ? sorted[below] : sorted[below] + part * (sorted[below + 1] - sorted[below]);
 }
 
-// The rank from 1 of a number among the others, counted from the largest or, ascending, from the smallest. Numbers
-// equal in the 15 digits Excel compares take the first of their ranks, or share the mean of them. A number the
-// list does not hold has rank 0.
+// The rank from 1 of a number among the others, or 0 when the list does not hold it. Numbers equal in the 15
+// digits Excel compares take the first of their ranks, or share the mean of them.
 export function rankAmong(values: Float64Array, value: number, ascending: boolean, shared: boolean): number {
     let ahead = 0;
     let ties = 0;

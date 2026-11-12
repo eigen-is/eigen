@@ -42,7 +42,7 @@ export type ArrayValue = {
     // One past the last written row, or column, that each stored one stands for. Null when each stands for one.
     readonly rowEnds: Int32Array | null;
     readonly columnEnds: Int32Array | null;
-    // Whether an element is a reference, which only a lifted call makes.
+    // Whether its elements are references and no values.
     readonly references: boolean;
 };
 
@@ -103,9 +103,18 @@ export function arrayOf<T extends Scalar | Reference>(
     }
     const height = rowEnds?.length ?? rows;
     const width = columnEnds?.length ?? columns;
+    const stored = nums ?? items;
     return {
         type: ValueType.Array,
-        ...{ rows, columns, height, width, items: nums ?? items, nums, rowEnds, columnEnds, references },
+        rows,
+        columns,
+        height,
+        width,
+        items: stored,
+        nums,
+        rowEnds,
+        columnEnds,
+        references,
     };
 }
 

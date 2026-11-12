@@ -48,8 +48,7 @@ export function days360(start: number, end: number, european: boolean): number {
 }
 
 // `basis` 0 is 30 days a month the American way, 1 the days of the years themselves, 2 the days over 360, 3 the
-// days over 365 and 4 30 days a month the European way, each cut down to a whole number, so -0.5 is none of them.
-// The two dates may come in either order.
+// days over 365 and 4 30 days a month the European way, each cut down to a whole number.
 export function yearFraction(one: number, other: number, basis: number): number | FormulaError {
     const start = Math.min(one, other);
     const end = Math.max(one, other);
