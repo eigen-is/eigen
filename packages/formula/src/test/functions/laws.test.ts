@@ -403,7 +403,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         equals('F1:F3,E1:E3', NA);
         equals('E1:E3,NA()', NA);
         // An element that is a reference is refused, where a family of numbers reads its first cell.
-        equals('INDEX(A1:A5,{2,4})', VALUE);
+        equals('OFFSET(A1,{1,3},0)', VALUE);
         const whole = written(entry, [...base, '{1,2,3}']).slice(1);
         expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);
     });
@@ -426,7 +426,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         equals('F1:F3,E1:E3', NA);
         equals('E1:E3,NA()', NA);
         equals('(A1:A3,C1:C3)', VALUE);
-        equals('INDEX(A1:A5,{2,4})', VALUE);
+        equals('OFFSET(A1,{1,3},0)', VALUE);
         const whole = written(entry, [...base, '{1,2,3}']).slice(1);
         expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);
     });
@@ -448,7 +448,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             both('{10;30;40}', '{10;1;20}'),
             both('A1:C6', 'A1:C6'),
             both('{10;1;20;2;30;3;40;50}', '{10;1;20;2;30;3;40;50}'),
-            both('A1:A5', 'INDEX(A1:A5,{1;2;3;4;5})'),
+            both('A1:A5', 'OFFSET(A1,{0;1;2;3;4},0)'),
             both('{10;20}', '{10;20}'),
             both('A1:A2', 'A1:A2'),
         ]);
@@ -480,8 +480,8 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
                 put('A2:B4'),
                 put('(A2:A3,C1:C3)'),
                 `=INDEX(${put('A2:A4').slice(1)},2,1)`,
-                `=INDEX(${put('INDEX(A1:A5,{2,4})').slice(1)},1,1)`,
-                `=INDEX(${put('INDEX(A1:A5,{2,4})').slice(1)},1,2)`,
+                `=INDEX(${put('OFFSET(A1,{1,3},0)').slice(1)},1,1)`,
+                `=INDEX(${put('OFFSET(A1,{1,3},0)').slice(1)},1,2)`,
             ]);
             expect([range, union, second]).toEqual([cell, cell, REF]);
             expect(lifted).toEqual([cell, other]);
@@ -507,7 +507,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
     test('where only a reference is taken, an array of references gives one answer per reference', () => {
         for (const at of params.map((param, i) => (param.prepare === Prepare.Reference ? i : -1))) {
             if (at < 0) continue;
-            const lifted = written(entry, withArg(base, at, 'INDEX(A1:A5,{2,4})')).slice(1);
+            const lifted = written(entry, withArg(base, at, 'OFFSET(A1,{1,3},0)')).slice(1);
             const values = evaluateAll([
                 `=INDEX(${lifted},1,1)`,
                 `=INDEX(${lifted},1,2)`,

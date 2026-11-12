@@ -17,7 +17,7 @@ import { ends, isLazy, picked, read, run, slotOf } from './call';
 import type { Evaluator } from './evaluator';
 import type { Frame } from './readers';
 import type { Entry, Held, Lazy, Param } from './signature';
-import { NEXT, Prepare, TOKENS } from './signature';
+import { ANYWHERE, NEXT, Prepare, TOKENS } from './signature';
 
 // The frame holds the arguments as prepared, `count` of them written. Each element is read into the frame itself,
 // so what a reader of the call was bound to is the element in progress.
@@ -55,11 +55,18 @@ export function lift(
             const failed = element(ctx, params, frame, prepared, lifting, arrays, lined, r, c);
             const result = failed ?? run(ctx, entry, frame.held, count, 0);
             // Of an element that answers an array, the first value: ROW of a range of three rows is its first row.
-            const item = isLazy(result) ? null : isArray(result) ? result.items[0] : result;
+            let item = isLazy(result) ? null : isArray(result) ? result.items[0] : result;
+            // And of one that answers a reference, the value of its first cell: a part of a range is a value
+            // here, as Excel's INDEX(A1:B3,{1,2},1) is. A cell that holds nothing stays that cell, which is
+            // passed over where a blank cell of a range is. Only a row that works a reference out keeps one
+            // per element, and its array is then one of references.
+            if (isReference(item)) {
+                if (entry.returns === ANYWHERE) references = true;
+                else item = ctx.first(item) ?? { ...item, bottom: item.top, right: item.left, next: null };
+            }
             if (makes && typeof item === 'string' && !ctx.recalc.spend(item.length)) return CALC;
             if (isLazy(result)) picks[items.length] = result;
             items.push(item);
-            references ||= isReference(item);
         }
     }
     const made = arrayOf(lined.rows, lined.columns, items, down.ends, across.ends, references);
