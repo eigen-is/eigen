@@ -142,7 +142,7 @@ export class Recalc {
                                 this.made.fill(0, 0, this.size);
                             }
                         }
-                        this.looped.clear();
+                        if (this.looped.size > 0) this.looped.clear();
                     }
                 }
             }
