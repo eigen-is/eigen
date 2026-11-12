@@ -1,5 +1,5 @@
 // What a shape's tree says about every cell that holds it, worked out from the tree and the function list alone,
-// without evaluating: whether this build can evaluate it at all, whether it reads cells it does not name or draws,
+// without evaluating: whether this build can evaluate it at all, whether it reads cells it does not name,
 // whether a structural edit can change its answer through a place or a size, and how much of the stack its
 // evaluation can take. They are packed into one number, the depth above the flags.
 
@@ -18,14 +18,12 @@ export const Fact = {
     Chosen: 2,
     // Cells that the tree does not name may be read, so a write anywhere can change the answer.
     ReadsUnnamed: 4,
-    // The answer differs from one recalc to the next with nothing written: a draw, or the clock.
-    Volatile: 8,
     // The answer depends on where the cell or a cell it names sits: a call of a row that reads a place, as ROW
     // does, or the @ in front of a range. Moving the cell or rewriting its references can change it.
-    Positional: 16,
+    Positional: 8,
     // The answer can depend on how many lines a range spans: a range stands somewhere else than as the argument
     // of a parameter that passes over empty cells.
-    Sized: 32,
+    Sized: 16,
 } as const;
 
 export const FACT_BITS = 8;
@@ -74,7 +72,6 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
     if (entry?.slots.some((slot) => slot.read === Read.Here)) flags |= Fact.Positional;
     if (node.kind === NodeKind.Prefix && node.op === Token.At) flags |= Fact.Positional;
     if (entry !== undefined && entry.chosen !== null) flags |= Fact.Chosen;
-    if (entry?.volatile) flags |= Fact.Volatile;
     if (entry?.returns === ANYWHERE) flags |= Fact.ReadsUnnamed;
     // What a row asks of the workbook itself, such as the text of a formula, is the value of no cell it names.
     if (entry?.params.some((param) => param.read === Read.Engine)) flags |= Fact.ReadsUnnamed;
