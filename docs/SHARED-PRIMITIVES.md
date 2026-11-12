@@ -425,6 +425,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useRecordHistory` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-file-history.ts |
 | `useRenamePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useRequestAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
+| `useResolvedDriveLocation` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useRestorePaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
 | `useRootFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useSharedPaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
@@ -524,7 +525,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useDriveSort` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
 | `useDriveUploadFiles` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/use-drive-upload-files.tsx |
 | `useMountLabel` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-mount-list.tsx |
-| `useResolvedDriveLocation` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-browser.tsx |
 | `useDriveListRoute` | `@workspace/ui/components/drive/use-drive-list-route` | packages/ui/src/components/drive/use-drive-list-route.ts |
 | `useFileActionRunner` | `@workspace/ui/components/file-actions` | packages/ui/src/components/file-actions/use-file-action-runner.tsx |
 | `useOptionalPreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
@@ -692,6 +692,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveCopyDestination` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
 | `DriveImportSource` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
 | `DriveItemRef` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveLocationValue` | `@workspace/lib/types` | packages/lib/src/types/drive-view.ts |
 | `DrivePath` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePathDetails` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePathPermissions` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
@@ -982,7 +983,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MenuSectionsProps` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/menu-sections.tsx |
 | `DriveAccessListProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-access-list.tsx |
 | `DriveListDate` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
-| `DriveLocationValue` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-browser.tsx |
 | `DriveSortControl` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
 | `DriveTableProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
 | `DriveViewProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |

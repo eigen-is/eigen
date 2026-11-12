@@ -10,6 +10,7 @@ import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppError, retryWhenTransformBusy } from '../../api-error';
@@ -39,6 +40,12 @@ export function useRootFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_I
         staleTime: STALE_TIME.ONE_MINUTE,
         enabled: !!ownerId && !!mountId,
     });
+}
+
+// The location with an empty folder id filled in as the mount's root, which stays empty until the root has loaded.
+export function useResolvedDriveLocation(value: DriveLocationValue): DriveLocationValue {
+    const { data: rootFolder } = useRootFolder(value.ownerId, value.mountId);
+    return value.folderId ? value : { ...value, folderId: rootFolder?.id ?? '' };
 }
 
 export function folderContentQueryConfig(ownerId: string, mountId: string, pathId: string) {

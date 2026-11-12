@@ -2,7 +2,8 @@
 // folder as a crumb row, with a Drive browser under it to pick another. The host owns the value and whether the
 // browser is open. Open, the crumbs and New folder act on the browser, and the bar's toggle closes it.
 
-import { useBreadcrumb } from '@workspace/lib/drive';
+import { useBreadcrumb, useResolvedDriveLocation } from '@workspace/lib/drive';
+import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
 import { Label } from '@workspace/ui/components/label';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, FolderPlus } from 'lucide-react';
@@ -10,8 +11,7 @@ import { useState } from 'react';
 import { InfoBlock, STRETCHED_TRIGGER_CLASS } from '../info-block';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { DriveBreadcrumb } from './drive-breadcrumb';
-import type { DriveLocationValue } from './drive-browser';
-import { DriveBrowser, useResolvedDriveLocation } from './drive-browser';
+import { DriveBrowser } from './drive-browser';
 import { useMountLabel } from './drive-mount-list';
 import type { DriveSortControl } from './drive-table';
 

@@ -5,7 +5,7 @@
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
-import type { DriveLocationValue } from '../../../components/drive/drive-browser';
+import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';

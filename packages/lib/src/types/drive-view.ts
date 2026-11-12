@@ -1,6 +1,6 @@
 // What a Drive view shows and lets the user do: the list or grid mode and the sort a user keeps in settings, the
-// capabilities a view declares, such as upload or share, the search params a Drive URL carries and the root path a
-// Drive view's context provides. The Drive app and the shared Drive components read them.
+// capabilities a view declares, such as upload or share, the search params a Drive URL carries, the folder a picker
+// shows and the root path a Drive view's context provides. The Drive app and the shared Drive components read them.
 
 import type { DrivePath, EigenDocType } from './drive';
 
@@ -34,6 +34,9 @@ export type DriveSearchParams = {
     sharePathId?: string;
     shareEmail?: string;
 };
+
+// Where a Drive picker is: an empty folder id stands for the mount's root.
+export type DriveLocationValue = { ownerId: string; mountId: string; folderId: string };
 
 export type DriveContextType = {
     rootPath: DrivePath | null;

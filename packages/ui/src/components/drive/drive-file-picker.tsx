@@ -6,7 +6,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { useDriveViewPreferences } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
-import type { DriveSort } from '@workspace/lib/types/drive-view';
+import type { DriveLocationValue, DriveSort } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -19,7 +19,6 @@ import {
 } from '@workspace/ui/components/dialog';
 import { Upload } from 'lucide-react';
 import { useState } from 'react';
-import type { DriveLocationValue } from './drive-browser';
 import { DriveBrowser } from './drive-browser';
 
 type DriveFilePickerProps = {

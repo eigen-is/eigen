@@ -3,6 +3,8 @@
 // for a folder: a picker opened with none confirms its drive's root, once that has loaded.
 
 import { useAuth } from '@workspace/lib/auth';
+import { useResolvedDriveLocation } from '@workspace/lib/drive';
+import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -21,8 +23,6 @@ import { cn } from '@workspace/ui/lib/utils';
 import { Download } from 'lucide-react';
 import { useState } from 'react';
 import { EigenLoader } from '../braket/eigen-loader';
-import type { DriveLocationValue } from './drive-browser';
-import { useResolvedDriveLocation } from './drive-browser';
 import { DriveLocationField } from './drive-location-field';
 
 type DriveLocationPickerProps = {

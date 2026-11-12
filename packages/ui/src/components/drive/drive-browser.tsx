@@ -8,10 +8,11 @@ import {
     useBreadcrumb,
     useCreateFolder,
     useFolderContent,
-    useRootFolder,
+    useResolvedDriveLocation,
 } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
+import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { FolderPlus } from 'lucide-react';
@@ -22,8 +23,6 @@ import { DriveItemNameDialog } from './drive-item-name-dialog';
 import { DriveMountList, useMountLabel } from './drive-mount-list';
 import type { DriveSortControl } from './drive-table';
 import { DriveTable, useDriveSort } from './drive-table';
-
-export type DriveLocationValue = { ownerId: string; mountId: string; folderId: string };
 
 type DriveBrowserProps = {
     value: DriveLocationValue;
@@ -159,10 +158,4 @@ export function DriveBrowser({
             )}
         </div>
     );
-}
-
-// The location with an empty folder id filled in as the mount's root, which stays empty until the root has loaded.
-export function useResolvedDriveLocation(value: DriveLocationValue): DriveLocationValue {
-    const { data: rootFolder } = useRootFolder(value.ownerId, value.mountId);
-    return value.folderId ? value : { ...value, folderId: rootFolder?.id ?? '' };
 }
