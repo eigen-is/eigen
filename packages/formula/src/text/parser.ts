@@ -52,7 +52,8 @@ export function isUnparsed(stored: string): boolean {
     return stored.charCodeAt(0) === EQUALS && stored.charCodeAt(1) === EQUALS;
 }
 
-// A formula as typed at a cell, such as =SUM(A1:B2)*Sheet2!$C$1, with the row and column from 0.
+// A formula as typed at a cell, such as =SUM(A1:B2)*Sheet2!$C$1, with the row and column from 0. The = may be
+// left out, as a file leaves it out.
 export function parseA1(
     text: string,
     hostRow: number,
@@ -171,10 +172,9 @@ class Parser {
         const limit = this.stored ? MAX_STORED_LENGTH : MAX_FORMULA_LENGTH;
         if (this.text.length > limit) return { reason: 'too-long', at: limit };
         if (isUnparsed(this.text)) return { reason: 'syntax', at: 1 };
-        if (this.text.charCodeAt(0) === EQUALS) {
-            this.end = 1;
-            this.next();
-        }
+        // A formula in a file has no = of its own, and reads from its first character.
+        if (this.text.charCodeAt(0) === EQUALS) this.end = 1;
+        this.next();
         const tree = this.expression(0, false);
         if (this.kind !== Token.End) this.fail();
         return this.reason === '' ? tree : { reason: this.reason, at: this.failedAt };

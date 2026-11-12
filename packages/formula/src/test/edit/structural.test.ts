@@ -32,13 +32,13 @@ const OURS: Record<string, [string, string]> = {
     'T6-109': ['=SUM(#REF!)', 'as T6-107; Excel by hand clips the range to =SUM(C1:C8) in a sort'],
     'T7-112': ['=#REF!', 'a deleted sheet prints as a bare #REF!, where Excel writes #REF!A1'],
     'T7-113': ['=#REF!', 'as T7-112; the new Sheet2 has another id and does not bind'],
-    'T1-30': ["=SUM('Sheet2:Sheet4'!A5)", 'a 3-D reference is kept as typed and shown in quotes: not an Eigen feature'],
-    'T7-114': ["=SUM('Sheet2:Sheet4'!A1)", 'as T1-30'],
-    'T7-115': ["=SUM('Sheet2:Sheet4'!A1)", 'as T1-30'],
-    'T7-116': ["=SUM('Sheet2:Sheet4'!A1)", 'as T1-30'],
-    'T7-117': ["=SUM('Sheet2:Sheet3'!A1)", 'as T1-30'],
-    'T7-118': ["=SUM('Sheet2:Sheet4'!A1)", 'as T1-30'],
-    'T7-119': ["=SUM('Sheet2:Sheet4'!A1)", 'as T1-30'],
+    'T1-30': ['=SUM(Sheet2:Sheet4!A5)', 'a 3-D reference is kept as typed: not an Eigen feature'],
+    'T7-114': ['=SUM(Sheet2:Sheet4!A1)', 'as T1-30'],
+    'T7-115': ['=SUM(Sheet2:Sheet4!A1)', 'as T1-30'],
+    'T7-116': ['=SUM(Sheet2:Sheet4!A1)', 'as T1-30'],
+    'T7-117': ['=SUM(Sheet2:Sheet3!A1)', 'as T1-30'],
+    'T7-118': ['=SUM(Sheet2:Sheet4!A1)', 'as T1-30'],
+    'T7-119': ['=SUM(Sheet2:Sheet4!A1)', 'as T1-30'],
 };
 
 const NOT_RUN: Record<string, string> = {
