@@ -127,8 +127,7 @@ export class Walk {
     }
 
     // What an element of an array that is a reference is to a family: the number it counts as, NaN when it is
-    // passed over, or the error the call answers. The one place that reads this of a family, before the body for
-    // the error and in the walk for the number. A first cell is computed when it is read.
+    // passed over, or the error the call answers, which is asked for before the body runs.
     public referred(at: Reference, family: Family): number | FormulaError {
         const { element } = family;
         if (element === Element.Passed) return Number.NaN;

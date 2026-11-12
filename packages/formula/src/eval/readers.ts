@@ -1,6 +1,8 @@
 // What a function's body gets in place of a range: a reader the call wrapper has prepared, so no body touches a
 // cell, a column or an array's storage. One frame per level of nested calls holds the slots of the call in
-// progress and its readers, reused from call to call: a reader is good until the body returns.
+// progress and its readers, reused from call to call: a reader is good until the body returns. What aims a reader
+// at its arguments is static, as `Table.over` is: the wrapper has the class, and a body only an instance, whose
+// type has no member that reaches a cell the call does not name.
 
 import type { FormulaError } from '../values/errors';
 import { CALC, NA } from '../values/errors';
@@ -90,8 +92,7 @@ export class Numbers {
         this.frame = frame;
     }
 
-    // The three below are the call wrapper's, and static so that a body, which holds a reader and no class, has
-    // no way to aim one. The arguments `from` up to `to` of the frame, as a family counts them.
+    // The arguments `from` up to `to` of the frame, as a family counts them.
     public static bind(numbers: Numbers, from: number, to: number, family: Family, snaps: boolean): Numbers {
         numbers.snaps = snaps;
         numbers.from = from;
@@ -204,8 +205,7 @@ export class Pairs {
     private first = new Float64Array(0);
     private second = new Float64Array(0);
 
-    // The call wrapper's, and static for what Numbers says. Arguments of unequal size are #N/A, and else the first
-    // error at the earliest place is the answer.
+    // Arguments of unequal size are #N/A, and else the first error at the earliest place is the answer.
     public static over(ctx: Evaluator, pairs: Pairs, first: Value, second: Value): FormulaError | null {
         const size = heightOf(first) * widthOf(first);
         if (heightOf(second) * widthOf(second) !== size) return NA;
@@ -281,7 +281,7 @@ export class Table {
         return table.value;
     }
 
-    // The call wrapper's, and static for what Numbers says: the table of what an argument was evaluated to.
+    // Makes `table` the table of what an argument was evaluated to.
     public static over(table: Table, value: Value): Table {
         table.value = value;
         table.areas = 1;

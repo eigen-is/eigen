@@ -216,9 +216,8 @@ function collected(family: Family, value: Value): Held {
     }
 }
 
-// The body on arguments that are read, and its answer as a cell can hold it: a number that is no number is #NUM!,
-// and a text has at most 32,767 characters. `held` are the slots of the call in progress, and `skips` says what
-// the walk of this run passes over.
+// The body on arguments that are read, with what its walk passes over in `skips`, and its answer as a cell can hold
+// it: a number that is no number is #NUM!, and a text has at most 32,767 characters. `held` are the call's slots.
 export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number, skips: number): Value | Lazy {
     let args: readonly unknown[] = held;
     const frame = entry.plain ? null : ctx.frames[ctx.calls - 1];
