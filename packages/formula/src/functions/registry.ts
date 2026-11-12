@@ -6,7 +6,7 @@
 import type { Family } from '../eval/families';
 import { Families } from '../eval/families';
 import type { Matches, Numbers, Room, Table } from '../eval/readers';
-import type { ANYWHERE, Entry, Lazy, PART, Param, Returns, Walked } from '../eval/signature';
+import type { ANYWHERE, Entry, Lazy, Next, PART, Param, Returns, Walked } from '../eval/signature';
 import { MAX_ARGUMENTS, Prepare, Read } from '../eval/signature';
 import { toBoolean, toNumber, toText } from '../values/coerce';
 import type { FormulaError } from '../values/errors';
@@ -15,7 +15,7 @@ import type { ArrayValue, Reference, Scalar } from '../values/value';
 
 export type { Matches, Numbers, Room, Table } from '../eval/readers';
 export type { Vector } from '../eval/search';
-export { ANYWHERE, Find, PART } from '../eval/signature';
+export { ANYWHERE, Find, NEXT, PART } from '../eval/signature';
 export { rectangle } from '../values/rectangle';
 
 export type Registry = ReadonlyMap<string, Entry>;
@@ -27,6 +27,7 @@ const REQUIRED = {
     fallback: undefined,
     skips: false,
     rest: false,
+    each: false,
     union: null,
 };
 
@@ -151,18 +152,30 @@ export function rest(param: Param<unknown>): Param<unknown> {
     return Object.freeze({ ...param, rest: true });
 }
 
+// The parameter is one of a group that repeats to the end, and the groups are tried in turn: the body is called
+// with one group at a time and answers for it, or answers NEXT. A group no call reaches is never evaluated.
+export function each<T>(param: Param<T>): Param<T> & { readonly each: true } {
+    return Object.freeze({ ...param, each: true as const });
+}
+
 type Args<P extends readonly Param<unknown>[]> = { [K in keyof P]: P[K] extends Param<infer T> ? T : never };
 
-// A token only where a parameter is lazy, and a table only from a row marked PART.
+// A token only where a parameter is lazy, NEXT only where one is tried in turn, a table only from a row marked PART.
 type Picks<P extends readonly Param<unknown>[]> = true extends {
     [K in keyof P]: P[K] extends Param<Lazy> ? true : false;
 }[number]
     ? Lazy
     : never;
+type Steps<P extends readonly Param<unknown>[]> = true extends {
+    [K in keyof P]: P[K] extends { readonly each: true } ? true : false;
+}[number]
+    ? Next
+    : never;
 type Out<P extends readonly Param<unknown>[], R extends Returns> =
     | Scalar
     | ArrayValue
     | Picks<P>
+    | Steps<P>
     | (R extends typeof PART ? Table : never)
     | (R extends typeof ANYWHERE ? Reference : never);
 
@@ -178,9 +191,10 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
     let group = 1;
     let where = -1;
     let matched = -1;
-    // Whether an optional parameter was met, and one that repeats or takes no argument.
+    // Whether an optional parameter was met, one that repeats or takes no argument, and one that is tried in turn.
     let optionals = false;
     let closed = false;
+    let stepped = false;
     for (const param of params) {
         const ambient = param.prepare === Prepare.Ambient;
         const only = param.read === Read.Matched || param.read === Read.Blanks;
@@ -206,15 +220,28 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
         optionals ||= param.optional && !ambient;
         closed ||= ambient || param.rest;
         if (!param.optional) min += own.length;
-        if (param.rest) group = own.length;
-        else fixed += own.length;
+        // After the groups that are tried in turn a row takes one lazy argument at most, as its last record.
+        if (
+            stepped &&
+            !param.each &&
+            (slots.length > fixed + group || param.prepare !== Prepare.Lazy || !param.optional)
+        ) {
+            throw new Error(`${name}: after the groups, more than one optional lazy parameter`);
+        }
+        if (param.each) group = stepped ? group + 1 : 1;
+        else if (param.rest) group = own.length;
+        else if (!stepped) fixed += own.length;
+        stepped ||= param.each;
         slots.push(...own);
+    }
+    if (stepped && params.some((param) => param.prepare !== Prepare.Scalar && param.prepare !== Prepare.Lazy)) {
+        throw new Error(`${name}: groups tried in turn beside a range`);
     }
     if (matched >= 0 && where < 0) throw new Error(`${name}: numbers beside criteria, and no criteria`);
     const plain = params.every(
         (param) => !param.rest && param.prepare !== Prepare.Walked && param.prepare !== Prepare.Ambient,
     );
-    const max = params.some((param) => param.rest) ? MAX_ARGUMENTS : fixed;
+    const max = params.some((param) => param.rest || param.each) ? MAX_ARGUMENTS : fixed;
     return Object.freeze({
         name,
         params,
@@ -224,6 +251,7 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
         max,
         fixed,
         group,
+        stepped,
         where,
         matched,
         volatile: params.some((param) => param.read === Read.Random || param.read === Read.Now),

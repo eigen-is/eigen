@@ -77,6 +77,8 @@ export type Param<T> = {
     readonly skips: boolean;
     // Whether the parameter takes every argument from its own to the last.
     readonly rest: boolean;
+    // Whether the parameter is one of a group that repeats, and is tried group by group.
+    readonly each: boolean;
     // What a union of areas answers. Null takes every area.
     readonly union: FormulaError | null;
     // Only in the type, never in a record: what the body gets.
@@ -92,6 +94,11 @@ export type Lazy = { readonly type: typeof ValueType.Lazy; readonly index: numbe
 export const TOKENS: readonly Lazy[] = Array.from({ length: MAX_ARGUMENTS }, (_, index) =>
     Object.freeze({ type: ValueType.Lazy, index }),
 );
+
+// What the body of a row whose arguments come in groups answers for "not this group": the token of no argument.
+export type Next = { readonly type: typeof ValueType.Lazy; readonly index: -1 };
+
+export const NEXT: Next = Object.freeze({ type: ValueType.Lazy, index: -1 });
 
 // What a slot of a call holds: an argument as prepared and, once read, what the body gets for it.
 export type Held = Value | Lazy | Table | undefined;
@@ -116,6 +123,7 @@ export type Entry = {
     readonly name: string;
     readonly params: readonly Param<unknown>[];
     // One record per argument place: a parameter that spans two arguments has two.
+    // After the arguments that repeat in groups, a row may take one more: its record is then the last.
     readonly slots: readonly Param<unknown>[];
     readonly returns: Returns;
     readonly min: number;
@@ -123,6 +131,8 @@ export type Entry = {
     // How many arguments come before the ones that repeat, and how many repeat together.
     readonly fixed: number;
     readonly group: number;
+    // Whether the groups are tried in turn, each evaluated only while an element is still undecided.
+    readonly stepped: boolean;
     // The place of the first criteria range, and of the range of the numbers beside the cells the criteria accept,
     // or -1. The criteria run up to that range when it comes after them, and it then takes its size from the first.
     readonly where: number;

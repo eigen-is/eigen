@@ -108,7 +108,11 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         if (entry.min > 0) formulas.push(written(entry, base.slice(0, entry.min - 1)));
         if (entry.max < 255) formulas.push(written(entry, [...base, ...base, '1'].slice(0, entry.max + 1)));
         for (const value of evaluateAll(formulas)) expect(value).toBe(VALUE);
-        if (entry.group > 1) expect(evaluateAll([written(entry, [...base, base[entry.fixed]])])[0]).toBe(VALUE);
+        // A group that is not whole, where the row takes no argument after its groups.
+        const whole = entry.slots.length === entry.fixed + entry.group;
+        if (entry.group > 1 && whole) {
+            expect(evaluateAll([written(entry, [...base, base[entry.fixed]])])[0]).toBe(VALUE);
+        }
         const fewest = evaluateAll([written(entry, base.slice(0, entry.min))])[0];
         expect(fewest).not.toBe(VALUE);
     });

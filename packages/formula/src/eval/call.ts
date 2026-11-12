@@ -16,7 +16,7 @@ import { isArray, isError, isReference, ValueType } from '../values/value';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Errors, TypedText } from './families';
-import { lift } from './lift';
+import { lift, step } from './lift';
 import { look } from './look';
 import { real } from './operators';
 import { Frame, Table } from './readers';
@@ -31,13 +31,19 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
     const given = node.children;
     const count = given.length;
     const { fixed } = entry;
-    // The arguments that repeat come in whole groups.
-    if (count < entry.min || count > entry.max || (count > fixed && (count - fixed) % entry.group !== 0)) return VALUE;
+    const { slots } = entry;
+    // The arguments that repeat come in whole groups, with one more only where the row takes one after them.
+    if (count < entry.min || count > entry.max) return VALUE;
+    if (count > fixed && (count - fixed) % entry.group > slots.length - fixed - entry.group) return VALUE;
     const level = ctx.calls;
     const frame = (ctx.frames[level] ??= new Frame(ctx));
     const { held } = frame;
-    const { slots } = entry;
     ctx.calls = level + 1;
+    if (entry.stepped) {
+        const stepped = step(ctx, entry, frame, node, sheet, row, column);
+        ctx.calls = level;
+        return stepped;
+    }
     const size = Math.max(count, fixed);
     if (held.length !== size) held.length = size;
     let lifted = false;
@@ -98,12 +104,14 @@ export function picked(
     row: number,
     column: number,
 ): Value {
-    const param = slotOf(entry, token.index);
+    const param = slotOf(entry, token.index, node.children.length);
     if (token !== TOKENS[token.index] || param.prepare !== Prepare.Lazy)
         throw new Error(`${entry.name}: a foreign token`);
     const child = token.index < node.children.length ? node.children[token.index] : null;
     if (child === null || (child.kind === NodeKind.Empty && param.skips)) return param.fallback ?? null;
-    return child.kind === NodeKind.Empty ? null : ctx.evaluate(child, sheet, row, column);
+    if (child.kind !== NodeKind.Empty) return ctx.evaluate(child, sheet, row, column);
+    // An empty argument that is picked is a blank, and the number 0 in a row whose groups are tried in turn.
+    return entry.stepped ? 0 : null;
 }
 
 // Whether an error at a parameter ends the call: every reading but the ones that take an error as a value.
@@ -111,10 +119,13 @@ export function ends(param: Param<unknown>): boolean {
     return param.read < Read.Anything;
 }
 
-// What the argument at a place is read as.
-export function slotOf(entry: Entry, at: number): Param<unknown> {
-    const { fixed } = entry;
-    return entry.slots[at < fixed ? at : fixed + ((at - fixed) % entry.group)];
+// What the argument at a place is read as, in a call of `count` arguments: past the last whole group it is the
+// one argument a row takes after its groups.
+export function slotOf(entry: Entry, at: number, count: number): Param<unknown> {
+    const { fixed, group } = entry;
+    if (at < fixed) return entry.slots[at];
+    const grouped = count - fixed - ((count - fixed) % group);
+    return entry.slots[fixed + (at - fixed < grouped ? (at - fixed) % group : group)];
 }
 
 // Whether an argument is one range at a parameter that takes a range as it is: all but the one that makes a

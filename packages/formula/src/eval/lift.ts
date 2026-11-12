@@ -5,6 +5,8 @@
 
 import type { Sheet } from '../store/sheet';
 import type { FormulaNode } from '../text/tree';
+import { NodeKind } from '../text/tree';
+import type { FormulaError } from '../values/errors';
 import { CALC, NA, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { arrayOf, isArray, isError, isReference, MOST_ELEMENTS } from '../values/value';
@@ -13,8 +15,8 @@ import { align, apart } from './bands';
 import { ends, isLazy, picked, read, run, slotOf } from './call';
 import type { Evaluator } from './evaluator';
 import type { Frame } from './readers';
-import type { Entry, Lazy, Param } from './signature';
-import { Prepare } from './signature';
+import type { Entry, Held, Lazy, Param } from './signature';
+import { NEXT, Prepare, TOKENS } from './signature';
 
 // The frame holds the arguments as prepared, `count` of them written. Each element is read into the frame itself,
 // so what a reader of the call was bound to is the element in progress.
@@ -28,17 +30,16 @@ export function lift(
     row: number,
     column: number,
 ): Value {
-    const { held } = frame;
-    const prepared = held.slice();
+    const prepared = frame.held.slice();
+    const params = prepared.map((_, i) => slotOf(entry, i, count));
     const arrays: ArrayValue[] = [];
     // Per argument, which of the arrays it is, or -1.
     const lifting = prepared.map((value, i) =>
-        isArray(value) && lifts(slotOf(entry, i), value) ? arrays.push(value) - 1 : -1,
+        isArray(value) && lifts(params[i], value) ? arrays.push(value) - 1 : -1,
     );
     const lined = lineUp(ctx, arrays, entry.volatile);
     if (lined === null) return CALC;
     const { down, across } = lined;
-    const width = across.count;
     // Filled element by element and never made at its size: an array made ten thousand long or longer throws the
     // engine that runs this out of its compiled code, for every call after it too.
     const items: (Scalar | Reference)[] = [];
@@ -46,32 +47,117 @@ export function lift(
     const picks: (Lazy | undefined)[] = [];
     let references = false;
     for (let r = 0; r < down.count; r += 1) {
-        for (let c = 0; c < width; c += 1) {
-            let result: Value | Lazy | null = null;
-            // An element is read as the argument of a call of its own is, and its failure stays in the element.
-            for (let i = 0; i < prepared.length && result === null; i += 1) {
-                const param = slotOf(entry, i);
-                const k = lifting[i];
-                let value = prepared[i];
-                if (k >= 0) {
-                    const from = placeAt(arrays[k], down, across, k, r, c);
-                    const item = from < 0 ? NA : arrays[k].items[from];
-                    value = param.prepare === Prepare.Reference ? item : single(ctx, item);
-                }
-                value = read(param, value, frame, i);
-                if (isError(value) && ends(param)) result = value;
-                held[i] = value;
-            }
-            result ??= run(ctx, entry, held, count);
-            if (isLazy(result)) picks[r * width + c] = result;
+        for (let c = 0; c < across.count; c += 1) {
+            const failed = element(ctx, params, frame, prepared, lifting, arrays, lined, r, c);
+            const result = failed ?? run(ctx, entry, frame.held, count);
             // Of an element that answers an array, the first value: ROW of a range of three rows is its first row.
             const item = isLazy(result) ? null : isArray(result) ? result.items[0] : result;
+            if (isLazy(result)) picks[items.length] = result;
             items.push(item);
             references ||= isReference(item);
         }
     }
     const made = arrayOf(lined.rows, lined.columns, items, down.ends, across.ends, references);
     return picks.length === 0 || !isArray(made) ? made : fill(ctx, entry, made, picks, node, sheet, row, column);
+}
+
+// A call of a row whose arguments come in groups that are tried in turn, such as IFS and SWITCH. A group is
+// evaluated only while an element is still undecided, and the body says for one element and one group what the
+// element answers, which lazy argument it picks, or NEXT. So the first group that decides a call hides every later
+// one, its errors and its arrays included, and the shape of the answer grows with the groups that are reached.
+export function step(
+    ctx: Evaluator,
+    entry: Entry,
+    frame: Frame,
+    node: FormulaNode,
+    sheet: Sheet,
+    row: number,
+    column: number,
+): Value {
+    const given = node.children;
+    const { held } = frame;
+    const { slots, fixed, group } = entry;
+    const groups = Math.trunc((given.length - fixed) / group);
+    // What the body is called with: the arguments before the groups, one group, and the token of the argument
+    // after the groups, which an element that no group decided picks.
+    const params = slots.slice(0, fixed + group);
+    const last = slots.length > params.length ? TOKENS[fixed + groups * group] : undefined;
+    held.length = slots.length;
+    if (last !== undefined) held[params.length] = last;
+    const prepared: Held[] = [];
+    // What each element answers so far: its value, or the lazy argument it picked, NEXT while it is undecided.
+    let made: Scalar | Reference | ArrayValue = null;
+    let picks: (Lazy | undefined)[] = [NEXT];
+    let undecided = true;
+    // One round per group, and a last one in which what is still undecided picks the argument after the groups.
+    for (let g = 0; g <= groups && undecided; g += 1) {
+        const arrays: ArrayValue[] = isArray(made) ? [made] : [];
+        const lifting: number[] = [];
+        for (let i = 0; i < params.length && g < groups; i += 1) {
+            const place = i < fixed ? i : i + g * group;
+            // The arguments before the groups are evaluated in the first round, a group in its own.
+            if (params[i].prepare === Prepare.Lazy) prepared[i] = TOKENS[place];
+            else if (i >= fixed || g === 0) {
+                const empty = given[place].kind === NodeKind.Empty;
+                prepared[i] = empty ? null : ctx.operand(given[place], sheet, row, column);
+            }
+            const value = prepared[i];
+            lifting[i] = isArray(value) ? arrays.push(value) - 1 : -1;
+        }
+        const lined = lineUp(ctx, arrays, false);
+        if (lined === null) return CALC;
+        const { down, across } = lined;
+        const items: (Scalar | Reference)[] = [];
+        const next: (Lazy | undefined)[] = [];
+        undecided = false;
+        for (let r = 0; r < down.count; r += 1) {
+            for (let c = 0; c < across.count; c += 1) {
+                const from = isArray(made) ? placeAt(made, down, across, 0, r, c) : 0;
+                let result: Value | Lazy = from < 0 ? NA : (picks[from] ?? (isArray(made) ? made.items[from] : made));
+                if (result === NEXT && g === groups) result = last ?? NA;
+                else if (result === NEXT) {
+                    const failed = element(ctx, params, frame, prepared, lifting, arrays, lined, r, c);
+                    result = failed ?? run(ctx, entry, held, given.length);
+                }
+                undecided ||= result === NEXT;
+                next.push(isLazy(result) ? result : undefined);
+                items.push(isLazy(result) ? null : isArray(result) ? result.items[0] : result);
+            }
+        }
+        picks = next;
+        made = arrayOf(lined.rows, lined.columns, items, down.ends, across.ends);
+    }
+    if (isArray(made)) return fill(ctx, entry, made, picks, node, sheet, row, column);
+    return picks[0] === undefined ? made : picked(ctx, entry, picks[0], node, sheet, row, column);
+}
+
+// One element of a call that runs once per element, read into the frame as the arguments of a call of its own
+// are: the failure that is the answer of the element, or null with the frame ready for the body.
+function element(
+    ctx: Evaluator,
+    params: readonly Param<unknown>[],
+    frame: Frame,
+    prepared: readonly Held[],
+    lifting: readonly number[],
+    arrays: readonly ArrayValue[],
+    lined: Lined,
+    r: number,
+    c: number,
+): FormulaError | null {
+    for (let i = 0; i < params.length; i += 1) {
+        const param = params[i];
+        const k = lifting[i];
+        let value = prepared[i];
+        if (k >= 0) {
+            const from = placeAt(arrays[k], lined.down, lined.across, k, r, c);
+            const item = from < 0 ? NA : arrays[k].items[from];
+            value = param.prepare === Prepare.Reference ? item : single(ctx, item);
+        }
+        value = read(param, value, frame, i);
+        if (isError(value) && ends(param)) return value;
+        frame.held[i] = value;
+    }
+    return null;
 }
 
 // Whether an array at a parameter runs the call once per element: where one value is read, and an array of
@@ -82,6 +168,8 @@ function lifts(param: Param<unknown>, array: ArrayValue): boolean {
 
 type Lined = { readonly rows: number; readonly columns: number; readonly down: Axis; readonly across: Axis };
 
+const ONE: Axis = { count: 1, ends: null, from: [] };
+
 // The shape of an operation over these arrays and how each of them runs along it, or null when the result would
 // store more than an array may. `apiece` cuts every run into single elements.
 function lineUp(ctx: Evaluator, arrays: readonly ArrayValue[], apiece: boolean): Lined | null {
@@ -91,6 +179,8 @@ function lineUp(ctx: Evaluator, arrays: readonly ArrayValue[], apiece: boolean):
         rows = Math.max(rows, array.rows);
         columns = Math.max(columns, array.columns);
     }
+    // With no array there is one element.
+    if (arrays.length === 0) return { rows, columns, down: ONE, across: ONE };
     const down = align(arrays, rows, true);
     const across = align(arrays, columns, false);
     // A row that answers anew at every call makes each written element by a call of its own.
