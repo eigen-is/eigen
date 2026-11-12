@@ -18,7 +18,7 @@ These are decided, and each is said once. A row repeats a choice only where it i
 
 **A one-cell array is a single value.** An array of one element is not told from that element. Example: `=TYPE({"a"})` is 64 in Excel and 2 in this engine.
 
-**No 255-character limit.** `CODE`, `UNICODE`, `REPT`, `VALUE`, criteria and lookup keys take a text of any length up to 32,767 characters, where Excel refuses one past 255 with `#VALUE!` (recorded for `CODE`, `UNICODE`, `REPT`, `VALUE`, `SUMIF` and `VLOOKUP`). Example: `=CODE(REPT("a",300))` is `#VALUE!` in Excel and 97 in this engine.
+**No 255-character limit.** `CODE`, `UNICODE`, `REPT`, `VALUE`, `HYPERLINK`'s link, criteria and lookup keys take a text of any length up to 32,767 characters, where Excel refuses one past 255 with `#VALUE!` (recorded for `CODE`, `UNICODE`, `REPT`, `VALUE`, `HYPERLINK`, `SUMIF` and `VLOOKUP`). Example: `=CODE(REPT("a",300))` is `#VALUE!` in Excel and 97 in this engine.
 
 **Approximate searches assume sorted data.** `MATCH` types 1 and -1, `LOOKUP`, and `VLOOKUP` and `HLOOKUP` with an approximate match halve the list, as Excel's documentation requires the list to be sorted. On a list that is not sorted Excel also reads on cell by cell and can answer another position. On sorted data, runs of equal values included, the answers agree. Example: `=MATCH(4,{6,4,2},1)` is 2 in Excel and 3 in this engine. 47 recorded rows differ this way, all on unsorted lists.
 
@@ -78,7 +78,7 @@ These are decided, and each is said once. A row repeats a choice only where it i
 | `SINH` | as Excel | |
 | `SQRT` | as Excel | |
 | `SUBTOTAL` | partial | Codes 101 to 111 count hidden rows, as 1 to 11 do: the engine is told of no hidden row. |
-| `SUM` | as Excel | |
+| `SUM` | differs | A one-cell array constant is its element, so its text is read as a typed argument: `SUM({"TRUE"},1)` is `#VALUE!`, Excel 1. With two elements it agrees: `SUM({"TRUE","x"},1)` is 1. |
 | `SUMIF` | differs | No 255-character limit on the criterion. Given a computed array where a range is needed (`SUMIF(INDEX(A1:B3,0,{1,2}),">15")`), one `#VALUE!` where Excel answers one per element. |
 | `SUMIFS` | differs | No 255-character limit on a criterion. |
 | `SUMPRODUCT` | differs | One blank cell as its only range is 0: `SUMPRODUCT(Z1)` and `SUMPRODUCT(Z1:Z1)`, Excel `#VALUE!`. Two blank cells agree (0). |
@@ -98,7 +98,7 @@ These are decided, and each is said once. A row repeats a choice only where it i
 | `AVERAGEIFS` | differs | No 255-character limit on a criterion. No Excel row is recorded for this function; it runs on `COUNTIF`'s criteria code. |
 | `CORREL` | as Excel | |
 | `COUNT` | as Excel | |
-| `COUNTA` | differs | A blank cell in the reference array of a lifted `INDEX` or an `XLOOKUP` is not counted: `COUNTA(INDEX(C1:C4,{1;2;3;4}))` over a blank C4 is 3, Excel 4, though Excel's other readers of that array see the blank. |
+| `COUNTA` | differs | A blank cell in the reference array of a lifted `INDEX` or an `XLOOKUP` is not counted: `COUNTA(INDEX(C1:C4,{1;2;3;4}))` over a blank C4 is 3, Excel 4, and so is the same count over an `XLOOKUP` array, though Excel's other readers of those arrays see the blank. A blank that passes through a computed array is 0 and counted: `COUNTA(IF({1;1;1;1},C1:C4))` is 4 in both. |
 | `COUNTBLANK` | differs | Given a computed array where a range is needed (`COUNTBLANK(IF({1;1},B1:B2))`), one `#VALUE!` where Excel answers one per element. |
 | `COUNTIF` | differs | No 255-character limit on the criterion. |
 | `COUNTIFS` | differs | No 255-character limit on a criterion. |
@@ -159,7 +159,7 @@ These are decided, and each is said once. A row repeats a choice only where it i
 | `CLEAN` | as Excel | |
 | `CODE` | differs | No 255-character limit. Half of an emoji is 63, by UTF-16 counting. `CODE(UNICHAR(128))` is 63, Excel 128. |
 | `CONCAT` | as Excel | |
-| `CONCATENATE` | as Excel | |
+| `CONCATENATE` | differs | Past 32,767 characters the answer is `#VALUE!`, as `&` gives, where Excel cuts the text silently: `LEN(CONCATENATE(REPT("x",32767),"y"))` is `#VALUE!`, Excel 32767. |
 | `DOLLAR` | as Excel | |
 | `EXACT` | as Excel | |
 | `FIND` | differs | Positions count UTF-16 units: in `"😀a"` the `a` is at 3, Excel 2. |
@@ -229,7 +229,7 @@ Every function of this family that reads a date follows the day line, so in Janu
 | `IFNA` | differs | As `IFERROR`: `IFNA({1,2},{7,8,9})` is `{1,2}`, Excel `{1,2,9}`. |
 | `IFS` | differs | An array result can be narrower than Excel's: `ROWS(IFS({TRUE,TRUE},1,{TRUE;FALSE},2))` is 1, Excel 2. |
 | `NOT` | as Excel | |
-| `OR` | as Excel | |
+| `OR` | differs | A one-cell array constant is its element, so its text is read as a typed argument: `OR({"TRUE"})` is TRUE, Excel `#VALUE!`. With two elements it agrees: `OR({"TRUE","TRUE"})` is `#VALUE!`. |
 | `SWITCH` | as Excel | |
 | `TRUE` | as Excel | |
 | `XOR` | as Excel | |
@@ -270,7 +270,7 @@ Every function of this family that reads a date follows the day line, so in Janu
 | `COLUMNS` | as Excel | |
 | `FORMULATEXT` | differs | A range that holds more than 986,895 cells is `#CALC!`, as for `ISFORMULA`. |
 | `HLOOKUP` | differs | Sorted data, for an approximate match. A row index given as a range or an array is read where Excel answers `#VALUE!` or `#REF!`, and a cell that holds a text or an error there answers `#VALUE!` or that error, where Excel answers `#REF!`. No 255-character limit on the key. |
-| `HYPERLINK` | as Excel | |
+| `HYPERLINK` | differs | A link of any length a text can have: `HYPERLINK(REPT("a",300),"f")` is `f`, where Excel answers `#VALUE!` past 255 characters. |
 | `INDEX` | as Excel | |
 | `INDIRECT` | partial | R1C1 text that names a whole row or column (`INDIRECT("R1",FALSE)`, `"C1"`, `"R[1]"`, `"R:R"`) is `#REF!`; Excel answers the row or column. |
 | `LOOKUP` | differs | Sorted data. A result range shorter than, or shaped unlike, the lookup range is `#N/A` where Excel reads the cells past its end (`LOOKUP(20,A1:A5,B1)`). Over an array of references (`LOOKUP(2,{1,2},OFFSET(A1,{0,1},0,2))`) it answers one value where Excel answers one per reference. |
