@@ -129,8 +129,7 @@ export async function snapshotMountData(
                 }
             }
         } else {
-            // The path lock covers the whole copy because an overwrite rewrites in place. The shared tree lock
-            // covers only the open, so no rename moves the bytes between the key and the open.
+            // The shared tree lock covers only the open, so no rename moves the bytes between the key and the open.
             const entry = await mount.withPathLock(row.id, async () => {
                 const opened = await mount.withTreeShared(async () => {
                     const live = await mount.getPath(row.id);

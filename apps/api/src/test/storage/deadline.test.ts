@@ -30,7 +30,7 @@ describe('consumeStream', () => {
         expect(await turnsDuringCopy(true)).toBeGreaterThanOrEqual(3);
     });
 
-    // The unlocked readers (Drive copy, readBytes, mail attachments) rely on this to keep an overwrite out.
+    // A byte copy of a local-key document's database relies on this to keep a SQLite checkpoint out.
     test('any other reader copies a warm local file in one step', async () => {
         expect(await turnsDuringCopy()).toBe(0);
     });
