@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { fn, NUMBER, NUMBERS, NUMBERS_A, rest } from '../../functions/registry';
+import { cells, fn, NUMBER, NUMBERS, NUMBERS_A, optional, rest } from '../../functions/registry';
 import { DIV0, NA, NUM, REF, VALUE } from '../../index';
 import { dateSerial } from '../../values/dates';
 import type { Cells } from '../recalc/support';
@@ -224,6 +224,22 @@ describe('a parameter that takes every value before one that takes a single valu
         ['=LARGE({1,2,3},)', NUM, F1],
     ])('%s', (formula, expected, cells) => {
         expect(large(formula, cells)).toBe(expected);
+    });
+
+    // RANK is not a function of this build either: its numbers are a range and nothing else, between two values.
+    test('a parameter that takes every value of a reference only, between two that take a single value', () => {
+        const RANK = fn('RANK', [NUMBER, cells(NUMBERS), optional(NUMBER, 0)], (number, numbers, order) => {
+            const list = numbers.list();
+            const ahead = list.filter((other) => (order === 0 ? other > number : other < number)).length;
+            return list.includes(number) ? ahead + 1 : NA;
+        });
+        const rank = (formula: string) => evaluateWith([RANK], formula, F1);
+        // Excel batch 3 and 5.
+        expect(rank('=RANK(20,(A1:A3,B1:B3))')).toBe(5);
+        expect(rank('=RANK(20,A1:A3,)')).toBe(2);
+        expect(rank('=RANK(20,A1:A3,1)')).toBe(2);
+        expect(rank('=RANK(20,{10,20})')).toBe(VALUE);
+        expect(across('=RANK(20,OFFSET(A1,{0,1},0,3))', 2, F1, rank)).toEqual([2, 3]);
     });
 
     test.each([
