@@ -68,6 +68,11 @@ export class Column {
         this.version += 1;
     }
 
+    // Gives the formulas on the rows `top` to `bottom` another shape. The lookup index holds values, so it stays.
+    public fillShape(top: number, bottom: number, shape: number): void {
+        this.shape.fill(shape, top, bottom + 1);
+    }
+
     public markDirty(row: number): void {
         if (this.kind[row] > SETTLED) return;
         this.kind[row] |= DIRTY;
@@ -95,11 +100,22 @@ export class Column {
         this.pending -= 1;
     }
 
-    public insertRows(index: number, count: number): void {
-        if (index >= this.length) return;
+    // How many cells from `from` on hold a value or a formula.
+    public cells(from: number): number {
+        let cells = 0;
+        for (let row = from; row < this.length; row += 1) {
+            if (this.kind[row] !== 0 || this.shape[row] !== 0) cells += 1;
+        }
+        return cells;
+    }
+
+    // Returns how many cells the new rows pushed past the last row of the grid, which are gone.
+    public insertRows(index: number, count: number): number {
+        if (index >= this.length) return 0;
         // Rows from `kept` on would land past the last row of the grid.
         const kept = Math.max(index, Math.min(this.length, GRID_ROWS - count));
-        this.forget(kept, this.length);
+        const dropped = this.cells(kept);
+        this.tally(kept, this.length, -1);
         const length = kept > index ? kept + count : index;
         if (length > this.kind.length) this.resize(Math.min(GRID_ROWS, Math.max(length, this.kind.length * 2)));
         for (const plane of [this.kind, this.num, this.ref, this.shape]) {
@@ -110,18 +126,49 @@ export class Column {
         this.length = length;
         this.trim();
         this.version += 1;
+        return dropped;
     }
 
     public deleteRows(index: number, count: number): void {
         if (index >= this.length) return;
         const end = Math.min(index + count, this.length);
-        this.forget(index, end);
+        this.tally(index, end, -1);
         const length = this.length - (end - index);
         for (const plane of [this.kind, this.num, this.ref, this.shape]) {
             plane.copyWithin(index, end, this.length);
             plane.fill(0, length, this.length);
         }
         this.length = length;
+        this.trim();
+        this.version += 1;
+    }
+
+    // Puts the `count` rows of `source` from `from` on at `to`, flags and all, and empties every row there that
+    // the source does not reach. The source may be this column, and the rows may overlap.
+    public take(source: Column | undefined, from: number, to: number, count: number): void {
+        const supplied = source === undefined ? 0 : Math.max(0, Math.min(count, source.length - from));
+        if (supplied === 0 && to >= this.length) return;
+        this.tally(to, Math.min(to + count, this.length), -1);
+        if (source !== undefined && supplied > 0) {
+            this.reach(to + supplied - 1);
+            this.kind.set(source.kind.subarray(from, from + supplied), to);
+            this.num.set(source.num.subarray(from, from + supplied), to);
+            this.ref.set(source.ref.subarray(from, from + supplied), to);
+            this.shape.set(source.shape.subarray(from, from + supplied), to);
+        }
+        const end = Math.min(to + count, this.length);
+        for (const plane of [this.kind, this.num, this.ref, this.shape]) plane.fill(0, to + supplied, end);
+        this.tally(to, to + supplied, 1);
+        this.trim();
+        this.version += 1;
+    }
+
+    // Empties the rows from `from` up to `to`.
+    public clearRows(from: number, to: number): void {
+        const end = Math.min(to, this.length);
+        if (from >= end) return;
+        this.tally(from, end, -1);
+        for (const plane of [this.kind, this.num, this.ref, this.shape]) plane.fill(0, from, end);
         this.trim();
         this.version += 1;
     }
@@ -134,13 +181,14 @@ export class Column {
         }
     }
 
-    // Takes the rows from `from` up to `to` out of the counts, before they leave the column.
-    private forget(from: number, to: number): void {
+    // Takes the rows from `from` up to `to` out of the counts before they leave the column, with -1, or into them
+    // once they arrived, with 1.
+    private tally(from: number, to: number, by: number): void {
         for (let row = from; row < to; row += 1) {
             const kind = this.kind[row];
-            if ((kind & KIND_MASK) === CellKind.Error) this.errors -= 1;
-            if (kind > SETTLED) this.pending -= 1;
-            if (kind & LOOP) this.loops -= 1;
+            if ((kind & KIND_MASK) === CellKind.Error) this.errors += by;
+            if (kind > SETTLED) this.pending += by;
+            if (kind & LOOP) this.loops += by;
         }
     }
 

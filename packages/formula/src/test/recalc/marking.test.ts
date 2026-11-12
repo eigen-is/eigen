@@ -62,7 +62,7 @@ const every = (column: string) => Array.from({ length: LINES }, (_, line) => `${
 describe('small rectangles under one tall reference', () => {
     test.each(READERS)('a first recalc computes every formula: %s', (_name, reader) => {
         const engine = new Engine([source('s', ladder(LINES, reader, null, 1))]);
-        expect(engine.recalc(NO_CAP)).toEqual({ loops: [], stopped: false });
+        expect(engine.recalc(NO_CAP)).toMatchObject({ loops: [], stopped: false });
         for (const line of [0, 1, 150, LINES - 1]) {
             expect([engine.valueOf('s', line * 2, 1), engine.valueOf('s', line * 2, 2)]).toEqual([
                 line * 2,

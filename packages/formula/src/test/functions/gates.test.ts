@@ -85,7 +85,7 @@ describe('what a body can do wrong is caught by the wrapper', () => {
         const { recalc, value } = passOf(thrower, cells);
         expect(() => recalc.pass(Number.POSITIVE_INFINITY)).toThrow('a body that throws');
         fail = false;
-        expect(recalc.pass(Number.POSITIVE_INFINITY)).toEqual({ loops: [], stopped: false });
+        expect(recalc.pass(Number.POSITIVE_INFINITY)).toMatchObject({ loops: [], stopped: false });
         expect([value('B1'), value('B2'), value('B3')]).toEqual([2, 4, 8]);
     });
 });

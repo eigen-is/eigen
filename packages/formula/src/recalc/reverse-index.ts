@@ -48,6 +48,9 @@ export class ReverseIndex {
     private levels: number[][] = [];
     // The rectangles whose shape reads cells its references do not name: sheet, first and last column and row.
     private unnamed: number[] = [];
+    // Every block of cells of one shape, as the last rebuild found them: sheet, first and last column, first and
+    // last row, and shape.
+    public rectangles: readonly number[] = [];
     // The spans a marking has still to follow: sheet, column, first and last row.
     private work: number[] = [];
     // What a marking wrote here and puts back before it returns: the sheet, place and old value of each `REACH`
@@ -58,7 +61,6 @@ export class ReverseIndex {
     // `facts` holds the facts of every shape, by its id.
     public rebuild(workbook: Workbook, facts: readonly number[]): void {
         const { sheets, shapes } = workbook;
-        // Sheet, first and last column, first and last row, and shape of every rectangle.
         const rectangles: number[] = [];
         for (let s = 0; s < sheets.length; s += 1) {
             // The runs of the column before, from the top down: first row, last row, shape, and where in the list
@@ -93,7 +95,7 @@ export class ReverseIndex {
                 opened = ran;
             }
         }
-        const places = new Map(sheets.map((sheet, s) => [sheet.id, s] as const));
+        this.rectangles = rectangles;
         const entries: number[] = [];
         // Per sheet, what each entry reads of it: first and last row, first and last column, and the entry.
         const areas: number[][] = sheets.map(() => []);
@@ -106,7 +108,11 @@ export class ReverseIndex {
             for (const ref of shapes.shape(id).refs) {
                 const { op, sheetKind, flags } = ref;
                 const target =
-                    sheetKind === SheetKind.Host ? s : sheetKind === SheetKind.Id ? places.get(ref.sheet) : undefined;
+                    sheetKind === SheetKind.Host
+                        ? s
+                        : sheetKind === SheetKind.Id
+                          ? workbook.sheet(ref.sheet)?.place
+                          : undefined;
                 if (target === undefined) continue;
                 // Each end as where it sits for a host at 0 and how far it moves with the host, 0 or 1.
                 let { row, row2, column, column2 } = ref;
@@ -234,10 +240,9 @@ export class ReverseIndex {
         this.levels.push(levels);
     }
 
-    // Flags every formula that reads a seed or a formula flagged here, each once, and with any seed at all every
-    // formula that reads cells it does not name. A seed is a span of rows: sheet, column, first and last row.
+    // Flags every formula that reads a seed or a formula flagged here, each once, and every formula that reads
+    // cells it does not name. A seed is a span of rows: sheet, column, first and last row.
     public mark(workbook: Workbook, seeds: readonly number[]): void {
-        if (seeds.length === 0) return;
         const { sheets } = workbook;
         const { unnamed, entries, lowered, recorded } = this;
         this.work = seeds.slice();

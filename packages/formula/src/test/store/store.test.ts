@@ -119,7 +119,7 @@ describe('writes', () => {
         const sheet = sheetOf(workbook);
         const column = sheet.columns[0];
         expect(column.pending).toBe(1);
-        workbook.setFormula(sheet, 1, 0, '=2+2');
+        workbook.fillFormula(sheet, 1, 0, 1, 0, '=2+2');
         expect(column.pending).toBe(2);
         workbook.setValue(sheet, 0, 0, 'typed');
         workbook.clear(sheet, 1, 0);
@@ -183,7 +183,7 @@ describe('writes', () => {
         workbook.clear(sheet, 2, 0);
         expect(first.errors).toBe(0);
         const after = first.version;
-        workbook.setFormula(sheet, 1, 0, '=1');
+        workbook.fillFormula(sheet, 1, 0, 1, 0, '=1');
         expect(first.version).toBeGreaterThan(after);
         expect(second.version).toBe(other);
     });

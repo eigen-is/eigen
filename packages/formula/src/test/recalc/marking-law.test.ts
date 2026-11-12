@@ -194,7 +194,7 @@ function run(seed: number, books: number): { markings: number; flagged: number; 
                 const row = pick(ROWS);
                 const column = pick(COLUMNS);
                 const what = pick(4);
-                if (what < 2) workbook.setFormula(sheet, row, column, what === 0 ? formula() : tall());
+                if (what < 2) workbook.fillFormula(sheet, row, column, row, column, what === 0 ? formula() : tall());
                 else if (what === 2) workbook.setValue(sheet, row, column, pick(9));
                 else workbook.clear(sheet, row, column);
                 rebuild();
@@ -266,14 +266,15 @@ function written(seed: number, books: number): { passes: number; computed: numbe
                     for (let i = 0; i < length; i += 1) {
                         const row = up ? from + length - 1 - i : from + i;
                         seeds.push(s, column, row, row);
-                        recalc.touch(workbook.sheets[s], row, column, false);
-                        workbook.setValue(workbook.sheets[s], row, column, pick(9));
+                        recalc.setValue(workbook.sheets[s], row, column, pick(9));
                     }
                     from += pick(length + 1);
                 }
             }
             const expected = pendingOf(workbook);
-            for (const key of closure(workbook, readersOf(workbook, factsOf(workbook)), seeds)) expected.add(key);
+            // A pass with nothing written marks nothing.
+            const reached = seeds.length > 0 ? closure(workbook, readersOf(workbook, factsOf(workbook)), seeds) : [];
+            for (const key of reached) expected.add(key);
             recalc.pass(Number.POSITIVE_INFINITY);
             const shown = new Set<number>();
             workbook.sheets.forEach((sheet, s) => {
@@ -300,7 +301,8 @@ describe('a marking flags what the definition reaches, no less and no more', () 
     test('the generator writes formulas that parse', () => {
         const { formula, tall } = generator(random(1));
         const workbook = new Workbook([source('a', []), source('b', []), source('c', [])]);
-        for (let i = 0; i < 400; i += 1) workbook.setFormula(workbook.sheets[0], i, 0, i % 2 ? formula() : tall());
+        for (let i = 0; i < 400; i += 1)
+            workbook.fillFormula(workbook.sheets[0], i, 0, i, 0, i % 2 ? formula() : tall());
         for (let id = 1; id <= workbook.shapes.size; id += 1) expect(workbook.shapes.shape(id).tree).not.toBeNull();
     });
 
@@ -324,7 +326,7 @@ describe('a marking flags what the definition reaches, no less and no more', () 
                 [0, 2],
             ]),
         );
-        expect(closure(workbook, readers, [])).toEqual(new Set());
+        expect(closure(workbook, readers, [])).toEqual(keys([[5, 5]]));
         workbook.sheets[0].columns[0].markDirty(1);
         expect(closure(workbook, readers, [0, 0, 0, 0])).toEqual(
             keys([
