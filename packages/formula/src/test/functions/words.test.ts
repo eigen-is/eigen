@@ -38,7 +38,6 @@ describe('the list of every number: MEDIAN', () => {
         ['=MEDIAN(E1:E3)', DIV0],
         ['=MEDIAN("x",1)', VALUE],
         ['=MEDIAN(D1:D2,7)', 7],
-        ['=MEDIAN(OFFSET(A1,{0,1,2},0,2))', 20],
         ['=MEDIAN(IF({1;1;1;1},C1:C4))', 0.05],
         // A stored row of an array that stands for many written ones is in the list that many times.
         ['=MEDIAN(A1:A20*1)', 5],

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Errors, TypedText } from '../../eval/families';
+import { Element, Errors, TypedText } from '../../eval/families';
 import type { Entry, Param } from '../../eval/signature';
 import { Prepare, Read } from '../../eval/signature';
 import { FUNCTIONS } from '../../functions/library';
@@ -299,6 +299,23 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         same('+D1', 'TRUE');
         same('IF({1,1},Z9:AA9)', family.blanks ? '{0,0}' : null);
         same('A1:A40*1', `{10;20;30;40;50${';0'.repeat(35)}}`);
+    });
+
+    // A1:A3 are numbers, which every family counts, and D1 is a boolean, which a family counts or not as a cell.
+    test('an element of an array that is a reference is what the row says', () => {
+        if (family === undefined || family === null) return;
+        const { element } = family;
+        if (typeof element === 'object') {
+            equals('OFFSET(A1,{0,1,2},0,2)', element);
+            equals('OFFSET(Z9,{0,1},0,2)', element);
+        } else if (element === Element.First) {
+            same('OFFSET(A1,{0,1,2},0,2)', 'A1:A3');
+            same('OFFSET(D1,{0,0},0,2)', 'D1,D1');
+            same('OFFSET(Z9,{0,1},0,2)', null);
+        } else {
+            same('OFFSET(A1,{0,1,2},0,2)', element === Element.Counted ? '1,1,1' : null);
+            same('OFFSET(Z9,{0,1},0,2)', element === Element.Counted ? '1,1' : null);
+        }
     });
 
     test('an error in a range is found in argument order, after every typed argument is read', () => {

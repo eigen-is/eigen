@@ -41,7 +41,10 @@ function ambient<T>(read: Read): Param<T> {
     return Object.freeze({ ...REQUIRED, prepare: Prepare.Ambient, read, optional: true });
 }
 
-function walked(family: Family): Walked<Numbers> {
+// A reading that takes every value as a family counts it.
+type Collector = Walked<Numbers> & { readonly family: Family };
+
+function walked(family: Family): Collector {
     return Object.freeze({ ...REQUIRED, prepare: Prepare.Walked, read: Read.Walked, family });
 }
 
@@ -175,6 +178,12 @@ export function areas<T>(param: Param<T>): Param<T> {
 // The error a union answers, in place of the reading's own.
 export function refusing<T>(param: Param<T>, error: FormulaError): Param<T> {
     return Object.freeze({ ...param, union: error });
+}
+
+// The error a function answers for an element of an array that is a reference, as OFFSET(A1,{0,1,2},0,2) makes
+// three, in place of what its family makes of one: MEDIAN answers #VALUE! where SUM reads the first cell.
+export function referring(param: Collector, error: FormulaError): Collector {
+    return Object.freeze({ ...param, family: { ...param.family, element: error } });
 }
 
 // The parameter takes every argument from its own to the last: as one reader over all of them, or as a list.

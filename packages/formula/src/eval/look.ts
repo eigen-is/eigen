@@ -40,7 +40,7 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
             // Most often the one argument is one range: its cells are computed and looked at in one go.
             const one = to === at + 1 && isReference(value) && value.next === null ? value : null;
             if (one !== null) ctx.recalc.settleArea(one);
-            else for (let i = at; i < to; i += 1) settle(ctx, held[i], family);
+            else for (let i = at; i < to; i += 1) settle(ctx, held[i]);
             const found =
                 family.errors !== Errors.Result ? null : one !== null ? firstError(ctx, one, frame.skips) : null;
             if (found !== null) return found;
@@ -83,13 +83,12 @@ function written(value: Held): value is Value {
     return value !== undefined && !isLazy(value) && !(value instanceof Table);
 }
 
-function settle(ctx: Evaluator, value: Held, family: Family): void {
+function settle(ctx: Evaluator, value: Held): void {
     for (let area = isReference(value) ? value : null; area !== null; area = area.next) ctx.recalc.settleArea(area);
-    if (!isArray(value) || !value.references || !family.first) return;
-    for (let i = 0; i < value.items.length; i += 1) ctx.first(value.items[i]);
 }
 
-// The first error among the values of one argument, row by row, but for the cells that `skips` passes over.
+// The first error among the values of one argument, row by row, but for the cells that `skips` passes over. Of an
+// element that is a reference it is what the family says, which can be an error of the family's own.
 function errorIn(ctx: Evaluator, value: Held, family: Family, skips: number): FormulaError | null {
     for (let area = isReference(value) ? value : null; area !== null; area = area.next) {
         const error = firstError(ctx, area, skips);
@@ -97,8 +96,9 @@ function errorIn(ctx: Evaluator, value: Held, family: Family, skips: number): Fo
     }
     if (!isArray(value) || value.nums !== null) return null;
     for (let i = 0; i < value.items.length; i += 1) {
-        const item = family.first ? ctx.first(value.items[i]) : value.items[i];
-        if (isError(item)) return item;
+        const item = value.items[i];
+        const found = isReference(item) ? ctx.walk.referred(item, family) : item;
+        if (isError(found)) return found;
     }
     return null;
 }
@@ -147,11 +147,12 @@ function spelled(texts: string[], value: Value): FormulaError | null {
 // The error that keeps the arguments `from` up to `to` from being multiplied place by place: any argument's first
 // error comes before a difference in size, which is #VALUE!.
 function sized(ctx: Evaluator, held: readonly Held[], from: number, to: number): FormulaError | null {
-    for (let i = from; i < to; i += 1) settle(ctx, held[i], Families.Counted);
+    for (let i = from; i < to; i += 1) settle(ctx, held[i]);
     const first = held[from];
     let alike = true;
     for (let i = from; i < to; i += 1) {
         const value = held[i];
+        // An element that is a reference is no number here, so no cell of it is read: as the family that counts.
         const error = errorIn(ctx, value, Families.Counted, 0);
         if (error !== null) return error;
         alike &&= heightOf(value) === heightOf(first) && widthOf(value) === widthOf(first);

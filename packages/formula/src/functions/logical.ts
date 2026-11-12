@@ -5,10 +5,10 @@
 import { compareValues } from '../values/compare';
 import { NA, VALUE } from '../values/errors';
 import { isError } from '../values/value';
-import { ANY, BOOLEAN, each, fn, INTEGER, LAZY, NEXT, optional, PLAIN, rest, TRUTHS } from './registry';
+import { ANY, BOOLEAN, each, fn, INTEGER, LAZY, NEXT, optional, PLAIN, referring, rest, TRUTHS } from './registry';
 
 export const LOGICAL = [
-    fn('AND', [rest(TRUTHS)], (truths) => (truths.count() === 0 ? VALUE : !truths.holds(0))),
+    fn('AND', [rest(referring(TRUTHS, NA))], (truths) => (truths.count() === 0 ? VALUE : !truths.holds(0))),
     fn('OR', [rest(TRUTHS)], (truths) => (truths.count() === 0 ? VALUE : truths.min() !== 0 || truths.max() !== 0)),
     fn('NOT', [BOOLEAN], (truth) => !truth),
     fn('IF', [BOOLEAN, LAZY, optional(LAZY, false)], (test, then, otherwise) => (test ? then : otherwise)),
