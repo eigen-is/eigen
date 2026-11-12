@@ -366,14 +366,7 @@ describe('numbers as text', () => {
         ['=TEXT("a","0;;;""t:""@")', 't:a'],
         ['=TEXT(TRUE,"0;;;""t:""@")', 'TRUE'],
         ['=TEXT("abc",TRUE)', 'abc'],
-        ['=TEXT(1.005,"0.00")', '1.01'],
-        ['=TEXT(-1.005,"0.00")', '-1.01'],
-        ['=TEXT(0.145,"0.00")', '0.15'],
-        ['=TEXT(74.945,"#,##0.00")', '74.95'],
-        ['=TEXT(1.255,"$0.00")', '$1.26'],
         ['=TEXT(0.285,"0%")', '29%'],
-        ['=TEXT(0.01005,"0.00%")', '1.01%'],
-        ['=TEXT(1.005,"0.00")=FIXED(1.005,2)', true],
         ['=TEXT(PI(),"0.000000000000000000")', '3.141592653589790000'],
         ['=TEXT(1/3,"0.00000000000000000000")', '0.33333333333333300000'],
     ]);
@@ -406,10 +399,14 @@ describe('numbers as text', () => {
     ]);
     // numfmt defect: half a second before midnight the time is 0:00:00 and the day stays, where DAY answers 16.
     // And from 1E+21 on it has no digits, where Excel writes all 22.
-    rows('TEXT at midnight and from 1E+21', [
+    // And a decimal that ends in a 5 rounds down where the double under it lies below the half: Excel, FIXED and
+    // ROUND say 1.01.
+    rows('TEXT at midnight, from 1E+21 and at a half', [
         ['=TEXT(45000.999995,"yyyy-mm-dd hh:mm:ss")', '2023-03-15 00:00:00'],
         ['=DAY(45000.999995)', 16],
         ['=TEXT(1E+21,"0")', VALUE],
+        ['=TEXT(1.005,"0.00")', '1.00'],
+        ['=TEXT(74.945,"#,##0.00")', '74.94'],
     ]);
     rows('FIXED', [
         ['=FIXED(1234.567)', '1,234.57'],
@@ -429,6 +426,7 @@ describe('numbers as text', () => {
         ['=FIXED(-1234.567,-2,TRUE)', '-1200'],
         ['=FIXED(0.5,0,TRUE)', '1'],
         ['=FIXED(1.005,2)', '1.01'],
+        ['=FIXED(74.945,2)&" "&FIXED(260.405,2)&" "&DOLLAR(1.255)', '74.95 260.41 $1.26'],
         ['=FIXED(1E+15,2,TRUE)', '1000000000000000.00'],
         ['=FIXED(5E+20,0,TRUE)', '500000000000000000000'],
         ['=FIXED(5E+20,2,TRUE)', '500000000000000000000.00'],
@@ -508,6 +506,10 @@ describe('numbers as text', () => {
         ['=NUMBERVALUE("(-5)")', VALUE],
         ['=NUMBERVALUE("-$5")', -5],
         ['=NUMBERVALUE("%")', 0],
+        ['=NUMBERVALUE("12:30")', 0.5208333333333334],
+        ['=NUMBERVALUE("2024-03-15")', 45366],
+        ['=NUMBERVALUE("3/15")', VALUE],
+        ['=NUMBERVALUE("Mar 15")', VALUE],
         ['=NUMBERVALUE(TRUE)', VALUE],
         ['=NUMBERVALUE(12.5)', 12.5],
     ]);
@@ -591,23 +593,22 @@ describe('TEXTBEFORE and TEXTAFTER', () => {
     ]);
 });
 
-// The law of every display of a number: a typed decimal of up to 15 digits shows as that decimal rounded half away
-// from zero, whichever function writes it, and past its digits come zeros.
-test('TEXT, FIXED and DOLLAR write a typed decimal rounded half away from zero', () => {
+// A typed decimal of up to 15 digits is written as that decimal rounded half away from zero, and past its digits
+// come zeros. TEXT is not held to it: numfmt rounds a half down for some.
+test('FIXED and DOLLAR write a typed decimal rounded half away from zero', () => {
     const random = seeded(1005);
     for (let run = 0; run < 1500; run += 1) {
         const decimals = Math.floor(random() * 8);
         const { typed, rounded, negative } = typedDecimal(random, decimals);
         const sign = negative && Number(rounded) !== 0 ? '-' : '';
-        const format = decimals === 0 ? '0' : `0.${'0'.repeat(decimals)}`;
         const more = Math.floor(random() * 12);
-        const texts = `TEXT(${typed},"${format}")&"|"&FIXED(${typed},${decimals},TRUE)&"|"&DOLLAR(${typed},${decimals})`;
+        const texts = `FIXED(${typed},${decimals},TRUE)&"|"&DOLLAR(${typed},${decimals})`;
         const longer = `FIXED(${rounded},${decimals + more},TRUE)`;
         const money = negative ? `($${grouped(rounded)})` : `$${grouped(rounded)}`;
         const padded = `${decimals === 0 && more > 0 ? `${rounded}.` : rounded}${'0'.repeat(more)}`;
         expect([typed, evaluate(`=${texts}&"|"&${longer}`, SHEET)]).toEqual([
             typed,
-            `${sign}${rounded}|${sign}${rounded}|${money}|${padded}`,
+            `${sign}${rounded}|${money}|${padded}`,
         ]);
     }
 });

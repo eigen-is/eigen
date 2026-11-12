@@ -9,7 +9,7 @@ import { partBeside } from '../values/delimited';
 import { CALC, NA, VALUE } from '../values/errors';
 import { lowerCase, properCase, upperCase } from '../values/letter-case';
 import { fixedText } from '../values/number-text';
-import { parseNumber } from '../values/parse-number';
+import { parseDateTime, parseNumber } from '../values/parse-number';
 import { roundDecimal } from '../values/precision';
 import { separatedNumber } from '../values/separated-number';
 import { isError, LONGEST_TEXT } from '../values/value';
@@ -165,12 +165,13 @@ export const TEXT_FUNCTIONS = [
     fn('UNICODE', [TEXT], (text) => (countCharacters(text) > OLD_LONGEST_TEXT ? VALUE : (firstCode(text) ?? VALUE))),
     // An empty text is 0, as it is wherever a number is read.
     fn('VALUE', [TEXT], (text) => (text === '' ? 0 : (parseNumber(text) ?? VALUE))),
-    // The first character of each separator counts. Left out, the comma groups unless it is the decimal sign.
+    // The first character of each separator counts. Left out, the comma groups unless it is the decimal sign. A
+    // date or a time is read too, but only one that says its year: no year is handed over, so the clock is not asked.
     fn('NUMBERVALUE', [TEXT, optional(TEXT, '.'), optional(TEXT)], (text, decimals, groups) => {
         const decimal = cutCharacters(decimals, 0, 1);
         const group = groups === undefined ? (decimal === ',' ? '' : ',') : cutCharacters(groups, 0, 1);
         if (decimal === '' || groups === '' || group === decimal) return VALUE;
-        return separatedNumber(text, decimal, group) ?? VALUE;
+        return separatedNumber(text, decimal, group) ?? parseDateTime(text, Number.NaN) ?? VALUE;
     }),
     // A text that reads as a number is shown as that number. Any other text goes through the text section of the
     // format and stays as it is under a format that does not parse, and a boolean is its name.
