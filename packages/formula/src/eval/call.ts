@@ -12,7 +12,7 @@ import { LAST_SERIAL } from '../values/dates';
 import { NAME, NUM, VALUE } from '../values/errors';
 import { parseNumber } from '../values/parse-number';
 import type { Value } from '../values/value';
-import { isArray, isError, isReference, ValueType } from '../values/value';
+import { isArray, isError, isReference, LONGEST_TEXT, ValueType } from '../values/value';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Errors, TypedText } from './families';
@@ -23,8 +23,6 @@ import { Frame, Table } from './readers';
 import type { Entry, Held, Lazy, Param, Result } from './signature';
 import { Prepare, Read, TOKENS } from './signature';
 
-const LONGEST_TEXT = 32767;
-
 export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
     const entry = ctx.functions.get(node.text);
     if (entry === undefined) return NAME;
@@ -32,8 +30,9 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
     const count = given.length;
     const { fixed } = entry;
     const { slots } = entry;
-    // The arguments that repeat come in whole groups, with one more only where the row takes one after them.
-    if (count < entry.min || count > entry.max) return VALUE;
+    // The arguments that repeat come in whole groups, with one more only where the row takes one after them: so a
+    // row with none that repeat takes none past its last.
+    if (count < entry.min) return VALUE;
     if (count > fixed && (count - fixed) % entry.group > slots.length - fixed - entry.group) return VALUE;
     const level = ctx.calls;
     const frame = (ctx.frames[level] ??= new Frame(ctx));
@@ -121,7 +120,7 @@ export function ends(param: Param<unknown>): boolean {
 }
 
 // What the argument at a place is read as, in a call of `count` arguments: past the last whole group it is the
-// one argument a row takes after its groups.
+// one argument a row takes after its groups. `call` steps through the same records in place, for its speed.
 export function slotOf(entry: Entry, at: number, count: number): Param<unknown> {
     const { fixed, group } = entry;
     if (at < fixed) return entry.slots[at];

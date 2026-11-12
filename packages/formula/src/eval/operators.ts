@@ -10,23 +10,15 @@ import type { FormulaError } from '../values/errors';
 import { DIV0, NUM, VALUE } from '../values/errors';
 import { snapSum } from '../values/precision';
 import type { Scalar, Value } from '../values/value';
-import { isError } from '../values/value';
+import { isError, LONGEST_TEXT } from '../values/value';
 import type { Entry } from './signature';
 
 const SMALLEST_NORMAL = 2.2250738585072014e-308;
-const LONGEST_TEXT = 32767;
 
 // A number as a cell can hold it: an overflow is #NUM!, and what is too small to be a normal double is 0.
 export function real(result: number): number | FormulaError {
     if (result - result !== 0) return NUM;
     return result > -SMALLEST_NORMAL && result < SMALLEST_NORMAL ? 0 : result;
-}
-
-// What an operator or a function made, as a cell can hold it: a number as above, and a text of up to 32,767
-// characters.
-export function held(result: Value): Value {
-    if (typeof result === 'number') return real(result);
-    return typeof result === 'string' && result.length > LONGEST_TEXT ? VALUE : result;
 }
 
 function power(base: number, exponent: number): number | FormulaError {

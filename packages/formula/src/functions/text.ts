@@ -3,18 +3,17 @@
 
 import { VALUE } from '../values/errors';
 import { upperCase } from '../values/letter-case';
+import { LONGEST_TEXT } from '../values/value';
 import { fn, NUMBER, optional, rest, TEXT } from './registry';
 
 // Past this a position is no position: MID("abc",2^31,1) is #VALUE!.
 const MOST = 2 ** 31;
-// The most characters a text holds: a longer one is refused before it is built.
-const LONGEST = 32767;
 
 export const TEXT_FUNCTIONS = [
     fn('CONCATENATE', [rest(TEXT)], (texts) => {
         let joined = '';
         for (const text of texts) {
-            if (joined.length + text.length > LONGEST) return VALUE;
+            if (joined.length + text.length > LONGEST_TEXT) return VALUE;
             joined += text;
         }
         return joined;
