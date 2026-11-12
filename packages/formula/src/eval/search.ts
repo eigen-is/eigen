@@ -1,8 +1,8 @@
 // Searching one row or one column of values for a key, as every lookup function does: for the key itself or a
-// pattern, for the nearest value, or by halving when the values are taken to be sorted, in the steps Excel takes.
-// MATCH type -1 alone halves where Excel reads every value: on values not sorted downward it differs, by choice.
+// pattern, for the nearest value, or by halving when the values are taken to be sorted. An approximate MATCH, LOOKUP
+// or VLOOKUP only halves where Excel also reads on cell by cell: on values not sorted that way it differs, by choice.
 // A key matches only values of its own kind, text in any case, and a blank never matches; XMATCH's bisection alone
-// orders the kinds. A function gets a column's cells or an array's elements as a Vector, and a position from 0 or -1.
+// orders the kinds. A function gets a column's cells or an array's elements as a Vector, and a position from 0.
 
 import type { Column } from '../store/column';
 import { CellKind, KIND_MASK } from '../store/column';
@@ -191,9 +191,8 @@ export class Vector {
 
     // The last value at most the key among values taken to be sorted upward, or with `descending` the key, else the
     // last value above it, among values taken to be sorted downward. A probe at a value of another kind moves to the
-    // next of the key's kind after it, else before it, and the search goes on beside the value it moved to. Upward a
-    // probe that equals the key ends at the last of its run of equals, as in Excel; downward the halving goes on to
-    // the first of the equal keys.
+    // next of the key's kind after it, else before it, and the search goes on beside the value it moved to. Of equal
+    // keys the halving goes on to the last one upward and to the first one downward.
     private halve(key: Key, descending: boolean): number {
         let low = 0;
         let high = this.used - 1;
@@ -213,15 +212,11 @@ export class Vector {
                 order = against(this.valueAt(at), key);
             }
             if (Number.isNaN(order)) break;
-            if (order === 0 && !descending) {
-                while (at + 1 < this.used && against(this.valueAt(at + 1), key) === 0) at += 1;
-                return at;
-            }
-            if (order === 0) hit = at;
-            if (order !== 0 && order < 0 !== descending) {
+            if (descending ? order > 0 : order <= 0) {
                 before = at;
                 low = at + 1;
             } else {
+                if (order === 0) hit = at;
                 high = at - 1;
             }
         }
