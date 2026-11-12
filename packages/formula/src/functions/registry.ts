@@ -34,6 +34,10 @@ function scalar<T>(read: Read): Param<T> {
     return Object.freeze({ ...REQUIRED, prepare: Prepare.Scalar, read });
 }
 
+function ambient<T>(read: Read): Param<T> {
+    return Object.freeze({ ...REQUIRED, prepare: Prepare.Ambient, read, optional: true });
+}
+
 function walked(family: Family): Walked<Numbers> {
     return Object.freeze({ ...REQUIRED, prepare: Prepare.Walked, read: Read.Walked, family });
 }
@@ -80,25 +84,10 @@ export const HERE: Param<Reference> = Object.freeze({
 // Whatever was written, unread, as a table: never lifted, never refused, and an error is a value of it.
 export const ANYTHING: Param<Table> = Object.freeze({ ...REQUIRED, prepare: Prepare.Whole, read: Read.Anything });
 // Take no argument, and make the row answer anew in every pass: a draw in [0, 1), and the date and time.
-export const RANDOM: Param<number> = Object.freeze({
-    ...REQUIRED,
-    prepare: Prepare.Ambient,
-    read: Read.Random,
-    optional: true,
-});
-export const NOW: Param<number> = Object.freeze({
-    ...REQUIRED,
-    prepare: Prepare.Ambient,
-    read: Read.Now,
-    optional: true,
-});
+export const RANDOM = ambient<number>(Read.Random);
+export const NOW = ambient<number>(Read.Now);
 // Takes no argument: where a body that builds an array gets it.
-export const ROOM: Param<Room> = Object.freeze({
-    ...REQUIRED,
-    prepare: Prepare.Ambient,
-    read: Read.Room,
-    optional: true,
-});
+export const ROOM = ambient<Room>(Read.Room);
 
 // What the arguments of the three readings below are read as: a reference and nothing else, and any value.
 const ONLY: Param<Reference> = Object.freeze({

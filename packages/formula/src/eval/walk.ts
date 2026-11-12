@@ -8,7 +8,7 @@ import { CellKind, KIND_MASK } from '../store/column';
 import type { FormulaError } from '../values/errors';
 import { CALC } from '../values/errors';
 import type { ArrayValue, Reference } from '../values/value';
-import { isArray, isReference, MOST_ELEMENTS } from '../values/value';
+import { isArray, isReference } from '../values/value';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Families } from './families';
@@ -26,7 +26,7 @@ export class Walk {
     public to = 0;
     // How many cells were handed out so far.
     public count = 0;
-    // Set when the walk would add or list more than it may: the call is then #CALC!.
+    // Set when the walk would add more than it may: the call is then #CALC!.
     public error: FormulaError | null = null;
     // After `add`, the sum before its last addition.
     public before = 0;
@@ -119,33 +119,6 @@ export class Walk {
         }
         this.before = before;
         return sum;
-    }
-
-    // Every number the walk still hands out, once per written cell in written order, into `list` or a longer one.
-    public gather(list: Float64Array): Float64Array {
-        let into = list;
-        let at = 0;
-        while (this.next()) {
-            const { num, from, to, reps, rows } = this;
-            let cells = 0;
-            for (let i = from; i < to; i += 1) cells += reps === null ? 1 : reps[i];
-            if (at + cells * rows > MOST_ELEMENTS) {
-                this.fail(CALC);
-                break;
-            }
-            if (at + cells * rows > into.length) {
-                const longer = new Float64Array(Math.max(into.length * 2, at + cells * rows));
-                longer.set(into.subarray(0, at));
-                into = longer;
-            }
-            for (let row = 0; row < rows; row += 1) {
-                for (let i = from; i < to; i += 1) {
-                    const end = at + (reps === null ? 1 : reps[i]);
-                    while (at < end) into[at++] = num[i];
-                }
-            }
-        }
-        return into;
     }
 
     // `start` and a stored row of an array that stands for more than its own numbers, with the sum before the

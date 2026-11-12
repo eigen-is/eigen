@@ -62,7 +62,6 @@ export class Numbers {
     private snaps = true;
     // Whether the numbers are the ones the criteria of the call left beside their matches, and no argument's.
     private matched = false;
-    private gathered: Float64Array = new Float64Array(8);
 
     public constructor(ctx: Evaluator, frame: Frame) {
         this.ctx = ctx;
@@ -127,21 +126,6 @@ export class Numbers {
         while (walk.next()) for (let i = walk.from; i < walk.to; i += 1) found ||= walk.num[i] === value;
         this.done();
         return found;
-    }
-
-    // Every number once per written cell, in written order: a copy that is the body's own.
-    public list(): Float64Array {
-        const { walk } = this.start();
-        this.gathered = walk.gather(this.gathered);
-        const count = this.done();
-        if (this.frame.failed !== null || !this.ctx.recalc.room(count, MOST_ELEMENTS)) {
-            return new Float64Array(0);
-        }
-        return this.gathered.slice(0, count);
-    }
-
-    public sorted(): Float64Array {
-        return this.list().sort();
     }
 
     private start(): Evaluator {
