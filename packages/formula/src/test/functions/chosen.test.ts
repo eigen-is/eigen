@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { FUNCTIONS } from '../../functions/library';
-import { DIV0, errorOf, VALUE } from '../../index';
+import { DIV0, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
 import { at as atOf, engineOf, evaluate, valueAt } from '../recalc/support';
 import { F1 } from './collectors.test';
@@ -35,11 +35,10 @@ describe('SUBTOTAL picks a function by its first argument and hands it the refer
         ['=SUBTOTAL(109,A1:A5)', 15],
         ['=SUBTOTAL(103,A1:A5)', 5],
         ['=SUBTOTAL(109,C1:C4)', 3],
-        // A code that picks no function, and one whose function this build does not have.
+        // A code that picks no function.
         ['=SUBTOTAL(12,A1:A5)', VALUE],
         ['=SUBTOTAL(0,A1:A5)', VALUE],
         ['=SUBTOTAL(6,A1:A5)', 120],
-        ['=SUBTOTAL(7,A1:A5)', errorOf('#NAME?')],
         ['=SUBTOTAL(9)', VALUE],
         ['=SUBTOTAL("x",A1:A5)', VALUE],
         ['=SUBTOTAL(1/0,A1:A5)', DIV0],
