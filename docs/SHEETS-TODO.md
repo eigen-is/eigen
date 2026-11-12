@@ -280,7 +280,8 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 - [ ] **`TEXTAFTER` and `TEXTBEFORE`**: of two delimiters that start at one place the first listed wins, `TEXTAFTER("abcabc",{"b","bc"},1)` is `cabc`, Excel `abc`; an error given as `if_not_found` answers even when the delimiter is found. **S**
 - [ ] **`COUNTBLANK` of an array** is one `#VALUE!`, where Excel answers per element; **`SHEET("Sheet2")`** is `#N/A`, Excel the sheet's number. **S**
 - [ ] **`GCD(,6)` and `LCM(,6)`** are 6, Excel `#N/A`. **S**
-- [ ] **Last digits**: `MULTINOMIAL(170)` is 1, Excel 1.0000000000002; `LOG(100,0.9999999999999999)` differs in its last digits. **S**
+- [ ] **Last digits**: `MULTINOMIAL(170)` is 1, Excel 1.0000000000002; `LOG(100,0.9999999999999999)` differs in its last digits; `LN` and `STDEV` differ from Excel's cached values in the last digits on 23 corpus cells. **S**
+- [ ] **`INDIRECT` does not read a structured reference**: `INDIRECT("T[Outstanding Work]")` is `#REF!`, where Excel reads the table's column (30 corpus cells). It needs tables as a live feature, not a file's references resolved at import. **M**
 
 ### Values and text
 
@@ -298,6 +299,9 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 - [ ] **A tiny number prints in plain digits**: `=1.23456789012345E-18` reads back as `=0.00000000000000000123456789012345`, where Excel keeps the exponent (`PLAIN_EXPONENT_MIN` in `text/printer.ts`); check Excel from 1E-13 to 1E-19. **S**
 - [ ] **A sheet named like a cell, first in a 3-D prefix**: the A1 text `='B2:Sheet2'!A1:B2:Sheet2!C3` reads back as another formula, so re-editing it in the formula bar changes it (stored text is safe). One condition in `text/printer.ts` quotes it. **S**
 - [ ] **A space before a comma is dropped**: `=SUM(A1 ,B1)` comes back as `=SUM(A1,B1)`. **S**
+- [ ] **A call's name folds by Unicode**: `=ß(1)` reads back as `=SS(1)`, where `sheetNameKey` folds a name another way. One fold for every name, before `LET` binds names. **S**
+- [ ] **A typed 3-D formula shows blank with no error**: `=SUM(Sales:Data!A1)` is stored as a reference to a sheet named `Sales:Data` that no tab has, and its value is blank, with no error to say why. **S**
+- [ ] **A typed number keeps a 16th digit**: Excel cuts a typed `1234567890123456` to 1234567890123450 at entry, so `=A1&""` is `1234567890123450` there and `1234567890123460` here, fed the typed digits. The cut belongs in step 1b's editor parse, as the engine reads no typing. **S**
 
 ### Lookups
 
@@ -307,16 +311,18 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 
 - [ ] **No carry at midnight for a date-only format**: `TEXT(45000.999995,"dddd")` is Wednesday, Excel Thursday; numfmt's own test pins the other answer. **S**
 - [ ] **Half a second rounds up**: `TEXT(0.5+0.5/86400,"hh:mm:ss")` is `12:00:01`, Excel `12:00:00`. **S**
-- [ ] **Negative serials**: `TEXT(-1.25,"[h]:mm:ss")` is `-18:00:00` where 30 hours are meant (Excel `#VALUE!`), and a negative time does not carry at midnight. **S**
-- [ ] **`a/p` in lower or mixed case**: `TEXT(0.02,"hh:mm a/p")` is `00:28 a/p`, Excel `12:28 a`; `TEXT(0.52,"h:mm AM/pm")` is `12:28 A12/p12`, Excel `12:28 PM`. In cells too. **S**
+- [ ] **Negative serials**: `TEXT(-1.25,"[h]:mm:ss")` is `-18:00:00` where 30 hours are meant (Excel `#VALUE!`, and `#######` in a cell), and a negative time does not carry at midnight. numfmt's elapsed parts reuse the wrapped clock time: report it upstream rather than patch numfmt a second time. **S**
+- [ ] **`a/p` in lower or mixed case**: `TEXT(0.02,"hh:mm a/p")` is `00:28 a/p`, Excel `12:28 a`; `TEXT(0.52,"h:mm AM/pm")` is `12:28 A12/p12`, Excel `12:28 PM`. In cells too. A numfmt bug to report upstream. **S**
 - [ ] **A date past 31 December 9999**: `TEXT(2958466,"yyyy-mm-dd")` is `10000-01-01` and `TEXT(1E+300,"yyyy-mm-dd")` `1E+300`, Excel `#VALUE!` for both (`valueAsText` in `format/number-display.ts`). **S**
 - [ ] **Fraction formats past 1E+21** print exponent text, and **a 16-digit number whose 16th digit is an exact 5** rounds toward zero. **S**
+- [ ] **`TEXT` on a 16-digit tie** rounds as numfmt does, the engine's own number text the other way: `TEXT(73938790243119/4,"0.0")` is `18484697560779.7` as in Excel, where `&""`, `FIXED` and `ROUND` give `…779.8` (51 of 200,000 random numbers). **S**
 
 ### The xlsx dialect
 
 - [ ] **A range handed to a function the engine lacks is exported plain**, without the `@` an old Excel would need. **S**
 - [ ] **`TYPE(A1:A10)` after import** is 64, where Excel shows 16. **S**
-- [ ] **Two keys for one meaning**: `(@A1,B1)` round-trips to another stored text of the same meaning; and `[1]A1!B2` is printed bare: check that Excel reads it. **S**
+- [ ] **Two keys for one meaning**: `(@A1,B1)` round-trips to another stored text of the same meaning, and `SUM(T[#All]#)` comes back from one xlsx round trip as `SUM((T[#All])#)`; and `[1]A1!B2` is printed bare: check that Excel reads it. **S**
+- [ ] **`=(@-A1,B1)` exports as a two-argument `SINGLE`**: the file gets `(_xlfn.SINGLE(-A1,B1))`, which Excel refuses, and its re-import reads `SINGLE(…)` as an unknown name: `#VALUE!` becomes `#NAME?`. Brackets by precedence in the printer would fix it and the row above. **S**
 
 ### Table references
 
@@ -333,6 +339,7 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 - [ ] **A sparse column costs 2.5 times its extent per sorted search**. **M**
 - [ ] **`settleArea` rescans its range after every unwind**, superlinear on a range whose cells each head a deep chain (`recalc/recalc.ts`). **S**
 - [ ] **Writing the value a cell already holds recomputes its cone**. **S**
+- [ ] **`ReverseIndex.rebuild` runs on every typed formula**: rebuilding is linear in the rectangles of equal shapes, so in a book where every formula is its own rectangle (a different literal per row) typing one costs 72 ms at 100,000 formulas and 344 ms at 500,000. One shape over 500,000 rows costs 2.3 ms. **S**
 
 ### Memory
 
@@ -345,10 +352,16 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 - [ ] **Three tests time out at a machine load over 100**: `edit/classes.test.ts`, `edit/reread.test.ts` and `recalc/marking-shapes.test.ts`. Give them less work or a timeout of their own. **S**
 - [ ] **Tests that kill four surviving mutants of `eval/search.ts`**, and one for `REPT`'s 32,767-character check. **S**
 - [ ] **Excel checks nobody could run**: an emoji's length in desktop Excel; whether `FACT` snaps within 1E-7; where `POWER`'s negative base stops (between 2^31 and 2^49); `"+ 5"` as 5; `SUMX2MY2` and `SUMX2PY2` of no pair as `#DIV/0!`; `NEARLY` on `RIGHT`, `ROUNDUP` and `ROUNDDOWN`. **S**
+- [ ] **`scripts/oracle.ts` has no fixture plan for batches 2 to 5 and 14 to 20**, whose fixtures are prose, so their rows are not computed again on each build; a plan per batch is about 20 lines. **S**
+- [ ] **The depth budget in a worker on Firefox and on iOS Safari** is not measured; Chrome and Safari on macOS have 4.2 times headroom in a worker. **S**
 
 ### Code
 
 - [ ] **`spell` in `eval/look.ts`** fills one of two lists by a nullable flag; split it. **S**
+- [ ] **Own math kernels or the runtime's**: `LN`, `LOG`, `EXP`, `ATAN2` and the trigonometric and hyperbolic functions use the runtime's `Math`, and Bun and Node differ in the last bit on about one call in ten, as `values/powers.ts` already avoids for `^`. Step 2 derives values on every reader, so it decides. **M**
+- [ ] **`setFormula` interns the host's text as its key**: `=sum( R[1]C )` is a shape of its own until an edit rewrites it canonical. Harmless for values, but a peer's text is not canonical by construction; step 1b's adapter should hand stored text from `printStored`. **S**
+- [ ] **Duplicate sheet names are not refused**: `addSheet` takes a name that differs from another only by case, and which sheet a typed name binds is the host's finder. **S**
+- [ ] **`RecalcResult.loops` after a load with cached values** lists fewer loop cells than a fresh load: a self-loop `=SUMPRODUCT(R[0]C:R[2]C)` loaded holding `#REF!` is never recomputed, so it is not listed. A host that trusts `loops` after such a load misses it. **S**
 
 ## Sync and undo
 
