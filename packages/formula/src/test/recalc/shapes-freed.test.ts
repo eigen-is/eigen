@@ -112,6 +112,19 @@ describe('a shape no cell holds any more is forgotten, and the next new shape ta
         expect(workbook.value(sheet.columns[1], count + 100)).toBe(1 + count);
         expect(sheet.columns[1].pending).toBe(0);
     }, 60_000);
+
+    test('a thousand formulas written over three cells, a recalc after each, keep the shapes of three cells', () => {
+        const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }]);
+        const recalc = new Recalc(workbook, FUNCTIONS);
+        const [sheet] = workbook.sheets;
+        for (let i = 1; i <= 1000; i += 1) {
+            for (let row = 0; row < 3; row += 1) recalc.fillFormula(sheet, row, 1, row, 1, `=R1C1+${i * 3 + row}`);
+            // The three shapes in the cells and the three they took the place of, which the pass forgets.
+            expect(workbook.shapes.size).toBeLessThanOrEqual(6);
+            recalc.pass(NO_CAP);
+        }
+        expect(workbook.value(sheet.columns[1], 2)).toBe(1 + 3002);
+    });
 });
 
 const BLOCK = { fromSheet: 's1', row: 0, column: 0, rows: 2, columns: 1, toSheet: 's1', toRow: 0, toColumn: 0 };

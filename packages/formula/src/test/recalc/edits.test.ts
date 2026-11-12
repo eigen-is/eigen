@@ -161,6 +161,22 @@ describe('a whole column read by many formulas, and a row inserted', () => {
         engine.recalc(NO_CAP);
         expect([valueAt(engine, 'A8'), valueAt(engine, 'A9'), valueAt(engine, 'A10')]).toEqual([1, 1, 7]);
     });
+    test('a row inserted under one formula filled across columns computes each host whose own column lost a cell', () => {
+        // D1 and E1 hold one stored text: it reads column A at D1 and column B at E1, and only B is full.
+        const engine = computed({ s1: { A1: 1, B1: 2, [`B${GRID_ROWS}`]: 5, D1: '=SUM(A:A)', E1: '=SUM(B:B)' } });
+        expect([text(engine, 'D1'), valueAt(engine, 'D1'), valueAt(engine, 'E1')]).toEqual([text(engine, 'E1'), 1, 7]);
+        expect(engine.editLines(rows(true, 3)).dropped).toBe(1);
+        engine.recalc(NO_CAP);
+        expect([valueAt(engine, 'D1'), valueAt(engine, 'E1')]).toEqual([1, 2]);
+    });
+    test('a column inserted beside one formula filled down rows computes each host whose own row lost a cell', () => {
+        // Only row 1 is full, which the first host reads.
+        const engine = computed({ s1: { B1: 1, B2: 2, XFD1: 5, A4: '=SUM(1:1)', A5: '=SUM(2:2)' } });
+        expect([text(engine, 'A4'), valueAt(engine, 'A4'), valueAt(engine, 'A5')]).toEqual([text(engine, 'A5'), 6, 2]);
+        expect(engine.editLines(columns(true, 'D')).dropped).toBe(1);
+        engine.recalc(NO_CAP);
+        expect([valueAt(engine, 'A4'), valueAt(engine, 'A5')]).toEqual([1, 2]);
+    });
 });
 
 describe('what an edit seeds', () => {
