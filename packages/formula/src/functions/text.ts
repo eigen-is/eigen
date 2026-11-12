@@ -71,6 +71,8 @@ function beside(after: boolean) {
     };
 }
 
+const BESIDE = [TEXT, TEXTS, skippable(INTEGER), skippable(INTEGER, 0), skippable(INTEGER, 0), optional(TEXT)] as const;
+
 export const TEXT_FUNCTIONS = [
     // What is past the longest text is cut off, where CONCAT refuses.
     fn('CONCATENATE', [rest(TEXT)], (texts) => texts.join('').slice(0, LONGEST_TEXT)),
@@ -197,14 +199,6 @@ export const TEXT_FUNCTIONS = [
         const digits = fixed(Math.abs(number), decimals, true);
         return isError(digits) ? digits : number < 0 ? `($${digits})` : `$${digits}`;
     }),
-    fn(
-        'TEXTBEFORE',
-        [TEXT, TEXTS, skippable(INTEGER), skippable(INTEGER, 0), skippable(INTEGER, 0), optional(TEXT)],
-        beside(false),
-    ),
-    fn(
-        'TEXTAFTER',
-        [TEXT, TEXTS, skippable(INTEGER), skippable(INTEGER, 0), skippable(INTEGER, 0), optional(TEXT)],
-        beside(true),
-    ),
+    fn('TEXTBEFORE', BESIDE, beside(false)),
+    fn('TEXTAFTER', BESIDE, beside(true)),
 ];

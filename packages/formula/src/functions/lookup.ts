@@ -5,6 +5,7 @@
 import { columnLabel, GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { quoteSheetName } from '../text/sheet-name';
 import { NA, REF, VALUE } from '../values/errors';
+import { rectangle } from '../values/rectangle';
 import type { Reference } from '../values/value';
 import type { Table } from './registry';
 import {
@@ -27,7 +28,6 @@ import {
     placed,
     REFERENCE,
     ROOM,
-    rectangle,
     refusing,
     skippable,
     TABLE,
@@ -147,9 +147,8 @@ export const LOOKUP = [
     fn('HLOOKUP', [PLAIN, placed(refusing(TABLE, NA)), INTEGER, optional(BOOLEAN, true)], (key, table, row, sorted) =>
         tableLookup(key, table, row, sorted, false),
     ),
-    // The values are searched down the first column when the table is at least as high as it is wide, else along
-    // the first row, and the result comes from the last column or row, or from the result range at that place:
-    // one row or one column, never both.
+    // Searched down the first column when the table is at least as high as it is wide, else along the first row.
+    // The result comes from the last column or row, or from the result range, which is one row or one column.
     fn(
         'LOOKUP',
         [PLAIN, defaulted(refusing(TABLE, NA), VALUE), optional(refusing(TABLE, NA))],
@@ -185,11 +184,9 @@ export const LOOKUP = [
         },
         PART,
     ),
-    // The cell shows the friendly name, a blank one as 0, or the link itself. A link is at most 255 long.
     fn('HYPERLINK', [TEXT, optional(PLAIN)], (link, name) =>
         link.length > 255 ? VALUE : name === undefined ? link : (name ?? 0),
     ),
     fn('FORMULATEXT', [apiece(areas(REFERENCE)), ENGINE], (_cell, book) => book.formula() ?? NA),
-    // The text is read as A1, and as R1C1 when the second argument is FALSE.
     fn('INDIRECT', [TEXT, optional(BOOLEAN, true), ENGINE], (text, a1, book) => book.refer(text, a1), ANYWHERE),
 ];
