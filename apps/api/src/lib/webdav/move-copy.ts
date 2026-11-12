@@ -1,8 +1,8 @@
 // The WebDAV MOVE and COPY methods. Both stay inside one mount of one owner, so a Destination anywhere
 // else is a 502 and the client downloads and uploads again. The WebDAV router calls them with the
 // signed-in user, and each goes through getSharedDrive, so the Drive ACL decides access. They apply the
-// overwrite rules and the WebDAV locks as RFC 4918 asks. The drive trashes what an overwrite replaces,
-// once nothing can refuse the write any more.
+// overwrite rules and the WebDAV locks as RFC 4918 asks, and tell the drive which path they checked under
+// the destination name. The drive replaces that path, once nothing can refuse the write any more.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types/drive';
@@ -90,7 +90,7 @@ async function resolveMoveCopy(args: MoveCopyArgs, verb: 'MOVE' | 'COPY'): Promi
     const destParent = await drive.resolvePath(mountId, destParentStr);
     if (!destParent) throw new ApiError(409, 'Destination parent not found');
 
-    // An overwrite trashes destExisting with its members and replaces a child of destParent.
+    // An overwrite replaces destExisting with its members, which is a child of destParent.
     if (destExisting) await withMembers(destExisting);
     await assertWritable(drive, mountId, destParent.id, ifHeader, user.id);
 

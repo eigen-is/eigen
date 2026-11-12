@@ -255,8 +255,8 @@ export class SharedDrive {
         return this.drive.movePath(mountId, pathId, targetParentId, this.user);
     }
 
-    // The move trashes what holds the name. Write on the folder covers that path too, as access only widens down a
-    // chain of folders.
+    // The move trashes or writes over what holds the name. Write on the folder covers that path too, as access only
+    // widens down a chain of folders.
     public async movePathOver(
         mountId: string,
         pathId: string,
@@ -298,7 +298,7 @@ export class SharedDrive {
         return this.drive.copyPath(mountId, srcPathId, to, desiredName, this.user);
     }
 
-    // The copy trashes what holds the name, which write on the folder covers too, as it does for movePathOver.
+    // The copy trashes or writes over what holds the name, which write on the folder covers, as for movePathOver.
     public async copyPathOver(
         mountId: string,
         srcPathId: string,

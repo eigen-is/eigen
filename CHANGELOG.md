@@ -19,6 +19,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Copying to another drive** — the copy appears once it is complete, and a copied document is found by searching its text right away
 - **All images in Drive** — the list includes the images someone shared with you directly
 - **Saving from Word and Excel over WebDAV** — **Save as** into a mounted drive works. A save, move or copy over an existing file that the server refuses leaves that file in place instead of in the Trash
+- **Sharing after a save over WebDAV** — saving from Word or Excel into a mounted drive keeps the file's sharing, history and watchers, and leaves no copy in the Trash on every save
 - **Folders over WebDAV** — renaming a file in Finder to change only its capitals works, and copying a folder without its contents onto an existing one is refused instead of replacing it. Folder listings give addresses a client can follow on a standard install
 - **New files over WebDAV** — when two clients create a file of the same name at once, one gets the file and the other an error, instead of a second, numbered copy
 - **Locks over WebDAV** — a file someone locked stays locked to everyone else, and only they can renew the lock. A lock on a folder also holds for people who only have a subfolder shared with them

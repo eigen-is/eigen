@@ -4,6 +4,7 @@ import { getServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
 import type { TestUser } from '../setup';
 import {
+    authedRequest,
     capUserDrive,
     createTestUser,
     driveGet,
@@ -18,6 +19,8 @@ describe('WebDAV MOVE/COPY', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let mountId: string;
     let baseHref: string;
+    const lockBody = `<?xml version="1.0" encoding="utf-8" ?>
+<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`;
 
     beforeAll(async () => {
         ctx = await getTestContext();
@@ -340,13 +343,106 @@ describe('WebDAV MOVE/COPY', () => {
         const trashNames = async (): Promise<string[]> =>
             (await (await getHome(ctx.alice.user.id)).drive.listTrash(mountId)).map((path) => path.name);
 
-        test('trashes the old file, lands the source and answers 204', async () => {
-            await webdavRequest(email(), 'PUT', `${baseHref}/mv-new.txt`, { body: 'new' });
-            await webdavRequest(email(), 'PUT', `${baseHref}/mv-old.txt`, { body: 'old' });
-            expect((await move('mv-new.txt', 'mv-old.txt')).status).toBe(204);
-            expect(await read('mv-old.txt')).toBe('200 new');
-            expect((await webdavRequest(email(), 'GET', `${baseHref}/mv-new.txt`)).status).toBe(404);
-            expect(await trashNames()).toContain('mv-old.txt');
+        // Word and Excel save this way, so the file must stay the one that is shared, watched and has the history.
+        test('of a file over a file keeps the file, with its sharing, type and history, and gives it the bytes', async () => {
+            const { drive } = await getHome(ctx.alice.user.id);
+            await webdavRequest(email(), 'PUT', `${baseHref}/report.docx`, { body: 'old' });
+            const created = await drive.resolvePath(mountId, '/report.docx');
+            if (!created) throw new Error('expected the file');
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${created.id}/acl`, {
+                add: [{ id: ctx.bob.user.email, read: true, write: false }],
+            });
+            const report = await drive.getPath(mountId, created.id);
+            if (!report?.acl?.length) throw new Error('expected the share');
+            const eventsBefore = (await drive.getFileHistory(mountId, report.id)).map((event) => event.eventType);
+
+            await webdavRequest(email(), 'PUT', `${baseHref}/~WRD0001.tmp`, { body: 'new' });
+            expect((await move('~WRD0001.tmp', 'report.docx')).status).toBe(204);
+
+            const saved = await drive.resolvePath(mountId, '/report.docx');
+            expect(saved?.id).toBe(report.id);
+            expect(saved?.mimeType).toBe(report.mimeType);
+            expect(saved?.acl).toEqual(report.acl);
+            const sharee = await webdavRequest(ctx.bob.user.email, 'GET', `${baseHref}/report.docx`);
+            expect(`${sharee.status} ${await sharee.text()}`).toBe('200 new');
+            const download = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${mountId}/file/${report.id}/download`,
+            );
+            expect(download.headers.get('Content-Type')).toBe(Bun.file('report.docx').type);
+            expect(download.headers.get('Content-Disposition')).toContain('report.docx');
+            expect(await download.text()).toBe('new');
+
+            const events = (await drive.getFileHistory(mountId, report.id)).map((event) => event.eventType);
+            expect(events.toSorted()).toEqual([...eventsBefore, 'uploaded' as const].toSorted());
+            expect(await drive.resolvePath(mountId, '/~WRD0001.tmp')).toBeNull();
+            const trash = await trashNames();
+            expect(trash).not.toContain('report.docx');
+            expect(trash).not.toContain('~WRD0001.tmp');
+        });
+
+        test('of a file over a locked file keeps the lock of the client that sent its token', async () => {
+            await webdavRequest(email(), 'PUT', `${baseHref}/mv-locked.txt`, { body: 'old' });
+            await webdavRequest(email(), 'PUT', `${baseHref}/mv-locked.tmp`, { body: 'new' });
+            const lock = await webdavRequest(email(), 'LOCK', `${baseHref}/mv-locked.txt`, {
+                body: lockBody,
+                headers: { 'Content-Type': 'application/xml' },
+            });
+            const token = (lock.headers.get('Lock-Token') ?? '').replace(/^<|>$/g, '');
+            const res = await webdavRequest(email(), 'MOVE', `${baseHref}/mv-locked.tmp`, {
+                headers: {
+                    Destination: `http://localhost${baseHref}/mv-locked.txt`,
+                    Overwrite: 'T',
+                    If: `<http://localhost${baseHref}/mv-locked.txt> (<${token}>)`,
+                },
+            });
+            expect(res.status).toBe(204);
+            expect(await read('mv-locked.txt')).toBe('200 new');
+            const unlocked = await webdavRequest(email(), 'PUT', `${baseHref}/mv-locked.txt`, { body: 'no token' });
+            expect(unlocked.status).toBe(423);
+            const unlock = await webdavRequest(email(), 'UNLOCK', `${baseHref}/mv-locked.txt`, {
+                headers: { 'Lock-Token': `<${token}>` },
+            });
+            expect(unlock.status).toBe(204);
+        });
+
+        test('of a file over a folder, or a folder over a folder or a file, trashes what was there', async () => {
+            const make = (kind: string, name: string): Promise<Response> =>
+                kind === 'folder'
+                    ? webdavRequest(email(), 'MKCOL', `${baseHref}/${name}`)
+                    : webdavRequest(email(), 'PUT', `${baseHref}/${name}`, { body: name });
+            for (const { source, target } of [
+                { source: 'file', target: 'folder' },
+                { source: 'folder', target: 'folder' },
+                { source: 'folder', target: 'file' },
+            ] as const) {
+                const from = `mv-${source}-over-${target}-src`;
+                const to = `mv-${source}-over-${target}`;
+                expect((await make(source, from)).status).toBe(201);
+                expect((await make(target, to)).status).toBe(201);
+                expect((await move(from, to)).status).toBe(204);
+                expect(await trashNames()).toContain(to);
+                const landed = await (await getHome(ctx.alice.user.id)).drive.resolvePath(mountId, `/${to}`);
+                expect(landed?.type).toBe(source);
+            }
+        });
+
+        test("over a file in a document's media/ is a 423 and changes nothing", async () => {
+            const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+            const doc = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `folder/${root.id}/create/doc`,
+                { fileName: 'MvMediaDoc' },
+            );
+            await webdavRequest(email(), 'PUT', `${baseHref}/mv-into-media.txt`, { body: 'new' });
+            await webdavRequest(email(), 'PUT', `${baseHref}/${doc.name}/media/kept.txt`, { body: 'old' });
+            const res = await move('mv-into-media.txt', `${doc.name}/media/kept.txt`);
+            expect(`${res.status} ${await res.text()}`).toBe('423 Cannot change the inside of a document');
+            expect(await read(`${doc.name}/media/kept.txt`)).toBe('200 old');
+            expect(await read('mv-into-media.txt')).toBe('200 new');
+            expect(await trashNames()).not.toContain('kept.txt');
         });
 
         test('into another folder under a new name lands beside a file with the old name', async () => {
@@ -436,12 +532,24 @@ describe('WebDAV MOVE/COPY', () => {
         const trashNames = async (): Promise<string[]> =>
             (await (await getHome(ctx.alice.user.id)).drive.listTrash(mountId)).map((path) => path.name);
 
-        test('trashes the old file, lands the copy and answers 204', async () => {
+        test('of a file over a file keeps both files and gives the destination the bytes', async () => {
+            const { drive } = await getHome(ctx.alice.user.id);
             await webdavRequest(email(), 'PUT', `${baseHref}/over-new.txt`, { body: 'new' });
             await webdavRequest(email(), 'PUT', `${baseHref}/over-old.txt`, { body: 'old' });
+            const old = await drive.resolvePath(mountId, '/over-old.txt');
             expect((await copy('over-new.txt', 'over-old.txt')).status).toBe(204);
+            expect((await drive.resolvePath(mountId, '/over-old.txt'))?.id).toBe(old?.id);
             expect(await (await webdavRequest(email(), 'GET', `${baseHref}/over-old.txt`)).text()).toBe('new');
-            expect(await trashNames()).toContain('over-old.txt');
+            expect(await (await webdavRequest(email(), 'GET', `${baseHref}/over-new.txt`)).text()).toBe('new');
+            expect(await trashNames()).not.toContain('over-old.txt');
+        });
+
+        test('of a file over a folder trashes the folder', async () => {
+            await webdavRequest(email(), 'PUT', `${baseHref}/over-file.txt`, { body: 'new' });
+            await webdavRequest(email(), 'MKCOL', `${baseHref}/over-folder`);
+            expect((await copy('over-file.txt', 'over-folder')).status).toBe(204);
+            expect(await (await webdavRequest(email(), 'GET', `${baseHref}/over-folder`)).text()).toBe('new');
+            expect(await trashNames()).toContain('over-folder');
         });
 
         test('into its own subtree is a 409 and leaves the destination', async () => {
@@ -474,9 +582,6 @@ describe('WebDAV MOVE/COPY', () => {
 
     // The handler checks Overwrite and the locks on what holds the name. The drive writes many awaits later.
     describe('a destination that appears after the request checked the name', () => {
-        const lockBody = `<?xml version="1.0" encoding="utf-8" ?>
-<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`;
-
         beforeAll(async () => {
             expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', `${baseHref}/Appears`)).status).toBe(201);
             const folder = await (await getHome(ctx.alice.user.id)).drive.resolvePath(mountId, '/Appears');

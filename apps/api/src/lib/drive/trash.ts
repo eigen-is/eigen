@@ -1,5 +1,5 @@
 // The drive side of the trash: moving a path to the trash, back out of it, and deleting it for good,
-// from the trash or, for a failed copy that holds only what it wrote, without it. Drive methods such as
+// from the trash or, for a path nobody needs back such as a failed copy, without it. Drive methods such as
 // deletePath check the path and then call these. They close open documents, take away sharing, tell
 // open tabs and write the history.
 
@@ -112,14 +112,20 @@ export async function deleteFailedCopy(
     user: User,
 ): Promise<void> {
     if (!(await holdsOnlyCopy(mount, item, createdIds))) return deletePath(drive, mount, item, user);
+    return deleteForGood(drive, mount, item, user);
+}
+
+// Deletes a live path without the trash, such as the source of a move whose bytes went into the file it replaced.
+export async function deleteForGood(drive: Drive, mount: Mount, item: DrivePath, user: User): Promise<void> {
     const members = await drive.getEffectiveMembers(mount.id, item.id);
-    // A document opened in the half-built copy between this close and the delete loses its database under the
-    // editor, which logs until its socket's read check closes it. The copy goes for good either way.
+    // A document opened under the path between this close and the delete loses its database under the editor,
+    // which logs until its socket's read check closes it. The path goes for good either way.
     await closeOpenDocumentsUnder(drive, mount, item.id);
     await mount.deletePath(item.id);
     drive.emit(isContainerType(item.type) ? SSEventType.DRIVE_FOLDER_DELETED : SSEventType.DRIVE_FILE_DELETED, item, {
         members,
     });
+    if (item.acl) await propagateSharedPathChange(item, item.acl, null, user);
 }
 
 // True when the copy made the path and everything below it, and nobody shared any of it since.

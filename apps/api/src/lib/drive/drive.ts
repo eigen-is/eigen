@@ -48,7 +48,7 @@ import { CollabDocument } from '../collab/collab-document';
 import { enforceMaxUploadSize, enforceMountQuota } from '../config/enforcement';
 import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
-import { ApiError, computeEtag } from '../core';
+import { ApiError, computeEtag, storageGone } from '../core';
 import type { Home } from '../home';
 import { broadcastToOwnerAndMembers } from '../home/home-relay';
 import { composeCollaboratorsEmail } from '../mailer/mail-composers';
@@ -108,7 +108,7 @@ import {
 import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp } from './streaming';
 import { sweepCopy, sweepDocument } from './sweep';
-import { deleteFailedCopy, deletePath, permanentlyDelete, restorePath } from './trash';
+import { deleteFailedCopy, deleteForGood, deletePath, permanentlyDelete, restorePath } from './trash';
 import { commitFromTemp, finalizeNamedUpload, finalizeUpload } from './upload';
 
 // How a content write is guarded and recorded. ifMatch is an If-Match value, checked under the file's
@@ -609,8 +609,8 @@ export class Drive {
     }
 
     // Puts a path in a folder under exactly this name, as a WebDAV MOVE asks: a move, a rename or both, in one write.
-    // What holds the name goes to the trash, and only once nothing can refuse the move any more. `checkedId` is the
-    // path the caller found there and checked, or null for a free name.
+    // What holds the name is replaced only once nothing can refuse the move any more. `checkedId` is the path the
+    // caller found there and checked, or null for a free name.
     public async movePathOver(
         mountId: string,
         pathId: string,
@@ -628,7 +628,12 @@ export class Drive {
             throw new ApiError(409, 'Cannot move a folder into itself or its own descendant');
         }
         mount.assertLiveFolder(pathId, destParentId);
-        await this.trashOccupant(mount, destParentId, safeName, path, checkedId, user);
+        const kept = await this.replaceOccupant(mount, destParentId, safeName, path, checkedId, user);
+        if (kept) {
+            // The bytes live on in the kept file, so the source goes for good, not to the trash.
+            await this.removePath(mountId, pathId, (_, source) => deleteForGood(this, mount, source, user));
+            return kept;
+        }
         const to = {
             ...(destParentId !== path.parentId && { parentId: destParentId }),
             ...(safeName !== path.name && { name: safeName }),
@@ -701,8 +706,8 @@ export class Drive {
     }
 
     // Copies a path into a folder of its own mount under exactly this name, as a WebDAV COPY with Overwrite: T asks.
-    // What holds the name goes to the trash, and only once nothing can refuse the copy any more. `checkedId` is as
-    // for movePathOver.
+    // What holds the name is replaced only once nothing can refuse the copy any more. `checkedId` is as for
+    // movePathOver.
     public async copyPathOver(
         mountId: string,
         srcPathId: string,
@@ -715,8 +720,8 @@ export class Drive {
         const safeName = validateName(name);
         const src = await mount.getActivePath(srcPathId);
         const tree = await this.checkedCopyTree(mount, src, mount, destParentId);
-        await this.trashOccupant(mount, destParentId, safeName, src, checkedId, user);
-        return this.writeCopy(mount, destParentId, safeName, tree, mount, user);
+        const kept = await this.replaceOccupant(mount, destParentId, safeName, src, checkedId, user);
+        return kept ?? this.writeCopy(mount, destParentId, safeName, tree, mount, user);
     }
 
     // Copies `src`, a path of a mount of this drive or of another one, into a folder of this drive under a free name.
@@ -756,24 +761,29 @@ export class Drive {
         return tree;
     }
 
-    // Trashes what holds the name in the folder. A name is compared without case, so `path`, the one being moved or
-    // copied, can hold it itself, and then it stays. A folder `path` is in would take `path` to the trash with it.
-    // The caller checked Overwrite and the locks on `checkedId` alone, so a path that took the name since is refused.
-    private async trashOccupant(
+    // Replaces what holds the name with `path`, the one being moved or copied. A file under a file is kept and
+    // returned, with the bytes of `path` written as an upload over it. Anything else goes to the trash.
+    private async replaceOccupant(
         mount: Mount,
         parentId: string,
         name: string,
         path: DrivePath,
         checkedId: string | null,
         user: User,
-    ): Promise<void> {
+    ): Promise<DrivePath | null> {
         const occupant = await mount.getChildByName(parentId, name);
-        if (!occupant || occupant.id === path.id) return;
+        if (!occupant || occupant.id === path.id) return null;
         if (occupant.id !== checkedId) throw nameTakenError(occupant.name);
+        if (path.type === DRIVE_TYPE_FILE && occupant.type === DRIVE_TYPE_FILE) {
+            const bytes = await mount.readFile(path.id);
+            if (!bytes) throw storageGone();
+            return (await this.writeFileContent(mount.id, occupant.id, bytes, { user })).path;
+        }
         if (await mount.isSelfOrDescendant(occupant.id, path.id)) {
             throw new ApiError(409, 'Cannot replace a folder with a path inside it');
         }
         await this.deletePath(mount.id, occupant.id, user);
+        return null;
     }
 
     private async writeCopy(
