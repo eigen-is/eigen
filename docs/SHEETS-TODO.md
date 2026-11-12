@@ -335,8 +335,8 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 
 ### Memory
 
-- [ ] **A column costs its last row**: 17 bytes a row, so one cell on row 1,048,576 costs its column about 18 MB, and an engine or an xlsx import has no cap. A slot budget at step 1b's decoder and importer bounds it; sparse columns would remove it. **M**
-- [ ] **One formula may still hold eight full arrays of references** under `MOST_STORED`, about 1.3 GB by arithmetic (not measured). **S**
+- [ ] **A column costs its last row**: 17 bytes a row, so one cell on row 1,048,576 reserves about 18 MB for its column, and an engine or an xlsx import has no cap. Measured on Bun and Node: 200 cells on the last row hold 50 to 74 MB resident at load and 3.4 GB after one row insert, which writes every slot; 100 cells 1.7 GB. A file of a few KB can do this, so step 1b closes it before a real file reaches the engine: a slot budget at the decoder and importer bounds it, sparse columns would remove it. **M**
+- [ ] **One formula may still hold eight full arrays of references** under `MOST_STORED`: a lifted call such as `OFFSET(A1,ROW(A:A)-1,COLUMN(A1:P1)-1)` builds 2^24 references charged one slot each, not `REFERENCE_ROOM`'s 17, and one such array peaks at 1.9 to 2.2 GB resident on Bun and 2.0 GB on Node (measured), so eight would take about 15 GB. **S**
 - [ ] **A source of cells that calls back into the engine** during `addSheet` gets one cell's formula swapped for another's, since the shape table forgets the half-loaded sheet's shapes. The `SheetSource` contract forbids it and nothing checks it. **S**
 
 ### Tests and checks
