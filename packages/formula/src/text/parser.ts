@@ -27,7 +27,7 @@ import { branch, EMPTY, leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKi
 // The cap on a formula's text in every spelling. One formula is longer stored or in a file than typed, as a!A1 is
 // with a uuid for the sheet, so a cap per spelling would refuse text the engine printed itself.
 export const MAX_STORED_LENGTH = 131072;
-// Brackets and prefix or postfix operators, one inside the other. A chain of binary operators is not nesting.
+// Brackets, calls and prefix or postfix operators, one inside the other. A chain of binary operators is not nesting.
 export const MAX_NESTING = 64;
 export const MAX_ARGUMENTS = 255;
 
@@ -76,6 +76,12 @@ export function callsSpaced(text: string, pos: number, end: number): boolean {
     const gap = lexAt(text, end);
     if (tokenKind(gap) !== Token.Space || text.charCodeAt(tokenEnd(gap)) !== OPEN) return false;
     return !readsAsReference(text.slice(pos, end));
+}
+
+// The tree, or the failure of one that nests deeper than its stored text reads back. The parser counts as it reads;
+// this measures a tree that a walk made deeper than the text it came from, as reading a file's spellings does.
+export function bounded(tree: FormulaNode): FormulaNode | ParseFailure {
+    return nesting(tree) > MAX_NESTING ? { reason: 'too-deep', at: 0 } : tree;
 }
 
 // Whether a word is a cell label or a stored reference by its form alone, in any letter case and on or off the
@@ -733,6 +739,18 @@ function yieldsReference(node: FormulaNode): boolean {
             return node.op === Token.Colon || node.op === Token.Space || node.op === Token.Comma;
         default:
             return false;
+    }
+}
+
+// How many levels a tree nests. Its first children are read in a loop, as a long sum or a row of % is that deep.
+function nesting(tree: FormulaNode): number {
+    let levels = 0;
+    let deepest = 0;
+    for (let node = tree; ; node = node.children[0]) {
+        const { kind, children } = node;
+        if (kind >= NodeKind.Call && kind !== NodeKind.Binary && kind !== NodeKind.Table) levels += 1;
+        for (let i = 1; i < children.length; i += 1) deepest = Math.max(deepest, levels + nesting(children[i]));
+        if (children.length === 0) return Math.max(deepest, levels);
     }
 }
 

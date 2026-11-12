@@ -6,6 +6,7 @@ import {
     EXCEL_WORKSHEET_FUNCTIONS,
 } from '../../functions/excel-names';
 import { FUNCTIONS } from '../../functions/library';
+import type { FormulaNode } from '../../text';
 import {
     intersect,
     isLegacy,
@@ -21,7 +22,7 @@ import {
 import * as parser from '../../text/parser';
 import { ShapeTable } from '../../text/shapes';
 import { at, findSheet, sheetName, treeA1 } from './support';
-import { bar, fileOf, read } from './xlsx-support';
+import { bar, fileOf, intersected, read } from './xlsx-support';
 
 // Excel's own answers, recorded in batch 15 of the oracle (Excel for the web, 12 November 2026). Part T: a formula
 // typed into a cell, the mark Excel saved it with and the text of its <f>. `ours` is set where this build
@@ -222,7 +223,7 @@ describe('text/xlsx: where Excel puts the @ in a plain <f> (oracle batch 15, par
 
     test('a plain <f> is written back as it was, and plain', () => {
         for (const { row, host, file } of LEGACY) {
-            const out = fileOf(intersect(read(file, host), FUNCTIONS), host);
+            const out = fileOf(intersected(read(file, host)), host);
             if (row === 'L12b') expect(out).toEqual({ legacy: true, text: '_xlfn.NORM.S.DIST(0,TRUE)' });
             else if (row === 'L12c') expect(out).toEqual({ legacy: true, text: '_xludf.FOO(1)' });
             else expect(out).toEqual({ legacy: true, text: file });
@@ -329,8 +330,8 @@ describe('text/xlsx: the three contexts', () => {
 
     test('the pass does nothing to a tree it already ran over', () => {
         for (const { file, host } of LEGACY) {
-            const once = intersect(read(file, host), FUNCTIONS);
-            expect(intersect(once, FUNCTIONS)).toBe(once);
+            const once = intersected(read(file, host));
+            expect(intersected(once)).toBe(once);
         }
     });
 });
@@ -610,11 +611,11 @@ describe('text/xlsx: a stored key reads back as the tree it was printed from', (
 
     for (const text of BREAKING) {
         test(text, () => {
-            for (const tree of [read(text, 'E5'), intersect(read(text, 'E5'), FUNCTIONS)]) {
+            for (const tree of [read(text, 'E5'), intersected(read(text, 'E5'))]) {
                 expect(parseStored(printStored(tree))).toEqual(tree);
                 const { legacy, text: written } = fileOf(tree, 'E5');
                 const again = read(written, 'E5');
-                expect(printStored(legacy ? intersect(again, FUNCTIONS) : again)).toBe(printStored(tree));
+                expect(printStored(legacy ? intersected(again) : again)).toBe(printStored(tree));
             }
         });
     }
@@ -636,12 +637,12 @@ describe('text/xlsx: a stored key reads back as the tree it was printed from', (
         'Sheet2!Rate _xlfn.SINGLE(B1:B3)',
     ]) {
         test(text, () => {
-            for (const tree of [read(text, 'E5'), intersect(read(text, 'E5'), FUNCTIONS)]) {
+            for (const tree of [read(text, 'E5'), intersected(read(text, 'E5'))]) {
                 expect(parseStored(printStored(tree))).toEqual(tree);
                 expect(treeA1(printA1(tree, ...at('E5'), sheetName), 'E5')).toEqual(tree);
                 const { legacy, text: written } = fileOf(tree, 'E5');
                 const again = read(written, 'E5');
-                expect(printStored(legacy ? intersect(again, FUNCTIONS) : again)).toBe(printStored(tree));
+                expect(printStored(legacy ? intersected(again) : again)).toBe(printStored(tree));
             }
         });
     }
@@ -657,6 +658,31 @@ describe('text/xlsx: a stored key reads back as the tree it was printed from', (
         const tree = read('SUM((A1,_xlfn.SINGLE(B1:B3)),_xlfn.SINGLE(A1:A3):B5)', 'E5');
         expect(printA1(tree, ...at('E5'), sheetName)).toBe('=SUM((A1,(@B1:B3)),(@A1:A3):B5)');
         expect(fileOf(tree, 'E5').text).toBe('SUM((A1,_xlfn.SINGLE(B1:B3)),_xlfn.SINGLE(A1:A3):B5)');
+    });
+});
+
+describe('text/xlsx: a file formula whose stored form nests too deep is refused', () => {
+    const wrapped = (inner: string, calls: number) => `${'ABS('.repeat(calls)}${inner}${')'.repeat(calls)}`;
+
+    test.each([
+        ['_xlfn.SINGLE(A1:A2+1)', 62],
+        ['_xlfn.ANCHORARRAY(A1+1)', 62],
+        ['_xlfn.SINGLE(A1:A2%)', 61],
+        ['1+_xlfn.SINGLE(A1:A2+1):B2', 61],
+    ])('the brackets and the operator %s becomes count: it reads under %i calls and no more', (inner, most) => {
+        for (let calls = most - 2; calls <= 64; calls += 1) {
+            const tree = parseXlsx(wrapped(inner, calls), ...at('E5'), findSheet);
+            if (calls > most) expect(tree).toMatchObject({ reason: 'too-deep' });
+            else expect(parseStored(printStored(tree as FormulaNode))).toEqual(tree as FormulaNode);
+        }
+    });
+
+    test('the @ of a plain <f> counts: a range under 63 calls gets it, under 64 the formula is refused', () => {
+        const fits = intersect(read(wrapped('A1:A2', 63)), FUNCTIONS);
+        expect(parseStored(printStored(fits as FormulaNode))).toEqual(fits as FormulaNode);
+        expect(printStored(fits as FormulaNode)).toContain('ABS(@R[-1]C[-3]:RC[-3])');
+        expect(intersect(read(wrapped('A1:A2', 64)), FUNCTIONS)).toEqual({ reason: 'too-deep', at: 0 });
+        expect(intersect(read(wrapped('A1', 64)), FUNCTIONS)).toEqual(read(wrapped('A1', 64)));
     });
 });
 
@@ -689,7 +715,7 @@ describe('text/xlsx: a shared formula', () => {
 
     test("a follower is its master's shape at another cell, as Excel reads it", () => {
         for (const [text, master, follower, excel] of FOLLOWERS) {
-            const tree = intersect(read(text, master), FUNCTIONS);
+            const tree = intersected(read(text, master));
             expect(printA1(tree, ...at(follower), sheetName)).toBe(excel);
         }
         expect(FOLLOWERS.length + PAST_THE_EDGE.length).toBe(18);
@@ -697,7 +723,7 @@ describe('text/xlsx: a shared formula', () => {
 
     test('a follower past the edge of the grid is #REF! where Excel wraps to the other edge: a known difference', () => {
         for (const [text, master, follower, ours] of PAST_THE_EDGE) {
-            expect(printA1(intersect(read(text, master), FUNCTIONS), ...at(follower), sheetName)).toBe(ours);
+            expect(printA1(intersected(read(text, master)), ...at(follower), sheetName)).toBe(ours);
         }
         expect(PAST_THE_EDGE[0][3]).not.toBe('=B1');
     });
@@ -715,7 +741,7 @@ describe('text/xlsx: a shared formula', () => {
         const shapes = new ShapeTable();
         let master = 0;
         const shown = cells.map(([cell, text]) => {
-            if (master === 0 && text !== null) master = shapes.internTree(intersect(read(text, cell), FUNCTIONS));
+            if (master === 0 && text !== null) master = shapes.internTree(intersected(read(text, cell)));
             return typedText(shapes.shape(master), ...at(cell), sheetName);
         });
         expect(shown).toEqual(['=B1+1', '=B2+1', '=B3+1', '=B4+1']);

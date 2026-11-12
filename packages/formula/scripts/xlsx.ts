@@ -150,13 +150,13 @@ export function readBook(path: string): Book {
                     const plain = kind !== 'array' && attribute(cell[1], 'cm') === undefined;
                     const text = decodeXml(f[2]);
                     const named = withNames(text, place, names, listed, 0);
-                    const parsed = parseXlsx(named, row, column, findSheet);
-                    if ('reason' in parsed) formula = refused(`the parser refuses it (${parsed.reason})`);
-                    else {
-                        const resolved = resolveTables(parsed, sheet.id, row, column, findTable);
-                        const tree = plain ? intersect(resolved, FUNCTIONS) : resolved;
-                        formula = { tree, stored: printStored(tree), refused: '', named: named !== text };
-                    }
+                    const read = parseXlsx(named, row, column, findSheet);
+                    const resolved = 'reason' in read ? read : resolveTables(read, sheet.id, row, column, findTable);
+                    const tree = plain && !('reason' in resolved) ? intersect(resolved, FUNCTIONS) : resolved;
+                    formula =
+                        'reason' in tree
+                            ? refused(`the parser refuses it (${tree.reason})`)
+                            : { tree, stored: printStored(tree), refused: '', named: named !== text };
                     if (shared !== '') masters.set(shared, formula);
                 }
                 cells.push({ row, column, value, formula });

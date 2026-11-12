@@ -17,7 +17,7 @@ import { columnIndex } from './a1';
 import { UNDERSCORE } from './chars';
 import { REF_ERROR, Token } from './lexer';
 import type { ParseFailure, SheetFinder } from './parser';
-import { parseA1, readsAsReference } from './parser';
+import { bounded, parseA1, readsAsReference } from './parser';
 import { isTableCell } from './tables';
 import type { FormulaNode } from './tree';
 import { branch, leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from './tree';
@@ -44,12 +44,13 @@ export function parseXlsx(
     findSheet: SheetFinder,
 ): FormulaNode | ParseFailure {
     const tree = parseA1(text, hostRow, hostColumn, findSheet);
-    return 'reason' in tree ? tree : spellIn(tree);
+    return 'reason' in tree ? tree : bounded(spellIn(tree));
 }
 
 // The tree of a plain <f> with an @ wherever an Excel without dynamic arrays read one cell of what may be many.
-export function intersect(tree: FormulaNode, functions: Registry): FormulaNode {
-    return cut(tree, functions, ONE | TOP);
+// An @ is a level of nesting, so a tree at the limit can come back as a failure.
+export function intersect(tree: FormulaNode, functions: Registry): FormulaNode | ParseFailure {
+    return bounded(cut(tree, functions, ONE | TOP));
 }
 
 // Whether a plain <f> gives the cell the value it has here: no place that certainly or possibly wants one value
