@@ -1,7 +1,8 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { FUNCTIONS } from '../../functions/library';
 import type { SheetSource } from '../../index';
 import { Recalc } from '../../recalc/recalc';
+import { StringTable } from '../../store/strings';
 import { ChangeKind, SWEEP_FLOOR, Workbook } from '../../store/workbook';
 import { engineOf, stored, valueAt } from './support';
 
@@ -9,6 +10,13 @@ const NO_CAP = Number.POSITIVE_INFINITY;
 
 // A text of its own that weighs as much as a cell's text can, in mixed case so that its comparison key is another.
 const long = (label: string) => `${label} ${'x'.repeat(30_000)}`;
+
+// The megabytes in use once everything that can go is gone.
+function megabytes(): number {
+    Bun.gc(true);
+    const { heapUsed, arrayBuffers } = process.memoryUsage();
+    return (heapUsed + arrayBuffers) / 2 ** 20;
+}
 
 function texts(id: string, count: number, text: (row: number) => string): SheetSource {
     return {
@@ -21,7 +29,7 @@ function texts(id: string, count: number, text: (row: number) => string): SheetS
 }
 
 describe('the string table weighs what the cells hold now, within the factor a sweep allows', () => {
-    test('a hundred thousand text formulas fed by one cell, written twelve times', () => {
+    test('a hundred thousand text formulas fed by one cell, written twenty-four times', () => {
         const count = 100_000;
         const workbook = new Workbook([
             {
@@ -40,27 +48,38 @@ describe('the string table weighs what the cells hold now, within the factor a s
         // Every text is held by a cell here, and each write makes as many again of the same lengths.
         const { weight, size } = workbook.strings;
         expect(weight).toBeGreaterThan(SWEEP_FLOOR);
-        for (let i = 1; i <= 12; i += 1) {
+        const keep = spyOn(StringTable.prototype, 'keep');
+        const before = megabytes();
+        for (let i = 1; i <= 24; i += 1) {
             recalc.setValue(sheet, 0, 1, `Item ${i % 10}/`);
             recalc.pass(NO_CAP);
             // Twice what the cells held at the last sweep, and what this pass made.
             expect(workbook.strings.weight).toBeLessThanOrEqual(3 * weight);
             expect(workbook.strings.size).toBeLessThanOrEqual(3 * size);
         }
-        expect(workbook.value(sheet.columns[2], count)).toBe(`Item 2/${count}`);
+        // Measured: 47 megabytes more with the sweep, 182 without.
+        expect(megabytes() - before).toBeLessThan(100);
+        // A pass makes at most what the cells hold, so the table is past twice that at every second pass.
+        expect(keep).toHaveBeenCalledTimes(12);
+        keep.mockRestore();
+        expect(workbook.value(sheet.columns[2], count)).toBe(`Item 4/${count}`);
     }, 60_000);
 
-    test('one joined text of thirty thousand characters, rewritten four hundred times', () => {
+    test('one joined text of thirty thousand characters, rewritten two thousand times', () => {
         const workbook = new Workbook([texts('a', 3000, (row) => `name ${row}`)]);
         const recalc = new Recalc(workbook, FUNCTIONS);
         const [sheet] = workbook.sheets;
         recalc.fillFormula(sheet, 0, 2, 0, 2, stored('=TEXTJOIN(", ",TRUE,A1:A3000)', 'C1'));
-        for (let i = 0; i < 400; i += 1) {
+        recalc.pass(NO_CAP);
+        const before = megabytes();
+        for (let i = 0; i < 2000; i += 1) {
             recalc.setValue(sheet, i, 0, `edit ${i}`);
             recalc.pass(NO_CAP);
             // The table is far below the floor at its sweeps, so it is the floor and what one pass made.
             expect(workbook.strings.weight).toBeLessThanOrEqual(1.1 * SWEEP_FLOOR);
         }
+        // Measured: 3 megabytes more with the sweep, 122 without.
+        expect(megabytes() - before).toBeLessThan(40);
         expect(String(workbook.value(sheet.columns[2], 0))).toStartWith('edit 0, edit 1, edit 2, ');
     }, 60_000);
 
@@ -70,8 +89,11 @@ describe('the string table weighs what the cells hold now, within the factor a s
         const recalc = new Recalc(workbook, FUNCTIONS);
         recalc.pass(NO_CAP);
         expect(workbook.strings.weight).toBeGreaterThan(SWEEP_FLOOR);
+        const before = megabytes();
         recalc.edit({ kind: ChangeKind.RemoveSheet, sheet: 'b' });
         recalc.pass(NO_CAP);
+        // Measured: 33 of 45 megabytes given back with the sweep, 1 without.
+        expect(before - megabytes()).toBeGreaterThan(before / 3);
         expect(workbook.strings.weight).toBe(new Workbook([names]).strings.weight);
     }, 60_000);
 });
