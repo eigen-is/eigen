@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2158 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2159 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -426,7 +426,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useRecordHistory` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-file-history.ts |
 | `useRenamePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useRequestAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
-| `useRestorePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
+| `useRestorePaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
 | `useRootFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useSharedPaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useTextPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
@@ -562,7 +562,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (448)
+## Types (449)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -687,6 +687,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveCollabType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveContainerType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveContextType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveCopyDestination` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveImportSource` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveItemRef` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePath` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |

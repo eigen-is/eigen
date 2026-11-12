@@ -502,6 +502,14 @@ export type DriveCapabilities = {
 // body, so the hooks and routes can't drift apart; importFromDriveSchema mirrors it.
 export type DriveImportSource = { sourceOwnerId: string; sourceMountId: string; sourcePathId: string };
 
+// Where a copy of a Drive item goes, and under which name: the body of the copy route.
+export type DriveCopyDestination = {
+    targetOwnerId: string;
+    targetMountId: string;
+    targetParentId: string;
+    name?: string;
+};
+
 // The part of a DrivePath that names an item, enough to build its URL or open it. DrivePath is assignable to it.
 export type DriveItemRef = {
     id: string;

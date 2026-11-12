@@ -12,11 +12,12 @@ import {
     useDriveViewPreferences,
     useEmptyTrash,
     usePermanentlyDelete,
-    useRestorePath,
+    useRestorePaths,
     useTrash,
 } from '@workspace/lib/drive';
 import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Column, ColumnLayout, DeleteDialog, LoadingState, ToolbarTitle } from '@workspace/ui';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Button } from '@workspace/ui/components/button';
@@ -53,7 +54,7 @@ function TrashRoute() {
     const { user } = Route.useRouteContext();
 
     const { items: trashedItems, failedDrives, isLoading, error } = useTrash(user.id);
-    const restorePath = useRestorePath();
+    const restorePaths = useRestorePaths();
     const permanentlyDelete = usePermanentlyDelete();
     const emptyTrash = useEmptyTrash(user.id);
 
@@ -61,7 +62,6 @@ function TrashRoute() {
     const deleteDialog = useDialogValue<readonly DrivePath[]>();
     const deleteItems = deleteDialog.value;
 
-    // Empty trash takes the viewer's own items only: a team's trash also holds what teammates deleted.
     const ownCount = trashedItems.filter((item) => item.ownerId === user.id).length;
 
     // The date sort orders by the time an item was trashed, the date this page shows.
@@ -81,9 +81,7 @@ function TrashRoute() {
                 icon: RotateCcw,
                 group: 'organize',
             },
-            run: () => {
-                for (const item of items) restorePath.mutate(item);
-            },
+            run: () => restorePaths.mutate(items),
         },
         {
             action: {
@@ -156,7 +154,7 @@ function TrashRoute() {
                             ? `Are you sure you want to permanently delete ${deleteItems.length} items? This action cannot be undone.`
                             : 'Are you sure you want to permanently delete'
                     }
-                    itemName={deleteItems.length === 1 ? deleteItems[0].name : undefined}
+                    itemName={deleteItems.length === 1 ? stripEigenExtension(deleteItems[0].name) : undefined}
                     onDelete={async () => {
                         await permanentlyDelete.mutateAsync(deleteItems).catch((error: unknown) => {
                             if (error instanceof PartialBatchError) deleteDialog.openDialog(error.failed);

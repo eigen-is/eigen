@@ -3,12 +3,15 @@ import {
     api,
     contactsApi,
     emlPreviewRoute,
+    getDriveItemUrl,
     icsPreviewRoute,
     mailEmlPreviewRoute,
     mailIcsPreviewRoute,
     mailVCardPreviewRoute,
+    openDocument,
     vcardPreviewRoute,
 } from '../../core/api';
+import { DRIVE_MIME_FOLDER } from '../../types/drive';
 
 afterEach(() => mock.restore());
 
@@ -181,4 +184,26 @@ describe('API date parsing', () => {
         expect(response.data?.[0]?.createdAt).toBeInstanceOf(Date);
         expect(response.data?.[0]?.createdAt).toEqual(new Date('2026-08-15T10:30:00.000Z'));
     });
+});
+
+// A document app's details panel opens an item's folder the way its rows open a document: in the Drive app.
+test('openDocument opens a folder in Drive', () => {
+    const folder = {
+        id: 'f1',
+        ownerId: 'o1',
+        mountId: 'default',
+        name: 'Plans',
+        type: 'folder',
+        mimeType: DRIVE_MIME_FOLDER,
+    } as const;
+    // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
+    const g = globalThis as any;
+    const realWindow = g.window;
+    g.window = { location: { href: '' } };
+    try {
+        openDocument(folder);
+        expect(g.window.location.href).toBe(getDriveItemUrl(folder));
+    } finally {
+        g.window = realWindow;
+    }
 });

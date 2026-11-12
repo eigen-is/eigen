@@ -1,7 +1,7 @@
 // The list column of a Drive view: DriveList draws the rows as a table or a grid with selection, drop
 // and context menus, and hands the selection to the command palette. DriveListToolbar draws the crumb
-// row or title above it with the view controls. DriveLayout mounts both, for example in Drive's folder
-// view and in the document apps' lists.
+// row or title above it with the view controls. A layout such as DriveLayout mounts both, in Drive's
+// folder view and in the document apps' lists for example.
 
 import { useBreadcrumb, useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
@@ -328,7 +328,10 @@ export function DriveList({
         >
             {allowUpload && <FileDropOverlay visible={isDragging} label="Drop files to upload" icon={UploadIcon} />}
 
-            {mode === 'grid' ? (
+            {/* In place of the table, so the empty state centers in the whole list area. */}
+            {items.length === 0 ? (
+                <EmptyState hint={emptyHint} />
+            ) : mode === 'grid' ? (
                 <DriveGrid {...sharedProps} />
             ) : (
                 <DriveTable
@@ -339,8 +342,6 @@ export function DriveList({
                     sort={sort}
                 />
             )}
-
-            {items.length === 0 && <EmptyState hint={emptyHint} />}
             <DrivePaletteSelection
                 items={selection.selectedItems}
                 listing={items}

@@ -1,6 +1,6 @@
 // A document app's own index, such as all of the viewer's sheets or the docs on one team drive,
-// drawn in Drive's list and detail layout. A row opens its document in the app. The app's index and
-// team drive routes render it, and the selection lives in the URL they own.
+// drawn in Drive's list and detail layout. A row opens its document in the app. An app's routes, such as
+// its index, render it, and the selection lives in the URL they own.
 
 import { openDocument } from '@workspace/lib/api';
 import {
@@ -54,7 +54,7 @@ export function EigenDocListView({
     const { isMobile } = useLayout();
     const capabilities = {
         ...DRIVE_CAPABILITIES.listing,
-        // Move to works inside the layout's one owner and mount, so only a list of one mount offers it.
+        // The other lists also hold items shared with the viewer, whose drive the move picker can't open.
         canMove: isMountScoped,
         createTypes: new Set([config.type]),
     };

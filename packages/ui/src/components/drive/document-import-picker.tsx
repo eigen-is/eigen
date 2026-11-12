@@ -1,5 +1,5 @@
-// The Import… picker docs, sheets and slides share: pick a file from Drive or the device, then say how it comes in,
-// and only then does either import mutation run. The choice stays open, under the progress dialog, until the import
+// The Import… picker of an editor such as Docs or Slides: pick a file from Drive or the device, then say how it comes
+// in, and only then does either import mutation run. The choice stays open, under the progress dialog, until the import
 // is done, and a failed import leaves it open for another try. A Drive file is offered by its extension, as Convert
 // takes it: Drive stores the type its upload claimed, which for an Office file can be application/octet-stream.
 

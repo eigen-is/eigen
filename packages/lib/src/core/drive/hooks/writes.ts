@@ -1,25 +1,19 @@
 // The hooks that change Drive, such as create, upload, copy, move, rename and delete. Each one sends its
-// request per item and then calls the invalidators for the listings the change makes stale. A batch goes
-// through settleEach: when only part of it goes through, the hook says which items did, so a dialog can
-// retry the rest and an editor can keep what landed.
+// request per item and then calls the invalidators for the listings the change makes stale, once for the
+// whole batch. A batch goes through settleEach: when only part of it goes through, the hook says which items
+// did, so a dialog can retry the rest and an editor can keep what landed.
 
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient, UseMutationResult } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { driveApi, getDriveAppUrl, getDriveFileUploadUrl, openDocument } from '@workspace/lib/api';
-import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
+import type { DriveCopyDestination, DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPE_INFO, withEigenExtension } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, getErrorMessage, onMutationError } from '../../api-error';
 import { useAuth } from '../../auth';
 import { CREATE_TIMEOUT_MS, createWithReconcile, fetchListingOnce } from '../reconcile-create';
-import {
-    invalidateAclSharedOrUnshared,
-    invalidateItemCreated,
-    invalidateItemDeleted,
-    invalidatePathMoved,
-    invalidatePathRenamed,
-} from './keys';
+import { invalidateItemCreated, invalidateItemsDeleted, invalidatePathRenamed, invalidatePathsMoved } from './keys';
 import { folderContentQueryConfig } from './reads';
 
 // Owner and mount come with each call, so one instance can create a folder in any drive.
@@ -111,7 +105,7 @@ export async function settleEach(
 
 // Each path names its own owner and mount, so a selection from several drives reaches each home. An
 // aggregate filter view, for example, lists other owners' items.
-export function useDeletePaths() {
+export function useDeletePaths(): UseMutationResult<DrivePath[], unknown, readonly DrivePath[]> {
     const queryClient = useQueryClient();
     const { user } = useAuth();
     return useMutation({
@@ -126,21 +120,22 @@ export function useDeletePaths() {
                     if (response.error) throw new AppError(response);
                     return path;
                 },
-                (deleted) => {
-                    for (const path of deleted) invalidateItemDeleted(queryClient, path);
-                    // Deleting a direct share leaves it, which drops the row from the caller's shared-with-me list.
-                    if (user) invalidateAclSharedOrUnshared(queryClient, user.id);
-                },
+                (deleted) => invalidateItemsDeleted(queryClient, deleted, user?.id ?? ''),
             ),
         onError: onMutationError,
     });
 }
 
 // A move stays inside one drive, so the target folder is looked up in each item's own.
-export function useMovePaths() {
+export function useMovePaths(): UseMutationResult<
+    DrivePath[],
+    unknown,
+    { paths: readonly DrivePath[]; targetParentId: string }
+> {
     const queryClient = useQueryClient();
+    const { user } = useAuth();
     return useMutation({
-        mutationFn: ({ paths, targetParentId }: { paths: readonly DrivePath[]; targetParentId: string }) =>
+        mutationFn: ({ paths, targetParentId }) =>
             settleEach(
                 'move',
                 paths,
@@ -151,16 +146,14 @@ export function useMovePaths() {
                     if (response.error) throw new AppError(response);
                     return path;
                 },
-                (moved) => {
-                    for (const path of moved) invalidatePathMoved(queryClient, path, targetParentId);
-                },
+                (moved) => invalidatePathsMoved(queryClient, moved, targetParentId, user?.id ?? ''),
             ),
         onError: onMutationError,
     });
 }
 
 // Each copy lands beside its original, named "Copy of" it, as Make a copy does.
-export function useDuplicatePaths() {
+export function useDuplicatePaths(): UseMutationResult<DrivePath[], unknown, readonly DrivePath[]> {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (sources: readonly DrivePath[]) => copyEach(queryClient, sources, besideOriginal),
@@ -172,7 +165,7 @@ export function useDuplicatePaths() {
 export function useCopyToFolder() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ items, ...target }: { items: readonly DrivePath[] } & CopyTarget) =>
+        mutationFn: ({ items, ...target }: { items: readonly DrivePath[] } & DriveCopyDestination) =>
             copyEach(queryClient, items, () => target),
         onSuccess: (copied, { targetOwnerId, targetMountId, targetParentId }) => {
             toast.success(copied.length === 1 ? '1 item copied' : `${copied.length} items copied`, {
@@ -220,17 +213,17 @@ export function useCopyToMediaFolder(ownerId: string, mountId: string) {
     });
 }
 
-export function useRenamePath() {
+export function useRenamePath(): UseMutationResult<void, unknown, { path: DrivePath; newName: string }> {
     const queryClient = useQueryClient();
+    const { user } = useAuth();
     return useMutation({
-        mutationFn: async ({ path, newName }: { path: DrivePath; newName: string }) => {
+        mutationFn: async ({ path, newName }) => {
             const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
                 .path({ pathId: path.id })
                 .rename.put({ newName });
             if (response.error) throw new AppError(response);
-            return response.data;
         },
-        onSuccess: (_data, { path }) => invalidatePathRenamed(queryClient, path),
+        onSuccess: (_data, { path }) => invalidatePathRenamed(queryClient, path, user?.id ?? ''),
         onError: onMutationError,
     });
 }
@@ -275,18 +268,11 @@ export function useCreateDriveItem(type: EigenDocType) {
     });
 }
 
-type CopyTarget = {
-    targetOwnerId: string;
-    targetMountId: string;
-    targetParentId: string;
-    name?: string;
-};
-
 // The server gives each copy into one folder its own free name, however many arrive together.
 function copyEach(
     queryClient: QueryClient,
     sources: readonly DrivePath[],
-    targetOf: (source: DrivePath) => CopyTarget,
+    targetOf: (source: DrivePath) => DriveCopyDestination,
 ): Promise<DrivePath[]> {
     return settleEach(
         'copy',
@@ -308,7 +294,7 @@ function copyEach(
     );
 }
 
-function besideOriginal(source: DrivePath): CopyTarget {
+function besideOriginal(source: DrivePath): DriveCopyDestination {
     if (!source.parentId) throw new Error('A root has no folder to hold its copy');
     return {
         targetOwnerId: source.ownerId,

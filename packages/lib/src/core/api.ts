@@ -255,7 +255,7 @@ function getDocumentUrl(path: DriveItemRef): string | undefined {
 
 // Same tab always. See LAYOUT.md § Buttons navigate here, links in content open a new tab.
 export function openDocument(path: DriveItemRef) {
-    const url = getDocumentUrl(path);
+    const url = getDriveItemUrl(path);
     if (!url) {
         console.warn('Cannot open document. Unsupported type:', path.type);
         return;

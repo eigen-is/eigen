@@ -41,8 +41,11 @@ export type ContactMenuActions = {
     showExport?: boolean;
 };
 
-// The contact rows the list's context menu and the detail kebab share; mount `dialogs` outside the menu content.
-export function useContactMenu() {
+// The caller mounts `dialogs` outside the menu content, which unmounts when the menu closes.
+export function useContactMenu(): {
+    renderItems: (contacts: Contact[], close: () => void, actions: ContactMenuActions) => ReactNode;
+    dialogs: ReactNode;
+} {
     const openWriteEmailTo = useOpenWriteEmailTo();
     const mailEnabled = useMailEnabled();
     const startChatWith = useStartChatWith();
@@ -51,8 +54,6 @@ export function useContactMenu() {
     const chatWizard = useDialogValue<{ email: string; name: string }[]>();
 
     const startChat = async (emails: string[], name: string) => {
-        // startChatWith prefers the registered account address. An existing one-to-one chat the user can write in opens
-        // directly, otherwise the wizard opens filled in.
         const result = await startChatWith(emails);
         if (result !== 'opened') chatWizard.openDialog([{ email: result.email, name }]);
     };
@@ -73,7 +74,6 @@ export function useContactMenu() {
         }));
         const canReach = eligible.length > 0;
         const canMail = canReach && mailEnabled;
-
         const canExport = !!showExport && contacts.length > 0;
 
         const labelIds = labels.map((label) => label.id);
@@ -100,8 +100,7 @@ export function useContactMenu() {
                             )}
                             <DropdownMenuItem
                                 onClick={() => {
-                                    // One contact may open an existing chat, and its whole address list lets
-                                    // startChatWith prefer the registered account. Several open the wizard.
+                                    // The whole address list lets startChatWith prefer the registered account.
                                     if (eligible.length === 1) {
                                         void startChat(
                                             eligible[0].email.filter((email) => email.trim().length > 0),

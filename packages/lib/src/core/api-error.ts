@@ -21,9 +21,16 @@ const STATUS_MESSAGES: Record<number, string> = {
     507: 'Insufficient storage',
 };
 
-function readString(source: Record<string, unknown>, key: string): string | undefined {
-    const field = source[key];
-    return typeof field === 'string' && field.trim() !== '' ? field.trim() : undefined;
+export class AppError extends Error {
+    public status: number;
+
+    // error.status is `unknown`: a route that declares no response schema leaves Eden no codes to enumerate.
+    public constructor(response: { error: { status: unknown; value: unknown } | null; status: number }) {
+        const errorStatus = response.error?.status;
+        const status = typeof errorStatus === 'number' ? errorStatus : response.status;
+        super(messageFromBody(response.error?.value, status));
+        this.status = status;
+    }
 }
 
 // Elysia keeps a validation error's `message` and `summary` out of production bodies, and a rejected schema arrives
@@ -41,16 +48,9 @@ function messageFromBody(value: unknown, status: number): string {
     return value === null || value === undefined || Array.isArray(value) ? fallback : String(value);
 }
 
-export class AppError extends Error {
-    public status: number;
-
-    // error.status is `unknown`: a route that declares no response schema leaves Eden no codes to enumerate.
-    public constructor(response: { error: { status: unknown; value: unknown } | null; status: number }) {
-        const errorStatus = response.error?.status;
-        const status = typeof errorStatus === 'number' ? errorStatus : response.status;
-        super(messageFromBody(response.error?.value, status));
-        this.status = status;
-    }
+function readString(source: Record<string, unknown>, key: string): string | undefined {
+    const field = source[key];
+    return typeof field === 'string' && field.trim() !== '' ? field.trim() : undefined;
 }
 
 // The retry every preview that runs a transform shares: the runner's queue is bounded, so its "busy"

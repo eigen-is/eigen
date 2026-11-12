@@ -1,5 +1,5 @@
-// The storage section of a team's admin page: the team's Drive mounts, each with its storage and size, and the
-// dialogs that add and edit one.
+// The storage section of a team's admin page: the team's Drive mounts, each with its storage, size and an on/off
+// switch, and the dialogs that add and edit one.
 
 import { STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
 import { useCheckS3Connection, useHardenS3Bucket, useServerSettings } from '@workspace/lib/settings';
@@ -30,16 +30,12 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
     const s3Harden = useHardenS3Bucket();
 
     const { data: mounts = {} } = useTeamMounts(teamId);
+    const entries = Object.entries(mounts);
     const addMount = useAddTeamMount(teamId);
     const updateMount = useUpdateTeamMount(teamId);
 
     const handleAddMount = async (values: MountFormValues) => {
-        await addMount.mutateAsync({
-            name: values.name,
-            storageType: values.storageType,
-            maxSizeMB: values.maxSizeMB,
-            s3Config: values.s3Config,
-        });
+        await addMount.mutateAsync(values);
     };
 
     const handleEditMount = async (mountId: string, values: MountFormValues) => {
@@ -58,7 +54,7 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
     return (
         <div className="space-y-3">
             <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium">Mounts ({Object.keys(mounts).length})</h3>
+                <h3 className="text-sm font-medium">Mounts ({entries.length})</h3>
                 <Button variant="ghost" size="sm" onClick={() => setShowAddMount(true)}>
                     <HardDrive className="h-4 w-4 mr-1" />
                     Add
@@ -97,7 +93,7 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
                 />
             )}
 
-            {Object.keys(mounts).length === 0 ? (
+            {entries.length === 0 ? (
                 <EmptyState
                     icon={<HardDrive className="h-6 w-6" />}
                     message="No mounts yet"
@@ -105,7 +101,7 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
                 />
             ) : (
                 <div className="space-y-2">
-                    {Object.entries(mounts).map(([id, mount]) => (
+                    {entries.map(([id, mount]) => (
                         <div key={id} className="flex items-center gap-3 p-3 border rounded-lg">
                             <HardDrive className="h-4 w-4 text-muted-foreground shrink-0" />
                             <div className="flex-1 min-w-0">

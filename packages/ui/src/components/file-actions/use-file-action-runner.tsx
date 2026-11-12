@@ -145,6 +145,7 @@ export function useFileActionRunner(
                     onSaved={(paths) => {
                         if (picker.convert) for (const path of paths) convertPath(path, picker.convert.targetType);
                     }}
+                    onPartialFailure={(failed) => openPicker(failed, picker.convert)}
                 />
                 <ImportToCalendarPicker
                     subject={picker.subjects[0] ?? null}

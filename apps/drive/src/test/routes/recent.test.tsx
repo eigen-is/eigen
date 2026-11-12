@@ -151,8 +151,10 @@ test('the phone’s View options sort the page and leave the preference alone', 
     expect(preference()).toEqual({ mode: 'list', sortKey: 'name', sortDir: 'asc' });
 });
 
-test('an empty Recent shows the standard empty text', async () => {
+test('an empty Recent shows the standard empty text in place of the table, with no hint', async () => {
     recent.data = [];
     const container = await open();
     expect(container.textContent).toContain('Within this void, all possibilities are yet unobserved.');
+    expect(container.querySelector('[role="grid"]')).toBeNull();
+    expect(container.textContent).not.toContain('Drop files');
 });
