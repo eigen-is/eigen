@@ -1,6 +1,7 @@
 // Text patterns as criteria, exact lookups and SEARCH read them: * stands for any run of characters, ? for one, and
-// a ~ in front of *, ? or ~ makes that character itself. A pattern is read once and then matched against the
-// upper-cased form of each text, so case never matters. It never becomes a regular expression.
+// a ~ makes the character after it stand for itself, so ~* is a star and ~b a plain b. A pattern is read once and
+// then matched against the upper-cased form of each text, so case never matters. It never becomes a regular
+// expression.
 
 const ANY_RUN = -1;
 const ANY_ONE = -2;
@@ -28,10 +29,9 @@ export function patternOf(key: string): Pattern {
             wild = true;
             continue;
         }
-        const next = key.charCodeAt(at + 1);
-        if (code === TILDE && (next === STAR || next === QUESTION || next === TILDE)) {
-            code = next;
+        if (code === TILDE && at + 1 < key.length) {
             at += 1;
+            code = key.charCodeAt(at);
         }
         codes.push(code);
         literal += key.charAt(at);

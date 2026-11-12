@@ -51,6 +51,7 @@ describe('patternStart', () => {
         ['~', 'A~C', 0, 0],
         ['A~', 'BA~', 0, 1],
         ['~~~', 'A~C', 0, 1],
+        ['~C', 'A~C', 0, 2],
         ['', 'ABC', 3, 3],
         ['?', 'ABC', 3, -1],
     ])('%p in %p from %i starts at %i', (sought, key, from, expected) => {
