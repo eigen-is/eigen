@@ -72,8 +72,9 @@ describe('SUM', () => {
         ['=SUM(ZZ1:ZZ9)', 0],
         ['=SUM(#N/A,#DIV/0!)', NA],
         ['=SUM(1/0,A6)', DIV0],
-        ['=SUM(A6,1/0)', NA],
-        ['=SUM(A1:A6,1/0)', NA],
+        // An argument that is an error is read before any range is looked into.
+        ['=SUM(A6,1/0)', DIV0],
+        ['=SUM(A1:A6,1/0)', DIV0],
         ['=SUM("")', 0],
         ['=SUM(IF(TRUE,A1:A3))', 2],
     ])('%s is %p', (formula, expected) => {
@@ -177,7 +178,7 @@ describe('ROW and COLUMN', () => {
         ['=ROW(B5:B9)', 'C7', 5],
         ['=INDEX(ROW(B5:B9),3)', 'C7', 7],
         ['=INDEX(COLUMN(B5:D5),1,3)', 'C7', 4],
-        ['=ROW((A1,B2))', 'C7', VALUE],
+        ['=ROW((A1,B2))', 'C7', REF],
         ['=ROW(C7)', 'C7', 7],
     ])('%s at %s is %p', (formula, host, expected) => {
         expect(evaluate(formula, {}, host)).toBe(expected);

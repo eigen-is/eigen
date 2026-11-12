@@ -12,7 +12,7 @@ import type { Evaluator } from './evaluator';
 
 // The first error of one area, row by row, once its cells are settled. A cell on a loop still carries its flags.
 export function firstError(ctx: Evaluator, area: Reference): FormulaError | null {
-    const { columns } = area.sheet;
+    const { columns } = ctx.workbook.sheets[area.sheet];
     const right = Math.min(area.right, columns.length - 1);
     let found: FormulaError | null = null;
     let foundRow = GRID_ROWS;
@@ -34,7 +34,7 @@ export function firstError(ctx: Evaluator, area: Reference): FormulaError | null
 export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
     ctx.recalc.settleArea(area);
     const { top, left } = area;
-    const sheet = area.sheet.columns;
+    const sheet = ctx.workbook.sheets[area.sheet].columns;
     const rows = area.bottom - top + 1;
     const columns = area.right - left + 1;
     const across = Math.max(0, Math.min(columns, sheet.length - left));
@@ -57,7 +57,10 @@ export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
     const height = rowEnds?.length ?? rows;
     const width = columnEnds?.length ?? columns;
     if (!ctx.recalc.room(height * width, MOST_ELEMENTS)) return CALC;
-    const items = new Array<Scalar>(height * width);
+    // Filled with blanks one by one and never made at its size: an array made ten thousand long or longer throws
+    // the engine that runs this out of its compiled code, for every reference read after it too.
+    const items: Scalar[] = [];
+    for (let at = height * width; at > 0; at -= 1) items.push(null);
     for (let j = 0; j < width; j += 1) {
         const c = columnEnds === null || j === 0 ? j : columnEnds[j - 1];
         const column = c < across && filledColumns[c] === 1 ? sheet[left + c] : null;
@@ -69,7 +72,18 @@ export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
     }
     if (rows * columns === 1) return items[0];
     // Not looked through for an array of numbers: what reads a range as an array reads it element by element.
-    return { type: ValueType.Array, rows, columns, height, width, items, nums: null, rowEnds, columnEnds };
+    return {
+        type: ValueType.Array,
+        rows,
+        columns,
+        height,
+        width,
+        items,
+        nums: null,
+        rowEnds,
+        columnEnds,
+        references: false,
+    };
 }
 
 // Where the runs of an axis of `size` end: each of the first `length` marks that is set is a run of its own, and

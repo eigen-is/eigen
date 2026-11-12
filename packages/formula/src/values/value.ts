@@ -1,19 +1,20 @@
 // What a formula can evaluate to. A number, a text and a boolean are the JS types and a blank is null, so most
-// arithmetic allocates nothing. The four kinds that need an object carry an integer `type`: an error, a reference
-// to cells that nobody has read yet, an array, and the argument a call leaves out. An array keeps the size that
-// was written apart from what it stores, so a whole column costs its cells and not the grid.
+// arithmetic allocates nothing. The kinds that need an object carry an integer `type`: an error, a reference to
+// cells that nobody has read yet and an array, and beside them the two things a function gets that are no value:
+// the token of an argument that is not evaluated yet, and a table. An array keeps the size that was written apart
+// from what it stores, so a whole column costs its cells and not the grid.
 
-import type { Sheet } from '../store/sheet';
 import type { FormulaError } from './errors';
 
-export const ValueType = { Error: 1, Reference: 2, Array: 3, Omitted: 4 } as const;
+export const ValueType = { Error: 1, Reference: 2, Array: 3, Lazy: 4, Table: 5 } as const;
 
 export type Scalar = number | string | boolean | null | FormulaError;
 
-// One rectangle of one sheet, corners included, and the next area when a union made it.
+// One rectangle of one sheet, corners included, and the next area when a union made it. The sheet is its place in
+// the workbook, so a reference is plain data that reads nothing.
 export type Reference = {
     readonly type: typeof ValueType.Reference;
-    readonly sheet: Sheet;
+    readonly sheet: number;
     readonly top: number;
     readonly left: number;
     readonly bottom: number;
@@ -38,24 +39,24 @@ export type ArrayValue = {
     // One past the last written row, or column, that each stored one stands for. Null when each stands for one.
     readonly rowEnds: Int32Array | null;
     readonly columnEnds: Int32Array | null;
+    // Whether an element is a reference, which only a lifted call makes.
+    readonly references: boolean;
 };
 
-export type Omitted = { readonly type: typeof ValueType.Omitted };
+export type Value = Scalar | Reference | ArrayValue;
 
-export type Value = Scalar | Reference | ArrayValue | Omitted;
+// Anything a slot of a call can hold: a guard below asks only for its tag.
+type Tagged = { readonly type: number } | number | string | boolean | null | undefined;
 
-// An argument left out between two separators, as in SUM(1,,2).
-export const OMITTED: Omitted = Object.freeze({ type: ValueType.Omitted });
-
-export function isError(value: Value): value is FormulaError {
+export function isError(value: Tagged): value is FormulaError {
     return typeof value === 'object' && value !== null && value.type === ValueType.Error;
 }
 
-export function isReference(value: Value): value is Reference {
+export function isReference(value: Tagged): value is Reference {
     return typeof value === 'object' && value !== null && value.type === ValueType.Reference;
 }
 
-export function isArray(value: Value): value is ArrayValue {
+export function isArray(value: Tagged): value is ArrayValue {
     return typeof value === 'object' && value !== null && value.type === ValueType.Array;
 }
 
@@ -67,6 +68,7 @@ export function arrayOf<T extends Scalar | Reference>(
     items: ArrayLike<T>,
     rowEnds: Int32Array | null = null,
     columnEnds: Int32Array | null = null,
+    references = false,
 ): T | ArrayValue {
     if (rows * columns === 1) return items[0];
     let nums: Float64Array | null = null;
@@ -84,7 +86,10 @@ export function arrayOf<T extends Scalar | Reference>(
     }
     const height = rowEnds?.length ?? rows;
     const width = columnEnds?.length ?? columns;
-    return { type: ValueType.Array, rows, columns, height, width, items: nums ?? items, nums, rowEnds, columnEnds };
+    return {
+        type: ValueType.Array,
+        ...{ rows, columns, height, width, items: nums ?? items, nums, rowEnds, columnEnds, references },
+    };
 }
 
 // The stored row or column that a written one lies in.

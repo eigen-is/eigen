@@ -3,14 +3,16 @@
 // deep its evaluation nests. They are packed into one number, the depth above the flags.
 
 import type { Registry } from '../functions/registry';
-import { FunctionFlag } from '../functions/registry';
 import { Token } from '../text/lexer';
 import type { FormulaNode } from '../text/tree';
 import { NodeKind, RefFlag, RefKind, SheetKind } from '../text/tree';
+import { ANYWHERE } from './signature';
 
 export const Fact = {
     // A reference into another workbook or across sheets: the cell keeps the value it came with.
     Kept: 1,
+    // A call of a row that picks another row, such as SUBTOTAL: an outer such call passes the cell over.
+    Chosen: 2,
     ReadsUnnamed: 4,
 } as const;
 
@@ -40,12 +42,12 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
         flags |= facts & FLAGS;
     }
     const entry = node.kind === NodeKind.Call ? functions.get(node.text) : undefined;
-    if (entry !== undefined) {
-        if (entry.flags & FunctionFlag.ReadsUnnamed) flags |= Fact.ReadsUnnamed;
-        const [range, , resized] = node.children;
-        if (entry.flags & FunctionFlag.Resizes && resized !== undefined && !sameSize(range, resized)) {
-            flags |= Fact.ReadsUnnamed;
-        }
+    if (entry !== undefined && entry.chosen !== null) flags |= Fact.Chosen;
+    // An answer that differs from pass to pass, or cells that no argument names, must be computed in every pass.
+    if (entry !== undefined && (entry.volatile || entry.returns === ANYWHERE)) flags |= Fact.ReadsUnnamed;
+    // A range that takes its size from another names cells of its own only when the two are of one size.
+    if (entry !== undefined && entry.matched > entry.where && entry.matched < node.children.length) {
+        if (!sameSize(node.children[entry.where], node.children[entry.matched])) flags |= Fact.ReadsUnnamed;
     }
     return flags | ((depth + 1) << FACT_BITS);
 }

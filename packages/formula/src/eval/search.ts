@@ -1,38 +1,83 @@
 // Searching one row or one column of values for a key, as every lookup function does: for the key itself or a
 // pattern, for the nearest value, or by bisection when the values are sorted. A key matches only values of its own
 // kind, text in any case, and blanks never take part. The values are the rows of a column, read in place, or the
-// elements of an array. Each search answers with a position from 0, or -1, and the function picks its result.
+// elements of an array. A function gets them as a Vector and asks it for a position from 0, or -1.
 
-import type { Evaluator } from '../eval/evaluator';
-import { toArray } from '../eval/views';
 import type { Column } from '../store/column';
 import { CellKind, KIND_MASK } from '../store/column';
 import { ColumnIndex, firstFrom } from '../store/column-index';
 import type { Workbook } from '../store/workbook';
 import { compareValues } from '../values/compare';
+import type { FormulaError } from '../values/errors';
+import { VALUE } from '../values/errors';
 import { equal15 } from '../values/precision';
 import { textKey } from '../values/text-order';
 import type { Reference, Scalar, Value } from '../values/value';
 import { bandOf, isArray, isReference } from '../values/value';
 import { patternMatches, patternOf } from '../values/wildcard';
+import type { Evaluator } from './evaluator';
+import { Find } from './signature';
+import { toArray } from './views';
 
 export type Key = number | string | boolean;
 
-export type Vector = {
-    readonly workbook: Workbook;
+// One row or one column of a table, ready to be searched.
+export class Vector {
+    public readonly workbook: Workbook;
     // The values are the cells of this column from row `start` down, or else `items` from `start` in steps of `step`.
-    readonly column: Column | null;
-    readonly items: ArrayLike<Scalar | Reference>;
-    readonly start: number;
-    readonly step: number;
+    public readonly column: Column | null;
+    public readonly items: ArrayLike<Scalar | Reference>;
+    public readonly start: number;
+    public readonly step: number;
     // How many values there are, and how many of them, counted from the first, can be other than blank.
-    readonly length: number;
-    readonly used: number;
+    public readonly length: number;
+    public readonly used: number;
     // How many of the values that can be other than blank are held, each for a run of equal values, and where each
     // run ends: null when each is one value. A search that visits every value looks at the held ones only.
-    readonly stored: number;
-    readonly ends: Int32Array | null;
-};
+    public readonly stored: number;
+    public readonly ends: Int32Array | null;
+
+    public constructor(
+        workbook: Workbook,
+        column: Column | null,
+        items: ArrayLike<Scalar | Reference>,
+        start: number,
+        step: number,
+        length: number,
+        stored: number,
+        ends: Int32Array | null,
+    ) {
+        this.workbook = workbook;
+        this.column = column;
+        this.items = items;
+        this.start = start;
+        this.step = step;
+        this.length = length;
+        this.stored = stored;
+        this.ends = ends;
+        this.used = stored === 0 ? 0 : (ends?.[stored - 1] ?? stored);
+    }
+
+    // The place of the key itself, a text key as a pattern, or of the last value at most the key, or at least it,
+    // among values taken to be sorted.
+    public find(key: Key, mode: Find): number {
+        if (mode === Find.Exact) return exact(this, key, true, false);
+        return mode === Find.AtMost ? bisect(this, key, false, -1, true) : bisect(this, key, true, 1, false);
+    }
+
+    // `match` is 0 for the key itself, -1 for it or the next smaller value, 1 for it or the next larger one and 2
+    // for the key as a pattern. `search` is 1 from the first value on, -1 from the last one back, and 2 or -2 for a
+    // bisection of ascending or descending values. A blank key finds a blank.
+    public seek(key: Key | null, match: number, search: number): number | FormulaError {
+        if (match !== 0 && match !== -1 && match !== 1 && match !== 2) return VALUE;
+        if (search === 1 || search === -1) {
+            if (match === 0 || match === 2) return exact(this, key, match === 2, search < 0);
+            return nearest(this, key ?? 0, match > 0, search < 0);
+        }
+        if ((search !== 2 && search !== -2) || match === 2) return VALUE;
+        return bisect(this, key ?? 0, search < 0, match, false);
+    }
+}
 
 export function heightOf(range: Value): number {
     return isReference(range) ? range.bottom - range.top + 1 : isArray(range) ? range.rows : 1;
@@ -42,33 +87,39 @@ export function widthOf(range: Value): number {
     return isReference(range) ? range.right - range.left + 1 : isArray(range) ? range.columns : 1;
 }
 
-// The first column of a range or an array when `down`, else its first row. The formulas in it are computed first.
-export function edgeOf(ctx: Evaluator, range: Value, down: boolean): Vector {
+// Column `index` of a range or an array when `down`, else row `index`. The formulas in it are computed first.
+export function edge(ctx: Evaluator, range: Value, down: boolean, index: number): Vector {
     const { workbook } = ctx;
     if (isReference(range) && down) {
-        ctx.recalc.settleArea({ ...range, right: range.left, next: null });
-        const column = range.sheet.columns[range.left];
+        const left = range.left + index;
+        ctx.recalc.settleArea({ ...range, left, right: left, next: null });
+        const column = workbook.sheets[range.sheet].columns[left];
         const length = range.bottom - range.top + 1;
         // The blanks at the end of the range take no part, whatever cells the column holds below it.
         let used = column === undefined ? 0 : Math.max(0, Math.min(length, column.length - range.top));
         while (used > 0 && (column.kind[range.top + used - 1] & KIND_MASK) === CellKind.Empty) used -= 1;
-        const held = { column: column ?? null, items: [], start: range.top, step: 1 };
-        return { workbook, ...held, length, used, stored: used, ends: null };
+        return new Vector(workbook, column ?? null, [], range.top, 1, length, used, null);
     }
-    const values = isReference(range) ? toArray(ctx, { ...range, bottom: range.top, next: null }) : ctx.read(range);
-    if (!isArray(values)) {
-        const held = { column: null, items: [values], start: 0, step: 1 };
-        return { workbook, ...held, length: 1, used: 1, stored: 1, ends: null };
-    }
-    const { items } = values;
-    const length = down ? values.rows : values.columns;
-    const ends = down ? values.rowEnds : values.columnEnds;
-    const step = down ? values.width : 1;
+    const top = isReference(range) ? range.top + index : 0;
+    const values = isReference(range) ? toArray(ctx, { ...range, top, bottom: top, next: null }) : ctx.read(range);
+    if (!isArray(values)) return new Vector(workbook, null, [values], 0, 1, 1, 1, null);
+    const { items, width } = values;
+    const across = isReference(range) ? 0 : index;
+    const start = down ? bandOf(values.columnEnds, across) : bandOf(values.rowEnds, across) * width;
+    const step = down ? width : 1;
     // The blanks at the end never take part.
-    let stored = down ? values.height : values.width;
-    while (stored > 0 && items[(stored - 1) * step] === null) stored -= 1;
-    const used = stored === 0 ? 0 : (ends?.[stored - 1] ?? stored);
-    return { workbook, column: null, items, start: 0, step, length, used, stored, ends };
+    let stored = down ? values.height : width;
+    while (stored > 0 && items[start + (stored - 1) * step] === null) stored -= 1;
+    return new Vector(
+        workbook,
+        null,
+        items,
+        start,
+        step,
+        down ? values.rows : values.columns,
+        stored,
+        down ? values.rowEnds : values.columnEnds,
+    );
 }
 
 // The value at a position.
@@ -98,7 +149,7 @@ function against(value: Scalar | Reference, key: Key): number {
 
 // The first value that equals the key, or the last one when `reverse`. With `wild` a text key is a pattern, and
 // a blank key finds a blank.
-export function exact(vector: Vector, key: Key | null, wild: boolean, reverse: boolean): number {
+function exact(vector: Vector, key: Key | null, wild: boolean, reverse: boolean): number {
     const { column, start } = vector;
     const used = vector.stored;
     const step = reverse ? -1 : 1;
@@ -163,7 +214,7 @@ export function exact(vector: Vector, key: Key | null, wild: boolean, reverse: b
 
 // The value that equals the key, or else the nearest smaller one, or the nearest larger one with `larger`. Every
 // value is looked at, in order, or from the last one back when `reverse`, and of equal candidates the first met wins.
-export function nearest(vector: Vector, key: Key, larger: boolean, reverse: boolean): number {
+function nearest(vector: Vector, key: Key, larger: boolean, reverse: boolean): number {
     const used = vector.stored;
     const step = reverse ? -1 : 1;
     const end = reverse ? -1 : used;
@@ -188,7 +239,7 @@ export function nearest(vector: Vector, key: Key, larger: boolean, reverse: bool
 // A probe that meets a value of another kind moves to the nearest one of the key's kind. Of equal keys it lands on
 // the last one with `last`, else on the first. With no equal value, `mode` picks the result: 0 none, -1 the next
 // smaller value, 1 the next larger.
-export function bisect(vector: Vector, key: Key, descending: boolean, mode: number, last: boolean): number {
+function bisect(vector: Vector, key: Key, descending: boolean, mode: number, last: boolean): number {
     let low = 0;
     let high = vector.used - 1;
     // The last value met that sorts ahead of where the key belongs, and the first that sorts past it.

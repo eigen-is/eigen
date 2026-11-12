@@ -96,8 +96,9 @@ export class Recalc {
 
     // Computes the formulas that the cells written since the last pass reach, those that read cells they do not
     // name and what an earlier pass left, in sheet, column, row order where the reads do not ask for another.
-    public pass(cap: number): RecalcResult {
+    public pass(cap: number, now = 0, seed = 0): RecalcResult {
         const { workbook } = this;
+        this.evaluator.clock(now, seed);
         if (this.stale) {
             for (let shape = 1; shape <= workbook.shapes.size; shape += 1) this.factsOf(shape);
             this.index.rebuild(workbook, this.facts);
@@ -141,7 +142,7 @@ export class Recalc {
                                 this.made.fill(0, 0, this.size);
                             }
                         }
-                        this.looped.clear();
+                        if (this.looped.size > 0) this.looped.clear();
                     }
                 }
             }
@@ -183,7 +184,8 @@ export class Recalc {
 
     // Computes what is still to be computed in one area, so a loop over its planes meets values only.
     public settleArea(area: Reference): void {
-        const { sheet, top } = area;
+        const { top } = area;
+        const sheet = this.workbook.sheets[area.sheet];
         const right = Math.min(area.right, sheet.columns.length - 1);
         for (let c = area.left; c <= right; c += 1) {
             const column = sheet.columns[c];
@@ -310,7 +312,7 @@ export class Recalc {
         return (this.factsOf(shape) >> FACT_BITS) + CELL;
     }
 
-    private factsOf(shape: number): number {
+    public factsOf(shape: number): number {
         let facts = this.facts[shape];
         if (facts === undefined) {
             const { tree } = this.workbook.shapes.shape(shape);

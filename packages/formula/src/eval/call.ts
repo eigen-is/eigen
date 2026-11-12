@@ -1,130 +1,255 @@
-// The call wrapper: the one place that turns the argument nodes of a call into what the function's body gets.
-// It checks the count, leaves a lazy argument unevaluated, keeps a reference where the parameter wants one, reads
-// a scalar, and fills in what was left out. When a scalar parameter gets an array, `lift` runs the body once per
-// element of the arrays lined up, and an operator on an array goes through the same lift.
+// The call wrapper: the one place that turns the argument nodes of a call into what the function's body gets. It
+// works down one ordered list, which is also the rule for which error a call answers: the count, then every
+// argument prepared left to right, then every argument read left to right, then the insides of the ranges, then
+// the body. An array where one value is read turns the call into one call per element, which `lift` runs over
+// the same `read` and `run`.
 
-import type { FunctionEntry, Param } from '../functions/registry';
-import { FunctionFlag, ParamKind, PENDING } from '../functions/registry';
 import type { Sheet } from '../store/sheet';
 import type { FormulaNode } from '../text/tree';
-import type { FormulaError } from '../values/errors';
-import { CALC, NA, NAME, VALUE } from '../values/errors';
-import type { ArrayValue, Scalar, Value } from '../values/value';
-import { arrayOf, isArray, isError, isReference, MOST_ELEMENTS, OMITTED } from '../values/value';
-import { align, apart } from './bands';
+import { NodeKind } from '../text/tree';
+import { toBoolean, toNumber, toText } from '../values/coerce';
+import { LAST_SERIAL } from '../values/dates';
+import { NAME, NUM, VALUE } from '../values/errors';
+import { parseNumber } from '../values/parse-number';
+import type { Value } from '../values/value';
+import { isArray, isError, isReference, ValueType } from '../values/value';
 import type { Evaluator } from './evaluator';
-import { held } from './operators';
+import type { Family } from './families';
+import { Errors, TypedText } from './families';
+import { lift, step } from './lift';
+import { look } from './look';
+import { real } from './operators';
+import { Frame, Table } from './readers';
+import type { Entry, Held, Lazy, Param, Result } from './signature';
+import { Prepare, Read, TOKENS } from './signature';
 
-function paramAt(entry: FunctionEntry, index: number): Param {
-    const { params, repeat } = entry;
-    return params[index < params.length ? index : params.length - repeat + ((index - params.length) % repeat)];
-}
+const LONGEST_TEXT = 32767;
 
 export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
     const entry = ctx.functions.get(node.text);
     if (entry === undefined) return NAME;
     const given = node.children;
     const count = given.length;
+    const { fixed } = entry;
+    const { slots } = entry;
+    // The arguments that repeat come in whole groups, with one more only where the row takes one after them.
     if (count < entry.min || count > entry.max) return VALUE;
-    const size = Math.max(count, entry.params.length);
+    if (count > fixed && (count - fixed) % entry.group > slots.length - fixed - entry.group) return VALUE;
     const level = ctx.calls;
-    const args = (ctx.frames[level] ??= []);
+    const frame = (ctx.frames[level] ??= new Frame(ctx));
+    const { held } = frame;
     ctx.calls = level + 1;
-    args.length = size;
+    if (entry.stepped) {
+        const stepped = step(ctx, entry, frame, node, sheet, row, column);
+        ctx.calls = level;
+        return stepped;
+    }
+    const size = Math.max(count, fixed);
+    if (held.length !== size) held.length = size;
     let lifted = false;
-    let refused: FormulaError | null = null;
+    // The record of the argument in hand: after the last one, the records of the arguments that repeat come again.
+    let at = 0;
     for (let i = 0; i < size; i += 1) {
-        const param = paramAt(entry, i);
-        let value: Value;
-        if (i >= count) {
-            value = param.fallback === undefined ? OMITTED : param.fallback;
-        } else if (param.kind === ParamKind.Lazy) {
-            value = PENDING;
-        } else if (param.kind === ParamKind.Scalar) {
+        let value: Held;
+        const slot = slots[at];
+        at = at + 1 < slots.length ? at + 1 : fixed;
+        if (slot.prepare === Prepare.Lazy) value = TOKENS[i];
+        // An argument left out is what the body gets for it, and so is one left empty where that means left out.
+        // Any other empty argument is a blank, and is read as one.
+        else if (i >= count) value = slot.read === Read.Here ? ctx.here(sheet, row, column) : slot.fallback;
+        else if (given[i].kind === NodeKind.Empty) value = slot.skips ? slot.fallback : null;
+        else if (slot.prepare === Prepare.Scalar) {
             value = ctx.operand(given[i], sheet, row, column);
             if (isArray(value)) lifted = true;
         } else {
             value = ctx.evaluate(given[i], sheet, row, column);
-            if (param.kind === ParamKind.Ref && !isReference(value) && refused === null) {
-                refused = isError(value) ? value : VALUE;
-            }
+            if (slot.prepare === Prepare.Reference && isArray(value) && value.references) lifted = true;
         }
-        args[i] = value;
+        held[i] = value;
     }
-    const result =
-        refused !== null
-            ? refused
-            : lifted
-              ? lift(ctx, entry, args, node, sheet, row, column)
-              : held(entry.run(args, ctx, node, sheet, row, column));
+    let result: Value | Lazy | null = null;
+    if (lifted) result = lift(ctx, entry, frame, count, node, sheet, row, column);
+    else {
+        at = 0;
+        for (let i = 0; i < count && result === null; i += 1) {
+            const param = slots[at];
+            const written = held[i];
+            at = at + 1 < slots.length ? at + 1 : fixed;
+            // Read already: what is taken as it stands, a number where a number is read, and one range wherever
+            // a range is walked or is only a place.
+            if (param.read >= Read.Any) continue;
+            if (typeof written === 'number' ? param.read === Read.Number : alone(param, written)) continue;
+            const value = read(param, written, frame, i);
+            if (isError(value) && ends(param)) result = value;
+            held[i] = value;
+        }
+        result ??= run(ctx, entry, held, count);
+        if (isLazy(result)) result = picked(ctx, entry, result, node, sheet, row, column);
+    }
     ctx.calls = level;
     return result;
 }
 
-// Runs the body once per stored element of the arrays its scalar parameters got, lined up: one result stands for
-// its whole run. A lazy parameter is evaluated here, so with an array every branch runs.
-export function lift(
+export function isLazy(value: Held): value is Lazy {
+    return typeof value === 'object' && value !== null && value.type === ValueType.Lazy;
+}
+
+// The argument a token names, evaluated now: a reference stays one. The token must be of this call's own.
+export function picked(
     ctx: Evaluator,
-    entry: FunctionEntry,
-    args: readonly Value[],
+    entry: Entry,
+    token: Lazy,
     node: FormulaNode,
     sheet: Sheet,
     row: number,
     column: number,
 ): Value {
-    const element = args.slice();
-    const arrays: ArrayValue[] = [];
-    // The argument each array is.
-    const places: number[] = [];
-    let rows = 1;
-    let columns = 1;
-    for (let i = 0; i < element.length; i += 1) {
-        const { kind } = paramAt(entry, i);
-        if (element[i] === PENDING) element[i] = ctx.operand(node.children[i], sheet, row, column);
-        const value = element[i];
-        if ((kind !== ParamKind.Scalar && kind !== ParamKind.Lazy) || !isArray(value)) continue;
-        arrays.push(value);
-        places.push(i);
-        rows = Math.max(rows, value.rows);
-        columns = Math.max(columns, value.columns);
-    }
-    let down = align(arrays, rows, true);
-    let across = align(arrays, columns, false);
-    // A volatile body answers anew at every call, so each written element is made by a call of its own.
-    const each = (entry.flags & FunctionFlag.Volatile) !== 0;
-    if (!ctx.recalc.room(each ? rows * columns : down.count * across.count, MOST_ELEMENTS)) return CALC;
-    if (each) {
-        down = apart(down, rows);
-        across = apart(across, columns);
-    }
-    const height = down.count;
-    const width = across.count;
-    const items = new Array<Scalar>(height * width);
-    let alike = true;
-    for (let k = 0; k < arrays.length; k += 1) alike &&= down.from[k] === null && across.from[k] === null;
-    // Arrays that all run as the result does, such as two filled columns, are read at one place.
-    for (let at = 0; alike && at < items.length; at += 1) {
-        for (let k = 0; k < arrays.length; k += 1) element[places[k]] = arrays[k].items[at];
-        const result = ctx.read(held(entry.run(element, ctx, node, sheet, row, column)));
-        items[at] = isArray(result) ? CALC : result;
-    }
-    // Per array, where its stored row for the row in progress starts, or -1 past its last row.
-    const starts = arrays.map(() => 0);
-    for (let r = 0; !alike && r < height; r += 1) {
-        for (let k = 0; k < arrays.length; k += 1) {
-            const from = down.from[k];
-            const stored = from === null ? r : from[r];
-            starts[k] = stored < 0 ? -1 : stored * arrays[k].width;
+    // A token must be the one of a place the row has, and that place a lazy one.
+    const own = token === TOKENS[token.index] && token.index < entry.max;
+    const param = own ? slotOf(entry, token.index, node.children.length) : null;
+    if (param === null || param.prepare !== Prepare.Lazy) throw new Error(`${entry.name}: a foreign token`);
+    const child = token.index < node.children.length ? node.children[token.index] : null;
+    if (child === null || (child.kind === NodeKind.Empty && param.skips)) return param.fallback ?? null;
+    if (child.kind !== NodeKind.Empty) return ctx.evaluate(child, sheet, row, column);
+    // An empty argument that is picked is a blank, and the number 0 in a row whose groups are tried in turn.
+    return entry.stepped ? 0 : null;
+}
+
+// Whether an error at a parameter ends the call: every reading but the ones that take an error as a value.
+export function ends(param: Param<unknown>): boolean {
+    return param.read < Read.Anything;
+}
+
+// What the argument at a place is read as, in a call of `count` arguments: past the last whole group it is the
+// one argument a row takes after its groups.
+export function slotOf(entry: Entry, at: number, count: number): Param<unknown> {
+    const { fixed, group } = entry;
+    if (at < fixed) return entry.slots[at];
+    const grouped = count - fixed - ((count - fixed) % group);
+    return entry.slots[fixed + (at - fixed < grouped ? (at - fixed) % group : group)];
+}
+
+// Whether an argument is one range at a parameter that takes a range as it is: all but the one that makes a
+// table of it.
+function alone(param: Param<unknown>, value: Held): boolean {
+    return isReference(value) && value.next === null && param.prepare !== Prepare.Whole;
+}
+
+// One prepared argument as the body gets it, or the error that ends the call. A table is the one of its place
+// `at` in the frame of the call.
+export function read(param: Param<unknown>, value: Held, frame: Frame, at: number): Held {
+    if (value === undefined || isLazy(value) || value instanceof Table) return value;
+    switch (param.read) {
+        case Read.Number:
+            if (typeof value === 'number') return value;
+            return param.strict && typeof value === 'boolean' ? VALUE : toNumber(value);
+        case Read.Integer:
+        case Read.Serial: {
+            if (param.strict && typeof value === 'boolean') return VALUE;
+            const number = typeof value === 'number' ? value : toNumber(value);
+            if (typeof number !== 'number') return number;
+            if (param.read === Read.Integer) return Math.trunc(number);
+            return number < 0 || number > LAST_SERIAL ? NUM : Math.floor(number);
         }
-        for (let c = 0; c < width; c += 1) {
-            for (let k = 0; k < arrays.length; k += 1) {
-                const from = across.from[k];
-                const stored = from === null ? c : from[c];
-                element[places[k]] = starts[k] < 0 || stored < 0 ? NA : arrays[k].items[starts[k] + stored];
-            }
-            const result = ctx.read(held(entry.run(element, ctx, node, sheet, row, column)));
-            items[r * width + c] = isArray(result) ? CALC : result;
+        case Read.Text:
+            return toText(value);
+        case Read.Boolean:
+            return toBoolean(value);
+        case Read.Walked:
+            return param.family === null ? value : collected(param.family, value);
+        case Read.Table:
+            if (isError(value)) return value;
+            if (isReference(value) && value.next !== null && param.union !== null) return param.union;
+            return frame.table(at).over(value);
+        case Read.Anything:
+            return frame.table(at).over(value);
+        case Read.Here:
+        case Read.Only:
+            if (!isReference(value)) return isError(value) ? value : VALUE;
+            return value.next !== null && param.union !== null ? param.union : value;
+        case Read.Plain:
+        case Read.Any:
+        case Read.Lazy:
+        case Read.Room:
+        case Read.Where:
+        case Read.Matched:
+        case Read.Blanks:
+        case Read.Random:
+        case Read.Now:
+            return value;
+        case Read.Products:
+            return isReference(value) && value.next !== null ? VALUE : value;
+        default: {
+            const unknown: never = param.read;
+            return unknown;
         }
     }
-    return arrayOf(rows, columns, items, down.ends, across.ends);
+}
+
+// An argument of a parameter that takes every value. A value typed there becomes the number the walk hands out
+// for it, or null when it is passed over; a reference and an array are kept for the walk.
+function collected(family: Family, value: Value): Held {
+    switch (typeof value) {
+        case 'number':
+            return value;
+        case 'boolean':
+            return value ? 1 : 0;
+        case 'string':
+            if (family.text === TypedText.Parsed) return toNumber(value);
+            if (family.text === TypedText.Numeric) return parseNumber(value) === undefined ? null : 0;
+            if (family.text === TypedText.Counted) return 0;
+            return value.toUpperCase() === 'TRUE' ? 1 : value.toUpperCase() === 'FALSE' ? 0 : null;
+        default:
+            if (value === null) return 0;
+            if (!isError(value)) return value;
+            return family.errors === Errors.Result ? value : family.errors === Errors.Counted ? 0 : null;
+    }
+}
+
+// The body on arguments that are read, and its answer as a cell can hold it: a number that is no number is #NUM!,
+// and a text has at most 32,767 characters. `held` are the slots of the call in progress.
+export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number): Value | Lazy {
+    let args: readonly unknown[] = held;
+    const frame = entry.plain ? null : ctx.frames[ctx.calls - 1];
+    const choice = entry.chosen === null || typeof held[0] !== 'number' ? undefined : entry.chosen.get(held[0]);
+    // The row that the first argument picked runs on the arguments after it, with its walk told what to pass over.
+    if (choice !== undefined && frame !== null) {
+        const target = ctx.functions.get(choice.target);
+        if (target === undefined) return NAME;
+        held.copyWithin(0, 1, count);
+        held.length = count - 1;
+        frame.skips = choice.skips;
+        const result = run(ctx, target, held, count - 1);
+        frame.skips = 0;
+        return result;
+    }
+    if (frame !== null) {
+        const error = look(ctx, entry, frame, count);
+        if (error !== null) return error;
+        args = frame.args;
+    }
+    let result: Result;
+    switch (args.length) {
+        case 0:
+            result = entry.run();
+            break;
+        case 1:
+            result = entry.run(args[0]);
+            break;
+        case 2:
+            result = entry.run(args[0], args[1]);
+            break;
+        case 3:
+            result = entry.run(args[0], args[1], args[2]);
+            break;
+        case 4:
+            result = entry.run(args[0], args[1], args[2], args[3]);
+            break;
+        default:
+            result = entry.run(...args);
+    }
+    if (frame !== null && frame.failed !== null) return frame.failed;
+    if (typeof result === 'number') return real(result);
+    if (typeof result === 'string') return result.length > LONGEST_TEXT ? VALUE : result;
+    return result instanceof Table ? Table.held(result) : result;
 }

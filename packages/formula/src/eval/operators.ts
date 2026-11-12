@@ -2,8 +2,7 @@
 // their error order, the left operand first. They are total: a value that is no scalar is #VALUE!. Each operator is
 // also an entry of the kind a function is, so that an operator on an array is lifted by the code that lifts a call.
 
-import type { FunctionEntry } from '../functions/registry';
-import { define, SCALAR } from '../functions/registry';
+import { ANY, fn } from '../functions/registry';
 import { Token } from '../text/lexer';
 import { toNumber, toText } from '../values/coerce';
 import { compareValues } from '../values/compare';
@@ -12,6 +11,7 @@ import { DIV0, NUM, VALUE } from '../values/errors';
 import { snapSum } from '../values/precision';
 import type { Scalar, Value } from '../values/value';
 import { isError } from '../values/value';
+import type { Entry } from './signature';
 
 const SMALLEST_NORMAL = 2.2250738585072014e-308;
 const LONGEST_TEXT = 32767;
@@ -121,9 +121,9 @@ const BINARY = [
 ];
 
 // By operator token, for an operand that is an array.
-export const LIFTED_BINARY: readonly FunctionEntry[] = BINARY.reduce((entries: FunctionEntry[], op) => {
-    entries[op] = define('', [SCALAR, SCALAR], (args) => operate(op, args[0], args[1], false));
+export const LIFTED_BINARY: readonly Entry[] = BINARY.reduce((entries: Entry[], op) => {
+    entries[op] = fn('', [ANY, ANY], (a, b) => operate(op, a, b, false));
     return entries;
 }, []);
-export const LIFTED_NEGATE = define('', [SCALAR], (args) => negate(args[0]));
-export const LIFTED_PERCENT = define('', [SCALAR], (args) => percent(args[0]));
+export const LIFTED_NEGATE = fn('', [ANY], negate);
+export const LIFTED_PERCENT = fn('', [ANY], percent);

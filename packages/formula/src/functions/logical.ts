@@ -1,36 +1,23 @@
-// The logical functions. IF, IFERROR and IFNA take their branches lazily, so the branch not taken is never evaluated;
-// AND and OR evaluate everything, and an error anywhere in their arguments is their result. In a reference or an
-// array they count only numbers and booleans, and with nothing to count they are #VALUE!.
+// The logical functions. IF, IFERROR and IFNA answer with the branch they pick, which is evaluated only then; IFS
+// and SWITCH try their pairs in turn and stop at the first that fits; AND and OR take every truth value of their
+// arguments, and with nothing to take they are #VALUE!.
 
-import { Take } from '../eval/walk';
+import { compareValues } from '../values/compare';
 import { NA, VALUE } from '../values/errors';
 import { isError } from '../values/value';
-import { aggregate, BOOLEAN, define, LAZY, optional, refusal, SCALAR, scalar1 } from './registry';
+import { ANY, BOOLEAN, each, fn, LAZY, NEXT, optional, PLAIN, rest, TRUTHS } from './registry';
 
 export const LOGICAL = [
-    aggregate('AND', Take.Truths, (walk) => {
-        let all = true;
-        while (walk.next()) for (let i = walk.from; i < walk.to; i += 1) if (walk.num[i] === 0) all = false;
-        return walk.count === 0 ? VALUE : all;
-    }),
-    aggregate('OR', Take.Truths, (walk) => {
-        let any = false;
-        while (walk.next()) for (let i = walk.from; i < walk.to; i += 1) if (walk.num[i] !== 0) any = true;
-        return walk.count === 0 ? VALUE : any;
-    }),
-    scalar1('NOT', BOOLEAN, (truth) => !truth),
-    define('IF', [BOOLEAN, LAZY, optional(LAZY, false)], (args, ctx, node, sheet, row, column) => {
-        const test = BOOLEAN.read(args[0]);
-        if (test === undefined) return refusal(args[0]);
-        const branch = test ? 1 : 2;
-        return ctx.force(args[branch], node.children[branch], sheet, row, column);
-    }),
-    define('IFERROR', [SCALAR, LAZY], (args, ctx, node, sheet, row, column) =>
-        isError(args[0]) ? ctx.force(args[1], node.children[1], sheet, row, column) : args[0],
+    fn('AND', [rest(TRUTHS)], (truths) => (truths.count() === 0 ? VALUE : !truths.holds(0))),
+    fn('OR', [rest(TRUTHS)], (truths) => (truths.count() === 0 ? VALUE : truths.min() !== 0 || truths.max() !== 0)),
+    fn('NOT', [BOOLEAN], (truth) => !truth),
+    fn('IF', [BOOLEAN, LAZY, optional(LAZY, false)], (test, then, otherwise) => (test ? then : otherwise)),
+    fn('IFERROR', [ANY, LAZY], (value, fallback) => (isError(value) ? fallback : value)),
+    fn('IFNA', [ANY, LAZY], (value, fallback) => (value === NA ? fallback : value)),
+    fn('IFS', [each(BOOLEAN), each(LAZY)], (test, result) => (test ? result : NEXT)),
+    fn('SWITCH', [PLAIN, each(PLAIN), each(LAZY), optional(LAZY, NA)], (value, match, result) =>
+        compareValues(value, match) === 0 ? result : NEXT,
     ),
-    define('IFNA', [SCALAR, LAZY], (args, ctx, node, sheet, row, column) =>
-        args[0] === NA ? ctx.force(args[1], node.children[1], sheet, row, column) : args[0],
-    ),
-    define('TRUE', [], () => true),
-    define('FALSE', [], () => false),
+    fn('TRUE', [], () => true),
+    fn('FALSE', [], () => false),
 ];
