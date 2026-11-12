@@ -101,8 +101,8 @@ export class Recalc {
         this.seed(this.workbook.sheets.indexOf(sheet), c, row);
     }
 
-    // Computes the formulas that the cells written since the last pass reach, those that draw or read cells they
-    // do not name, and what an earlier pass left, in sheet, column, row order where the reads do not ask for another.
+    // Computes the formulas that the cells written since the last pass reach, those that read cells they do not
+    // name, and what an earlier pass left, in sheet, column, row order where the reads do not ask for another.
     public pass(cap: number, now = 0, seed = 0): RecalcResult {
         const { workbook } = this;
         this.evaluator.clock(now, seed);
@@ -123,15 +123,6 @@ export class Recalc {
             if (sameColumn && spans[last + 3] >= seeds[at + 2] - 1) {
                 spans[last + 3] = Math.max(spans[last + 3], seeds[at + 3]);
             } else spans.push(seeds[at], seeds[at + 1], seeds[at + 2], seeds[at + 3]);
-        }
-        // A pass after any write computes every formula that draws or reads the clock again, and so what reads it.
-        const { volatile } = this.index;
-        for (let i = 0; spans.length > 0 && i < volatile.length; i += 5) {
-            for (let c = volatile[i + 1]; c <= volatile[i + 2]; c += 1) {
-                const column = workbook.sheets[volatile[i]].columns[c];
-                for (let row = volatile[i + 3]; row <= volatile[i + 4]; row += 1) column.markDirty(row);
-                spans.push(volatile[i], c, volatile[i + 3], volatile[i + 4]);
-            }
         }
         this.index.mark(workbook, spans);
         seeds.length = 0;
