@@ -8,7 +8,7 @@ export function repeated(start: number, value: number, times: number): number {
     let left = times;
     while (left > 0) {
         const once = sum + value;
-        if (once === sum) return sum;
+        if (once === sum) return once;
         const twice = once + value;
         const step = twice - once;
         const size = Math.abs(sum);
