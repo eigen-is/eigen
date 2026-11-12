@@ -19,6 +19,7 @@ import { Column, ColumnLayout, DeleteDialog, LoadingState, ToolbarTitle } from '
 import { Button } from '@workspace/ui/components/button';
 import { DriveList, DriveViewControls } from '@workspace/ui/components/drive/drive-list';
 import type { DriveListDate } from '@workspace/ui/components/drive/drive-table';
+import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -56,7 +57,8 @@ function TrashRoute() {
     const emptyTrash = useEmptyTrash(ownerId, mountId);
 
     const [emptyTrashOpen, setEmptyTrashOpen] = useState(false);
-    const [deleteItems, setDeleteItems] = useState<readonly DrivePath[]>([]);
+    const deleteDialog = useDialogValue<readonly DrivePath[]>();
+    const deleteItems = deleteDialog.value;
 
     // The date sort orders by the time an item was trashed, the date this page shows.
     const { sortKey, sortDir } = useDriveViewPreferences();
@@ -87,7 +89,7 @@ function TrashRoute() {
                 icon: Trash2,
                 group: 'destructive',
             },
-            run: () => setDeleteItems(items),
+            run: () => deleteDialog.openDialog(items),
         },
     ];
 
@@ -128,26 +130,26 @@ function TrashRoute() {
                 deleteText="Empty trash"
             />
 
-            <DeleteDialog
-                open={deleteItems.length > 0}
-                onOpenChange={(open) => {
-                    if (!open) setDeleteItems([]);
-                }}
-                title="Delete permanently"
-                description={
-                    deleteItems.length > 1
-                        ? `Are you sure you want to permanently delete ${deleteItems.length} items? This action cannot be undone.`
-                        : 'Are you sure you want to permanently delete'
-                }
-                itemName={deleteItems.length === 1 ? deleteItems[0].name : undefined}
-                onDelete={async () => {
-                    await permanentlyDelete.mutateAsync(deleteItems).catch((error: unknown) => {
-                        if (error instanceof PartialBatchError) setDeleteItems(error.failed);
-                        throw error;
-                    });
-                }}
-                deleteText="Delete permanently"
-            />
+            {deleteItems && (
+                <DeleteDialog
+                    open={deleteDialog.open}
+                    onOpenChange={deleteDialog.setOpen}
+                    title="Delete permanently"
+                    description={
+                        deleteItems.length > 1
+                            ? `Are you sure you want to permanently delete ${deleteItems.length} items? This action cannot be undone.`
+                            : 'Are you sure you want to permanently delete'
+                    }
+                    itemName={deleteItems.length === 1 ? deleteItems[0].name : undefined}
+                    onDelete={async () => {
+                        await permanentlyDelete.mutateAsync(deleteItems).catch((error: unknown) => {
+                            if (error instanceof PartialBatchError) deleteDialog.openDialog(error.failed);
+                            throw error;
+                        });
+                    }}
+                    deleteText="Delete permanently"
+                />
+            )}
         </>
     );
 }

@@ -1,5 +1,6 @@
 // When Copy to… or Move to… gets only part of a selection through, the picker stays open, and confirming
 // again sends only the items that failed, so a copy doesn't land twice and a moved item isn't moved again.
+// The Move to… picker starts in its item's drive, and a move into another drive is refused.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
@@ -14,7 +15,16 @@ mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session,
 // A copy, because mock.module rewrites the loaded module in place, and afterAll puts the original back for the
 // field's own test.
 const realLocationField = { ...(await import('../../../components/drive/drive-location-field')) };
-mock.module('../../../components/drive/drive-location-field', () => ({ DriveLocationField: () => null }));
+// The drive the picker shows, and the way to pick another, both read from the field it draws.
+type Location = { ownerId: string; mountId: string; folderId: string };
+const field: { ownerId: string; pick: (location: Location) => void } = { ownerId: '', pick: () => {} };
+mock.module('../../../components/drive/drive-location-field', () => ({
+    DriveLocationField: ({ value, onChange }: { value: Location; onChange: (location: Location) => void }) => {
+        field.ownerId = value.ownerId;
+        field.pick = onChange;
+        return null;
+    },
+}));
 afterAll(() => mock.module('../../../components/drive/drive-location-field', () => realLocationField));
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
@@ -93,17 +103,27 @@ test.each([
     expect(posted).toEqual(['bad']);
 });
 
-// A view can list another drive's items, as a document app's index lists a team's. The picker starts in the
-// view's drive, and a move never leaves the item's own.
-test('move-to: an item of another drive is not moved into the drive the view shows', async () => {
-    const teamItem = drivePath({
-        id: 'team-item',
-        name: 'Plan.txt',
-        mimeType: 'text/plain',
-        ownerId: 'team-1',
-        parentId: 'team-root',
-    });
+// A view can list another drive's items, as a document app's index lists a team's. A move never leaves the
+// item's own drive, so its picker starts there, while a copy starts in the drive the view shows.
+const teamItem = drivePath({
+    id: 'team-item',
+    name: 'Plan.txt',
+    mimeType: 'text/plain',
+    ownerId: 'team-1',
+    parentId: 'team-root',
+});
+
+test.each([
+    ['move-to', 'team-1'],
+    ['copy-to', 'user-1'],
+] as const)('%s: the picker for an item of another drive starts in the drive of %s', async (id, ownerId) => {
+    await openPicker(id, [teamItem]);
+    expect(field.ownerId).toBe(ownerId);
+});
+
+test('move-to: an item is not moved into a folder of another drive', async () => {
     await openPicker('move-to', [teamItem]);
+    await act(async () => field.pick({ ownerId: 'user-1', mountId: 'default', folderId: 'root' }));
     await confirm('Move here');
     expect(posted).toEqual([]);
 });

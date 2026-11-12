@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2155 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2158 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -250,7 +250,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (306)
+## Hooks (307)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -545,6 +545,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useDialogOpen` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `useMenuOpen` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `useDialogPending` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
+| `useDialogValue` | `@workspace/ui/hooks/use-dialog-value` | packages/ui/src/hooks/use-dialog-value.ts |
 | `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useElementSize` | `@workspace/ui/hooks/use-element-size` | packages/ui/src/hooks/use-element-size.ts |
 | `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
@@ -1014,7 +1015,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1177)
+## Utilities & constants (1179)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -2178,6 +2179,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `createEigenAppRouter` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
 | `mountEigenApp` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
 | `stubCanvasImageFonts` | `@workspace/ui/test/canvas-image` | packages/ui/src/test/canvas-image.ts |
+| `closingDialog` | `@workspace/ui/test/closing-dialog` | packages/ui/src/test/closing-dialog.ts |
+| `holdClosingDialogs` | `@workspace/ui/test/closing-dialog` | packages/ui/src/test/closing-dialog.ts |
 | `contextMenuEvent` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `KEY_SOURCES` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `POINTER_SOURCES` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |

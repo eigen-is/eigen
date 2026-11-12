@@ -26,7 +26,6 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction }: Dr
     }, [open]);
 
     const targets = failed ?? paths;
-    const first = targets[0] ?? null;
     const isSingle = targets.length === 1;
     // The server leaves a direct share instead of trashing it, and an item in someone else's drive goes to
     // their trash. The dialog's text says which.
@@ -34,7 +33,6 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction }: Dr
     const foreign = targets.some((path) => !isEffectiveOwnerOf(path.ownerId));
 
     const handleDelete = async () => {
-        if (targets.length === 0) return;
         const deleted = await deletePathsMutation.mutateAsync(targets).catch((error: unknown) => {
             if (error instanceof PartialBatchError) {
                 for (const path of error.succeeded) onAfterAction?.('delete', path);
@@ -74,7 +72,7 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction }: Dr
             onOpenChange={onOpenChange}
             title={copy.title}
             description={copy.description}
-            itemName={isSingle && first ? stripEigenExtension(first.name) : undefined}
+            itemName={isSingle ? stripEigenExtension(targets[0].name) : undefined}
             onDelete={handleDelete}
             deleteText={copy.deleteText}
         />

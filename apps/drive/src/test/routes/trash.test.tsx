@@ -3,10 +3,11 @@
 // empty, and asks before it deletes everything.
 // A trashed row's menu and the command palette offer the same two rows: Restore and Delete permanently.
 // When Delete permanently gets only part of a selection through, the dialog stays open on the items that
-// failed, and confirming again sends only those.
+// failed, and confirming again sends only those. A canceled dialog keeps its count while it fades out.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { PaletteSelectionActions } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { closingDialog, holdClosingDialogs } from '@workspace/ui/test/closing-dialog';
 import { drivePath } from '@workspace/ui/test/drive-path';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { menuRows } from '@workspace/ui/test/menu-rows';
@@ -188,6 +189,26 @@ test('a trashed row’s menu draws the same rows, Delete permanently last and re
     expect(menuRows()).toEqual(['Restore', '—', 'Delete permanently']);
     const rows = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')];
     expect(rows.map((row) => row.getAttribute('data-variant'))).toEqual(['default', 'destructive']);
+});
+
+test('the Delete permanently dialog keeps its count while it closes', async () => {
+    const release = holdClosingDialogs();
+    try {
+        trash.data = [trashed('a.txt', 1, 3), trashed('b.txt', 1, 2), trashed('c.txt', 1, 1)];
+        const container = await open();
+        const rows = [...container.querySelectorAll('[role="grid"] [data-index] > *')];
+        await click(rows[0]);
+        await act(async () => {
+            rows[2]?.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+        });
+        await act(async () => palette.actions?.find(({ action }) => action.id === 'delete-permanently')?.run());
+        await click(button(document.querySelector('[role="dialog"]') ?? document, 'Cancel'));
+        expect(closingDialog()?.querySelector('p')?.textContent).toBe(
+            'Are you sure you want to permanently delete 3 items? This action cannot be undone.',
+        );
+    } finally {
+        release();
+    }
 });
 
 test('confirming Delete permanently again after a partial failure sends only the refused item', async () => {
