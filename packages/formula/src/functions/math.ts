@@ -19,6 +19,7 @@ import {
     PRODUCTS,
     RANDOM,
     rest,
+    strict,
     WHERE,
     WHOLES,
 } from './registry';
@@ -44,7 +45,7 @@ export const MATH = [
     fn('ROUND', [NUMBER, INTEGER], roundDecimal),
     fn('RAND', [RANDOM], (random) => random),
     // A whole number from the bottom rounded up to the top rounded down, and the bottom when none lies between.
-    fn('RANDBETWEEN', [NUMBER, NUMBER, RANDOM], (low, high, random) => {
+    fn('RANDBETWEEN', [strict(NUMBER), strict(NUMBER), RANDOM], (low, high, random) => {
         if (low > high) return NUM;
         const bottom = Math.ceil(low);
         return bottom + Math.floor(random * (Math.max(bottom, Math.floor(high)) - bottom + 1));

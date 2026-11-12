@@ -26,6 +26,9 @@ export const Prepare = {
     // Of a reference the first cell and no other, so a range never runs the call per cell. An array does, and
     // an element of it that is a reference gives its first cell.
     Corner: 6,
+    // Read to a value as the first, but a range of several cells is #VALUE! for the whole call: an array still
+    // runs the call once per element.
+    Single: 7,
 } as const;
 
 export type Prepare = (typeof Prepare)[keyof typeof Prepare];
@@ -80,7 +83,7 @@ declare const carries: unique symbol;
 export type Param<T> = {
     readonly prepare: Prepare;
     readonly read: Read;
-    // Whether a number reading refuses a boolean.
+    // Whether a number reading refuses a boolean, and an argument left empty with #N/A.
     readonly strict: boolean;
     // What a walked reading counts.
     readonly family: Family | null;

@@ -177,7 +177,7 @@ describe('the clock and the draw come from the pass', () => {
         const formulas = {
             A1: '=SUM(RANDBETWEEN({5,6,7},{5,6,7}))',
             A2: '=SUM(RANDBETWEEN({1,2;3,4},{1,2;3,4}))',
-            A3: '=SUM(RANDBETWEEN(C1:C3,C1:C3))',
+            A3: '=SUM(RANDBETWEEN(C1:C3*1,C1:C3*1))',
             A4: '=INDEX(RANDBETWEEN({1,2,"x y"},1),1,3)',
         };
         const values = drawn({ ...formulas, C1: 10, C2: 20, C3: 30 }, 7);

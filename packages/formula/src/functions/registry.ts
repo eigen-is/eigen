@@ -183,9 +183,10 @@ export function skippable(param: Param<unknown>, fallback?: Scalar): Param<unkno
     return Object.freeze({ ...param, optional: true, skips: true, fallback });
 }
 
-// A number reading that refuses a boolean, typed or in a cell, with #VALUE!.
+// A number as Excel's add-in functions read one: a boolean, typed or in a cell, is #VALUE!, a range of several
+// cells is #VALUE! for the whole call where an array runs it once per element, and an argument left empty is #N/A.
 export function strict(param: Param<number>): Param<number> {
-    return Object.freeze({ ...param, strict: true });
+    return Object.freeze({ ...param, strict: true, prepare: Prepare.Single });
 }
 
 // A union is taken, every area of it.

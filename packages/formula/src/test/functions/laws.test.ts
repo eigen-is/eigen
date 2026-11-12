@@ -125,7 +125,9 @@ function withArg(args: readonly string[], at: number, put: string): string[] {
 describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, entry) => {
     const base = BASE.get(entry.name) ?? [];
     const params = entry.slots;
-    const scalars = params.map((param, at) => (param.prepare === Prepare.Scalar ? at : -1)).filter((at) => at >= 0);
+    // The parameters that read one value: a strict one among them, which refuses a range.
+    const reads = (param: Param<unknown>) => param.prepare === Prepare.Scalar || param.prepare === Prepare.Single;
+    const scalars = params.map((param, at) => (reads(param) ? at : -1)).filter((at) => at >= 0);
     // The parameters whose reading an error ends, and those read as a number or a truth value.
     const ends = (param: Param<unknown>) =>
         param.read < Read.Anything && (param.family === null || param.family.errors === Errors.Result);
@@ -163,6 +165,21 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             );
             expect(bad).toBe(VALUE);
             expect(text).toEqual(plain);
+        }
+    });
+
+    test('a strict number refuses a boolean and a range of several cells, and takes one cell and an array', () => {
+        for (const at of scalars.filter((slot) => params[slot].strict)) {
+            const put = (argument: string) => written(entry, withArg(base, at, argument));
+            const lifted = put('C1:C3*1').slice(1);
+            const [typed, cell, range, union, one, plain, element] = evaluateAll([
+                ...[put('TRUE'), put('D1'), put('C1:C3'), put('(C1,C2)'), put('C2:C2'), put('2')],
+                `=INDEX(${lifted},2,1)`,
+            ]);
+            expect([typed, cell, range, union]).toEqual([VALUE, VALUE, VALUE, VALUE]);
+            if (entry.volatile) continue;
+            expect(one).toEqual(plain);
+            expect(element).toEqual(plain);
         }
     });
 
@@ -236,6 +253,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             expect(cell).toEqual(blank);
             // An empty argument is a blank that is read, or left out where the parameter says so.
             if (param.skips && at === params.length - 1) expect(empty).toEqual(evaluateAll([written(entry, upTo)])[0]);
+            else if (param.strict) expect(empty).toBe(NA);
             else if (!param.skips && at > 0) expect(empty).toEqual(blank);
             if (!param.optional || param.fallback === undefined || at !== params.length - 1) continue;
             const fallback =

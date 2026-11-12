@@ -9,14 +9,14 @@ import type { FormulaNode } from '../text/tree';
 import { NodeKind } from '../text/tree';
 import { toBoolean, toNumber, toText } from '../values/coerce';
 import { LAST_SERIAL } from '../values/dates';
-import { NAME, NUM, VALUE } from '../values/errors';
+import { NA, NAME, NUM, VALUE } from '../values/errors';
 import { parseNumber } from '../values/parse-number';
 import type { Value } from '../values/value';
 import { isArray, isError, isReference, LONGEST_TEXT, ValueType } from '../values/value';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Errors, TypedText } from './families';
-import { lift, lifts, step } from './lift';
+import { lift, lifts, single, step } from './lift';
 import { look } from './look';
 import { real } from './operators';
 import { Frame, Table } from './readers';
@@ -57,15 +57,16 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
         // An argument left out is what the body gets for it, and so is one left empty where that means left out.
         // Any other empty argument is a blank, and is read as one.
         else if (i >= count) value = slot.read === Read.Here ? ctx.here(sheet, row, column) : slot.fallback;
-        else if (given[i].kind === NodeKind.Empty) value = slot.skips ? slot.fallback : null;
+        else if (given[i].kind === NodeKind.Empty) value = slot.skips ? slot.fallback : slot.strict ? NA : null;
         else if (slot.prepare === Prepare.Scalar) {
             value = ctx.operand(given[i], sheet, row, column);
             if (isArray(value)) lifted = true;
         } else {
             value = ctx.evaluate(given[i], sheet, row, column);
-            // The preparations that take a place or a first cell are the last two an argument can have.
+            // The preparations that take a place, a first cell or one cell only are the last an argument can have.
             if (slot.prepare >= Prepare.Reference) {
                 if (slot.prepare === Prepare.Corner && isReference(value)) value = ctx.first(value);
+                else if (slot.prepare === Prepare.Single && isReference(value)) value = single(ctx, value);
                 else if (slot.apiece && isReference(value)) value = cellsOf(ctx, value);
                 if (isArray(value) && lifts(slot, value)) lifted = true;
             }
@@ -173,7 +174,11 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
             return Table.over(frame.table(at), value);
         case Read.Here:
         case Read.Only:
-            if (!isReference(value)) return isError(value) ? value : VALUE;
+            if (!isReference(value)) {
+                // What is no reference is refused with its own error, and an array with its first element's.
+                const first = isArray(value) ? value.items[0] : value;
+                return isError(first) ? first : VALUE;
+            }
             return value.next !== null && param.union !== null ? param.union : value;
         case Read.Plain:
         case Read.Any:
