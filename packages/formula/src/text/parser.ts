@@ -20,7 +20,7 @@ import {
     UPPER_R,
     ZERO,
 } from './chars';
-import { continuesWord, errorCode, lexAt, REF_ERROR, Token, tokenEnd, tokenKind } from './lexer';
+import { continuesWord, errorCode, joinsReferences, lexAt, REF_ERROR, Token, tokenEnd, tokenKind } from './lexer';
 import type { FormulaNode } from './tree';
 import { branch, EMPTY, leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from './tree';
 
@@ -66,7 +66,8 @@ export function parseStored(text: string): FormulaNode | ParseFailure {
     return new Parser(text, true, 0, 0, noSheet).formula();
 }
 
-function noSheet(): undefined {
+// The finder of a text that names no sheet, and the names of a workbook that has none.
+export function noSheet(): undefined {
     return undefined;
 }
 
@@ -76,6 +77,17 @@ export function callsSpaced(text: string, pos: number, end: number): boolean {
     const gap = lexAt(text, end);
     if (tokenKind(gap) !== Token.Space || text.charCodeAt(tokenEnd(gap)) !== OPEN) return false;
     return !readsAsReference(text.slice(pos, end));
+}
+
+// Whether a colon between these two operands, printed bare, reads as columns: a name that is a column label, then
+// another such name, a whole column, or a function named like a column and called with whitespace.
+export function readsAsColumns(left: FormulaNode, right: FormulaNode): boolean {
+    const before = left.kind === NodeKind.Binary ? left.children[1] : left;
+    let after = right;
+    while (after.kind === NodeKind.Postfix || after.kind === NodeKind.Invoke) after = after.children[0];
+    if (before.kind !== NodeKind.Name || columnIndex(before.text) === -1 || after.space !== '') return false;
+    if (after.kind === NodeKind.Ref) return after.op === RefKind.Columns;
+    return (after.kind === NodeKind.Name || after.spaceOpen !== '') && columnIndex(after.text) !== -1;
 }
 
 // The tree, or the failure of one that nests deeper than its stored text reads back. The parser counts as it reads;
@@ -267,8 +279,7 @@ class Parser {
             const right = this.expression(power + 1, union);
             height = Math.max(height, this.height);
             // A number never stands beside a colon as a row would: each of these joins what may yield a reference.
-            const joinsReferences = op === Token.Colon || op === Token.Space || op === Token.Comma;
-            if (joinsReferences && !(yieldsReference(left) && yieldsReference(right))) return this.fail();
+            if (joinsReferences(op) && !(yieldsReference(left) && yieldsReference(right))) return this.fail();
             left =
                 op === Token.Colon
                     ? this.colon(left, right, space)
@@ -291,11 +302,8 @@ class Parser {
             if (cell && after.kind === NodeKind.Ref && after.op <= RefKind.Range && after.space === '') {
                 return this.fail();
             }
-            // A name that is a column label, a colon and a column would show as one range, as would a function named
-            // like a column and called with whitespace. Only stored text gets here that way.
-            const label = after.kind === NodeKind.Name || after.spaceOpen !== '';
-            const column = after.kind === NodeKind.Ref ? after.op === RefKind.Columns : label && isColumn(after);
-            if (before.kind === NodeKind.Name && isColumn(before) && column && after.space === '') return this.fail();
+            // Only stored text gets here with a name and a column that would show as one range.
+            if (readsAsColumns(left, right)) return this.fail();
         }
         return branch(NodeKind.Binary, Token.Colon, '', [left, right], space, '', '');
     }
@@ -736,7 +744,7 @@ function yieldsReference(node: FormulaNode): boolean {
         case NodeKind.Postfix:
             return node.op === Token.Hash;
         case NodeKind.Binary:
-            return node.op === Token.Colon || node.op === Token.Space || node.op === Token.Comma;
+            return joinsReferences(node.op);
         default:
             return false;
     }
@@ -752,8 +760,4 @@ function nesting(tree: FormulaNode): number {
         for (let i = 1; i < children.length; i += 1) deepest = Math.max(deepest, levels + nesting(children[i]));
         if (children.length === 0) return Math.max(deepest, levels);
     }
-}
-
-function isColumn(named: FormulaNode): boolean {
-    return columnIndex(named.text) !== -1;
 }

@@ -3,7 +3,7 @@
 
 import { rangeToA1 } from '../text/a1';
 import { quoteSheetName } from '../text/sheet-name';
-import { NA, VALUE } from '../values/errors';
+import { CALC, DIV0, NA, NAME, NULL, NUM, REF, SPILL, VALUE } from '../values/errors';
 import { isError } from '../values/value';
 import {
     ANY,
@@ -24,20 +24,20 @@ import {
 
 // Excel's errors in the order ERROR.TYPE numbers them, from 1. The order in which a cell stores ours is another.
 const EXCEL_ERRORS: readonly string[] = [
-    '#NULL!',
-    '#DIV/0!',
-    '#VALUE!',
-    '#REF!',
-    '#NAME?',
-    '#NUM!',
-    '#N/A',
+    NULL.text,
+    DIV0.text,
+    VALUE.text,
+    REF.text,
+    NAME.text,
+    NUM.text,
+    NA.text,
     '#GETTING_DATA',
-    '#SPILL!',
+    SPILL.text,
     '#CONNECT!',
     '#BLOCKED!',
     '#UNKNOWN!',
     '#FIELD!',
-    '#CALC!',
+    CALC.text,
 ];
 
 export const INFORMATION = [

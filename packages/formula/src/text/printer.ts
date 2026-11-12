@@ -5,7 +5,7 @@
 
 import { columnLabel, GRID_COLUMNS, GRID_ROWS } from './a1';
 import { ERROR_LITERALS, isWord, SYMBOLS, Token } from './lexer';
-import { readsAsReference, referenceAt } from './parser';
+import { noSheet, readsAsReference, referenceAt } from './parser';
 import { quotedSheetName, quoteSheetName } from './sheet-name';
 import type { Ends, FormulaNode } from './tree';
 import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from './tree';
@@ -16,7 +16,7 @@ const PLAIN_EXPONENT_MIN = -18;
 export type SheetNames = (id: string) => string | undefined;
 
 export function printStored(tree: FormulaNode): string {
-    return `=${print(tree, true, 0, 0, noName)}`;
+    return `=${print(tree, true, 0, 0, noSheet)}`;
 }
 
 // The formula as it reads at a cell, row and column from 0. `sheetName` gives a sheet's name by its id.
@@ -27,10 +27,6 @@ export function printA1(tree: FormulaNode, hostRow: number, hostColumn: number, 
 // A tree in the spellings of a file, as xlsxTree makes one, at a cell.
 export function printXlsx(tree: FormulaNode, hostRow: number, hostColumn: number, sheetName: SheetNames): string {
     return print(tree, false, hostRow, hostColumn, sheetName);
-}
-
-function noName(): undefined {
-    return undefined;
 }
 
 function print(node: FormulaNode, stored: boolean, row: number, column: number, sheetName: SheetNames): string {

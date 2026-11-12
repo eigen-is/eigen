@@ -79,17 +79,22 @@ export const ERROR_LITERALS: readonly string[] = [
     '#EXTERNAL!',
 ];
 
+// Whether an operator joins two references into one: a range, an intersection or a union.
+export function joinsReferences(op: number): boolean {
+    return op === Token.Colon || op === Token.Space || op === Token.Comma;
+}
+
 // What is left of a reference whose cells or sheet are gone. It stands wherever a reference may.
 export const REF_ERROR = REF.code;
 
-const SPACE = 1;
+const BLANK = 1;
 const DIGIT = 2;
 const WORD_START = 3;
 const WORD_PART = 4;
 
 const CLASS = new Uint8Array(128);
 for (const [chars, charClass] of [
-    [' \t\n\r', SPACE],
+    [' \t\n\r', BLANK],
     ['0123456789', DIGIT],
     ['ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_\\$', WORD_START],
     ['.?', WORD_PART],
@@ -151,8 +156,8 @@ export function lexAt(text: string, pos: number): number {
         return (end << 6) | Token.Bad;
     }
     const charClass = CLASS[code];
-    if (charClass === SPACE) {
-        while (CLASS[text.charCodeAt(end)] === SPACE) end += 1;
+    if (charClass === BLANK) {
+        while (CLASS[text.charCodeAt(end)] === BLANK) end += 1;
         return (end << 6) | Token.Space;
     }
     if (charClass === DIGIT) return (numberEnd(text, pos) << 6) | Token.Number;

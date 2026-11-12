@@ -586,11 +586,18 @@ export const EXCEL_ARRAY_FUNCTIONS: ReadonlySet<string> = new Set([
     'WRAPROWS',
 ]);
 
+// The prefixes a file writes before a future function and before a worksheet one, in the letter case Excel writes.
+export const FUTURE_PREFIX = '_xlfn.';
+export const WORKSHEET_PREFIX = '_xlfn._xlws.';
 const FUTURE_PREFIXES = /^(?:_xlfn\.)?(?:_xlws\.)?/i;
 
 // True for a name Excel knows as a function, in any case and with or without its file prefixes: XLOOKUP,
 // _xlfn.LET, sum. A typo such as FILTRE is false.
 export function isExcelFunction(name: string): boolean {
-    const bare = name.replace(FUTURE_PREFIXES, '').toUpperCase();
-    return EXCEL_FUTURE_FUNCTIONS.has(bare) || EXCEL_2007_FUNCTIONS.has(bare);
+    return isExcelName(name.replace(FUTURE_PREFIXES, '').toUpperCase());
+}
+
+// The same for a bare name in upper case, as a parsed call holds it: a prefix left on it makes it no function.
+export function isExcelName(name: string): boolean {
+    return EXCEL_FUTURE_FUNCTIONS.has(name) || EXCEL_2007_FUNCTIONS.has(name);
 }

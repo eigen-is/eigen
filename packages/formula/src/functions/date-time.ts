@@ -44,7 +44,7 @@ function stamped(part: (day: number, second: number) => number) {
 }
 
 // A text that is a date or a time, as its serial. A date without a year is of the year of the pass.
-function typed(text: string, now: number) {
+function serialOf(text: string, now: number) {
     return parseDateTime(text, serialDate(Math.floor(now)).year);
 }
 
@@ -59,11 +59,11 @@ export const DATE_TIME = [
     fn('NOW', [NOW], (now) => now),
     fn('TODAY', [NOW], Math.floor),
     fn('DATEVALUE', [TEXT, NOW], (text, now) => {
-        const serial = typed(text, now);
+        const serial = serialOf(text, now);
         return serial === undefined ? VALUE : Math.floor(serial);
     }),
     fn('TIMEVALUE', [TEXT, NOW], (text, now) => {
-        const serial = typed(text, now);
+        const serial = serialOf(text, now);
         return serial === undefined ? VALUE : serial - Math.floor(serial);
     }),
     fn(

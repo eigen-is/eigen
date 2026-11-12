@@ -30,7 +30,7 @@ import {
 } from './registry';
 
 // Past this a position is no position: MID("abc",2^31,1) is #VALUE!.
-const MOST = 2 ** 31;
+const POSITION_LIMIT = 2 ** 31;
 
 // The most decimals FIXED and DOLLAR write, and the longest text.
 const MOST_DECIMALS = 127;
@@ -105,7 +105,7 @@ export const TEXT_FUNCTIONS = [
         return cutCharacters(text, Math.max(length - Math.trunc(count), 0), length);
     }),
     fn('MID', [TEXT, NUMBER, NUMBER], (text, start, count) =>
-        start < 1 || count < 0 || start >= MOST || count >= MOST
+        start < 1 || count < 0 || start >= POSITION_LIMIT || count >= POSITION_LIMIT
             ? VALUE
             : cutCharacters(text, Math.trunc(start) - 1, Math.trunc(count)),
     ),
@@ -117,7 +117,7 @@ export const TEXT_FUNCTIONS = [
     // Left out, every `old` is replaced, one after the other. A numbered one is counted among all the places
     // `old` starts at, overlapping ones too: the second aa of aaaa starts at its second a.
     fn('SUBSTITUTE', [TEXT, TEXT, TEXT, optional(strict(NUMBER))], (text, old, put, instance) => {
-        if (instance !== undefined && (instance < 1 || instance >= MOST)) return VALUE;
+        if (instance !== undefined && (instance < 1 || instance >= POSITION_LIMIT)) return VALUE;
         if (old === '') return text;
         const width = countCharacters(old);
         const step = instance === undefined ? width : 1;
