@@ -21,6 +21,8 @@ export class Frame {
     public readonly args: unknown[] = [];
     // Set by a reader that could not answer: the result of the call, whatever the body made of it.
     public failed: FormulaError | null = null;
+    // What the walk of the call in progress passes over, when another row picked the row that runs.
+    public skips = 0;
     private readonly ctx: Evaluator;
     // What the criteria of the call in progress matched.
     public readonly matches = new Matches();
@@ -130,7 +132,7 @@ export class Numbers {
 
     private start(): Evaluator {
         const { walk } = this.ctx;
-        walk.start(this.frame.held, this.from, this.to, this.family);
+        walk.start(this.frame.held, this.from, this.to, this.family, this.frame.skips);
         if (this.matched) walk.hand(this.frame.tally.numbers, this.frame.tally.found);
         return this.ctx;
     }

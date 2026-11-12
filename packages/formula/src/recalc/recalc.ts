@@ -312,7 +312,7 @@ export class Recalc {
         return (this.factsOf(shape) >> FACT_BITS) + CELL;
     }
 
-    private factsOf(shape: number): number {
+    public factsOf(shape: number): number {
         let facts = this.facts[shape];
         if (facts === undefined) {
             const { tree } = this.workbook.shapes.shape(shape);

@@ -15,7 +15,7 @@ import type { ArrayValue, Reference, Scalar } from '../values/value';
 
 export type { Matches, Numbers, Room, Table } from '../eval/readers';
 export type { Vector } from '../eval/search';
-export { ANYWHERE, Find, NEXT, PART } from '../eval/signature';
+export { ANYWHERE, Find, NESTED, NEXT, PART } from '../eval/signature';
 export { rectangle } from '../values/rectangle';
 
 export type Registry = ReadonlyMap<string, Entry>;
@@ -29,6 +29,7 @@ const REQUIRED = {
     rest: false,
     each: false,
     union: null,
+    only: false,
 };
 
 function scalar<T>(read: Read): Param<T> {
@@ -104,9 +105,15 @@ export const REFERENCE: Param<Reference> = Object.freeze({ ...ONLY, union: REF }
 export const WHERE: Walked<Matches> = Object.freeze({ ...REQUIRED, prepare: Prepare.Walked, read: Read.Where });
 // The numbers beside the cells every WHERE of the row accepts. After its WHERE it takes the size of that range
 // from its own first cell, and left out it is that range; before, the sizes must be equal.
-export const MATCHED: Walked<Numbers> = Object.freeze({ ...REQUIRED, prepare: Prepare.Walked, read: Read.Matched });
+export const MATCHED: Walked<Numbers> = Object.freeze({
+    ...REQUIRED,
+    ...{ prepare: Prepare.Walked, read: Read.Matched, union: VALUE, only: true },
+});
 // The cells of a range that show nothing: a blank or empty text.
-export const BLANKS: Param<Matches> = Object.freeze({ ...REQUIRED, prepare: Prepare.Walked, read: Read.Blanks });
+export const BLANKS: Param<Matches> = Object.freeze({
+    ...REQUIRED,
+    ...{ prepare: Prepare.Walked, read: Read.Blanks, union: VALUE, only: true },
+});
 
 // Ranges or arrays of one size, as the product at each place: what is no number counts as 0.
 export const PRODUCTS: Walked<Numbers> = Object.freeze({ ...REQUIRED, prepare: Prepare.Walked, read: Read.Products });
@@ -158,6 +165,12 @@ export function each<T>(param: Param<T>): Param<T> & { readonly each: true } {
     return Object.freeze({ ...param, each: true as const });
 }
 
+// The parameter takes nothing but a reference: anything else is its own error or #VALUE!, and an array of
+// references runs the call once per reference. RANK and SUBTOTAL take their ranges so.
+export function cells<T>(param: Walked<T>): Walked<T> {
+    return Object.freeze({ ...param, only: true });
+}
+
 type Args<P extends readonly Param<unknown>[]> = { [K in keyof P]: P[K] extends Param<infer T> ? T : never };
 
 // A token only where a parameter is lazy, NEXT only where one is tried in turn, a table only from a row marked PART.
@@ -197,12 +210,11 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
     let stepped = false;
     for (const param of params) {
         const ambient = param.prepare === Prepare.Ambient;
-        const only = param.read === Read.Matched || param.read === Read.Blanks;
         const own = ambient
             ? []
             : param.read === Read.Where
               ? [ONLY, ANY]
-              : [only ? { ...ONLY, optional: param.optional } : param];
+              : [param.only ? { ...ONLY, optional: param.optional, union: param.union } : param];
         if (closed && !ambient) throw new Error(`${name}: a parameter after a repeating or an ambient one`);
         if (
             param.optional &&
@@ -255,9 +267,17 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
         where,
         matched,
         volatile: params.some((param) => param.read === Read.Random || param.read === Read.Now),
+        chosen: null,
         plain,
         run: body,
     });
+}
+
+// A row whose first argument, a whole number, picks another row, which then gets the references that follow:
+// `targets` lists the name each code picks and what its walk passes over. A code that is not listed is #VALUE!.
+export function chosen(name: string, targets: readonly (readonly [code: number, target: string, skips: number])[]) {
+    const picks = new Map(targets.map(([code, target, skips]) => [code, { target, skips }]));
+    return Object.freeze({ ...fn(name, [INTEGER, rest(cells(NUMBERS))], () => VALUE), chosen: picks });
 }
 
 // What a reading makes of its fallback: the fallback itself when it is a value of that reading.

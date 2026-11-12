@@ -224,8 +224,9 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         expect(third).toEqual(first);
     });
 
-    // The parameter that takes every value of its arguments, when the row ends in one.
-    const family = entry.params.at(-1)?.rest === true ? entry.params.at(-1)?.family : undefined;
+    // The parameter that takes every value of its arguments, typed ones too, when the row ends in one.
+    const last = entry.params.at(-1);
+    const family = last?.rest === true && !last.only ? last.family : undefined;
     // What the call answers with one more argument, and whether two forms of that argument answer alike.
     const same = (a: string, b: string | null) => {
         const [first, second] = evaluateAll([

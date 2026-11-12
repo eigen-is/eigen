@@ -81,6 +81,8 @@ export type Param<T> = {
     readonly each: boolean;
     // What a union of areas answers. Null takes every area.
     readonly union: FormulaError | null;
+    // Whether the parameter takes nothing but a reference, so an array of references runs the call once for each.
+    readonly only: boolean;
     // Only in the type, never in a record: what the body gets.
     readonly [carries]?: () => T;
 };
@@ -117,6 +119,12 @@ export const ANYWHERE = 2;
 
 export type Returns = 0 | typeof PART | typeof ANYWHERE;
 
+// What the walk passes over for a row that another row picked: a cell whose formula holds a call of such a row.
+export const NESTED = 1;
+
+// The row that a code picks, by its name, and what the walk then passes over.
+export type Choice = { readonly target: string; readonly skips: number };
+
 export type Result = Scalar | ArrayValue | Lazy | Table | Reference;
 
 export type Entry = {
@@ -141,6 +149,8 @@ export type Entry = {
     readonly plain: boolean;
     // Whether the row takes a draw or the time, so its answer differs from call to call.
     readonly volatile: boolean;
+    // Of a row that picks another row by its first argument: the row each code picks. Null for any other row.
+    readonly chosen: ReadonlyMap<number, Choice> | null;
     // A method on purpose: a body typed by its parameters is stored here without a cast, since TypeScript compares
     // the parameters of a method loosely. `fn` is the only writer.
     run(...args: readonly unknown[]): Result;

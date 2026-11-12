@@ -207,9 +207,21 @@ function collected(family: Family, value: Value): Held {
 
 // The body on arguments that are read, and its answer as a cell can hold it: a number that is no number is #NUM!,
 // and a text has at most 32,767 characters. `held` are the slots of the call in progress.
-export function run(ctx: Evaluator, entry: Entry, held: readonly Held[], count: number): Value | Lazy {
+export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number): Value | Lazy {
     let args: readonly unknown[] = held;
     const frame = entry.plain ? null : ctx.frames[ctx.calls - 1];
+    const choice = entry.chosen === null || typeof held[0] !== 'number' ? undefined : entry.chosen.get(held[0]);
+    // The row that the first argument picked runs on the arguments after it, with its walk told what to pass over.
+    if (choice !== undefined && frame !== null) {
+        const target = ctx.functions.get(choice.target);
+        if (target === undefined) return NAME;
+        held.copyWithin(0, 1, count);
+        held.length = count - 1;
+        frame.skips = choice.skips;
+        const result = run(ctx, target, held, count - 1);
+        frame.skips = 0;
+        return result;
+    }
     if (frame !== null) {
         const error = look(ctx, entry, frame, count);
         if (error !== null) return error;

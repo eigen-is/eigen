@@ -4,12 +4,14 @@
 // cell and found every error before the walk starts, so it meets none. It also adds what it hands out, since a
 // stored row of an array can stand for a million written ones.
 
+import type { Column } from '../store/column';
 import { CellKind, KIND_MASK } from '../store/column';
 import type { FormulaError } from '../values/errors';
 import { CALC } from '../values/errors';
 import type { ArrayValue, Reference } from '../values/value';
 import { isArray, isReference } from '../values/value';
 import type { Evaluator } from './evaluator';
+import { Fact } from './facts';
 import type { Family } from './families';
 import { Families } from './families';
 import type { Held } from './signature';
@@ -54,16 +56,19 @@ export class Walk {
     private unstored = 0;
     // Whether a span that `hand` was given is still to be handed out.
     private handed = false;
+    private skips = 0;
 
     public constructor(ctx: Evaluator) {
         this.ctx = ctx;
         this.num = this.span;
     }
 
-    // The arguments `from` up to `to`, as the wrapper read them: a number counts, and nothing is passed over.
-    public start(args: readonly Held[], from: number, to: number, family: Family): void {
+    // The arguments `from` up to `to`, as the wrapper read them: a number counts. `skips` says which cells are
+    // passed over whatever they hold.
+    public start(args: readonly Held[], from: number, to: number, family: Family, skips: number): void {
         this.args = args;
         this.family = family;
+        this.skips = skips;
         this.arg = from;
         this.last = to;
         this.area = null;
@@ -174,7 +179,7 @@ export class Walk {
         const held = this.ctx.workbook.sheets[at.sheet].columns[at.left];
         if (held === undefined || at.top >= held.length) return Number.NaN;
         const kind = held.kind[at.top] & KIND_MASK;
-        if (((this.family.kinds >> kind) & 1) === 0) return Number.NaN;
+        if (((this.family.kinds >> kind) & 1) === 0 || this.skipped(held, at.top)) return Number.NaN;
         return kind === CellKind.Boolean ? held.ref[at.top] : held.num[at.top];
     }
 
@@ -198,7 +203,7 @@ export class Walk {
         const { right, end, span } = this;
         const { columns } = this.ctx.workbook.sheets[area.sheet];
         const { kinds } = this.family;
-        if (this.row < end && area.left === right) {
+        if (this.row < end && area.left === right && this.skips === 0) {
             const held = columns[right];
             const { kind } = held;
             let row = this.row;
@@ -219,11 +224,12 @@ export class Walk {
                 return true;
             }
         }
-        for (let row = this.row; row < end && area.left < right; row += 1) {
+        // Cell by cell for several columns, and for one column when cells may be passed over.
+        for (let row = this.row; row < end && (area.left < right || this.skips !== 0); row += 1) {
             let found = 0;
             for (let c = area.left; c <= right; c += 1) {
                 const held = columns[c];
-                if (row >= held.length) continue;
+                if (row >= held.length || this.skipped(held, row)) continue;
                 const at = held.kind[row] & KIND_MASK;
                 if ((kinds >> at) & 1) span[found++] = at === CellKind.Boolean ? held.ref[row] : held.num[row];
             }
@@ -296,6 +302,12 @@ export class Walk {
         this.reps = null;
         this.rows = 1;
         return false;
+    }
+
+    // Whether a cell is passed over whatever it holds: one whose formula holds a call of a row that picks another.
+    private skipped(held: Column, row: number): boolean {
+        if (this.skips === 0 || held.shape[row] === 0) return false;
+        return (this.ctx.recalc.factsOf(held.shape[row]) & Fact.Chosen) !== 0;
     }
 
     private single(value: number): boolean {
