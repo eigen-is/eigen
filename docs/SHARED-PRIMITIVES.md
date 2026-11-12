@@ -1530,7 +1530,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `downloadDriveFile` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `triggerDownload` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `checkPathAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
-| `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/types/mount.ts |
 | `driveActionsFor` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-actions.ts |
 | `folderContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `forgetPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/keys.ts |
@@ -1693,6 +1692,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
 | `CONVERT_SOURCES` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
+| `DEFAULT_MOUNT_ID` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `describeFileEvent` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `DOCS_TEXT_WIDTHS` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `docsTextWidth` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
