@@ -9,7 +9,6 @@ import { ApiError } from '../core/errors';
 import { computeEtag, matchesIfMatch, matchesIfNoneMatch, rangeResponse, scriptableInlineHeaders } from '../core/http';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
-import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 import { splitParentAndName } from './path';
 
@@ -96,13 +95,10 @@ export async function handlePut(args: {
     const parent = await drive.resolvePath(mountId, parentStr);
     if (!parent) throw new ApiError(409, 'Parent not found');
 
-    // One breadcrumb, for the guard and the RFC 4918 §6.2 lock check: parent counts on create, ancestors on overwrite.
+    // The RFC 4918 §6.2 lock check: the parent counts on create, the ancestors on overwrite.
     const breadcrumb = existing
         ? await drive.breadCrumb(mountId, existing.id)
         : await drive.breadCrumb(mountId, parent.id);
-    if (enclosingDocumentContainer(breadcrumb, { includeSelf: !existing })) {
-        throw new ApiError(423, 'Container internals are read-only');
-    }
     assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
     if (!(await drive.canWrite(mountId, existing?.id ?? parent.id, user))) {
         throw new ApiError(403, 'No write permission');
@@ -179,12 +175,7 @@ export async function handleMkcol(args: {
     const parent = await drive.resolvePath(mountId, parentStr);
     if (!parent) throw new ApiError(409, 'Parent not found');
 
-    const breadcrumb = await drive.breadCrumb(mountId, parent.id);
-    if (enclosingDocumentContainer(breadcrumb, { includeSelf: true })) {
-        throw new ApiError(423, 'Container internals are read-only');
-    }
-    assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
-
+    assertWritable(drive.lockManager, await drive.breadCrumb(mountId, parent.id), ifHeader, user.id);
     await drive.createFolder(mountId, parent.id, name, user);
     return new Response(null, { status: 201 });
 }
@@ -201,11 +192,7 @@ export async function handleDelete(args: {
     const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
 
-    const breadcrumb = await drive.breadCrumb(mountId, path.id);
-    if (enclosingDocumentContainer(breadcrumb, { includeSelf: false })) {
-        throw new ApiError(423, 'Container internals are read-only');
-    }
-    assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
+    assertWritable(drive.lockManager, await drive.breadCrumb(mountId, path.id), ifHeader, user.id);
     await drive.deletePath(mountId, path.id, user);
     return new Response(null, { status: 204 });
 }

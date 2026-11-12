@@ -1,3 +1,8 @@
+// The WebDAV PROPPATCH method: a client's own properties on a file or folder, such as Finder's tags, kept in the
+// path's details. The WebDAV router calls it with the signed-in user, through getSharedDrive, so the Drive ACL and
+// its rule for writes inside a document decide. RFC 4918's live properties are refused, and one refused property
+// fails the whole request.
+
 import type { WebdavDeadProp } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
 import { ApiError } from '../core/errors';
@@ -5,15 +10,12 @@ import { parseXmlRoot, serializeXmlChildren, XML_NAMESPACE, xmlChildren, xmlElem
 import { DAV_NAMESPACES } from '../dav/xml';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
-import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 import { encodeHref } from './path';
 import { buildXmlResponse, MAX_XML_BODY_BYTES, multistatus, propstatStatus, response } from './xml';
 
-// RFC 4918 §15 classifies these as live properties: their values are derived from
-// the resource itself (size, mtime, etag, locks, quota) or controlled by the
-// server. PROPPATCH on a live property must return 403 Forbidden inside propstat
-// rather than persisting an opaque copy that would shadow the real value.
+// RFC 4918 §15's live properties, which the server derives or controls. A PROPPATCH on one is a 403 in its propstat,
+// so no stored copy shadows the real value.
 const PROTECTED_PROPS = new Set([
     'displayname',
     'getcontentlength',
@@ -64,11 +66,7 @@ export async function handleProppatch(args: {
     const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
 
-    const breadcrumb = await drive.breadCrumb(mountId, path.id);
-    if (enclosingDocumentContainer(breadcrumb, { includeSelf: false })) {
-        throw new ApiError(423, 'Container internals are read-only');
-    }
-    assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
+    assertWritable(drive.lockManager, await drive.breadCrumb(mountId, path.id), ifHeader, user.id);
 
     const ops = extractPropOps(body);
     // Only a set is refused in the xml namespace (reserved) or on a no-namespace live name (read as the live one); a remove runs, so a stored row can go.
@@ -78,9 +76,8 @@ export async function handleProppatch(args: {
     // RFC 4918 §9.2: all or nothing, so one refused op saves none and fails the rest with 424.
     const refused = ops.some(isProtected);
 
-    // Apply all ops in memory first, then write once. RFC 4918 §9.2 requires
-    // ops to be processed in document order; a set on an existing prop keeps
-    // that prop's slot.
+    // All ops apply in memory, in document order as RFC 4918 §9.2 asks, and write once. A set on an existing prop
+    // keeps its slot.
     if (!refused) {
         let webdavProps = path.details?.webdavProps ? [...path.details.webdavProps] : [];
         let mutated = false;

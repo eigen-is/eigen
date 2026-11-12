@@ -6,7 +6,6 @@
 import type {
     DriveACLDelta,
     DriveAccessCheckResult,
-    DriveContainerType,
     DrivePath,
     DrivePathDetails,
     DriveVisibility,
@@ -24,13 +23,13 @@ import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError } from '../core';
 import type { Home } from '../home';
 import type { Mount } from '../mount';
+import type { CopyTree } from '../mount/copy';
 import type { StorageFile } from '../storage';
 import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
 import { canonicalACLId, canReadFromAncestors } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
-import type { CopyTarget } from './copy-across';
-import type { ContentWriteOptions, ContentWriteResult, Drive } from './drive';
+import type { ContentWriteOptions, ContentWriteResult, CopyTarget, Drive } from './drive';
 import type { LockManager } from './lock-manager';
 
 // A `_user` or `_actor` in the middle of a parameter list only keeps the arguments after it where
@@ -189,15 +188,9 @@ export class SharedDrive {
 
     // ---- Changing the tree ----
 
-    public async createFolder(
-        mountId: string,
-        parentId: string,
-        folderName: string,
-        _user: User,
-        containerType?: DriveContainerType,
-    ): Promise<DrivePath> {
+    public async createFolder(mountId: string, parentId: string, folderName: string, _user: User): Promise<DrivePath> {
         await this.requireWrite(mountId, parentId);
-        return this.drive.createFolder(mountId, parentId, folderName, this.user, containerType);
+        return this.drive.createFolder(mountId, parentId, folderName, this.user);
     }
 
     public async create(mountId: string, parentId: string, name: string, type: EigenDocType): Promise<DrivePath> {
@@ -272,6 +265,19 @@ export class SharedDrive {
         await this.requireRead(mountId, srcPathId, memberships, 'No read permission on source');
         if (!to) await this.requireWrite(mountId, destParentId, memberships, 'No write permission on target folder');
         return this.drive.copyPath(mountId, srcPathId, destParentId, name, this.user, to);
+    }
+
+    // A copy from another drive writes its whole tree into the folder, so write access there is all it needs.
+    public async receiveCopy(
+        mountId: string,
+        destParentId: string,
+        name: string,
+        tree: CopyTree,
+        source: Drive,
+        _user: User,
+    ): Promise<DrivePath> {
+        await this.requireWrite(mountId, destParentId);
+        return this.drive.receiveCopy(mountId, destParentId, name, tree, source, this.user);
     }
 
     public async flushContainerDb(mountId: string, containerId: string): Promise<void> {

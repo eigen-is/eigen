@@ -14,6 +14,7 @@ import type {
     DriveContainerType,
     DrivePath,
     DrivePathDetails,
+    DrivePathType,
     DriveVisibility,
     EffectiveMember,
     EigenDocType,
@@ -48,16 +49,15 @@ import { CollabDocument } from '../collab/collab-document';
 import { enforceMaxUploadSize, enforceMountQuota } from '../config/enforcement';
 import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
-import { ApiError, computeEtag } from '../core';
+import { ApiError, computeEtag, storageGone } from '../core';
 import type { Home } from '../home';
 import { broadcastToOwnerAndMembers } from '../home/home-relay';
 import { composeCollaboratorsEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import type { DatabaseHold } from '../mount';
 import { createMountConfig, DEFAULT_MOUNT_ID, Mount } from '../mount';
-import { isContainerDatabase } from '../mount/container-dbs';
 import type { CopyTree } from '../mount/copy';
-import { copySize } from '../mount/copy';
+import { copySize, writeCopy } from '../mount/copy';
 import { validateName } from '../mount/names';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
@@ -69,7 +69,6 @@ import { deleteVersions } from '../versioning/delete';
 import { listVersions } from '../versioning/list';
 import { restoreContainer } from '../versioning/restore';
 import { saveVersion } from '../versioning/save';
-import { isVersionsFolder, isVersionsName } from '../versioning/versions-folder';
 import {
     canonicalACLId,
     canReadFromAncestors,
@@ -82,6 +81,7 @@ import {
     matchesACL,
     mergeACLDelta,
     normalizeACL,
+    refuseDocumentWrite,
 } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
 import {
@@ -92,8 +92,7 @@ import {
 } from './acl-propagation';
 import { propagateAssignment } from './assignment-propagation';
 import { CollabRegistry } from './collab-registry';
-import type { CopyTarget } from './copy-across';
-import { copyPathAcross } from './copy-across';
+import type { DriveLike } from './get-drive';
 import { LockManager } from './lock-manager';
 import type { RecentRow } from './recent';
 import { listRecent, touchRecent } from './recent';
@@ -119,7 +118,8 @@ export type ContentWriteOptions = { user: User; ifMatch?: string; event?: 'uploa
 // after can't show in either. The caller sends them back, so its next save is checked against its own bytes.
 export type ContentWriteResult = { path: DrivePath; etag: string };
 
-const DOCUMENT_PART_ERROR = 'Cannot change a part of a document on its own';
+// Where a copy that leaves its mount lands. The owner and the mount are the ones whose limits it meets.
+export type CopyTarget = { drive: DriveLike; ownerId: string; mountId: string };
 
 export class Drive {
     // A live WebDAV lock holds the home, so only a close for another reason, such as a restore, drops it.
@@ -372,21 +372,20 @@ export class Drive {
 
     // ---- Changing the tree ----
 
-    public async createFolder(
+    public async createFolder(mountId: string, parentId: string, folderName: string, user: User): Promise<DrivePath> {
+        await this.personParent(this.getMount(mountId), parentId, DRIVE_TYPE_FOLDER);
+        return this.addFolder(mountId, parentId, folderName, DRIVE_TYPE_FOLDER, user);
+    }
+
+    private async addFolder(
         mountId: string,
         parentId: string,
         folderName: string,
+        type: DriveContainerType,
         user: User,
-        containerType: DriveContainerType = 'folder',
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
-        const parent = await this.getTargetFolder(mount, parentId);
-        if (!isContainerType(parent.type)) {
-            throw new ApiError(404, 'Parent folder not found');
-        }
-        refuseVersionsName(parent, folderName);
-
-        const pathId = await mount.createFolder(parentId, folderName, containerType);
+        const pathId = await mount.createFolder(parentId, folderName, type);
         const folder = await mount.getPath(pathId);
         if (!folder) throw new ApiError(500, 'Failed to create folder');
         this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder);
@@ -403,10 +402,7 @@ export class Drive {
         user: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
-        const parent = await this.getTargetFolder(mount, parentId);
-        if (!isContainerType(parent.type)) {
-            throw new ApiError(404, 'Parent folder not found');
-        }
+        await this.personParent(mount, parentId, type);
 
         // The name is checked before the extension goes on. Otherwise an empty name would pass as a
         // bare `.eigendoc` file.
@@ -458,10 +454,7 @@ export class Drive {
         user: User,
     ): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
-        const parent = await this.getTargetFolder(mount, parentId);
-        if (parent.type !== DRIVE_TYPE_FOLDER) {
-            throw new ApiError(404, 'Parent folder not found');
-        }
+        await this.personParent(mount, parentId, DRIVE_TYPE_FILE);
 
         const streamed = await streamFilesToTemp(mount, request, maxSize);
         // All files land at once, each under a free name of its own. A file that fails still has its temp
@@ -503,13 +496,19 @@ export class Drive {
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
         user: User,
     ): Promise<DrivePath> {
-        const mount = this.getMount(mountId);
-        const parent = await this.getTargetFolder(mount, parentId);
-        // A document container is a valid parent too. Copying a document to another drive writes its
-        // databases into the new container this way.
-        if (!isContainerType(parent.type)) throw new ApiError(400, 'Target is not a folder');
-        refuseVersionsName(parent, name);
+        await this.personParent(this.getMount(mountId), parentId, DRIVE_TYPE_FILE);
+        return this.addFile(mountId, parentId, name, mimeType, data, user);
+    }
 
+    private async addFile(
+        mountId: string,
+        parentId: string,
+        name: string,
+        mimeType: string,
+        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        user: User,
+    ): Promise<DrivePath> {
+        const mount = this.getMount(mountId);
         const tempId = crypto.randomUUID();
         let created: DrivePath;
         try {
@@ -543,11 +542,10 @@ export class Drive {
         { user, ifMatch, event = 'uploaded' }: ContentWriteOptions,
     ): Promise<ContentWriteResult> {
         const mount = this.getMount(mountId);
-        const path = await mount.getActivePath(pathId);
+        const path = await this.personPath(mount, pathId);
         if (path.type !== DRIVE_TYPE_FILE) {
             throw new ApiError(404, 'File not found');
         }
-        await this.refuseDocumentPart(mount, path);
 
         // The thumbnail job starts as soon as the bytes land, so no error after that leaves its temp
         // file behind. A content write never changes the name or the type of the file.
@@ -593,33 +591,28 @@ export class Drive {
         return { path: committed, etag: computeEtag(committed) };
     }
 
-    private async getTargetFolder(mount: Mount, folderId: string): Promise<DrivePath> {
-        const folder = await mount.getActivePath(folderId);
-        await this.refuseDocumentPart(mount, folder);
-        return folder;
-    }
-
-    // A document's databases and versions take no bytes from a person's write: an overwritten database breaks the
-    // document, and a file in versions/ would list as a version. So a write refuses such a path as target or folder.
-    private async refuseDocumentPart(mount: Mount, path: DrivePath): Promise<void> {
-        let parent: DrivePath | undefined;
-        for (const crumb of await mount.getBreadcrumb(path.id)) {
-            const isPart =
-                parent &&
-                isDocumentType(parent.type) &&
-                (isVersionsFolder(crumb) || isContainerDatabase(crumb.name, parent.type));
-            if (isPart) throw new ApiError(400, DOCUMENT_PART_ERROR);
-            parent = crumb;
+    // The folder a person's write adds a child of type `adding` to, such as an upload or a move. A file holds nothing,
+    // so it is not found either.
+    private async personParent(mount: Mount, parentId: string, adding: DrivePathType): Promise<void> {
+        const crumbs = await mount.getBreadcrumb(parentId);
+        const parent = crumbs.at(-1);
+        if (!parent || parent.trashedAt || !isContainerType(parent.type)) {
+            throw new ApiError(404, 'Parent folder not found');
         }
+        refuseDocumentWrite(crumbs, adding);
     }
 
-    // A person never trashes, renames or moves a part of a document, which changes only with its whole document.
-    private async refuseInsideDocument(mount: Mount, pathId: string): Promise<void> {
-        if (isInsideDocument(await mount.getBreadcrumb(pathId))) throw new ApiError(400, DOCUMENT_PART_ERROR);
+    // The path a person's write changes, such as by a rename, a trash or new bytes.
+    private async personPath(mount: Mount, pathId: string): Promise<DrivePath> {
+        const path = await mount.getActivePath(pathId);
+        refuseDocumentWrite(await mount.getBreadcrumb(pathId));
+        return path;
     }
 
     public async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {
-        await this.getMount(mountId).updatePath(pathId, { details });
+        const mount = this.getMount(mountId);
+        await this.personPath(mount, pathId);
+        await mount.updatePath(pathId, { details });
     }
 
     public async touchUpdatedAt(mountId: string, pathId: string, updatedAt: Date): Promise<void> {
@@ -628,14 +621,9 @@ export class Drive {
 
     public async movePath(mountId: string, pathId: string, targetParentId: string, user: User): Promise<DrivePath> {
         const mount = this.getMount(mountId);
-        const path = await mount.getActivePath(pathId);
-        await this.refuseInsideDocument(mount, pathId);
+        const path = await this.personPath(mount, pathId);
         const oldParentId = path.parentId;
-
-        const targetParent = await this.getTargetFolder(mount, targetParentId);
-        if (targetParent.type !== DRIVE_TYPE_FOLDER) {
-            throw new ApiError(404, 'Target parent is not a folder');
-        }
+        await this.personParent(mount, targetParentId, path.type);
 
         // Read before the move: a watcher who could see the path through its old folders hears about it too.
         const oldChain = await mount.getBreadcrumb(pathId);
@@ -670,8 +658,7 @@ export class Drive {
 
     public async renamePath(mountId: string, pathId: string, newName: string, user: User): Promise<void> {
         const mount = this.getMount(mountId);
-        const item = await mount.getActivePath(pathId);
-        await this.refuseInsideDocument(mount, pathId);
+        const item = await this.personPath(mount, pathId);
         const oldName = item.name;
 
         const renamedItem = await mount.updatePath(pathId, { name: newName });
@@ -695,12 +682,12 @@ export class Drive {
         const mount = this.getMount(mountId);
         if (to) {
             // Checked before the source is listed, so a user who may not write there never flushes the
-            // source's documents or reads the target's limits. The target checks each write again.
+            // source's documents or reads the target's limits.
             if (!(await to.drive.canWrite(to.mountId, destParentId, user))) {
                 throw new ApiError(403, 'No write permission on target folder');
             }
             const tree = await this.listCopyWithinLimits(mount, srcPathId, to);
-            const copiedAcross = await copyPathAcross(this, tree, to, destParentId, name, user);
+            const copiedAcross = await to.drive.receiveCopy(to.mountId, destParentId, name, tree, this, user);
             await sweepCopy(to.drive, copiedAcross, tree);
             return copiedAcross;
         }
@@ -709,8 +696,8 @@ export class Drive {
         if (await mount.isSelfOrDescendant(srcPathId, destParentId)) {
             throw new ApiError(409, 'Cannot copy a folder into itself or its own descendant');
         }
-        refuseVersionsName(await this.getTargetFolder(mount, destParentId), name);
         const tree = await this.listCopyWithinLimits(mount, srcPathId, { ownerId: this.owner.id, mountId });
+        await this.personParent(mount, destParentId, tree.path.type);
         const copied = await mount.copyPath(
             tree,
             destParentId,
@@ -734,6 +721,28 @@ export class Drive {
         });
         this.broadcastHistoryUpdated(mountId, copied);
         return copied;
+    }
+
+    // Writes a copy listed in another mount or drive into this one. It writes the parts of each document it brings, so
+    // the rule for a person's write inside a document is checked once, at the destination, as in Drive.copyPath.
+    public async receiveCopy(
+        mountId: string,
+        destParentId: string,
+        name: string,
+        tree: CopyTree,
+        source: Drive,
+        user: User,
+    ): Promise<DrivePath> {
+        await this.personParent(this.getMount(mountId), destParentId, tree.path.type);
+        return writeCopy(tree, destParentId, name, {
+            createFolder: (parentId, folderName, type) => this.addFolder(mountId, parentId, folderName, type, user),
+            copyFile: async (parentId, fileName, src) => {
+                const file = await source.downloadFile(src.mountId, src.id);
+                if (!file) throw storageGone();
+                return this.addFile(mountId, parentId, fileName, src.mimeType, file, user);
+            },
+            discard: (pathId, createdIds) => this.deleteFailedCopy(mountId, pathId, createdIds, user),
+        });
     }
 
     // The copy writes exactly what this lists, so it never copies its own output. Every copy has to fit the
@@ -782,7 +791,7 @@ export class Drive {
     // The trash runs in the path's ACL chain. An ACL change that started first lands first, and the
     // trash then takes it away with the rest. One that comes after finds the path in the trash.
     public async deletePath(mountId: string, pathId: string, user: User): Promise<void> {
-        await this.refuseInsideDocument(this.getMount(mountId), pathId);
+        await this.personPath(this.getMount(mountId), pathId);
         return this.removePath(mountId, pathId, (mount, item) => deletePath(this, mount, item, user));
     }
 
@@ -1422,10 +1431,4 @@ export class Drive {
         });
         return run;
     }
-}
-
-// A document makes its versions/ folder at its first saved version, and Delete history removes it. In between, a user's
-// folder of that name would take its place, so no user write names a child of a document so.
-function refuseVersionsName(folder: DrivePath, name: string): void {
-    if (isDocumentType(folder.type) && isVersionsName(name)) throw new ApiError(400, DOCUMENT_PART_ERROR);
 }

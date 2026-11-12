@@ -467,7 +467,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         expect(pendingUploadCount(mount)).toBe(1);
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1); // "S3" still stale {1}
 
-        // readFile is freshest-first (the seam behind downloadFile / copyPathAcross): it must surface
+        // readFile is freshest-first (the seam behind downloadFile / receiveCopy): it must surface
         // the staged {1,2}, not the stale {1} in storage.
         expect(await countRowsInFile(await mount.readFile(dataDbId), TEST_DIR)).toBe(2);
         // readRange is freshest-first too (the seam behind Range GETs and content extraction); a slice

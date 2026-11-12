@@ -1,6 +1,6 @@
 # WebDAV
 
-> **TLDR:** WebDAV lets a computer open a Drive mount as a network folder. Each mount is one WebDAV share (RFC 4918, Class 1 and 2) at `/webdav/<ownerId>/<mountId>/`, over HTTP Basic with the same app passwords as IMAP, CalDAV and CardDAV. Every handler goes through `SharedDrive`, so a WebDAV client gets exactly the permissions the REST API gives. The code is `apps/api/src/lib/webdav/`. Not obvious from the code: nothing above a mount answers, an Eigen document shows as a plain folder that is read-only inside, locks live in memory only, and the ETag is the content hash because Finder loops on an unstable one. CalDAV and CardDAV are a separate service under `/dav/` ([CALDAV.md](CALDAV.md), [CARDDAV.md](CARDDAV.md)).
+> **TLDR:** WebDAV lets a computer open a Drive mount as a network folder. Each mount is one WebDAV share (RFC 4918, Class 1 and 2) at `/webdav/<ownerId>/<mountId>/`, over HTTP Basic with the same app passwords as IMAP, CalDAV and CardDAV. Every handler goes through `SharedDrive`, so a WebDAV client gets exactly the permissions the REST API gives. The code is `apps/api/src/lib/webdav/`. Not obvious from the code: nothing above a mount answers, an Eigen document shows as a plain folder whose only writable spot is its `media/`, locks live in memory only, and the ETag is the content hash because Finder loops on an unstable one. CalDAV and CardDAV are a separate service under `/dav/` ([CALDAV.md](CALDAV.md), [CARDDAV.md](CARDDAV.md)).
 
 People mount a drive in Finder or Windows Explorer, sync it with rclone or Mountain Duck, or save straight from Word and Excel. The Integrations page (`apps/space/src/routes/_auth.services.tsx`) lists one URL per mount the user can reach and makes the app passwords. A mount is one drive of a Home: a table of paths over one storage backend ([STORAGE.md § A mount is a paths table](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)).
 
@@ -31,11 +31,11 @@ Each handler starts with `getSharedDrive(ownerId, user)`, so WebDAV enforces the
 
 `resolvePath` checks read access only. So LOCK checks `canWrite` before it issues a token: a lock announces writes to come, and a reader must not pin one.
 
-## A document container is a folder that is read-only inside
+## A document container is a folder a client only adds media to
 
 An Eigen document (every type `isDocumentType` names) is a drive folder holding `data.db` and `media/` ([STORAGE.md](STORAGE.md)). Over WebDAV it lists as a folder with its real children, and `GET Report.eigendoc/data.db` returns the SQLite file byte for byte. So rclone or rsync backs up every document losslessly.
 
-A write inside one is a `423 Locked`: PUT, MKCOL, DELETE and PROPPATCH on anything inside, a MOVE from or to inside, and a COPY into one. The drive layer owns that state, and a client write would corrupt it or orphan its rows. The container as a whole moves, renames, copies and trashes like any folder. `enclosingDocumentContainer` (`container-guard.ts`) makes the call over the breadcrumb each handler fetches anyway for the lock check. `container-guard.test.ts` pins every method.
+A client may PUT, COPY or MOVE a new file into the document's `media/`, as the web app uploads an image there. Every other write inside one is a `423 Locked`: an overwrite, MKCOL, DELETE and PROPPATCH on anything inside, a MOVE out of one, and a PUT, COPY or MOVE of anything anywhere else in it. The drive layer owns that state, and a client write would corrupt it or orphan its rows. The container as a whole moves, renames, copies and trashes like any folder. WebDAV has no check of its own: the drive's rule for a person's write inside a document refuses it with the same 423 and message as the REST API, after the lock and access checks ([STORAGE.md](STORAGE.md#a-person-never-trashes-renames-or-moves-a-part-of-a-document)). `container-guard.test.ts` pins every method.
 
 There is no export view: a document is never offered as `.docx` or `.xlsx` over WebDAV, so editing one goes through the web app. The converters that could back such a view are in [EXPORT.md](EXPORT.md).
 

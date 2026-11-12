@@ -459,11 +459,11 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
 
                 // The opposite copy runs once this one wrote its first file into the inbox, so it copies that
                 // partial output back into the source.
-                const ownerDrive = (await getHome(owner.id)).drive;
-                const createFileFromData = ownerDrive.createFileFromData.bind(ownerDrive);
+                const { mount } = await (await getHome(owner.id)).drive.resolveFile(mountId, inbox.id);
+                const createFileFromTemp = mount.createFileFromTemp.bind(mount);
                 let opposite = 0;
-                const copyBack = spyOn(ownerDrive, 'createFileFromData').mockImplementationOnce(async (...args) => {
-                    const created = await createFileFromData(...args);
+                const copyBack = spyOn(mount, 'createFileFromTemp').mockImplementationOnce(async (...args) => {
+                    const created = await createFileFromTemp(...args);
                     const back = await copyFile(writer.sessionToken, owner.id, mountId, inbox.id, {
                         targetOwnerId: writer.id,
                         targetMountId: mountId,
@@ -535,11 +535,11 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             const ownerUser = await getUserById(owner.id);
             if (!ownerUser) throw new Error('the owner has no user row');
             const ownerDrive = (await getHome(owner.id)).drive;
-            const createFileFromData = ownerDrive.createFileFromData.bind(ownerDrive);
-            const moveIn = spyOn(ownerDrive, 'createFileFromData').mockImplementationOnce(async (...args) => {
-                const created = await createFileFromData(...args);
-                if (!created.parentId) throw new Error('the copied file has no folder');
-                await ownerDrive.movePath(mountId, mine.id, created.parentId, ownerUser);
+            const { mount } = await ownerDrive.resolveFile(mountId, inbox.id);
+            const createFileFromTemp = mount.createFileFromTemp.bind(mount);
+            const moveIn = spyOn(mount, 'createFileFromTemp').mockImplementationOnce(async (parentId, ...rest) => {
+                const created = await createFileFromTemp(parentId, ...rest);
+                await ownerDrive.movePath(mountId, mine.id, parentId, ownerUser);
                 return created;
             });
             let res: Response;

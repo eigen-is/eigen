@@ -10,7 +10,6 @@ import { ApiError } from '../core/errors';
 import type { DriveLike } from '../drive/get-drive';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
-import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 import { decodeHref, splitParentAndName } from './path';
 
@@ -102,15 +101,9 @@ async function resolveMoveCopy(args: {
     const src = await drive.resolvePath(mountId, pathStr);
     if (!src) throw new ApiError(404, 'Source not found');
 
-    // MOVE takes the source out of its folder, so the container guard and the lock check apply to it. COPY
-    // leaves the source as it is and needs only the resolve above.
-    if (verb === 'MOVE') {
-        const srcBreadcrumb = await drive.breadCrumb(mountId, src.id);
-        if (enclosingDocumentContainer(srcBreadcrumb, { includeSelf: false })) {
-            throw new ApiError(423, 'Container internals are read-only');
-        }
-        assertWritable(drive.lockManager, srcBreadcrumb, ifHeader, user.id);
-    }
+    // MOVE takes the source out of its folder, so the lock check applies to it. COPY leaves the source as it is and
+    // needs only the resolve above.
+    if (verb === 'MOVE') assertWritable(drive.lockManager, await drive.breadCrumb(mountId, src.id), ifHeader, user.id);
 
     const destExisting = await drive.resolvePath(mountId, dest.pathStr);
     // RFC 4918 §9.8.5 and §9.9.4: the same source and destination is a 403. Otherwise the overwrite below
@@ -129,9 +122,6 @@ async function resolveMoveCopy(args: {
     const destBreadcrumb = destExisting
         ? await drive.breadCrumb(mountId, destExisting.id)
         : await drive.breadCrumb(mountId, destParent.id);
-    if (enclosingDocumentContainer(destBreadcrumb, { includeSelf: !destExisting })) {
-        throw new ApiError(423, 'Container internals are read-only');
-    }
     assertWritable(drive.lockManager, destBreadcrumb, ifHeader, user.id);
     if (destExisting) assertWritable(drive.lockManager, destBreadcrumb.slice(0, -1), ifHeader, user.id);
 

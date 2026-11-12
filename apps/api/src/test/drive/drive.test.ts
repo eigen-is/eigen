@@ -142,18 +142,6 @@ describe('Drive', () => {
             );
             expect(res.status).toBe(400);
         });
-
-        test('createFolder can create a typed container', async () => {
-            const home = await getHome(ctx.alice.user.id);
-            const created = await home.drive.createFolder(
-                aliceMountId,
-                aliceRootId,
-                'Typed.eigendoc',
-                home.user,
-                'doc',
-            );
-            expect(created.type).toBe('doc');
-        });
     });
 
     describe('File Upload & Management', () => {

@@ -604,23 +604,20 @@ async function main(): Promise<void> {
     );
 
     // --- Stickies: a byte copy of the committed fixture container, its data.db and comments.db. A container finds
-    // its parts by name, never by path id, so the copy works. The board's creators and colors are patched below. ---
+    // its parts by name, never by path id, so the copy works. No person writes inside a document, so the parts go in
+    // through the mount. The board's creators and colors are patched below. ---
     const boardAuthor = userForRole('production');
-    const boardPath = await teamDrive.createFolder(
-        teamMountId,
-        lookup(folderId, KANBAN.folder),
-        `${KANBAN.name}.eigenstickies`,
-        boardAuthor,
-        'stickies',
-    );
+    const boardFolderId = lookup(folderId, KANBAN.folder);
+    const { mount: teamMount } = await teamDrive.resolveFile(teamMountId, boardFolderId);
+    const boardId = await teamMount.createFolder(boardFolderId, `${KANBAN.name}.eigenstickies`, 'stickies');
     for (const dbName of ['data.db', 'comments.db']) {
         const bytes = readFileSync(join(FIXTURES_DIR, 'festival-kanban.eigenstickies', dbName));
-        await teamDrive.createFileFromData(teamMountId, boardPath.id, dbName, SQLITE_MIME, bytes, boardAuthor);
+        await teamMount.writeFile(await teamMount.touchFile(boardId, dbName, SQLITE_MIME), bytes);
     }
-    await teamDrive.createFolder(teamMountId, boardPath.id, CONTAINER_MEDIA_FOLDER, boardAuthor);
-    await teamDrive.createFolder(teamMountId, boardPath.id, CONTAINER_CHAT_FOLDER, boardAuthor);
-    teamDocs.set(KANBAN.name, boardPath);
-    const boardId = boardPath.id;
+    await teamMount.createFolder(boardId, CONTAINER_MEDIA_FOLDER);
+    await teamMount.createFolder(boardId, CONTAINER_CHAT_FOLDER);
+    await teamDrive.recordFileEvent(teamMountId, boardId, boardAuthor, { eventType: 'created' });
+    teamDocs.set(KANBAN.name, await teamMount.getActivePath(boardId));
 
     // Card chat threads work like doc comments: a real chat in the container's chat/ subfolder, started by the
     // card's creator and linked back onto the card by name.

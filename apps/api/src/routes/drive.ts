@@ -241,7 +241,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 // Every copy needs read on the target folder, wherever it comes from.
                 const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
                 const target = await targetDrive.resolveFile(body.targetMountId, body.targetParentId);
-                if (!isContainerType(target.path.type)) throw new ApiError(404, 'Folder not found');
                 return await targetDrive.withHomeHeld(async () => {
                     // NFC first: the store keeps names NFC, so the compare below has to see the same form.
                     const desired = (body.name ?? source.name).replace(/[/\\]/g, '_').normalize('NFC');

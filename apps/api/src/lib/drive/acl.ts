@@ -1,12 +1,20 @@
 // Who may read or write a Drive path, decided from the chain of folders above it, and what else that chain says,
 // such as whether the path is in the trash or inside a document. SharedDrive asks this before every call it passes
-// on, and the watcher fan-out asks it before each notification. The helpers that merge, normalize and trim an ACL
-// before Drive saves it live here too.
+// on, Drive before each write a person makes, and the watcher fan-out before each notification. The helpers that
+// merge, normalize and trim an ACL before Drive saves it live here too.
 
+import { CONTAINER_CHAT_FOLDER, CONTAINER_MEDIA_FOLDER } from '@workspace/lib/constants/container';
 import { parseOwnerId } from '@workspace/lib/types';
-import type { DriveACL, DriveACLDelta, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
-import { isCollabType, isDocumentType } from '@workspace/lib/types/drive';
+import type { DriveACL, DriveACLDelta, DrivePath, DrivePathType, DriveVisibility } from '@workspace/lib/types/drive';
+import {
+    DRIVE_TYPE_CHAT,
+    DRIVE_TYPE_FILE,
+    DRIVE_TYPE_FOLDER,
+    isCollabType,
+    isDocumentType,
+} from '@workspace/lib/types/drive';
 import { validateEmailAddress } from '@workspace/lib/validation';
+import { ApiError } from '../core';
 import type { Memberships, User } from '../user';
 
 export function grantsPublicRead(visibility: DriveVisibility): boolean {
@@ -22,6 +30,30 @@ export function isTrashedChain(ancestors: readonly DrivePath[]): boolean {
 // Whether a folder above the path is a document, so the path is one of its parts. The chain ends with the path itself.
 export function isInsideDocument(chain: readonly DrivePath[]): boolean {
     return chain.slice(0, -1).some((crumb) => isDocumentType(crumb.type));
+}
+
+const DOCUMENT_WRITE_ERROR = 'Cannot change the inside of a document';
+
+// The folders of a document a person may add to, and what each takes.
+const OPEN_DOCUMENT_FOLDERS = new Map<string, DrivePathType>([
+    [CONTAINER_MEDIA_FOLDER, DRIVE_TYPE_FILE],
+    [CONTAINER_CHAT_FOLDER, DRIVE_TYPE_CHAT],
+]);
+
+// A person's write: adding a child of type `adding` to the last crumb, or with no `adding` changing the last crumb
+// itself. Inside a document a person only adds a file to its media/ or a thread to its chat/.
+export function refuseDocumentWrite(crumbs: readonly DrivePath[], adding?: DrivePathType): void {
+    const inside = adding ? crumbs.some((crumb) => isDocumentType(crumb.type)) : isInsideDocument(crumbs);
+    if (!inside) return;
+    const document = crumbs.at(-2);
+    const folder = crumbs.at(-1);
+    const intoOpenFolder =
+        adding !== undefined &&
+        document !== undefined &&
+        isDocumentType(document.type) &&
+        folder?.type === DRIVE_TYPE_FOLDER &&
+        OPEN_DOCUMENT_FOLDERS.get(folder.name) === adding;
+    if (!intoOpenFolder) throw new ApiError(423, DOCUMENT_WRITE_ERROR);
 }
 
 // Ownership, team membership, public visibility or an ACL entry on the path or any ancestor. Only the

@@ -236,6 +236,16 @@ describe('SharedDrive gating enumeration', () => {
             reason: 'write-gated on the parent',
             call: (sd) => sd.create(mountId, folderId, 'intruder', 'doc'),
         },
+        receiveCopy: {
+            gate: 'denies',
+            reason: 'write-gated on the destination folder',
+            call: async (sd) => {
+                const { drive } = await getHome(ctx.alice.user.id);
+                const path = await drive.getPath(mountId, fileId);
+                if (!path) throw new Error('the probe file is gone');
+                return sd.receiveCopy(mountId, folderId, 'intruder.txt', { path, children: [] }, drive, charlie);
+            },
+        },
         emailCollaborators: {
             gate: 'denies',
             reason: 'write-gated',
