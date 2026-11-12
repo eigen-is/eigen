@@ -154,6 +154,8 @@ export class Table {
     public columns = 1;
     // How many areas the range has. The size, and everything but `area`, is of the first.
     public areas = 1;
+    // Whether what was written is a reference: an array is none, whatever its elements are.
+    public reference = false;
     private readonly ctx: Evaluator;
     private value: Value = null;
     private piece: Table | null = null;
@@ -170,7 +172,9 @@ export class Table {
     public over(value: Value): this {
         this.value = value;
         this.areas = 1;
+        this.reference = false;
         if (isReference(value)) {
+            this.reference = true;
             this.rows = value.bottom - value.top + 1;
             this.columns = value.right - value.left + 1;
             for (let area = value.next; area !== null; area = area.next) this.areas += 1;

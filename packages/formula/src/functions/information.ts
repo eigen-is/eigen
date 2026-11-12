@@ -9,6 +9,7 @@ export const INFORMATION = [
     fn('ISBLANK', [ANY], (value) => value === null),
     fn('ISERROR', [ANY], isError),
     fn('ISNUMBER', [ANY], (value) => typeof value === 'number'),
+    fn('ISREF', [ANYTHING], (whole) => whole.reference),
     fn('ISTEXT', [ANY], (value) => typeof value === 'string'),
     fn('NA', [], () => NA),
     // 1 for a number or a blank, 2 for a text, 4 for a boolean, 16 for an error and 64 for more than one value.

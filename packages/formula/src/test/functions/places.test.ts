@@ -37,6 +37,14 @@ describe('a date, any value, a place and a reference a body worked out', () => {
         ['=TYPE("a")', 2],
         ['=TYPE(D1)', 4],
         ['=TYPE()', VALUE],
+        // Batch 5: ISREF asks what was written, and an array of references is no reference.
+        ['=ISREF(A1:A3)', true],
+        ['=ISREF(Z9)', true],
+        ['=ISREF(1/0)', false],
+        ['=ISREF(OFFSET(A1,{0,1},0))', false],
+        ['=ISREF(OFFSET(A1,{0,1},0,2))', false],
+        ['=ISREF(OFFSET(A1,1,0))', true],
+        ['=ISREF(IF(TRUE,A1))', true],
         // Batch 3 and 5: OFFSET's sizes default when left out or left empty, and a blank cell there is a 0.
         ['=OFFSET(A1,1,0)', 20],
         ['=SUM(OFFSET(A1,1,0,2,1))', 50],
