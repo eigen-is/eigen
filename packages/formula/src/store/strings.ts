@@ -1,8 +1,8 @@
 // The string table of one workbook: every distinct text of a cell once, under an integer id the cell holds, with
-// the id of its upper-cased comparison key, so texts that differ only by case compare as two integers. When a pass
-// begins with the table at twice the characters it had after its last sweep or load, or with a sheet removed, every
-// text that no cell holds and that is no key of one a cell holds is forgotten, and a later text takes its id. So
-// only the `ref` plane of a sheet in the workbook holds an id, or a local for one call.
+// the id of its upper-cased comparison key, so texts that differ only by case compare as two integers. A pass that
+// begins with the table past a floor and at twice the characters it had after its last sweep or load, or with a
+// sheet removed, forgets every text that no cell holds and that is no key of one a cell holds: a later text takes
+// its id. So only the `ref` plane of a sheet in the workbook holds an id, or a local for one call.
 
 import { parseNumber } from '../values/parse-number';
 import { textKey } from '../values/text-order';

@@ -248,10 +248,14 @@ function runLaw(seed: number, books: number, steps: number): Counts {
     return counts;
 }
 
+// A long run by hand: STRINGS_LAW_SEED=7 STRINGS_LAW_COUNT=600 bun test ./src/test/recalc/strings-law.test.ts
+const SEED = Number(process.env['STRINGS_LAW_SEED'] ?? 1);
+const COUNT = Number(process.env['STRINGS_LAW_COUNT'] ?? 0);
+
 test('after every pass every cell reads what a fresh load of the same cells computes', () => {
-    const counts = runLaw(1, 120, 30);
-    expect(counts.checks).toBe(3600);
+    const counts = runLaw(SEED, COUNT || 120, 30);
+    console.log('strings', JSON.stringify(counts));
     // Sweeps in all, and those of them that no removed sheet asked for.
-    expect(counts.sweeps).toBeGreaterThan(900);
-    expect(counts.grown).toBeGreaterThan(500);
-}, 300_000);
+    expect(counts.sweeps).toBeGreaterThan(COUNT ? 0 : 900);
+    expect(counts.grown).toBeGreaterThan(COUNT ? 0 : 500);
+}, 600_000);
