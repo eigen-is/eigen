@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { readdirSync, rmSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import type { MountSettings } from '@workspace/lib/types/settings';
+import { PATHS } from '../../lib/config/paths';
 import { getPublicConfig } from '../../lib/config/server-config';
 import { evictHome, getTeamHome } from '../../lib/home/get-home';
 import type { TeamHome } from '../../lib/home/team-home';
@@ -199,17 +200,32 @@ describe('Changing a team mount', () => {
         expect(reopened.doc.getText('body').toString()).toBe('kept');
     });
 
-    // Pushed onto the live mount, the switch failed at its add here and left the mount enabled with nothing live.
-    test('a switch on a home that is already closing lands on the next home', async () => {
-        const { ownerId, home } = await newTeam();
-        const mount = await home.addMount({ name: 'Late', storageType: 'local' });
-        await home.updateMount(mount.id, { enabled: false });
-        const off = await getTeamHome(ownerId);
-        const closing = off.close();
+    // Saved through the closed home, the file named the new bucket while the next home kept writing to the old one.
+    test('a save whose bucket check outlasts its home is refused, and the next home keeps its settings', async () => {
+        const check = await okS3Check();
+        try {
+            const { ownerId, home } = await newTeam();
+            const mount = await home.addMount({ name: 'Raced', storageType: 's3', s3Config: bucketA });
+            const { promise: checked, resolve: answerCheck } = Promise.withResolvers<void>();
+            check.mockImplementationOnce(async () => {
+                await checked;
+                return { ok: true, message: 'Connection successful', versioning: 'enabled' };
+            });
 
-        expect((await off.updateMount(mount.id, { enabled: true })).enabled).toBe(true);
-        await closing;
-        expect(await names(await getTeamHome(ownerId), mount.id)).toEqual([]);
+            const saving = home.updateMount(mount.id, { s3Config: bucketB });
+            await home.close();
+            const next = await getTeamHome(ownerId);
+            const settingsFile = join(next.homeDir, PATHS.SETTINGS);
+            const before = readFileSync(settingsFile, 'utf8');
+            answerCheck();
+
+            await expect(saving).rejects.toMatchObject({ status: 503, message: 'Home is closing' });
+            expect(readFileSync(settingsFile, 'utf8')).toBe(before);
+            expect(next.closing).toBe(false);
+            expect(next.drive.getMountConfig(mount.id).s3Config).toEqual(bucketA);
+        } finally {
+            check.mockRestore();
+        }
     });
 
     // Saved first, the mount stayed in the settings behind the 503, and the admin's retry added a second one.
