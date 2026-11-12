@@ -31,7 +31,7 @@ export function VersionHistoryMenu({
     onRequestDeleteHistory,
 }: {
     path: DrivePath;
-    onRequestRestore: (snap: Snapshot) => void;
+    onRequestRestore: (snapshot: Snapshot) => void;
     // The size of the listed versions, which the dialog says it frees.
     onRequestDeleteHistory: (size: number) => void;
 }) {
@@ -52,13 +52,13 @@ export function VersionHistoryMenu({
                     {/* Only the list scrolls, so Delete history stays in view below a long one. */}
                     <div className="max-h-64 overflow-y-auto">
                         {data && data.length > 0 ? (
-                            data.map((snap) => (
+                            data.map((snapshot) => (
                                 <DropdownMenuItem
-                                    key={snap.id}
+                                    key={snapshot.id}
                                     className="flex items-center justify-between gap-4"
-                                    onSelect={() => onRequestRestore(snap)}
+                                    onSelect={() => onRequestRestore(snapshot)}
                                 >
-                                    <span>{formatDateTime(snap.createdAt)}</span>
+                                    <span>{formatDateTime(snapshot.createdAt)}</span>
                                     <span className="text-xs text-muted-foreground">Restore</span>
                                 </DropdownMenuItem>
                             ))
@@ -73,7 +73,9 @@ export function VersionHistoryMenu({
                                 variant="destructive"
                                 disabled={!data || data.length === 0}
                                 onSelect={() =>
-                                    onRequestDeleteHistory((data ?? []).reduce((sum, snap) => sum + snap.size, 0))
+                                    onRequestDeleteHistory(
+                                        (data ?? []).reduce((sum, snapshot) => sum + snapshot.size, 0),
+                                    )
                                 }
                             >
                                 <Trash2 className="h-4 w-4" /> Delete history…
@@ -165,14 +167,14 @@ export function StorageGoneVersions({ path }: { path: DrivePath }) {
     return (
         <>
             <div className="mt-2 flex max-h-64 min-w-[240px] flex-col overflow-y-auto">
-                {data.map((snap) => (
+                {data.map((snapshot) => (
                     <Button
-                        key={snap.id}
+                        key={snapshot.id}
                         variant="ghost"
                         className="justify-between gap-4"
-                        onClick={() => restoreDialog.openDialog(snap)}
+                        onClick={() => restoreDialog.openDialog(snapshot)}
                     >
-                        <span>{formatDateTime(snap.createdAt)}</span>
+                        <span>{formatDateTime(snapshot.createdAt)}</span>
                         <span className="text-xs text-muted-foreground">Restore</span>
                     </Button>
                 ))}
