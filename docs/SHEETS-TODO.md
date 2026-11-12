@@ -271,7 +271,7 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 
 - [ ] **The index of `VLOOKUP` and `HLOOKUP` and the type of `MATCH` given a cell, a range or an array**: Excel answers `#REF!` for an error cell, a text that is no number, a 2-D range and a union, a 1-D range is one `#VALUE!` for the two lookups and `#REF!` for `MATCH`, and an array lifts only `MATCH`. Ours: `MATCH(10,A1:A6,B1:B2)` is 1, `VLOOKUP(10,A1:B6,C1:C2)` is `#REF!`. 35 recorded rows; not one word, so it needs a ruling first. **M**
 - [ ] **A holidays word for `NETWORKDAYS` and `WORKDAY`**: a text or a boolean among the holidays should fail the call, and with 0 days the argument is not read. `NETWORKDAYS(DATE(2006,1,1),DATE(2006,2,1),{"2006/1/2","2006/1/16"})` is 23, Excel 21; the `.INTL` form with weekend 7 is 24, Excel 22. 63 recorded rows. **M**
-- [ ] **`NUMBERS_A` over the elements of an array, and `RANK`'s order**: a text or a boolean in an array constant is not what a cell of that kind is (4 recorded rows), and `RANK`'s order refuses a text and takes a boolean (12). **S**
+- [ ] **`NUMBERS_A` over the elements of an array, and `RANK`'s order**: a text or a boolean in an array constant is read as in a cell, where Excel skips both in `VARA`, `VARPA`, `STDEVA`, `STDEVPA` and `MINA` (`VARA({1,"x",TRUE,5})` is 4.9167, Excel 8) but counts one of them in `AVERAGEA` (`AVERAGEA({3,"x",TRUE,5})` is 2.25, Excel 2.6667), so it is a path per function, not one rule in the family; and `RANK`'s order refuses a text and takes a boolean (12 recorded rows). **M**
 - [ ] **An empty argument at an optional table**: `LOOKUP(4,C1:C3,)` is `#N/A`, Excel `#VALUE!`; `defaulted` says it only for a parameter that must be given. **S**
 - [ ] **A date typed without a year outside `DATEVALUE`**: `"2/29"+0` and `YEAR("3/15")` are `#VALUE!`, where Excel takes the current year (7 recorded rows). Taking it needs the pass's clock in `values/coerce.ts`, which every reading of a number goes through: decide whether it is worth that. **M**
 - [ ] **`SUBTOTAL` and `AGGREGATE` do not lift over what follows their code**: `choose` in `eval/call.ts` is a read loop of its own (3 recorded `AGGREGATE` rows). Run the picked row through the ordinary prepare, read and lift. **S**
@@ -322,6 +322,7 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 - [ ] **A range handed to a function the engine lacks is exported plain**, without the `@` an old Excel would need. **S**
 - [ ] **`TYPE(A1:A10)` after import** is 64, where Excel shows 16. **S**
 - [ ] **Two keys for one meaning**: `(@A1,B1)` round-trips to another stored text of the same meaning, and `SUM(T[#All]#)` comes back from one xlsx round trip as `SUM((T[#All])#)`; and `[1]A1!B2` is printed bare: check that Excel reads it. **S**
+- [ ] **The API keeps its own list of the worksheet functions**: `WORKSHEET_FUNCTIONS` and the two prefixes in `apps/api/src/lib/ooxml/spreadsheetml.ts` repeat `EXCEL_WORKSHEET_FUNCTIONS`, `FUTURE_PREFIX` and `WORKSHEET_PREFIX` of `functions/excel-names.ts`, which `@workspace/formula/names` does not export. Export them there, or a `withPrefix` the writer calls, and delete the copy. **S**
 - [ ] **`=(@-A1,B1)` exports as a two-argument `SINGLE`**: the file gets `(_xlfn.SINGLE(-A1,B1))`, which Excel refuses, and its re-import reads `SINGLE(…)` as an unknown name: `#VALUE!` becomes `#NAME?`. Brackets by precedence in the printer would fix it and the row above. **S**
 
 ### Table references
@@ -339,6 +340,8 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 - [ ] **A sparse column costs 2.5 times its extent per sorted search**. **M**
 - [ ] **`settleArea` rescans its range after every unwind**, superlinear on a range whose cells each head a deep chain (`recalc/recalc.ts`). **S**
 - [ ] **Writing the value a cell already holds recomputes its cone**. **S**
+- [ ] **A capped pass walks a deep chain again every time it stops**: a stopped pass drops its cells in progress, so a chain read against sheet order (`=R[1]C+1` down a column) deeper than about 70,000 cells is walked down again by every pass. 100,000 cells take 1.2 s over 100 passes at cap 1000, against 52 ms uncapped. A design exists that keeps the list across a stop (48 lines added and 35 removed in `recalc/recalc.ts`, no new field) and was not built: a stopped pass would then list a loop it found, anything that changes cells outside `Recalc` between two stopped passes breaks it, and its cost on the ordinary path is not measured. Step 1b chooses the cap, and with it whether this matters. **M**
+- [ ] **On Node an uncapped pass over a deep chain is slower than a capped one**: 1.6 million cells read against sheet order take 1.9 s uncapped against 0.45 s at cap 1000, on Bun 0.96 s uncapped. Unexplained. **S**
 - [ ] **`ReverseIndex.rebuild` runs on every typed formula**: rebuilding is linear in the rectangles of equal shapes, so in a book where every formula is its own rectangle (a different literal per row) typing one costs 72 ms at 100,000 formulas and 344 ms at 500,000. One shape over 500,000 rows costs 2.3 ms. **S**
 
 ### Memory
@@ -352,11 +355,17 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 - [ ] **Three tests time out at a machine load over 100**: `edit/classes.test.ts`, `edit/reread.test.ts` and `recalc/marking-shapes.test.ts`. Give them less work or a timeout of their own. **S**
 - [ ] **Tests that kill four surviving mutants of `eval/search.ts`**, and one for `REPT`'s 32,767-character check. **S**
 - [ ] **Excel checks nobody could run**: an emoji's length in desktop Excel; whether `FACT` snaps within 1E-7; where `POWER`'s negative base stops (between 2^31 and 2^49); `"+ 5"` as 5; `SUMX2MY2` and `SUMX2PY2` of no pair as `#DIV/0!`; `NEARLY` on `RIGHT`, `ROUNDUP` and `ROUNDDOWN`. **S**
-- [ ] **`scripts/oracle.ts` has no fixture plan for batches 2 to 5 and 14 to 20**, whose fixtures are prose, so their rows are not computed again on each build; a plan per batch is about 20 lines. **S**
+- [ ] **`packages/formula/scripts/oracle-rows.ts` has no fixture plan for batches 2 to 5 and 14 to 20**, whose fixtures are prose, so their rows are not computed again on each build; a plan per batch is about 20 lines. **S**
+- [ ] **No test pins that a chain read against sheet order costs linear time**: the public path counts only formulas and elements, and a walk or a fill that runs no formula is neither, so a pin needs a counter in production code. **S**
+- [ ] **The edit law's "last rows of the grid" group runs past its own timeout at a high count**: at `EDIT_LAW_COUNT=600` it takes about 213 s against its 120 s timeout, with no law error; the default count passes. **S**
+- [ ] **The oracle repairs batch 13's fixture in code**: `packages/formula/scripts/oracle-rows.ts` puts back a backtick the recorded `excel-batch13.md` lost in part 2a, where the recorded file should be fixed and the repair deleted. **S**
 - [ ] **The depth budget in a worker on Firefox and on iOS Safari** is not measured; Chrome and Safari on macOS have 4.2 times headroom in a worker. **S**
 
 ### Code
 
+- [ ] **A structural edit can grow a stored key past the bound**: an edit cannot refuse a formula, so a key within a digit per reference of 131,072 characters, such as `=R[9]C+R[9]C+…` at A1, becomes `R[10]C` terms of 152,915 characters after a row inserted between, and the cell is `#ERROR!` after a reload. Accepted for now: no crash, one cell. **S**
+- [ ] **`ParseFailure` is exported by no entry**: `parseA1`, `parseXlsx`, `intersect` and `storedKey` answer it, and step 1b's importer needs the type to handle `intersect`'s failure. **S**
+- [ ] **`Book` keeps its fields private with `#`** where the package writes `private`, because `functions/gates.test.ts` pins at compile time that a body cannot reach a book's fields by a key in brackets either. The owner's call. **S**
 - [ ] **`spell` in `eval/look.ts`** fills one of two lists by a nullable flag; split it. **S**
 - [ ] **Own math kernels or the runtime's**: `LN`, `LOG`, `EXP`, `ATAN2` and the trigonometric and hyperbolic functions use the runtime's `Math`, and Bun and Node differ in the last bit on about one call in ten, as `values/powers.ts` already avoids for `^`. Step 2 derives values on every reader, so it decides. **M**
 - [ ] **`setFormula` interns the host's text as its key**: `=sum( R[1]C )` is a shape of its own until an edit rewrites it canonical. Harmless for values, but a peer's text is not canonical by construction; step 1b's adapter should hand stored text from `printStored`. **S**
