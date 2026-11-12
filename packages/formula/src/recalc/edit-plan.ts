@@ -53,7 +53,7 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
         // Text that did not parse is kept as it is.
         if (tree === null) continue;
         const host = sheets[place];
-        const positional = (shape.facts & Fact.Positional) !== 0;
+        const positional = (shapes.facts[id] & Fact.Positional) !== 0;
         // One class of hosts, in the places before the edit, then the sheet and the distance it goes to.
         const outcome = (
             next: FormulaNode,
@@ -86,7 +86,7 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
             case ChangeKind.Lines: {
                 const { edit } = change;
                 const { rows, index, insert, count } = edit;
-                const sized = (shape.facts & Fact.Sized) !== 0;
+                const sized = (shapes.facts[id] & Fact.Sized) !== 0;
                 const edited = workbook.known(edit.sheet);
                 const distance = insert ? count : -count;
                 // The first line whose cells an insert pushes off the grid.

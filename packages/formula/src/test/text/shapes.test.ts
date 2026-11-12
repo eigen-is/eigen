@@ -68,8 +68,8 @@ describe('ShapeTable', () => {
     test('a shape that is not kept is forgotten, and its id goes to a new shape that starts with nothing', () => {
         const table = new ShapeTable();
         const [a, b, c] = ['=R1C1', '=R1C2', '=R1C3'].map((text) => table.intern(text));
-        table.shape(a).facts = 7;
-        table.shape(c).facts = 9;
+        table.facts[a] = 7;
+        table.facts[c] = 9;
         const held = new Uint8Array(table.size + 1);
         held[b] = 1;
         table.keep(held);
@@ -80,7 +80,7 @@ describe('ShapeTable', () => {
         const again = table.intern('=R1C1');
         expect([next, again].sort()).toEqual([a, c].sort());
         expect([table.shape(next).text, table.shape(again).text]).toEqual(['=ROW()', '=R1C1']);
-        expect([table.shape(next).facts, table.shape(again).facts]).toEqual([-1, -1]);
+        expect([table.facts[next], table.facts[again], table.facts[b]]).toEqual([-1, -1, -1]);
         expect(table.intern('=ROW()')).toBe(next);
         expect(table.size).toBe(3);
         expect(table.intern('=R1C3')).toBe(4);
@@ -98,7 +98,7 @@ describe('ShapeTable', () => {
     test('text that does not parse is kept as a shape without a tree', () => {
         const table = new ShapeTable();
         const id = table.intern('=SUM(1,');
-        expect(table.shape(id)).toEqual({ text: '=SUM(1,', tree: null, refs: [], namesSheet: false, facts: -1 });
+        expect(table.shape(id)).toEqual({ text: '=SUM(1,', tree: null, refs: [], namesSheet: false });
         expect(table.intern('=SUM(1,')).toBe(id);
     });
 

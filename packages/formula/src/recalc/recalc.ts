@@ -65,6 +65,8 @@ export class Recalc {
     private readonly seeds: number[] = [];
     // The runs of cells whose value the pass changed.
     private changed: number[] = [];
+    // Per shape id, its facts, or -1 until they are worked out: the shape table's own list.
+    private readonly facts: number[];
     // The cells in progress, in the order they were entered. The list is the reading chain, each cell read by the
     // one before it on the chain, plus the cells whose formula ran and that wait for the first cell of their loop.
     private readonly sheets: Sheet[] = [];
@@ -96,6 +98,7 @@ export class Recalc {
     public constructor(workbook: Workbook, functions: Registry) {
         this.workbook = workbook;
         this.functions = functions;
+        this.facts = workbook.shapes.facts;
         this.evaluator = new Evaluator(workbook, functions, this);
         // A formula that came without a value was never computed, which the ones that came with a value have to hear.
         for (let s = 0; s < workbook.sheets.length; s += 1) {
@@ -391,9 +394,13 @@ export class Recalc {
     }
 
     public factsOf(shape: number): number {
-        const held = this.workbook.shapes.shape(shape);
-        if (held.facts < 0) held.facts = held.tree === null ? 1 << FACT_BITS : shapeFacts(held.tree, this.functions);
-        return held.facts;
+        let facts = this.facts[shape];
+        if (facts < 0) {
+            const { tree } = this.workbook.shapes.shape(shape);
+            facts = tree === null ? 1 << FACT_BITS : shapeFacts(tree, this.functions);
+            this.facts[shape] = facts;
+        }
+        return facts;
     }
 }
 

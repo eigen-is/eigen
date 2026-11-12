@@ -16,19 +16,19 @@ export type Shape = {
     readonly refs: readonly FormulaNode[];
     // Whether a reference names a sheet that did not exist, so it must be bound when one of that name appears.
     readonly namesSheet: boolean;
-    // What the recalc works out of the tree and its functions, or -1 until it has. It is kept on the shape so
-    // that it goes with it: the next shape under the id starts with nothing.
-    facts: number;
 };
 
 // What the slot of a forgotten shape holds until a new shape takes it.
-const FORGOTTEN: Shape = { text: '', tree: null, refs: [], namesSheet: false, facts: 0 };
+const FORGOTTEN: Shape = { text: '', tree: null, refs: [], namesSheet: false };
 
 export class ShapeTable {
     private readonly ids = new Map<string, number>();
     private readonly shapes: Shape[] = [];
     // The ids of the forgotten shapes, each for the next new shape.
     private readonly free: number[] = [];
+    // Per id, what the recalc worked out of the shape's tree and its functions, or -1 until it has. The list is
+    // kept here because it is here that an id goes to another shape, which starts with nothing.
+    public readonly facts: number[] = [-1];
 
     // The highest id given out so far.
     public get size(): number {
@@ -69,7 +69,8 @@ export class ShapeTable {
         const refs: FormulaNode[] = [];
         const namesSheet = tree !== null && collect(tree, refs);
         const id = this.free.pop() ?? this.shapes.length + 1;
-        this.shapes[id - 1] = { text, tree, refs, namesSheet, facts: -1 };
+        this.shapes[id - 1] = { text, tree, refs, namesSheet };
+        this.facts[id] = -1;
         this.ids.set(text, id);
         return id;
     }

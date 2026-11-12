@@ -102,10 +102,11 @@ export class ReverseIndex {
         this.unnamed = [];
         for (let r = 0; r < rectangles.length; r += 6) {
             const s = rectangles[r];
-            const { facts, refs } = shapes.shape(rectangles[r + 5]);
+            const id = rectangles[r + 5];
+            const facts = shapes.facts[id];
             if (facts & Fact.Kept) continue;
             if (facts & Fact.ReadsUnnamed) this.unnamed.push(...rectangles.slice(r, r + 5));
-            for (const ref of refs) {
+            for (const ref of shapes.shape(id).refs) {
                 const { op, sheetKind, flags } = ref;
                 const target =
                     sheetKind === SheetKind.Host
