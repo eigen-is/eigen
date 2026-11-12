@@ -115,6 +115,9 @@ export type ContentWriteResult = { path: DrivePath; etag: string };
 // The folder a copy lands in, reached as the copying user reaches it.
 export type CopyTarget = { drive: DriveLike; mountId: string; parentId: string };
 
+// A path another home's row names, such as a Recent or Shared with me row, with the row that named it.
+export type VisiblePath<Row> = { readonly row: Row; readonly path: DrivePath };
+
 const UNKNOWN_TYPE = 'application/octet-stream';
 
 export class Drive {
@@ -1144,8 +1147,8 @@ export class Drive {
         user: User,
         memberships: Memberships,
         rows: readonly Row[],
-    ): Promise<{ row: Row; path: DrivePath }[]> {
-        const found: { row: Row; path: DrivePath }[] = [];
+    ): Promise<VisiblePath<Row>[]> {
+        const found: VisiblePath<Row>[] = [];
         for (const [mountId, mountRows] of Map.groupBy(rows, (row) => row.mountId)) {
             const mount = this.mounts.get(mountId);
             if (!mount) continue;

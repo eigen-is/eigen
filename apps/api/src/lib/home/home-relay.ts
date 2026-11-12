@@ -34,6 +34,7 @@ import {
 } from '../config/paths';
 import { readContactsTotalSize } from '../contacts/card-store';
 import { LocalFilesystem } from '../core';
+import type { VisiblePath } from '../drive/drive';
 import type { EventPatch } from '../ical/ical-component';
 import { readMailTotalSize } from '../mail/maildir-store';
 import type { Memberships, User } from '../user';
@@ -267,14 +268,11 @@ export async function pullVisiblePaths<Row extends { ownerId: string; mountId: s
     user: User,
     memberships: Memberships,
     rows: readonly Row[],
-): Promise<{ row: Row; path: DrivePath }[]> {
-    const lists = await pullFromEach([...new Set(rows.map((row) => row.ownerId))], async (ownerId) => {
+): Promise<VisiblePath<Row>[]> {
+    const byOwner = Map.groupBy(rows, (row) => row.ownerId);
+    const lists = await pullFromEach([...byOwner.keys()], async (ownerId) => {
         const home = await getHome(ownerId);
-        return home.drive.getVisiblePaths(
-            user,
-            memberships,
-            rows.filter((row) => row.ownerId === ownerId),
-        );
+        return home.drive.getVisiblePaths(user, memberships, byOwner.get(ownerId) ?? []);
     });
     return lists.flat();
 }

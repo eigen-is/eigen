@@ -4,7 +4,14 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 import { getServerConfig } from '../../lib/config/server-config';
 import * as getHomeModule from '../../lib/home/get-home';
-import { drainDeliveriesWithin, drainHomeDeliveries, sendToHome, sendToUserHomes } from '../../lib/home/home-relay';
+import {
+    drainDeliveriesWithin,
+    drainHomeDeliveries,
+    pullVisiblePaths,
+    sendToHome,
+    sendToUserHomes,
+} from '../../lib/home/home-relay';
+import { getMemberships } from '../../lib/user';
 import type { TestContext, TestUser } from '../setup';
 import {
     addMember,
@@ -225,6 +232,27 @@ describe('A fan-out to many homes', () => {
         }
         const shared = await (await getHomeModule.getHome(members[0].id)).drive.getSharedPathsWithMe();
         expect(shared.some((path) => path.id === root.id)).toBe(false);
+    });
+});
+
+describe('A read of the paths rows name', () => {
+    afterEach(() => {
+        mock.restore();
+    });
+
+    test('hands each owner only the rows that name its paths', async () => {
+        const aliceHome = await getHomeModule.getHome(ctx.alice.user.id);
+        const bobHome = await getHomeModule.getHome(ctx.bob.user.id);
+        const aliceAsks = spyOn(aliceHome.drive, 'getVisiblePaths');
+        const bobAsks = spyOn(bobHome.drive, 'getVisiblePaths');
+        const row = (ownerId: string) => ({ ownerId, mountId: 'default', pathId: crypto.randomUUID() });
+        const rows = [row(ctx.alice.user.id), row(ctx.bob.user.id), row(ctx.alice.user.id)];
+        const viewer = aliceHome.user;
+
+        await pullVisiblePaths(viewer, await getMemberships(viewer.id), rows);
+
+        expect(aliceAsks.mock.calls.map((call) => call[2])).toEqual([[rows[0], rows[2]]]);
+        expect(bobAsks.mock.calls.map((call) => call[2])).toEqual([[rows[1]]]);
     });
 });
 
