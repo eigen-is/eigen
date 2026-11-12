@@ -1,8 +1,8 @@
 // The small dialog that asks for one name, such as a new folder's in a Drive picker or the new name Rename gives an
 // item. It shows the folder it works in under the field. Its submit button, Create unless the caller names it, waits
-// for a name with more than spaces and hands the name on as typed. The field opens with its name selected, so typing
-// replaces it. The caller's promise decides the rest: a save closes the dialog, and a failure keeps it open with the
-// typed name, beside the mutation's toast.
+// for a name with more than spaces and hands the name on as typed. The field opens with its name selected, or the
+// start of it the caller asks for, so typing replaces it. The caller's promise decides the rest: a save closes the
+// dialog, and a failure keeps it open with the typed name, beside the mutation's toast.
 
 import { useBreadcrumb } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -23,6 +23,7 @@ type DriveItemNameDialogProps = {
     path: DrivePath;
     title?: string;
     defaultValue?: string;
+    selectionEnd?: number;
     submitLabel?: string;
 };
 
@@ -34,6 +35,7 @@ export function DriveItemNameDialog({
     path,
     title,
     defaultValue = '',
+    selectionEnd = defaultValue.length,
     submitLabel = 'Create',
 }: DriveItemNameDialogProps) {
     const { data: breadcrumbPaths = [] } = useBreadcrumb(path.ownerId, path.mountId, open ? path.id : undefined);
@@ -42,6 +44,7 @@ export function DriveItemNameDialog({
             <ItemNameForm
                 type={type}
                 defaultValue={defaultValue}
+                selectionEnd={selectionEnd}
                 submitLabel={submitLabel}
                 location={breadcrumbPaths.map((crumb) => crumb.name || 'Drive').join(' > ')}
                 onSave={onSave}
@@ -54,12 +57,14 @@ export function DriveItemNameDialog({
 function ItemNameForm({
     type,
     defaultValue,
+    selectionEnd,
     submitLabel,
     location,
     onSave,
 }: {
     type: ItemType;
     defaultValue: string;
+    selectionEnd: number;
     submitLabel: string;
     location: string;
     onSave: (itemName: string) => Promise<unknown>;
@@ -69,8 +74,8 @@ function ItemNameForm({
     // arrived.
     const fieldRef = useRef<HTMLInputElement>(null);
     useLayoutEffect(() => {
-        fieldRef.current?.select();
-    }, []);
+        fieldRef.current?.setSelectionRange(0, selectionEnd);
+    }, [selectionEnd]);
 
     return (
         <FormDialogForm

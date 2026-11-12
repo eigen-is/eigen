@@ -11,6 +11,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Changed
 
 - **Documents over WebDAV** — a WebDAV client can add a file to a document's `media` folder by saving or copying it there. Moving a file into a document is refused, since the next **Delete history…** would delete it
+- **Renaming a file in Drive** — the **Rename** dialog shows the whole name with the part before the extension selected, so you can change the extension too. A document made in Eigen keeps its extension hidden
 - **Guest sign-in code** — the code mailed to a guest works for 15 minutes instead of 5, so a mail that arrives late still gets them in
 
 ### Fixed
