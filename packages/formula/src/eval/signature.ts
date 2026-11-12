@@ -23,6 +23,9 @@ export const Prepare = {
     Reference: 4,
     // No argument: something of the engine that the body is handed.
     Ambient: 5,
+    // Of a reference the first cell and no other, so a range never runs the call per cell. An array does, and
+    // an element of it that is a reference gives its first cell.
+    Corner: 6,
 } as const;
 
 export type Prepare = (typeof Prepare)[keyof typeof Prepare];
@@ -44,19 +47,25 @@ export const Read = {
     Only: 9,
     // Ranges of one size, multiplied place by place: the products.
     Products: 10,
+    // Every value of ranges, arrays and typed values, each as the text it is spelled as.
+    Texts: 11,
+    // Two ranges or arrays of one size, read side by side: the numbers at the places where both hold one.
+    Pairs: 12,
     // Whatever was written, as a table: an error is a value of it, and nothing fails.
-    Anything: 11,
-    Any: 12,
-    Lazy: 13,
+    Anything: 13,
+    Any: 14,
+    Lazy: 15,
+    // The value of the first cell of a reference, or the value itself.
+    Corner: 16,
     // Readings of a whole parameter, whose arguments are read as Only and Any: a criteria range with its
     // criterion, the numbers beside the cells every criterion accepts, and the cells that show nothing.
-    Where: 14,
-    Matched: 15,
-    Blanks: 16,
+    Where: 17,
+    Matched: 18,
+    Blanks: 19,
     // What takes no argument: room for an array, a draw in [0, 1), and the date and time as a serial.
-    Room: 17,
-    Random: 18,
-    Now: 19,
+    Room: 20,
+    Random: 21,
+    Now: 22,
 } as const;
 
 export type Read = (typeof Read)[keyof typeof Read];

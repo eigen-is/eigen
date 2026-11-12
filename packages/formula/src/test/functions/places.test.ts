@@ -25,6 +25,8 @@ describe('a date, any value, a place and a reference a body worked out', () => {
         ['=EDATE(45000,D1)', VALUE],
         ['=EDATE(1,-1.5)', NUM],
         ['=EDATE(2958465,1)', NUM],
+        // The other end of that bound, at its position too: the contract's reading, Excel's own answer is queued.
+        ['=EDATE(2958466,"x")', NUM],
         // Batch 4 and 5: TYPE takes anything, lifts over nothing and fails on nothing.
         ['=TYPE(A1:A3)', 64],
         ['=TYPE({1,2})', 64],
@@ -35,6 +37,14 @@ describe('a date, any value, a place and a reference a body worked out', () => {
         ['=TYPE("a")', 2],
         ['=TYPE(D1)', 4],
         ['=TYPE()', VALUE],
+        // Batch 5: ISREF asks what was written, and an array of references is no reference.
+        ['=ISREF(A1:A3)', true],
+        ['=ISREF(Z9)', true],
+        ['=ISREF(1/0)', false],
+        ['=ISREF(OFFSET(A1,{0,1},0))', false],
+        ['=ISREF(OFFSET(A1,{0,1},0,2))', false],
+        ['=ISREF(OFFSET(A1,1,0))', true],
+        ['=ISREF(IF(TRUE,A1))', true],
         // Batch 3 and 5: OFFSET's sizes default when left out or left empty, and a blank cell there is a 0.
         ['=OFFSET(A1,1,0)', 20],
         ['=SUM(OFFSET(A1,1,0,2,1))', 50],
@@ -131,7 +141,7 @@ describe('the clock and the draw come from the pass', () => {
         expect(valueAt(engine, 'A4')).toBe(300);
     });
 
-    // No function of this build draws and takes a value, so this test hands the recalc a row that does.
+    // The calls are counted by a row of this test's own.
     test('a row that draws is called for every written element of an array, another row once per run', () => {
         let calls = 0;
         const functions = new Map(FUNCTIONS);
@@ -149,37 +159,18 @@ describe('the clock and the draw come from the pass', () => {
         expect(workbook.value(workbook.sheets[0].columns[0], 0)).toBe(500500);
     });
 
-    // Excel batch 5, group 7: RANDBETWEEN over arrays is one call per written element, each on its own values.
+    // Excel batch 4 and 5: RANDBETWEEN over arrays is one call per written element, each on its own values.
     test('a row that draws reads each element of an array that stores every element', () => {
-        const functions = new Map(FUNCTIONS);
-        functions.set(
-            'BETWEEN',
-            fn('BETWEEN', [NUMBER, NUMBER, RANDOM], (low, high, draw) => Math.floor(low + draw * (high - low + 1))),
-        );
-        const formulas = [
-            '=SUM(BETWEEN({5,6,7},{5,6,7}))',
-            '=SUM(BETWEEN({1,2;3,4},{1,2;3,4}))',
-            '=SUM(BETWEEN(C1:C3,C1:C3))',
-            '=INDEX(BETWEEN({1,2,"x y"},1),1,3)',
-            '=INDEX(BETWEEN(1,{1000000,1000000,1000000}),1,1)',
-            '=INDEX(BETWEEN(1,{1000000,1000000,1000000}),1,2)',
-            '=INDEX(BETWEEN(1,{1000000,1000000,1000000}),1,3)',
-        ];
-        const workbook = new Workbook([
-            {
-                id: 's1',
-                name: 'Sheet1',
-                cells: (cell) => {
-                    for (const [row, formula] of formulas.entries()) {
-                        cell(row, 0, null, stored(formula, `A${row + 1}`));
-                    }
-                    for (let row = 0; row < 3; row += 1) cell(row, 2, 10 * (row + 1), null);
-                },
-            },
-        ]);
-        new Recalc(workbook, functions).pass(Number.POSITIVE_INFINITY, 0, 7);
-        const values = formulas.map((_, row) => workbook.value(workbook.sheets[0].columns[0], row));
+        const formulas = {
+            A1: '=SUM(RANDBETWEEN({5,6,7},{5,6,7}))',
+            A2: '=SUM(RANDBETWEEN({1,2;3,4},{1,2;3,4}))',
+            A3: '=SUM(RANDBETWEEN(C1:C3,C1:C3))',
+            A4: '=INDEX(RANDBETWEEN({1,2,"x y"},1),1,3)',
+        };
+        const values = drawn({ ...formulas, C1: 10, C2: 20, C3: 30 }, 7);
         expect(values.slice(0, 4)).toEqual([18, 10, 60, VALUE]);
-        expect(new Set(values.slice(4)).size).toBe(3);
+        const three = (formula: string) => [1, 2, 3].map((at) => drawn({ A1: `=INDEX(${formula},1,${at})` }, 7)[0]);
+        expect(new Set(three('RANDBETWEEN(1,{1000000,1000000,1000000})')).size).toBe(3);
+        expect(new Set(three('RANDBETWEEN(1,1000000)*{1,1,1}')).size).toBe(1);
     });
 });

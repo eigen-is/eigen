@@ -12,18 +12,16 @@ import { LAST_SERIAL } from '../values/dates';
 import { NAME, NUM, VALUE } from '../values/errors';
 import { parseNumber } from '../values/parse-number';
 import type { Value } from '../values/value';
-import { isArray, isError, isReference, ValueType } from '../values/value';
+import { isArray, isError, isReference, LONGEST_TEXT, ValueType } from '../values/value';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Errors, TypedText } from './families';
-import { lift, step } from './lift';
+import { lift, lifts, step } from './lift';
 import { look } from './look';
 import { real } from './operators';
 import { Frame, Table } from './readers';
 import type { Entry, Held, Lazy, Param, Result } from './signature';
 import { Prepare, Read, TOKENS } from './signature';
-
-const LONGEST_TEXT = 32767;
 
 export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
     const entry = ctx.functions.get(node.text);
@@ -32,8 +30,9 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
     const count = given.length;
     const { fixed } = entry;
     const { slots } = entry;
-    // The arguments that repeat come in whole groups, with one more only where the row takes one after them.
-    if (count < entry.min || count > entry.max) return VALUE;
+    // The arguments that repeat come in whole groups, with one more only where the row takes one after them: so a
+    // row with none that repeat takes none past its last.
+    if (count < entry.min) return VALUE;
     if (count > fixed && (count - fixed) % entry.group > slots.length - fixed - entry.group) return VALUE;
     const level = ctx.calls;
     const frame = (ctx.frames[level] ??= new Frame(ctx));
@@ -63,7 +62,11 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
             if (isArray(value)) lifted = true;
         } else {
             value = ctx.evaluate(given[i], sheet, row, column);
-            if (slot.prepare === Prepare.Reference && isArray(value) && value.references) lifted = true;
+            // The preparations that take a place or a first cell are the last two an argument can have.
+            if (slot.prepare >= Prepare.Reference) {
+                if (slot.prepare === Prepare.Corner && isReference(value)) value = ctx.first(value);
+                else if (isArray(value) && lifts(slot, value)) lifted = true;
+            }
         }
         held[i] = value;
     }
@@ -121,7 +124,7 @@ export function ends(param: Param<unknown>): boolean {
 }
 
 // What the argument at a place is read as, in a call of `count` arguments: past the last whole group it is the
-// one argument a row takes after its groups.
+// one argument a row takes after its groups. `call` steps through the same records in place, for its speed.
 export function slotOf(entry: Entry, at: number, count: number): Param<unknown> {
     const { fixed, group } = entry;
     if (at < fixed) return entry.slots[at];
@@ -170,6 +173,7 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
         case Read.Plain:
         case Read.Any:
         case Read.Lazy:
+        case Read.Corner:
         case Read.Room:
         case Read.Where:
         case Read.Matched:
@@ -177,8 +181,12 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
         case Read.Random:
         case Read.Now:
             return value;
+        case Read.Pairs:
         case Read.Products:
-            return isReference(value) && value.next !== null ? VALUE : value;
+        case Read.Texts:
+            // Of two ranges read side by side, neither may be left empty.
+            if (value === null && param.read === Read.Pairs) return VALUE;
+            return isReference(value) && value.next !== null && param.union !== null ? param.union : value;
         default: {
             const unknown: never = param.read;
             return unknown;
@@ -200,7 +208,7 @@ function collected(family: Family, value: Value): Held {
             if (family.text === TypedText.Counted) return 0;
             return value.toUpperCase() === 'TRUE' ? 1 : value.toUpperCase() === 'FALSE' ? 0 : null;
         default:
-            if (value === null) return 0;
+            if (value === null) return family.blanks ? 0 : null;
             if (!isError(value)) return value;
             return family.errors === Errors.Result ? value : family.errors === Errors.Counted ? 0 : null;
     }

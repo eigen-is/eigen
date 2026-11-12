@@ -5,14 +5,14 @@
 import type { FormulaError } from '../values/errors';
 import { CALC, NA } from '../values/errors';
 import { snapSum } from '../values/precision';
-import type { ArrayValue, Scalar, Value } from '../values/value';
-import { arrayOf, elementAt, isArray, isReference, partOf, ValueType } from '../values/value';
+import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
+import { arrayOf, elementAt, isArray, isError, isReference, partOf, ValueType } from '../values/value';
 import { Tally } from './criteria';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Families } from './families';
 import type { Vector } from './search';
-import { edge } from './search';
+import { edge, heightOf, widthOf } from './search';
 import type { Held } from './signature';
 import { add } from './sum';
 
@@ -25,14 +25,17 @@ export class Frame {
     // What the walk of the call in progress passes over, when another row picked the row that runs.
     public skips = 0;
     private readonly ctx: Evaluator;
-    // What the criteria of the call in progress matched.
+    // What the criteria of the call in progress matched, and what its two ranges read side by side hold.
     public readonly matches = new Matches();
     public readonly tally = new Tally();
+    public readonly pairs: Pairs;
     private readonly readers: Numbers[] = [];
     private readonly tables: Table[] = [];
+    private readonly lists: string[][] = [];
 
     public constructor(ctx: Evaluator) {
         this.ctx = ctx;
+        this.pairs = new Pairs(ctx);
     }
 
     // The table of the argument at a place.
@@ -40,6 +43,11 @@ export class Frame {
         const { tables } = this;
         while (tables.length <= at) tables.push(new Table(this.ctx));
         return tables[at];
+    }
+
+    // The list of the texts of one parameter.
+    public texts(param: number): string[] {
+        return (this.lists[param] ??= []);
     }
 
     // The reader of the numbers of one parameter.
@@ -122,6 +130,28 @@ export class Numbers {
         return most;
     }
 
+    // Every number in written order, one that is written many times over as often: a list of the body's own.
+    public list(): Float64Array {
+        const size = this.count();
+        if (!this.ctx.recalc.room(size)) {
+            this.frame.failed = CALC;
+            return new Float64Array(0);
+        }
+        const list = new Float64Array(size);
+        const { walk } = this.start();
+        let at = 0;
+        while (walk.next()) {
+            const { num, from, to, reps } = walk;
+            for (let row = 0; row < walk.rows; row += 1) {
+                for (let i = from; i < to; i += 1) {
+                    for (let times = reps === null ? 1 : reps[i]; times > 0; times -= 1) list[at++] = num[i];
+                }
+            }
+        }
+        this.done();
+        return list;
+    }
+
     // Whether `value` is one of the numbers.
     public holds(value: number): boolean {
         const { walk } = this.start();
@@ -146,6 +176,72 @@ export class Numbers {
     }
 }
 
+// Two ranges or arrays of one size read side by side, place by place in written order and a range row by row:
+// the numbers at the places where both hold one.
+export class Pairs {
+    public xs = new Float64Array(0);
+    public ys = new Float64Array(0);
+    private readonly ctx: Evaluator;
+    private first = new Float64Array(0);
+    private second = new Float64Array(0);
+
+    public constructor(ctx: Evaluator) {
+        this.ctx = ctx;
+    }
+
+    // Arguments of unequal size are #N/A, and else the first error at the earliest place is the answer.
+    public over(first: Value, second: Value): FormulaError | null {
+        const { ctx } = this;
+        const size = heightOf(first) * widthOf(first);
+        if (heightOf(second) * widthOf(second) !== size) return NA;
+        if (isReference(first)) ctx.recalc.settleArea(first);
+        if (isReference(second)) ctx.recalc.settleArea(second);
+        // Past the last cell of both ranges every place is a blank, which pairs with nothing.
+        const used = Math.max(reach(ctx, first), reach(ctx, second));
+        if (!ctx.recalc.room(2 * used)) return CALC;
+        if (this.first.length < used) {
+            this.first = new Float64Array(used);
+            this.second = new Float64Array(used);
+        }
+        let count = 0;
+        for (let place = 0; place < used; place += 1) {
+            const x = placed(ctx, first, place);
+            const y = placed(ctx, second, place);
+            if (isError(x)) return x;
+            if (isError(y)) return y;
+            if (typeof x !== 'number' || typeof y !== 'number') continue;
+            this.first[count] = x;
+            this.second[count] = y;
+            count += 1;
+        }
+        this.xs = this.first.subarray(0, count);
+        this.ys = this.second.subarray(0, count);
+        return null;
+    }
+}
+
+// How many places of an argument, counted row by row, can hold a value: of a range, up to the last row that a
+// column of it reaches.
+function reach(ctx: Evaluator, value: Value): number {
+    if (!isReference(value)) return heightOf(value) * widthOf(value);
+    const { columns } = ctx.workbook.sheets[value.sheet];
+    let rows = 0;
+    for (let c = value.left; c <= value.right && c < columns.length; c += 1) {
+        rows = Math.max(rows, Math.min(value.bottom + 1, columns[c].length) - value.top);
+    }
+    return rows * widthOf(value);
+}
+
+// The value at one place of an argument, counted row by row.
+function placed(ctx: Evaluator, value: Value, place: number): Scalar | Reference {
+    if (isArray(value)) return elementAt(value, Math.floor(place / value.columns), place % value.columns);
+    if (!isReference(value)) return value;
+    const width = widthOf(value);
+    const { columns } = ctx.workbook.sheets[value.sheet];
+    const c = value.left + (place % width);
+    return c < columns.length ? ctx.workbook.value(columns[c], value.top + Math.floor(place / width)) : null;
+}
+
 // A range, an array or one value as a table: its size, a row or a column of it to search, and one value of it.
 // Nothing is read until the body asks, and what it asks for is computed first.
 export class Table {
@@ -154,6 +250,8 @@ export class Table {
     public columns = 1;
     // How many areas the range has. The size, and everything but `area`, is of the first.
     public areas = 1;
+    // Whether what was written is a reference: an array is none, whatever its elements are.
+    public reference = false;
     private readonly ctx: Evaluator;
     private value: Value = null;
     private piece: Table | null = null;
@@ -170,7 +268,9 @@ export class Table {
     public over(value: Value): this {
         this.value = value;
         this.areas = 1;
+        this.reference = false;
         if (isReference(value)) {
+            this.reference = true;
             this.rows = value.bottom - value.top + 1;
             this.columns = value.right - value.left + 1;
             for (let area = value.next; area !== null; area = area.next) this.areas += 1;

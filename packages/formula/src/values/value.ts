@@ -10,6 +10,9 @@ export const ValueType = { Error: 1, Reference: 2, Array: 3, Lazy: 4, Table: 5 }
 
 export type Scalar = number | string | boolean | null | FormulaError;
 
+// The most characters a text holds: a longer one is #VALUE!.
+export const LONGEST_TEXT = 32767;
+
 // One rectangle of one sheet, corners included, and the next area when a union made it. The sheet is its place in
 // the workbook, so a reference is plain data that reads nothing.
 export type Reference = {
