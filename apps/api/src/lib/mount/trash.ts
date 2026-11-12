@@ -65,7 +65,7 @@ export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath
 
             // getPath, not getActivePath: the row this returns is the trashed one.
             const updated = await mount.getPath(pathId);
-            if (!updated) throw new ApiError(500, 'Path not found after update');
+            if (!updated) throw new ApiError(404, 'Path not found');
             return updated;
         }),
     );
