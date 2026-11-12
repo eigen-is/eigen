@@ -12,7 +12,20 @@ import { parseNumber } from '../values/parse-number';
 import { roundDecimal } from '../values/precision';
 import { separatedNumber } from '../values/separated-number';
 import { isError, LONGEST_TEXT } from '../values/value';
-import { BOOLEAN, fn, INTEGER, NUMBER, optional, PLAIN, rest, skippable, strict, TEXT, TEXTS } from './registry';
+import {
+    BOOLEAN,
+    defaulted,
+    fn,
+    INTEGER,
+    NUMBER,
+    optional,
+    PLAIN,
+    rest,
+    skippable,
+    strict,
+    TEXT,
+    TEXTS,
+} from './registry';
 
 // Past this a position is no position: MID("abc",2^31,1) is #VALUE!.
 const MOST = 2 ** 31;
@@ -71,7 +84,7 @@ export const TEXT_FUNCTIONS = [
     }),
     // Between two texts goes the next delimiter, the first again after the last. With `skip`, empty text is left
     // out, but it counts toward the longest text as if it were joined.
-    fn('TEXTJOIN', [TEXTS, BOOLEAN, rest(TEXTS)], (delimiters, skip, texts) => {
+    fn('TEXTJOIN', [TEXTS, defaulted(BOOLEAN, true), rest(TEXTS)], (delimiters, skip, texts) => {
         let joined = '';
         let count = 0;
         for (const text of texts) {

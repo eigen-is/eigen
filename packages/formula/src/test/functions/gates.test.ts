@@ -7,6 +7,8 @@ import { FUNCTIONS } from '../../functions/library';
 import type { Book, Matches, Numbers, Pairs, Room, Table, Vector } from '../../functions/registry';
 import {
     ANYTHING,
+    BOOLEAN,
+    defaulted,
     ENGINE,
     each,
     Find,
@@ -24,6 +26,7 @@ import {
     rest,
     TABLE,
     TEXT,
+    TEXTS,
     WHERE,
 } from '../../functions/registry';
 import { Recalc } from '../../recalc/recalc';
@@ -31,7 +34,7 @@ import { Workbook } from '../../store/workbook';
 import { parseA1 } from '../../text';
 import { NA } from '../../values/errors';
 import { ValueType } from '../../values/value';
-import { at, stored } from '../recalc/support';
+import { at, evaluateWith, stored } from '../recalc/support';
 
 // A recalc over typed cells with one more row in the list of functions: what no function of this build does.
 function passOf(entry: Entry, cells: Readonly<Record<string, string | number>>) {
@@ -203,6 +206,20 @@ describe('a body reaches no cell, column or stored array', () => {
         const { recalc, value } = passOf(peek, { ...cells, N3: '=PEEK({1,2;3,4},9,9)', N4: '=PEEK(A1:B2,-1,-1)' });
         recalc.pass(Number.POSITIVE_INFINITY);
         expect(['N1', 'N2', 'N3', 'N4'].map(value)).toEqual([NA, NA, NA, NA]);
+    });
+});
+
+describe('what a modifier says of the type is what the body gets', () => {
+    // Checked when the tests are compiled: the list is no `| undefined`, as it is none when the body runs.
+    test('a list that repeats and may be left out is a list still', () => {
+        const row = fn('JOINED', [optional(rest(TEXTS))], (texts) => texts.join('+'));
+        expect(evaluateWith([row], '=JOINED()&JOINED("a",1)')).toBe('a+1');
+    });
+
+    test('a default for an argument left empty must be a value of the reading', () => {
+        expect(() => fn('WRONG', [defaulted(BOOLEAN, true), rest(TEXTS)], () => 0)).not.toThrow();
+        const wrong = Object.freeze({ ...BOOLEAN, skips: true, fallback: 'x' });
+        expect(() => fn('WRONG', [wrong], () => 0)).toThrow('a fallback of another kind');
     });
 });
 

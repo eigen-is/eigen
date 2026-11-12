@@ -187,6 +187,12 @@ export function skippable(param: Param<unknown>, fallback?: Scalar): Param<unkno
     return Object.freeze({ ...param, optional: true, skips: true, fallback });
 }
 
+// The parameter must be given, and an argument left empty is `fallback`, where a blank cell there is still read as
+// a blank: TEXTJOIN(",",,"a","") leaves the empty text out. It may stand before a parameter that repeats.
+export function defaulted<T>(param: Param<T>, fallback: NoInfer<T> & Scalar): Param<T> {
+    return Object.freeze({ ...param, skips: true, fallback });
+}
+
 // A number that refuses a boolean, typed or in a cell, with #VALUE!, and nothing else: SUBSTITUTE's instance.
 export function strict(param: Param<number>): Param<number> {
     return Object.freeze({ ...param, strict: true });
@@ -216,7 +222,7 @@ export function referring(param: Collector, error: FormulaError): Collector {
 }
 
 // The parameter takes every argument from its own to the last: as one reader over all of them, or as a list.
-export function rest<T>(param: Walked<T>): Param<T>;
+export function rest<T>(param: Walked<T>): Walked<T>;
 export function rest<T>(param: Param<T>): Param<readonly T[]>;
 export function rest(param: Param<unknown>): Param<unknown> {
     return Object.freeze({ ...param, rest: true });
@@ -299,12 +305,7 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
         if (param.read === Read.Pairs && (param.rest || param.optional)) {
             throw new Error(`${name}: two ranges side by side that repeat or may be left out`);
         }
-        if (
-            param.optional &&
-            param.fallback !== undefined &&
-            param.read !== Read.Lazy &&
-            reads(param) !== param.fallback
-        ) {
+        if (param.fallback !== undefined && param.read !== Read.Lazy && reads(param) !== param.fallback) {
             throw new Error(`${name}: a fallback of another kind`);
         }
         if (!param.optional && optionals) throw new Error(`${name}: a required parameter after an optional one`);
