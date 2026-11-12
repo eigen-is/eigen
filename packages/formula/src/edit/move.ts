@@ -22,7 +22,7 @@ export type Move = {
     readonly toColumn: number;
 };
 
-export type Moved = Omit<Transformed, 'resized' | 'slid'>;
+type Moved = Omit<Transformed, 'resized' | 'slid'>;
 
 // What moves is the part of a block that is on the grid where it is and where it goes, and the rest of it is gone.
 // This is the move of that part.
@@ -34,7 +34,7 @@ export function fitted(move: Move): Move {
 
 // The hosts of one formula on the rows `top` to `bottom` and the columns `left` to `right`, before the move, which
 // all get this outcome. `carried` says they are in the block and move with it.
-export type MoveClass = Moved & {
+type MoveClass = Moved & {
     readonly top: number;
     readonly bottom: number;
     readonly left: number;

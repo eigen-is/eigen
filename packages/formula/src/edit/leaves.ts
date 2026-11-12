@@ -1,7 +1,7 @@
 // What every transform of formula text shares. The walk: a tree goes in, each node without children is offered to
 // the caller, and a tree comes out that is the same object where nothing changed and shares every untouched branch;
-// the row and column transform, the move and the sheet rewrites are each one function over a leaf on top of it. And
-// the questions they ask of a reference leaf, such as which sheet it reads and whether it fell off the grid.
+// a transform, such as the one for inserted rows, is one function over a leaf on top of it. And the questions they
+// ask of a reference leaf, such as which sheet it reads and whether it fell off the grid.
 
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { REF_ERROR } from '../text/lexer';
@@ -48,8 +48,7 @@ export function sheetOf(reference: FormulaNode, hostSheet: string): string | nul
     return reference.sheetKind === SheetKind.Id ? reference.sheet : null;
 }
 
-// Whether a reference names cells off the grid at this host, where it reads as #REF!. A copy, a fill and a sort keep
-// the stored text, so this check is all they need.
+// Whether a reference names cells off the grid at this host, where it reads as #REF!.
 export function offGrid(reference: FormulaNode, hostRow: number, hostColumn: number): boolean {
     const ends: Ends = { first: 0, second: 0 };
     return (
