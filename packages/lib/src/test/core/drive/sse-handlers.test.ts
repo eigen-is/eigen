@@ -87,6 +87,16 @@ describe('handleDriveSSEvent — DRIVE_ACL_SHARED / DRIVE_ACL_UNSHARED', () => {
             expect(hasKey(invalidated, [...driveKeys.owner(OWNER), 'effective-members'])).toBe(true);
         }
     });
+
+    // The viewer's own lists of one type hold what others shared with them, so a share adds a row there.
+    test("refreshes the viewer's own lists of one type", () => {
+        for (const type of [SSEventType.DRIVE_ACL_SHARED, SSEventType.DRIVE_ACL_UNSHARED] as const) {
+            const { queryClient, invalidated } = trackingClient();
+            handleDriveSSEvent(driveEvent(type), queryClient, VIEWER);
+            expect(hasKey(invalidated, driveKeys.mimeTypes(VIEWER))).toBe(true);
+            expect(hasKey(invalidated, driveKeys.mimeAllTypes())).toBe(true);
+        }
+    });
 });
 
 // An open document reads its canRead/canWrite from its info query, so an owner who makes a writer a viewer, on the
