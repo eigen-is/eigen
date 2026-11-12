@@ -1,6 +1,6 @@
-// The last steps of a write of a file's bytes, such as an upload, an attachment saved from mail or an
-// overwrite. The bytes wait in a temp file of the mount, which commitFromTemp owns: it runs the commit
-// and makes the thumbnail in the background, and removes the temp file whichever way the write ends.
+// The last steps of a write of a file's bytes, such as an upload, an attachment saved from mail or an overwrite. The
+// bytes wait in a temp file of the mount: commitFromTemp runs the commit, and thumbnailInBackground then makes the
+// thumbnail from that file and removes it. A rename that gives a file a new type remakes its thumbnail the same way.
 // finalizeNamedUpload is the commit of a new file: its row, a word to open tabs and the history row.
 // finalizeUpload is that commit under a free name, for a create that may not refuse a taken one.
 
@@ -13,8 +13,8 @@ import type { User } from '../user';
 import type { Drive } from './drive';
 import { folderIn, withFreeName } from './naming';
 
-// `commit` writes the temp file when its caller has not yet and puts the bytes in the tree, or only fetches them for
-// a file whose type changed. No caller removes the temp file: a failed commit does here, then the thumbnail job.
+// `commit` writes the temp file when its caller has not yet and puts the bytes in the tree. No caller removes the temp
+// file: a failed commit does here, then the thumbnail job.
 export async function commitFromTemp(
     drive: Drive,
     mount: Mount,
@@ -25,11 +25,22 @@ export async function commitFromTemp(
         await mount.cleanupTemp(tempId);
         throw e;
     });
+    thumbnailInBackground(drive, mount, file, tempId, async () => mount.getTempPath(tempId));
+    return file;
+}
+
+// `source` gives the temp file's path, and fills it first when the bytes are not there yet, such as by a download.
+export function thumbnailInBackground(
+    drive: Drive,
+    mount: Mount,
+    file: DrivePath,
+    tempId: string,
+    source: () => Promise<string>,
+): void {
     mount.runInBackground(`thumbnail of ${file.id}`, async () => {
         try {
             if (file.size === 0) return;
-            const source = mount.getTempPath(tempId);
-            const thumbnail = await saveThumbnail(mount.thumbsDir, file.id, source, file.mimeType, file.name);
+            const thumbnail = await saveThumbnail(mount.thumbsDir, file.id, await source(), file.mimeType, file.name);
             if (!thumbnail) return;
             const current = await mount.getPath(file.id);
             if (!current) return;
@@ -47,7 +58,6 @@ export async function commitFromTemp(
             await mount.cleanupTemp(tempId);
         }
     });
-    return file;
 }
 
 type StagedFile = {

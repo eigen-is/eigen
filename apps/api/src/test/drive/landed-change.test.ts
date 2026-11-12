@@ -221,6 +221,34 @@ describe('a change that has landed', () => {
         expect(await historyOf(file.id)).toContain('renamed');
     });
 
+    test('a rename that changes the type answers, reaches the open tabs and the history when the bytes cannot be read', async () => {
+        const file = await home.drive.createFileFromData(
+            mount.id,
+            rootId,
+            'landed-retype.bin',
+            'application/octet-stream',
+            Buffer.from(PNG),
+            alice,
+        );
+        const before = await settledTempFiles();
+        const events: string[] = [];
+        const broadcast = spyOn(home, 'broadcast').mockImplementation((event) => {
+            events.push(event.type);
+        });
+        const download = spyOn(mount, 'downloadToTemp').mockRejectedValueOnce(new Error('storage down'));
+        try {
+            await home.drive.renamePath(mount.id, file.id, 'landed-retype.png', alice);
+
+            expect(await mount.getPath(file.id)).toMatchObject({ name: 'landed-retype.png', mimeType: 'image/png' });
+            expect(events).toContain(SSEventType.DRIVE_PATH_RENAMED);
+            expect(await historyOf(file.id)).toContain('renamed');
+            expect(await settledTempFiles()).toEqual(before);
+        } finally {
+            download.mockRestore();
+            broadcast.mockRestore();
+        }
+    });
+
     test('a sharing change reaches the open tabs and the history when the share copies fail', async () => {
         const file = await sharedFile('landed-share.txt');
 
