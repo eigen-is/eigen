@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { ENGINE, fn, REFERENCE } from '../../functions/registry';
 import { CALC, DIV0, NA, NULL, REF, VALUE } from '../../index';
+import { columnLabel } from '../../text/a1';
 import type { Cells } from '../recalc/support';
 import { engineOf, evaluate, stored, valueAt, valuesWith } from '../recalc/support';
 
@@ -80,6 +81,24 @@ describe('whether a cell holds a formula, and its text: ISFORMULA, FORMULATEXT',
         expect(evaluate('=INDEX(FORMULATEXT(B:K),7,10)', far)).toBe('=K8');
         expect(evaluate('=INDEX(ISFORMULA(B:K),7,9)', far)).toBe(false);
         expect(evaluate('=INDEX(ISFORMULA(B:K),8,10)', far)).toBe(false);
+    });
+
+    // A reference per cell takes 17 times the room of a number: cells on a diagonal make every row and column one
+    // that holds a cell, so 993 of them are 986,049 references and 994 are more than one formula may store.
+    test('a range that holds more cells apart than a formula has room for is #CALC!', () => {
+        const diagonal = (count: number) => {
+            const cells: Record<string, number> = {};
+            for (let at = 0; at < count; at += 1) cells[`${columnLabel(at)}${at + 1}`] = 1;
+            return cells;
+        };
+        expect(evaluate('=ROWS(ISFORMULA(A1:ALE993))', diagonal(993), 'XFD1')).toBe(993);
+        expect(evaluate('=ROWS(ISFORMULA(A1:ALF994))', diagonal(994), 'XFD1')).toBe(CALC);
+        expect(evaluate('=ROWS(FORMULATEXT(A1:ALF994))', diagonal(994), 'XFD1')).toBe(CALC);
+        const block: Record<string, string> = {};
+        for (let row = 1; row <= 10000; row += 1) block[`A${row}`] = `=${row}`;
+        for (let row = 1; row <= 500; row += 1) for (const column of 'BCDEFGHIJK') block[`${column}${row}`] = '=A1';
+        expect(evaluate('=SUM(--ISFORMULA(A1:A10000))', block)).toBe(10000);
+        expect(evaluate('=SUM(LEN(FORMULATEXT(B1:K500)))', block)).toBe(15000);
     });
 
     test('the text is the formula as it reads at its own cell, names of sheets and all', () => {

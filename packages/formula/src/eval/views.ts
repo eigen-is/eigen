@@ -104,6 +104,9 @@ function runs(filled: Uint8Array, length: number, size: number): Int32Array | nu
     return ends;
 }
 
+// A reference is an object of about 137 bytes, where the room of an array counts an element as a number's 8.
+const REFERENCE_ROOM = 17;
+
 // The cells of the first area of a reference, each as a reference of its own, for a parameter that takes a range
 // cell by cell. One cell is itself. It is stored as `toArray` stores a range: a row or a column that holds a cell
 // is a run of its own, and a stretch that holds none is one run, whose element is the reference to that whole
@@ -132,7 +135,7 @@ export function cellsOf(ctx: Evaluator, area: Reference): Reference | ArrayValue
     const columnEnds = runs(filledColumns, across, columns);
     const height = rowEnds?.length ?? rows;
     const width = columnEnds?.length ?? columns;
-    if (!ctx.recalc.room(height * width)) return CALC;
+    if (!ctx.recalc.room(height * width * REFERENCE_ROOM)) return CALC;
     const items: Reference[] = [];
     for (let i = 0; i < height; i += 1) {
         const first = top + (rowEnds === null || i === 0 ? i : rowEnds[i - 1]);
