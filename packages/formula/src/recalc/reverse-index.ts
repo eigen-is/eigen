@@ -176,7 +176,7 @@ export class ReverseIndex {
         for (const read of areas) this.list(read);
     }
 
-    // Lists what the entries read of one sheet. Not a loop in `rebuild`: a method called per sheet is compiled early.
+    // Lists what the entries read of one sheet.
     private list(read: readonly number[]): void {
         const count = read.length / 5;
         // The first row and the place of each area in one number, so that a plain sort orders them by row.

@@ -22,15 +22,12 @@ type CellAddress = { readonly sheet: string; readonly row: number; readonly colu
 
 export type RecalcResult = {
     // Every cell of the workbook that is on a circular reference, in sheet, column, row order. Final only when
-    // `stopped` is false: a pass that stopped can still list a loop that a write broke, until a later one computes it.
-    // A loop is found by computing it and by nothing else, as what a formula reads can hang on values: so the cells
-    // of a loop that came from a load with values are listed once one of them is computed, and not before.
+    // `stopped` is false, and a loop is listed once one of its cells was computed: only computing finds it.
     readonly loops: readonly CellAddress[];
     // True when the pass met its cap with formulas still to compute. What it computed stays, and the next goes on.
     readonly stopped: boolean;
     // The cells whose value the pass changed, as runs down a column: the place of the sheet, the column, the
-    // first and the last row. They are true until the next edit or pass. A pass that stopped can list a cell of
-    // a loop that is still to be computed.
+    // first and the last row. They are true until the next edit or pass.
     readonly changed: readonly number[];
 };
 
@@ -45,9 +42,8 @@ export type EditResult = {
 const BUDGET = 640;
 const CELL = 6;
 
-// The most elements one array stores, which bounds memory, and the most work one formula does, which bounds time: the
-// elements of its arrays, the characters of the texts it made for them, and the numbers it adds one by one for
-// cells that no array stores. A formula that needs more of either is #CALC!, alone.
+// The most elements one array stores, which bounds memory, and the most work one formula does, which bounds time:
+// array elements, characters of texts made for them and numbers added one by one. Past either it is #CALC!, alone.
 const MOST_STORED = 2 ** 24;
 const MOST_WORK = 2 ** 27;
 
@@ -136,9 +132,8 @@ export class Recalc {
         return this.edit({ kind: ChangeKind.AddSheet, sheet: this.workbook.load(source), place });
     }
 
-    // Performs a structural edit. The formulas whose value it can change are flagged with everything that reads
-    // them while the index still describes the cells as they are, together with the cells written since the last
-    // pass: so nothing but the flags, which move with their cells, has to find its way across the edit.
+    // Performs a structural edit. What it can change is flagged, with the cells written since the last pass, while
+    // the index still describes the cells as they are: so only the flags, which move with their cells, cross the edit.
     public edit(change: Change): EditResult {
         const { workbook } = this;
         this.reach();

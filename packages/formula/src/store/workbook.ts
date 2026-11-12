@@ -95,9 +95,8 @@ export class Workbook {
         return sheet;
     }
 
-    // Writes the new shape of the formulas an edit rewrites, each a block in the places before the edit (sheet,
-    // first and last column, first and last row, shape), then performs the edit, so the shapes travel with their
-    // cells. Returns how many cells that held something the edit pushed off the grid.
+    // Writes the new shape of each block of formulas an edit rewrites, in the places before the edit, then performs
+    // the edit, so the shapes travel with their cells. Returns how many cells the edit pushed off the grid.
     public apply(change: Change, fills: readonly number[]): number {
         for (let f = 0; f < fills.length; f += 6) {
             const { columns } = this.held[fills[f]];
