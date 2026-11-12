@@ -70,7 +70,8 @@ export function apart(axis: Axis, size: number): Axis {
     const from = axis.from.map((map) => {
         const each = new Int32Array(size);
         for (let at = 0, run = 0; at < size; at += 1) {
-            if (axis.ends !== null && at === axis.ends[run]) run += 1;
+            if (axis.ends === null) run = at;
+            else if (at === axis.ends[run]) run += 1;
             each[at] = map === null ? run : map[run];
         }
         return each;

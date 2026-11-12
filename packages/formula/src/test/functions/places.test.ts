@@ -132,4 +132,38 @@ describe('the clock and the draw come from the pass', () => {
         expect(calls).toBe(1000);
         expect(workbook.value(workbook.sheets[0].columns[0], 0)).toBe(500500);
     });
+
+    // Excel batch 5, group 7: RANDBETWEEN over arrays is one call per written element, each on its own values.
+    test('a row that draws reads each element of an array that stores every element', () => {
+        const functions = new Map(FUNCTIONS);
+        functions.set(
+            'BETWEEN',
+            fn('BETWEEN', [NUMBER, NUMBER, RANDOM], (low, high, draw) => Math.floor(low + draw * (high - low + 1))),
+        );
+        const formulas = [
+            '=SUM(BETWEEN({5,6,7},{5,6,7}))',
+            '=SUM(BETWEEN({1,2;3,4},{1,2;3,4}))',
+            '=SUM(BETWEEN(C1:C3,C1:C3))',
+            '=INDEX(BETWEEN({1,2,"x y"},1),1,3)',
+            '=INDEX(BETWEEN(1,{1000000,1000000,1000000}),1,1)',
+            '=INDEX(BETWEEN(1,{1000000,1000000,1000000}),1,2)',
+            '=INDEX(BETWEEN(1,{1000000,1000000,1000000}),1,3)',
+        ];
+        const workbook = new Workbook([
+            {
+                id: 's1',
+                name: 'Sheet1',
+                cells: (cell) => {
+                    for (const [row, formula] of formulas.entries()) {
+                        cell(row, 0, null, stored(formula, `A${row + 1}`));
+                    }
+                    for (let row = 0; row < 3; row += 1) cell(row, 2, 10 * (row + 1), null);
+                },
+            },
+        ]);
+        new Recalc(workbook, functions).pass(Number.POSITIVE_INFINITY, 0, 7);
+        const values = formulas.map((_, row) => workbook.value(workbook.sheets[0].columns[0], row));
+        expect(values.slice(0, 4)).toEqual([18, 10, 60, VALUE]);
+        expect(new Set(values.slice(4)).size).toBe(3);
+    });
 });
