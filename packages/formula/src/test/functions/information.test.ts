@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { DIV0, NA, REF, VALUE } from '../../index';
+import { DIV0, NA, REF, SPILL, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
 import { evaluate } from '../recalc/support';
 
@@ -130,10 +130,19 @@ describe('ERROR.TYPE', () => {
         ['=INDEX(ERROR.TYPE({1,#N/A,#DIV/0!}),1,2)', 7],
         ['=INDEX(ERROR.TYPE({1,2}+{1,2,3}),1,3)', 7],
         ['=ERROR.TYPE()', VALUE],
-        // Excel check
-        ['=ERROR.TYPE(#SPILL!)', NA],
+        ['=ERROR.TYPE(#GETTING_DATA)', 8],
+        // Excel refuses the typed #SPILL! and answers 9 for a cell that holds it, as K1 does.
+        ['=ERROR.TYPE(K1)', 9],
+        ['=ERROR.TYPE(#SPILL!)', 9],
+        // Excel check: its documented list goes on with these four; no row records them.
+        ['=ERROR.TYPE(#CONNECT!)', 10],
+        ['=ERROR.TYPE(#BLOCKED!)', 11],
+        ['=ERROR.TYPE(#UNKNOWN!)', 12],
+        ['=ERROR.TYPE(#FIELD!)', 13],
+        // Ours, for a formula that does not parse: no place in Excel's list.
+        ['=ERROR.TYPE(N2)', NA],
     ])('%s is %p', (formula, expected) => {
-        expect(evaluate(formula, SHEET)).toBe(expected);
+        expect(evaluate(formula, { ...SHEET, K1: SPILL, N2: '=1+' })).toBe(expected);
     });
 });
 
