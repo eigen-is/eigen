@@ -93,7 +93,7 @@ export const TOKENS: readonly Lazy[] = Array.from({ length: MAX_ARGUMENTS }, (_,
 );
 
 // What a slot of a call holds: an argument as prepared and, once read, what the body gets for it.
-export type Held = Value | Lazy | undefined;
+export type Held = Value | Lazy | Table | undefined;
 
 // How a search of a row or a column takes its key: the key itself, or among values taken to be sorted the last
 // one at most the key, or at least it.

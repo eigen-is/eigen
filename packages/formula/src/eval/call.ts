@@ -34,18 +34,21 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
     // The arguments that repeat come in whole groups.
     if (count < entry.min || count > entry.max || (count > fixed && (count - fixed) % entry.group !== 0)) return VALUE;
     const level = ctx.calls;
-    const { held } = (ctx.frames[level] ??= new Frame(ctx));
+    const frame = (ctx.frames[level] ??= new Frame(ctx));
+    const { held } = frame;
+    const { slots, group } = entry;
     ctx.calls = level + 1;
     const size = Math.max(count, fixed);
     if (held.length !== size) held.length = size;
     let lifted = false;
     for (let i = 0; i < size; i += 1) {
         let value: Held;
-        const slot = slotOf(entry, i);
+        const slot = i < fixed ? slots[i] : slots[fixed + ((i - fixed) % group)];
         if (slot.prepare === Prepare.Lazy) value = TOKENS[i];
-        else if (i >= count) value = slot.read === Read.Here ? ctx.here(sheet, row, column) : undefined;
-        // An argument left empty is a blank, and is read as one, unless the parameter takes it for left out.
-        else if (given[i].kind === NodeKind.Empty) value = slot.skips ? undefined : null;
+        // An argument left out is what the body gets for it, and so is one left empty where that means left out.
+        // Any other empty argument is a blank, and is read as one.
+        else if (i >= count) value = slot.read === Read.Here ? ctx.here(sheet, row, column) : slot.fallback;
+        else if (given[i].kind === NodeKind.Empty) value = slot.skips ? slot.fallback : null;
         else if (slot.prepare === Prepare.Scalar) {
             value = ctx.operand(given[i], sheet, row, column);
             if (isArray(value)) lifted = true;
@@ -56,13 +59,14 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
         held[i] = value;
     }
     let result: Value | Lazy | null = null;
-    if (lifted) result = lift(ctx, entry, held, count, node, sheet, row, column);
+    if (lifted) result = lift(ctx, entry, frame, count, node, sheet, row, column);
     else {
-        for (let i = 0; i < size && result === null; i += 1) {
-            const param = slotOf(entry, i);
-            // A token is what the body gets, and a number where a number is read is read already.
-            if (param.prepare === Prepare.Lazy || (param.read === Read.Number && typeof held[i] === 'number')) continue;
-            const value = read(param, held[i]);
+        for (let i = 0; i < count && result === null; i += 1) {
+            const param = i < fixed ? slots[i] : slots[fixed + ((i - fixed) % group)];
+            const written = held[i];
+            // Read already: a number where a number is read, and one range wherever a range is taken as it is.
+            if (typeof written === 'number' ? param.read === Read.Number : taken(param, written)) continue;
+            const value = read(param, written, frame, i);
             if (isError(value) && ends(param)) result = value;
             held[i] = value;
         }
@@ -106,10 +110,17 @@ export function slotOf(entry: Entry, at: number): Param<unknown> {
     return entry.slots[at < fixed ? at : fixed + ((at - fixed) % entry.group)];
 }
 
-// One prepared argument as the body gets it, or the error that ends the call.
-export function read(param: Param<unknown>, value: Held): Held {
-    if (value === undefined) return param.fallback;
-    if (isLazy(value)) return value;
+// Whether an argument is what the body gets as it stands: a token, and one range for a parameter that walks it or
+// only takes it as a place.
+function taken(param: Param<unknown>, value: Held): boolean {
+    if (param.prepare === Prepare.Lazy) return true;
+    return param.prepare !== Prepare.Whole && isReference(value) && value.next === null;
+}
+
+// One prepared argument as the body gets it, or the error that ends the call. A table is the one of its place
+// `at` in the frame of the call.
+export function read(param: Param<unknown>, value: Held, frame: Frame, at: number): Held {
+    if (value === undefined || isLazy(value) || value instanceof Table) return value;
     switch (param.read) {
         case Read.Number:
             if (typeof value === 'number') return value;
@@ -129,7 +140,11 @@ export function read(param: Param<unknown>, value: Held): Held {
         case Read.Walked:
             return param.family === null ? value : collected(param.family, value);
         case Read.Table:
-            return isReference(value) && value.next !== null && param.union !== null ? param.union : value;
+            if (isError(value)) return value;
+            if (isReference(value) && value.next !== null && param.union !== null) return param.union;
+            return frame.table(at).over(value);
+        case Read.Anything:
+            return frame.table(at).over(value);
         case Read.Here:
         case Read.Only:
             if (!isReference(value)) return isError(value) ? value : VALUE;
@@ -141,7 +156,6 @@ export function read(param: Param<unknown>, value: Held): Held {
         case Read.Where:
         case Read.Matched:
         case Read.Blanks:
-        case Read.Anything:
         case Read.Random:
         case Read.Now:
             return value;

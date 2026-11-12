@@ -218,9 +218,7 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
         slots.push(...own);
     }
     const plain = params.every(
-        (param) =>
-            !param.rest &&
-            (param.prepare === Prepare.Scalar || param.prepare === Prepare.Lazy || param.prepare === Prepare.Reference),
+        (param) => !param.rest && param.prepare !== Prepare.Walked && param.prepare !== Prepare.Ambient,
     );
     const max = params.some((param) => param.rest) ? MAX_ARGUMENTS : fixed;
     return Object.freeze({

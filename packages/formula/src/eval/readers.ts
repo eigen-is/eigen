@@ -6,7 +6,7 @@ import type { FormulaError } from '../values/errors';
 import { CALC, NA } from '../values/errors';
 import { snapSum } from '../values/precision';
 import type { ArrayValue, Scalar, Value } from '../values/value';
-import { arrayOf, elementAt, isArray, isReference, MOST_ELEMENTS, partOf } from '../values/value';
+import { arrayOf, elementAt, isArray, isReference, MOST_ELEMENTS, partOf, ValueType } from '../values/value';
 import type { Tally } from './criteria';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
@@ -147,6 +147,7 @@ export class Numbers {
 // A range, an array or one value as a table: its size, a row or a column of it to search, and one value of it.
 // Nothing is read until the body asks, and what it asks for is computed first.
 export class Table {
+    public readonly type = ValueType.Table;
     public rows = 1;
     public columns = 1;
     // How many areas the range has. The size, and everything but `area`, is of the first.

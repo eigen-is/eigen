@@ -72,6 +72,13 @@ describe('a date, any value, a place and a reference a body worked out', () => {
     });
 });
 
+// Reading an element computes the cell it names, whose own formula calls a function while the operator is lifted.
+test('an operator over references keeps its operands while an element computes its cell', () => {
+    const cells = { P1: '=SUM(7,8)', P2: '=SUM(1,2)' };
+    expect(evaluate('=SUM(5+OFFSET(P1,{0,1},0))', cells, 'A1')).toBe(28);
+    expect(evaluate('=SUM(-OFFSET(P1,{0,1},0))', cells, 'A1')).toBe(-18);
+});
+
 describe('the clock and the draw come from the pass', () => {
     const drawn = (formulas: Cells, seed: number) => {
         const engine = engineOf({ s1: formulas });

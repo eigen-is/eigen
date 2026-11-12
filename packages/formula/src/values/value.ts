@@ -1,12 +1,12 @@
 // What a formula can evaluate to. A number, a text and a boolean are the JS types and a blank is null, so most
-// arithmetic allocates nothing. The four kinds that need an object carry an integer `type`: an error, a reference
-// to cells that nobody has read yet, an array, and the token a function gets for an argument that is not
-// evaluated yet. An array keeps the size that
-// was written apart from what it stores, so a whole column costs its cells and not the grid.
+// arithmetic allocates nothing. The kinds that need an object carry an integer `type`: an error, a reference to
+// cells that nobody has read yet and an array, and beside them the two things a function gets that are no value:
+// the token of an argument that is not evaluated yet, and a table. An array keeps the size that was written apart
+// from what it stores, so a whole column costs its cells and not the grid.
 
 import type { FormulaError } from './errors';
 
-export const ValueType = { Error: 1, Reference: 2, Array: 3, Lazy: 4 } as const;
+export const ValueType = { Error: 1, Reference: 2, Array: 3, Lazy: 4, Table: 5 } as const;
 
 export type Scalar = number | string | boolean | null | FormulaError;
 

@@ -12,21 +12,23 @@ import type { Axis } from './bands';
 import { align, apart } from './bands';
 import { ends, isLazy, picked, read, run, slotOf } from './call';
 import type { Evaluator } from './evaluator';
-import type { Entry, Held, Lazy, Param } from './signature';
+import type { Frame } from './readers';
+import type { Entry, Lazy, Param } from './signature';
 import { Prepare } from './signature';
 
-// `held` are the arguments as prepared, `count` of them written. Each element is read into `held` itself, so what
-// a reader of the call was bound to is the element in progress.
+// The frame holds the arguments as prepared, `count` of them written. Each element is read into the frame itself,
+// so what a reader of the call was bound to is the element in progress.
 export function lift(
     ctx: Evaluator,
     entry: Entry,
-    held: Held[],
+    frame: Frame,
     count: number,
     node: FormulaNode,
     sheet: Sheet,
     row: number,
     column: number,
 ): Value {
+    const { held } = frame;
     const prepared = held.slice();
     const arrays: ArrayValue[] = [];
     // Per argument, which of the arrays it is, or -1.
@@ -54,7 +56,7 @@ export function lift(
                     const item = from < 0 ? NA : arrays[k].items[from];
                     value = param.prepare === Prepare.Reference ? item : single(ctx, item);
                 }
-                value = read(param, value);
+                value = read(param, value, frame, i);
                 if (isError(value) && ends(param)) result = value;
                 held[i] = value;
             }

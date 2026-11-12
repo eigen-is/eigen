@@ -18,8 +18,8 @@ import { arrayOf, isArray, isError, isReference, ValueType } from '../values/val
 import { call } from './call';
 import { lift } from './lift';
 import { LIFTED_BINARY, LIFTED_NEGATE, LIFTED_PERCENT, negate, operate, percent } from './operators';
-import type { Frame } from './readers';
-import { Room } from './readers';
+import { Frame, Room } from './readers';
+import type { Entry } from './signature';
 import { toArray } from './views';
 import { Walk } from './walk';
 
@@ -95,7 +95,7 @@ export class Evaluator {
                 if (node.op === Token.Hash) return REF;
                 const value = this.operand(node.children[0], sheet, row, column);
                 return isArray(value)
-                    ? lift(this, LIFTED_PERCENT, [value], 1, node, sheet, row, column)
+                    ? this.lifted(LIFTED_PERCENT, value, undefined, node, sheet, row, column)
                     : percent(value);
             }
             case NodeKind.Binary:
@@ -222,7 +222,9 @@ export class Evaluator {
         if (node.op === Token.Plus) return this.operand(child, sheet, row, column);
         if (node.op === Token.Minus) {
             const value = this.operand(child, sheet, row, column);
-            return isArray(value) ? lift(this, LIFTED_NEGATE, [value], 1, node, sheet, row, column) : negate(value);
+            return isArray(value)
+                ? this.lifted(LIFTED_NEGATE, value, undefined, node, sheet, row, column)
+                : negate(value);
         }
         const value = this.evaluate(child, sheet, row, column);
         if (isArray(value)) return value.items[0];
@@ -265,8 +267,30 @@ export class Evaluator {
         }
         const a = this.read(left);
         const b = this.operand(node.children[1], sheet, row, column);
-        if (isArray(a) || isArray(b)) return lift(this, LIFTED_BINARY[op], [a, b], 2, node, sheet, row, column);
+        if (isArray(a) || isArray(b)) return this.lifted(LIFTED_BINARY[op], a, b, node, sheet, row, column);
         return operate(op, a, b, snap);
+    }
+
+    // An operator over an array runs once per element, as a call does: its operands are the arguments of a level
+    // of calls of their own, since reading an element can compute a cell whose formula calls a function.
+    private lifted(
+        entry: Entry,
+        a: Value,
+        b: Value | undefined,
+        node: FormulaNode,
+        sheet: Sheet,
+        row: number,
+        column: number,
+    ): Value {
+        const level = this.calls;
+        const frame = (this.frames[level] ??= new Frame(this));
+        frame.held.length = 0;
+        frame.held.push(a);
+        if (b !== undefined) frame.held.push(b);
+        this.calls = level + 1;
+        const result = lift(this, entry, frame, frame.held.length, node, sheet, row, column);
+        this.calls = level;
+        return result;
     }
 
     private constant(node: FormulaNode): Scalar | ArrayValue {

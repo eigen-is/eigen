@@ -13,6 +13,7 @@ import type { Family } from './families';
 import { Errors, Families } from './families';
 import { productsOf } from './products';
 import type { Frame } from './readers';
+import { Table } from './readers';
 import { heightOf, widthOf } from './search';
 import type { Entry, Held, Param } from './signature';
 import { Prepare, Read } from './signature';
@@ -33,8 +34,6 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
         const value = held[at];
         if (param.prepare === Prepare.Ambient) {
             args[p] = param.read === Read.Room ? ctx.room : param.read === Read.Now ? ctx.now : ctx.draw();
-        } else if (param.prepare === Prepare.Whole) {
-            args[p] = value === undefined || isLazy(value) ? undefined : frame.table(p).over(value);
         } else if (param.prepare !== Prepare.Walked) args[p] = param.rest ? held.slice(at, count) : value;
         else if (param.read === Read.Matched) args[p] = frame.numbers(p).bind(at, to, Families.Numbers, false);
         else if (param.read === Read.Products) {
@@ -92,7 +91,7 @@ function multiply(ctx: Evaluator, held: Held[], from: number, to: number): Formu
     const factors: Value[] = [];
     for (let i = from; i < to; i += 1) {
         const value = held[i];
-        if (value === undefined || isLazy(value)) continue;
+        if (value === undefined || isLazy(value) || value instanceof Table) continue;
         settle(ctx, value, Families.Counted);
         factors.push(value);
     }
