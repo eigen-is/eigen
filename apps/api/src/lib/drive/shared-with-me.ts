@@ -47,8 +47,9 @@ export async function receiveSharedPathChange(
             .get();
         if (!removed) return;
         home.broadcast(buildDriveEvent(SSEventType.DRIVE_ACL_UNSHARED, path));
-        // A user who leaves a share did it themselves, so they get no notice.
-        if (actorEmail?.toLowerCase() !== home.user.email.toLowerCase()) {
+        // A user who left a share did it themselves, and one who now sees the path in their own drive lost nothing,
+        // so neither gets a notice.
+        if (!owns && actorEmail?.toLowerCase() !== home.user.email.toLowerCase()) {
             home.notify({
                 type: 'unshare',
                 actorEmail,
