@@ -75,6 +75,8 @@ A test reads a closing dialog with `holdClosingDialogs` (`packages/ui/src/test/c
 
 `canWrite` also rides into every file subject the view builds, because a convert writes beside its source and a read-only view has nowhere to write ([PREVIEWS.md](PREVIEWS.md#a-file-subject-stores-identity-everything-else-is-derived)).
 
+The detail column's Location row reads the parent's `useBreadcrumb`, the query the folder view reads, and names the drive as the sidebar does, or the owner or team where the server cut the chain short, then the folders down to the parent, as a link only when the viewer can read that parent.
+
 ## One item menu serves the row and the detail column
 
 `DriveItemMenuItems` (`drive-item-menu.tsx`) is the menu both the row's context menu and the detail column's ⋮ draw, for one item or a multi-selection, which gets only the rows with a `pluralLabel`. Each row is a `DriveActionMenuItem`, which the File menu and Trash's menu draw too. A row's `shortcut` is the hotkey constant the listing's key handler compares against, so the menu shows the key that acts; only the row's context menu names keys, because they act on the listing. The shared file actions come in through `FileActionMenuItems`, minus Save to Drive, which Drive's own Copy to… already says. Space, the detail preview and the menu row all go through the file-action registry, so none of them previews a folder ([PREVIEWS.md](PREVIEWS.md#the-host-mounts-the-runners-dialogs)).
