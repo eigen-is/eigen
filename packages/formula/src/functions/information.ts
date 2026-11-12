@@ -3,7 +3,7 @@
 
 import { NA } from '../values/errors';
 import { isError } from '../values/value';
-import { ANY, ANYTHING, fn } from './registry';
+import { ANY, ANYTHING, CORNER, fn } from './registry';
 
 export const INFORMATION = [
     fn('ISBLANK', [ANY], (value) => value === null),
@@ -11,6 +11,8 @@ export const INFORMATION = [
     fn('ISNUMBER', [ANY], (value) => typeof value === 'number'),
     fn('ISREF', [ANYTHING], (whole) => whole.reference),
     fn('ISTEXT', [ANY], (value) => typeof value === 'string'),
+    // A number is itself and TRUE is 1. A text and a blank are 0, and an error stays the error it is.
+    fn('N', [CORNER], (value) => (typeof value === 'number' || isError(value) ? value : value === true ? 1 : 0)),
     fn('NA', [], () => NA),
     // 1 for a number or a blank, 2 for a text, 4 for a boolean, 16 for an error and 64 for more than one value.
     fn('TYPE', [ANYTHING], (whole) => {

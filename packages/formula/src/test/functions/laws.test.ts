@@ -116,6 +116,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
     const ends = (param: Param<unknown>) =>
         param.read < Read.Anything && (param.family === null || param.family.errors === Errors.Result);
     const failing = params.map((param, at) => (ends(param) ? at : -1)).filter((at) => at >= 0);
+    const corners = params.map((param, at) => (param.prepare === Prepare.Corner ? at : -1)).filter((at) => at >= 0);
     const coerced = scalars.filter((at) => params[at].read <= Read.Boolean && params[at].read !== Read.Text);
     // Two calls of a row that draws answer alike only when each is the first call of its pass.
     const evaluateAll = entry.volatile ? apart : together;
@@ -175,7 +176,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
 
     // Of a row that draws, the calls are made one after the other, in the order the elements are written.
     test('an array where one value is read gives the answers of one call per element', () => {
-        for (const at of scalars) {
+        for (const at of [...scalars, ...corners]) {
             const [a, b] = [pool(params[at])[0], pool(params[at])[1]];
             const lifted = written(entry, withArg(base, at, `{${a},${b},"x y"}`)).slice(1);
             const elements = [1, 2, 3].map((column) => `=INDEX(${lifted},1,${column})`);
@@ -324,6 +325,23 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             expected.push(param.union);
         });
         expect(evaluateAll(formulas)).toEqual(expected);
+    });
+
+    test('where the first cell is read, a range is one value and an array of references one value per reference', () => {
+        for (const at of corners) {
+            const put = (argument: string) => written(entry, withArg(base, at, argument));
+            const [cell, other, range, union, second, ...lifted] = evaluateAll([
+                put('A2'),
+                put('A4'),
+                put('A2:B4'),
+                put('(A2:A3,C1:C3)'),
+                `=INDEX(${put('A2:A4').slice(1)},2,1)`,
+                `=INDEX(${put('INDEX(A1:A5,{2,4})').slice(1)},1,1)`,
+                `=INDEX(${put('INDEX(A1:A5,{2,4})').slice(1)},1,2)`,
+            ]);
+            expect([range, union, second]).toEqual([cell, cell, REF]);
+            expect(lifted).toEqual([cell, other]);
+        }
     });
 
     test('where only a reference is taken, an array of references gives one answer per reference', () => {

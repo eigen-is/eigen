@@ -58,6 +58,9 @@ export const BOOLEAN = scalar<boolean>(Read.Boolean);
 // The value as it is, an error included, for a function that asks what a value is.
 export const ANY = scalar<Scalar>(Read.Any);
 
+// The value of the first cell of a reference, or the value itself, an error included. A range is one value here
+// and never one call per cell, but an array still runs the call once per element.
+export const CORNER: Param<Scalar> = Object.freeze({ ...REQUIRED, prepare: Prepare.Corner, read: Read.Corner });
 // Any value but an error, as it is: for a value whose own kind matters, such as a key to look up.
 export const PLAIN = scalar<number | string | boolean | null>(Read.Plain);
 // Not evaluated. The body may answer with it, and the wrapper then evaluates the argument: an empty one is a blank.

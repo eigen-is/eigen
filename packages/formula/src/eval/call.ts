@@ -16,7 +16,7 @@ import { isArray, isError, isReference, LONGEST_TEXT, ValueType } from '../value
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Errors, TypedText } from './families';
-import { lift, step } from './lift';
+import { lift, lifts, step } from './lift';
 import { look } from './look';
 import { real } from './operators';
 import { Frame, Table } from './readers';
@@ -62,7 +62,10 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
             if (isArray(value)) lifted = true;
         } else {
             value = ctx.evaluate(given[i], sheet, row, column);
-            if (slot.prepare === Prepare.Reference && isArray(value) && value.references) lifted = true;
+            if (slot.prepare >= Prepare.Reference) {
+                if (slot.prepare === Prepare.Corner && isReference(value)) value = ctx.first(value);
+                else if (isArray(value) && lifts(slot, value)) lifted = true;
+            }
         }
         held[i] = value;
     }
@@ -169,6 +172,7 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
         case Read.Plain:
         case Read.Any:
         case Read.Lazy:
+        case Read.Corner:
         case Read.Room:
         case Read.Where:
         case Read.Matched:

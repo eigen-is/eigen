@@ -69,6 +69,38 @@ describe('numbers to multiply: PRODUCT', () => {
     });
 });
 
+describe('the first cell of a reference: N', () => {
+    test.each([
+        // Excel batch 3: a range gives one value, that of its first cell.
+        ['=N(A1:A3)', 3, F3],
+        ['=N(J1:J3)', 1, F3],
+        ['=N(J2:J4)', 0, F3],
+        ['=N(TRUE)', 1, F3],
+        ['=N(A1:A3)', 10, F1],
+        ['=N(D1:D2)', 1, F1],
+        ['=N(Z9)', 0, F1],
+        // Batch 5: an array is one call per element.
+        ['=SUM(N(IF(1,{1,2,3})))', 6, F1],
+        ['=SUM(N({1,2,3}))', 6, F1],
+        ['=SUM(N(OFFSET(A1,{0,1,2},0,2)))', 60, F1],
+        ['=N()', VALUE, F1],
+    ])('%s', (formula, expected, cells) => {
+        expect(evaluate(formula, cells)).toBe(expected);
+    });
+
+    test.each([
+        ['=N({1,2,3})', [1, 2, 3]],
+        ['=N(OFFSET(A1,{0,1,2},0,2))', [10, 20, 30]],
+        ['=N({5,"a",TRUE})', [5, 0, 1]],
+    ])('%s', (formula, expected) => {
+        expect(across(formula, 3, F1, evaluate)).toEqual(expected);
+    });
+
+    test('the formula in the first cell is computed, and no other cell of the range is read', () => {
+        expect(evaluate('=N(P1:P3)', { P1: '=1+1', P2: '=1/0' }, 'A1')).toBe(2);
+    });
+});
+
 // LARGE is not a function of this build: the row is the test's own, on the list and a number after it.
 describe('a parameter that takes every value before one that takes a single value', () => {
     // A k below 1 is refused before it is rounded up.
