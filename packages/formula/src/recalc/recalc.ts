@@ -193,8 +193,6 @@ export class Recalc {
                                 this.compute();
                             } catch (thrown) {
                                 if (thrown !== UNWIND) throw thrown;
-                                // Every formula in progress runs again from its start, and makes its arrays again.
-                                this.made.fill(0, 0, this.size);
                             }
                         }
                         if (this.looped.size > 0) this.looped.clear();
@@ -321,7 +319,6 @@ export class Recalc {
         this.rows[at] = row;
         this.parents[at] = this.current;
         this.lows[at] = at;
-        this.made[at] = 0;
         this.areas[at] = null;
         this.size = at + 1;
         this.current = at;
@@ -372,6 +369,8 @@ export class Recalc {
         const row = this.rows[at];
         const shape = column.shape[row];
         const kept = (this.factsOf(shape) & Fact.Kept) !== 0;
+        // A formula that runs again after a throw for depth makes its arrays again.
+        this.made[at] = 0;
         const { tree } = this.workbook.shapes.shape(shape);
         const value = kept
             ? null
