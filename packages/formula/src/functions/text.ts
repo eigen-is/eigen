@@ -12,10 +12,13 @@ import { parseNumber } from '../values/parse-number';
 import { round15, roundDecimal } from '../values/precision';
 import { separatedNumber } from '../values/separated-number';
 import { isError, LONGEST_TEXT } from '../values/value';
-import { BOOLEAN, fn, INTEGER, LAZY, NUMBER, optional, PLAIN, rest, skippable, strict, TEXT, TEXTS } from './registry';
+import { BOOLEAN, fn, INTEGER, NUMBER, optional, PLAIN, rest, skippable, strict, TEXT, TEXTS } from './registry';
 
 // Past this a position is no position: MID("abc",2^31,1) is #VALUE!.
 const MOST = 2 ** 31;
+
+// REPT, CODE and UNICODE still refuse a text longer than the one Excel once held.
+const OLD_LONGEST_TEXT = 255;
 
 // The most decimals FIXED and DOLLAR write.
 const MOST_DECIMALS = 127;
@@ -34,14 +37,14 @@ function fixed(number: number, decimals: number, whole: string) {
 
 // TEXTBEFORE and TEXTAFTER. An instance that was written is refused when the text has no room for that many
 // delimiters, and one left out never is: of an empty text nothing is found.
-function beside<F>(after: boolean) {
+function beside(after: boolean) {
     return (
         text: string,
         delimiters: readonly string[],
         instance: number | undefined,
         mode: number,
         toEnd: number,
-        fallback: F,
+        fallback: string | undefined,
     ) => {
         if (instance === 0 || (mode !== 0 && mode !== 1) || (toEnd !== 0 && toEnd !== 1)) return VALUE;
         let shortest = LONGEST_TEXT;
@@ -51,7 +54,7 @@ function beside<F>(after: boolean) {
             mode === 1
                 ? partBeside(text, upperCase(text), delimiters.map(upperCase), instance ?? 1, toEnd === 1, after)
                 : partBeside(text, text, delimiters, instance ?? 1, toEnd === 1, after);
-        return part ?? fallback;
+        return part ?? fallback ?? NA;
     };
 }
 
@@ -67,12 +70,11 @@ export const TEXT_FUNCTIONS = [
         return joined;
     }),
     // Between two texts goes the next delimiter, the first again after the last. With `skip`, empty text is left
-    // out, but it counts toward the longest text as if it were joined. A text to join must follow.
+    // out, but it counts toward the longest text as if it were joined.
     fn('TEXTJOIN', [TEXTS, skippable(BOOLEAN, true), optional(rest(TEXTS))], (delimiters, skip, texts) => {
-        if (!texts?.length) return VALUE;
         let joined = '';
         let count = 0;
-        for (const text of texts) {
+        for (const text of texts ?? []) {
             const delimiter = count === 0 ? '' : delimiters[(count - 1) % delimiters.length];
             if (joined.length + delimiter.length + text.length > LONGEST_TEXT) return CALC;
             if (skip && text === '') continue;
@@ -130,7 +132,9 @@ export const TEXT_FUNCTIONS = [
             : searchCharacters(sought, text, Math.trunc(start)) || VALUE,
     ),
     fn('REPT', [TEXT, NUMBER], (text, count) =>
-        count < 0 || text.length * Math.trunc(count) > LONGEST_TEXT ? VALUE : text.repeat(Math.trunc(count)),
+        count < 0 || text.length > OLD_LONGEST_TEXT || text.length * Math.trunc(count) > LONGEST_TEXT
+            ? VALUE
+            : text.repeat(Math.trunc(count)),
     ),
     fn('EXACT', [TEXT, TEXT], (one, other) => one === other),
     fn('LEN', [TEXT], countCharacters),
@@ -141,13 +145,15 @@ export const TEXT_FUNCTIONS = [
     fn('TRIM', [TEXT], (text) => text.replace(/ {2,}/g, ' ').replace(/^ | $/g, '')),
     fn('CLEAN', [TEXT], (text) => text.replace(UNSEEN, '')),
     fn('CHAR', [INTEGER], (code) => (code < 1 || code > 255 ? VALUE : ansiCharacter(code))),
-    fn('CODE', [TEXT], (text) => (text === '' ? VALUE : ansiCode(text.charCodeAt(0)))),
+    fn('CODE', [TEXT], (text) =>
+        text === '' || text.length > OLD_LONGEST_TEXT ? VALUE : ansiCode(text.charCodeAt(0)),
+    ),
     // Half of a surrogate pair and the last two code points of a plane are no character.
     fn('UNICHAR', [INTEGER], (code) => {
         if (code < 1 || code > LAST_CODE_POINT) return VALUE;
         return (code >= 0xd800 && code <= 0xdfff) || (code & 0xfffe) === 0xfffe ? NA : String.fromCodePoint(code);
     }),
-    fn('UNICODE', [TEXT], (text) => text.codePointAt(0) ?? VALUE),
+    fn('UNICODE', [TEXT], (text) => (text.length > OLD_LONGEST_TEXT ? VALUE : (text.codePointAt(0) ?? VALUE))),
     // An empty text is 0, as it is wherever a number is read.
     fn('VALUE', [TEXT], (text) => (text === '' ? 0 : (parseNumber(text) ?? VALUE))),
     // The first character of each separator counts. Left out, the comma groups unless it is the decimal sign.
@@ -173,12 +179,12 @@ export const TEXT_FUNCTIONS = [
     }),
     fn(
         'TEXTBEFORE',
-        [TEXT, TEXTS, skippable(INTEGER), skippable(INTEGER, 0), skippable(INTEGER, 0), optional(LAZY, NA)],
+        [TEXT, TEXTS, skippable(INTEGER), skippable(INTEGER, 0), skippable(INTEGER, 0), optional(TEXT)],
         beside(false),
     ),
     fn(
         'TEXTAFTER',
-        [TEXT, TEXTS, skippable(INTEGER), skippable(INTEGER, 0), skippable(INTEGER, 0), optional(LAZY, NA)],
+        [TEXT, TEXTS, skippable(INTEGER), skippable(INTEGER, 0), skippable(INTEGER, 0), optional(TEXT)],
         beside(true),
     ),
 ];

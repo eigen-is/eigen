@@ -220,6 +220,7 @@ describe('finding and replacing', () => {
         ['=REPT("x",1E+300)', VALUE],
         ['=REPT("",32768)', ''],
         ['=REPT(TRUE,2)', 'TRUETRUE'],
+        ['=REPT(D6,2)', VALUE],
     ]);
     rows('EXACT', [
         ['=EXACT("a","A")', false],
@@ -242,7 +243,6 @@ describe('joining', () => {
         ['=TEXTJOIN(",",,"a","")', 'a'],
         ['=TEXTJOIN(",",B1,"a",B1:B3)', 'a,,3,TRUE'],
         ['=TEXTJOIN(",",FALSE,"","")', ','],
-        ['=TEXTJOIN(",",TRUE)', VALUE],
         ['=TEXTJOIN(A1:A2,TRUE,"a",B1:B3)', 'a1.53-2.5TRUE'],
         ['=LEN(TEXTJOIN("|",FALSE,REPT("x",32767)))', 32767],
         ['=TEXTJOIN("|",FALSE,REPT("x",32766),"y")', CALC],
@@ -280,6 +280,7 @@ describe('characters and their codes', () => {
         ['=CODE("")', VALUE],
         ['=CODE(B1)', VALUE],
         ['=CODE(65)', 54],
+        ['=CODE(D6)', VALUE],
     ]);
     rows('UNICHAR and UNICODE', [
         ['=UNICHAR(65.5)', 'A'],
@@ -302,6 +303,7 @@ describe('characters and their codes', () => {
         ['=UNICODE(CHAR(128))', 8364],
         ['=UNICODE(65)', 54],
         ['=UNICODE("")', VALUE],
+        ['=UNICODE(D6)', VALUE],
     ]);
 });
 
@@ -482,7 +484,8 @@ describe('TEXTBEFORE and TEXTAFTER', () => {
         ['=TEXTBEFORE("a-b-c","-",-4,0,1)', NA],
         ['=TEXTBEFORE("aXbxc","x",-1,1)', 'aXb'],
         ['=TEXTBEFORE(1234.5,".")', '1234'],
-        ['=TEXTBEFORE(D1," ",1,0,0,B4)', 'Hello'],
+        ['=TEXTBEFORE(D1,"x",1,0,0,5)', '5'],
+        ['=TEXTBEFORE(D1,"x",1,0,0,B1)', ''],
         ['=TEXTBEFORE(D1,"x",1,0,0,D1)', 'Hello World'],
         ['=TEXTBEFORE(D1," ",1,0,B4,NA())', DIV0],
     ]);
@@ -509,7 +512,6 @@ describe('TEXTBEFORE and TEXTAFTER', () => {
 });
 
 test('an array where one value is asked gives one answer per element', () => {
-    expect(
-        evaluate('=TEXTJOIN("|",TRUE,RIGHT(D1,{1,5}),FIND({"o","W"},D1),TEXTBEFORE(D1," ",{1,2},0,0,"nf"))', SHEET),
-    ).toBe('d|World|5|7|Hello|nf');
+    const joined = '=TEXTJOIN("|",TRUE,RIGHT(D1,{1,5}),FIND({"o","W"},D1),TEXTBEFORE(D1,"x",1,0,0,A1:A2))';
+    expect(evaluate(joined, SHEET)).toBe('d|World|5|7|1.5|-2.5');
 });
