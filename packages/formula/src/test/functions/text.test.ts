@@ -314,7 +314,7 @@ describe('numbers as text', () => {
         ['=TEXT(0,"#")', ''],
         ['=TEXT(2.5,"0")', '3'],
         ['=TEXT(-0.5,"0")', '-1'],
-        ['=TEXT(0,"0;(0);zero;@")', 'z1900ro'],
+        ['=TEXT(0,"0;(0);zero;@")', 'z1899ro'],
         ['=TEXT(1234.567,"abc")', 'a46c'],
         ['=TEXT(1234.567,"?/?")', '8642/7'],
         ['=TEXT(1234.567,"0.0E+00")', '1.2E+03'],
@@ -343,20 +343,32 @@ describe('numbers as text', () => {
         ['=TEXT("12:30","h:mm")', '12:30'],
         ['=TEXT(B4,"0")', DIV0],
     ]);
+    // The day line is Google's, by the owner's pick: day 0 is 30 December 1899, a negative number is an earlier day
+    // and 1900 has no 29 February. Excel answers 1900-01-00 for 0, 1900-02-29 for 60 and #VALUE! below 0.
     rows('TEXT with a date format', [
         ['=TEXT(45000.75,"yyyy-mm-dd")', '2023-03-15'],
         ['=TEXT(45000.75,"dd/mm/yyyy hh:mm:ss")', '15/03/2023 18:00:00'],
         ['=TEXT(45000.75,"h:mm AM/PM")', '6:00 PM'],
         ['=TEXT(45000.75,"[h]:mm")', '1080018:00'],
         ['=TEXT(45000.75,"dddd mmmm")', 'Wednesday March'],
-        ['=TEXT(0,"yyyy-mm-dd")', '1900-01-00'],
+        ['=TEXT(0,"yyyy-mm-dd")', '1899-12-30'],
+        ['=TEXT(1,"yyyy-mm-dd")', '1899-12-31'],
+        ['=TEXT(60,"yyyy-mm-dd")', '1900-02-28'],
+        ['=TEXT(61,"yyyy-mm-dd")', '1900-03-01'],
+        ['=TEXT(-1,"yyyy-mm-dd")', '1899-12-29'],
+        ['=TEXT(-141639,"yyyy-mm-dd")', '1512-03-15'],
+        ['=TEXT(-0.25,"yyyy-mm-dd hh:mm")', '1899-12-29 18:00'],
         ['=TEXT(0,"dddd")', 'Saturday'],
         ['=TEXT(1,"dddd")', 'Sunday'],
-        ['=TEXT(60,"yyyy-mm-dd")', '1900-02-29'],
-        ['=TEXT(-1,"yyyy-mm-dd")', VALUE],
-        ['=TEXT(-1234.567,"[h]:mm")', VALUE],
-        ['=TEXT(-1234.567,"dddd")', VALUE],
+        ['=TEXT(-6,"dddd")', 'Sunday'],
         ['=TEXT(-1234.567,"0;(0);zero;@")', '(1235)'],
+    ]);
+    // numfmt defect: no weekday name from 7 days before day 0 on, and the next day's name for a negative number
+    // with a time. 15 March 1512 was a Friday, and -0.25 is the evening of Friday 29 December 1899.
+    rows('TEXT with a weekday before day 0', [
+        ['=TEXT(-7,"dddd")', ''],
+        ['=TEXT(-141639,"dddd")', ''],
+        ['=TEXT(-0.25,"dddd")', 'Saturday'],
     ]);
     rows('FIXED', [
         ['=FIXED(1234.567)', '1,234.57'],

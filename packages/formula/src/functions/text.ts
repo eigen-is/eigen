@@ -9,7 +9,7 @@ import { partBeside } from '../values/delimited';
 import { CALC, NA, VALUE } from '../values/errors';
 import { lowerCase, properCase, upperCase } from '../values/letter-case';
 import { parseNumber } from '../values/parse-number';
-import { round15, roundDecimal } from '../values/precision';
+import { roundDecimal } from '../values/precision';
 import { separatedNumber } from '../values/separated-number';
 import { isError, LONGEST_TEXT } from '../values/value';
 import { BOOLEAN, fn, INTEGER, NUMBER, optional, PLAIN, rest, skippable, strict, TEXT, TEXTS } from './registry';
@@ -168,7 +168,7 @@ export const TEXT_FUNCTIONS = [
         const number = value === null ? 0 : typeof value === 'string' ? parseNumber(value) : value;
         if (typeof number !== 'number') return value === true ? 'TRUE' : value === false ? 'FALSE' : value;
         if (format === '') return number < 0 ? '-' : '';
-        return numberAsText(round15(number), format) ?? VALUE;
+        return numberAsText(number, format) ?? VALUE;
     }),
     fn('FIXED', [NUMBER, skippable(INTEGER, 2), optional(BOOLEAN, false)], (number, decimals, plain) =>
         fixed(number, decimals, plain ? '0' : '#,##0'),

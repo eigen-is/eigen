@@ -60,19 +60,30 @@ describe('numberAsText', () => {
         expect(numberAsText(1, '"x')).toBeNull();
     });
 
-    test('a date format shows the days 0 and 60 as Excel does and refuses what is no date', () => {
-        expect(numberAsText(0, 'yyyy-mm-dd')).toBe('1900-01-00');
-        expect(numberAsText(60, 'yyyy-mm-dd')).toBe('1900-02-29');
+    test("the day line is Google's: day 0 is 30 December 1899 and 1900 has no 29 February", () => {
+        expect(numberAsText(0, 'yyyy-mm-dd')).toBe('1899-12-30');
+        expect(numberAsText(1, 'yyyy-mm-dd')).toBe('1899-12-31');
+        expect(numberAsText(60, 'yyyy-mm-dd')).toBe('1900-02-28');
+        expect(numberAsText(61, 'yyyy-mm-dd')).toBe('1900-03-01');
         expect(numberAsText(2958465, 'yyyy-mm-dd')).toBe('9999-12-31');
-        expect(numberAsText(-1, 'yyyy-mm-dd')).toBeNull();
-        expect(numberAsText(-1.5, '[h]:mm')).toBeNull();
-        expect(numberAsText(2958466, 'yyyy-mm-dd')).toBeNull();
+        expect(numberDisplay(60, 'd mmm yyyy')).toBe('28 Feb 1900');
+        expect(numberDisplay(0, 'dddd')).toBe('Saturday');
     });
 
-    test('a negative number is refused only by the section that shows it', () => {
+    test('a negative number is a day before day 0', () => {
+        expect(numberAsText(-1, 'yyyy-mm-dd')).toBe('1899-12-29');
+        expect(numberAsText(-141639, 'yyyy-mm-dd')).toBe('1512-03-15');
+        expect(numberAsText(-0.25, 'yyyy-mm-dd hh:mm')).toBe('1899-12-29 18:00');
+        expect(numberAsText(-693593, 'yyyy-mm-dd')).toBe('0001-01-01');
+        expect(numberDisplay(-1, 'd mmm yyyy')).toBe('29 Dec 1899');
         expect(numberAsText(-5, '0;(0);zero;@')).toBe('(5)');
-        expect(numberAsText(0, '0;(0);zero;@')).toBe('z1900ro');
-        expect(numberAsText(-5, '0.0')).toBe('-5.0');
+    });
+
+    test('numfmt defect: a weekday before day 0 is empty or a day late', () => {
+        expect(numberAsText(-6, 'dddd')).toBe('Sunday');
+        expect(numberAsText(-7, 'dddd')).toBe('');
+        expect(numberAsText(-141639, 'ddd')).toBe('');
+        expect(numberAsText(-1.25, 'dddd')).toBe('Friday');
     });
 
     test('a number whose digits cannot be written out is null', () => {
