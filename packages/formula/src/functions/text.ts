@@ -154,10 +154,12 @@ export const TEXT_FUNCTIONS = [
         const code = firstCode(text);
         return code === undefined || countCharacters(text) > OLD_LONGEST_TEXT ? VALUE : ansiCode(code);
     }),
-    // Half of a surrogate pair and the last two code points of a plane are no character.
+    // Half of a surrogate pair is no character, and neither are the code points Unicode sets aside for good: the
+    // last two of a plane and the 32 from U+FDD0.
     fn('UNICHAR', [INTEGER], (code) => {
         if (code < 1 || code > LAST_CODE_POINT) return VALUE;
-        return (code >= 0xd800 && code <= 0xdfff) || (code & 0xfffe) === 0xfffe ? NA : String.fromCodePoint(code);
+        const none = (code >= 0xd800 && code <= 0xdfff) || (code >= 0xfdd0 && code <= 0xfdef);
+        return none || (code & 0xfffe) === 0xfffe ? NA : String.fromCodePoint(code);
     }),
     fn('UNICODE', [TEXT], (text) => (countCharacters(text) > OLD_LONGEST_TEXT ? VALUE : (firstCode(text) ?? VALUE))),
     // An empty text is 0, as it is wherever a number is read.

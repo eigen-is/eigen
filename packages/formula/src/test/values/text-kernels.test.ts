@@ -86,6 +86,26 @@ describe('letter case', () => {
         expect(lowerCase('ΟΔΥΣΣΕΥΣ')).toBe('οδυσσευς');
     });
 
+    test('no letter of Unicode changes the length of a text in lower case', () => {
+        for (let point = 0; point <= 0x10ffff; point += 1) {
+            if (point >= 0xd800 && point <= 0xdfff) continue;
+            const letter = String.fromCodePoint(point);
+            if (lowerCase(letter).length !== letter.length) throw new Error(`U+${point.toString(16)}`);
+        }
+    });
+
+    test('a final sigma does not depend on another letter of the text', () => {
+        expect(lowerCase('ΑΣ')).toBe('ας');
+        expect(lowerCase('ΑΣ İ')).toBe('ας i');
+        expect(lowerCase('ΣΑ İ')).toBe('σα i');
+    });
+
+    test('an accent written apart does not end a word', () => {
+        expect(properCase(`e${String.fromCharCode(769)}lise d${String.fromCharCode(769)}`)).toBe(
+            `E${String.fromCharCode(769)}lise D${String.fromCharCode(769)}`,
+        );
+    });
+
     test('proper case starts a word after anything that is no letter', () => {
         expect(properCase("o'NEIL mc-donald 3rd x2y")).toBe("O'Neil Mc-Donald 3Rd X2Y");
         expect(properCase('ǆ ß İ ı ﬁ')).toBe('Ǆ ß I I ﬁ');
