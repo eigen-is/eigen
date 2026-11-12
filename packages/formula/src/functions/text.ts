@@ -71,10 +71,10 @@ export const TEXT_FUNCTIONS = [
     }),
     // Between two texts goes the next delimiter, the first again after the last. With `skip`, empty text is left
     // out, but it counts toward the longest text as if it were joined.
-    fn('TEXTJOIN', [TEXTS, skippable(BOOLEAN, true), optional(rest(TEXTS))], (delimiters, skip, texts) => {
+    fn('TEXTJOIN', [TEXTS, BOOLEAN, rest(TEXTS)], (delimiters, skip, texts) => {
         let joined = '';
         let count = 0;
-        for (const text of texts ?? []) {
+        for (const text of texts) {
             const delimiter = count === 0 ? '' : delimiters[(count - 1) % delimiters.length];
             if (joined.length + delimiter.length + text.length > LONGEST_TEXT) return CALC;
             if (skip && text === '') continue;

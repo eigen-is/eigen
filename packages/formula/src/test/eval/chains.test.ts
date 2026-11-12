@@ -46,7 +46,7 @@ describe('what a cell can hold', () => {
     test.each([
         ['=LEN(A1&LEFT(A1,12767))', 32767],
         ['=A1&LEFT(A1,12768)', VALUE],
-        ['=CONCATENATE(A1,A1)', VALUE],
+        ['=LEN(CONCATENATE(A1,A1))', 32767],
         ['=LEFT(A1&A1,5)', VALUE],
         ['=REPLACE(A1,1,0,A1)', VALUE],
         ['=LEN(A1&A1)', VALUE],

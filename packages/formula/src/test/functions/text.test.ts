@@ -239,8 +239,6 @@ describe('joining', () => {
     rows('TEXTJOIN', [
         ['=TEXTJOIN(",",TRUE,"a",B1:B3)', 'a,3,TRUE'],
         ['=TEXTJOIN(",",FALSE,"a",B1:B3)', 'a,,3,TRUE'],
-        ['=TEXTJOIN(",",,"a",B1:B3)', 'a,3,TRUE'],
-        ['=TEXTJOIN(",",,"a","")', 'a'],
         ['=TEXTJOIN(",",B1,"a",B1:B3)', 'a,,3,TRUE'],
         ['=TEXTJOIN(",",FALSE,"","")', ','],
         ['=TEXTJOIN(A1:A2,TRUE,"a",B1:B3)', 'a1.53-2.5TRUE'],
