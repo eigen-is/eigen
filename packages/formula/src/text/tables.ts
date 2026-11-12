@@ -37,7 +37,7 @@ const ITEMS: ReadonlyMap<string, number> = new Map([
     ['#this row', THIS_ROW],
 ]);
 
-const ESCAPED = /'([^])/g;
+const ESCAPED = /'([\s\S])/g;
 
 // The rows a reference picks, as the bits above, and its first and last column in lower case, both empty for
 // every column. Null for brackets that say nothing Excel would read.
