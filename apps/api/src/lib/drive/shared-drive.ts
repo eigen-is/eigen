@@ -23,7 +23,7 @@ import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError } from '../core';
 import type { Home } from '../home';
 import type { Mount } from '../mount';
-import type { StorageFile } from '../storage';
+import type { FileBytes, StorageFile } from '../storage';
 import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
 import { canonicalACLId, canReadFromAncestors } from './acl';
@@ -47,12 +47,6 @@ export class SharedDrive {
     // Each lock belongs to the user who took it, so the locks need no access check of their own.
     public get lockManager(): LockManager {
         return this.drive.lockManager;
-    }
-
-    // Dropping the locks of other users needs write access, the same as the move that calls it.
-    public async releaseLocksUnder(mountId: string, pathId: string): Promise<void> {
-        await this.requireWrite(mountId, pathId);
-        return this.drive.releaseLocksUnder(mountId, pathId);
     }
 
     // The whole chain, not only what the caller can read: a lock on a folder above a share holds for the sharee too.
@@ -224,7 +218,7 @@ export class SharedDrive {
         parentId: string,
         name: string,
         mimeType: string,
-        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        data: FileBytes,
     ): Promise<DrivePath> {
         await this.requireWrite(mountId, parentId);
         return this.drive.createFileFromData(mountId, parentId, name, mimeType, data, this.user);
@@ -235,7 +229,7 @@ export class SharedDrive {
         parentId: string,
         name: string,
         mimeType: string,
-        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        data: FileBytes,
     ): Promise<DrivePath> {
         await this.requireWrite(mountId, parentId);
         return this.drive.createNamedFile(mountId, parentId, name, mimeType, data, this.user);
@@ -244,7 +238,7 @@ export class SharedDrive {
     public async writeFileContent(
         mountId: string,
         pathId: string,
-        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        data: FileBytes,
         options: ContentWriteOptions,
     ): Promise<ContentWriteResult> {
         await this.requireWrite(mountId, pathId);

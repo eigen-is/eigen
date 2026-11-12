@@ -371,6 +371,74 @@ describe('WebDAV LOCK/UNLOCK', () => {
             expect(put.status).toBe(204);
         });
 
+        // RFC 4918 §9.6.1 and §9.9.2: a folder can't go while a member of it can't.
+        test("a DELETE, a MOVE or an overwrite of a folder is a 423 over another user's lock inside it", async () => {
+            const inner = `${folderHref}/locked-member`;
+            const other = `${folderHref}/locked-member-other`;
+            for (const href of [inner, other]) {
+                expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', href)).status).toBe(201);
+            }
+            const url = `${inner}/report.docx`;
+            await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'alice' });
+            const token = lockTokenOf(await lockRequest(url));
+            const over = { Destination: `http://localhost${inner}`, Overwrite: 'T' };
+            const writes: [string, string, Record<string, string>][] = [
+                ['DELETE', inner, {}],
+                ['DELETE', inner, { If: `(<${token}>)` }],
+                ['MOVE', inner, { Destination: `http://localhost${folderHref}/locked-member-moved` }],
+                ['MOVE', other, over],
+                ['COPY', other, over],
+            ];
+            for (const [method, href, headers] of writes) {
+                const res = await webdavRequest(ctx.bob.user.email, method, href, { headers });
+                expect(`${method} ${res.status}`).toBe(`${method} 423`);
+            }
+            expect((await webdavRequest(ctx.alice.user.email, 'DELETE', inner)).status).toBe(423);
+            const put = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
+                body: 'saved',
+                headers: { If: `(<${token}>)` },
+            });
+            expect(put.status).toBe(204);
+            expect((await webdavRequest(ctx.alice.user.email, 'GET', other)).status).toBe(405);
+        });
+
+        test('a DELETE of a folder passes the locks inside it with the token of each', async () => {
+            const inner = `${folderHref}/locked-twice-inside`;
+            expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', inner)).status).toBe(201);
+            const tokens: string[] = [];
+            for (const name of ['a.docx', 'b.docx']) {
+                await webdavRequest(ctx.alice.user.email, 'PUT', `${inner}/${name}`, { body: 'alice' });
+                tokens.push(lockTokenOf(await lockRequest(`${inner}/${name}`)));
+            }
+            const remove = (ifHeader: string) =>
+                webdavRequest(ctx.alice.user.email, 'DELETE', inner, { headers: { If: ifHeader } });
+            expect((await remove(`(<${tokens[0]}>)`)).status).toBe(423);
+            expect((await remove(`(<${tokens[0]}>) (<${tokens[1]}>)`)).status).toBe(204);
+        });
+
+        test('a move or a rename in the Drive app releases the lock on the file', async () => {
+            const url = `${folderHref}/moved-in-app.docx`;
+            await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'alice' });
+            lockTokenOf(await lockRequest(url));
+            const drive = (await getHome(ctx.alice.user.id)).drive;
+            const file = await drive.resolvePath(mountId, '/lock-shared-with-bob/moved-in-app.docx');
+            const root = await drive.getRootFolder(mountId);
+            if (!file || !root) throw new Error('expected the file and the root');
+            expect(drive.lockManager.listForPath(file.id)).toHaveLength(1);
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${file.id}/move`, {
+                targetParentId: root.id,
+            });
+            expect((await drive.getPath(mountId, file.id))?.parentId).toBe(root.id);
+            expect(drive.lockManager.listForPath(file.id)).toHaveLength(0);
+
+            lockTokenOf(await lockRequest(`${baseHref}/moved-in-app.docx`));
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${file.id}/rename`, {
+                newName: 'renamed-in-app.docx',
+            });
+            expect((await drive.getPath(mountId, file.id))?.name).toBe('renamed-in-app.docx');
+            expect(drive.lockManager.listForPath(file.id)).toHaveLength(0);
+        });
+
         test('a refresh by another user with the token, or at another URL, is a 412 and extends nothing', async () => {
             const url = `${folderHref}/refresh-own-only.txt`;
             const otherUrl = `${folderHref}/refresh-other.txt`;

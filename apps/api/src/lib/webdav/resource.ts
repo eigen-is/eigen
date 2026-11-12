@@ -44,9 +44,7 @@ export async function handleGet(args: {
         ETag: etag,
         'Last-Modified': path.updatedAt.toUTCString(),
         'Accept-Ranges': 'bytes',
-        // Same hardening REST serveFile applies: nosniff on every body, plus a sandbox CSP for
-        // scriptable types (html/xhtml/svg) so a disguised upload can't run script with the
-        // viewer's session. Harmless to real WebDAV clients, which ignore CSP on a download.
+        // A disguised upload opened in a browser must not run script with the viewer's session.
         'X-Content-Type-Options': 'nosniff',
         ...scriptableInlineHeaders(path.mimeType),
     };
@@ -57,8 +55,7 @@ export async function handleGet(args: {
         slice: async (start, end) => {
             const slice = await drive.readRange(mountId, path.id, start, end);
             if (!slice) throw new ApiError(404, 'Not found');
-            // Stream the slice. Passing the BunFile/S3File directly loses the slice bounds
-            // somewhere in the response pipeline, so route through .stream() which respects them.
+            // A BunFile or S3File passed as it is loses the slice bounds on its way out, and its stream keeps them.
             return slice.stream();
         },
         full: async () => {
@@ -96,14 +93,12 @@ export async function handlePut(args: {
     if (!parent) throw new ApiError(409, 'Parent not found');
 
     // RFC 4918 §7.4: a create changes its folder, so the folder's locks count for it.
-    await assertWritable(drive, mountId, existing?.id ?? parent.id, ifHeader, user.id);
-    if (!(await drive.canWrite(mountId, existing?.id ?? parent.id, user))) {
-        throw new ApiError(403, 'No write permission');
-    }
+    const writtenId = existing?.id ?? parent.id;
+    await assertWritable(drive, mountId, writtenId, ifHeader, user.id);
+    if (!(await drive.canWrite(mountId, writtenId, user))) throw new ApiError(403, 'No write permission');
 
     // A failed precondition answers before a byte is read. A missing file has no etag, so any If-Match
-    // fails on it (RFC 7232 §3.1). The write checks If-Match again under the file's lock, where two
-    // PUTs from one etag can't both pass.
+    // fails on it (RFC 7232 §3.1).
     if (ifMatch && !matchesIfMatch(ifMatch, existing ? computeEtag(existing) : null)) {
         return new Response(null, { status: 412 });
     }
@@ -161,10 +156,8 @@ export async function handleMkcol(args: {
     }
 
     const drive = await getSharedDrive(ownerId, user);
-    if (await drive.resolvePath(mountId, pathStr)) {
-        // RFC 4918 §9.3.1: target exists → 405 Method Not Allowed
-        return new Response(null, { status: 405 });
-    }
+    // RFC 4918 §9.3.1 asks for a 405 on a name that is taken.
+    if (await drive.resolvePath(mountId, pathStr)) return new Response(null, { status: 405 });
 
     const { parentStr, name } = splitParentAndName(pathStr);
     if (!name) throw new ApiError(400, 'Missing folder name');
@@ -189,7 +182,7 @@ export async function handleDelete(args: {
     const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
 
-    await assertWritable(drive, mountId, path.id, ifHeader, user.id);
+    await assertWritable(drive, mountId, path.id, ifHeader, user.id, await drive.descendantIds(mountId, path.id));
     await drive.deletePath(mountId, path.id, user);
     return new Response(null, { status: 204 });
 }

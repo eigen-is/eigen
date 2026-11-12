@@ -76,7 +76,6 @@ export async function handleLock(args: {
     const { parentStr, name } = splitParentAndName(pathStr);
     const parent = await drive.resolvePath(mountId, parentStr);
     if (!parent) throw new ApiError(409, 'Parent not found');
-    if (!(await drive.canWrite(mountId, parent.id, user))) throw new ApiError(403, 'No write permission');
     await assertWritable(drive, mountId, parent.id, ifHeader, user.id);
     const mimeType = Bun.file(name).type || 'application/octet-stream';
     return lockOn(await drive.createNamedFile(mountId, parent.id, name, mimeType, Buffer.alloc(0), user), 201);
@@ -104,17 +103,18 @@ export async function handleUnlock(args: {
     return new Response(null, { status: 204 });
 }
 
-// RFC 4918 §6.2: a depth-infinity lock on a folder covers everything below it, so a write must also
-// pass the locks of every folder above the path, those the caller can't read included.
+// RFC 4918 §9.6.1 and §9.9.2: a folder can't go while a member of it is locked, so a write that removes or moves
+// a whole path passes its descendants, and the locks on them count too.
 export async function assertWritable(
     drive: DriveLike,
     mountId: string,
     pathId: string,
     ifHeader: string | null,
     userId: string,
+    descendantPathIds: readonly string[] = [],
 ): Promise<void> {
-    const ancestorIds = await drive.ancestorIds(mountId, pathId);
-    if (!drive.lockManager.isWriteAllowed(pathId, ifHeader, userId, ancestorIds)) {
+    const ancestorPathIds = await drive.ancestorIds(mountId, pathId);
+    if (!drive.lockManager.isWriteAllowed(pathId, ifHeader, userId, ancestorPathIds, descendantPathIds)) {
         throw new ApiError(423, 'Locked');
     }
 }
@@ -126,7 +126,6 @@ function parseTimeoutHeader(header: string | null): number {
     return Math.min(Number(match[1]) * 1000, LOCK_MAX_TTL_MS);
 }
 
-// RFC 4918 §14.17: the owner is the client's own XML, and every lockdiscovery sends it back as XML.
 // Each child declares the namespaces it uses, so an owner can grow past the size of its body. The lock
 // keeps it for its whole life, so it gets the same cap as a body.
 function readLockOwner(lockinfo: XmlElement): string | undefined {
