@@ -98,7 +98,7 @@ Adding members is an ACL edit, so step 1 uses the share dialog's `ContactAddRow`
 
 ### Matching compares effective member sets
 
-`GET /chat/:ownerId/rooms/by-members?emails=…` returns the standalone chats whose members are exactly the caller plus `emails`, writable first, then most recently updated. Writable means the caller owns the chat or the caller's ACL entry has `write`. Matching never looks at the name, so a renamed chat still matches. `findChatsByMembers` (`apps/api/src/lib/chat/find-by-members.ts`) reads only the caller's own home: their mounts plus the shared-with-me mirror. It makes no cross-home calls ([SCALABILITY.md](SCALABILITY.md)), which is why the route is self-only.
+`GET /chat/:ownerId/rooms/by-members?emails=…` returns the standalone chats whose members are exactly the caller plus `emails`, writable first, then most recently updated. Writable means the caller owns the chat or the caller's ACL entry has `write`. Matching never looks at the name, so a renamed chat still matches. `findChatsByMembers` (`apps/api/src/lib/chat/find-by-members.ts`) reads the caller's own mounts plus their Shared with me, which reads each shared chat from its owner ([ACL.md](ACL.md#shared-with-me-reads-each-path-from-its-owner)). Both lists are the caller's own, which is why the route is self-only.
 
 A chat's members are its effective member emails: path ACL, ancestor ACLs, expanded teams and the owner, all lowercased. A chat whose membership is not a fixed set of people never matches:
 
@@ -125,7 +125,7 @@ A wizard chat is born shared. If the ACL step fails, the route trashes and purge
 
 ### Adding someone to a chat sends no share email
 
-A "someone shared a file with you" email for being added to a chat has the wrong tone and spams groups; the first message is the real notification. The create route passes `suppressShareEmail: 'registered'`, which skips only the email ([ACL.md § Share Emails](ACL.md#share-emails)). The mirror fan-out, the `drive:acl-shared` event and the in-app share notification still happen. An address without an account still gets the email, because it is that person's only invite. `/invite` and the share dialog don't pass the flag and keep sending it.
+A "someone shared a file with you" email for being added to a chat has the wrong tone and spams groups; the first message is the real notification. The create route passes `suppressShareEmail: 'registered'`, which skips only the email ([ACL.md § Share Emails](ACL.md#share-emails)). The push into each member's `shared.db`, the `drive:acl-shared` event and the in-app share notification still happen. An address without an account still gets the email, because it is that person's only invite. `/invite` and the share dialog don't pass the flag and keep sending it.
 
 ### A team chat takes its members from the team
 

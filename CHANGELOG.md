@@ -14,6 +14,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Renaming a file in Drive** — the **Rename** dialog shows the whole name with the part before the extension selected, so you can change the extension too. A document made in Eigen keeps its extension hidden
 - **Guest sign-in code** — the code mailed to a guest works for 15 minutes instead of 5, so a mail that arrives late still gets them in
 - **Uploads** — an image or file that fails to upload into a document or a chat says why, such as a file over the size limit, instead of a bare error code. An upload in Drive can be stopped from its progress card
+- **Team drive storage** — giving a team drive new storage, or turning one on or off, reconnects the team's open documents. They show "Storage unavailable" for a few seconds and keep every edit
 
 ### Fixed
 
@@ -21,7 +22,9 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Moving several items in Drive** — when some of them fail, the **Move to** dialog keeps only those, so **Move here** again leaves the moved ones alone. **Delete permanently** in the Trash does the same
 - **Copying to another drive** — the copy appears once it is complete, and a copied document is found by searching its text right away
 - **All images in Drive** — the list includes the images someone shared with you directly
-- **Shared with me in Drive** — a file someone shared with you shows its current name, folder, size and thumbnail, also after they moved or changed it. When they move it to the Trash or restore it, it leaves and returns without a notification
+- **Shared with me in Drive** — a file someone shared with you shows its current name, folder, size and thumbnail, also after they moved or changed it, or moved the folder it is in. When they move it to the Trash or restore it, it leaves and returns without a notification
+- **Shared files in Docs, Sheets, Slides, Stickies and Vector** — a file someone shares with you, or renames, moves or changes, shows as it is now in the app's file list right away
+- **Files on the server's own disk** — a save replaces a file in one step, so a crash during the save, or a download at that moment, gets the whole old file or the whole new one, never part of either
 - **Saving from Word and Excel over WebDAV** — **Save as** into a mounted drive works. A save, move or copy over an existing file that the server refuses leaves that file in place instead of in the Trash
 - **Sharing after a save over WebDAV** — saving from Word or Excel into a mounted drive keeps the file's sharing, history and watchers. Such a save, or **Replace** in Finder or Explorer, overwrites the file as an upload does, so its old content no longer goes to the Trash
 - **Folders over WebDAV** — renaming a file in Finder to change only its capitals works, and copying a folder without its contents onto an existing one is refused instead of replacing it. Folder listings give addresses a client can follow on a standard install

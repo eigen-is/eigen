@@ -229,7 +229,7 @@ What else reaches the list follows from these two writers, and is accepted:
 
 `GET /drive/:ownerId/recent` (`requireSelf`, `requireNonGuest`) runs `aggregateRecents` (`apps/api/src/lib/drive/aggregate.ts`). It takes the newest 100 rows, groups them by owner, reads the user's team memberships once, and asks every owner at once through `pullVisiblePaths`, which runs on `pullFromEach` ([SCALABILITY.md § Reads across many homes go through pullFromEach](SCALABILITY.md#reads-across-many-homes-go-through-pullfromeach)). The user's own home is asked the same way. When fewer than 100 rows come back visible, it asks again for the next 100. It merges, sorts by `lastActivityAt` and returns at most 100, each a current `DrivePath` with its `lastActivityAt`.
 
-`Drive.getVisiblePaths` answers on the owner's side, with one batched `getBreadcrumbs` per mount. **Shared with me** asks through the same two functions ([ACL.md](ACL.md#shared-with-me-reads-each-path-from-its-owner)). It does its own access check and only the relay calls it, so it has no `SharedDrive` wrapper ([ARCHITECTURE.md § Drive Architecture](ARCHITECTURE.md#drive-architecture)). It leaves a row out when:
+`Drive.getVisiblePaths` answers on the owner's side, with one batched `getBreadcrumbs` per mount. It does its own access check and only the relay calls it, so it has no `SharedDrive` wrapper ([ARCHITECTURE.md § Drive Architecture](ARCHITECTURE.md#drive-architecture)). **Shared with me** asks through the same two functions ([ACL.md](ACL.md#shared-with-me-reads-each-path-from-its-owner)). `getVisiblePaths` leaves a row out when:
 
 | Left out | Why |
 |---|---|

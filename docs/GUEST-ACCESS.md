@@ -10,7 +10,7 @@ The sections cover the guest's Home and limits, the sign-in and its rate limits,
 
 ## A guest has a disk-based home with only drive and notifications
 
-`getHome()` builds a `GuestHome` for a user with `role: 'guest'`. It holds a Drive and a NotificationCenter under `data/guest/{guestId}/` ([STORAGE.md](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)), and leaves mail, contacts and calendar uninitialized. Its `settings.json` names no mounts, so the Drive only carries `shared.db`, the mirror of what others shared with the guest. `GuestHome.size()` reports zero everywhere.
+`getHome()` builds a `GuestHome` for a user with `role: 'guest'`. It holds a Drive and a NotificationCenter under `data/guest/{guestId}/` ([STORAGE.md](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)), and leaves mail, contacts and calendar uninitialized. Its `settings.json` names no mounts, so the Drive only carries `shared.db`, which names what others shared with the guest. `GuestHome.size()` reports zero everywhere.
 
 The home is on disk rather than in memory so it reuses Drive and NotificationCenter unchanged. An in-memory stand-in would have to subclass `Drive`, whose `home` is private, and reimplement `receiveSharedPathChange`. On disk, `shared.db` and the notifications also survive idle eviction, restarts and the next session.
 

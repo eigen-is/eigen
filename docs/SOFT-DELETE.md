@@ -1,10 +1,10 @@
 # Soft Delete and Trash
 
-> **TLDR:** A delete moves a Drive item to trash instead of erasing it. Two columns on `paths` hold the state, and the item is re-parented to the mount root. The code is `apps/api/src/lib/mount/trash.ts` (rows and bytes) and `apps/api/src/lib/drive/trash.ts` (collab close, sharing, SSE, history). Four things are not obvious. Only `local` storage moves bytes, into `data/.trash/`. Trash revokes every share, and restore brings them back without a new email. A drive's trash is its owners' alone, and Drive's Trash page lists every drive the viewer owns. Expired trash is purged only when a mount opens, which is when its Home loads, and trashed bytes count toward the quota until then.
+> **TLDR:** A delete moves a Drive item to trash instead of erasing it. Two columns on `paths` hold the state, and the item is re-parented to the mount root. The code is `apps/api/src/lib/mount/trash.ts` (rows and bytes) and `apps/api/src/lib/drive/trash.ts` (collab close, SSE, history). Four things are not obvious. Only `local` storage moves bytes, into `data/.trash/`. Trash revokes every share, and restore brings them back without a new email. A drive's trash is its owners' alone, and Drive's Trash page lists every drive the viewer owns. Expired trash is purged only when a mount opens, which is when its Home loads, and trashed bytes count toward the quota until then.
 
 Everything in Drive goes to the same trash: a plain file, a folder, or an Eigen document such as a doc or a chat room, which is a container folder. A delete in the Drive app and a WebDAV `DELETE` both trash, as does what a WebDAV MOVE or COPY overwrites, except a file under a file, which is kept and takes the new bytes ([WEBDAV.md](WEBDAV.md#an-overwrite-keeps-a-file-under-a-file-and-trashes-anything-else)). An owner restores or erases from Drive's Trash page. Each item is a row in its mount's `paths` table. A mount is one drive of a Home, with its own `metadata.db` and one storage backend ([STORAGE.md § A mount is a paths table](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)).
 
-The one idea is that trash is a state of the row, not a copy. A trashed row stays in its mount, every lookup skips it, and restore clears the state. Around that change, trash reaches the shared pieces an item touches. It closes the collab documents under the item ([COLLAB.md](COLLAB.md)), updates its sharing ([ACL.md](ACL.md)), tells the open apps over SSE, and records history for the item's watchers ([FILE-HISTORY.md](FILE-HISTORY.md)).
+The one idea is that trash is a state of the row, not a copy. A trashed row stays in its mount, every lookup skips it, and restore clears the state. Around that change, trash reaches the shared pieces an item touches. It closes the collab documents under the item ([COLLAB.md](COLLAB.md)), shuts out the people it is shared with ([ACL.md](ACL.md)), tells the open apps over SSE, and records history for the item's watchers ([FILE-HISTORY.md](FILE-HISTORY.md)).
 
 ## Two columns mark trash, and the item moves to the root
 
@@ -16,7 +16,7 @@ The item is re-parented to the mount root, so its row no longer names the folder
 
 Listings, name lookups, shared views and mime queries add `trashedAt IS NULL`, and the unique name index covers untrashed rows only. So a trashed item disappears everywhere and its name is free again. Content access (download, embed, copy, watch, a collab socket) goes through `Mount.getActivePath`, which answers 404 "File is in trash".
 
-`getPath` still returns a trashed row, because restore and breadcrumbs need it. `getTotalSize` counts it, so trash counts toward the quota. The walks below a path include trashed children: the sharing push walks `listFolderAll`, and the trash's close reads `collectDescendantIds`, one recursive query.
+`getPath` still returns a trashed row, because restore and breadcrumbs need it. `getTotalSize` counts it, so trash counts toward the quota. The walks below a path include trashed children: the check before a failed copy's cleanup walks `listFolderAll`, and the trash's close reads `collectDescendantIds`, one recursive query.
 
 ## Only `local` moves bytes into `.trash/`
 
@@ -67,7 +67,7 @@ A folder's permanent delete first removes every trash root whose `trashedFrom` l
 
 Drive's Trash page reads one list per drive the viewer owns or co-owns: each of their own mounts and each mount of their teams (`useTrash` in `packages/lib/src/core/drive/hooks/trash.ts`). Each list keeps its drive's own query key, so the refresh a trash, restore or delete event gives its owner's trash lists ([SSE.md](SSE.md#a-burst-of-drive-events-refetches-an-open-listing-once)) reaches a teammate's open Trash too. A trashed item names its owner and mount, so Restore and Delete permanently go to the drive it came from, and a selection refreshes each drive's list once. A drive whose trash fails to load is left out, so the others still list, and a warning above them names it by the mount name the sidebar shows (`failedDrives`), or as "your team drives" when the teams themselves fail to load. The page is an error only when none loads. **Empty trash** empties the viewer's own mounts and no team drive, because a team's trash also holds what teammates deleted. Those items are deleted one selection at a time. `packages/lib/src/test/core/drive/hooks/trash.test.ts` pins it.
 
-`Drive.emptyTrash` loops `permanentlyDelete` per item, so every item gets the same sharing, SSE and history handling. An item that is gone or no longer in trash by its turn is skipped: a folder's delete took it with it, or a restore got its lock first. A single permanent delete of such an item is a 404. Trashing the mount root is a 400.
+`Drive.emptyTrash` loops `permanentlyDelete` per item, so every item gets the same SSE and history handling. An item that is gone or no longer in trash by its turn is skipped: a folder's delete took it with it, or a restore got its lock first. A single permanent delete of such an item is a 404. Trashing the mount root is a 400.
 
 ## A part of a document goes to the trash only with the whole document
 

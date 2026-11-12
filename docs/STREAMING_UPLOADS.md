@@ -6,7 +6,7 @@ Uploads come from Drive's upload dialog and drag and drop, from an image an edit
 
 ## Elysia never reads the upload body
 
-The route declares `parse: 'none'`, so Elysia leaves the request body alone and `Drive.uploadFiles` hands it to the parser. The client appends every file as a `file` field of one `FormData` and posts it once by XHR (`uploadFiles`), which reports progress and can be cancelled. Before any byte is read, the route computes the size limit with `getUploadMaxSize` ([QUOTA.md](QUOTA.md)). A mount that is already full answers 507 without reading the body.
+The route declares `parse: 'none'`, so Elysia leaves the request body alone and `Drive.uploadFiles` hands it to the parser. The client appends every file as a `file` field of one `FormData` and posts it once by XHR (`uploadFiles` in `packages/lib/src/core/drive/upload.ts`), which reports progress and can be cancelled. Before any byte is read, the route computes the size limit with `getUploadMaxSize` ([QUOTA.md](QUOTA.md)). A mount that is already full answers 507 without reading the body.
 
 Mail draft attachments (`Mail.uploadDraftAttachment`, `apps/api/src/lib/mail/mail-domain.ts`) use the same parser.
 
