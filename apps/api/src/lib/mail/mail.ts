@@ -10,6 +10,7 @@ import { getMailUploadMaxSize, getUploadMaxSize } from '../config/enforcement';
 import { isRoleAddress } from '../config/server-config';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive';
+import { downloadName } from '../drive/serve-file';
 import { getHome } from '../home';
 import type { User } from '../user';
 import { getOrgAdmins, getUserByEmail } from '../user';
@@ -66,15 +67,14 @@ export async function attachFromDrive(
     const mailClient = await getMailClient(user);
 
     const drive = await getSharedDrive(sourceOwnerId, user);
-    const sourcePath = await drive.getPath(sourceMountId, sourcePathId);
-    if (!sourcePath) throw new ApiError(404, 'Source file not found');
-    if (sourcePath.size > maxSize) throw attachmentTooLarge(maxSize);
+    const { mount, path } = await drive.resolveFile(sourceMountId, sourcePathId);
+    if (path.size > maxSize) throw attachmentTooLarge(maxSize);
 
     const sourceFile = await drive.downloadFile(sourceMountId, sourcePathId);
     if (!sourceFile) throw new ApiError(404, 'Source file missing on disk');
 
-    const filename = sourcePath.details?.originalName || sourcePath.name;
-    return await mailClient.stageDriveAttachment(sourceFile, filename, sourcePath.mimeType, maxSize);
+    const filename = await downloadName(mount, path);
+    return await mailClient.stageDriveAttachment(sourceFile, filename, path.mimeType, maxSize);
 }
 
 export async function saveAttachmentsToDrive(

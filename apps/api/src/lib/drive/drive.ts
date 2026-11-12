@@ -60,7 +60,7 @@ import { copySize } from '../mount/copy';
 import { validateName } from '../mount/names';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
-import type { StorageFile } from '../storage';
+import type { FileBytes, StorageFile } from '../storage';
 import { writeTempWithHash } from '../storage';
 import type { Memberships, User } from '../user';
 import { getMemberships, getUserByEmail } from '../user';
@@ -481,7 +481,7 @@ export class Drive {
         parentId: string,
         name: string,
         mimeType: string,
-        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        data: FileBytes,
         user: User,
     ): Promise<DrivePath> {
         return this.createFile(mountId, parentId, name, mimeType, data, user, finalizeUpload);
@@ -493,7 +493,7 @@ export class Drive {
         parentId: string,
         name: string,
         mimeType: string,
-        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        data: FileBytes,
         user: User,
     ): Promise<DrivePath> {
         return this.createFile(mountId, parentId, name, mimeType, data, user, finalizeNamedUpload);
@@ -504,7 +504,7 @@ export class Drive {
         parentId: string,
         name: string,
         mimeType: string,
-        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        data: FileBytes,
         user: User,
         finalize: typeof finalizeUpload,
     ): Promise<DrivePath> {
@@ -534,7 +534,7 @@ export class Drive {
     public async writeFileContent(
         mountId: string,
         pathId: string,
-        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        data: FileBytes,
         { user, ifMatch, event = 'uploaded' }: ContentWriteOptions,
     ): Promise<ContentWriteResult> {
         const mount = this.getMount(mountId);

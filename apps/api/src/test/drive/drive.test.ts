@@ -27,6 +27,7 @@ import {
     findOrFail,
     getTestContext,
 } from '../setup';
+import { webdavRequest } from '../webdav/setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 const BOB_EMAIL = 'bob@test.eigen.is';
@@ -2737,6 +2738,76 @@ describe('Drive', () => {
                 },
             );
             expect(res.status).toBe(409);
+        });
+    });
+
+    describe('The name of a download', () => {
+        let folder: DrivePath;
+        const token = () => ctx.alice.user.sessionToken;
+        const ownerId = () => ctx.alice.user.id;
+
+        beforeAll(async () => {
+            folder = await drivePost(token(), ownerId(), aliceMountId, `folder/${aliceRootId}`, {
+                folderName: 'DownloadNames',
+            });
+        });
+
+        const upload = (parentId: string, name: string) =>
+            driveUpload(token(), ownerId(), aliceMountId, parentId, new File(['x'], name, { type: 'text/plain' }));
+
+        async function downloadName(pathId: string): Promise<string | null> {
+            const res = await authedRequest(token(), `/drive/${ownerId()}/${aliceMountId}/file/${pathId}/download`);
+            expect(res.status).toBe(200);
+            await res.text();
+            return res.headers.get('Content-Disposition');
+        }
+
+        test('a renamed file downloads under its new name', async () => {
+            const file = await upload(folder.id, 'draft.docx');
+            await drivePut(token(), ownerId(), aliceMountId, `path/${file.id}/rename`, { newName: 'final.docx' });
+            expect(await downloadName(file.id)).toBe('attachment; filename="final.docx"');
+        });
+
+        test('a file an office app saved over WebDAV downloads under the name it was moved to', async () => {
+            const base = `/webdav/${ownerId()}/${aliceMountId}/DownloadNames`;
+            const email = ctx.alice.user.email;
+            expect((await webdavRequest(email, 'PUT', `${base}/report.docx`, { body: 'v1' })).status).toBe(201);
+            expect((await webdavRequest(email, 'PUT', `${base}/~WRD0001.tmp`, { body: 'v2' })).status).toBe(201);
+            const move = await webdavRequest(email, 'MOVE', `${base}/~WRD0001.tmp`, {
+                headers: { Destination: `http://localhost${base}/report.docx`, Overwrite: 'T' },
+            });
+            expect(move.status).toBe(204);
+            const saved = await (await getHome(ownerId())).drive.resolvePath(
+                aliceMountId,
+                '/DownloadNames/report.docx',
+            );
+            if (!saved) throw new Error('expected the saved file');
+            expect(saved.details?.originalName).toBeUndefined();
+            expect(await downloadName(saved.id)).toBe('attachment; filename="report.docx"');
+        });
+
+        test('a numbered upload downloads under the name Drive shows', async () => {
+            await upload(folder.id, 'photo.png');
+            const second = await upload(folder.id, 'photo.png');
+            expect(second.name).not.toBe('photo.png');
+            expect(await downloadName(second.id)).toBe(`attachment; filename="${second.name}"`);
+        });
+
+        test("two uploads of one name into a document's media/ both download under that name", async () => {
+            const doc = await drivePost(token(), ownerId(), aliceMountId, `folder/${folder.id}/create/doc`, {
+                fileName: 'with-media',
+            });
+            const media = await (await getHome(ownerId())).drive.resolvePath(
+                aliceMountId,
+                `/DownloadNames/${doc.name}/media`,
+            );
+            if (!media) throw new Error('expected the media folder');
+            const first = await upload(media.id, 'photo.png');
+            const second = await upload(media.id, 'photo.png');
+            expect(second.name).not.toBe(first.name);
+            for (const file of [first, second]) {
+                expect(await downloadName(file.id)).toBe('attachment; filename="photo.png"');
+            }
         });
     });
 

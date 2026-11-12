@@ -1,8 +1,8 @@
 // The last steps of a write of a file's bytes, such as an upload, an attachment saved from mail or an
 // overwrite. The bytes wait in a temp file of the mount, which commitFromTemp owns: it runs the commit
 // and makes the thumbnail in the background, and removes the temp file whichever way the write ends.
-// finalizeUpload is the commit of a new file: a free name, a word to open tabs and the history row.
-// finalizeNamedUpload is the same commit for a create that must keep its name, such as a WebDAV PUT.
+// finalizeNamedUpload is the commit of a new file: its row, a word to open tabs and the history row.
+// finalizeUpload is that commit under a free name, for a create that may not refuse a taken one.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -59,32 +59,30 @@ type StagedFile = {
     user: User;
 };
 
-// The caller tells the watchers, so an upload of many files notifies them once.
-export async function finalizeUpload(drive: Drive, mount: Mount, args: StagedFile): Promise<DrivePath> {
+// The file keeps the name it came with beside the free one: inside a document nobody sees the stored name, so
+// an attachment shows and downloads under this one.
+export async function finalizeUpload(drive: Drive, mount: Mount, file: StagedFile): Promise<DrivePath> {
     // The store keeps names in NFC, so the name is compared with its siblings in that form too.
-    const originalName = args.name.replace(/[/\\]/g, '_').normalize('NFC');
-    const pathId = await withFreeName(folderIn(mount, args.parentId), originalName, (name) =>
-        mount.createFileFromTemp(args.parentId, name, args.mimeType, args.size, args.hash, args.tempId),
+    const originalName = file.name.replace(/[/\\]/g, '_').normalize('NFC');
+    return withFreeName(folderIn(mount, file.parentId), originalName, (name) =>
+        finalizeNamedUpload(drive, mount, { ...file, name }, originalName),
     );
-    return recordUpload(drive, mount, pathId, originalName, args.user);
 }
 
 // A WebDAV URL names one file, so its create never picks another name: on a taken one the mount's 409 stands.
-export async function finalizeNamedUpload(drive: Drive, mount: Mount, args: StagedFile): Promise<DrivePath> {
-    const { parentId, name, mimeType, size, hash, tempId } = args;
-    const pathId = await mount.createFileFromTemp(parentId, name, mimeType, size, hash, tempId);
-    return recordUpload(drive, mount, pathId, name.normalize('NFC'), args.user);
-}
-
-async function recordUpload(
+// The caller tells the watchers, so an upload of many files notifies them once.
+export async function finalizeNamedUpload(
     drive: Drive,
     mount: Mount,
-    pathId: string,
-    originalName: string,
-    user: User,
+    file: StagedFile,
+    originalName?: string,
 ): Promise<DrivePath> {
-    const uploadedFile = await mount.updatePath(pathId, { details: { originalName } });
-    drive.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
-    mount.history.record({ pathId, eventType: 'uploaded', actor: user, details: { size: uploadedFile.size } });
-    return uploadedFile;
+    const { parentId, name, mimeType, size, hash, tempId, user } = file;
+    const pathId = await mount.createFileFromTemp(parentId, name, mimeType, size, hash, tempId);
+    const uploaded = originalName
+        ? await mount.updatePath(pathId, { details: { originalName } })
+        : await mount.getActivePath(pathId);
+    drive.emit(SSEventType.DRIVE_FILE_UPLOADED, uploaded);
+    mount.history.record({ pathId, eventType: 'uploaded', actor: user, details: { size: uploaded.size } });
+    return uploaded;
 }
