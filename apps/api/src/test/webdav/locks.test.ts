@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { parseXml, xmlChild } from '../../lib/core/xml';
 import { getHome } from '../../lib/home';
 import type { TestContext } from '../setup';
@@ -198,10 +198,46 @@ describe('WebDAV LOCK/UNLOCK', () => {
         expect(home.drive.lockManager.listForPath(pathId)).toHaveLength(0);
     });
 
-    test('LOCK on a missing name → 404, and nothing is created', async () => {
+    // Office saves a new file by locking its name before the first PUT (RFC 4918 §7.3).
+    test('LOCK on a new name creates an empty file it locks → 201, and a PUT with the token writes it', async () => {
         const url = `${baseHref}/lock-new-name.docx`;
-        expect((await lockRequest(url)).status).toBe(404);
+        const lock = await lockRequest(url);
+        expect(lock.status).toBe(201);
+        const token = lockTokenOf(lock);
+        expect(token).toMatch(/^urn:uuid:/);
+        const get = await webdavRequest(ctx.alice.user.email, 'GET', url);
+        expect(`${get.status} ${await get.text()}`).toBe('200 ');
+        expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'saved' })).status).toBe(423);
+        const put = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
+            body: 'saved',
+            headers: { If: `(<${token}>)` },
+        });
+        expect(put.status).toBe(204);
+        expect(await (await webdavRequest(ctx.alice.user.email, 'GET', url)).text()).toBe('saved');
+    });
+
+    test('LOCK on a new name under a missing folder → 409, and nothing is created', async () => {
+        expect((await lockRequest(`${baseHref}/lock-no-such-dir/new.txt`)).status).toBe(409);
+        expect((await webdavRequest(ctx.alice.user.email, 'GET', `${baseHref}/lock-no-such-dir`)).status).toBe(404);
+    });
+
+    test('a lock refresh on a missing name → 404, and nothing is created', async () => {
+        const url = `${baseHref}/lock-refresh-missing.txt`;
+        const res = await webdavRequest(ctx.alice.user.email, 'LOCK', url, { headers: { If: '(<urn:uuid:none>)' } });
+        expect(res.status).toBe(404);
         expect((await webdavRequest(ctx.alice.user.email, 'GET', url)).status).toBe(404);
+    });
+
+    test('LOCK on a new name in a folder Bob may only read → 403, and nothing is created', async () => {
+        const folderHref = `${baseHref}/lock-read-only-for-bob`;
+        expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', folderHref)).status).toBe(201);
+        const folder = await (await getHome(ctx.alice.user.id)).drive.resolvePath(mountId, '/lock-read-only-for-bob');
+        if (!folder) throw new Error('expected the folder');
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${folder.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: false }],
+        });
+        expect((await lockRequest(`${folderHref}/bob.txt`, { email: ctx.bob.user.email })).status).toBe(403);
+        expect((await webdavRequest(ctx.alice.user.email, 'GET', `${folderHref}/bob.txt`)).status).toBe(404);
     });
 
     describe('in a folder Alice shares with Bob to write', () => {
@@ -226,6 +262,46 @@ describe('WebDAV LOCK/UNLOCK', () => {
             const put = await webdavRequest(ctx.bob.user.email, 'PUT', url, { body: 'bob', headers });
             expect(put.status).toBe(423);
             expect(await (await webdavRequest(ctx.alice.user.email, 'GET', url)).text()).toBe('alice');
+        });
+
+        // Both find the name missing before either goes on, as two Office clients saving one new name at once can.
+        test('of two LOCKs on one new name at once, one creates and locks the file and the other is a 423', async () => {
+            const pathStr = '/lock-shared-with-bob/race-new.docx';
+            const drive = (await getHome(ctx.alice.user.id)).drive;
+            const bothMissing = Promise.withResolvers<void>();
+            let missing = 0;
+            const resolvePath = drive.resolvePath.bind(drive);
+            const spy = spyOn(drive, 'resolvePath').mockImplementation(async (mount: string, path: string) => {
+                const found = await resolvePath(mount, path);
+                if (path === pathStr && !found && missing < 2) {
+                    if (++missing === 2) bothMissing.resolve();
+                    await bothMissing.promise;
+                }
+                return found;
+            });
+            let answers: { email: string; status: number }[];
+            try {
+                answers = await Promise.all(
+                    [ctx.alice.user.email, ctx.bob.user.email].map(async (email) => ({
+                        email,
+                        status: (await lockRequest(`${baseHref}${pathStr}`, { email })).status,
+                    })),
+                );
+            } finally {
+                bothMissing.resolve();
+                spy.mockRestore();
+            }
+
+            expect(answers.map((answer) => answer.status).toSorted()).toEqual([201, 423]);
+            const folder = await drive.resolvePath(mountId, '/lock-shared-with-bob');
+            if (!folder) throw new Error('expected the folder');
+            const names = (await drive.getFolderContents(mountId, folder.id)).map((path) => path.name);
+            expect(names.filter((name) => name.startsWith('race-new'))).toEqual(['race-new.docx']);
+            const file = await drive.resolvePath(mountId, pathStr);
+            if (!file) throw new Error('expected the file');
+            const winner = answers.find((answer) => answer.status === 201);
+            const winnerId = winner?.email === ctx.bob.user.email ? ctx.bob.user.id : ctx.alice.user.id;
+            expect(drive.lockManager.listForPath(file.id).map((lock) => lock.userId)).toEqual([winnerId]);
         });
 
         test('of two shared locks, each holder writes with their own token, and nobody without one', async () => {

@@ -57,17 +57,28 @@ describe('WebDAV ACL', () => {
         expect(res.status).toBe(404);
     });
 
-    test("Bob cannot LOCK alice's file", async () => {
+    // A LOCK on a name Bob can't see would create it, so he gets a PUT's answer for a folder he can't see.
+    test("Bob cannot LOCK alice's file or a new name in her mount, and gets one answer for both", async () => {
         await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHrefAlice}/lockable.txt`, { body: 'c' });
         const lockBody = `<?xml version="1.0" encoding="utf-8"?>
 <D:lockinfo xmlns:D="DAV:">
   <D:lockscope><D:exclusive/></D:lockscope>
   <D:locktype><D:write/></D:locktype>
 </D:lockinfo>`;
-        const res = await webdavRequest(ctx.bob.user.email, 'LOCK', `${baseHrefAlice}/lockable.txt`, {
-            body: lockBody,
-            headers: { 'Content-Type': 'application/xml; charset=utf-8' },
-        });
-        expect(res.status).toBe(404);
+        const lock = async (name: string) => {
+            const res = await webdavRequest(ctx.bob.user.email, 'LOCK', `${baseHrefAlice}/${name}`, {
+                body: lockBody,
+                headers: { 'Content-Type': 'application/xml; charset=utf-8' },
+            });
+            return `${res.status} ${await res.text()}`;
+        };
+        const existing = await lock('lockable.txt');
+        expect(existing).toStartWith('409 ');
+        expect(await lock('lock-intruder.txt')).toBe(existing);
+        const put = await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHrefAlice}/lockable.txt`, { body: 'd' });
+        expect(put.status).toBe(204);
+        expect((await webdavRequest(ctx.alice.user.email, 'GET', `${baseHrefAlice}/lock-intruder.txt`)).status).toBe(
+            404,
+        );
     });
 });

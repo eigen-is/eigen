@@ -105,6 +105,9 @@ describe('WebDAV writes inside a document', () => {
                 dest(`${docPath}/media/Outside/`),
             ),
             'PROPPATCH data.db': await webdavRequest(email(), 'PROPPATCH', `${docPath}/data.db`, { body: proppatch }),
+            'LOCK a new name in the document': await webdavRequest(email(), 'LOCK', `${docPath}/intruder-lock.txt`, {
+                body: '<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>',
+            }),
         };
         const outcomes: Record<string, string> = {};
         for (const [write, res] of Object.entries(writes)) outcomes[write] = `${res.status} ${await res.text()}`;
@@ -115,6 +118,7 @@ describe('WebDAV writes inside a document', () => {
         );
         const got = await webdavRequest(email(), 'GET', `${docPath}/media/kept.txt`);
         expect(await got.text()).toBe('kept');
+        expect((await webdavRequest(email(), 'GET', `${docPath}/intruder-lock.txt`)).status).toBe(404);
         const names = (
             await driveGetList(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `folder/${rootId}`)
         ).map((path) => path.name);
