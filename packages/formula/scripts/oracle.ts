@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import type { Literal, SheetSource } from '../src/index';
+import type { CellSink, Literal, SheetSource } from '../src/index';
 import { Engine, FUNCTIONS } from '../src/index';
 import { isExcelFunction } from '../src/names';
 import type { FormulaNode } from '../src/text';
@@ -95,11 +95,13 @@ type Outcome = {
 const HOST = 'U21';
 // The recorder's machine date, 12 Nov 2026, for the rows that read the clock and were not skipped.
 const NOW = 46338.5;
-const VOLATILE = /\b(RAND|RANDBETWEEN|RANDARRAY|NOW|TODAY)\(/;
+const VOLATILE = ['RAND', 'RANDBETWEEN', 'RANDARRAY', 'NOW', 'TODAY'];
+const CALLS_VOLATILE = new RegExp(`\\b(${VOLATILE.join('|')})\\(`);
 
-function column(label: string, values: readonly Literal[], from = 1): Record<string, Literal> {
+// The cells down a column from row 1, an empty text for a cell that stays blank.
+function down(label: string, values: readonly Literal[]): Record<string, Literal> {
     const cells: Record<string, Literal> = {};
-    for (const [i, value] of values.entries()) if (value !== '') cells[`${label}${i + from}`] = value;
+    for (const [i, value] of values.entries()) if (value !== '') cells[`${label}${i + 1}`] = value;
     return cells;
 }
 
@@ -121,24 +123,24 @@ const COMMON: Cells = {
 const REFERENCE: Cells = {
     ...COMMON,
     B7: '=NA()',
-    ...column('D', ['k1', 'k2', 'k3', 'k4']),
-    ...column('E', [10, 20, 30, 40]),
+    ...down('D', ['k1', 'k2', 'k3', 'k4']),
+    ...down('E', [10, 20, 30, 40]),
 };
 const STATISTICAL: Cells = {
     ...COMMON,
-    ...column('D', [3, 1, 4, 1, 5, 9, 2, 6]),
-    ...column('E', [3, 'x', '', true, 5, '=1/0', 2, '7']),
-    ...column('F', ['x', 'y', 'z']),
-    ...column('G', [10, 20, '=1/0', '=SUBTOTAL(9,D1:D3)', 40, 50]),
-    ...column('H', [2, 7, 1, 8, 2, 8, 1, 8]),
-    ...column('I', [1, 2, 3, 4, 5, 6, 7, 8]),
-    ...column('J', [5, 5, 5, 5, 5]),
-    ...column('K', [1, 2, '=NA()', 4, 5, 6, 7, 8]),
-    ...column('N', [1, 1, 2, 2, 3, 4]),
+    ...down('D', [3, 1, 4, 1, 5, 9, 2, 6]),
+    ...down('E', [3, 'x', '', true, 5, '=1/0', 2, '7']),
+    ...down('F', ['x', 'y', 'z']),
+    ...down('G', [10, 20, '=1/0', '=SUBTOTAL(9,D1:D3)', 40, 50]),
+    ...down('H', [2, 7, 1, 8, 2, 8, 1, 8]),
+    ...down('I', [1, 2, 3, 4, 5, 6, 7, 8]),
+    ...down('J', [5, 5, 5, 5, 5]),
+    ...down('K', [1, 2, '=NA()', 4, 5, 6, 7, 8]),
+    ...down('N', [1, 1, 2, 2, 3, 4]),
 };
 const TEXT: Cells = {
     ...COMMON,
-    ...column('D', [
+    ...down('D', [
         'Hello World',
         '  two  spaces  ',
         'straße',
@@ -153,7 +155,7 @@ const TEXT: Cells = {
 };
 const DATES: Cells = {
     ...COMMON,
-    ...column('D', [
+    ...down('D', [
         45351,
         45000.75,
         0,
@@ -169,22 +171,22 @@ const DATES: Cells = {
         0.999999999,
         1.5,
     ]),
-    ...column('F', [45002, 'x', '', '=1/0', 45002, 45003]),
-    ...column('G', [45002, 45003, 45003]),
+    ...down('F', [45002, 'x', '', '=1/0', 45002, 45003]),
+    ...down('G', [45002, 45003, 45003]),
 };
-const TENS = column('A', [10, 20, 30, 40, 50]);
+const TENS = down('A', [10, 20, 30, 40, 50]);
 const F1: Cells = {
-    ...column('A', [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]),
-    ...column('B', [40, 50, 60]),
-    ...column('C', [0.1, 0.2, -0.3]),
+    ...down('A', [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]),
+    ...down('B', [40, 50, 60]),
+    ...down('C', [0.1, 0.2, -0.3]),
     D1: '=TRUE',
     D2: '="TRUE"',
-    ...column('E', [1, '=1/0', 3]),
+    ...down('E', [1, '=1/0', 3]),
 };
 const B10: Cells = {
     ...TENS,
-    ...column('B', [40, 50, 60]),
-    ...column('C', [0.1, 0.2, -0.3]),
+    ...down('B', [40, 50, 60]),
+    ...down('C', [0.1, 0.2, -0.3]),
     D1: '=TRUE',
     E1: 1,
     E2: '=1/0',
@@ -194,17 +196,18 @@ const B10: Cells = {
 };
 const X12: Cells = { A1: 1, B1: 2, A2: 3, B2: 4 };
 const B12: Cells = {
-    ...column('A', [10, 20, 30]),
-    ...column('B', [40, 50, 60]),
-    ...column('D', ['k1', 'k2', 'k3', 'k4']),
-    ...column('E', [10, 20, 30, 40]),
+    ...down('A', [10, 20, 30]),
+    ...down('B', [40, 50, 60]),
+    ...down('D', ['k1', 'k2', 'k3', 'k4']),
+    ...down('E', [10, 20, 30, 40]),
     G5: 'abc',
 };
-const PAIR: Cells = { ...TENS, ...column('B', [12, 19, 33, 38, 55]) };
+const PAIR: Cells = { ...TENS, ...down('B', [12, 19, 33, 38, 55]) };
 const { A3: _, ...PAIR_WITHOUT_A3 } = PAIR;
 const HUGE: Cells = { A1: 1e200, A2: 1e200, B1: 1e200, B2: 1e200, C1: 1e200, C2: -1e200, F1: 0 };
 
-// Per file, the fixture of each section: the first pattern that matches the section's heading wins.
+// Per file, the fixture of each row: the first pattern that matches its section's heading and its first cell, as
+// `heading / cell`, wins.
 const PLANS: ReadonlyMap<string, readonly [string, Plan]> = new Map([
     ['family-math.md', ['math', [[/./, { host: COMMON }]]]],
     ['family-statistical.md', ['statistical', [[/./, { host: STATISTICAL }]]]],
@@ -222,13 +225,13 @@ const PLANS: ReadonlyMap<string, readonly [string, Plan]> = new Map([
                     /^Group 4:/,
                     {
                         host: {
-                            ...column('A', [10, 20, '', 40, 50]),
-                            ...column('B', ['a', 'b', 'c', 'd', 'e']),
-                            ...column('D', [1, '="3"', 5, '', 3]),
-                            ...column('E', [0, 1, 2, 'x']),
-                            ...column('G', [-100, 30, 40, 50, 60]),
-                            ...column('I', [10, 20, 30, '=1/0', 50]),
-                            ...column('J', ['a', 'b', 'c', 'd', 'e']),
+                            ...down('A', [10, 20, '', 40, 50]),
+                            ...down('B', ['a', 'b', 'c', 'd', 'e']),
+                            ...down('D', [1, '="3"', 5, '', 3]),
+                            ...down('E', [0, 1, 2, 'x']),
+                            ...down('G', [-100, 30, 40, 50, 60]),
+                            ...down('I', [10, 20, 30, '=1/0', 50]),
+                            ...down('J', ['a', 'b', 'c', 'd', 'e']),
                         },
                         hostName: 'b6_f2',
                     },
@@ -238,8 +241,8 @@ const PLANS: ReadonlyMap<string, readonly [string, Plan]> = new Map([
                     /^Group 6:/,
                     {
                         host: {
-                            ...column('A', [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]),
-                            ...column('B', [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]),
+                            ...down('A', [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]),
+                            ...down('B', [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]),
                             A11: '=IF(TRUE,SUBTOTAL(9,A1:A10))',
                             B11: '=SUM(SUBTOTAL(9,B1:B10))',
                             G1: 10,
@@ -296,13 +299,13 @@ const PLANS: ReadonlyMap<string, readonly [string, Plan]> = new Map([
                     /^Group 12:/,
                     {
                         host: {
-                            ...column('A', [1, 2, 4, 3, 5, 7]),
-                            ...column('B', [2, 1, 5, 4, 6, 9]),
-                            ...column('H', [1, '=1/0', 3]),
-                            ...column('I', ['=TRUE', 2, 3]),
-                            ...column('J', [1, 2, 3]),
-                            ...column('K', ['x', 2, 3]),
-                            ...column('L', [1, '=""', 3]),
+                            ...down('A', [1, 2, 4, 3, 5, 7]),
+                            ...down('B', [2, 1, 5, 4, 6, 9]),
+                            ...down('H', [1, '=1/0', 3]),
+                            ...down('I', ['=TRUE', 2, 3]),
+                            ...down('J', [1, 2, 3]),
+                            ...down('K', ['x', 2, 3]),
+                            ...down('L', [1, '=""', 3]),
                         },
                         hostName: 'b7_c',
                     },
@@ -325,7 +328,7 @@ const PLANS: ReadonlyMap<string, readonly [string, Plan]> = new Map([
                     },
                 ],
                 [/^Group 6/, { host: {}, hostName: 'b10_parse' }],
-                [/^Group 5 \/ cnt/, { host: { A2: '=""', A3: 0, A4: 'x' }, hostName: 'b10_cnt' }],
+                [/^Group 5.* \/ 5\.1[3-6]$/, { host: { A2: '=""', A3: 0, A4: 'x' }, hostName: 'b10_cnt' }],
                 [/./, { host: B10, hostName: 'b10_ref' }],
             ],
         ],
@@ -374,11 +377,11 @@ const PLANS: ReadonlyMap<string, readonly [string, Plan]> = new Map([
                     /2c:/,
                     {
                         host: {
-                            ...column('A', [1.1, 2.3, 2.9, 4.2, 5.7, 6.1]),
-                            ...column('B', [2.2, 3.9, 6.1, 8.3, 9.8, 12.4]),
-                            ...column('C', [1000000.1, 1000000.3, 1000000.2, 1000000.7, 1000000.5, 1000000.9]),
-                            ...column('D', [0.1, 0.7, 0.2, 0.9]),
-                            ...column('E', [3, 1, 4, 1]),
+                            ...down('A', [1.1, 2.3, 2.9, 4.2, 5.7, 6.1]),
+                            ...down('B', [2.2, 3.9, 6.1, 8.3, 9.8, 12.4]),
+                            ...down('C', [1000000.1, 1000000.3, 1000000.2, 1000000.7, 1000000.5, 1000000.9]),
+                            ...down('D', [0.1, 0.7, 0.2, 0.9]),
+                            ...down('E', [3, 1, 4, 1]),
                         },
                     },
                 ],
@@ -396,14 +399,14 @@ function cellAt(label: string): [number, number] {
 }
 
 // The host cell's value for each formula, each in a fresh engine on the fixture, with every sheet the formula names.
-function evaluateAll(formulas: readonly string[], fixture: Fixture, named: readonly string[]): unknown[] {
+function evaluateAll(formulas: readonly string[], fixture: Fixture, named: readonly string[]): (Literal | null)[] {
     const hostName = fixture.hostName ?? named[0] ?? 'Sheet1';
     const others: Record<string, Cells> = { ...fixture.others };
     for (const name of named) if (name !== hostName && !(name in others)) others[name] = fixture.host;
     if (Object.keys(others).length === 0) others.Sheet2 = fixture.host;
     const sheets = [{ id: 's1', name: hostName }, ...Object.keys(others).map((name, i) => ({ id: `o${i}`, name }))];
     const find = sheetFinder(sheets);
-    const fill = (sink: Parameters<SheetSource['cells']>[0], cells: Cells) => {
+    const fill = (sink: CellSink, cells: Cells) => {
         for (const [label, input] of Object.entries(cells)) {
             const [row, at] = cellAt(label);
             const text = typeof input === 'string' && input.startsWith('=') ? storedText(input, row, at, find) : null;
@@ -413,43 +416,37 @@ function evaluateAll(formulas: readonly string[], fixture: Fixture, named: reado
     const [hostRow, hostColumn] = cellAt(HOST);
     return formulas.map((formula) => {
         const text = storedText(formula, hostRow, hostColumn, find);
-        try {
-            const engine = new Engine([
-                {
-                    id: 's1',
-                    name: hostName,
-                    cells: (sink) => {
-                        fill(sink, fixture.host);
-                        sink(hostRow, hostColumn, null, text);
-                    },
+        const engine = new Engine([
+            {
+                id: 's1',
+                name: hostName,
+                cells: (sink) => {
+                    fill(sink, fixture.host);
+                    sink(hostRow, hostColumn, null, text);
                 },
-                ...Object.entries(others).map(([name, cells], i) => ({
-                    id: `o${i}`,
-                    name,
-                    cells: (sink: Parameters<SheetSource['cells']>[0]) => fill(sink, cells),
-                })),
-            ]);
-            engine.recalc(Number.POSITIVE_INFINITY, NOW, 7);
-            return engine.valueOf('s1', hostRow, hostColumn);
-        } catch (error) {
-            return `THROW ${error instanceof Error ? error.message : error}`;
-        }
+            },
+            ...Object.entries(others).map(([name, cells], i) => ({
+                id: `o${i}`,
+                name,
+                cells: (sink: CellSink) => fill(sink, cells),
+            })),
+        ]);
+        engine.recalc(Number.POSITIVE_INFINITY, NOW, 7);
+        return engine.valueOf('s1', hostRow, hostColumn);
     });
 }
 
-function shown(value: unknown): string {
+function shown(value: Literal | null): string {
     if (value === null) return '';
     if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
-    if (typeof value === 'object' && 'text' in value) return String(value.text);
-    return String(value);
+    return typeof value === 'object' ? value.text : String(value);
 }
 
-function equalsRecorded(ours: unknown, expected: Expected): boolean {
-    if (typeof ours === 'string' && ours.startsWith('THROW')) return false;
+function equalsRecorded(ours: Literal | null, expected: Expected): boolean {
     const { type, text } = expected;
     if (expected.quoted || type === '2') return ours === text;
     if (type === '4') return typeof ours === 'boolean' && shown(ours) === text;
-    if (type === '16') return ours !== null && typeof ours === 'object' && shown(ours) === text;
+    if (type === '16') return ours !== null && typeof ours === 'object' && ours.text === text;
     if (typeof ours === 'number') {
         // A blank cell read through the INDEX probe is the 0 a formula shows for it.
         if (text === '' && type === undefined && expected.element) return ours === 0;
@@ -538,7 +535,7 @@ function runFile(file: string, tag: string, plan: Plan, outcomes: Outcome[], ski
         excel: string,
         extra: { isref?: string; sum?: string } = {},
     ) => {
-        if (VOLATILE.test(formula)) return skip('volatile (RAND, NOW, TODAY)');
+        if (CALLS_VOLATILE.test(formula)) return skip('volatile (RAND, NOW, TODAY)');
         const sheets = [...new Set(formula.match(/b\d+_[a-z]+\d*/g) ?? [])].sort();
         const done = (ours: string, equal: boolean) =>
             outcomes.push({ file: tag, section, formula, excel, ours, equal });
@@ -565,8 +562,8 @@ function runFile(file: string, tag: string, plan: Plan, outcomes: Outcome[], ski
         if (elements === null)
             return done(`${shown(evaluateAll([formula], fixture, sheets)[0])} (array not probed)`, false);
         const indexes = elements.map((_, i) => `=INDEX(${body},${Math.floor(i / columns) + 1},${(i % columns) + 1})`);
-        const [, ...values] = evaluateAll([formula, ...indexes, size], fixture, sheets);
-        const sized = shown(values.pop());
+        const [, ours, ...values] = evaluateAll([formula, size, ...indexes], fixture, sheets);
+        const sized = shown(ours);
         const equal = sized === wanted && elements.every((element, i) => equalsRecorded(values[i], element));
         return done(`{${values.map(shown).join(',')}} ${sized}`, equal);
     };
@@ -630,8 +627,8 @@ function runFile(file: string, tag: string, plan: Plan, outcomes: Outcome[], ski
             skip('not a formula (typed entry or text)');
             continue;
         }
-        let fixture = (plan.find(([pattern]) => pattern.test(section)) ?? plan[plan.length - 1])[1];
-        if (tag === 'b10' && /^Group 5/.test(section) && /^5\.1[3-6]$/.test(cells[0])) fixture = plan[2][1];
+        const row = `${section} / ${cells[0]}`;
+        const fixture = (plan.find(([pattern]) => pattern.test(row)) ?? plan[plan.length - 1])[1];
         // The markdown lost a backtick in batch 13's part 2a.
         if (
             tag === 'b13' &&
@@ -718,7 +715,8 @@ function runFile(file: string, tag: string, plan: Plan, outcomes: Outcome[], ski
     }
 }
 
-function rowsMode(dir: string): string {
+// The table of counts per file, and the differing rows, one per line.
+function rowsMode(dir: string): { readonly report: string; readonly differing: string } {
     const outcomes: Outcome[] = [];
     const skipped = new Map<string, number>();
     const lines = ['| file | run | equal | differs | skipped |', '|---|---|---|---|---|'];
@@ -747,14 +745,10 @@ function rowsMode(dir: string): string {
             '',
             `Not run, no fixture plan here (their fixtures are prose in each file): ${unplanned.join(', ')}.`,
         );
-    if (options.out !== undefined) {
-        const differing = outcomes.filter((outcome) => !outcome.equal);
-        fs.writeFileSync(
-            options.out,
-            `${differing.map((o) => `[${o.file} / ${o.section.slice(0, 60)}] ${o.formula} | Excel ${o.excel} | ours ${o.ours}`).join('\n')}\n`,
-        );
-    }
-    return lines.join('\n');
+    const differing = outcomes
+        .filter((outcome) => !outcome.equal)
+        .map((o) => `[${o.file} / ${o.section.slice(0, 60)}] ${o.formula} | Excel ${o.excel} | ours ${o.ours}`);
+    return { report: lines.join('\n'), differing: differing.join('\n') };
 }
 
 // --------------------------------------------------------------------------------------------- corpus
@@ -764,7 +758,7 @@ type Pick = (typeof PICKS)[number];
 const RESIDUE = 'residue';
 // The writers whose cached values are Excel's own; openpyxl, for one, calls itself "Microsoft Excel Compatible".
 const EXCEL = /^Microsoft (Macintosh )?Excel( Online)?$/;
-const VOLATILE_CALLS = new Set(['NOW', 'TODAY', 'RAND', 'RANDBETWEEN', 'RANDARRAY', 'CELL', 'INFO']);
+const VOLATILE_CALLS = new Set([...VOLATILE, 'CELL', 'INFO']);
 const DATE_CALLS = new Set([
     'DATE',
     'DATEVALUE',
@@ -1011,20 +1005,20 @@ function rectOf(node: FormulaNode, sheet: number, row: number, column: number): 
 }
 
 // Numbers are equal within half a unit of their last significant digit, so two that round apart are not told apart.
-function sameValue(ours: unknown, cached: Literal, digits: number): boolean {
+function sameValue(ours: Literal | null, cached: Literal, digits: number): boolean {
     if (typeof cached === 'number') {
         if (typeof ours !== 'number') return false;
         const unit = 10 ** (Math.floor(Math.log10(Math.max(Math.abs(ours), Math.abs(cached)))) - digits + 1);
         const rounded = Number(ours.toPrecision(digits)) === Number(cached.toPrecision(digits));
         return ours === cached || rounded || Math.abs(ours - cached) <= 0.5000001 * unit;
     }
-    if (typeof cached === 'object') return ours !== null && typeof ours === 'object' && shown(ours) === cached.text;
+    if (typeof cached === 'object') return ours !== null && typeof ours === 'object' && ours.text === cached.text;
     if (ours === null) return cached === '';
     return ours === cached;
 }
 
-function kindOf(value: unknown): string {
-    if (value !== null && typeof value === 'object') return shown(value);
+function kindOf(value: Literal | null): string {
+    if (value !== null && typeof value === 'object') return value.text;
     return value === '' ? 'empty text' : value === null ? 'blank' : typeof value;
 }
 
@@ -1197,9 +1191,9 @@ function spread(formulas: readonly Formula[], marks: Marks, label: (read: string
 // The pick a differing cell's own formula explains, by the rules in the usage, in their order.
 function pickOf(
     formula: Formula,
-    ours: unknown,
+    ours: Literal | null,
     cached: Literal,
-    value: (sheet: number, row: number, column: number) => unknown,
+    value: (sheet: number, row: number, column: number) => Literal | null,
 ): Pick | undefined {
     const { facts: own, rects } = formula;
     const refused = typeof cached === 'object' && cached.text === '#VALUE!';
@@ -1207,7 +1201,7 @@ function pickOf(
     const typed = own.emptyText && own.arithmetic && (refused || cached === '');
     if ((reads && (own.arithmetic || refused)) || typed) return 'empty text';
     if ([...own.calls].some((name) => DATE_CALLS.has(name))) {
-        const early = (v: unknown) => v === null || (typeof v === 'number' && v >= 0 && v < 61);
+        const early = (v: Literal | null) => v === null || (typeof v === 'number' && v >= 0 && v < 61);
         const reads = rects.some(
             (rect) =>
                 rect.top === rect.bottom && rect.left === rect.right && early(value(rect.sheet, rect.top, rect.left)),
@@ -1220,7 +1214,7 @@ function pickOf(
         const rect = rectOf(ref, formula.sheet, formula.cell.row, formula.cell.column);
         if (rect === null) continue;
         const line = row ? { ...rect, bottom: rect.top } : { ...rect, right: rect.left };
-        let last: unknown = null;
+        let last: Literal | null = null;
         const unsorted = anyCell(line, (r, c) => {
             const next = value(line.sheet, r, c);
             if (next === null || next === '') return false;
@@ -1239,20 +1233,12 @@ function pickOf(
     return undefined;
 }
 
-// The equal cells whose value 0 is a blank result: each such formula asked ISBLANK over the computed values, in an
-// engine where every other formula is its value.
+// The equal cells whose value 0 is a blank result: each such formula asks ISBLANK of itself, in an engine where
+// every other formula is the value it computed.
 function wouldChange(book: Book, engine: Engine, candidates: readonly Formula[]): number {
     if (candidates.length === 0) return 0;
     const probes = new Set(candidates.map(({ sheet, cell }) => keyOf(sheet, cell.row, cell.column)));
-    const probe = new Engine(probeSources(book, engine, probes));
-    probe.recalc(Number.POSITIVE_INFINITY);
-    return candidates.filter(({ sheet, cell }) => probe.valueOf(book.sheets[sheet].id, cell.row, cell.column) === true)
-        .length;
-}
-
-// The book with every formula as the value it computed, but the probed ones, which ask ISBLANK of themselves.
-function probeSources(book: Book, engine: Engine, probes: ReadonlySet<number>): SheetSource[] {
-    return book.sheets.map((sheet, place) => ({
+    const sources: SheetSource[] = book.sheets.map((sheet, place) => ({
         id: sheet.id,
         name: sheet.name,
         cells: (sink) => {
@@ -1264,9 +1250,13 @@ function probeSources(book: Book, engine: Engine, probes: ReadonlySet<number>): 
             }
         },
     }));
+    const probe = new Engine(sources);
+    probe.recalc(Number.POSITIVE_INFINITY);
+    return candidates.filter(({ sheet, cell }) => probe.valueOf(book.sheets[sheet].id, cell.row, cell.column) === true)
+        .length;
 }
 
-function workbooksUnder(paths: readonly string[]): string[] {
+function corpusMode(paths: readonly string[]): string {
     const files: string[] = [];
     for (const start of paths) {
         if (fs.statSync(start).isFile()) files.push(start);
@@ -1277,19 +1267,15 @@ function workbooksUnder(paths: readonly string[]): string[] {
             }
         }
     }
-    return files.sort();
-}
-
-function corpusMode(paths: readonly string[]): string {
     const reports: BookReport[] = [];
     const failed: string[] = [];
-    for (const file of workbooksUnder(paths)) {
+    for (const file of files.sort()) {
         const child = spawnSync(process.execPath, [process.argv[1], '--book', file], {
             encoding: 'utf8',
             maxBuffer: 1 << 28,
             timeout: Number(options.timeout) * 1000,
         });
-        const last = child.stdout?.trim().split('\n').pop() ?? '';
+        const last = child.stdout.trim().split('\n').pop() ?? '';
         if (child.status === 0 && last.startsWith('{')) {
             const report: BookReport = JSON.parse(last);
             if (report.formulas > 0) reports.push(report);
@@ -1328,7 +1314,7 @@ function corpusMode(paths: readonly string[]): string {
         '',
         '| inside DIFFERS | cells |',
         '|---|---|',
-        ...PICKS.map((pick) => `| pick: ${pick} | ${sum((report) => report.picks[pick] ?? 0)} |`),
+        ...PICKS.map((pick) => `| pick: ${pick} | ${sum((report) => report.picks[pick])} |`),
         `| residue, roots (read no differing cell) | ${sum((report) => report.residueRoots)} |`,
         `| residue, downstream of a root | ${sum((report) => report.residueDownstream)} |`,
         '',
@@ -1354,7 +1340,7 @@ function corpusMode(paths: readonly string[]): string {
         '|---|---|---|---|---|---|---|---|---|---|---|',
         ...reports.map(
             (report) =>
-                `| ${path.basename(report.file).slice(-60)} | ${report.application} | ${report.formulas} | ${report.equal} | ${report.differs} | ${report.notBuilt} | ${report.notComparable} | ${PICKS.map((pick) => report.picks[pick] ?? 0).join(', ')} | ${report.residueRoots} | ${report.wouldChange} | ${report.seconds.toFixed(1)} |`,
+                `| ${path.basename(report.file).slice(-60)} | ${report.application} | ${report.formulas} | ${report.equal} | ${report.differs} | ${report.notBuilt} | ${report.notComparable} | ${PICKS.map((pick) => report.picks[pick]).join(', ')} | ${report.residueRoots} | ${report.wouldChange} | ${report.seconds.toFixed(1)} |`,
         ),
         '',
         ...failed.map((line) => `- could not be run: ${line}`),
@@ -1363,12 +1349,13 @@ function corpusMode(paths: readonly string[]): string {
 }
 
 const [mode, ...rest] = positionals;
-if (options.help || (options.book === undefined && (mode === undefined || rest.length === 0))) {
-    console.log(USAGE);
-} else if (options.book !== undefined) {
+if (options.book !== undefined) {
     console.log(JSON.stringify(bookMode(options.book)));
+} else if (options.help || (mode !== 'rows' && mode !== 'corpus') || rest.length === 0) {
+    console.log(USAGE);
 } else {
-    const report = mode === 'rows' ? rowsMode(rest[0]) : corpusMode(rest);
-    if (mode !== 'rows' && options.out !== undefined) fs.writeFileSync(options.out, `${report}\n`);
+    const rows = mode === 'rows' ? rowsMode(rest[0]) : null;
+    const report = rows?.report ?? corpusMode(rest);
+    if (options.out !== undefined) fs.writeFileSync(options.out, `${rows?.differing ?? report}\n`);
     console.log(report);
 }
