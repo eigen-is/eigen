@@ -760,7 +760,7 @@ export class Mount {
 
         // getPath, not getActivePath, because collab still updates a trashed document's row while it closes.
         const updated = await this.getPath(pathId);
-        if (!updated) throw new ApiError(500, 'Path not found after update');
+        if (!updated) throw new ApiError(404, 'Path not found');
         return updated;
     }
 

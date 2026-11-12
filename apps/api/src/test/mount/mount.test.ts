@@ -287,6 +287,13 @@ describe('Mount (local-key storage)', () => {
         expect(moved.parentId).toBe(dstId);
     });
 
+    test('an update of a path deleted for good answers 404', async () => {
+        const fileId = await seedFile(mount, rootId, 'gone.txt', 'text/plain', 1, Buffer.from('g'));
+        await mount.deletePath(fileId);
+        await expect(mount.updatePath(fileId, { size: 2 })).rejects.toMatchObject({ status: 404 });
+        await expect(mount.updatePath(fileId, { name: 'renamed.txt' })).rejects.toMatchObject({ status: 404 });
+    });
+
     test('delete file', async () => {
         const data = Buffer.from('to delete');
         const fileId = await seedFile(mount, rootId, 'deleteme.txt', 'text/plain', data.length, data);
