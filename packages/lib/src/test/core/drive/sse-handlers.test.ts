@@ -69,10 +69,11 @@ describe('handleDriveSSEvent — DRIVE_ACL_UPDATED', () => {
         expect(hasKey(invalidated, [...driveKeys.owner(OWNER), 'effective-members'])).toBe(true);
     });
 
-    test("invalidates the viewer's chat lookups and shared-with-me list, which belong to the viewer, not the path's owner", () => {
+    test("invalidates the viewer's chat lookups and shared-with-me list, which belong to the viewer, not the path's owner", async () => {
         const { queryClient, invalidated } = trackingClient();
 
         handleDriveSSEvent(driveEvent(SSEventType.DRIVE_ACL_UPDATED), queryClient, VIEWER);
+        await Bun.sleep(400);
         expect(hasKey(invalidated, chatKeys.byMembersAll(VIEWER))).toBe(true);
         expect(hasKey(invalidated, driveKeys.shared(VIEWER, 'with-me'))).toBe(true);
         expect(hasKey(invalidated, chatKeys.byMembersAll(OWNER))).toBe(false);
@@ -101,15 +102,28 @@ describe('handleDriveSSEvent — DRIVE_ACL_SHARED / DRIVE_ACL_UNSHARED', () => {
 // An unshare takes the path out of the sharee's reach, so their open Recent and Watched drop it now.
 test.each([SSEventType.DRIVE_ACL_SHARED, SSEventType.DRIVE_ACL_UNSHARED, SSEventType.DRIVE_ACL_UPDATED] as const)(
     "%s refreshes the viewer's Recent and Watched",
-    (type) => {
+    async (type) => {
         const { queryClient, invalidated } = trackingClient();
         handleDriveSSEvent(driveEvent(type), queryClient, VIEWER);
+        await Bun.sleep(400);
         expect([driveKeys.recent(VIEWER), driveKeys.watchesAll()].map((key) => hasKey(invalidated, key))).toEqual([
             true,
             true,
         ]);
     },
 );
+
+// Sharing many items at once sends each tab one ACL event per item, and the viewer's lists refetch once for them all.
+test('a burst of ACL events refreshes the viewer lists once', async () => {
+    const { queryClient, invalidated } = trackingClient();
+    for (let i = 0; i < 5; i++) {
+        const event = driveEvent(SSEventType.DRIVE_ACL_SHARED);
+        handleDriveSSEvent({ ...event, path: { ...event.path, id: `item-${i}` } }, queryClient, VIEWER);
+    }
+    await Bun.sleep(400);
+    const recent = JSON.stringify(driveKeys.recent(VIEWER));
+    expect(invalidated.filter((key) => JSON.stringify(key) === recent)).toHaveLength(1);
+});
 
 // An open document reads its canRead/canWrite from its info query, so an owner who makes a writer a viewer, on the
 // document or on a folder above it, reaches the open tab now. A role change on an existing share is DRIVE_ACL_UPDATED.
