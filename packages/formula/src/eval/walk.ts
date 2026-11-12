@@ -189,10 +189,11 @@ export class Walk {
         // Cell by cell for several columns, and for one column when cells may be passed over.
         let found = 0;
         let row = this.row;
+        let live = reach.count;
         for (; row < end && (area.left < right || this.skips !== 0); row += 1) {
-            if (row >= reach.shortest) reach.cut(row);
-            if (found + reach.count > span.length) break;
-            for (let i = 0; i < reach.count; i += 1) {
+            if (row >= reach.shortest) live = reach.cut(row);
+            if (found + live > span.length) break;
+            for (let i = 0; i < live; i += 1) {
                 const held = columns[tall[i]];
                 if (skipped(this.ctx, this.skips, held, row)) continue;
                 const at = held.kind[row] & KIND_MASK;
@@ -314,8 +315,8 @@ export class Reach {
         this.count += 1;
     }
 
-    // Leaves out the columns that end at `row` or above it.
-    public cut(row: number): void {
+    // Leaves out the columns that end at `row` or above it, and says how many are left.
+    public cut(row: number): number {
         const { columns, ends } = this;
         let kept = 0;
         let shortest = Number.POSITIVE_INFINITY;
@@ -329,6 +330,7 @@ export class Reach {
         }
         this.count = kept;
         this.shortest = shortest;
+        return kept;
     }
 }
 

@@ -61,8 +61,7 @@ export class Products {
     public next(walk: Walk): boolean {
         const { factors, from, to, reach, bands, row } = this;
         if (row >= this.end) return false;
-        if (row >= reach.shortest) reach.cut(row);
-        const live = reach.count;
+        const live = row >= reach.shortest ? reach.cut(row) : reach.count;
         const tall = reach.columns;
         let count = this.runs ? 1 : Math.min(this.end - row, Math.max(ROWS, Math.trunc(STRETCH / live)));
         let rows = 1;

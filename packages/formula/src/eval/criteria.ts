@@ -227,48 +227,67 @@ export class Tally {
         const top = values === null ? 0 : values.top;
         const end = listed === null ? last : listed.length;
         const band = width === 1 ? Math.max(end, 1) : 1;
+        const reaching = reach.columns;
         let { numbers } = this;
         let count = this.count;
         let found = 0;
-        for (let from = listed === null ? 0 : firstFrom(listed, first); from < end; from += band) {
-            const to = Math.min(from + band, end);
-            if (listed === null && from >= reach.shortest) reach.cut(from);
-            for (let live = 0; live < reach.count; live += 1) {
-                const across = reach.columns[live];
-                const base = across * pairs;
-                const stop = stops[across];
-                const value = counted[across];
-                for (let at = from; at < to; at += 1) {
-                    const offset = listed === null ? at : listed[at] - first;
-                    if (offset >= stop) break;
-                    let i = 0;
-                    for (; i < pairs; i += 1) {
-                        if (i === driver) continue;
-                        const column = columns[base + i];
-                        const row = ranges[i].top + offset;
-                        if (column === undefined || offset >= used[base + i]) {
-                            if (!blanks[i]) break;
-                        } else if (
-                            !meets(read[i], strings, column.kind[row] & KIND_MASK, column.num[row], column.ref[row])
-                        )
-                            break;
+        let live = reach.count;
+        let from = listed === null ? 0 : firstFrom(listed, first);
+        while (from < end) {
+            // Where a column ends, the ones that go on move up in the lists, so a row costs the columns it has.
+            // The rows up to the next such end are walked in a loop of their own, which calls nothing.
+            let until = end;
+            if (listed === null) {
+                live = reach.cut(from);
+                if (width > 1) until = Math.min(end, reach.shortest);
+                for (let across = 0; across < live; across += 1) {
+                    const was = reaching[across];
+                    reaching[across] = across;
+                    stops[across] = stops[was];
+                    counted[across] = counted[was];
+                    for (let i = 0; i < pairs; i += 1) {
+                        columns[across * pairs + i] = columns[was * pairs + i];
+                        used[across * pairs + i] = used[was * pairs + i];
                     }
-                    if (i < pairs) continue;
-                    count += 1;
-                    const row = top + offset;
-                    if (value === undefined || row >= value.length) continue;
-                    const kind = value.kind[row] & KIND_MASK;
-                    if (kind === CellKind.Error) {
-                        this.error = ctx.workbook.error(value.ref[row]);
-                        return;
+                }
+            }
+            for (; from < until; from += band) {
+                const to = Math.min(from + band, until);
+                for (let across = 0, base = 0; across < live; across += 1, base += pairs) {
+                    const stop = stops[across];
+                    const value = counted[across];
+                    for (let at = from; at < to; at += 1) {
+                        const offset = listed === null ? at : listed[at] - first;
+                        if (offset >= stop) break;
+                        let i = 0;
+                        for (; i < pairs; i += 1) {
+                            if (i === driver) continue;
+                            const column = columns[base + i];
+                            const row = ranges[i].top + offset;
+                            if (column === undefined || offset >= used[base + i]) {
+                                if (!blanks[i]) break;
+                            } else if (
+                                !meets(read[i], strings, column.kind[row] & KIND_MASK, column.num[row], column.ref[row])
+                            )
+                                break;
+                        }
+                        if (i < pairs) continue;
+                        count += 1;
+                        const row = top + offset;
+                        if (value === undefined || row >= value.length) continue;
+                        const kind = value.kind[row] & KIND_MASK;
+                        if (kind === CellKind.Error) {
+                            this.error = ctx.workbook.error(value.ref[row]);
+                            return;
+                        }
+                        if (kind !== CellKind.Number) continue;
+                        if (found === numbers.length) {
+                            numbers = new Float64Array(found * 2);
+                            numbers.set(this.numbers);
+                            this.numbers = numbers;
+                        }
+                        numbers[found++] = value.num[row];
                     }
-                    if (kind !== CellKind.Number) continue;
-                    if (found === numbers.length) {
-                        numbers = new Float64Array(found * 2);
-                        numbers.set(this.numbers);
-                        this.numbers = numbers;
-                    }
-                    numbers[found++] = value.num[row];
                 }
             }
         }
