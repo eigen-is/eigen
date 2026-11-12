@@ -1,9 +1,8 @@
 // The engine as a host holds it: one workbook loaded from a description of its sheets, the writes of a cell, the
 // structural edits, a recalc of what they reach, and the value and the formula of a cell. A sheet is named by its
-// id and a cell by its row and column from 0. The functions are the library's list, the same for every engine. It
-// reads the store and changes it only through the recalc. A host lets a stopped recalc run on before it writes
-// more, or raises the cap: writes between every stopped recalc can keep one from ever finishing when the cap is no
-// larger than the number of formulas that every recalc after a write computes again.
+// id and a cell by its row and column from 0. It reads the store and changes it only through the recalc. A host
+// lets a stopped recalc run on before it writes more, or raises the cap: writes between every stopped recalc can
+// keep one from ever finishing when the cap is no larger than what every recalc after a write computes again.
 
 import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';

@@ -1,9 +1,8 @@
 // What a formula's stored text becomes when a block of cells moves, as a cut and paste or a drag does it. A
 // reference to cells that are all in the block follows them, from any sheet; one to cells the block landed on is
-// #REF!; and a formula that moved keeps reading what it read, so its offsets to cells outside the block change.
-// Any other reference keeps its text, and is a seed when it reads a cell the block left or landed on. Whether a
-// reference lies in a block is a test per row and per column, so moveClasses cuts a block of hosts into a grid of
-// blocks with one outcome each: a cell read by a filled column is transformed once per block, not once per formula.
+// #REF!; a formula that moved keeps reading what it read; any other reference keeps its text, and is a seed when it
+// reads a cell the block left or landed on. Whether a reference lies in a block is a test per row and per column,
+// so moveClasses cuts a block of hosts into a grid of blocks with one outcome each, not one per formula.
 
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { Ends, FormulaNode } from '../text/tree';

@@ -1,10 +1,8 @@
-// Recalc on demand. A pass flags the formulas that the cells written since the last one reach, then computes them.
-// Reading a cell whose formula is still to be computed computes it first, so a formula always sees final values and
-// no order is worked out ahead. A cell met while it is being computed is on a loop, with every cell that was reading
-// towards it, and all of them get the loop's result whatever they computed. Nesting is bounded by one budget: past
-// it the calls in progress are dropped by a throw and the cells computed again from the list of cells in progress.
-// Every write of a cell and every structural edit goes through here, each as one body that first notes or flags
-// what the next pass must compute and then changes the store, so no caller can do the two in the wrong order.
+// Recalc on demand. Every write and structural edit goes through here, as one body that first notes or flags what
+// is to be computed and then changes the store. A pass flags the formulas the written cells reach and computes
+// them: reading a cell still to be computed computes it first, so no order is worked out ahead. A cell met while it
+// is being computed is on a loop with every cell reading towards it. Nesting has one budget: past it the calls in
+// progress are dropped by a throw and the cells computed again from the list of cells in progress.
 
 import { Evaluator } from '../eval/evaluator';
 import { FACT_BITS, Fact, shapeFacts } from '../eval/facts';
