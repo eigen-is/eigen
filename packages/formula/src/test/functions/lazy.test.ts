@@ -33,6 +33,16 @@ describe('a lazy argument is evaluated only when it is picked, and then once', (
         ['=CONCATENATE("a",1/0,NA())', DIV0],
         ['=CONCATENATE(A1,Z9,"b")', '10b'],
         ['=LEN(CONCATENATE(REPLACE("a",1,0,UPPER("b")),"c"))', 3],
+        // Batch 3 and 5: CHOOSE cuts its index and answers with the one argument that index picks, a reference
+        // as a reference and an empty one as a blank.
+        ['=CHOOSE(1.9,"a","b")', 'a'],
+        ['=ISBLANK(CHOOSE(2,1,))', true],
+        ['=ISBLANK(CHOOSE(2,1,,3))', true],
+        ['=CHOOSE(2,1,,3)&"x"', 'x'],
+        ['=CHOOSE(1,"a",1/0)', 'a'],
+        ['=CHOOSE(1/0,"a")', DIV0],
+        ['=SUM(CHOOSE(2,A1:A2,A1:A3))', 60],
+        ['=SUM(CHOOSE(1,D1,5))', 0],
     ])('%s', (formula, expected) => {
         expect(evaluate(formula, F1)).toBe(expected);
     });
@@ -49,6 +59,9 @@ describe('a lazy argument is evaluated only when it is picked, and then once', (
         ['=IF({TRUE,FALSE},{1,2,3},0)', [1, 0, NA]],
         ['=IF({TRUE,TRUE},1,{1,2,3})', [1, 1, REF]],
         ['=CONCATENATE({"a","b"},"-",{1,2,3})', ['a-1', 'b-2', NA]],
+        // Batch 5: of the arguments that repeat, too, one no element picked is never evaluated.
+        ['=CHOOSE({1,1},"a",1/0)', ['a', 'a']],
+        ['=CHOOSE({1,2},"a",1/0)', ['a', DIV0]],
     ])('%s', (formula, expected) => {
         expect(across(formula, expected.length)).toEqual(expected);
     });

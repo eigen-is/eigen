@@ -154,7 +154,8 @@ function element(
         if (k >= 0) {
             const from = placeAt(arrays[k], lined.down, lined.across, k, r, c);
             const item = from < 0 ? NA : arrays[k].items[from];
-            value = param.prepare === Prepare.Reference ? item : single(ctx, item);
+            if (param.prepare === Prepare.Reference) value = item;
+            else value = param.prepare === Prepare.Corner ? ctx.first(item) : single(ctx, item);
         }
         value = read(param, value, frame, i);
         if (isError(value) && ends(param)) return value;
@@ -163,10 +164,11 @@ function element(
     return null;
 }
 
-// Whether an array at a parameter runs the call once per element: where one value is read, and an array of
-// references where only a reference is taken.
-function lifts(param: Param<unknown>, array: ArrayValue): boolean {
-    return param.prepare === Prepare.Scalar || (param.prepare === Prepare.Reference && array.references);
+// Whether an array at a parameter runs the call once per element: where one value is read, of a range's first
+// cell too, and an array of references where only a reference is taken.
+export function lifts(param: Param<unknown>, array: ArrayValue): boolean {
+    if (param.prepare === Prepare.Reference) return array.references;
+    return param.prepare === Prepare.Scalar || param.prepare === Prepare.Corner;
 }
 
 type Lined = { readonly rows: number; readonly columns: number; readonly down: Axis; readonly across: Axis };

@@ -3,21 +3,29 @@ import { Errors, TypedText } from '../../eval/families';
 import type { Entry, Param } from '../../eval/signature';
 import { Prepare, Read } from '../../eval/signature';
 import { FUNCTIONS } from '../../functions/library';
+import { fn, NUMBER, NUMBERS, NUMBERS_A, rest } from '../../functions/registry';
 import type { FormulaError } from '../../index';
-import { DIV0, NA, REF, VALUE } from '../../index';
+import { DIV0, NA, NUM, REF, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
-import { engineOf, valueAt } from '../recalc/support';
+import { valuesWith } from '../recalc/support';
 
 // Every law below is derived from a row's own data, for every row of the one table: no law names a function.
-// A1:A5 = 10..50, B1:B5 = a..e, C1:C3 = 1, 2, 3, D1 = TRUE, E1:E3 = 1, #DIV/0!, 3, F1:F3 = 1, #N/A, 3, Z9 is blank.
+// A1:A5 = 10..50, B1:B5 = a..e, C1:C3 = 1, 2, 3, D1 = TRUE, E1:E3 = 1, #DIV/0!, 3, F1:F3 = 1, #N/A, 3, G1:G3 = #N/A, 2,
+// 3, Z9 is blank.
 const SHEET: Cells = {
     ...{ A1: 10, A2: 20, A3: 30, A4: 40, A5: 50 },
     ...{ B1: 'a', B2: 'b', B3: 'c', B4: 'd', B5: 'e' },
     ...{ C1: 1, C2: 2, C3: 3, D1: true },
-    ...{ E1: 1, E2: '=1/0', E3: 3, F1: 1, F2: '=NA()', F3: 3 },
+    ...{ E1: 1, E2: '=1/0', E3: 3, F1: 1, F2: '=NA()', F3: 3, G1: '=NA()', G2: 2, G3: 3 },
 };
 
-const ROWS = [...FUNCTIONS.values()];
+// Rows of this test's own, for what no function of this build does yet: a family that reads a text in a cell,
+// and a parameter that takes every value before one that takes a single value.
+const OWN = [
+    fn('MAXA', [rest(NUMBERS_A)], (numbers) => (numbers.count() === 0 ? 0 : numbers.max())),
+    fn('LARGE', [NUMBERS, NUMBER], (numbers, k) => numbers.list().sort()[numbers.count() - Math.ceil(k)] ?? NUM),
+];
+const ROWS = [...FUNCTIONS.values(), ...OWN];
 
 // A row for which no call from the pools answers a value names one here.
 const BASES: Readonly<Record<string, readonly string[]>> = {
@@ -39,6 +47,10 @@ function pool(param: Param<unknown>): readonly string[] {
             return ['TRUE', 'FALSE'];
         case Read.Walked:
             return ['A1:A5', 'C1:C3', '1'];
+        case Read.Texts:
+            return ['A1:A5', '"abc"', 'B1:B5'];
+        case Read.Pairs:
+            return ['A1:A5', 'C1:C3'];
         case Read.Plain:
             return ['20', '10', '"b"'];
         case Read.Table:
@@ -53,14 +65,26 @@ function pool(param: Param<unknown>): readonly string[] {
 }
 
 // Evaluates formulas side by side on one sheet, each in its own cell of column N on.
-function evaluateAll(formulas: readonly string[]) {
+function together(formulas: readonly string[]) {
     const cells: Record<string, string> = {};
     formulas.forEach((formula, at) => {
         cells[`N${at + 1}`] = formula;
     });
-    const engine = engineOf({ s1: { ...SHEET, ...cells } });
-    engine.recalc(Number.POSITIVE_INFINITY);
-    return formulas.map((_, at) => valueAt(engine, `N${at + 1}`));
+    return valuesWith(OWN, { ...SHEET, ...cells }, Object.keys(cells));
+}
+
+// Each formula in a pass of its own, so every one of them starts from the same draw.
+function apart(formulas: readonly string[]) {
+    return formulas.map((formula) => together([formula])[0]);
+}
+
+// The formulas computed one after the other in one pass: each reads the one before it, then makes its own call.
+function inTurn(formulas: readonly string[]) {
+    return together(
+        formulas.map((formula, at) =>
+            at === 0 ? formula : `=IF(ISERROR(N${at}),${formula.slice(1)},${formula.slice(1)})`,
+        ),
+    );
 }
 
 function written(entry: Entry, args: readonly string[]): string {
@@ -79,7 +103,7 @@ function baseOf(entry: Entry): readonly string[] | undefined {
     for (let k = 0; k < 4; k += 1) {
         tries.push(taken.map((param, at) => pool(param)[(k + at * k) % pool(param).length]));
     }
-    const values = evaluateAll(tries.map((args) => written(entry, args)));
+    const values = together(tries.map((args) => written(entry, args)));
     return tries[values.findIndex((value) => !isFailure(value) || ERRORS.has(entry.name))];
 }
 
@@ -97,7 +121,10 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
     const ends = (param: Param<unknown>) =>
         param.read < Read.Anything && (param.family === null || param.family.errors === Errors.Result);
     const failing = params.map((param, at) => (ends(param) ? at : -1)).filter((at) => at >= 0);
+    const corners = params.map((param, at) => (param.prepare === Prepare.Corner ? at : -1)).filter((at) => at >= 0);
     const coerced = scalars.filter((at) => params[at].read <= Read.Boolean && params[at].read !== Read.Text);
+    // Two calls of a row that draws answer alike only when each is the first call of its pass.
+    const evaluateAll = entry.volatile ? apart : together;
 
     test('has a call that answers a value', () => {
         expect(BASE.get(entry.name)).toBeDefined();
@@ -152,15 +179,24 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         for (const value of evaluateAll(formulas)) expect(value).toBe(DIV0);
     });
 
+    // Of a row that draws, the calls are made one after the other, in the order the elements are written.
     test('an array where one value is read gives the answers of one call per element', () => {
-        for (const at of scalars) {
+        for (const at of [...scalars, ...corners]) {
             const [a, b] = [pool(params[at])[0], pool(params[at])[1]];
             const lifted = written(entry, withArg(base, at, `{${a},${b},"x y"}`)).slice(1);
-            const formulas = [1, 2, 3].map((column) => `=INDEX(${lifted},1,${column})`);
-            for (const put of [a, b, '"x y"']) formulas.push(written(entry, withArg(base, at, put)));
-            const values = evaluateAll(formulas);
-            expect(values.slice(0, 3)).toEqual(values.slice(3));
+            const elements = [1, 2, 3].map((column) => `=INDEX(${lifted},1,${column})`);
+            const calls = [a, b, '"x y"'].map((put) => written(entry, withArg(base, at, put)));
+            expect(evaluateAll(elements)).toEqual(entry.volatile ? inTurn(calls) : evaluateAll(calls));
         }
+    });
+
+    test('a call that is an argument is made once, however often its answer is repeated', () => {
+        const repeated = `IF({1,1,1},${written(entry, base).slice(1)})`;
+        const [once, ...elements] = apart([
+            written(entry, base),
+            ...[1, 2, 3].map((at) => `=INDEX(${repeated},1,${at})`),
+        ]);
+        expect(elements).toEqual([once, once, once]);
     });
 
     test('arrays of unequal length leave #N/A past the end of the shorter', () => {
@@ -214,7 +250,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
     });
 
     test('equal arguments give equal answers', () => {
-        const [first, second, third] = evaluateAll([written(entry, base), written(entry, base), written(entry, base)]);
+        const [first, second, third] = together([written(entry, base), written(entry, base), written(entry, base)]);
         // A row that draws answers anew at each call, with a value of one kind.
         if (entry.volatile && entry.params.some((param) => param.read === Read.Random)) {
             expect(typeof second).toBe(typeof first);
@@ -242,8 +278,8 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         if (family === undefined || family === null) return;
         same('TRUE', '1');
         same('FALSE', '0');
-        same('', '0');
-        same('IF(TRUE,)', '0');
+        same('', family.blanks ? '0' : null);
+        same('IF(TRUE,)', family.blanks ? '0' : null);
         if (family.text === TypedText.Parsed) equals('"x y"', VALUE);
         if (family.text === TypedText.Parsed || family.text === TypedText.Numeric) same('"2"', '2');
         if (family.text === TypedText.Numeric || family.text === TypedText.Spelled) same('"x y"', null);
@@ -253,15 +289,15 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         else same('1/0', family.errors === Errors.Counted ? '1' : null);
     });
 
-    test('a cell counts by its kind, a blank cell never, a blank element of an array as 0', () => {
+    test('a cell counts by its kind, a blank cell never, a blank element of an array as the family says', () => {
         if (family === undefined || family === null) return;
         const counts = (kind: number) => ((family.kinds >> kind) & 1) === 1;
         same('D1', counts(2) ? 'TRUE' : null);
-        same('B1', counts(3) ? '1' : null);
+        same('B1', counts(3) ? '0' : null);
         same('Z9', null);
         same('C1', '1');
         same('+D1', 'TRUE');
-        same('IF({1,1},Z9:AA9)', '{0,0}');
+        same('IF({1,1},Z9:AA9)', family.blanks ? '{0,0}' : null);
         same('A1:A40*1', `{10;20;30;40;50${';0'.repeat(35)}}`);
     });
 
@@ -285,6 +321,56 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         same('(A1:A3,C1:C3)', 'A1:A3,C1:C3');
     });
 
+    test('where every value is taken as a text, each is spelled, a range row by row, and nothing lifts', () => {
+        if (last?.rest !== true || last.read !== Read.Texts) return;
+        same('TRUE', '"TRUE"');
+        same('1.5', '"1.5"');
+        same('', '""');
+        same('IF(TRUE,)', '""');
+        same('Z9', '""');
+        same('D1', '"TRUE"');
+        same('A1:B2', '10,"a",20,"b"');
+        same('{1,2;3,4}', '1,2,3,4');
+        same('A1:A8*1', '10,20,30,40,50,0,0,0');
+        equals('E1:E3', DIV0);
+        equals('E1:E3,F1:F3', DIV0);
+        equals('F1:F3,E1:E3', NA);
+        equals('E1:E3,NA()', NA);
+        // An element that is a reference is refused, where a family of numbers reads its first cell.
+        equals('INDEX(A1:A5,{2,4})', VALUE);
+        const whole = written(entry, [...base, '{1,2,3}']).slice(1);
+        expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);
+    });
+
+    test('two ranges side by side pair by place, leave out a pair with no number, and answer the earliest error', () => {
+        const at = params.findIndex((param) => param.read === Read.Pairs);
+        if (at < 0) return;
+        const both = (first: string, second: string) =>
+            written(entry, withArg(withArg(base, at, first), at + 1, second));
+        const values = evaluateAll([
+            both('A1:A5', 'C1:C3'),
+            both('A1:A4', '{2,4}'),
+            both('E1:E3', 'G1:G3'),
+            both('G1:G3', 'E1:E3'),
+            both('E1:E3', 'F1:F3'),
+            both('F1:F3', 'E1:E3'),
+            both('A1:A5', ''),
+            both('A1:A6', 'A1:C2'),
+            both('{10;30;40}', '{10;1;20}'),
+            both('A1:C6', 'A1:C6'),
+            both('{10;20;30;40;50}', '{10;20;30;40;50}'),
+            both('A1:A5', 'INDEX(A1:A5,{1;2;3;4;5})'),
+            both('{10;20}', '{10;20}'),
+            both('A1:A2', 'A1:A2'),
+        ]);
+        expect(values.slice(0, 7)).toEqual([NA, NA, NA, NA, DIV0, NA, VALUE]);
+        expect(values[7]).toEqual(values[8]);
+        expect(values[9]).toEqual(values[10]);
+        // An element that is a reference is no number, so its pair is left out.
+        expect(values[11]).toEqual(evaluateAll([both('{"a";"b"}', '{1;2}')])[0]);
+        expect(values[12]).toEqual(values[13]);
+    });
+
     test('a union of areas answers what the parameter says', () => {
         const formulas: string[] = [];
         const expected: FormulaError[] = [];
@@ -294,6 +380,23 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             expected.push(param.union);
         });
         expect(evaluateAll(formulas)).toEqual(expected);
+    });
+
+    test('where the first cell is read, a range is one value and an array of references one value per reference', () => {
+        for (const at of corners) {
+            const put = (argument: string) => written(entry, withArg(base, at, argument));
+            const [cell, other, range, union, second, ...lifted] = evaluateAll([
+                put('A2'),
+                put('A4'),
+                put('A2:B4'),
+                put('(A2:A3,C1:C3)'),
+                `=INDEX(${put('A2:A4').slice(1)},2,1)`,
+                `=INDEX(${put('INDEX(A1:A5,{2,4})').slice(1)},1,1)`,
+                `=INDEX(${put('INDEX(A1:A5,{2,4})').slice(1)},1,2)`,
+            ]);
+            expect([range, union, second]).toEqual([cell, cell, REF]);
+            expect(lifted).toEqual([cell, other]);
+        }
     });
 
     test('where only a reference is taken, an array of references gives one answer per reference', () => {

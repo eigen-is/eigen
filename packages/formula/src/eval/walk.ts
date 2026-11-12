@@ -125,7 +125,7 @@ export class Walk {
         const held = this.ctx.workbook.sheets[at.sheet].columns[at.left];
         if (held === undefined || at.top >= held.length) return Number.NaN;
         const kind = held.kind[at.top] & KIND_MASK;
-        if (((this.family.kinds >> kind) & 1) === 0 || this.skipped(held, at.top)) return Number.NaN;
+        if (((this.family.kinds >> kind) & 1) === 0 || skipped(this.ctx, this.skips, held, at.top)) return Number.NaN;
         return kind === CellKind.Boolean ? held.ref[at.top] : held.num[at.top];
     }
 
@@ -191,7 +191,7 @@ export class Walk {
             let found = 0;
             for (let i = 0; i < this.talls; i += 1) {
                 const held = columns[tall[i]];
-                if (this.skipped(held, row)) continue;
+                if (skipped(this.ctx, this.skips, held, row)) continue;
                 const at = held.kind[row] & KIND_MASK;
                 if ((kinds >> at) & 1) span[found++] = at === CellKind.Boolean ? held.ref[row] : held.num[row];
             }
@@ -210,7 +210,7 @@ export class Walk {
     // stretch of rows that each stand for one written row is one span of the block itself.
     private elements(array: ArrayValue): boolean {
         const { items, nums, height, width, rowEnds, columnEnds } = array;
-        const { kinds, first } = this.family;
+        const { kinds, first, blanks } = this.family;
         if (this.span.length < width) this.span = new Float64Array(width);
         if (this.widths.length < width) this.widths = new Int32Array(width);
         const { span, widths } = this;
@@ -235,17 +235,17 @@ export class Walk {
             for (let c = 0; c < width; c += 1) {
                 const item = items[row * width + c];
                 let number = 0;
-                // A blank element is a 0 that counts, which a blank cell is not.
+                // A blank element is a 0 that counts for most families, which a blank cell never is.
                 if (typeof item === 'number') number = item;
                 else if (isReference(item)) {
                     number = first ? this.counted(item) : Number.NaN;
                     if (Number.isNaN(number)) continue;
-                } else if (typeof item === 'boolean' && (kinds >> CellKind.Boolean) & 1) number = item ? 1 : 0;
-                else if (
-                    item !== null &&
-                    ((kinds >> (typeof item === 'string' ? CellKind.Text : CellKind.Error)) & 1) === 0
-                )
-                    continue;
+                } else if (item === null) {
+                    if (!blanks) continue;
+                } else if (typeof item === 'boolean') {
+                    if (((kinds >> CellKind.Boolean) & 1) === 0) continue;
+                    number = item ? 1 : 0;
+                } else if (((kinds >> (typeof item === 'string' ? CellKind.Text : CellKind.Error)) & 1) === 0) continue;
                 span[found] = number;
                 widths[found] = columnEnds === null ? 1 : columnEnds[c] - (c === 0 ? 0 : columnEnds[c - 1]);
                 cells += widths[found];
@@ -266,12 +266,6 @@ export class Walk {
         return false;
     }
 
-    // Whether a cell is passed over whatever it holds: one whose formula holds a call of a row that picks another.
-    private skipped(held: Column, row: number): boolean {
-        if (this.skips === 0 || held.shape[row] === 0) return false;
-        return (this.ctx.recalc.factsOf(held.shape[row]) & Fact.Chosen) !== 0;
-    }
-
     private single(value: number): boolean {
         this.span[0] = value;
         this.num = this.span;
@@ -290,4 +284,11 @@ export class Walk {
         this.arg = this.last;
         return false;
     }
+}
+
+// Whether a cell is passed over whatever it holds, an error too: with `skips`, one whose formula holds a call of a
+// row that picks another.
+export function skipped(ctx: Evaluator, skips: number, held: Column, row: number): boolean {
+    if (skips === 0 || held.shape[row] === 0) return false;
+    return (ctx.recalc.factsOf(held.shape[row]) & Fact.Chosen) !== 0;
 }

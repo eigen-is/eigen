@@ -2,10 +2,11 @@
 // them is found, in argument order and row by row, and each parameter is bound to what the body gets for it. So a
 // body never meets a cell that is still to be computed, or an error inside a range.
 
+import { toText } from '../values/coerce';
 import type { FormulaError } from '../values/errors';
-import { VALUE } from '../values/errors';
+import { CALC, VALUE } from '../values/errors';
 import type { Value } from '../values/value';
-import { isArray, isError, isReference } from '../values/value';
+import { elementAt, isArray, isError, isReference } from '../values/value';
 import { isLazy } from './call';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
@@ -34,25 +35,36 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
         if (param.prepare === Prepare.Ambient) {
             args[p] = param.read === Read.Room ? ctx.room : param.read === Read.Now ? ctx.now : ctx.draw();
         } else if (param.prepare !== Prepare.Walked) args[p] = param.rest ? held.slice(at, count) : value;
-        else if (param.read === Read.Matched) args[p] = frame.numbers(p).beside();
-        else if (param.read === Read.Products) {
-            const error = multiply(ctx, held, at, to);
-            if (error !== null) return error;
-            args[p] = frame.numbers(p).bind(at, at + 1, Families.Numbers, false);
-        } else if (family === null) args[p] = frame.matches;
-        else {
+        else if (family !== null) {
             // Most often the one argument is one range: its cells are computed and looked at in one go.
             const one = to === at + 1 && isReference(value) && value.next === null ? value : null;
             if (one !== null) ctx.recalc.settleArea(one);
             else for (let i = at; i < to; i += 1) settle(ctx, held[i], family);
-            const found = family.errors !== Errors.Result ? null : one !== null ? firstError(ctx, one) : null;
+            const found =
+                family.errors !== Errors.Result ? null : one !== null ? firstError(ctx, one, frame.skips) : null;
             if (found !== null) return found;
             for (let i = at; one === null && family.errors === Errors.Result && i < to; i += 1) {
-                const error = errorIn(ctx, held[i], family);
+                const error = errorIn(ctx, held[i], family, frame.skips);
                 if (error !== null) return error;
             }
             args[p] = frame.numbers(p).bind(at, to, family, true);
-        }
+        } else if (param.read === Read.Matched) args[p] = frame.numbers(p).beside();
+        else if (param.read === Read.Products) {
+            const error = multiply(ctx, held, at, to);
+            if (error !== null) return error;
+            args[p] = frame.numbers(p).bind(at, at + 1, Families.Numbers, false);
+        } else if (param.read === Read.Texts) {
+            const texts = frame.texts(p);
+            const error = spell(ctx, held, at, to, texts);
+            if (error !== null) return error;
+            args[p] = texts;
+        } else if (param.read === Read.Pairs) {
+            // Two ranges are paired or none: with one left out the call is #VALUE!.
+            const second = held[at + 1];
+            const error = written(value) && written(second) ? frame.pairs.over(value, second) : VALUE;
+            if (error !== null) return error;
+            args[p] = frame.pairs;
+        } else args[p] = frame.matches;
         at = to;
     }
     if (args.length !== params.length) args.length = params.length;
@@ -61,7 +73,13 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
 
 // How many arguments one occurrence of a parameter takes.
 function spanOf(param: Param<unknown>): number {
-    return param.prepare === Prepare.Ambient ? 0 : param.read === Read.Where ? 2 : 1;
+    if (param.prepare === Prepare.Ambient) return 0;
+    return param.read === Read.Where || param.read === Read.Pairs ? 2 : 1;
+}
+
+// Whether a slot holds what an argument was evaluated to, which is all it holds where a range is taken.
+function written(value: Held): value is Value {
+    return value !== undefined && !isLazy(value) && !(value instanceof Table);
 }
 
 function settle(ctx: Evaluator, value: Held, family: Family): void {
@@ -70,10 +88,10 @@ function settle(ctx: Evaluator, value: Held, family: Family): void {
     for (let i = 0; i < value.items.length; i += 1) ctx.first(value.items[i]);
 }
 
-// The first error among the values of one argument, row by row.
-function errorIn(ctx: Evaluator, value: Held, family: Family): FormulaError | null {
+// The first error among the values of one argument, row by row, but for the cells that `skips` passes over.
+function errorIn(ctx: Evaluator, value: Held, family: Family, skips: number): FormulaError | null {
     for (let area = isReference(value) ? value : null; area !== null; area = area.next) {
-        const error = firstError(ctx, area);
+        const error = firstError(ctx, area, skips);
         if (error !== null) return error;
     }
     if (!isArray(value) || value.nums !== null) return null;
@@ -84,19 +102,60 @@ function errorIn(ctx: Evaluator, value: Held, family: Family): FormulaError | nu
     return null;
 }
 
+// Every value of the arguments `from` up to `to` as a text, in written order and a range row by row: the first
+// error among them, or null with `texts` filled.
+function spell(ctx: Evaluator, held: readonly Held[], from: number, to: number, texts: string[]): FormulaError | null {
+    const { workbook, recalc } = ctx;
+    texts.length = 0;
+    for (let i = from; i < to; i += 1) {
+        const value = held[i];
+        if (!written(value)) continue;
+        let error: FormulaError | null = null;
+        for (let area = isReference(value) ? value : null; area !== null && error === null; area = area.next) {
+            if (!recalc.room(heightOf(area) * widthOf(area))) return CALC;
+            recalc.settleArea(area);
+            const { columns } = workbook.sheets[area.sheet];
+            for (let row = area.top; row <= area.bottom && error === null; row += 1) {
+                for (let c = area.left; c <= area.right && error === null; c += 1) {
+                    error = spelled(texts, c < columns.length ? workbook.value(columns[c], row) : null);
+                }
+            }
+        }
+        if (isArray(value)) {
+            if (!recalc.room(value.rows * value.columns)) return CALC;
+            for (let row = 0; row < value.rows && error === null; row += 1) {
+                for (let c = 0; c < value.columns && error === null; c += 1) {
+                    error = spelled(texts, elementAt(value, row, c));
+                }
+            }
+        } else if (!isReference(value)) error = spelled(texts, value);
+        if (error !== null) return error;
+    }
+    return null;
+}
+
+// One value added to `texts` as the text it is spelled as. An error is the answer and is not added, and so is
+// #VALUE! for what is no single value, as an element that is a reference.
+function spelled(texts: string[], value: Value): FormulaError | null {
+    const text = toText(value);
+    if (typeof text !== 'string') return text;
+    texts.push(text);
+    return null;
+}
+
 // The arguments `from` up to `to` as their products, left in the place of the first: any argument's first error
 // comes before a difference in size, which is #VALUE!.
 function multiply(ctx: Evaluator, held: Held[], from: number, to: number): FormulaError | null {
     const factors: Value[] = [];
     for (let i = from; i < to; i += 1) {
         const value = held[i];
-        if (value === undefined || isLazy(value) || value instanceof Table) continue;
+        if (!written(value)) continue;
         settle(ctx, value, Families.Counted);
         factors.push(value);
     }
     let sized = true;
     for (const factor of factors) {
-        const error = errorIn(ctx, factor, Families.Counted);
+        const error = errorIn(ctx, factor, Families.Counted, 0);
         if (error !== null) return error;
         sized &&= heightOf(factor) === heightOf(factors[0]) && widthOf(factor) === widthOf(factors[0]);
     }

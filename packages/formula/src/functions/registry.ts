@@ -6,7 +6,7 @@
 
 import type { Family } from '../eval/families';
 import { Families } from '../eval/families';
-import type { Matches, Numbers, Room, Table } from '../eval/readers';
+import type { Matches, Numbers, Pairs, Room, Table } from '../eval/readers';
 import type { ANYWHERE, Entry, Lazy, Next, PART, Param, Returns, Walked } from '../eval/signature';
 import { MAX_ARGUMENTS, Prepare, Read } from '../eval/signature';
 import { toBoolean, toNumber, toText } from '../values/coerce';
@@ -14,7 +14,7 @@ import type { FormulaError } from '../values/errors';
 import { REF, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
 
-export type { Matches, Numbers, Room, Table } from '../eval/readers';
+export type { Matches, Numbers, Pairs, Room, Table } from '../eval/readers';
 export type { Vector } from '../eval/search';
 export { ANYWHERE, Find, NESTED, NEXT, PART } from '../eval/signature';
 export { rectangle } from '../values/rectangle';
@@ -58,6 +58,9 @@ export const BOOLEAN = scalar<boolean>(Read.Boolean);
 // The value as it is, an error included, for a function that asks what a value is.
 export const ANY = scalar<Scalar>(Read.Any);
 
+// The value of the first cell of a reference, or the value itself, an error included. A range is one value here
+// and never one call per cell, but an array still runs the call once per element.
+export const CORNER: Param<Scalar> = Object.freeze({ ...REQUIRED, prepare: Prepare.Corner, read: Read.Corner });
 // Any value but an error, as it is: for a value whose own kind matters, such as a key to look up.
 export const PLAIN = scalar<number | string | boolean | null>(Read.Plain);
 // Not evaluated. The body may answer with it, and the wrapper then evaluates the argument: an empty one is a blank.
@@ -65,12 +68,17 @@ export const LAZY: Param<Lazy> = Object.freeze({ ...REQUIRED, prepare: Prepare.L
 
 // Every number of a range or an array. Typed as an argument, a text is read as a number and a boolean is 1 or 0.
 export const NUMBERS = walked(Families.Numbers);
-// The numbers, to be counted: a typed text counts when it reads as a number, and an error is passed over.
+// The numbers, to be counted and nothing else: a typed text counts when it reads as a number, and an error is
+// passed over.
 export const COUNTED = walked(Families.Counted);
-// Everything but a blank cell, to be counted.
+// Everything but a blank cell, to be counted and nothing else.
 export const FILLED = walked(Families.Filled);
 // The numbers and booleans. A typed text counts when it spells TRUE or FALSE and is passed over otherwise.
 export const TRUTHS = walked(Families.Truths);
+// The numbers, with a boolean in a cell as 1 or 0 and a text in a cell as 0, as AVERAGEA and MAXA take them.
+export const NUMBERS_A = walked(Families.NumbersA);
+// The numbers, to be multiplied: as NUMBERS, but an empty argument and a blank element of an array are passed over.
+export const FACTORS = walked(Families.Factors);
 
 // A range, an array or one value, as it is: the body searches it, picks from it or measures it. A union is #VALUE!.
 export const TABLE: Param<Table> = Object.freeze({
@@ -116,8 +124,24 @@ export const BLANKS: Param<Matches> = Object.freeze({
     ...{ prepare: Prepare.Walked, read: Read.Blanks, union: VALUE, only: true },
 });
 
-// Ranges or arrays of one size, as the product at each place: what is no number counts as 0.
-export const PRODUCTS: Walked<Numbers> = Object.freeze({ ...REQUIRED, prepare: Prepare.Walked, read: Read.Products });
+// Ranges or arrays of one size, as the product at each place: what is no number counts as 0. A union is #VALUE!.
+export const PRODUCTS: Walked<Numbers> = Object.freeze({
+    ...REQUIRED,
+    ...{ prepare: Prepare.Walked, read: Read.Products, union: VALUE },
+});
+// Every value as a text, in written order and a range row by row: a number and a boolean spelled out, a blank
+// as empty text. An error among them is the result, an element that is a reference is #VALUE!, and so is a union.
+export const TEXTS: Walked<readonly string[]> = Object.freeze({
+    ...REQUIRED,
+    ...{ prepare: Prepare.Walked, read: Read.Texts, union: VALUE },
+});
+
+// Two arguments, ranges or arrays of one size, read side by side: the numbers at the places where both hold one.
+// Unequal sizes are #N/A, the earliest error in either is the result, and neither argument may be left out.
+export const PAIRS: Walked<Pairs> = Object.freeze({
+    ...REQUIRED,
+    ...{ prepare: Prepare.Walked, read: Read.Pairs, union: VALUE },
+});
 
 // The argument may be left out at the end, and the body then gets `fallback`. An empty argument is still a blank.
 // Of a lazy argument the fallback is what the call answers when its token comes back.
@@ -176,7 +200,7 @@ type Args<P extends readonly Param<unknown>[]> = { [K in keyof P]: P[K] extends 
 
 // A token only where a parameter is lazy, NEXT only where one is tried in turn, a table only from a row marked PART.
 type Picks<P extends readonly Param<unknown>[]> = true extends {
-    [K in keyof P]: P[K] extends Param<Lazy> ? true : false;
+    [K in keyof P]: P[K] extends Param<Lazy> | Param<readonly Lazy[]> ? true : false;
 }[number]
     ? Lazy
     : never;
@@ -215,8 +239,12 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
             ? []
             : param.read === Read.Where
               ? [ONLY, ANY]
-              : [param.only ? { ...ONLY, optional: param.optional, union: param.union } : param];
+              : param.read === Read.Pairs
+                ? [param, param]
+                : [param.only ? { ...ONLY, optional: param.optional, union: param.union } : param];
         if (closed && !ambient) throw new Error(`${name}: a parameter after a repeating or an ambient one`);
+        // Tables that repeat would be read value by value in the body, which is the call wrapper's to do.
+        if (param.rest && param.prepare === Prepare.Whole) throw new Error(`${name}: a table that repeats`);
         if (
             param.optional &&
             param.fallback !== undefined &&

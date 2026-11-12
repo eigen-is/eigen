@@ -9,9 +9,11 @@ import { CALC } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
 import { ValueType } from '../values/value';
 import type { Evaluator } from './evaluator';
+import { skipped } from './walk';
 
 // The first error of one area, row by row, once its cells are settled. A cell on a loop still carries its flags.
-export function firstError(ctx: Evaluator, area: Reference): FormulaError | null {
+// `skips` says which cells the walk of the call passes over: an error in one of them is none.
+export function firstError(ctx: Evaluator, area: Reference, skips: number): FormulaError | null {
     const { columns } = ctx.workbook.sheets[area.sheet];
     const right = Math.min(area.right, columns.length - 1);
     let found: FormulaError | null = null;
@@ -21,7 +23,7 @@ export function firstError(ctx: Evaluator, area: Reference): FormulaError | null
         if (column.errors === 0) continue;
         const end = Math.min(area.bottom + 1, column.length, foundRow);
         for (let row = area.top; row < end; row += 1) {
-            if ((column.kind[row] & KIND_MASK) !== CellKind.Error) continue;
+            if ((column.kind[row] & KIND_MASK) !== CellKind.Error || skipped(ctx, skips, column, row)) continue;
             found = ctx.workbook.error(column.ref[row]);
             foundRow = row;
             break;
