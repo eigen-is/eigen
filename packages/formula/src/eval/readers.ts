@@ -197,7 +197,7 @@ export class Pairs {
         if (isReference(first)) ctx.recalc.settleArea(first);
         if (isReference(second)) ctx.recalc.settleArea(second);
         // Past the last cell of both ranges every place is a blank, which pairs with nothing.
-        const used = Math.min(size, Math.max(reach(ctx, first), reach(ctx, second)));
+        const used = Math.max(reach(ctx, first), reach(ctx, second));
         if (!ctx.recalc.room(2 * used)) return CALC;
         if (this.first.length < used) {
             this.first = new Float64Array(used);

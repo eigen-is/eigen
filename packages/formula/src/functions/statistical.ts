@@ -1,5 +1,6 @@
-// The functions that count and average. Each takes the numbers or the matches the call wrapper found for it:
-// every number of its arguments, the cells that meet its criteria, or the numbers beside those.
+// The statistical functions, such as a count, an average or the middle of a set. Each takes what the call wrapper
+// found for it: every number of its arguments, the cells that meet its criteria, the numbers beside those, or two
+// ranges paired place by place.
 
 import { DIV0 } from '../values/errors';
 import type { Numbers } from './registry';

@@ -62,6 +62,7 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
             if (isArray(value)) lifted = true;
         } else {
             value = ctx.evaluate(given[i], sheet, row, column);
+            // The preparations that take a place or a first cell are the last two an argument can have.
             if (slot.prepare >= Prepare.Reference) {
                 if (slot.prepare === Prepare.Corner && isReference(value)) value = ctx.first(value);
                 else if (isArray(value) && lifts(slot, value)) lifted = true;

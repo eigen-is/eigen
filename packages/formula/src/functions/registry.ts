@@ -68,9 +68,10 @@ export const LAZY: Param<Lazy> = Object.freeze({ ...REQUIRED, prepare: Prepare.L
 
 // Every number of a range or an array. Typed as an argument, a text is read as a number and a boolean is 1 or 0.
 export const NUMBERS = walked(Families.Numbers);
-// The numbers, to be counted: a typed text counts when it reads as a number, and an error is passed over.
+// The numbers, to be counted and nothing else: a typed text counts when it reads as a number, and an error is
+// passed over.
 export const COUNTED = walked(Families.Counted);
-// Everything but a blank cell, to be counted.
+// Everything but a blank cell, to be counted and nothing else.
 export const FILLED = walked(Families.Filled);
 // The numbers and booleans. A typed text counts when it spells TRUE or FALSE and is passed over otherwise.
 export const TRUTHS = walked(Families.Truths);
@@ -135,8 +136,8 @@ export const TEXTS: Walked<readonly string[]> = Object.freeze({
     ...{ prepare: Prepare.Walked, read: Read.Texts, union: VALUE },
 });
 
-// Two arguments, ranges or arrays of one size, read side by side in written order: the numbers at the places
-// where both hold one. Unequal sizes are #N/A, and of the errors in both the one at the earliest place is the result.
+// Two arguments, ranges or arrays of one size, read side by side: the numbers at the places where both hold one.
+// Unequal sizes are #N/A, the earliest error in either is the result, and neither argument may be left out.
 export const PAIRS: Walked<Pairs> = Object.freeze({
     ...REQUIRED,
     ...{ prepare: Prepare.Walked, read: Read.Pairs, union: VALUE },

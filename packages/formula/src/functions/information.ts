@@ -1,5 +1,5 @@
-// The functions that ask what a value is. They take an error as a value, so an error in the cell they look at is
-// an answer and not a result.
+// The functions that ask what a value is, such as whether it is a number, an error or a reference. They take an
+// error as a value, so an error in the cell they look at is theirs to answer for and does not end the call.
 
 import { NA } from '../values/errors';
 import { isError } from '../values/value';

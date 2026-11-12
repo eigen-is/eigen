@@ -59,7 +59,7 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
             if (error !== null) return error;
             args[p] = texts;
         } else if (param.read === Read.Pairs) {
-            // Both arguments must be written.
+            // Two ranges are paired or none: with one left out the call is #VALUE!.
             const second = held[at + 1];
             const error = written(value) && written(second) ? frame.pairs.over(value, second) : VALUE;
             if (error !== null) return error;

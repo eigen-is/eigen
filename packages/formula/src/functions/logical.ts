@@ -1,6 +1,6 @@
-// The logical functions. IF, IFERROR and IFNA answer with the branch they pick, which is evaluated only then; IFS
-// and SWITCH try their pairs in turn and stop at the first that fits; AND and OR take every truth value of their
-// arguments, and with nothing to take they are #VALUE!.
+// The logical functions. IF, IFERROR, IFNA and CHOOSE answer with the argument they pick, which is evaluated only
+// then; IFS and SWITCH try their pairs in turn and stop at the first that fits; AND and OR take every truth value
+// of their arguments, and with nothing to take they are #VALUE!.
 
 import { compareValues } from '../values/compare';
 import { NA, VALUE } from '../values/errors';
