@@ -12,11 +12,17 @@ export type Span = { start: number; end: number };
 
 export const GONE = -1;
 
+// The first line that `count` lines inserted at `index` push past the last of `lines` lines: from it on all are gone.
+export function firstPushed(index: number, count: number, lines: number): number {
+    return Math.max(index, lines - count);
+}
+
 // GONE for a deleted line and for one an insert pushes past the last line.
 export function mapIndex(edit: Edit, i: number): number {
-    if (i < edit.index) return i;
-    if (edit.insert) return i + edit.count < edit.lines ? i + edit.count : GONE;
-    return i < edit.index + edit.count ? GONE : i - edit.count;
+    const { index, count } = edit;
+    if (i < index) return i;
+    if (edit.insert) return i < firstPushed(index, count, edit.lines) ? i + count : GONE;
+    return i < index + count ? GONE : i - count;
 }
 
 // Writes where the lines `start` to `end` are after the edit into `into`, or returns false when none is left. An end
@@ -24,11 +30,9 @@ export function mapIndex(edit: Edit, i: number): number {
 export function mapSpan(edit: Edit, start: number, end: number, into: Span): boolean {
     const { index, count } = edit;
     if (edit.insert) {
-        const last = edit.lines - 1;
-        const moved = start < index ? start : start + count;
-        if (moved > last) return false;
-        into.start = moved;
-        into.end = end < index ? end : Math.min(end + count, last);
+        if (start >= firstPushed(index, count, edit.lines)) return false;
+        into.start = start < index ? start : start + count;
+        into.end = end < index ? end : Math.min(end + count, edit.lines - 1);
         return true;
     }
     const after = index + count;

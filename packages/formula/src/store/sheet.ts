@@ -3,6 +3,7 @@
 // and columns and moving a block moves the cells only: what a formula's text becomes is the transform's work, not
 // the store's. The place is the workbook's to write, whenever the list of sheets changes.
 
+import { firstPushed } from '../edit/map';
 import type { Move } from '../edit/move';
 import { fitted } from '../edit/move';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
@@ -45,8 +46,7 @@ export class Sheet {
 
     public insertColumns(index: number, count: number): number {
         if (index >= this.held.length) return 0;
-        // Columns from `kept` on would land past the last column of the grid.
-        const kept = Math.max(index, Math.min(this.held.length, GRID_COLUMNS - count));
+        const kept = Math.min(this.held.length, firstPushed(index, count, GRID_COLUMNS));
         let dropped = 0;
         for (let c = kept; c < this.held.length; c += 1) dropped += this.held[c].cells(0, GRID_ROWS);
         this.held.length = kept;
@@ -59,9 +59,8 @@ export class Sheet {
         this.held.splice(index, count);
     }
 
-    // Takes the block of a move from `source`, which may be this sheet, and empties what the block left behind.
-    // What the block lands on is gone, also where the source held nothing. What moves is the part of the block
-    // that is on the grid before and after: returns how many cells of the rest held something, which are gone.
+    // Takes the part of a move's block that is on the grid before and after from `source`, which may be this
+    // sheet, over whatever it lands on. Returns how many cells of the rest of the block held something: they are gone.
     public moveFrom(source: Sheet, move: Move): number {
         const { row, column, toRow, toColumn } = move;
         const { rows, columns } = fitted(move);

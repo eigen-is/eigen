@@ -4,6 +4,7 @@
 // of the recompute. Everything is in the places before the edit, but the blocks reported to the host.
 
 import { mapLeaves, sheetOf } from '../edit/leaves';
+import { firstPushed } from '../edit/map';
 import { moveClasses } from '../edit/move';
 import { bindSheet } from '../edit/sheets';
 import { hostClasses } from '../edit/transform';
@@ -90,8 +91,7 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
                 const sized = (shapes.facts[id] & Fact.Sized) !== 0;
                 const edited = workbook.known(edit.sheet);
                 const distance = insert ? count : -count;
-                // The first line whose cells an insert pushes off the grid.
-                const lost = Math.max(index, (rows ? GRID_ROWS : GRID_COLUMNS) - count);
+                const lost = firstPushed(index, count, rows ? GRID_ROWS : GRID_COLUMNS);
                 const first = rows ? left : top;
                 const last = rows ? right : top;
                 for (const found of hostClasses(tree, refs, edit, host.id, rows ? top : left, rows ? bottom : right)) {

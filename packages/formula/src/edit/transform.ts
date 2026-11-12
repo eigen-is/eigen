@@ -9,7 +9,7 @@ import type { Ends, FormulaNode } from '../text/tree';
 import { endsAt, NodeKind, RefFlag, RefKind, referenceNode } from '../text/tree';
 import { broken, mapLeaves, sheetOf } from './leaves';
 import type { Edit, Span } from './map';
-import { GONE, mapIndex, mapSpan } from './map';
+import { firstPushed, GONE, mapIndex, mapSpan } from './map';
 
 // `count` rows or columns inserted so that the first new one is line `index`, or the `count` from `index` on deleted,
 // on the sheet of this id.
@@ -32,14 +32,13 @@ export type Transformed = {
     // A range that is still a range spans another number of lines than it did, and every cell it reads kept its
     // value: a seed only for a formula that depends on the size of a range, which its shape's facts say.
     readonly resized: boolean;
-    // A whole column or row a reference names is on the edited sheet and along the edited lines. It names the
-    // same lines as before, so the value changes only when a cell of them sat at or past the edit, which the
-    // store knows and the tree does not.
+    // A whole column or row a reference names lies along the edited lines of the edited sheet: the value changes
+    // only when a cell of it sat at or past the edit, which the store knows and the tree does not.
     readonly slid: boolean;
 };
 
 // The hosts on the lines `start` to `end`, counted before the edit, which all get this outcome.
-export type HostClass = Transformed & { readonly start: number; readonly end: number };
+type HostClass = Transformed & { readonly start: number; readonly end: number };
 
 // `host` is the formula's own row for a row edit and its column for a column edit, before the edit. The host
 // itself must survive the edit.
@@ -60,7 +59,7 @@ export function hostClasses(
     const { rows, index } = edit;
     const axis = onAxis(edit);
     const { lines } = axis;
-    const second = edit.insert ? lines - edit.count : index + edit.count;
+    const second = edit.insert ? firstPushed(index, edit.count, lines) : index + edit.count;
     const hostOnSheet = hostSheet === edit.sheet;
     const absolute = rows ? RefFlag.RowAbsolute : RefFlag.ColumnAbsolute;
     const absolute2 = rows ? RefFlag.Row2Absolute : RefFlag.Column2Absolute;
@@ -130,7 +129,7 @@ function shift(
         const absolute2 = flags & (rows ? RefFlag.Row2Absolute : RefFlag.Column2Absolute);
         const stored = rows ? node.row : node.column;
         const stored2 = rows ? node.row2 : node.column2;
-        const onAxis = endsAt(node, rows, host, lines, ends);
+        const onGrid = endsAt(node, rows, host, lines, ends);
         const target = ends.first;
         const target2 = ends.second;
         const inOrder = target <= target2;
@@ -139,7 +138,7 @@ function shift(
         let moved = target;
         let moved2 = target2;
         // A target off the grid reads as #REF! at this host and stays where it is, so that it never comes back.
-        if (onSheet && onAxis) {
+        if (onSheet && onGrid) {
             if (!mapSpan(axis, low, high, span)) {
                 lossy = true;
                 recompute = true;
