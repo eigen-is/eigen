@@ -80,3 +80,13 @@ describe('a collector reads a typed argument, a cell and an array element each b
         expect(evaluate(formula, F1)).toBe(expected);
     });
 });
+
+// The formula is the first cell of the pass, so nothing it reads is computed when it is met.
+test('the formulas in a range are computed before the range is added, counted or searched for an error', () => {
+    const cells = { P1: '=1+1', P2: '=P1+1', P3: '=P2+1', Q1: '=P3*10', Q2: '=1/0' };
+    expect(evaluate('=SUM(P1:P3)', cells, 'A1')).toBe(9);
+    expect(evaluate('=COUNT(P1:P3)', cells, 'A1')).toBe(3);
+    expect(evaluate('=MAX(P1:Q1)', cells, 'A1')).toBe(40);
+    expect(evaluate('=SUM(P1:Q2)', cells, 'A1')).toBe(DIV0);
+    expect(evaluate('=SUM(P1:P3,Q1)', cells, 'A1')).toBe(49);
+});

@@ -25,6 +25,8 @@ describe('a date, any value, a place and a reference a body worked out', () => {
         ['=EDATE(45000,D1)', VALUE],
         ['=EDATE(1,-1.5)', NUM],
         ['=EDATE(2958465,1)', NUM],
+        // The other end of that bound, at its position too: the contract's reading, Excel's own answer is queued.
+        ['=EDATE(2958466,"x")', NUM],
         // Batch 4 and 5: TYPE takes anything, lifts over nothing and fails on nothing.
         ['=TYPE(A1:A3)', 64],
         ['=TYPE({1,2})', 64],
