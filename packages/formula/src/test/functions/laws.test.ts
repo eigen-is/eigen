@@ -46,6 +46,8 @@ function pool(param: Param<unknown>): readonly string[] {
             return ['TRUE', 'FALSE'];
         case Read.Walked:
             return ['A1:A5', 'C1:C3', '1'];
+        case Read.Texts:
+            return ['A1:A5', '"abc"', 'B1:B5'];
         case Read.Plain:
             return ['20', '10', '"b"'];
         case Read.Table:
@@ -314,6 +316,27 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         const whole = written(entry, [...base, '{1,2,3}']).slice(1);
         expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);
         same('(A1:A3,C1:C3)', 'A1:A3,C1:C3');
+    });
+
+    test('where every value is taken as a text, each is spelled, a range row by row, and nothing lifts', () => {
+        if (last?.rest !== true || last.read !== Read.Texts) return;
+        same('TRUE', '"TRUE"');
+        same('1.5', '"1.5"');
+        same('', '""');
+        same('IF(TRUE,)', '""');
+        same('Z9', '""');
+        same('D1', '"TRUE"');
+        same('A1:B2', '10,"a",20,"b"');
+        same('{1,2;3,4}', '1,2,3,4');
+        same('A1:A8*1', '10,20,30,40,50,0,0,0');
+        equals('E1:E3', DIV0);
+        equals('E1:E3,F1:F3', DIV0);
+        equals('F1:F3,E1:E3', NA);
+        equals('E1:E3,NA()', NA);
+        // An element that is a reference is refused, where a family of numbers reads its first cell.
+        equals('INDEX(A1:A5,{2,4})', VALUE);
+        const whole = written(entry, [...base, '{1,2,3}']).slice(1);
+        expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);
     });
 
     test('a union of areas answers what the parameter says', () => {

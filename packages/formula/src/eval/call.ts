@@ -181,7 +181,8 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
         case Read.Now:
             return value;
         case Read.Products:
-            return isReference(value) && value.next !== null ? VALUE : value;
+        case Read.Texts:
+            return isReference(value) && value.next !== null && param.union !== null ? param.union : value;
         default: {
             const unknown: never = param.read;
             return unknown;

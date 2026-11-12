@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { fn, NUMBER, NUMBERS, NUMBERS_A, rest } from '../../functions/registry';
-import { DIV0, NUM, VALUE } from '../../index';
+import { DIV0, NA, NUM, REF, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
 import { evaluate, evaluateWith } from '../recalc/support';
 
@@ -98,6 +98,56 @@ describe('the first cell of a reference: N', () => {
 
     test('the formula in the first cell is computed, and no other cell of the range is read', () => {
         expect(evaluate('=N(P1:P3)', { P1: '=1+1', P2: '=1/0' }, 'A1')).toBe(2);
+    });
+});
+
+describe('every value as a text: TEXTJOIN and CONCAT', () => {
+    const LONG = 'x'.repeat(20000);
+
+    test.each([
+        // Excel batch 3: empty text is left out or kept, and a range of delimiters is used in turn.
+        ['=TEXTJOIN(",",TRUE,IF(A1:A5>2,A1:A5,""))', '3,4,5', F3],
+        ['=TEXTJOIN(",",FALSE,IF(A1:A5>2,A1:A5,""))', '3,,4,,5', F3],
+        ['=TEXTJOIN(M1:M2,TRUE,B1:B5)', '2-7+1-8+2', F3],
+        ['=TEXTJOIN(M1,TRUE,B1:B5)', '2-7-1-8-2', F3],
+        ['=TEXTJOIN({"-","+"},TRUE,B1:B5)', '2-7+1-8+2', F3],
+        // Batch 5: an array of references is #VALUE!, where SUM reads the first cell of each.
+        ['=TEXTJOIN(",",TRUE,OFFSET(A1,{0,1,2},0,2))', VALUE, F1],
+        ['=CONCAT(OFFSET(B1,{0,1},0,2))', VALUE, F1],
+        // The values of every argument in written order, a range row by row, each spelled as & spells it.
+        ['=CONCAT("a",1,TRUE)', 'a1TRUE', F1],
+        ['=CONCAT(A1:B2)', '10402050', F1],
+        ['=CONCAT(A1:A2,"-",{1,2;3,4})', '1020-1234', F1],
+        ['=TEXTJOIN("-",TRUE,A1:A2,"x",B1:B2)', '10-20-x-40-50', F1],
+        ['=TEXTJOIN(",",TRUE,A1:A3*1)', '10,20,30', F1],
+        // The order a call is worked in: a typed error before the first error in a range, the ranges in turn.
+        ['=CONCAT(E1:E3)', DIV0, F1],
+        ['=CONCAT(E1:E3,NA())', NA, F1],
+        ['=TEXTJOIN(E1:E3,NA(),"a")', NA, F1],
+        ['=TEXTJOIN(E1:E3,"x","a")', VALUE, F1],
+        ['=TEXTJOIN(",",TRUE,H1:H3,I1:I3)', DIV0, F3],
+        ['=TEXTJOIN(",",TRUE,I1:I3,H1:H3)', NA, F3],
+        ['=TEXTJOIN(I1:I3,TRUE,H1:H3)', NA, F3],
+        ['=TEXTJOIN(",",TRUE)', VALUE, F1],
+        // A text of more than 32,767 characters is #VALUE!.
+        ['=LEN(CONCAT(P1))', 20000, { P1: LONG }],
+        ['=CONCAT(P1,P1)', VALUE, { P1: LONG }],
+        ['=TEXTJOIN("",TRUE,P1,P1)', VALUE, { P1: LONG }],
+        ['=LEN(TEXTJOIN(",",TRUE,P1,P2,"a"))', 20002, { P1: LONG }],
+    ])('%s', (formula, expected, cells) => {
+        expect(evaluate(formula, cells)).toBe(expected);
+    });
+
+    test('a lookup value that is an array runs the call per element, a range of texts never does', () => {
+        expect(across('=TEXTJOIN(",",{TRUE,FALSE},IF(A1:A5>2,A1:A5,""))', 2, F3, evaluate)).toEqual([
+            '3,4,5',
+            '3,,4,,5',
+        ]);
+        expect(evaluate('=INDEX(CONCAT(A1:A3),1,2)', F1)).toBe(REF);
+    });
+
+    test('the formulas of a range are computed before they are spelled', () => {
+        expect(evaluate('=CONCAT(P1:P3)', { P1: '=1+1', P2: '=P1&"a"', P3: '=P2&P1' }, 'A1')).toBe('22a2a2');
     });
 });
 

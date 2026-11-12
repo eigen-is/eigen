@@ -4,17 +4,34 @@
 import { VALUE } from '../values/errors';
 import { upperCase } from '../values/letter-case';
 import { LONGEST_TEXT } from '../values/value';
-import { fn, NUMBER, optional, rest, TEXT } from './registry';
+import { BOOLEAN, fn, NUMBER, optional, rest, TEXT, TEXTS } from './registry';
 
 // Past this a position is no position: MID("abc",2^31,1) is #VALUE!.
 const MOST = 2 ** 31;
 
+// A text that would be too long is refused before it is built.
+function concatenate(texts: readonly string[]) {
+    let joined = '';
+    for (const text of texts) {
+        if (joined.length + text.length > LONGEST_TEXT) return VALUE;
+        joined += text;
+    }
+    return joined;
+}
+
 export const TEXT_FUNCTIONS = [
-    fn('CONCATENATE', [rest(TEXT)], (texts) => {
+    fn('CONCATENATE', [rest(TEXT)], concatenate),
+    fn('CONCAT', [rest(TEXTS)], concatenate),
+    // Between two texts goes the next delimiter, the first again after the last. With `skip`, empty text is left out.
+    fn('TEXTJOIN', [TEXTS, BOOLEAN, rest(TEXTS)], (delimiters, skip, texts) => {
         let joined = '';
+        let count = 0;
         for (const text of texts) {
-            if (joined.length + text.length > LONGEST_TEXT) return VALUE;
-            joined += text;
+            if (skip && text === '') continue;
+            const delimiter = count === 0 ? '' : delimiters[(count - 1) % delimiters.length];
+            if (joined.length + delimiter.length + text.length > LONGEST_TEXT) return VALUE;
+            joined += delimiter + text;
+            count += 1;
         }
         return joined;
     }),

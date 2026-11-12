@@ -47,21 +47,23 @@ export const Read = {
     Only: 9,
     // Ranges of one size, multiplied place by place: the products.
     Products: 10,
+    // Every value of ranges, arrays and typed values, each as the text it is spelled as.
+    Texts: 11,
     // Whatever was written, as a table: an error is a value of it, and nothing fails.
-    Anything: 11,
-    Any: 12,
-    Lazy: 13,
+    Anything: 12,
+    Any: 13,
+    Lazy: 14,
     // The value of the first cell of a reference, or the value itself.
-    Corner: 14,
+    Corner: 15,
     // Readings of a whole parameter, whose arguments are read as Only and Any: a criteria range with its
     // criterion, the numbers beside the cells every criterion accepts, and the cells that show nothing.
-    Where: 15,
-    Matched: 16,
-    Blanks: 17,
+    Where: 16,
+    Matched: 17,
+    Blanks: 18,
     // What takes no argument: room for an array, a draw in [0, 1), and the date and time as a serial.
-    Room: 18,
-    Random: 19,
-    Now: 20,
+    Room: 19,
+    Random: 20,
+    Now: 21,
 } as const;
 
 export type Read = (typeof Read)[keyof typeof Read];

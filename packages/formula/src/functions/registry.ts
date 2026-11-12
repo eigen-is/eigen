@@ -123,8 +123,17 @@ export const BLANKS: Param<Matches> = Object.freeze({
     ...{ prepare: Prepare.Walked, read: Read.Blanks, union: VALUE, only: true },
 });
 
-// Ranges or arrays of one size, as the product at each place: what is no number counts as 0.
-export const PRODUCTS: Walked<Numbers> = Object.freeze({ ...REQUIRED, prepare: Prepare.Walked, read: Read.Products });
+// Ranges or arrays of one size, as the product at each place: what is no number counts as 0. A union is #VALUE!.
+export const PRODUCTS: Walked<Numbers> = Object.freeze({
+    ...REQUIRED,
+    ...{ prepare: Prepare.Walked, read: Read.Products, union: VALUE },
+});
+// Every value as a text, in written order and a range row by row: a number and a boolean spelled out, a blank
+// as empty text. An error among them is the result, an element that is a reference is #VALUE!, and so is a union.
+export const TEXTS: Walked<readonly string[]> = Object.freeze({
+    ...REQUIRED,
+    ...{ prepare: Prepare.Walked, read: Read.Texts, union: VALUE },
+});
 
 // The argument may be left out at the end, and the body then gets `fallback`. An empty argument is still a blank.
 // Of a lazy argument the fallback is what the call answers when its token comes back.
@@ -224,6 +233,8 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
               ? [ONLY, ANY]
               : [param.only ? { ...ONLY, optional: param.optional, union: param.union } : param];
         if (closed && !ambient) throw new Error(`${name}: a parameter after a repeating or an ambient one`);
+        // Tables that repeat would be read value by value in the body, which is the call wrapper's to do.
+        if (param.rest && param.prepare === Prepare.Whole) throw new Error(`${name}: a table that repeats`);
         if (
             param.optional &&
             param.fallback !== undefined &&

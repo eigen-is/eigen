@@ -2,7 +2,20 @@ import { describe, expect, test } from 'bun:test';
 import type { Entry } from '../../eval/signature';
 import { TOKENS } from '../../eval/signature';
 import { FUNCTIONS } from '../../functions/library';
-import { each, fn, LAZY, MATCHED, NEXT, NUMBER, NUMBERS, optional, rest, WHERE } from '../../functions/registry';
+import {
+    ANYTHING,
+    each,
+    fn,
+    LAZY,
+    MATCHED,
+    NEXT,
+    NUMBER,
+    NUMBERS,
+    optional,
+    rest,
+    TABLE,
+    WHERE,
+} from '../../functions/registry';
 import { Recalc } from '../../recalc/recalc';
 import { Workbook } from '../../store/workbook';
 import { ValueType } from '../../values/value';
@@ -88,6 +101,8 @@ describe('a row that is put together wrongly fails when it is made', () => {
         ['after the groups, more than one', () => fn('WRONG', [each(NUMBER), NUMBER], () => 0)],
         ['groups tried in turn beside a range', () => fn('WRONG', [NUMBERS, each(NUMBER)], () => 0)],
         ['a parameter after a repeating', () => fn('WRONG', [rest(NUMBER), each(NUMBER)], () => 0)],
+        ['a table that repeats', () => fn('WRONG', [rest(TABLE)], () => 0)],
+        ['a table that repeats', () => fn('WRONG', [NUMBER, rest(ANYTHING)], () => 0)],
         [
             'a fallback of another kind',
             () =>

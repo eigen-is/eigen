@@ -30,6 +30,7 @@ export class Frame {
     public readonly tally = new Tally();
     private readonly readers: Numbers[] = [];
     private readonly tables: Table[] = [];
+    private readonly lists: string[][] = [];
 
     public constructor(ctx: Evaluator) {
         this.ctx = ctx;
@@ -40,6 +41,11 @@ export class Frame {
         const { tables } = this;
         while (tables.length <= at) tables.push(new Table(this.ctx));
         return tables[at];
+    }
+
+    // The list of the texts of one parameter.
+    public texts(param: number): string[] {
+        return (this.lists[param] ??= []);
     }
 
     // The reader of the numbers of one parameter.
