@@ -74,8 +74,7 @@ function beside(after: boolean) {
 const BESIDE = [TEXT, TEXTS, skippable(INTEGER), skippable(INTEGER, 0), skippable(INTEGER, 0), optional(TEXT)] as const;
 
 export const TEXT_FUNCTIONS = [
-    // What is past the longest text is cut off, where CONCAT refuses.
-    fn('CONCATENATE', [rest(TEXT)], (texts) => texts.join('').slice(0, LONGEST_TEXT)),
+    fn('CONCATENATE', [rest(TEXT)], (texts) => texts.join('')),
     fn('CONCAT', [rest(TEXTS)], (texts) => {
         let joined = '';
         for (const text of texts) {

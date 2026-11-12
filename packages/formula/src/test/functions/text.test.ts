@@ -267,8 +267,9 @@ describe('joining', () => {
         ['=LEN(CONCAT(REPT("x",32767),""))', 32767],
         ['=CONCAT(REPT("x",32767),"y")', CALC],
         ['=CONCATENATE(D1,D3)', 'Hello Worldstraße'],
-        ['=LEN(CONCATENATE(REPT("x",32767),"y"))', 32767],
-        ['=RIGHT(CONCATENATE(REPT("x",32766),"yz"),2)', 'xy'],
+        ['=LEN(CONCATENATE(REPT("x",32766),"y"))', 32767],
+        ['=CONCATENATE(REPT("x",32767),"y")', VALUE],
+        ['=CONCATENATE(REPT("x",32766),"yz")', VALUE],
     ]);
 });
 
