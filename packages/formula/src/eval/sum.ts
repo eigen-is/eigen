@@ -12,34 +12,46 @@ export function add(walk: Walk, recalc: Recalc): number {
     let sum = 0;
     let before = 0;
     while (walk.next()) {
-        const { num, from, to, reps, rows } = walk;
-        if (reps === null && rows === 1) {
-            for (let i = from; i < to - 1; i += 1) sum += num[i];
-            before = sum;
-            sum += num[to - 1];
+        if (walk.reps !== null || walk.rows !== 1) {
+            sum = addRow(walk, recalc, sum);
+            before = walk.before;
             continue;
         }
-        let cells = 0;
-        let equal = true;
-        for (let i = from; i < to; i += 1) {
-            cells += reps === null ? 1 : reps[i];
-            equal &&= num[i] === num[from];
-        }
-        if (equal) {
-            before = repeated(sum, num[from], cells * rows - 1);
-            sum = before + num[from];
-        } else if (!recalc.room((rows - 1) * (to - from))) walk.fail(CALC);
-        else {
-            // A row of different numbers that stands for many written rows is added that many times over.
-            for (let row = 0; row < rows; row += 1) {
-                for (let i = from; i < to; i += 1) {
-                    before = reps === null ? sum : repeated(sum, num[i], reps[i] - 1);
-                    sum = before + num[i];
-                }
-            }
-        }
+        const { num, to } = walk;
+        for (let i = walk.from; i < to - 1; i += 1) sum += num[i];
+        before = sum;
+        sum += num[to - 1];
     }
     walk.before = before;
+    return sum;
+}
+
+// `start` and a stored row of an array that stands for more than its own numbers, with the sum before the last
+// addition left in `walk.before`. It is apart from the loop above, which must stay small to stay fast.
+function addRow(walk: Walk, recalc: Recalc, start: number): number {
+    const { num, from, to, reps, rows } = walk;
+    let sum = start;
+    let cells = 0;
+    let equal = true;
+    for (let i = from; i < to; i += 1) {
+        cells += reps === null ? 1 : reps[i];
+        equal &&= num[i] === num[from];
+    }
+    if (equal) {
+        walk.before = repeated(sum, num[from], cells * rows - 1);
+        return walk.before + num[from];
+    }
+    // A row of different numbers that stands for many written rows is added that many times over.
+    if (!recalc.room((rows - 1) * (to - from))) {
+        walk.fail(CALC);
+        return sum;
+    }
+    for (let row = 0; row < rows; row += 1) {
+        for (let i = from; i < to; i += 1) {
+            walk.before = reps === null ? sum : repeated(sum, num[i], reps[i] - 1);
+            sum = walk.before + num[i];
+        }
+    }
     return sum;
 }
 
