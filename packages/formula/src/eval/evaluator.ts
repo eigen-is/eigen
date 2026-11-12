@@ -8,7 +8,7 @@ import type { Recalc } from '../recalc/recalc';
 import type { Sheet } from '../store/sheet';
 import type { Workbook } from '../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
-import { ERROR_LITERALS, Token } from '../text/lexer';
+import { ERROR_LITERALS, joinsReferences, Token } from '../text/lexer';
 import type { Ends, FormulaNode } from '../text/tree';
 import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from '../text/tree';
 import type { FormulaError } from '../values/errors';
@@ -242,7 +242,7 @@ export class Evaluator {
         let first = node;
         for (; first.children[0].kind === NodeKind.Binary; first = first.children[0]) (chain ??= []).push(first);
         const start = first.children[0];
-        const left = isReferenceOperator(first.op)
+        const left = joinsReferences(first.op)
             ? this.evaluate(start, sheet, row, column)
             : this.operand(start, sheet, row, column);
         let value = this.operation(first, left, sheet, row, column, snap && chain === null);
@@ -256,7 +256,7 @@ export class Evaluator {
     // One operator, with its left operand already evaluated.
     private operation(node: FormulaNode, left: Value, sheet: Sheet, row: number, column: number, snap: boolean): Value {
         const { op } = node;
-        if (isReferenceOperator(op)) {
+        if (joinsReferences(op)) {
             if (isError(left)) return left;
             const right = this.evaluate(node.children[1], sheet, row, column);
             if (isError(right)) return right;
@@ -311,10 +311,6 @@ export class Evaluator {
         this.constants.set(node, value);
         return value;
     }
-}
-
-function isReferenceOperator(op: number): boolean {
-    return op === Token.Colon || op === Token.Space || op === Token.Comma;
 }
 
 // The three operators on references: the box around two, the cells two share, and one after the other.

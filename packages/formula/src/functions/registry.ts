@@ -9,11 +9,12 @@ import type { Family } from '../eval/families';
 import { Families } from '../eval/families';
 import type { Matches, Numbers, Pairs, Room, Table } from '../eval/readers';
 import type { ANYWHERE, Entry, Lazy, Next, PART, Param, Returns, Walked } from '../eval/signature';
-import { MAX_ARGUMENTS, Prepare, Read } from '../eval/signature';
+import { Prepare, Read } from '../eval/signature';
+import { MAX_ARGUMENTS } from '../text/parser';
 import { toBoolean, toNumber, toText } from '../values/coerce';
 import type { FormulaError } from '../values/errors';
 import { REF, VALUE } from '../values/errors';
-import type { ArrayValue, Reference, Scalar } from '../values/value';
+import type { ArrayValue, Plain, Reference, Scalar } from '../values/value';
 
 export type { Numbers, Pairs, Table } from '../eval/readers';
 export { ANYWHERE, ERRORS, Find, NESTED, NEXT, PART } from '../eval/signature';
@@ -70,7 +71,7 @@ export const ANY = scalar<Scalar>(Read.Any);
 // and never one call per cell, but an array still runs the call once per element.
 export const CORNER: Param<Scalar> = Object.freeze({ ...REQUIRED, prepare: Prepare.Corner, read: Read.Corner });
 // Any value but an error, as it is: for a value whose own kind matters, such as a key to look up.
-export const PLAIN = scalar<number | string | boolean | null>(Read.Plain);
+export const PLAIN = scalar<Plain | null>(Read.Plain);
 // Not evaluated. The body may answer with it, and the wrapper then evaluates the argument: an empty one is a blank.
 export const LAZY: Param<Lazy> = Object.freeze({ ...REQUIRED, prepare: Prepare.Lazy, read: Read.Lazy });
 // As LAZY, and the argument the body answers with is read: one cell is its value, a range the array of its cells,
