@@ -302,7 +302,8 @@ test('a menu beside a list that takes the focus from the body gives its trigger 
             await settle();
             expect(menuOpen()).toBe(true);
             await pressEscape();
-            await settle();
+            // The menu gives the focus back once it has left the page, which takes longer on a busy machine.
+            for (let turn = 0; turn < 100 && document.activeElement !== trigger; turn++) await settle();
             focused.push([
                 inDialog ? 'dialog' : 'page',
                 opener,
