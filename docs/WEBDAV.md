@@ -27,7 +27,7 @@ Every request carries HTTP Basic, checked by `verifyProtocolAuth` ([IMAP.md § D
 
 ## Every handler resolves through SharedDrive
 
-Each handler starts with `getSharedDrive(ownerId, user)`, so WebDAV enforces the same grants as the REST API ([ACL.md](ACL.md)). The drive methods it needs (`resolvePath`, `copyPathOver`, `readRange`, `updatePathDetails`, `lockManager`) live on `Drive` with a matching `SharedDrive` wrapper. A path the caller can't read resolves to nothing, as a name that doesn't exist does, so a stranger gets the same 404 for both and can't probe a drive for names. A write into a folder they can't read is the 409 of a missing parent.
+Each handler starts with `getSharedDrive(ownerId, user)`, so WebDAV enforces the same grants as the REST API ([ACL.md](ACL.md)). The drive methods it needs (`resolvePath`, `copyPathOver`, `movePathOver`, `readRange`, `updatePathDetails`, `lockManager`) live on `Drive` with a matching `SharedDrive` wrapper. A path the caller can't read resolves to nothing, as a name that doesn't exist does, so a stranger gets the same 404 for both and can't probe a drive for names. A write into a folder they can't read is the 409 of a missing parent.
 
 `resolvePath` checks read access only. So LOCK checks `canWrite` before it issues a token: a lock announces writes to come, and a reader must not pin one.
 
@@ -42,6 +42,8 @@ There is no export view: a document is never offered as `.docx` or `.xlsx` over 
 ## MOVE and COPY stay inside one mount
 
 A `Destination` in another mount or under another owner is a 502. The client downloads and re-uploads instead. COPY runs server-side through `Drive.copyPathOver`, so the bytes never cross HTTP. It meets the limits of the copy route before it writes, which are those of a PUT: any copy past the drive's free space is a 507, and a file past the per-file cap is a 413 ([QUOTA.md](QUOTA.md#507-is-a-full-budget-413-a-file-too-large)). An `Overwrite: T` COPY goes through `Drive.copyPathOver`, which trashes the existing destination only after every check, right before it writes. So a COPY refused for space or size (507, 413), into its own subtree (409) or inside a document (423) leaves the destination as it was. A failure that only shows during the write, such as an I/O error, leaves the old destination in the trash, as RFC 4918 §9.8.4 describes Overwrite. A `Depth: 0` folder COPY writes no bytes, so the handler trashes the destination itself and creates the folder. A COPY is exempt from the server's idle timeout (`server.timeout(request, 0)`), because a deep copy stays silent until it lands. `Depth: 0` on a folder copies the folder without its members (RFC 4918 §9.8.3).
+
+A MOVE is one drive call (`Drive.movePathOver`): it trashes an overwritten destination only after every check, and then one row write sets the new folder and name. Word and Excel save by MOVE with overwrite, so a refusal must never cost the file being replaced: a MOVE refused for a part of a document (423) or for a folder into its own subtree (409) leaves the destination as it was. Because folder and name change in one write, `MOVE /a/x` to `/b/y` lands beside an existing `/b/x`. `apps/api/src/test/webdav/move-copy.test.ts` pins both methods.
 
 An overwrite trashes the target first. So a request whose source and destination are one resource is a 403, checked before anything is trashed, or the source itself would go to the trash. `Overwrite: F` on an existing target is a 412.
 

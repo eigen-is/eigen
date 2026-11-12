@@ -234,15 +234,32 @@ export class SharedDrive {
         return this.drive.updatePathDetails(mountId, pathId, details);
     }
 
-    // A move takes the item out of its folder, so it needs write on that folder too, as a rename does.
     public async movePath(mountId: string, pathId: string, targetParentId: string): Promise<DrivePath> {
+        await this.requireMove(mountId, pathId, targetParentId);
+        return this.drive.movePath(mountId, pathId, targetParentId, this.user);
+    }
+
+    // The move trashes what holds the name. Write on the folder covers that path too, as access only widens down a
+    // chain of folders.
+    public async movePathOver(
+        mountId: string,
+        pathId: string,
+        destParentId: string,
+        name: string,
+        _user: User,
+    ): Promise<DrivePath> {
+        await this.requireMove(mountId, pathId, destParentId);
+        return this.drive.movePathOver(mountId, pathId, destParentId, name, this.user);
+    }
+
+    // A move takes the item out of its folder, so it needs write on that folder too, as a rename does.
+    private async requireMove(mountId: string, pathId: string, targetParentId: string): Promise<void> {
         const memberships = await getMemberships(this.user.id);
         await this.requireWrite(mountId, pathId, memberships, 'No write permission on source');
         const path = await this.drive.getPath(mountId, pathId);
         if (!path?.parentId) throw new ApiError(403, 'No write permission on source folder');
         await this.requireWrite(mountId, path.parentId, memberships, 'No write permission on source folder');
         await this.requireWrite(mountId, targetParentId, memberships, 'No write permission on target folder');
-        return this.drive.movePath(mountId, pathId, targetParentId, this.user);
     }
 
     public async renamePath(mountId: string, pathId: string, newName: string): Promise<void> {
@@ -264,8 +281,7 @@ export class SharedDrive {
         return this.drive.copyPath(mountId, srcPathId, to, desiredName, this.user);
     }
 
-    // The copy trashes what holds the name. Write on the folder covers that path too, as access only widens down a
-    // chain of folders.
+    // The copy trashes what holds the name, which write on the folder covers too, as it does for movePathOver.
     public async copyPathOver(
         mountId: string,
         srcPathId: string,

@@ -278,6 +278,65 @@ describe('WebDAV MOVE/COPY', () => {
         });
     });
 
+    // A MOVE is one write: nothing is trashed, moved or renamed unless all of it goes through.
+    describe('a MOVE over an existing destination', () => {
+        const email = () => ctx.alice.user.email;
+        const move = (source: string, destination: string): Promise<Response> =>
+            webdavRequest(email(), 'MOVE', `${baseHref}/${source}`, {
+                headers: { Destination: `http://localhost${baseHref}/${destination}`, Overwrite: 'T' },
+            });
+        const read = async (path: string): Promise<string> => {
+            const res = await webdavRequest(email(), 'GET', `${baseHref}/${path}`);
+            return `${res.status} ${await res.text()}`;
+        };
+        const trashNames = async (): Promise<string[]> =>
+            (await (await getHome(ctx.alice.user.id)).drive.listTrash(mountId)).map((path) => path.name);
+
+        test('trashes the old file, lands the source and answers 204', async () => {
+            await webdavRequest(email(), 'PUT', `${baseHref}/mv-new.txt`, { body: 'new' });
+            await webdavRequest(email(), 'PUT', `${baseHref}/mv-old.txt`, { body: 'old' });
+            expect((await move('mv-new.txt', 'mv-old.txt')).status).toBe(204);
+            expect(await read('mv-old.txt')).toBe('200 new');
+            expect((await webdavRequest(email(), 'GET', `${baseHref}/mv-new.txt`)).status).toBe(404);
+            expect(await trashNames()).toContain('mv-old.txt');
+        });
+
+        test('into another folder under a new name lands beside a file with the old name', async () => {
+            await webdavRequest(email(), 'MKCOL', `${baseHref}/MvFrom/`);
+            await webdavRequest(email(), 'MKCOL', `${baseHref}/MvTo/`);
+            await webdavRequest(email(), 'PUT', `${baseHref}/MvFrom/x.txt`, { body: 'moved' });
+            await webdavRequest(email(), 'PUT', `${baseHref}/MvTo/x.txt`, { body: 'stays' });
+            expect((await move('MvFrom/x.txt', 'MvTo/y.txt')).status).toBe(201);
+            expect(await read('MvTo/y.txt')).toBe('200 moved');
+            expect(await read('MvTo/x.txt')).toBe('200 stays');
+            expect((await webdavRequest(email(), 'GET', `${baseHref}/MvFrom/x.txt`)).status).toBe(404);
+        });
+
+        test('of a folder into its own subtree is a 409 and leaves the destination', async () => {
+            await webdavRequest(email(), 'MKCOL', `${baseHref}/MvCycle/`);
+            await webdavRequest(email(), 'MKCOL', `${baseHref}/MvCycle/Inner/`);
+            await webdavRequest(email(), 'PUT', `${baseHref}/MvCycle/Inner/kept-409.txt`, { body: 'old' });
+            expect((await move('MvCycle', 'MvCycle/Inner/kept-409.txt')).status).toBe(409);
+            expect(await read('MvCycle/Inner/kept-409.txt')).toBe('200 old');
+        });
+
+        test('of a part of a document is a 423 and leaves the destination', async () => {
+            const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+            const doc = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `folder/${root.id}/create/doc`,
+                { fileName: 'MvDoc' },
+            );
+            await webdavRequest(email(), 'PUT', `${baseHref}/kept-423.db`, { body: 'old' });
+            const res = await move(`${doc.name}/data.db`, 'kept-423.db');
+            expect(`${res.status} ${await res.text()}`).toBe('423 Cannot change the inside of a document');
+            expect(await read('kept-423.db')).toBe('200 old');
+            expect(await trashNames()).not.toContain('kept-423.db');
+        });
+    });
+
     describe('a COPY over an existing destination', () => {
         const email = () => ctx.alice.user.email;
         const copy = (source: string, destination: string): Promise<Response> =>

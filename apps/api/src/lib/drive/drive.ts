@@ -606,52 +606,87 @@ export class Drive {
     public async movePath(mountId: string, pathId: string, targetParentId: string, user: User): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const path = await this.personPath(mount, pathId);
-        const oldParentId = path.parentId;
-        // A move adds nothing new, so the path is checked as it would sit in its new folder: never inside a document.
-        refuseDocumentWrite([...(await this.folderChain(mount, targetParentId)), path]);
-
-        // Read before the move: a watcher who could see the path through its old folders hears about it too.
-        const oldChain = await mount.getBreadcrumb(pathId);
-        // Read before the move for the same reason: whoever saw the path in its old folder hears it left.
-        const oldMembers = await this.getEffectiveMembers(mountId, pathId);
-
-        const movedPath = await mount.updatePath(pathId, { parentId: targetParentId });
-        this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, {
-            oldParentId,
-            members: this.getEffectiveMembers(mountId, pathId).then((members) => [...oldMembers, ...members]),
-        });
-        if (oldParentId) {
-            // The move walks two parent chains, so it records and fans out here instead of in recordFileEvent.
-            mount.history.record({
-                pathId,
-                eventType: 'moved',
-                actor: user,
-                details: { oldParentId, newParentId: targetParentId },
-            });
-            await mount.history.fanOut({
-                eventType: 'moved',
-                actor: user,
-                path: movedPath,
-                chainRootIds: [oldParentId, targetParentId],
-                details: { oldParentId, newParentId: targetParentId },
-                verifyAncestors: [...oldChain, ...(await mount.getBreadcrumb(pathId))],
-            });
-            this.broadcastHistoryUpdated(mountId, movedPath);
-        }
-        return movedPath;
+        await this.personMoveTarget(mount, path, targetParentId);
+        return this.changePlace(mount, path, { parentId: targetParentId }, user);
     }
 
     public async renamePath(mountId: string, pathId: string, newName: string, user: User): Promise<void> {
         const mount = this.getMount(mountId);
-        const item = await this.personPath(mount, pathId);
-        const oldName = item.name;
+        await this.changePlace(mount, await this.personPath(mount, pathId), { name: newName }, user);
+    }
 
-        const renamedItem = await mount.updatePath(pathId, { name: newName });
-        this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
-        await this.recordFileEvent(mountId, pathId, user, { eventType: 'renamed', details: { oldName, newName } });
-        // The people the path is shared with keep a copy of it, and this gives them the new name. It reaches other
-        // homes, so it goes last. The actor stays null, because a rename must not email them.
-        await this.pushSharing(mountId, pathId, 'live', null);
+    // Puts a path in a folder under exactly this name, as a WebDAV MOVE asks: a move, a rename or both, in one write.
+    // What holds the name goes to the trash, and only once nothing can refuse the move any more.
+    public async movePathOver(
+        mountId: string,
+        pathId: string,
+        destParentId: string,
+        name: string,
+        user: User,
+    ): Promise<DrivePath> {
+        const mount = this.getMount(mountId);
+        const path = await this.personPath(mount, pathId);
+        await this.personMoveTarget(mount, path, destParentId);
+        const safeName = validateName(name);
+        // The row write checks this too, but only after the trash below.
+        if (await mount.isSelfOrDescendant(pathId, destParentId)) {
+            throw new ApiError(409, 'Cannot move a folder into itself or its own descendant');
+        }
+        await this.trashOccupant(mount, destParentId, safeName, path, user);
+        const to = {
+            ...(destParentId !== path.parentId && { parentId: destParentId }),
+            ...(safeName !== path.name && { name: safeName }),
+        };
+        return this.changePlace(mount, path, to, user);
+    }
+
+    // A move adds nothing new, so the path is checked as it would sit in its new folder: never inside a document.
+    private async personMoveTarget(mount: Mount, path: DrivePath, targetParentId: string): Promise<void> {
+        refuseDocumentWrite([...(await this.folderChain(mount, targetParentId)), path]);
+    }
+
+    // The one row write behind a move, a rename or both, and what each tells open tabs, the history and watchers.
+    private async changePlace(
+        mount: Mount,
+        path: DrivePath,
+        to: { parentId?: string; name?: string },
+        user: User,
+    ): Promise<DrivePath> {
+        const oldParentId = path.parentId;
+        const newParentId = to.parentId;
+        // Read before the move: whoever could see the path through its old folders, or watches one, hears that it left.
+        const oldChain = newParentId ? await mount.getBreadcrumb(path.id) : [];
+        const oldMembers = newParentId ? await this.getEffectiveMembers(mount.id, path.id) : [];
+        const updated = await mount.updatePath(path.id, to);
+        if (newParentId) {
+            this.emit(SSEventType.DRIVE_PATH_MOVED, updated, {
+                oldParentId,
+                members: this.getEffectiveMembers(mount.id, path.id).then((members) => [...oldMembers, ...members]),
+            });
+        }
+        if (newParentId && oldParentId) {
+            // The move walks two parent chains, so it records and fans out here instead of in recordFileEvent.
+            const details = { oldParentId, newParentId };
+            mount.history.record({ pathId: path.id, eventType: 'moved', actor: user, details });
+            await mount.history.fanOut({
+                eventType: 'moved',
+                actor: user,
+                path: updated,
+                chainRootIds: [oldParentId, newParentId],
+                details,
+                verifyAncestors: [...oldChain, ...(await mount.getBreadcrumb(path.id))],
+            });
+            this.broadcastHistoryUpdated(mount.id, updated);
+        }
+        if (to.name !== undefined) {
+            this.emit(SSEventType.DRIVE_PATH_RENAMED, updated);
+            const details = { oldName: path.name, newName: updated.name };
+            await this.recordFileEvent(mount.id, path.id, user, { eventType: 'renamed', details });
+            // The people the path is shared with keep a copy of it, and this gives them the new name. It reaches other
+            // homes, so it goes last. The actor stays null, because a rename must not email them.
+            await this.pushSharing(mount.id, path.id, 'live', null);
+        }
+        return updated;
     }
 
     // Copies a path into a folder of any mount or drive the user may write, under a free name. Both homes are held,
@@ -693,7 +728,7 @@ export class Drive {
         const src = await mount.getActivePath(srcPathId);
         const to = { drive: this, ownerId: this.owner.id, mountId, parentId: destParentId };
         const tree = await this.checkedCopyTree(mount, src, to, mount, user);
-        await this.trashOccupant(mount, destParentId, safeName, user);
+        await this.trashOccupant(mount, destParentId, safeName, src, user);
         return this.writeCopy(mount, destParentId, safeName, tree, mount, user);
     }
 
@@ -738,9 +773,17 @@ export class Drive {
         return tree;
     }
 
-    private async trashOccupant(mount: Mount, parentId: string, name: string, user: User): Promise<void> {
+    // Trashes what holds the name in the folder. A name is compared without case, so `path`, the one being moved or
+    // copied, can hold it itself, and then it stays.
+    private async trashOccupant(
+        mount: Mount,
+        parentId: string,
+        name: string,
+        path: DrivePath,
+        user: User,
+    ): Promise<void> {
         const occupant = await mount.getChildByName(parentId, name);
-        if (occupant) await this.deletePath(mount.id, occupant.id, user);
+        if (occupant && occupant.id !== path.id) await this.deletePath(mount.id, occupant.id, user);
     }
 
     private async writeCopy(

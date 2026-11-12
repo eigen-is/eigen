@@ -71,6 +71,7 @@ describe('SharedDrive gating enumeration', () => {
         requireRead: { gate: 'private-helper', reason: 'the read gate itself' },
         requireWrite: { gate: 'private-helper', reason: 'the write gate itself' },
         requireDriveOwner: { gate: 'private-helper', reason: 'the drive-wide listing and trash gate' },
+        requireMove: { gate: 'private-helper', reason: 'the write gates of a move, on source and target' },
         isEffectiveOwner: { gate: 'private-helper', reason: 'team co-owner check feeding the gates' },
         sharingRestrictedFor: { gate: 'private-helper', reason: 'the sharingRestricted gate for ACL changes' },
 
@@ -287,6 +288,11 @@ describe('SharedDrive gating enumeration', () => {
             gate: 'denies',
             reason: 'write-gated on source and target',
             call: (sd) => sd.movePath(mountId, fileId, folderId),
+        },
+        movePathOver: {
+            gate: 'denies',
+            reason: 'write-gated on source and target',
+            call: (sd) => sd.movePathOver(mountId, fileId, folderId, 'moved.txt', charlie),
         },
         saveVersion: { gate: 'denies', reason: 'write-gated', call: (sd) => sd.saveVersion(mountId, docId) },
         restoreContainer: {

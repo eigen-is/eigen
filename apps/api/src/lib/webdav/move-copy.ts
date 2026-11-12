@@ -29,14 +29,7 @@ export async function handleMove(args: {
         verb: 'MOVE',
     });
 
-    if (destExisting) await drive.deletePath(args.mountId, destExisting.id, args.user);
-
-    if (src.parentId !== destParent.id) {
-        await drive.movePath(args.mountId, src.id, destParent.id, args.user);
-    }
-    if (src.name !== newName) {
-        await drive.renamePath(args.mountId, src.id, newName, args.user);
-    }
+    await drive.movePathOver(args.mountId, src.id, destParent.id, newName, args.user);
     // RFC 4918 §7.7: a lock does not move with its resource. Left in place, it would hold the Home
     // until it expires, because the client can't refresh it at the old URL.
     await drive.releaseLocksUnder(args.mountId, src.id);
@@ -106,8 +99,7 @@ async function resolveMoveCopy(args: {
     if (verb === 'MOVE') assertWritable(drive.lockManager, await drive.breadCrumb(mountId, src.id), ifHeader, user.id);
 
     const destExisting = await drive.resolvePath(mountId, dest.pathStr);
-    // RFC 4918 §9.8.5 and §9.9.4: the same source and destination is a 403. Otherwise the overwrite below
-    // would trash the source before it moves it.
+    // RFC 4918 §9.8.5 and §9.9.4: the same source and destination is a 403.
     if (destExisting?.id === src.id) throw new ApiError(403, 'Source and destination are the same');
     if (destExisting && !overwrite) throw new ApiError(412, 'Destination exists, no overwrite');
 
