@@ -28,8 +28,8 @@ import { DriveDeleteItem } from './drive-delete-item';
 import { DriveEmailCollaborators } from './drive-email-collaborators';
 import { DriveLocationPicker } from './drive-location-picker';
 import { DriveRenameItem } from './drive-rename-item';
-import { DriveUploadFiles } from './drive-upload-files';
 import { ExportProgressDialog, useDocumentExport } from './use-document-export';
+import { useDriveUploadFiles } from './use-drive-upload-files';
 
 // The picker behind Move to and Copy to, with the items it was opened for.
 type CopyMove = { items: readonly DrivePath[]; mode: 'move' | 'copy' };
@@ -74,7 +74,6 @@ export function useDriveActionRunner({
     const renameDialog = useDialogValue<DrivePath>();
     const shareDialog = useDialogValue<DrivePath>();
     const emailDialog = useDialogValue<DrivePath>();
-    const uploadDialog = useDialogValue<File[]>();
     const copyMoveDialog = useDialogValue<CopyMove>();
     const movePathsMutation = useMovePaths();
     const { mutateAsync: copyToFolder } = useCopyToFolder();
@@ -84,6 +83,7 @@ export function useDriveActionRunner({
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
     const actionsFor = useDriveActionsFor(capabilities);
     const { exportPath, isExporting } = useDocumentExport();
+    const uploads = useDriveUploadFiles(currentPath, onAfterAction);
 
     const afterDelete = (deleted: readonly DrivePath[]) => {
         for (const path of deleted) onAfterAction?.('delete', path);
@@ -193,16 +193,8 @@ export function useDriveActionRunner({
             : undefined,
         onCreateFolder: capabilities.canCreateFolder ? () => createDialog.openDialog('folder') : undefined,
         onCreateEigenDoc,
-        onUploadFile: capabilities.canUpload
-            ? () => {
-                  if (currentPath) uploadDialog.openDialog([]);
-              }
-            : undefined,
-        onUploadFiles: capabilities.canUpload
-            ? (files) => {
-                  if (currentPath && files.length > 0) uploadDialog.openDialog(files);
-              }
-            : undefined,
+        onUploadFile: capabilities.canUpload ? uploads.pickFiles : undefined,
+        onUploadFiles: capabilities.canUpload ? uploads.upload : undefined,
         dialogs: (
             <>
                 {capabilities.canCreateFolder && (
@@ -228,15 +220,7 @@ export function useDriveActionRunner({
                     />
                 ))}
 
-                {capabilities.canUpload && currentPath && (
-                    <DriveUploadFiles
-                        path={currentPath}
-                        open={uploadDialog.open}
-                        onOpenChange={uploadDialog.setOpen}
-                        initialFiles={uploadDialog.value}
-                        onAfterAction={onAfterAction}
-                    />
-                )}
+                {capabilities.canUpload && currentPath && uploads.input}
 
                 {renameDialog.value && (
                     <DriveRenameItem

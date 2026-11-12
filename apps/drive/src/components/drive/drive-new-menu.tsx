@@ -1,3 +1,7 @@
+// The New button at the top of the Drive sidebar: a menu that creates a folder or a document, or uploads files, into
+// the folder the user has open, else the drive root. The app shell draws it. After a new folder or an upload, the
+// view moves to the folder it went into.
+
 import { useMatch, useNavigate } from '@tanstack/react-router';
 import { DEFAULT_MOUNT_ID, usePathInfo } from '@workspace/lib/drive';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
@@ -5,7 +9,7 @@ import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import { DriveCreateEigenDoc } from '@workspace/ui/components/drive';
 import { getCreateMenuItems } from '@workspace/ui/components/drive/create-menu';
 import { DriveCreateFolder } from '@workspace/ui/components/drive/drive-create-folder';
-import { DriveUploadFiles } from '@workspace/ui/components/drive/drive-upload-files';
+import { useDriveUploadFiles } from '@workspace/ui/components/drive/use-drive-upload-files';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -24,7 +28,6 @@ type DriveNewMenuProps = {
 export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps) {
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
     const [createType, setCreateType] = useState<EigenDocType | null>(null);
-    const [uploadOpen, setUploadOpen] = useState(false);
     const navigate = useNavigate();
 
     const routeMatch = useMatch({
@@ -32,9 +35,9 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
         shouldThrow: false,
     });
 
-    const currentPathId = routeMatch?.params?.pathId;
-    const currentOwnerId = routeMatch?.params?.ownerId;
-    const currentMountId = routeMatch?.params?.mountId;
+    const currentPathId = routeMatch?.params.pathId;
+    const currentOwnerId = routeMatch?.params.ownerId;
+    const currentMountId = routeMatch?.params.mountId;
 
     const { data: currentPath } = usePathInfo(
         currentOwnerId || rootPath?.ownerId || '',
@@ -55,9 +58,11 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
         });
     };
 
+    const uploads = useDriveUploadFiles(targetPath, handleAfterAction);
+
     const createItems = getCreateMenuItems({
         onCreateFolder: () => setCreateFolderOpen(true),
-        onUploadFile: () => setUploadOpen(true),
+        onUploadFile: uploads.pickFiles,
         onCreateEigenDoc: Object.fromEntries(
             Object.values(EIGEN_DOC_TYPE_INFO).map((i) => [i.type, () => setCreateType(i.type)]),
         ),
@@ -91,7 +96,7 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
             {createType && (
                 <DriveCreateEigenDoc
                     type={createType}
-                    open={true}
+                    open
                     onOpenChange={(open) => {
                         if (!open) setCreateType(null);
                     }}
@@ -101,14 +106,7 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
                 />
             )}
 
-            {targetPath && (
-                <DriveUploadFiles
-                    path={targetPath}
-                    open={uploadOpen}
-                    onOpenChange={setUploadOpen}
-                    onAfterAction={handleAfterAction}
-                />
-            )}
+            {targetPath && uploads.input}
         </>
     );
 }

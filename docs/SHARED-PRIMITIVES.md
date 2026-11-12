@@ -250,7 +250,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (307)
+## Hooks (308)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -433,6 +433,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useTrash` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
 | `useUpdateACL` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useUploadFile` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `useUploadFiles` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useVCardPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useWatchToggle` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useZombieMediaSweep` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-zombie-media-sweep.ts |
@@ -1016,7 +1017,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1179)
+## Utilities & constants (1178)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -2163,7 +2164,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FIND_REPLACE_HOTKEY` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |
 | `buildDocSearchQuery` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 | `searchFlashKey` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
-| `uploadWithProgress` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-with-progress.tsx |
 | `alphaGroupKey` | `@workspace/ui/components/user` | packages/ui/src/components/user/alphabetical-list.tsx |
 | `USER_ITEM_AVATAR_SIZE` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-item.tsx |
 | `isVectorFontLoaded` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
