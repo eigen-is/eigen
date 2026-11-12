@@ -40,106 +40,6 @@ type Criterion = {
     readonly orBlank: boolean;
 };
 
-function criterionOf(strings: StringTable, value: Held): Criterion {
-    let op: number = Op.Equal;
-    let kind: number = CellKind.Number;
-    let num = 0;
-    let ref = 0;
-    let key = '';
-    let pattern: Pattern | null = null;
-    let orBlank = false;
-    if (typeof value === 'number') num = value;
-    else if (typeof value === 'boolean') {
-        kind = CellKind.Boolean;
-        ref = value ? 1 : 0;
-    } else if (isError(value)) {
-        kind = CellKind.Error;
-        ref = value.code;
-    } else if (typeof value === 'string') {
-        const first = value.charCodeAt(0);
-        const second = value.charCodeAt(1);
-        let from = 0;
-        if (first === EQUALS) from = 1;
-        else if (first === LESS) {
-            op = second === GREATER ? Op.NotEqual : second === EQUALS ? Op.LessEqual : Op.Less;
-            from = op === Op.Less ? 1 : 2;
-        } else if (first === GREATER) {
-            op = second === EQUALS ? Op.GreaterEqual : Op.Greater;
-            from = op === Op.Greater ? 1 : 2;
-        }
-        const operand = value.slice(from);
-        const number = parseNumber(operand);
-        key = textKey(operand);
-        const error = key.charCodeAt(0) === HASH ? errorOf(key) : null;
-        // An operand is typed the way a cell entry is, so one that spells a boolean matches booleans and no text.
-        const truth = spelledBoolean(operand);
-        if (number !== undefined) num = number;
-        else if (truth !== undefined) {
-            kind = CellKind.Boolean;
-            ref = truth ? 1 : 0;
-        } else if (error !== null && error.code !== 0) {
-            kind = CellKind.Error;
-            ref = error.code;
-        } else if (operand === '' && from > 0) kind = CellKind.Empty;
-        else {
-            kind = CellKind.Text;
-            orBlank = operand === '';
-            if (op <= Op.NotEqual) {
-                const read = patternOf(key);
-                if (read.literal === null) pattern = read;
-                else key = read.literal;
-            }
-            if (pattern === null) ref = strings.find(key);
-        }
-    }
-    return { op, kind, num, ref, key, pattern, orBlank };
-}
-
-// Whether a cell, given as what its column holds for it, meets the criterion.
-function meets(criterion: Criterion, strings: StringTable, kind: number, num: number, ref: number): boolean {
-    const { op } = criterion;
-    let order = 0;
-    switch (criterion.kind) {
-        case CellKind.Number:
-            if (kind === CellKind.Number) order = compare15(num, criterion.num);
-            else if (kind === CellKind.Text && op === Op.Equal) {
-                const read = strings.number(ref);
-                return read !== null && equal15(read, criterion.num);
-            } else return op === Op.NotEqual;
-            break;
-        case CellKind.Text:
-            if (kind !== CellKind.Text) return op === Op.NotEqual || (criterion.orBlank && kind === CellKind.Empty);
-            if (criterion.pattern !== null) {
-                return patternMatches(criterion.pattern, strings.text(strings.upper(ref))) === (op === Op.Equal);
-            }
-            if (op <= Op.NotEqual) return (strings.upper(ref) === criterion.ref) === (op === Op.Equal);
-            order = compareText(strings.text(strings.upper(ref)), criterion.key);
-            break;
-        case CellKind.Boolean:
-            if (kind !== CellKind.Boolean) return op === Op.NotEqual;
-            order = ref - criterion.ref;
-            break;
-        case CellKind.Error:
-            return op <= Op.NotEqual && (kind === CellKind.Error && ref === criterion.ref) === (op === Op.Equal);
-        default:
-            return op <= Op.NotEqual && (kind === CellKind.Empty) === (op === Op.Equal);
-    }
-    switch (op) {
-        case Op.Equal:
-            return order === 0;
-        case Op.NotEqual:
-            return order !== 0;
-        case Op.Less:
-            return order < 0;
-        case Op.LessEqual:
-            return order <= 0;
-        case Op.Greater:
-            return order > 0;
-        default:
-            return order >= 0;
-    }
-}
-
 // What the criteria of a call matched, with the lists it is worked out in. There is one per level of calls, used
 // again by every call, so a criteria function allocates nothing but its criteria as read.
 export class Tally {
@@ -292,5 +192,105 @@ export class Tally {
         }
         this.count = count;
         this.found = found;
+    }
+}
+
+function criterionOf(strings: StringTable, value: Held): Criterion {
+    let op: number = Op.Equal;
+    let kind: number = CellKind.Number;
+    let num = 0;
+    let ref = 0;
+    let key = '';
+    let pattern: Pattern | null = null;
+    let orBlank = false;
+    if (typeof value === 'number') num = value;
+    else if (typeof value === 'boolean') {
+        kind = CellKind.Boolean;
+        ref = value ? 1 : 0;
+    } else if (isError(value)) {
+        kind = CellKind.Error;
+        ref = value.code;
+    } else if (typeof value === 'string') {
+        const first = value.charCodeAt(0);
+        const second = value.charCodeAt(1);
+        let from = 0;
+        if (first === EQUALS) from = 1;
+        else if (first === LESS) {
+            op = second === GREATER ? Op.NotEqual : second === EQUALS ? Op.LessEqual : Op.Less;
+            from = op === Op.Less ? 1 : 2;
+        } else if (first === GREATER) {
+            op = second === EQUALS ? Op.GreaterEqual : Op.Greater;
+            from = op === Op.Greater ? 1 : 2;
+        }
+        const operand = value.slice(from);
+        const number = parseNumber(operand);
+        key = textKey(operand);
+        const error = key.charCodeAt(0) === HASH ? errorOf(key) : null;
+        // An operand is typed the way a cell entry is, so one that spells a boolean matches booleans and no text.
+        const truth = spelledBoolean(operand);
+        if (number !== undefined) num = number;
+        else if (truth !== undefined) {
+            kind = CellKind.Boolean;
+            ref = truth ? 1 : 0;
+        } else if (error !== null && error.code !== 0) {
+            kind = CellKind.Error;
+            ref = error.code;
+        } else if (operand === '' && from > 0) kind = CellKind.Empty;
+        else {
+            kind = CellKind.Text;
+            orBlank = operand === '';
+            if (op <= Op.NotEqual) {
+                const read = patternOf(key);
+                if (read.literal === null) pattern = read;
+                else key = read.literal;
+            }
+            if (pattern === null) ref = strings.find(key);
+        }
+    }
+    return { op, kind, num, ref, key, pattern, orBlank };
+}
+
+// Whether a cell, given as what its column holds for it, meets the criterion.
+function meets(criterion: Criterion, strings: StringTable, kind: number, num: number, ref: number): boolean {
+    const { op } = criterion;
+    let order = 0;
+    switch (criterion.kind) {
+        case CellKind.Number:
+            if (kind === CellKind.Number) order = compare15(num, criterion.num);
+            else if (kind === CellKind.Text && op === Op.Equal) {
+                const read = strings.number(ref);
+                return read !== null && equal15(read, criterion.num);
+            } else return op === Op.NotEqual;
+            break;
+        case CellKind.Text:
+            if (kind !== CellKind.Text) return op === Op.NotEqual || (criterion.orBlank && kind === CellKind.Empty);
+            if (criterion.pattern !== null) {
+                return patternMatches(criterion.pattern, strings.text(strings.upper(ref))) === (op === Op.Equal);
+            }
+            if (op <= Op.NotEqual) return (strings.upper(ref) === criterion.ref) === (op === Op.Equal);
+            order = compareText(strings.text(strings.upper(ref)), criterion.key);
+            break;
+        case CellKind.Boolean:
+            if (kind !== CellKind.Boolean) return op === Op.NotEqual;
+            order = ref - criterion.ref;
+            break;
+        case CellKind.Error:
+            return op <= Op.NotEqual && (kind === CellKind.Error && ref === criterion.ref) === (op === Op.Equal);
+        default:
+            return op <= Op.NotEqual && (kind === CellKind.Empty) === (op === Op.Equal);
+    }
+    switch (op) {
+        case Op.Equal:
+            return order === 0;
+        case Op.NotEqual:
+            return order !== 0;
+        case Op.Less:
+            return order < 0;
+        case Op.LessEqual:
+            return order <= 0;
+        case Op.Greater:
+            return order > 0;
+        default:
+            return order >= 0;
     }
 }
