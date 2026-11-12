@@ -24,8 +24,7 @@ import type { Choice, Entry, Held, Lazy, Param, Result } from './signature';
 import { Prepare, Read, slotOf, TOKENS } from './signature';
 import { cellsOf } from './views';
 
-// How far under a whole number a number is still read as that whole one, where a reading says so. Excel's own
-// reach lies between 0.00001, where FACT(4.99999) is 24, and 0.000000001, where FACT(4.999999999) is 120.
+// How far under a whole number a number is still read as that whole one, where a reading says so.
 const NEAR_REACH = 1e-7;
 
 export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
@@ -236,7 +235,7 @@ function collected(family: Family, value: Value): Held {
 }
 
 // The body on arguments that are read, with what its walk passes over in `skips`, and its answer as a cell can hold
-// it: a number that is no number is #NUM!, and a text has at most 32,767 characters. `held` are the call's slots.
+// it: a number that is no number is #NUM!, and a text is no longer than a cell's. `held` are the call's slots.
 export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number, skips: number): Value | Lazy {
     let args: readonly unknown[] = held;
     if (entry.chosen !== null) return choose(ctx, entry, entry.chosen, held, count);
@@ -273,8 +272,7 @@ export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number, s
 }
 
 // A call of a row that picks another by its first argument, and what the walk passes over by its second when it
-// takes one: the row that is picked runs on the arguments after those, each read now by that row's own parameter.
-// A code or an option that does not exist is #VALUE! before any range is looked into.
+// takes one: the row that is picked runs on the arguments after those, each read by that row's own parameter.
 function choose(
     ctx: Evaluator,
     entry: Entry,

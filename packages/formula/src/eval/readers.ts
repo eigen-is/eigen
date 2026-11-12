@@ -53,7 +53,6 @@ export class Frame {
         this.ctx = ctx;
     }
 
-    // The table of the argument at a place.
     public table(at: number): Table {
         const { tables } = this;
         while (tables.length <= at) tables.push(new Table(this.ctx));
@@ -67,17 +66,14 @@ export class Frame {
         return this.asked;
     }
 
-    // The list of the texts of one parameter.
     public texts(param: number): string[] {
         return (this.lists[param] ??= []);
     }
 
-    // The list of the whole numbers of one parameter.
     public wholes(param: number): number[] {
         return (this.numberLists[param] ??= []);
     }
 
-    // The reader of the numbers of one parameter.
     public numbers(param: number): Numbers {
         return (this.readers[param] ??= new Numbers(this.ctx, this));
     }
@@ -221,9 +217,8 @@ export class Pairs {
     private first = new Float64Array(0);
     private second = new Float64Array(0);
 
-    // One cell that is an argument by itself is read first: a blank one is an argument left empty, and an error
-    // in it the answer. Then arguments of unequal size are #N/A, an array of references has no number to pair,
-    // and else the first error at the earliest place is the answer.
+    // The error that keeps two arguments from being paired, in Excel's order: of one cell by itself, of unequal
+    // sizes, of an array of references, and else the first error at the earliest place.
     public static over(ctx: Evaluator, pairs: Pairs, first: Value, second: Value): FormulaError | null {
         const lone = alone(ctx, first) ?? alone(ctx, second);
         if (lone !== null) return lone;
@@ -305,7 +300,7 @@ export class Table {
         this.ctx = ctx;
     }
 
-    // What a table stands for, which the call wrapper asks of one that a body answered with.
+    // What a table stands for.
     public static held(table: Table): Value {
         return table.value;
     }

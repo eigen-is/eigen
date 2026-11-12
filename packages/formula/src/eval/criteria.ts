@@ -150,7 +150,7 @@ export class Tally {
     public found = 0;
     // The first error beside them, which is then the result of the call.
     public error: FormulaError | null = null;
-    // The criteria ranges of the call, each with its criterion: the call wrapper writes them.
+    // The criteria ranges of the call, each with its criterion.
     public readonly ranges: Reference[] = [];
     public readonly criteria: Held[] = [];
     // Per criterion: as it is read, and whether a blank cell meets it.

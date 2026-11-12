@@ -21,7 +21,7 @@ export function real(result: number): number | FormulaError {
     return result > -SMALLEST_NORMAL && result < SMALLEST_NORMAL ? 0 : result;
 }
 
-export function arithmetic(op: number, x: number, y: number): number | FormulaError {
+function arithmetic(op: number, x: number, y: number): number | FormulaError {
     switch (op) {
         case Token.Plus:
             return real(x + y);

@@ -131,8 +131,8 @@ function spell(
             const { columns } = workbook.sheets[area.sheet];
             for (let row = area.top; row <= area.bottom && error === null; row += 1) {
                 for (let c = area.left; c <= area.right && error === null; c += 1) {
-                    const value = c < columns.length ? workbook.value(columns[c], row) : null;
-                    error = wholes === null ? spelled(texts, value) : whole(wholes, value);
+                    const cell = c < columns.length ? workbook.value(columns[c], row) : null;
+                    error = wholes === null ? spelled(texts, cell) : whole(wholes, cell);
                 }
             }
         }
@@ -161,9 +161,8 @@ function spelled(texts: string[], value: Value): FormulaError | null {
     return null;
 }
 
-// One value added to `wholes` as the number it is, or as the number its text reads as. A blank is passed over;
-// an error is the answer, and so is #VALUE! for a boolean, a text that is no number and an element that is a
-// reference.
+// One value added to `wholes` as the number it is, or as the number its text reads as. A blank is passed over,
+// an error is the answer, and anything else that is no number is #VALUE!.
 function whole(wholes: number[], value: Value): FormulaError | null {
     if (value === null) return null;
     const number = typeof value === 'string' ? parseNumber(value) : value;
@@ -195,8 +194,8 @@ function weigh(ctx: Evaluator, entry: Entry, frame: Frame, count: number): Formu
     const { ranges, criteria } = tally;
     const { where, matched } = entry;
     // Written after the criteria, the range of the numbers takes its size from the first criteria range.
-    const sized = matched > where;
-    const to = sized ? matched : count;
+    const trailing = matched > where;
+    const to = trailing ? matched : count;
     let pairs = 0;
     for (let i = where; i < to; i += 2) {
         const range = held[i];
@@ -213,9 +212,9 @@ function weigh(ctx: Evaluator, entry: Entry, frame: Frame, count: number): Formu
     }
     const given = matched < 0 ? undefined : held[matched];
     let values = isReference(given) ? given : null;
-    if (sized && values === null) values = ranges[0];
+    if (trailing && values === null) values = ranges[0];
     else if (values !== null && (values.bottom - values.top !== rows || values.right - values.left !== columns)) {
-        if (!sized) return VALUE;
+        if (!trailing) return VALUE;
         values = { ...values, bottom: values.top + rows, right: values.left + columns };
     }
     // Every cell is computed before a criterion is read: a text is known by its id only once a cell holds it.

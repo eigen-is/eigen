@@ -2,8 +2,7 @@
 // a formula and its text, how many sheets there are, and a reference that is written in a text. A book is asked
 // about one cell, and the call wrapper picks it: the first cell of the reference the row was given, or the cell of
 // the formula. So no member takes a place, and a body reaches no cell its row does not name. A book is the one of
-// its call's frame, so a formula computed while the body runs aims another. What a book answers can change with no
-// value changing, so every row that takes one is computed again in every pass that has a write.
+// its call's frame, so a formula computed while the body runs aims another.
 
 import { isUnparsed, parseA1, parseStored } from '../text/parser';
 import { printA1 } from '../text/printer';

@@ -42,8 +42,7 @@ export function lift(
     const lined = lineUp(ctx, arrays, entry.volatile);
     if (lined === null) return CALC;
     const { down, across } = lined;
-    // Filled element by element and never made at its size: an array made ten thousand long or longer throws the
-    // engine that runs this out of its compiled code, for every call after it too.
+    // Filled element by element and never made at its size, which would slow every call after it.
     const items: (Scalar | Reference)[] = [];
     // Per element, the lazy argument it picked, or undefined for an element that has its value.
     const picks: (Lazy | undefined)[] = [];
@@ -57,10 +56,8 @@ export function lift(
             const result = failed ?? run(ctx, entry, frame.held, count, 0);
             // Of an element that answers an array, the first value: ROW of a range of three rows is its first row.
             let item = isLazy(result) ? null : isArray(result) ? result.items[0] : result;
-            // And of one that answers a reference, the value of its first cell: a part of a range is a value
-            // here, as Excel's INDEX(A1:B3,{1,2},1) is. A cell that holds nothing stays that cell, which is
-            // passed over where a blank cell of a range is. Only a row that works a reference out keeps one
-            // per element, and its array is then one of references.
+            // Of one that answers a reference, the value of its first cell, and a cell that holds nothing stays
+            // that cell. Only a row that works a reference out keeps one per element.
             if (isReference(item)) {
                 if (entry.returns === ANYWHERE) references = true;
                 else item = ctx.first(item) ?? { ...item, bottom: item.top, right: item.left, next: null };

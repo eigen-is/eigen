@@ -1,6 +1,6 @@
 // Searching one row or one column of values for a key, as every lookup function does: for the key itself or a
-// pattern, for the nearest value, or by halving when the values are taken to be sorted. An approximate MATCH, LOOKUP
-// or VLOOKUP only halves where Excel also reads on cell by cell: on values not sorted that way it differs, by choice.
+// pattern, for the nearest value, or by halving when the values are taken to be sorted. An approximate search, such
+// as VLOOKUP's, only halves where Excel also reads on cell by cell: on values not sorted so it differs, by choice.
 // A key matches only values of its own kind, text in any case, and a blank never matches; XMATCH's bisection alone
 // orders the kinds. A function gets a column's cells or an array's elements as a Vector, and a position from 0.
 
@@ -75,7 +75,6 @@ export class Vector {
         return this.bisect(key ?? 0, search < 0, match);
     }
 
-    // The value at a position.
     private valueAt(at: number): Scalar | Reference {
         const { column, start } = this;
         if (column !== null) return this.workbook.value(column, start + at);
@@ -99,10 +98,10 @@ export class Vector {
     // a blank key finds a blank.
     private exact(key: Plain | null, wild: boolean, reverse: boolean): number {
         const { column, start } = this;
-        const used = this.stored;
+        const { stored } = this;
         const step = reverse ? -1 : 1;
-        const first = reverse ? used - 1 : 0;
-        const end = reverse ? -1 : used;
+        const first = reverse ? stored - 1 : 0;
+        const end = reverse ? -1 : stored;
         if (key === null) {
             if (reverse && this.length > this.used) return this.length - 1;
             for (let at = first; at !== end; at += step) {
@@ -143,10 +142,10 @@ export class Vector {
         const rows = ColumnIndex.rows(column, strings, kind, num, ref);
         if (rows !== null) {
             // The rows of a number also list the text cells that read as it, which no lookup takes.
-            const from = reverse ? firstFrom(rows, start + used) - 1 : firstFrom(rows, start);
+            const from = reverse ? firstFrom(rows, start + stored) - 1 : firstFrom(rows, start);
             for (let i = from; i >= 0 && i < rows.length; i += step) {
                 const row = rows[i];
-                if (row < start || row >= start + used) break;
+                if (row < start || row >= start + stored) break;
                 if ((column.kind[row] & KIND_MASK) === kind) return row - start;
             }
             return -1;
@@ -167,12 +166,12 @@ export class Vector {
     // The value that equals the key, or else the nearest smaller one, or the nearest larger one with `larger`. Every
     // value is looked at, in order or from the last one back with `reverse`, and of equal candidates the first wins.
     private nearest(key: Plain, larger: boolean, reverse: boolean): number {
-        const used = this.stored;
+        const { stored } = this;
         const step = reverse ? -1 : 1;
-        const end = reverse ? -1 : used;
+        const end = reverse ? -1 : stored;
         let best = -1;
         let bestValue = key;
-        for (let at = reverse ? used - 1 : 0; at !== end; at += step) {
+        for (let at = reverse ? stored - 1 : 0; at !== end; at += step) {
             const value = this.heldAt(at);
             if (typeof value === 'object' || typeof value !== typeof key) continue;
             const order = compareValues(value, key);
@@ -188,9 +187,7 @@ export class Vector {
     }
 
     // The last value at most the key among values taken to be sorted upward, or with `descending` the key, else the
-    // last value above it, among values taken to be sorted downward. A probe at a value of another kind moves to the
-    // next of the key's kind after it, else before it, and the search goes on beside the value it moved to. Of equal
-    // keys the halving goes on to the last one upward and to the first one downward.
+    // last value above it, among values sorted downward. A probe at a value of another kind moves to one of the key's.
     private halve(key: Plain, descending: boolean): number {
         let low = 0;
         let high = this.used - 1;
@@ -222,8 +219,7 @@ export class Vector {
     }
 
     // Bisection over values taken to be sorted in the one order of values, kinds and all, with an error and a
-    // blank past every value. Of equal keys it finds the first when the values go up and the last when they go
-    // down. `mode` is seek's `match`.
+    // blank past every value. `mode` is seek's `match`.
     private bisect(key: Plain, descending: boolean, mode: number): number {
         let low = 0;
         let high = this.used - 1;
