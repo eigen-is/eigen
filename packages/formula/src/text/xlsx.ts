@@ -5,7 +5,7 @@
 // isLegacy says how to write a cell: true is a plain formula, false an array formula with the dynamic-array mark.
 
 import type { Param } from '../eval/signature';
-import { ANYWHERE, Prepare, Read, slotOf } from '../eval/signature';
+import { ANYWHERE, PART, Prepare, Read, slotOf } from '../eval/signature';
 import {
     EXCEL_2007_FUNCTIONS,
     EXCEL_ARRAY_FUNCTIONS,
@@ -426,14 +426,18 @@ function many(node: FormulaNode, functions: Registry, top: boolean): boolean {
             if (entry === undefined) return !isExcel(node.text) || EXCEL_ARRAY_FUNCTIONS.has(node.text);
             if (entry.returns === ANYWHERE) return true;
             const { children } = node;
-            // Of the two that answer a part of their table: INDEX is one cell when each index is a number other
-            // than 0 or a call of one value, XLOOKUP when it looks along a plain range and returns from one line.
-            if (node.text === 'INDEX' && !children.slice(1, 3).every((index) => isIndex(index, functions))) return true;
-            if (
-                node.text === 'XLOOKUP' &&
-                !(children[1]?.kind === NodeKind.Ref && children[1].op !== RefKind.Cell && isLine(children[2]))
-            )
-                return true;
+            // A row that answers a part of its table answers one cell in two written forms only: INDEX when each
+            // index is a number other than 0 or a call of one value, XLOOKUP along a plain range into one line.
+            if (entry.returns === PART) {
+                const one =
+                    node.text === 'INDEX'
+                        ? children.slice(1, 3).every((index) => isIndex(index, functions))
+                        : node.text === 'XLOOKUP' &&
+                          children[1]?.kind === NodeKind.Ref &&
+                          children[1].op !== RefKind.Cell &&
+                          isLine(children[2]);
+                if (!one) return true;
+            }
             // A call that picks an argument answers what it picked, and one that makes an array of the cells of a
             // place, as ROW does, answers as many as the place holds.
             const spreads = entry.params.some((param) => param.read === Read.Room);

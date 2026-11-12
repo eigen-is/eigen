@@ -6,7 +6,6 @@ import {
     EXCEL_WORKSHEET_FUNCTIONS,
 } from '../../functions/excel-names';
 import { FUNCTIONS } from '../../functions/library';
-import type { FormulaNode } from '../../text';
 import {
     intersect,
     isLegacy,
@@ -313,6 +312,15 @@ describe('text/xlsx: the three contexts', () => {
         );
     });
 
+    test('a function that answers a part of its table is many cells unless its form is known to answer one', () => {
+        const index = FUNCTIONS.get('INDEX');
+        if (!index) throw new Error('no INDEX');
+        const functions = new Map(FUNCTIONS).set('SLICE', index);
+        const cut = intersect(read('ABS(SLICE(A1:B3,1,1))+ABS(INDEX(A1:B3,1,1))'), functions);
+        if ('reason' in cut) throw new Error(cut.reason);
+        expect(printA1(cut, ...at('D2'), sheetName)).toBe('=ABS(@SLICE(A1:B3,1,1))+ABS(INDEX(A1:B3,1,1))');
+    });
+
     test('a user function gets the @ and takes its arguments as they are; a name and a single cell get none', () => {
         expect(bar('MyUdf(A1:A3)+1')).toBe('=@MYUDF(A1:A3)+1');
         expect(bar('[1]!Func(A1:A3)')).toBe('=@[1]!Func(A1:A3)');
@@ -607,6 +615,9 @@ describe('text/xlsx: a stored key reads back as the tree it was printed from', (
         'A1:C3:_xlfn.ANCHORARRAY(B10)',
         'A1:_xlfn.ANCHORARRAY(B10)(1)',
         'A1:_xlfn.ANCHORARRAY(SUM(B10))',
+        '_xlfn.ANCHORARRAY(#REF!)',
+        '_xlfn.ANCHORARRAY([1]!x(1))',
+        '_xlfn.ANCHORARRAY(_xlfn.LAMBDA(_xlpm.x,_xlpm.x)(A1))',
     ];
 
     for (const text of BREAKING) {
@@ -654,6 +665,29 @@ describe('text/xlsx: a stored key reads back as the tree it was printed from', (
         expect(printA1(read('Rate _xlfn.SINGLE(B1:B3)', 'E5'), ...at('E5'), sheetName)).toBe('=(Rate) (@B1:B3)');
     });
 
+    test('an anchor that is #REF! or a call of what a call returned gets no brackets, and is written as it was', () => {
+        for (const [file, typed] of [
+            ['_xlfn.ANCHORARRAY(#REF!)', '=#REF!#'],
+            ['_xlfn.ANCHORARRAY([1]!x(1))', '=[1]!x(1)#'],
+        ]) {
+            expect(printA1(read(file, 'E5'), ...at('E5'), sheetName)).toBe(typed);
+            expect(fileOf(read(file, 'E5'), 'E5').text).toBe(file);
+        }
+    });
+
+    test('a name the file wrote bare beside a colon or before brackets gets none it did not have', () => {
+        for (const [file, typed] of [
+            ['x :y', '=x :y'],
+            ['SUM(ab :cd)', '=SUM(ab :cd)'],
+            ['R (B1)', '=r (B1)'],
+            ['c (B1:B2)', '=c (B1:B2)'],
+        ]) {
+            const tree = read(file, 'E5');
+            expect(printA1(tree, ...at('E5'), sheetName)).toBe(typed);
+            expect(parseStored(printStored(tree))).toEqual(tree);
+        }
+    });
+
     test('the brackets the reader adds around an @ under a range operator go again on writing', () => {
         const tree = read('SUM((A1,_xlfn.SINGLE(B1:B3)),_xlfn.SINGLE(A1:A3):B5)', 'E5');
         expect(printA1(tree, ...at('E5'), sheetName)).toBe('=SUM((A1,(@B1:B3)),(@A1:A3):B5)');
@@ -671,16 +705,16 @@ describe('text/xlsx: a file formula whose stored form nests too deep is refused'
         ['1+_xlfn.SINGLE(A1:A2+1):B2', 61],
     ])('the brackets and the operator %s becomes count: it reads under %i calls and no more', (inner, most) => {
         for (let calls = most - 2; calls <= 64; calls += 1) {
-            const tree = parseXlsx(wrapped(inner, calls), ...at('E5'), findSheet);
-            if (calls > most) expect(tree).toMatchObject({ reason: 'too-deep' });
-            else expect(parseStored(printStored(tree as FormulaNode))).toEqual(tree as FormulaNode);
+            const text = wrapped(inner, calls);
+            if (calls > most) expect(parseXlsx(text, ...at('E5'), findSheet)).toMatchObject({ reason: 'too-deep' });
+            else expect(parseStored(printStored(read(text, 'E5')))).toEqual(read(text, 'E5'));
         }
     });
 
     test('the @ of a plain <f> counts: a range under 63 calls gets it, under 64 the formula is refused', () => {
-        const fits = intersect(read(wrapped('A1:A2', 63)), FUNCTIONS);
-        expect(parseStored(printStored(fits as FormulaNode))).toEqual(fits as FormulaNode);
-        expect(printStored(fits as FormulaNode)).toContain('ABS(@R[-1]C[-3]:RC[-3])');
+        const fits = intersected(read(wrapped('A1:A2', 63)));
+        expect(parseStored(printStored(fits))).toEqual(fits);
+        expect(printStored(fits)).toContain('ABS(@R[-1]C[-3]:RC[-3])');
         expect(intersect(read(wrapped('A1:A2', 64)), FUNCTIONS)).toEqual({ reason: 'too-deep', at: 0 });
         expect(intersect(read(wrapped('A1', 64)), FUNCTIONS)).toEqual(read(wrapped('A1', 64)));
     });

@@ -125,9 +125,12 @@ function pick(text: string): Picked | null {
     let columns = 0;
     let ranged = false;
     while (at < end) {
-        const part = bare ? end << 6 : lexAt(text, at);
-        if (!bare && tokenKind(part) !== Token.Bracket) return null;
-        const close = bare ? end : tokenEnd(part) - 1;
+        let close = end;
+        if (!bare) {
+            const part = lexAt(text, at);
+            if (tokenKind(part) !== Token.Bracket) return null;
+            close = tokenEnd(part) - 1;
+        }
         const name = text.slice(bare ? at : at + 1, close);
         if (name.charCodeAt(0) === HASH) {
             const item = ITEMS.get(name.toLowerCase());
