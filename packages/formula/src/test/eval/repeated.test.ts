@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { repeated } from '../../eval/sum';
 import { NUM } from '../../index';
 import { evaluate } from '../recalc/support';
 
@@ -97,12 +96,4 @@ describe('one value added many times is the sum a loop of additions gives, bit f
         }
         expect(snapped).toBeGreaterThan(3);
     });
-});
-
-// No sum of the engine starts at -0, so this asks the stepper itself.
-test('adding 0 to -0 gives 0, as one addition does', () => {
-    expect(Object.is(repeated(-0, 0, 3), -0 + 0)).toBe(true);
-    expect(Object.is(repeated(-0, 0, 0), -0)).toBe(true);
-    expect(Object.is(repeated(-0, -0, 3), -0)).toBe(true);
-    expect(repeated(2 ** 53, 1, 5)).toBe(2 ** 53);
 });

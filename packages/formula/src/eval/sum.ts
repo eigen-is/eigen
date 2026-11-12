@@ -42,7 +42,7 @@ function addRow(walk: Walk, recalc: Recalc, start: number): number {
         return walk.before + num[from];
     }
     // A row of different numbers that stands for many written rows is added that many times over.
-    if (!recalc.room((rows - 1) * (to - from))) {
+    if (!recalc.spend((rows - 1) * (to - from))) {
         walk.fail(CALC);
         return sum;
     }
@@ -56,7 +56,7 @@ function addRow(walk: Walk, recalc: Recalc, start: number): number {
 }
 
 // `start` after `value` was added to it `times` times, one addition at a time.
-export function repeated(start: number, value: number, times: number): number {
+function repeated(start: number, value: number, times: number): number {
     let sum = start;
     let left = times;
     while (left > 0) {

@@ -115,30 +115,34 @@ describe('the clock and the draw come from the pass', () => {
         expect(sum('=MAX(IF({1;1;1},NOW()))')).toBe(46000.5);
     });
 
-    test('a formula that draws is computed again in every pass', () => {
-        const engine = engineOf({ s1: { A1: '=RAND()', A2: '=OFFSET(B1,1,0)', B2: 5 } });
-        engine.recalc(Number.POSITIVE_INFINITY, 0, 1);
+    test('a formula that draws or reads the clock is computed on a load that never computed it, and keeps its value when a cell it does not read is written', () => {
+        const engine = engineOf({ s1: { A1: '=RAND()', A2: '=OFFSET(B1,1,0)', A3: '=NOW()', B2: 5 } });
+        engine.recalc(Number.POSITIVE_INFINITY, 100, 1);
         const first = valueAt(engine, 'A1');
+        expect(first).toBe(drawn({ A1: '=RAND()' }, 1)[0]);
+        expect(valueAt(engine, 'A3')).toBe(100);
         engine.setValue('s1', 1, 1, 6);
-        engine.recalc(Number.POSITIVE_INFINITY, 0, 2);
-        expect(valueAt(engine, 'A1')).not.toBe(first);
+        engine.recalc(Number.POSITIVE_INFINITY, 200, 2);
+        expect(valueAt(engine, 'A1')).toBe(first);
+        expect(valueAt(engine, 'A3')).toBe(100);
         expect(valueAt(engine, 'A2')).toBe(6);
     });
 
-    test('a recalc after any write computes what draws and what reads it, and a recalc after none computes nothing', () => {
-        const engine = engineOf({ s1: { A1: '=RAND()', A2: '=A1+1', A3: '=A2*2', A4: '=NOW()', C1: 1 } });
+    test('a formula that draws is computed again when a cell it reads or its own cell is written, and so is what reads it', () => {
+        const engine = engineOf({ s1: { A1: '=RAND()+C1*0', A2: '=A1+1', A3: '=A2*2', A4: '=NOW()', C1: 1 } });
         engine.recalc(Number.POSITIVE_INFINITY, 100, 1);
         const first = Number(valueAt(engine, 'A1'));
         expect(valueAt(engine, 'A3')).toBe((first + 1) * 2);
-        engine.recalc(Number.POSITIVE_INFINITY, 200, 2);
-        expect(valueAt(engine, 'A1')).toBe(first);
-        expect(valueAt(engine, 'A4')).toBe(100);
         engine.setValue('s1', 0, 2, 2);
-        engine.recalc(Number.POSITIVE_INFINITY, 300, 3);
+        engine.recalc(Number.POSITIVE_INFINITY, 200, 2);
         const second = Number(valueAt(engine, 'A1'));
         expect(second).not.toBe(first);
         expect(valueAt(engine, 'A3')).toBe((second + 1) * 2);
+        expect(valueAt(engine, 'A4')).toBe(100);
+        engine.setFormula('s1', 3, 0, '=NOW()');
+        engine.recalc(Number.POSITIVE_INFINITY, 300, 3);
         expect(valueAt(engine, 'A4')).toBe(300);
+        expect(valueAt(engine, 'A1')).toBe(second);
     });
 
     // The calls are counted by a row of this test's own.

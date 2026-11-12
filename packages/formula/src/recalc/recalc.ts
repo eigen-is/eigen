@@ -30,9 +30,11 @@ export type RecalcResult = {
 const BUDGET = 640;
 const CELL = 6;
 
-// The most one formula makes: the elements its arrays store, the characters of the texts it made for them, and the
-// numbers it adds one by one for cells that no array stores. A formula that needs more is #CALC!, alone.
-const MOST_MADE = 2 ** 24;
+// The most elements one array stores, which bounds memory, and the most work one formula does, which bounds time: the
+// elements of its arrays, the characters of the texts it made for them, and the numbers it adds one by one for
+// cells that no array stores. A formula that needs more of either is #CALC!, alone.
+const MOST_STORED = 2 ** 24;
+const MOST_WORK = 2 ** 27;
 
 const UNWIND = Object.freeze({ reason: 'the evaluation nests too deep' });
 const STOP = Object.freeze({ reason: 'the recalc computed as many formulas as its cap' });
@@ -73,6 +75,8 @@ export class Recalc {
     private stored = false;
     // What each cell in progress has made since its formula last started.
     private readonly made: number[] = [];
+    // The area each cell in progress is having computed, which a throw for depth leaves for the pass, or null.
+    private readonly areas: (Reference | null)[] = [];
 
     public constructor(workbook: Workbook, functions: Registry) {
         this.workbook = workbook;
@@ -97,8 +101,8 @@ export class Recalc {
         this.seed(this.workbook.sheets.indexOf(sheet), c, row);
     }
 
-    // Computes the formulas that the cells written since the last pass reach, those that draw or read cells they
-    // do not name, and what an earlier pass left, in sheet, column, row order where the reads do not ask for another.
+    // Computes the formulas that the cells written since the last pass reach, those that read cells they do not
+    // name, and what an earlier pass left, in sheet, column, row order where the reads do not ask for another.
     public pass(cap: number, now = 0, seed = 0): RecalcResult {
         const { workbook } = this;
         this.evaluator.clock(now, seed);
@@ -120,15 +124,6 @@ export class Recalc {
                 spans[last + 3] = Math.max(spans[last + 3], seeds[at + 3]);
             } else spans.push(seeds[at], seeds[at + 1], seeds[at + 2], seeds[at + 3]);
         }
-        // A pass after any write computes every formula that draws or reads the clock again, and so what reads it.
-        const { volatile } = this.index;
-        for (let i = 0; spans.length > 0 && i < volatile.length; i += 5) {
-            for (let c = volatile[i + 1]; c <= volatile[i + 2]; c += 1) {
-                const column = workbook.sheets[volatile[i]].columns[c];
-                for (let row = volatile[i + 3]; row <= volatile[i + 4]; row += 1) column.markDirty(row);
-                spans.push(volatile[i], c, volatile[i + 3], volatile[i + 4]);
-            }
-        }
         this.index.mark(workbook, spans);
         seeds.length = 0;
         this.cost = 0;
@@ -144,9 +139,15 @@ export class Recalc {
                         this.enter(sheet, column, c, row);
                         // After a throw for depth the innermost cell in progress goes first, with no call above it.
                         while (this.current >= 0) {
-                            this.depth = this.nesting(this.columns[this.current].shape[this.rows[this.current]]);
+                            const at = this.current;
+                            const area = this.areas[at];
                             this.evaluator.calls = 0;
                             try {
+                                // The area it was reading is computed from here, with nothing of its formula on
+                                // the stack: a formula too deep to read one cell starts again once, not per cell.
+                                this.depth = 0;
+                                if (area !== null) this.settleArea(area);
+                                this.depth = this.nesting(this.columns[at].shape[this.rows[at]]);
                                 this.compute();
                             } catch (thrown) {
                                 if (thrown !== UNWIND) throw thrown;
@@ -197,6 +198,8 @@ export class Recalc {
     // Computes what is still to be computed in one area, so a loop over its planes meets values only.
     public settleArea(area: Reference): void {
         const { top } = area;
+        const reader = this.current;
+        this.areas[reader] = area;
         const sheet = this.workbook.sheets[area.sheet];
         const right = Math.min(area.right, sheet.columns.length - 1);
         for (let c = area.left; c <= right; c += 1) {
@@ -206,13 +209,20 @@ export class Recalc {
                 if (column.kind[row] > SETTLED) this.resolve(sheet, column, c, row);
             }
         }
+        this.areas[reader] = null;
     }
 
-    // Asks for what the running formula is about to make, such as the elements of an array, before it makes them:
-    // false when the formula would then have made more than it may, and else it is added to what the pass costs.
-    public room(units: number): boolean {
+    // Asks for an array of so many stored elements before the running formula makes it: false when one array may
+    // not store that many, or the formula may not do the work.
+    public room(elements: number): boolean {
+        return elements <= MOST_STORED && this.spend(elements);
+    }
+
+    // Asks for work the running formula is about to do, such as the characters of a text, before it does it: false
+    // when the formula would then have done more than it may, and else it is added to what the pass costs.
+    public spend(units: number): boolean {
         const made = this.made[this.current] + units;
-        if (made > MOST_MADE) return false;
+        if (made > MOST_WORK) return false;
         this.made[this.current] = made;
         return true;
     }
@@ -252,6 +262,7 @@ export class Recalc {
         this.parents[at] = this.current;
         this.lows[at] = at;
         this.made[at] = 0;
+        this.areas[at] = null;
         this.size = at + 1;
         this.current = at;
     }

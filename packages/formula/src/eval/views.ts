@@ -7,7 +7,7 @@ import { GRID_ROWS } from '../text/a1';
 import type { FormulaError } from '../values/errors';
 import { CALC } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
-import { arrayOf } from '../values/value';
+import { ValueType } from '../values/value';
 import type { Evaluator } from './evaluator';
 import { skipped } from './walk';
 
@@ -72,7 +72,20 @@ export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
             items[i * width + j] = held ? ctx.workbook.value(column, top + r) : null;
         }
     }
-    return arrayOf(rows, columns, items, rowEnds, columnEnds);
+    if (rows * columns === 1) return items[0];
+    // Not looked through for an array of numbers: what reads a range as an array reads it element by element.
+    return {
+        type: ValueType.Array,
+        rows,
+        columns,
+        height,
+        width,
+        items,
+        nums: null,
+        rowEnds,
+        columnEnds,
+        references: false,
+    };
 }
 
 // Where the runs of an axis of `size` end: each of the first `length` marks that is set is a run of its own, and

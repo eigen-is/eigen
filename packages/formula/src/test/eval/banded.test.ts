@@ -317,86 +317,134 @@ describe('the bound on what one array stores', () => {
         expect(valueAt(edited, 'A1')).toBe(2 ** 34 - 40);
     });
 
-    test('an operation of two arrays is bounded as one array is', () => {
+    test('an operation of two arrays stores 2^24 elements, and one row more is #CALC!', () => {
         const cells: Record<string, Literal> = {};
         for (let i = 0; i < 4097; i += 1) {
             cells[label(i, 0)] = 1;
             cells[label(0, i + 1)] = 1;
         }
+        const row = `Sheet2!B1:${label(0, 4096)}`;
         const engine = engineOf({
-            s1: { A1: '=SUM(Sheet2!A:A+Sheet2!B1:XFD1)', A2: `=SUM(Sheet2!A1:A4000+Sheet2!B1:${label(0, 4000)})` },
+            s1: { A1: `=SUM(Sheet2!A1:A4097+${row})`, A2: `=SUM(Sheet2!A1:A4096+${row})` },
             s2: cells,
         });
         engine.recalc(ALL);
         expect(valueAt(engine, 'A1')).toBe(CALC);
-        expect(valueAt(engine, 'A2')).toBe(2 * 4000 * 4000);
+        expect(valueAt(engine, 'A2')).toBe(2 * 4096 * 4096);
     });
 
-    test('a row of different numbers is added for at most 2^24 cells that no array stores', () => {
+    test('a row of different numbers is added for more cells than an array stores, up to the work of a formula', () => {
         const row: Record<string, Literal> = {};
-        for (let i = 0; i < 20; i += 1) row[label(0, i + 1)] = i % 2 === 0 ? 0.1 : 0.7;
-        const few = Object.fromEntries(Object.entries(row).slice(0, 10));
+        for (let i = 0; i < 129; i += 1) row[label(0, i + 1)] = i + 1;
         const engine = engineOf({
             s1: {
-                A1: `=SUM((Sheet2!A:A="")*Sheet2!B1:${label(0, 20)})`,
-                A2: `=SUM((Data!A:A="")*Data!B1:${label(0, 10)})`,
+                A1: `=SUM((Sheet2!A:A<>"x")*Sheet2!B1:${label(0, 129)})`,
+                A2: '=SUM((Sheet2!A:A<>"x")*Sheet2!B1:R1)',
                 A3: '=A2+A1',
             },
             s2: row,
-            data: few,
         });
         expect(engine.recalc(ALL)).toEqual({ loops: [], stopped: false });
         expect(valueAt(engine, 'A1')).toBe(CALC);
         expect(valueAt(engine, 'A3')).toBe(CALC);
-        let sum = 0;
-        for (let r = 0; r < 1048576; r += 1) for (let i = 0; i < 5; i += 1) sum = sum + 0.1 + 0.7;
-        expect(valueAt(engine, 'A2')).toBe(sum);
+        expect(valueAt(engine, 'A2')).toBe(160432128);
     });
 
-    // A million stored elements, and three million additions for cells that no array stores.
-    const stored = 'SUM(ROW(A1:A1048576))';
+    // A million stored elements, three million additions for cells that no array stores, and 63 million characters.
+    const series = 'SUM(ROW(A1:A1048576))';
     const added = 'SUM({1,2,3}*(B1:B1048576=""))';
+    const texts = 'SUM(LEN(Sheet2!A1:A2048&""))';
     const of = (count: number, part: string) => Array.from({ length: count }, () => part).join('+');
 
-    test('the bound is on all that one formula makes, and what another formula made does not count', () => {
+    test('arrays that each fit do not add up to the bound on one array', () => {
+        expect(evaluate(`=${of(17, series)}`)).toBe((17 * (1048576 * 1048577)) / 2);
+    });
+
+    test('the bound on work is on all that one formula does, and what another formula did does not count', () => {
+        const long: Record<string, Literal> = {};
+        for (let i = 0; i < 2048; i += 1) long[label(i, 0)] = 'a'.repeat(31000);
         const engine = engineOf({
             s1: {
-                A1: `=${of(17, stored)}`,
-                A2: `=${of(15, stored)}`,
-                A3: `=${of(15, stored)}`,
-                A4: `=${of(6, added)}`,
-                A5: `=${of(5, added)}`,
-                A6: `=${of(3, added)}+${of(8, stored)}`,
-                A7: `=${of(3, added)}+${of(6, stored)}`,
+                A1: `=${of(3, texts)}`,
+                A2: `=${of(2, texts)}`,
+                A3: `=${of(2, texts)}`,
+                A4: `=${of(2, texts)}+${of(3, added)}`,
+                A5: `=${of(2, texts)}+${added}`,
             },
+            s2: long,
         });
         expect(engine.recalc(ALL)).toEqual({ loops: [], stopped: false });
-        const million = (1048576 * 1048577) / 2;
         expect(valueAt(engine, 'A1')).toBe(CALC);
-        expect(valueAt(engine, 'A2')).toBe(15 * million);
-        expect(valueAt(engine, 'A3')).toBe(15 * million);
+        expect(valueAt(engine, 'A2')).toBe(2 * 2048 * 31000);
+        expect(valueAt(engine, 'A3')).toBe(2 * 2048 * 31000);
         expect(valueAt(engine, 'A4')).toBe(CALC);
-        expect(valueAt(engine, 'A5')).toBe(5 * 6 * 1048576);
-        expect(valueAt(engine, 'A6')).toBe(CALC);
-        expect(valueAt(engine, 'A7')).toBe(3 * 6 * 1048576 + 6 * million);
+        expect(valueAt(engine, 'A5')).toBe(2 * 2048 * 31000 + 6 * 1048576);
+    });
+
+    test('the work of one formula is 2^27, and one character more is #CALC!', () => {
+        // Three arrays of 4,096 elements and 4,096 texts of 32,765 characters are 2^27.
+        const cells: Record<string, Literal> = {};
+        for (let i = 0; i < 4096; i += 1) cells[label(i, 0)] = 'a'.repeat(32765);
+        const engine = engineOf({ s1: { A1: '=SUM(LEN(Sheet2!A1:A4096&""))' }, s2: cells });
+        engine.recalc(ALL);
+        expect(valueAt(engine, 'A1')).toBe(4096 * 32765);
+        engine.setValue('s2', 7, 0, 'a'.repeat(32766));
+        engine.recalc(ALL);
+        expect(valueAt(engine, 'A1')).toBe(CALC);
     });
 
     test('a text that a call made for an element counts by its characters', () => {
         const engine = engineOf({
             s1: {
                 A1: 'a'.repeat(20000),
-                A2: '=SUM(LEN(ROW(B1:B1000)&A1))',
+                A2: '=SUM(LEN(ROW(B1:B7000)&A1))',
                 A3: '=SUM(LEN(ROW(B1:B700)&A1))',
-                A4: '=SUM(LEN(UPPER(IF(ROW(B1:B1000),A1))))',
-                A5: '=SUM(LEN(IF(ROW(B1:B1000),A1)))',
+                A4: '=SUM(LEN(UPPER(IF(ROW(B1:B7000),A1))))',
+                A5: '=SUM(LEN(IF(ROW(B1:B7000),A1)))',
+                A6: '=SUM(LEN(VLOOKUP(ROW(B1:B7000)*0+1,C1:D1,2,FALSE)))',
+                C1: 1,
+                D1: 'b'.repeat(20000),
             },
         });
         expect(engine.recalc(ALL)).toEqual({ loops: [], stopped: false });
         expect(valueAt(engine, 'A2')).toBe(CALC);
         expect(valueAt(engine, 'A3')).toBe(700 * 20000 + 9 + 90 * 2 + 601 * 3);
         expect(valueAt(engine, 'A4')).toBe(CALC);
-        // One text that every element picked is stored once.
-        expect(valueAt(engine, 'A5')).toBe(1000 * 20000);
+        // One text that every element picked is stored once, and so is one that a lookup found for every element.
+        expect(valueAt(engine, 'A5')).toBe(7000 * 20000);
+        expect(valueAt(engine, 'A6')).toBe(7000 * 20000);
+    });
+
+    test('five criteria down a million filled rows, multiplied', () => {
+        const formula =
+            '=SUMPRODUCT((Sheet2!A:A=1)*(Sheet2!B:B=1)*(Sheet2!C:C=1)*(Sheet2!D:D=1)*(Sheet2!E:E=1)*Sheet2!F:F)';
+        const engine = new Engine([
+            { id: 's1', name: 'Sheet1', cells: (cell) => cell(0, 0, null, stored(formula, 'A1')) },
+            {
+                id: 's2',
+                name: 'Sheet2',
+                cells: (cell) => {
+                    for (let c = 0; c < 6; c += 1) for (let r = 0; r < 1048576; r += 1) cell(r, c, 1, null);
+                },
+            },
+        ]);
+        engine.recalc(ALL);
+        expect(valueAt(engine, 'A1')).toBe(1048576);
+    });
+
+    test('100,000 texts of 175 characters are made upper case', () => {
+        const cells: Record<string, Literal> = {};
+        for (let i = 0; i < 100000; i += 1) cells[label(i, 0)] = 'a'.repeat(175);
+        const engine = engineOf({
+            s1: {
+                A1: '=SUMPRODUCT(--(UPPER(Sheet2!A1:A100000)="X"))',
+                A2: '=SUM(LEN(UPPER(Sheet2!A1:A100000)))',
+            },
+            s2: cells,
+        });
+        engine.recalc(ALL);
+        expect(valueAt(engine, 'A1')).toBe(0);
+        expect(valueAt(engine, 'A2')).toBe(17500000);
     });
 });
 
