@@ -1,8 +1,8 @@
 // The cell store of one workbook: its sheets in tab order and by id, the string table and the shape table. It is
-// built by one load from a description of the sheets and holds nothing a second load would not rebuild. A host
-// writes a cell here as a literal, a formula in its stored text, or a clear; the recalc writes each formula's result
-// into the same planes, so whoever reads a value never sees where it came from. `apply` is the one way cells move
-// and sheets come and go.
+// built by one load from a description of the sheets and holds nothing a second load would not rebuild; a source
+// never calls back into the engine while its cells are read, as its sheet is not the workbook's yet. A host writes a
+// literal, a formula in its stored text, or a clear; the recalc writes each result into the same planes, so a reader
+// never sees where a value came from. `apply` is the one way cells move and sheets come and go.
 
 import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';
@@ -40,6 +40,10 @@ export type Change =
     | { readonly kind: typeof ChangeKind.RenameSheet; readonly sheet: string; readonly name: string }
     | { readonly kind: typeof ChangeKind.MoveSheet; readonly sheet: string; readonly place: number };
 
+// A string table that weighs less, in characters, is not swept: the texts no cell holds then cost a few megabytes
+// at most, and a sweep reads every cell.
+export const SWEEP_FLOOR = 2 ** 22;
+
 export class Workbook {
     private readonly held: Sheet[] = [];
     public readonly strings = new StringTable();
@@ -48,9 +52,13 @@ export class Workbook {
     // The errors only a file knows, by their text. Their codes go on where the engine's own list ends.
     private readonly carried: FormulaError[] = [];
     private readonly carriedCodes = new Map<string, number>();
+    // The weight of the string table past which the next pass sweeps it: twice what it was after the last sweep or
+    // load and the floor at least, and 0 once a sheet was removed.
+    private limit: number;
 
     public constructor(sources: readonly SheetSource[]) {
         for (const source of sources) this.insert(this.load(source), this.held.length);
+        this.limit = Math.max(SWEEP_FLOOR, 2 * this.strings.weight);
     }
 
     // The sheets in tab order: each one's `place` is where it sits here.
@@ -121,6 +129,7 @@ export class Workbook {
                 const sheet = this.known(change.sheet);
                 this.held.splice(sheet.place, 1);
                 this.byId.delete(sheet.id);
+                this.limit = 0;
                 for (let s = sheet.place; s < this.held.length; s += 1) this.held[s].place = s;
                 return 0;
             }
@@ -134,6 +143,23 @@ export class Workbook {
                 return 0;
             }
         }
+    }
+
+    // Has the string table forget the texts no cell holds, once it is past its limit. For the start of a pass: no
+    // formula is running, and every sheet that holds a text is in the workbook.
+    public sweep(): void {
+        const { strings } = this;
+        if (strings.weight <= this.limit) return;
+        const held = new Uint8Array(strings.size);
+        for (const sheet of this.held) {
+            for (const { kind, ref, length } of sheet.columns) {
+                for (let row = 0; row < length; row += 1) {
+                    if ((kind[row] & KIND_MASK) === CellKind.Text) held[ref[row]] = 1;
+                }
+            }
+        }
+        strings.keep(held);
+        this.limit = Math.max(SWEEP_FLOOR, 2 * strings.weight);
     }
 
     public value(column: Column, row: number): Scalar {
