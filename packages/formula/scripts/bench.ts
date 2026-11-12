@@ -11,8 +11,8 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import type { CellSink, LineEdit, SheetSource } from '../src/index';
 import { Engine } from '../src/index';
-import { parseA1, printStored, sheetFinder } from '../src/text';
-import type { Book } from './xlsx';
+import { sheetFinder, storedText } from '../src/text';
+import type { Book, BookCell } from './xlsx';
 import { readBook, sourcesOf } from './xlsx';
 
 const USAGE = `bun packages/formula/scripts/bench.ts [options]
@@ -87,43 +87,32 @@ function loadBook(name: string): Book {
     return readBook(file);
 }
 
-function stored(formula: string, row: number, column: number, sheets: readonly { id: string; name: string }[]): string {
-    const tree = parseA1(formula, row, column, sheetFinder(sheets));
-    if ('reason' in tree) throw new Error(`${formula}: ${tree.reason}`);
-    return printStored(tree);
-}
-
-// What the formulas computed, so two runs that should agree can be told apart.
-function checksum(engine: Engine, sheets: readonly SheetSource[]): string {
+// The fastest full recalc of a never-computed engine over `reps` fresh engines. The check says what the formulas
+// of the last one computed, so two runs that should agree can be told apart.
+function recalcOf(sheets: readonly SheetSource[], reps: number): Measured {
+    let best = INF;
     let sum = 0;
     let texts = 0;
     let errors = 0;
     let formulas = 0;
-    for (const sheet of sheets) {
-        sheet.cells((row, column, _value, formula) => {
-            if (formula === null) return;
-            formulas += 1;
-            const value = engine.valueOf(sheet.id, row, column);
-            if (typeof value === 'number') sum += Number.isFinite(value) ? value % 1e9 : 1;
-            else if (typeof value === 'string') texts += value.length;
-            else if (value !== null && typeof value === 'object') errors += 1;
-        });
-    }
-    return `${formulas} formulas, sum ${sum.toPrecision(10)}, texts ${texts}, errors ${errors}`;
-}
-
-// The fastest full recalc of a never-computed engine over `reps` fresh engines.
-function recalcOf(sheets: readonly SheetSource[], reps: number): Measured {
-    let best = INF;
-    let check = '';
     for (let rep = 0; rep < reps; rep += 1) {
         const engine = new Engine(sheets);
         const start = performance.now();
         engine.recalc(INF);
         best = Math.min(best, performance.now() - start);
-        if (rep === reps - 1) check = checksum(engine, sheets);
+        if (rep < reps - 1) continue;
+        for (const sheet of sheets) {
+            sheet.cells((row, column, _value, formula) => {
+                if (formula === null) return;
+                formulas += 1;
+                const value = engine.valueOf(sheet.id, row, column);
+                if (typeof value === 'number') sum += Number.isFinite(value) ? value % 1e9 : 1;
+                else if (typeof value === 'string') texts += value.length;
+                else if (value !== null && typeof value === 'object') errors += 1;
+            });
+        }
     }
-    return { ms: best, check };
+    return { ms: best, check: `${formulas} formulas, sum ${sum.toPrecision(10)}, texts ${texts}, errors ${errors}` };
 }
 
 // The fastest edit plus the recalc after it, each on a fresh engine that `setup` made and computed.
@@ -156,13 +145,25 @@ function sheetOf(id: string, cells: (sink: CellSink) => void): SheetSource {
     return { id, name: id, cells };
 }
 
-// One sheet of a workbook edited: by name, or the one with the most formulas. The engine starts computed, with one
-// far write so the index is built as in a workbook in use; with `stale`, an insert just before the timed edit makes
-// it pay the index rebuild too.
-function bookEdit(book: string, kind: string, stale: boolean, sheetName?: string) {
+const LINE_EDITS = {
+    'row-insert-top': (sheet) => ({ insert: true, index: 2, count: 1, sheet, rows: true }),
+    'row-delete-top': (sheet) => ({ insert: false, index: 2, count: 1, sheet, rows: true }),
+    'column-insert-D': (sheet) => ({ insert: true, index: 3, count: 1, sheet, rows: false }),
+    'column-delete-D': (sheet) => ({ insert: false, index: 3, count: 1, sheet, rows: false }),
+    'column-delete-A': (sheet) => ({ insert: false, index: 0, count: 1, sheet, rows: false }),
+} satisfies Record<string, (sheet: string) => LineEdit>;
+
+// One sheet of a workbook edited: by name, or the one with the most formulas. The engine starts with its index
+// built by a far write, as in a workbook in use; with `stale`, an insert makes the timed edit rebuild it too.
+function bookEdit(
+    book: string,
+    kind: keyof typeof LINE_EDITS | 'remove-sheet' | 'move-block',
+    stale: boolean,
+    sheetName?: string,
+) {
     return (reps: number): Measured => {
         const loaded = loadBook(book);
-        const formulasIn = (cells: Book['sheets'][number]['cells']) => cells.filter((cell) => cell.formula).length;
+        const formulasIn = (cells: readonly BookCell[]) => cells.filter((cell) => cell.formula).length;
         const target =
             sheetName === undefined
                 ? [...loaded.sheets].sort((a, b) => formulasIn(b.cells) - formulasIn(a.cells))[0]
@@ -206,20 +207,12 @@ function bookEdit(book: string, kind: string, stale: boolean, sheetName?: string
     };
 }
 
-const LINE_EDITS: Record<string, (sheet: string) => LineEdit> = {
-    'row-insert-top': (sheet) => ({ insert: true, index: 2, count: 1, sheet, rows: true }),
-    'row-delete-top': (sheet) => ({ insert: false, index: 2, count: 1, sheet, rows: true }),
-    'column-insert-D': (sheet) => ({ insert: true, index: 3, count: 1, sheet, rows: false }),
-    'column-delete-D': (sheet) => ({ insert: false, index: 3, count: 1, sheet, rows: false }),
-    'column-delete-A': (sheet) => ({ insert: false, index: 0, count: 1, sheet, rows: false }),
-};
-
-// One formula per row in column H over contract data: A 1..100 repeating, B with zeros, C, D, E, and F, G 1..100.
-function perCall(formula: string, rows = 100_000) {
+// One formula per row in column H, down 100,000 rows of numbers.
+function perCall(formula: string) {
     return (reps: number): Measured => {
-        const text = stored(`=${formula}`, 0, 7, ONE_SHEET);
+        const text = storedText(`=${formula}`, 0, 7, sheetFinder(ONE_SHEET));
         const sheet = sheetOf('s1', (sink) => {
-            for (let r = 0; r < rows; r += 1) {
+            for (let r = 0; r < 100_000; r += 1) {
                 sink(r, 0, (r % 100) + 1, null);
                 sink(r, 1, r % 7 === 0 ? 0 : (r % 7) + 0.125, null);
                 sink(r, 2, r * 0.5, null);
@@ -236,9 +229,10 @@ function perCall(formula: string, rows = 100_000) {
     };
 }
 
-// `count` formulas in column H over aggregate data down `rows`: non-integers, a key 0..9, text keys, a count.
+// `count` formulas in column H beside `rows` rows of numbers and text keys.
 function aggregates(rows: number, count: number, formula: (i: number) => string) {
     return (reps: number): Measured => {
+        const find = sheetFinder(ONE_SHEET);
         const sheet = sheetOf('s1', (sink) => {
             for (let r = 0; r < rows; r += 1) {
                 sink(r, 0, r * 1.5 + 0.25, null);
@@ -249,7 +243,7 @@ function aggregates(rows: number, count: number, formula: (i: number) => string)
                 sink(r, 5, `v${r}`, null);
                 sink(r, 6, 1 + (r % 5) / 1000, null);
             }
-            for (let i = 0; i < count; i += 1) sink(i, 7, null, stored(formula(i), i, 7, ONE_SHEET));
+            for (let i = 0; i < count; i += 1) sink(i, 7, null, storedText(formula(i), i, 7, find));
         });
         return recalcOf([sheet], reps);
     };
@@ -259,7 +253,7 @@ function aggregates(rows: number, count: number, formula: (i: number) => string)
 function products(lengths: readonly number[], count: number, formula: string) {
     return (reps: number): Measured => {
         const at = lengths.length >= 2000 ? 3000 : 300;
-        const text = stored(formula, 0, at, TWO_SHEETS);
+        const text = storedText(formula, 0, at, sheetFinder(TWO_SHEETS));
         const sheet = sheetOf('s', (sink) => {
             for (const [k, length] of lengths.entries()) {
                 for (let r = 0; r < length; r += 1) sink(r, k, ((r * 31 + k * 17) % 97) + 1.25, null);
@@ -273,7 +267,7 @@ function products(lengths: readonly number[], count: number, formula: string) {
 // One formula over whole columns of a sheet whose few cells sit far apart.
 function far(formula: string, cells: (sink: CellSink) => void) {
     return (reps: number): Measured => {
-        const text = stored(formula, 0, 9, TWO_SHEETS);
+        const text = storedText(formula, 0, 9, sheetFinder(TWO_SHEETS));
         return recalcOf(
             [
                 { id: 's', name: 'S', cells: (sink) => sink(0, 9, null, text) },
@@ -564,12 +558,6 @@ const ROWS: Row[] = [
     },
 ];
 
-function median(values: readonly number[]): number {
-    const sorted = [...values].sort((a, b) => a - b);
-    const half = sorted.length >> 1;
-    return sorted.length % 2 === 1 ? sorted[half] : (sorted[half - 1] + sorted[half]) / 2;
-}
-
 function ms(value: number): string {
     return value < 10 ? value.toFixed(2) : value.toFixed(1);
 }
@@ -627,11 +615,14 @@ if (options.help) {
                 times.push(measured.ms);
                 check = measured.check;
             }
-            const fastest = times.length === rounds ? Math.min(...times) : Number.NaN;
+            times.sort((a, b) => a - b);
+            const half = times.length >> 1;
+            const median = times.length % 2 === 1 ? times[half] : (times[half - 1] + times[half]) / 2;
+            const fastest = times.length === rounds ? times[0] : Number.NaN;
             const verdict =
                 row.gate === undefined || Number.isNaN(fastest) ? '' : fastest <= row.gate ? 'PASS' : 'FAIL';
             const gate = row.gate === undefined ? '' : `<= ${row.gate} ms`;
-            const shown = Number.isNaN(fastest) ? ['', ''] : [ms(fastest), ms(median(times))];
+            const shown = Number.isNaN(fastest) ? ['', ''] : [ms(fastest), ms(median)];
             console.log(
                 `| ${row.group} | ${row.name} | ${shown[0]} | ${shown[1]} | ${gate} | ${verdict} | ${check.replace(/\|/g, '/')} |`,
             );

@@ -1,10 +1,13 @@
 import { describe, expect, test } from 'bun:test';
+import type { Book } from '../../eval/book';
 import { Fact, shapeFacts } from '../../eval/facts';
 import { Families } from '../../eval/families';
+import type { Matches, Room } from '../../eval/readers';
+import type { Vector } from '../../eval/search';
 import type { Entry } from '../../eval/signature';
 import { Read, TOKENS } from '../../eval/signature';
 import { FUNCTIONS } from '../../functions/library';
-import type { Book, Matches, Numbers, Pairs, Room, Table, Vector } from '../../functions/registry';
+import type { Numbers, Pairs, Table } from '../../functions/registry';
 import {
     ANYTHING,
     BOOLEAN,
@@ -21,7 +24,6 @@ import {
     NUMBERS,
     optional,
     PAIRS,
-    rectangle,
     refusing,
     rest,
     TABLE,
@@ -33,6 +35,7 @@ import { Recalc } from '../../recalc/recalc';
 import { Workbook } from '../../store/workbook';
 import { parseA1 } from '../../text';
 import { NA } from '../../values/errors';
+import { rectangle } from '../../values/rectangle';
 import { ValueType } from '../../values/value';
 import { at, evaluateWith, stored } from '../recalc/support';
 

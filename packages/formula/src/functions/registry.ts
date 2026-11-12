@@ -15,11 +15,8 @@ import type { FormulaError } from '../values/errors';
 import { REF, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
 
-export type { Book } from '../eval/book';
-export type { Matches, Numbers, Pairs, Room, Table } from '../eval/readers';
-export type { Vector } from '../eval/search';
+export type { Numbers, Pairs, Table } from '../eval/readers';
 export { ANYWHERE, ERRORS, Find, NESTED, NEXT, PART } from '../eval/signature';
-export { rectangle } from '../values/rectangle';
 
 export type Registry = ReadonlyMap<string, Entry>;
 
@@ -104,7 +101,10 @@ export const TABLE: Param<Table> = Object.freeze({
 // A reference that is never read. Left out, it is the formula's own cell. A union is #REF!.
 export const HERE: Param<Reference> = Object.freeze({
     ...REQUIRED,
-    ...{ prepare: Prepare.Reference, read: Read.Here, optional: true, union: REF },
+    prepare: Prepare.Reference,
+    read: Read.Here,
+    optional: true,
+    union: REF,
 });
 // Whatever was written, unread, as a table: never lifted, never refused, and an error is a value of it.
 export const ANYTHING: Param<Table> = Object.freeze({ ...REQUIRED, prepare: Prepare.Whole, read: Read.Anything });
@@ -133,44 +133,56 @@ export const WHERE: Walked<Matches> = Object.freeze({ ...REQUIRED, prepare: Prep
 // from its own first cell, and left out it is that range; before, the sizes must be equal.
 export const MATCHED: Walked<Numbers> = Object.freeze({
     ...REQUIRED,
-    ...{ prepare: Prepare.Walked, read: Read.Matched, union: VALUE, only: true },
+    prepare: Prepare.Walked,
+    read: Read.Matched,
+    union: VALUE,
+    only: true,
 });
 // The cells of a range that show nothing: a blank or empty text.
 export const BLANKS: Param<Matches> = Object.freeze({
     ...REQUIRED,
-    ...{ prepare: Prepare.Walked, read: Read.Blanks, union: VALUE, only: true },
+    prepare: Prepare.Walked,
+    read: Read.Blanks,
+    union: VALUE,
+    only: true,
 });
 
 // Ranges or arrays of one size, as the product at each place: what is no number counts as 0. A union is #VALUE!.
 // Only sum() and count() of them mean something, and count() is the places of one argument.
 export const PRODUCTS: Walked<Numbers> = Object.freeze({
     ...REQUIRED,
-    ...{ prepare: Prepare.Walked, read: Read.Products, union: VALUE },
+    prepare: Prepare.Walked,
+    read: Read.Products,
+    union: VALUE,
 });
 // Every value as a text, in written order and a range row by row, a blank as empty text. An error typed as an
 // argument is the result before one inside a range; an element that is a reference is #VALUE!, and so is a union.
 export const TEXTS: Walked<readonly string[]> = Object.freeze({
     ...REQUIRED,
-    ...{ prepare: Prepare.Walked, read: Read.Texts, union: VALUE },
+    prepare: Prepare.Walked,
+    read: Read.Texts,
+    union: VALUE,
 });
 
-// The value met most often is asked of these: the numbers, with a text passed over wherever it stands and a typed
-// boolean as 1 or 0. An argument left empty is #VALUE!, as are one blank cell by itself, a union and an element of
-// an array that is a reference.
+// The numbers the value met most often is asked of: a text is passed over wherever it stands, a typed boolean is
+// 1 or 0, and an empty argument, one blank cell by itself, a union and an element that is a reference are #VALUE!.
 export const MODES: Collector = Object.freeze({ ...walked(Families.Modes), union: VALUE });
-// Every value as a whole number's source, in written order: a text is read as a number, in a cell too, or else
-// #VALUE!, a boolean is #VALUE! wherever it stands, and a blank is passed over. A union is #VALUE!, and so is an
-// element of an array that is a reference.
+// Every value as a whole number's source, in written order: a text is read as a number, in a cell too, a blank
+// is passed over, and a boolean, a union and an element of an array that is a reference are #VALUE!.
 export const WHOLES: Walked<readonly number[]> = Object.freeze({
     ...REQUIRED,
-    ...{ prepare: Prepare.Walked, read: Read.Wholes, union: VALUE },
+    prepare: Prepare.Walked,
+    read: Read.Wholes,
+    union: VALUE,
 });
 
 // Two arguments, ranges or arrays of one size, read side by side: the numbers at the places where both hold one.
 // Unequal sizes are #N/A, the earliest error in either is the result, and neither argument may be left out.
 export const PAIRS: Walked<Pairs> = Object.freeze({
     ...REQUIRED,
-    ...{ prepare: Prepare.Walked, read: Read.Pairs, union: VALUE },
+    prepare: Prepare.Walked,
+    read: Read.Pairs,
+    union: VALUE,
 });
 
 // The argument may be left out at the end, and the body then gets `fallback`, or with none undefined or a reader
@@ -191,9 +203,8 @@ export function skippable(param: Param<unknown>, fallback?: Scalar): Param<unkno
     return Object.freeze({ ...param, optional: true, skips: true, fallback });
 }
 
-// The parameter must be given, and an argument left empty is `fallback`, where a blank cell there is still read as
-// a blank: TEXTJOIN(",",,"a","") leaves the empty text out. It may stand before a parameter that repeats. Of a
-// table it is the error an empty argument answers, where without it the body gets a table of one blank.
+// The parameter must be given, and an argument left empty is `fallback`, where a blank cell there still reads as a
+// blank. Of a table it is the error an empty argument answers, where without it the body gets a table of one blank.
 export function defaulted<P extends Param<Table>>(param: P, fallback: FormulaError): P;
 export function defaulted<T>(param: Param<T>, fallback: NoInfer<T> & Scalar): Param<T>;
 export function defaulted(param: Param<unknown>, fallback: Scalar): Param<unknown> {
@@ -205,9 +216,8 @@ export function strict(param: Param<number>): Param<number> {
     return Object.freeze({ ...param, strict: true });
 }
 
-// A number as Excel's add-in functions read one, three answers that every recorded one has together: a boolean
-// is #VALUE! as for `strict`, a range of several cells is #VALUE! for the whole call where an array runs it once
-// per element, and an argument left empty is #N/A where it must be given.
+// A number as Excel's add-in functions read one: a boolean is #VALUE! as for `strict`, a range of several cells is
+// #VALUE! for the whole call where an array runs it once per element, and a required argument left empty is #N/A.
 export function addin(param: Param<number>): Param<number> {
     return Object.freeze({ ...param, strict: true, prepare: Prepare.Single });
 }
@@ -298,9 +308,8 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
     let group = 1;
     let where = -1;
     let matched = -1;
-    // Whether an optional parameter was met, one that repeats or takes no argument, and one that is tried in turn.
-    let optionals = false;
-    let closed = false;
+    let anyOptional = false;
+    let ended = false;
     let stepped = false;
     for (const param of params) {
         const ambient = param.prepare === Prepare.Ambient;
@@ -311,7 +320,7 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
               : param.read === Read.Pairs
                 ? [param, param]
                 : [param.only ? { ...ONLY, optional: param.optional, union: param.union } : param];
-        if (closed && !ambient) throw new Error(`${name}: a parameter after a repeating or an ambient one`);
+        if (ended && !ambient) throw new Error(`${name}: a parameter after a repeating or an ambient one`);
         // Tables that repeat would be read value by value in the body, which is the call wrapper's to do.
         if (param.rest && param.prepare === Prepare.Whole) throw new Error(`${name}: a table that repeats`);
         // Two ranges are paired or none, so there is nothing a pair left out or a third range could mean.
@@ -321,13 +330,13 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
         if (param.fallback !== undefined && param.read !== Read.Lazy && reads(param) !== param.fallback) {
             throw new Error(`${name}: a fallback of another kind`);
         }
-        if (!param.optional && optionals) throw new Error(`${name}: a required parameter after an optional one`);
+        if (!param.optional && anyOptional) throw new Error(`${name}: a required parameter after an optional one`);
         const criteria = param.read >= Read.Where && param.read <= Read.Blanks;
         if (where >= 0 && !criteria) throw new Error(`${name}: a parameter after the criteria`);
         if (param.read === Read.Matched) matched = slots.length;
         else if (criteria && where < 0) where = slots.length;
-        optionals ||= param.optional && !ambient;
-        closed ||= ambient || param.rest;
+        anyOptional ||= param.optional && !ambient;
+        ended ||= ambient || param.rest;
         if (!param.optional) min += own.length;
         // After the groups that are tried in turn a row takes one lazy argument at most, as its last record.
         if (
@@ -375,11 +384,8 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
 // parameters of the row that is picked.
 const UNREAD: Param<Scalar> = Object.freeze({ ...REQUIRED, prepare: Prepare.Reference, read: Read.Any });
 
-// A row whose first argument, a whole number, picks another row, which then gets the arguments that follow:
-// `targets` lists the name each code picks and what its walk passes over. A code that is not listed is #VALUE!.
-// A row that is picked takes references only when it takes every value of its arguments, and else reads each
-// argument by its own parameter. With `options` the row takes a second whole number, and `options[n]` is what the
-// walk passes over for option n on top of what the code says: a number that is no option is #VALUE!.
+// A row whose first argument, a whole number, picks another row for the arguments that follow: `targets` lists the
+// name each code picks and what its walk passes over, and `options[n]` what a second number n adds to that.
 export function chosen(
     name: string,
     targets: readonly (readonly [code: number, target: string, skips: number])[],

@@ -10,7 +10,6 @@ import { ANY, BOOLEAN, each, fn, INTEGER, LAZY, LAZY_VALUE, NEXT, optional, PLAI
 export const LOGICAL = [
     fn('AND', [rest(TRUTHS)], (truths) => (truths.count() === 0 ? VALUE : !truths.holds(0))),
     fn('OR', [rest(TRUTHS)], (truths) => (truths.count() === 0 ? VALUE : truths.min() !== 0 || truths.max() !== 0)),
-    // TRUE when the truth values that hold are odd in number.
     fn('XOR', [rest(TRUTHS)], (truths) =>
         truths.count() === 0 ? VALUE : truths.list().filter((truth) => truth !== 0).length % 2 === 1,
     ),

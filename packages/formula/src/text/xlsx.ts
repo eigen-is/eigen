@@ -5,19 +5,20 @@
 // isLegacy says how to write a cell: true is a plain formula, false an array formula with the dynamic-array mark.
 
 import type { Param } from '../eval/signature';
-import { ANYWHERE, Prepare, Read, slotOf } from '../eval/signature';
+import { ANYWHERE, PART, Prepare, Read, slotOf } from '../eval/signature';
 import {
-    EXCEL_2007_FUNCTIONS,
     EXCEL_ARRAY_FUNCTIONS,
     EXCEL_FUTURE_FUNCTIONS,
     EXCEL_WORKSHEET_FUNCTIONS,
+    FUTURE_PREFIX,
+    isExcelName,
+    WORKSHEET_PREFIX,
 } from '../functions/excel-names';
 import type { Registry } from '../functions/registry';
-import { columnIndex } from './a1';
 import { UNDERSCORE } from './chars';
-import { REF_ERROR, Token } from './lexer';
+import { joinsReferences, REF_ERROR, Token } from './lexer';
 import type { ParseFailure, SheetFinder } from './parser';
-import { parseA1, readsAsReference } from './parser';
+import { bounded, noSheet, parseA1, readsAsColumns, readsAsReference } from './parser';
 import { isTableCell } from './tables';
 import type { FormulaNode } from './tree';
 import { branch, leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from './tree';
@@ -44,12 +45,13 @@ export function parseXlsx(
     findSheet: SheetFinder,
 ): FormulaNode | ParseFailure {
     const tree = parseA1(text, hostRow, hostColumn, findSheet);
-    return 'reason' in tree ? tree : spellIn(tree);
+    return 'reason' in tree ? tree : bounded(spellIn(tree));
 }
 
 // The tree of a plain <f> with an @ wherever an Excel without dynamic arrays read one cell of what may be many.
-export function intersect(tree: FormulaNode, functions: Registry): FormulaNode {
-    return cut(tree, functions, ONE | TOP);
+// An @ is a level of nesting, so a tree at the limit can come back as a failure.
+export function intersect(tree: FormulaNode, functions: Registry): FormulaNode | ParseFailure {
+    return bounded(cut(tree, functions, ONE | TOP));
 }
 
 // Whether a plain <f> gives the cell the value it has here: no place that certainly or possibly wants one value
@@ -71,7 +73,7 @@ function spellIn(node: FormulaNode): FormulaNode {
     if (kind === NodeKind.Name) {
         if (node.sheetKind !== SheetKind.Host || !marks(text, PARAMETER)) return node;
         // The bare name is what the A1 reader makes of it: one that reads as a cell or a boolean keeps its prefix.
-        const bare = parseA1(text.slice(PARAMETER.length), 0, 0, () => undefined);
+        const bare = parseA1(text.slice(PARAMETER.length), 0, 0, noSheet);
         const named = !('reason' in bare) && bare.kind === NodeKind.Name;
         return named ? leaf(kind, 0, bare.text, node.space, SheetKind.Host, '') : node;
     }
@@ -108,13 +110,15 @@ function spellIn(node: FormulaNode): FormulaNode {
     if (kind !== NodeKind.Call) return next === null ? node : remade(node, next);
     let name = text;
     if (text.charCodeAt(0) === UNDERSCORE) {
-        const worksheet = text.startsWith('_XLFN._XLWS.');
-        const bare = text.slice(worksheet ? 12 : 6);
+        const worksheet = marks(text, WORKSHEET_PREFIX);
+        const future = marks(text, FUTURE_PREFIX);
+        const prefix = worksheet ? WORKSHEET_PREFIX : future ? FUTURE_PREFIX : PARAMETER;
+        const bare = text.slice(prefix.length);
         const known = worksheet ? EXCEL_WORKSHEET_FUNCTIONS : EXCEL_FUTURE_FUNCTIONS;
         // A called name spelled like a function of Excel's is that function to Excel, bound or not, so only
         // another name is a called parameter: one that prints as itself, not as a cell.
-        const parameter = text.startsWith('_XLPM.') && bare !== '' && !isExcel(bare) && !readsAsReference(bare);
-        if (parameter || (text.startsWith('_XLFN.') && known.has(bare))) name = bare;
+        const parameter = marks(text, PARAMETER) && bare !== '' && !isExcelName(bare) && !readsAsReference(bare);
+        if (parameter || (future && known.has(bare))) name = bare;
     }
     const [child] = next ?? children;
     if (children.length !== 1 || (name !== 'SINGLE' && name !== 'ANCHORARRAY')) {
@@ -151,17 +155,6 @@ function childIn(parent: FormulaNode, at: number): FormulaNode {
     return tight ? fence(spelled) : spelled;
 }
 
-// Whether a colon between these two operands, printed bare, reads as columns: a name that is a column label, then
-// another such name or a whole column.
-function readsAsColumns(left: FormulaNode, right: FormulaNode): boolean {
-    const before = left.kind === NodeKind.Binary ? left.children[1] : left;
-    let after = right;
-    while (after.kind === NodeKind.Postfix || after.kind === NodeKind.Invoke) [after] = after.children;
-    if (before.kind !== NodeKind.Name || columnIndex(before.text) === -1 || after.space !== '') return false;
-    if (after.kind === NodeKind.Ref) return after.op === RefKind.Columns;
-    return (after.kind === NodeKind.Name || after.spaceOpen !== '') && columnIndex(after.text) !== -1;
-}
-
 // The node in brackets, with the whitespace before it moved in front of them.
 function fence(node: FormulaNode): FormulaNode {
     return indent(bracketed(indent(node, '')), leading(node));
@@ -186,7 +179,9 @@ function fenced(parent: FormulaNode, at: number, child: FormulaNode): boolean {
         while (after.kind === NodeKind.Postfix || after.kind === NodeKind.Invoke) [after] = after.children;
         return before.kind === NodeKind.Ref && before.op === RefKind.Cell && after.kind === NodeKind.Ref;
     }
-    return parent.kind === NodeKind.Binary ? joins(parent.op) : parent.kind === NodeKind.Postfix && isAtOrHash(parent);
+    return parent.kind === NodeKind.Binary
+        ? joinsReferences(parent.op)
+        : parent.kind === NodeKind.Postfix && isAtOrHash(parent);
 }
 
 function cut(node: FormulaNode, functions: Registry, context: number): FormulaNode {
@@ -276,7 +271,7 @@ function spellOut(
         return left;
     }
     const lambda = kind === NodeKind.Call && text === 'LAMBDA';
-    const binder = lambda || (kind === NodeKind.Call && text === 'LET');
+    const binder = binds(node);
     let scope = bound;
     let wider = bound;
     let next: FormulaNode[] | null = null;
@@ -298,11 +293,11 @@ function spellOut(
         return call('_xlfn.SINGLE', isUnion(child) ? bracketed(child) : child, node.space);
     }
     if (kind !== NodeKind.Call) return next === null ? node : remade(node, next);
-    const own = isExcel(text) ? undefined : declared(bound, text);
+    const own = isExcelName(text) ? undefined : declared(bound, text);
     let name = text;
     if (own !== undefined) name = PARAMETER + own;
-    else if (EXCEL_WORKSHEET_FUNCTIONS.has(text)) name = `_xlfn._xlws.${text}`;
-    else if (EXCEL_FUTURE_FUNCTIONS.has(text)) name = `_xlfn.${text}`;
+    else if (EXCEL_WORKSHEET_FUNCTIONS.has(text)) name = WORKSHEET_PREFIX + text;
+    else if (EXCEL_FUTURE_FUNCTIONS.has(text)) name = FUTURE_PREFIX + text;
     else if (text.charCodeAt(0) === UNDERSCORE) name = text.replace(FOREIGN, (prefix) => prefix.toLowerCase());
     return next === null && name === text ? node : remade(node, next ?? children, name);
 }
@@ -346,7 +341,7 @@ function contextOf(parent: FormulaNode, at: number, context: number, functions: 
         case NodeKind.Postfix:
             return isAtOrHash(parent) ? PLACE : operand(context);
         case NodeKind.Binary:
-            return joins(parent.op) ? PLACE : operand(context);
+            return joinsReferences(parent.op) ? PLACE : operand(context);
         case NodeKind.Call: {
             const entry = functions.get(parent.text);
             // A call of a wrong number of arguments has no record for some of them, and a function the engine
@@ -371,16 +366,8 @@ function operand(context: number): number {
     return (context & (ARRAY | TOP)) | ((context & (ONE | PLACE)) !== 0 ? ONE : 0);
 }
 
-function isExcel(name: string): boolean {
-    return EXCEL_FUTURE_FUNCTIONS.has(name) || EXCEL_2007_FUNCTIONS.has(name);
-}
-
 function marks(name: string, prefix: string): boolean {
     return name.charCodeAt(0) === UNDERSCORE && name.slice(0, prefix.length).toLowerCase() === prefix;
-}
-
-function joins(op: number): boolean {
-    return op === Token.Colon || op === Token.Space || op === Token.Comma;
 }
 
 function binds(node: FormulaNode): boolean {
@@ -422,17 +409,21 @@ function many(node: FormulaNode, functions: Registry, top: boolean): boolean {
             return node.children[0].sheetKind === SheetKind.External;
         case NodeKind.Call: {
             const entry = functions.get(node.text);
-            if (entry === undefined) return !isExcel(node.text) || EXCEL_ARRAY_FUNCTIONS.has(node.text);
+            if (entry === undefined) return !isExcelName(node.text) || EXCEL_ARRAY_FUNCTIONS.has(node.text);
             if (entry.returns === ANYWHERE) return true;
             const { children } = node;
-            // Of the two that answer a part of their table: INDEX is one cell when each index is a number other
-            // than 0 or a call of one value, XLOOKUP when it looks along a plain range and returns from one line.
-            if (node.text === 'INDEX' && !children.slice(1, 3).every((index) => isIndex(index, functions))) return true;
-            if (
-                node.text === 'XLOOKUP' &&
-                !(children[1]?.kind === NodeKind.Ref && children[1].op !== RefKind.Cell && isLine(children[2]))
-            )
-                return true;
+            // A row that answers a part of its table answers one cell in two written forms only: INDEX when each
+            // index is a number other than 0 or a call of one value, XLOOKUP along a plain range into one line.
+            if (entry.returns === PART) {
+                const one =
+                    node.text === 'INDEX'
+                        ? children.slice(1, 3).every((index) => isIndex(index, functions))
+                        : node.text === 'XLOOKUP' &&
+                          children[1]?.kind === NodeKind.Ref &&
+                          children[1].op !== RefKind.Cell &&
+                          isLine(children[2]);
+                if (!one) return true;
+            }
             // A call that picks an argument answers what it picked, and one that makes an array of the cells of a
             // place, as ROW does, answers as many as the place holds.
             const spreads = entry.params.some((param) => param.read === Read.Room);

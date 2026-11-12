@@ -6,13 +6,15 @@
 import type { SheetFinder } from './parser';
 import { isUnparsed, parseA1 } from './parser';
 import type { SheetNames } from './printer';
-import { printA1, printStored } from './printer';
+import { printA1, storedKey } from './printer';
 import type { Shape } from './shapes';
 
-// `typed` starts with its =, so text that does not parse is stored behind two.
+// `typed` starts with its =, so text that does not parse is stored behind two. So is a formula whose stored text
+// would be too long to read back.
 export function storedText(typed: string, hostRow: number, hostColumn: number, findSheet: SheetFinder): string {
     const tree = parseA1(typed, hostRow, hostColumn, findSheet);
-    return 'reason' in tree ? `=${typed}` : printStored(tree);
+    const key = 'reason' in tree ? tree : storedKey(tree);
+    return typeof key === 'string' ? key : `=${typed}`;
 }
 
 export function typedText(shape: Shape, hostRow: number, hostColumn: number, sheetName: SheetNames): string {

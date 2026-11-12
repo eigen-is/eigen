@@ -454,14 +454,12 @@ describe('HYPERLINK', () => {
         expect(evaluate(formula, BATCH)).toBe(expected);
     });
 
-    test('a link is refused past 255 characters, with a friendly name or without, and the name never is', () => {
+    test('a link may be longer than the 255 characters Excel takes, with a friendly name or without', () => {
         const long = { F1: 'y'.repeat(300) };
-        expect(evaluate('=HYPERLINK("x"&F1)', long)).toBe(VALUE);
+        expect(evaluate('=LEN(HYPERLINK("x"&F1))', long)).toBe(301);
         expect(evaluate('=LEN(HYPERLINK("x",F1))', long)).toBe(300);
-        expect(evaluate('=LEN(HYPERLINK(REPT("a",255)))')).toBe(255);
-        expect(evaluate('=HYPERLINK(REPT("a",256))')).toBe(VALUE);
-        expect(evaluate('=HYPERLINK(REPT("a",300),"f")')).toBe(VALUE);
-        expect(evaluate('=HYPERLINK(REPT("a",255),"f")')).toBe('f');
+        expect(evaluate('=LEN(HYPERLINK(REPT("a",256)))')).toBe(256);
+        expect(evaluate('=HYPERLINK(REPT("a",300),"f")')).toBe('f');
     });
 });
 

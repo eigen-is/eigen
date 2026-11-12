@@ -7,7 +7,7 @@ import type { TokenKind } from './lexer';
 import { lexAt, Token, tokenEnd, tokenKind } from './lexer';
 import { callsSpaced, referenceAt } from './parser';
 
-export type FormulaToken = {
+type FormulaToken = {
     readonly kind: TokenKind;
     readonly start: number;
     readonly end: number;

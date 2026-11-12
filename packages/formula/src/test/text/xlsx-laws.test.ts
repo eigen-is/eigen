@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { FUNCTIONS } from '../../functions/library';
 import type { FormulaNode } from '../../text';
-import { intersect, isLegacy, NodeKind, parseStored, parseXlsx, printStored, printXlsx, xlsxTree } from '../../text';
+import { isLegacy, NodeKind, parseStored, parseXlsx, printStored, printXlsx, xlsxTree } from '../../text';
 import { dice, findSheet, sheetName, showsAsAnother } from './support';
-import { fileFormulas } from './xlsx-support';
+import { fileFormulas, intersected } from './xlsx-support';
 
 const RUNS = 4000;
 
@@ -51,7 +51,7 @@ describe('text/xlsx laws, over generated file text', () => {
         let trees = 0;
         for (const marked of [false, true]) {
             for (const { text, tree } of cases(11, marked)) {
-                for (const made of [tree, intersect(tree, FUNCTIONS)]) {
+                for (const made of [tree, intersected(tree)]) {
                     const back = parseStored(printStored(made));
                     if (JSON.stringify(back) !== JSON.stringify(made))
                         throw new Error(`${text} -> ${printStored(made)}`);
@@ -67,7 +67,7 @@ describe('text/xlsx laws, over generated file text', () => {
         let cut = 0;
         let array = 0;
         for (const { text, row, column, tree } of cases(23, false)) {
-            const legacy = intersect(tree, FUNCTIONS);
+            const legacy = intersected(tree);
             const plain = printXlsx(xlsxTree(tree, FUNCTIONS, false), row, column, sheetName);
             read += 1;
             if (legacy !== tree) cut += 1;
@@ -92,12 +92,12 @@ describe('text/xlsx laws, over generated file text', () => {
         let written = 0;
         for (const marked of [false, true]) {
             for (const { text, row, column, tree } of cases(37, marked)) {
-                for (const made of [tree, intersect(tree, FUNCTIONS)]) {
+                for (const made of [tree, intersected(tree)]) {
                     const legacy = isLegacy(made, FUNCTIONS);
                     const file = printXlsx(xlsxTree(made, FUNCTIONS, legacy), row, column, sheetName);
                     const back = parseXlsx(file, row, column, findSheet);
                     if ('reason' in back) throw new Error(`${text}: ${file} does not read back`);
-                    const again = legacy ? intersect(back, FUNCTIONS) : back;
+                    const again = legacy ? intersected(back) : back;
                     const mark = isLegacy(again, FUNCTIONS);
                     if (mark !== legacy) throw new Error(`${text}: ${file} changes its mark`);
                     const second = printXlsx(xlsxTree(again, FUNCTIONS, mark), row, column, sheetName);
@@ -122,9 +122,9 @@ describe('text/xlsx laws, over generated file text', () => {
         for (const { tree } of cases(41, false)) {
             if (!unsure(tree)) continue;
             found += 1;
-            expect(isLegacy(intersect(tree, FUNCTIONS), FUNCTIONS)).toBe(false);
+            expect(isLegacy(intersected(tree), FUNCTIONS)).toBe(false);
             if (tree.kind === NodeKind.Call && (tree.text === 'LET' || tree.text === 'LAMBDA')) {
-                expect(intersect(tree, FUNCTIONS)).toBe(tree);
+                expect(intersected(tree)).toBe(tree);
             }
         }
         expect(found).toBeGreaterThan(100);

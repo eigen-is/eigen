@@ -3,7 +3,6 @@ import { FUNCTIONS } from '../../functions/library';
 import { REF } from '../../index';
 import type { FormulaNode, Table, TableFinder } from '../../text';
 import {
-    intersect,
     isLegacy,
     NodeKind,
     parseA1Range,
@@ -20,6 +19,7 @@ import {
 import { ShapeTable } from '../../text/shapes';
 import { engineOf, evaluate, valueAt } from '../recalc/support';
 import { at, dice, failure, findSheet, sheetName, shown, stored, treeA1, treeStored } from './support';
+import { intersected } from './xlsx-support';
 
 // Every form the corpus holds, with its count there, and the forms Excel shows a person.
 const FORMS = [
@@ -147,7 +147,7 @@ describe('text/tables: a table reference is one leaf that keeps what was written
         const text = 'SUMIF(tblData[DATE],"<="&EOMONTH(fDate,0),tblData[[#This Row],[AMOUNT]])*[@Price]';
         const tree = parseXlsx(text, 4, 4, findSheet);
         if ('reason' in tree) throw new Error(tree.reason);
-        const made = intersect(tree, FUNCTIONS);
+        const made = intersected(tree);
         expect(printXlsx(xlsxTree(made, FUNCTIONS, isLegacy(made, FUNCTIONS)), 4, 4, sheetName)).toBe(text);
     });
 
@@ -167,7 +167,7 @@ describe('text/tables: where an Excel without dynamic arrays read one cell', () 
     const cut = (text: string): string => {
         const tree = parseXlsx(text, 4, 4, findSheet);
         if ('reason' in tree) throw new Error(tree.reason);
-        return printA1(intersect(tree, FUNCTIONS), 4, 4, sheetName);
+        return printA1(intersected(tree), 4, 4, sheetName);
     };
 
     test('a whole column is a range like any other', () => {
@@ -455,7 +455,7 @@ describe('text/tables: the range a table reference stands for', () => {
         const shownAt = (text: string) => {
             const parsed = parseXlsx(text, ...at('E4'), findSheet);
             if ('reason' in parsed) throw new Error(parsed.reason);
-            const tree = intersect(resolveTables(parsed, 's1', ...at('E4'), findTable), FUNCTIONS);
+            const tree = intersected(resolveTables(parsed, 's1', ...at('E4'), findTable));
             return printA1(tree, ...at('E4'), sheetName);
         };
         expect(shownAt('One[[#This Row],[Qty]]*One[[#This Row],[Unit Price]]')).toBe('=$C4*$D4');

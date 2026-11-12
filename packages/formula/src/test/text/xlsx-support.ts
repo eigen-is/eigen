@@ -10,9 +10,16 @@ export function read(text: string, host = 'D2'): FormulaNode {
     return parsed;
 }
 
+// The tree of a plain <f> with its @ put in.
+export function intersected(tree: FormulaNode): FormulaNode {
+    const made = intersect(tree, FUNCTIONS);
+    if ('reason' in made) throw new Error(made.reason);
+    return made;
+}
+
 // What the formula bar shows for the plain <f> of a file.
 export function bar(text: string, host = 'D2'): string {
-    return printA1(intersect(read(text, host), FUNCTIONS), ...at(host), sheetName);
+    return printA1(intersected(read(text, host)), ...at(host), sheetName);
 }
 
 // The mark and the text a tree is written to a file with, as an exporter asks for them.

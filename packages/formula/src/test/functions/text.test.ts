@@ -267,8 +267,22 @@ describe('joining', () => {
         ['=LEN(CONCAT(REPT("x",32767),""))', 32767],
         ['=CONCAT(REPT("x",32767),"y")', CALC],
         ['=CONCATENATE(D1,D3)', 'Hello Worldstraße'],
-        ['=LEN(CONCATENATE(REPT("x",32767),"y"))', 32767],
-        ['=RIGHT(CONCATENATE(REPT("x",32766),"yz"),2)', 'xy'],
+        ['=LEN(CONCATENATE(REPT("x",32766),"y"))', 32767],
+        ['=CONCATENATE(REPT("x",32767),"y")', VALUE],
+        ['=CONCATENATE(REPT("x",32766),"yz")', VALUE],
+    ]);
+});
+
+// Excel's own answers, batch 20 part C: the longest text counts UTF-16 units in Excel too, whatever LEN counts.
+describe('the longest text is 32,767 UTF-16 units', () => {
+    rows('an emoji takes two of them', [
+        ['=ISTEXT(REPT(UNICHAR(128512),16383))', true],
+        ['=REPT(UNICHAR(128512),16384)', VALUE],
+        ['=ISTEXT(CONCAT(REPT("a",32765),UNICHAR(128512)))', true],
+        ['=CONCAT(REPT("a",32766),UNICHAR(128512))', CALC],
+        ['=TEXTJOIN("",TRUE,REPT("a",32766),UNICHAR(128512))', CALC],
+        ['=ISTEXT(SUBSTITUTE(REPT("a",32766),"a",UNICHAR(128512),1))', true],
+        ['=SUBSTITUTE(REPT("a",32767),"a",UNICHAR(128512),1)', VALUE],
     ]);
 });
 

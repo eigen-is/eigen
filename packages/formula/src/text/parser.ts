@@ -20,16 +20,14 @@ import {
     UPPER_R,
     ZERO,
 } from './chars';
-import { continuesWord, errorCode, lexAt, REF_ERROR, Token, tokenEnd, tokenKind } from './lexer';
+import { continuesWord, errorCode, joinsReferences, lexAt, REF_ERROR, Token, tokenEnd, tokenKind } from './lexer';
 import type { FormulaNode } from './tree';
 import { branch, EMPTY, leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from './tree';
 
-// Excel's limit on what a person types.
-export const MAX_FORMULA_LENGTH = 8192;
-// Stored text also arrives from a peer, so it has a cap of its own, with room above the twelvefold a typed formula
-// can grow when stored, as a!A1 does with a uuid for the sheet and offsets that span the grid.
-export const MAX_STORED_LENGTH = 16 * MAX_FORMULA_LENGTH;
-// Brackets and prefix or postfix operators, one inside the other. A chain of binary operators is not nesting.
+// The cap on a formula's text in every spelling. One formula is longer stored or in a file than typed, as a!A1 is
+// with a uuid for the sheet, so a cap per spelling would refuse text the engine printed itself.
+export const MAX_STORED_LENGTH = 131072;
+// Brackets, calls and prefix or postfix operators, one inside the other. A chain of binary operators is not nesting.
 export const MAX_NESTING = 64;
 export const MAX_ARGUMENTS = 255;
 
@@ -40,7 +38,7 @@ export type ParseFailure = {
     readonly at: number;
 };
 
-export type A1Range = {
+type A1Range = {
     readonly sheet?: string;
     readonly start: { readonly column: number; readonly row: number };
     readonly end: { readonly column: number; readonly row: number };
@@ -68,7 +66,8 @@ export function parseStored(text: string): FormulaNode | ParseFailure {
     return new Parser(text, true, 0, 0, noSheet).formula();
 }
 
-function noSheet(): undefined {
+// The finder of a text that names no sheet, and the names of a workbook that has none.
+export function noSheet(): undefined {
     return undefined;
 }
 
@@ -78,6 +77,23 @@ export function callsSpaced(text: string, pos: number, end: number): boolean {
     const gap = lexAt(text, end);
     if (tokenKind(gap) !== Token.Space || text.charCodeAt(tokenEnd(gap)) !== OPEN) return false;
     return !readsAsReference(text.slice(pos, end));
+}
+
+// Whether a colon between these two operands, printed bare, reads as columns: a name that is a column label, then
+// another such name, a whole column, or a function named like a column and called with whitespace.
+export function readsAsColumns(left: FormulaNode, right: FormulaNode): boolean {
+    const before = left.kind === NodeKind.Binary ? left.children[1] : left;
+    let after = right;
+    while (after.kind === NodeKind.Postfix || after.kind === NodeKind.Invoke) after = after.children[0];
+    if (before.kind !== NodeKind.Name || columnIndex(before.text) === -1 || after.space !== '') return false;
+    if (after.kind === NodeKind.Ref) return after.op === RefKind.Columns;
+    return (after.kind === NodeKind.Name || after.spaceOpen !== '') && columnIndex(after.text) !== -1;
+}
+
+// The tree, or the failure of one that nests deeper than its stored text reads back. The parser counts as it reads;
+// this measures a tree that a walk made deeper than the text it came from, as reading a file's spellings does.
+export function bounded(tree: FormulaNode): FormulaNode | ParseFailure {
+    return nesting(tree) > MAX_NESTING ? { reason: 'too-deep', at: 0 } : tree;
 }
 
 // Whether a word is a cell label or a stored reference by its form alone, in any letter case and on or off the
@@ -169,10 +185,8 @@ class Parser {
     }
 
     public formula(): FormulaNode | ParseFailure {
-        const limit = this.stored ? MAX_STORED_LENGTH : MAX_FORMULA_LENGTH;
-        if (this.text.length > limit) return { reason: 'too-long', at: limit };
+        if (this.text.length > MAX_STORED_LENGTH) return { reason: 'too-long', at: MAX_STORED_LENGTH };
         if (isUnparsed(this.text)) return { reason: 'syntax', at: 1 };
-        // A formula in a file has no = of its own, and reads from its first character.
         if (this.text.charCodeAt(0) === EQUALS) this.end = 1;
         this.next();
         const tree = this.expression(0, false);
@@ -264,8 +278,7 @@ class Parser {
             const right = this.expression(power + 1, union);
             height = Math.max(height, this.height);
             // A number never stands beside a colon as a row would: each of these joins what may yield a reference.
-            const joinsReferences = op === Token.Colon || op === Token.Space || op === Token.Comma;
-            if (joinsReferences && !(yieldsReference(left) && yieldsReference(right))) return this.fail();
+            if (joinsReferences(op) && !(yieldsReference(left) && yieldsReference(right))) return this.fail();
             left =
                 op === Token.Colon
                     ? this.colon(left, right, space)
@@ -288,11 +301,8 @@ class Parser {
             if (cell && after.kind === NodeKind.Ref && after.op <= RefKind.Range && after.space === '') {
                 return this.fail();
             }
-            // A name that is a column label, a colon and a column would show as one range, as would a function named
-            // like a column and called with whitespace. Only stored text gets here that way.
-            const label = after.kind === NodeKind.Name || after.spaceOpen !== '';
-            const column = after.kind === NodeKind.Ref ? after.op === RefKind.Columns : label && isColumn(after);
-            if (before.kind === NodeKind.Name && isColumn(before) && column && after.space === '') return this.fail();
+            // Only stored text gets here with a name and a column that would show as one range.
+            if (readsAsColumns(left, right)) return this.fail();
         }
         return branch(NodeKind.Binary, Token.Colon, '', [left, right], space, '', '');
     }
@@ -420,9 +430,8 @@ class Parser {
         return branch(NodeKind.Call, 0, name, args, space, spaceOpen, spaceEnd);
     }
 
-    // A name, or a table reference: a name, which may be none, and the brackets right after it. A name must not
-    // read as a reference in the other grammar, or it would come back as one: typed, it is stored in lower case,
-    // which the stored grammar never reads as R1C1; stored, it is refused. Before a bracket a cell label is too.
+    // A name, or a table reference: a name and the brackets right after it. A name that reads as a reference in
+    // the other grammar would come back as one, so typed it is stored in lower case, and stored it is refused.
     private name(space: string, sheetKind: FormulaNode['sheetKind'], sheet: string): FormulaNode {
         const { text, pos } = this;
         // A word runs on through a bracket of digits, so the name of Sales[2019] ends inside its token.
@@ -733,12 +742,20 @@ function yieldsReference(node: FormulaNode): boolean {
         case NodeKind.Postfix:
             return node.op === Token.Hash;
         case NodeKind.Binary:
-            return node.op === Token.Colon || node.op === Token.Space || node.op === Token.Comma;
+            return joinsReferences(node.op);
         default:
             return false;
     }
 }
 
-function isColumn(named: FormulaNode): boolean {
-    return columnIndex(named.text) !== -1;
+// How many levels a tree nests. Its first children are read in a loop, as a long sum or a row of % is that deep.
+function nesting(tree: FormulaNode): number {
+    let levels = 0;
+    let deepest = 0;
+    for (let node = tree; ; node = node.children[0]) {
+        const { kind, children } = node;
+        if (kind >= NodeKind.Call && kind !== NodeKind.Binary && kind !== NodeKind.Table) levels += 1;
+        for (let i = 1; i < children.length; i += 1) deepest = Math.max(deepest, levels + nesting(children[i]));
+        if (children.length === 0) return Math.max(deepest, levels);
+    }
 }

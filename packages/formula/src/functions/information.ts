@@ -3,7 +3,7 @@
 
 import { rangeToA1 } from '../text/a1';
 import { quoteSheetName } from '../text/sheet-name';
-import { NA, VALUE } from '../values/errors';
+import { CALC, DIV0, NA, NAME, NULL, NUM, REF, SPILL, VALUE } from '../values/errors';
 import { isError } from '../values/value';
 import {
     ANY,
@@ -24,20 +24,20 @@ import {
 
 // Excel's errors in the order ERROR.TYPE numbers them, from 1. The order in which a cell stores ours is another.
 const EXCEL_ERRORS: readonly string[] = [
-    '#NULL!',
-    '#DIV/0!',
-    '#VALUE!',
-    '#REF!',
-    '#NAME?',
-    '#NUM!',
-    '#N/A',
+    NULL.text,
+    DIV0.text,
+    VALUE.text,
+    REF.text,
+    NAME.text,
+    NUM.text,
+    NA.text,
     '#GETTING_DATA',
-    '#SPILL!',
+    SPILL.text,
     '#CONNECT!',
     '#BLOCKED!',
     '#UNKNOWN!',
     '#FIELD!',
-    '#CALC!',
+    CALC.text,
 ];
 
 export const INFORMATION = [
@@ -50,22 +50,18 @@ export const INFORMATION = [
     fn('ISREF', [ANYTHING], (whole) => whole.reference),
     fn('ISTEXT', [ANY], (value) => typeof value === 'string'),
     fn('ISNONTEXT', [ANY], (value) => typeof value !== 'string'),
-    // The fraction is cut off first, so 2.9 and -2.9 are even, and a number too large to hold a unit is even.
+    // The fraction is cut off first, so 2.9 and -2.9 are even.
     fn('ISEVEN', [addin(INTEGER)], (whole) => whole % 2 === 0),
     fn('ISODD', [addin(INTEGER)], (whole) => whole % 2 !== 0),
-    // The place of the error in Excel's list, and #N/A for a value that is no error or an error not in the list.
     fn('ERROR.TYPE', [ANY], (value) => {
         const place = isError(value) ? EXCEL_ERRORS.indexOf(value.text) : -1;
         return place < 0 ? NA : place + 1;
     }),
-    // A number is itself and TRUE is 1. A text and a blank are 0, and an error stays the error it is.
     fn('N', [CORNER], (value) => (typeof value === 'number' || isError(value) ? value : value === true ? 1 : 0)),
     fn('NA', [], () => NA),
-    // A text is itself and an error stays the error it is. Everything else is empty text.
     fn('T', [CORNER], (value) => (typeof value === 'string' || isError(value) ? value : '')),
-    // 1 for a number or a blank, 2 for a text, 4 for a boolean, 16 for an error, as a union is one, and 64 for
-    // more than one value.
     fn('TYPE', [ANYTHING], (whole) => {
+        // A union is an error to TYPE.
         if (whole.areas > 1) return 16;
         if (whole.rows > 1 || whole.columns > 1) return 64;
         const value = whole.at(0, 0);

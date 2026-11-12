@@ -70,9 +70,9 @@ export type FormulaNode = {
     readonly flags: number;
 };
 
-// Every field is set in one order by the three constructors, so the engine sees one object layout.
 const NO_CHILDREN: readonly FormulaNode[] = [];
 
+// The three constructors set every field in one order, so the engine sees one object layout.
 export function leaf(
     kind: FormulaNode['kind'],
     value: number,

@@ -1,5 +1,6 @@
 export type { Move } from './edit/move';
 export type { LineEdit } from './edit/transform';
+export { FUNCTIONS } from './functions/library';
 export type { Rewrite } from './recalc/edit-plan';
 export { Engine } from './recalc/engine';
 export type { EditResult, RecalcResult } from './recalc/recalc';

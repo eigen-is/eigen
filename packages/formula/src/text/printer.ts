@@ -5,8 +5,9 @@
 
 import { columnLabel, GRID_COLUMNS, GRID_ROWS } from './a1';
 import { ERROR_LITERALS, isWord, SYMBOLS, Token } from './lexer';
-import { readsAsReference, referenceAt } from './parser';
-import { quotedSheetName, quoteSheetName } from './sheet-name';
+import type { ParseFailure } from './parser';
+import { MAX_STORED_LENGTH, noSheet, readsAsReference, referenceAt } from './parser';
+import { inQuotes, quoteSheetName } from './sheet-name';
 import type { Ends, FormulaNode } from './tree';
 import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from './tree';
 
@@ -16,7 +17,14 @@ const PLAIN_EXPONENT_MIN = -18;
 export type SheetNames = (id: string) => string | undefined;
 
 export function printStored(tree: FormulaNode): string {
-    return `=${print(tree, true, 0, 0, noName)}`;
+    return `=${print(tree, true, 0, 0, noSheet)}`;
+}
+
+// The stored text of a formula as it is entered or read from a file, or the failure of one whose stored text would
+// not read back: it can be many times as long as the text it was read from, as a!A1 is far down the grid.
+export function storedKey(tree: FormulaNode): string | ParseFailure {
+    const key = printStored(tree);
+    return key.length > MAX_STORED_LENGTH ? { reason: 'too-long', at: 0 } : key;
 }
 
 // The formula as it reads at a cell, row and column from 0. `sheetName` gives a sheet's name by its id.
@@ -27,10 +35,6 @@ export function printA1(tree: FormulaNode, hostRow: number, hostColumn: number, 
 // A tree in the spellings of a file, as xlsxTree makes one, at a cell.
 export function printXlsx(tree: FormulaNode, hostRow: number, hostColumn: number, sheetName: SheetNames): string {
     return print(tree, false, hostRow, hostColumn, sheetName);
-}
-
-function noName(): undefined {
-    return undefined;
 }
 
 function print(node: FormulaNode, stored: boolean, row: number, column: number, sheetName: SheetNames): string {
@@ -53,7 +57,7 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
             if (node.kind === NodeKind.Table) return space + prefix + node.text;
             // Another workbook's name can be any text, so it is quoted unless it reads back bare as itself.
             const bare = node.sheetKind !== SheetKind.External || (isWord(node.text) && !readsAsReference(node.text));
-            return space + prefix + (bare ? node.text : quotedSheetName(node.text));
+            return space + prefix + (bare ? node.text : inQuotes(node.text));
         }
         case NodeKind.Ref:
             return space + reference(node, stored, row, column, sheetName);
@@ -80,7 +84,7 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
                     const before = left.kind === NodeKind.Binary ? left.children[1] : left;
                     const sheet = right.slice(0, Math.max(0, right.indexOf('!')));
                     const named = before.kind === NodeKind.Name && before.sheetKind === SheetKind.Host;
-                    if (named && isWord(sheet)) right = quotedSheetName(sheet) + right.slice(sheet.length);
+                    if (named && isWord(sheet)) right = inQuotes(sheet) + right.slice(sheet.length);
                 }
                 text = chain.space + SYMBOLS[chain.op] + right + text;
                 chain = left;
@@ -136,7 +140,7 @@ function sheetPrefix(node: FormulaNode, stored: boolean, sheetName: SheetNames):
             return name === undefined ? null : `${quoteSheetName(name)}!`;
         }
         case SheetKind.Name:
-            return `${stored ? quotedSheetName(sheet) : quoteSheetName(sheet)}!`;
+            return `${stored ? inQuotes(sheet) : quoteSheetName(sheet)}!`;
         case SheetKind.External:
         case SheetKind.Span: {
             // Stored text reads a bare bracket as a sheet id. Typed, the prefix is bare when it reads back as itself
@@ -144,7 +148,7 @@ function sheetPrefix(node: FormulaNode, stored: boolean, sheetName: SheetNames):
             const book = node.sheetKind === SheetKind.Span || isWord(`_${sheet.slice(1, sheet.indexOf(']'))}`);
             const bare = stored || !book ? null : referenceAt(`${sheet}!A1`, 0);
             const same = bare?.end === sheet.length + 3 && bare.node.sheetKind === node.sheetKind;
-            return `${same && bare.node.sheet === sheet ? sheet : quotedSheetName(sheet)}!`;
+            return `${same && bare.node.sheet === sheet ? sheet : inQuotes(sheet)}!`;
         }
     }
 }

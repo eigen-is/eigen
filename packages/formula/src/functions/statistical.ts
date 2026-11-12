@@ -58,11 +58,6 @@ function rank(value: number, numbers: Numbers, order: number) {
     return rankAmong(numbers.list(), value, order !== 0, false) || NA;
 }
 
-// Equal numbers share the mean of their ranks, where RANK gives each the first of them.
-function sharedRank(value: number, numbers: Numbers, order: number) {
-    return rankAmong(numbers.list(), value, order !== 0, true) || NA;
-}
-
 // The quarter is cut to a whole number after its sign is tested: QUARTILE(D1:D8,-0.5) is #NUM!.
 function quartile(numbers: Numbers, quarter: number) {
     return quarter < 0 ? NUM : percentile(numbers, Math.trunc(quarter) / 4);
@@ -110,9 +105,8 @@ function onLine(x: number, pairs: Pairs) {
     return isError(rise) ? rise : mean(pairs.xs) - rise * mean(pairs.ys) + rise * x;
 }
 
-// The covariance of the two sides over the product of their deviations, each of a sample when `less` is 1 and of
-// a whole population when 0. The order is Excel's to the last of its 15 digits: the covariance and both variances
-// are divided by the count first, and each variance has its own root.
+// The covariance over the product of the deviations, of a sample when `less` is 1 and of a population when 0. The
+// count divides the covariance and both variances first and each variance has its own root: Excel's last digit.
 function correlation({ xs, ys }: Pairs, less: number) {
     const spreadX = squaredDeviations(xs);
     const spreadY = squaredDeviations(ys);
@@ -157,7 +151,12 @@ export const STATISTICAL = [
     }),
     fn('RANK', [NUMBER, cells(NUMBERS), optional(NUMBER, 0)], rank),
     fn('RANK.EQ', [NUMBER, cells(NUMBERS), optional(NUMBER, 0)], rank),
-    fn('RANK.AVG', [NUMBER, cells(NUMBERS), optional(NUMBER, 0)], sharedRank),
+    // Equal numbers share the mean of their ranks, where RANK gives each the first of them.
+    fn(
+        'RANK.AVG',
+        [NUMBER, cells(NUMBERS), optional(NUMBER, 0)],
+        (value, numbers, order) => rankAmong(numbers.list(), value, order !== 0, true) || NA,
+    ),
     fn('PERCENTILE', [referring(NUMBERS, VALUE), NUMBER], percentile),
     fn('PERCENTILE.INC', [referring(NUMBERS, VALUE), NUMBER], percentile),
     fn('PERCENTILE.EXC', [referring(NUMBERS, VALUE), NUMBER], percentileBetween),
@@ -185,7 +184,6 @@ export const STATISTICAL = [
         return values.reduce((sum, value) => sum + Math.abs(value - middle), 0) / values.length;
     }),
     fn('DEVSQ', [rest(NUMBERS)], (numbers) => (numbers.count() === 0 ? NUM : squaredDeviations(numbers.list()))),
-    // Only of numbers above 0.
     fn('GEOMEAN', [rest(NUMBERS)], (numbers) =>
         numbers.count() === 0 || numbers.min() <= 0 ? NUM : rootOfProduct(numbers.list()),
     ),

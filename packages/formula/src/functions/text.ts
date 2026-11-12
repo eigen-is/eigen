@@ -30,7 +30,7 @@ import {
 } from './registry';
 
 // Past this a position is no position: MID("abc",2^31,1) is #VALUE!.
-const MOST = 2 ** 31;
+const POSITION_LIMIT = 2 ** 31;
 
 // The most decimals FIXED and DOLLAR write, and the longest text.
 const MOST_DECIMALS = 127;
@@ -45,7 +45,7 @@ const UNSEEN = /[^\P{Cc}\x7f]/gu;
 function fixed(number: number, decimals: number, grouped: boolean) {
     if (decimals > MOST_DECIMALS) return VALUE;
     const text = fixedText(roundDecimal(number, decimals), decimals, grouped);
-    return countCharacters(text) > LONGEST_FIXED ? VALUE : text;
+    return text.length > LONGEST_FIXED ? VALUE : text;
 }
 
 // TEXTBEFORE and TEXTAFTER. An instance that was written is refused when the text has no room for that many
@@ -71,13 +71,14 @@ function beside(after: boolean) {
     };
 }
 
+const BESIDE = [TEXT, TEXTS, skippable(INTEGER), skippable(INTEGER, 0), skippable(INTEGER, 0), optional(TEXT)] as const;
+
 export const TEXT_FUNCTIONS = [
-    // What is past the longest text is cut off, where CONCAT refuses.
-    fn('CONCATENATE', [rest(TEXT)], (texts) => cutCharacters(texts.join(''), 0, LONGEST_TEXT)),
+    fn('CONCATENATE', [rest(TEXT)], (texts) => texts.join('')),
     fn('CONCAT', [rest(TEXTS)], (texts) => {
         let joined = '';
         for (const text of texts) {
-            if (countCharacters(joined) + countCharacters(text) > LONGEST_TEXT) return CALC;
+            if (joined.length + text.length > LONGEST_TEXT) return CALC;
             joined += text;
         }
         return joined;
@@ -89,8 +90,7 @@ export const TEXT_FUNCTIONS = [
         let count = 0;
         for (const text of texts) {
             const delimiter = count === 0 ? '' : delimiters[(count - 1) % delimiters.length];
-            const length = countCharacters(joined) + countCharacters(delimiter) + countCharacters(text);
-            if (length > LONGEST_TEXT) return CALC;
+            if (joined.length + delimiter.length + text.length > LONGEST_TEXT) return CALC;
             if (skip && text === '') continue;
             joined += delimiter + text;
             count += 1;
@@ -106,7 +106,7 @@ export const TEXT_FUNCTIONS = [
         return cutCharacters(text, Math.max(length - Math.trunc(count), 0), length);
     }),
     fn('MID', [TEXT, NUMBER, NUMBER], (text, start, count) =>
-        start < 1 || count < 0 || start >= MOST || count >= MOST
+        start < 1 || count < 0 || start >= POSITION_LIMIT || count >= POSITION_LIMIT
             ? VALUE
             : cutCharacters(text, Math.trunc(start) - 1, Math.trunc(count)),
     ),
@@ -118,7 +118,7 @@ export const TEXT_FUNCTIONS = [
     // Left out, every `old` is replaced, one after the other. A numbered one is counted among all the places
     // `old` starts at, overlapping ones too: the second aa of aaaa starts at its second a.
     fn('SUBSTITUTE', [TEXT, TEXT, TEXT, optional(strict(NUMBER))], (text, old, put, instance) => {
-        if (instance !== undefined && (instance < 1 || instance >= MOST)) return VALUE;
+        if (instance !== undefined && (instance < 1 || instance >= POSITION_LIMIT)) return VALUE;
         if (old === '') return text;
         const width = countCharacters(old);
         const step = instance === undefined ? width : 1;
@@ -128,10 +128,10 @@ export const TEXT_FUNCTIONS = [
         for (let at = findCharacters(old, text, 1); at > 0; at = findCharacters(old, text, at + step)) {
             seen += 1;
             if (instance !== undefined && seen < Math.trunc(instance)) continue;
-            const between = at - 1 - kept;
+            const piece = cutCharacters(text, kept, at - 1 - kept) + put;
             // The longest text times itself is more than a string can hold on Node.
-            if (countCharacters(result) + between + countCharacters(put) > LONGEST_TEXT) return VALUE;
-            result += cutCharacters(text, kept, between) + put;
+            if (result.length + piece.length > LONGEST_TEXT) return VALUE;
+            result += piece;
             kept = at - 1 + width;
             if (instance !== undefined) break;
         }
@@ -149,7 +149,7 @@ export const TEXT_FUNCTIONS = [
             : searchCharacters(sought, text, Math.trunc(start)) || VALUE,
     ),
     fn('REPT', [TEXT, NUMBER], (text, count) =>
-        count < 0 || countCharacters(text) * Math.trunc(count) > LONGEST_TEXT ? VALUE : text.repeat(Math.trunc(count)),
+        count < 0 || text.length * Math.trunc(count) > LONGEST_TEXT ? VALUE : text.repeat(Math.trunc(count)),
     ),
     fn('EXACT', [TEXT, TEXT], (one, other) => one === other),
     fn('LEN', [TEXT], countCharacters),
@@ -198,14 +198,6 @@ export const TEXT_FUNCTIONS = [
         const digits = fixed(Math.abs(number), decimals, true);
         return isError(digits) ? digits : number < 0 ? `($${digits})` : `$${digits}`;
     }),
-    fn(
-        'TEXTBEFORE',
-        [TEXT, TEXTS, skippable(INTEGER), skippable(INTEGER, 0), skippable(INTEGER, 0), optional(TEXT)],
-        beside(false),
-    ),
-    fn(
-        'TEXTAFTER',
-        [TEXT, TEXTS, skippable(INTEGER), skippable(INTEGER, 0), skippable(INTEGER, 0), optional(TEXT)],
-        beside(true),
-    ),
+    fn('TEXTBEFORE', BESIDE, beside(false)),
+    fn('TEXTAFTER', BESIDE, beside(true)),
 ];

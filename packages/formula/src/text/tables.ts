@@ -39,8 +39,7 @@ const ITEMS: ReadonlyMap<string, number> = new Map([
 
 const ESCAPED = /'([\s\S])/g;
 
-// The rows a reference picks, as the bits above, and its first and last column in lower case, both empty for
-// every column. Null for brackets that say nothing Excel would read.
+// The rows as the bits above, and the first and last column in lower case, both empty for every column.
 type Picked = { readonly rows: number; readonly first: string; readonly last: string };
 
 // The tree with every table reference that `findTable` knows replaced by its range, for a formula at a cell of
@@ -105,9 +104,8 @@ export function isTableCell(node: FormulaNode): boolean {
     return picked !== null && picked.rows === THIS_ROW && picked.first !== '' && picked.first === picked.last;
 }
 
-// Reads the brackets: an @, then one item or column bare, or bracketed parts with commas between and a colon
-// between the two columns of a range. Whitespace may stand after the first bracket, before the last and around a
-// comma or colon, as Excel allows.
+// What the brackets of a table reference pick: an @, then one item or column bare, or bracketed parts with commas
+// between and a colon between two columns. Null for brackets that say nothing Excel would read.
 function pick(text: string): Picked | null {
     const end = text.length - 1;
     let at = text.indexOf('[') + 1;
@@ -125,9 +123,12 @@ function pick(text: string): Picked | null {
     let columns = 0;
     let ranged = false;
     while (at < end) {
-        const part = bare ? end << 6 : lexAt(text, at);
-        if (!bare && tokenKind(part) !== Token.Bracket) return null;
-        const close = bare ? end : tokenEnd(part) - 1;
+        let close = end;
+        if (!bare) {
+            const part = lexAt(text, at);
+            if (tokenKind(part) !== Token.Bracket) return null;
+            close = tokenEnd(part) - 1;
+        }
         const name = text.slice(bare ? at : at + 1, close);
         if (name.charCodeAt(0) === HASH) {
             const item = ITEMS.get(name.toLowerCase());
