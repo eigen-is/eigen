@@ -748,4 +748,14 @@ describe('text/xlsx: what the A1 reader makes of a file', () => {
         expect('reason' in parseXlsx('Sales[Amount', 0, 0, findSheet)).toBe(true);
         expect('reason' in parseXlsx('SUM(Table1[[#This Row],[Qty])', 0, 0, findSheet)).toBe(true);
     });
+
+    test('a file spells a formula longer than Excel shows it, and such a text reads', () => {
+        const file = `_xlfn.LET(_xlpm.x,1,${'_xlpm.x+'.repeat(2699)}_xlpm.x)`;
+        expect(file).toHaveLength(21620);
+        expect(printA1(read(file), ...at('D2'), sheetName)).toBe(`=LET(x,1,${'x+'.repeat(2699)}x)`);
+        const typed = treeA1(`=${'XOR(1)+'.repeat(999)}XOR(1)`, 'A1');
+        const written = fileOf(typed, 'A1').text;
+        expect(written).toHaveLength(12999);
+        expect(read(written, 'A1')).toEqual(typed);
+    });
 });

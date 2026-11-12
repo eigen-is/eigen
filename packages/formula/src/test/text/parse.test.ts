@@ -3,12 +3,12 @@ import { Fact, shapeFacts } from '../../eval/facts';
 import {
     ERROR_LITERALS,
     MAX_ARGUMENTS,
-    MAX_FORMULA_LENGTH,
     MAX_NESTING,
     MAX_STORED_LENGTH,
     NodeKind,
     parseA1,
     parseStored,
+    parseXlsx,
     printA1,
     printStored,
     RefFlag,
@@ -1020,28 +1020,29 @@ describe('limits', () => {
     const nested = (levels: number) => `=${'('.repeat(levels)}1${')'.repeat(levels)}`;
     const args = (count: number) => `=SUM(${Array.from({ length: count }, () => '1').join(',')})`;
 
-    test('8,192 characters', () => {
-        const longest = `=${'1+'.repeat((MAX_FORMULA_LENGTH - 2) / 2)}1`;
-        expect(longest).toHaveLength(MAX_FORMULA_LENGTH);
-        expect(failure(longest)).toBe('parsed');
-        expect(failure(`${longest} `)).toBe('too-long');
-        expect(MAX_FORMULA_LENGTH).toBe(8192);
-    });
-
-    test('the limit on length is on what a person types, and stored text may be longer', () => {
-        const sheets = sheetFinder([{ id: '0b9f6c1e-6a4d-4c1b-9a53-3f1f0c9d2e77', name: 'a' }]);
-        const typed = `=${'a!A1+'.repeat(1638)}1`;
-        expect(typed.length).toBeLessThanOrEqual(MAX_FORMULA_LENGTH);
-        const tree = parseA1(typed, 1048575, 16383, sheets);
-        if ('reason' in tree) throw new Error(tree.reason);
-        const text = printStored(tree);
-        expect(text).toHaveLength(1638 * 60 + 2);
-        expect(parseStored(text)).toEqual(tree);
-        expect(MAX_STORED_LENGTH).toBe(16 * MAX_FORMULA_LENGTH);
+    test('one bound on length for typed, stored and file text', () => {
+        expect(MAX_STORED_LENGTH).toBe(131072);
         const longest = `=${'1+'.repeat((MAX_STORED_LENGTH - 2) / 2)}1`;
         expect(longest).toHaveLength(MAX_STORED_LENGTH);
+        expect(failure(longest)).toBe('parsed');
+        expect(failure(`${longest} `)).toBe('too-long');
         expect(printStored(treeStored(longest))).toBe(longest);
         expect(parseStored(`${longest} `)).toEqual({ reason: 'too-long', at: MAX_STORED_LENGTH });
+        expect('reason' in parseXlsx(longest.slice(1), 0, 0, findSheet)).toBe(false);
+        expect(parseXlsx(`${longest} `, 0, 0, findSheet)).toEqual({ reason: 'too-long', at: MAX_STORED_LENGTH });
+    });
+
+    test('a formula of 8,190 typed characters reads again where it shows longer, and from its own file', () => {
+        const typed = `=${'B2+'.repeat(2729)}B2`;
+        expect(typed).toHaveLength(8190);
+        const far = printA1(treeA1(typed, 'A1'), 1048570, 16370, sheetName);
+        expect(far).toHaveLength(30030);
+        expect(storedText(far, 1048570, 16370, findSheet)).toBe(storedText(typed, 0, 0, findSheet));
+        const wide = sheetFinder([{ id: '0b9f6c1e-6a4d-4c1b-9a53-3f1f0c9d2e77', name: 'a' }]);
+        const tree = parseA1(`=${'a!A1+'.repeat(1638)}1`, 1048575, 16383, wide);
+        if ('reason' in tree) throw new Error(tree.reason);
+        expect(printStored(tree)).toHaveLength(1638 * 60 + 2);
+        expect(parseStored(printStored(tree))).toEqual(tree);
     });
 
     test('64 levels of nesting', () => {
@@ -1069,7 +1070,7 @@ describe('limits', () => {
 
     test('a chain of binary operators is not nesting, however long', () => {
         const sum = `=${'A1+'.repeat(2730)}1`;
-        expect(sum).toHaveLength(MAX_FORMULA_LENGTH);
+        expect(sum).toHaveLength(8192);
         const tree = treeA1(sum, 'B2');
         expect(printA1(tree, ...at('B2'), sheetName)).toBe(sum);
         expect(printStored(tree)).toBe(`=${'R[-1]C[-1]+'.repeat(2730)}1`);

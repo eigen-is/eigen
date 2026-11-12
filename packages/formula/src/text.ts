@@ -10,7 +10,6 @@ export { columnIndex, columnLabel, GRID_COLUMNS, GRID_ROWS, rangeToA1, toA1 } fr
 export { ERROR_LITERALS, Token } from './text/lexer';
 export {
     MAX_ARGUMENTS,
-    MAX_FORMULA_LENGTH,
     MAX_NESTING,
     MAX_STORED_LENGTH,
     parseA1,

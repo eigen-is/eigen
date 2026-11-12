@@ -24,11 +24,9 @@ import { continuesWord, errorCode, lexAt, REF_ERROR, Token, tokenEnd, tokenKind 
 import type { FormulaNode } from './tree';
 import { branch, EMPTY, leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from './tree';
 
-// Excel's limit on what a person types.
-export const MAX_FORMULA_LENGTH = 8192;
-// Stored text also arrives from a peer, so it has a cap of its own, with room above the twelvefold a typed formula
-// can grow when stored, as a!A1 does with a uuid for the sheet and offsets that span the grid.
-export const MAX_STORED_LENGTH = 16 * MAX_FORMULA_LENGTH;
+// The cap on a formula's text in every spelling. One formula is longer stored or in a file than typed, as a!A1 is
+// with a uuid for the sheet, so a cap per spelling would refuse text the engine printed itself.
+export const MAX_STORED_LENGTH = 131072;
 // Brackets and prefix or postfix operators, one inside the other. A chain of binary operators is not nesting.
 export const MAX_NESTING = 64;
 export const MAX_ARGUMENTS = 255;
@@ -169,8 +167,7 @@ class Parser {
     }
 
     public formula(): FormulaNode | ParseFailure {
-        const limit = this.stored ? MAX_STORED_LENGTH : MAX_FORMULA_LENGTH;
-        if (this.text.length > limit) return { reason: 'too-long', at: limit };
+        if (this.text.length > MAX_STORED_LENGTH) return { reason: 'too-long', at: MAX_STORED_LENGTH };
         if (isUnparsed(this.text)) return { reason: 'syntax', at: 1 };
         // A formula in a file has no = of its own, and reads from its first character.
         if (this.text.charCodeAt(0) === EQUALS) this.end = 1;
