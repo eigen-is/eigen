@@ -235,4 +235,55 @@ describe('Shared with me never lists what the user owns', () => {
 
         expect(await listedAndBell(ctx.bob.user.sessionToken, ctx.bob.user.id, name)).toEqual([false, []]);
     });
+
+    test('a share from before joining the team leaves without a notice, and a real unshare still tells', async () => {
+        const owner = teamOwnerId(teamId);
+        const team = await getHome(owner);
+        const alice = await getHome(ctx.alice.user.id);
+        const charlie = await getHome(ctx.charlie.user.id);
+        const mountId = await firstMountId(ctx.alice.user.sessionToken, owner);
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, owner, mountId, 'root');
+        const name = `${crypto.randomUUID()}.txt`;
+        const file = await team.drive.createFileFromData(
+            mountId,
+            root.id,
+            name,
+            'text/plain',
+            Buffer.from('x'),
+            alice.user,
+        );
+        const add = [{ id: ctx.charlie.user.email, read: true, write: false }];
+        await team.drive.updateACLDelta(mountId, file.id, { add }, undefined, undefined, alice.user);
+        await drainHomeDeliveries();
+        const sharedDb = await getSharedDatabase(charlie);
+        const row = () => sharedDb.select().from(sharedPaths).where(eq(sharedPaths.pathId, file.id)).get();
+        expect(row()).toBeDefined();
+        await addMember(ctx, teamId, ctx.charlie.user.id);
+        await drainHomeDeliveries();
+
+        const write = [{ id: ctx.charlie.user.email, read: true, write: true }];
+        await team.drive.updateACLDelta(mountId, file.id, { add: write }, undefined, undefined, alice.user);
+        await drainHomeDeliveries();
+        expect(row()).toBeUndefined();
+        const [, titles] = await listedAndBell(ctx.charlie.user.sessionToken, ctx.charlie.user.id, name);
+        expect(titles.filter((title) => title.endsWith('removed your access'))).toEqual([]);
+
+        const rootId = (await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, MOUNT, 'root')).id;
+        const other = `${crypto.randomUUID()}.txt`;
+        const own = await alice.drive.createFileFromData(
+            MOUNT,
+            rootId,
+            other,
+            'text/plain',
+            Buffer.from('x'),
+            alice.user,
+        );
+        await alice.drive.updateACLDelta(MOUNT, own.id, { add }, undefined, undefined, alice.user);
+        await drainHomeDeliveries();
+        const remove = [ctx.charlie.user.email];
+        await alice.drive.updateACLDelta(MOUNT, own.id, { remove }, undefined, undefined, alice.user);
+        await drainHomeDeliveries();
+        const [, otherTitles] = await listedAndBell(ctx.charlie.user.sessionToken, ctx.charlie.user.id, other);
+        expect(otherTitles.filter((title) => title.endsWith('removed your access'))).toHaveLength(1);
+    });
 });
