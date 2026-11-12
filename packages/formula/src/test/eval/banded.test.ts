@@ -415,6 +415,36 @@ describe('the bound on what one array stores', () => {
         expect(valueAt(engine, 'A6')).toBe(7000 * 20000);
     });
 
+    // Sheet2 holds a cell in the last row of column Q, so A:Q is 17 columns high: more than 2^24 places.
+    test('a list of every number, two ranges side by side and a join each store at most 2^24', () => {
+        const engine = engineOf({
+            s1: {
+                A1: '=MEDIAN(Sheet2!A:Q*1)',
+                A2: '=CORREL(Sheet2!A:Q,Sheet2!A:Q)',
+                A3: '=CONCAT(Sheet2!A:Q)',
+                A4: '=CONCAT(Sheet2!A:Q&"")',
+                A5: '=MEDIAN(Sheet2!A:P)',
+                A6: '=CONCAT(Sheet2!A:P)',
+            },
+            s2: { A1: 1, A2: 2, A3: 4, J1: 2, J2: 5, J3: 6, Q1048576: 5 },
+        });
+        expect(engine.recalc(ALL)).toMatchObject({ loops: [], stopped: false });
+        expect(['A1', 'A2', 'A3', 'A4'].map((label) => valueAt(engine, label))).toEqual([CALC, CALC, CALC, CALC]);
+        expect(valueAt(engine, 'A5')).toBe(3);
+        expect(valueAt(engine, 'A6')).toBe('122546');
+    });
+
+    // Each of the two ranges is 932,068 rows of 9 columns, 4 places more than half of 2^24: the bound is on each.
+    test('two ranges side by side store 2^24 each, not together', () => {
+        const engine = engineOf({
+            s1: { A1: '=CORREL(Sheet2!A1:I932068,Sheet2!J1:R932068)', A2: '=CORREL(Sheet2!A1:I3,Sheet2!J1:R3)' },
+            s2: { A1: 1, A2: 2, A3: 4, J1: 2, J2: 5, J3: 6, Q1048576: 5 },
+        });
+        engine.recalc(ALL);
+        expect(valueAt(engine, 'A1')).toBe(valueAt(engine, 'A2'));
+        expect(valueAt(engine, 'A2')).toBeCloseTo(51 / Math.sqrt(42 * 78), 13);
+    });
+
     test('five criteria down a million filled rows, multiplied', () => {
         const formula =
             '=SUMPRODUCT((Sheet2!A:A=1)*(Sheet2!B:B=1)*(Sheet2!C:C=1)*(Sheet2!D:D=1)*(Sheet2!E:E=1)*Sheet2!F:F)';

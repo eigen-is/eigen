@@ -128,6 +128,7 @@ export const BLANKS: Param<Matches> = Object.freeze({
 });
 
 // Ranges or arrays of one size, as the product at each place: what is no number counts as 0. A union is #VALUE!.
+// Only sum() and count() of them mean something, and count() is the places of one argument.
 export const PRODUCTS: Walked<Numbers> = Object.freeze({
     ...REQUIRED,
     ...{ prepare: Prepare.Walked, read: Read.Products, union: VALUE },

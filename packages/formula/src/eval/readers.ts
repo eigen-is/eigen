@@ -213,7 +213,8 @@ export class Pairs {
         if (isReference(second)) ctx.recalc.settleArea(second);
         // Past the last cell of both ranges every place is a blank, which pairs with nothing.
         const used = Math.max(reach(ctx, first), reach(ctx, second));
-        if (!ctx.recalc.room(2 * used)) return CALC;
+        // Two lists are made, and each may be as long as an array is.
+        if (!ctx.recalc.room(used) || !ctx.recalc.spend(used)) return CALC;
         if (pairs.first.length < used) {
             pairs.first = new Float64Array(used);
             pairs.second = new Float64Array(used);
