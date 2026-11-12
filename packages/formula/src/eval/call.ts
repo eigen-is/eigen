@@ -232,6 +232,43 @@ function collected(family: Family, value: Value): Held {
     }
 }
 
+// The body on arguments that are read, with what its walk passes over in `skips`, and its answer as a cell can hold
+// it: a number that is no number is #NUM!, and a text has at most 32,767 characters. `held` are the call's slots.
+export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number, skips: number): Value | Lazy {
+    let args: readonly unknown[] = held;
+    if (entry.chosen !== null) return choose(ctx, entry, entry.chosen, held, count);
+    const frame = entry.plain ? null : ctx.frames[ctx.calls - 1];
+    if (frame !== null) {
+        const error = look(ctx, entry, frame, count, skips);
+        if (error !== null) return error;
+        args = frame.args;
+    }
+    let result: Result;
+    switch (args.length) {
+        case 0:
+            result = entry.run();
+            break;
+        case 1:
+            result = entry.run(args[0]);
+            break;
+        case 2:
+            result = entry.run(args[0], args[1]);
+            break;
+        case 3:
+            result = entry.run(args[0], args[1], args[2]);
+            break;
+        case 4:
+            result = entry.run(args[0], args[1], args[2], args[3]);
+            break;
+        default:
+            result = entry.run(...args);
+    }
+    if (frame !== null && frame.failed !== null) return frame.failed;
+    if (typeof result === 'number') return real(result);
+    if (typeof result === 'string') return result.length > LONGEST_TEXT ? VALUE : result;
+    return result instanceof Table ? Table.held(result) : result;
+}
+
 // A call of a row that picks another by its first argument, and what the walk passes over by its second when it
 // takes one: the row that is picked runs on the arguments after those, each read now by that row's own parameter.
 // A code or an option that does not exist is #VALUE! before any range is looked into.
@@ -269,41 +306,4 @@ function choose(
         held[i] = value;
     }
     return run(ctx, target, held, given, choice.skips | passed);
-}
-
-// The body on arguments that are read, with what its walk passes over in `skips`, and its answer as a cell can hold
-// it: a number that is no number is #NUM!, and a text has at most 32,767 characters. `held` are the call's slots.
-export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number, skips: number): Value | Lazy {
-    let args: readonly unknown[] = held;
-    if (entry.chosen !== null) return choose(ctx, entry, entry.chosen, held, count);
-    const frame = entry.plain ? null : ctx.frames[ctx.calls - 1];
-    if (frame !== null) {
-        const error = look(ctx, entry, frame, count, skips);
-        if (error !== null) return error;
-        args = frame.args;
-    }
-    let result: Result;
-    switch (args.length) {
-        case 0:
-            result = entry.run();
-            break;
-        case 1:
-            result = entry.run(args[0]);
-            break;
-        case 2:
-            result = entry.run(args[0], args[1]);
-            break;
-        case 3:
-            result = entry.run(args[0], args[1], args[2]);
-            break;
-        case 4:
-            result = entry.run(args[0], args[1], args[2], args[3]);
-            break;
-        default:
-            result = entry.run(...args);
-    }
-    if (frame !== null && frame.failed !== null) return frame.failed;
-    if (typeof result === 'number') return real(result);
-    if (typeof result === 'string') return result.length > LONGEST_TEXT ? VALUE : result;
-    return result instanceof Table ? Table.held(result) : result;
 }
