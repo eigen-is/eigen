@@ -150,8 +150,10 @@ describe('a body reaches no cell, column or stored array', () => {
             fn('PEEK', [ENGINE], (book) => book.ctx.recalc.valueOf(book.ctx.workbook.sheets[0], 9, 9)),
             // @ts-expect-error a reference read from a text is handed back only by a row that is marked for it
             fn('PEEK', [TEXT, ENGINE], (text, book) => book.refer(text, true)),
+            // @ts-expect-error by a key in brackets neither: what a book holds is no property of it
+            fn('PEEK', [ENGINE], (book) => book['ctx'].recalc.valueOf(book['ctx'].workbook.sheets[0], 9, 9)),
         ];
-        expect(rows.length).toBe(4);
+        expect(rows.length).toBe(5);
     });
 
     // A row on this list can answer anew with no value changed, so each is computed in every pass that has a write.

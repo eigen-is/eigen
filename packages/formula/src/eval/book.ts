@@ -1,8 +1,9 @@
 // What a function's body gets of the workbook itself, for the few things no argument carries: whether a cell holds
 // a formula and its text, how many sheets there are, and a reference that is written in a text. A book is asked
 // about one cell, and the call wrapper picks it: the first cell of the reference the row was given, or the cell of
-// the formula. So no member takes a place, and a body reaches no cell its row does not name. What a book answers
-// can change with no value changing, so every row that takes one is computed again in every pass that has a write.
+// the formula. So no member takes a place, and a body reaches no cell its row does not name. A book is the one of
+// its call's frame, so a formula computed while the body runs aims another. What a book answers can change with no
+// value changing, so every row that takes one is computed again in every pass that has a write.
 
 import { isUnparsed, parseA1, parseStored } from '../text/parser';
 import { printA1 } from '../text/printer';
@@ -17,29 +18,27 @@ import type { Entry, Held } from './signature';
 import { Prepare } from './signature';
 
 export class Book {
-    private readonly ctx: Evaluator;
-    // The cell the book is asked about, and the cell of the formula that asks.
-    private cell: Reference | null = null;
-    private own: Reference | null = null;
+    // Truly private, where a reader's fields are private by type alone: a key in brackets reaches neither.
+    readonly #ctx: Evaluator;
+    // The cell the book is asked about, or null for the cell of the formula that asks.
+    #cell: Reference | null = null;
 
     public constructor(ctx: Evaluator) {
-        this.ctx = ctx;
+        this.#ctx = ctx;
     }
 
     // Makes `book` the book of a call of `entry`, whose arguments are read into `held`.
     public static aim(book: Book, entry: Entry, held: readonly Held[]): Book {
-        book.own = null;
-        book.cell = null;
         const at = entry.slots.findIndex((slot) => slot.prepare === Prepare.Reference);
         const given = at < 0 ? undefined : held[at];
-        if (isReference(given)) book.cell = given;
+        book.#cell = isReference(given) ? given : null;
         return book;
     }
 
     // The formula of the cell as it reads there, or null when it holds none.
     public formula(): string | null {
-        const { workbook } = this.ctx;
-        const { sheet, top, left } = this.asked();
+        const { workbook } = this.#ctx;
+        const { sheet, top, left } = this.#asked();
         const column = workbook.sheets[sheet].columns[left];
         const shape = column === undefined || top >= column.length ? 0 : column.shape[top];
         if (shape === 0) return null;
@@ -51,26 +50,26 @@ export class Book {
 
     // The value of the cell, its own formula computed first.
     public value(): Scalar {
-        const { sheet, top, left } = this.asked();
-        return this.ctx.recalc.valueOf(this.ctx.workbook.sheets[sheet], top, left);
+        const { sheet, top, left } = this.#asked();
+        return this.#ctx.recalc.valueOf(this.#ctx.workbook.sheets[sheet], top, left);
     }
 
     // The name of the cell's sheet when that is another than the formula's, and else null.
     public elsewhere(): string | null {
-        const { sheet } = this.asked();
-        return sheet === this.host().sheet ? null : this.ctx.workbook.sheets[sheet].name;
+        const { sheet } = this.#asked();
+        return sheet === this.#ctx.recalc.running().sheet ? null : this.#ctx.workbook.sheets[sheet].name;
     }
 
     public sheets(): number {
-        return this.ctx.workbook.sheets.length;
+        return this.#ctx.workbook.sheets.length;
     }
 
     // The reference a text spells, read from the formula's own cell: as A1 when `a1`, and else as R1C1, where
     // R[1]C is the cell below. A text that is no one reference, or names no sheet of the workbook, is #REF!.
     public refer(text: string, a1: boolean): Reference | FormulaError {
-        const { ctx } = this;
+        const ctx = this.#ctx;
         const { sheets } = ctx.workbook;
-        const host = this.host();
+        const host = ctx.recalc.running();
         let sheet = sheets[host.sheet];
         let tree = a1 ? parseA1(`=${text}`, host.top, host.left, (name) => findSheetByName(sheets, name)) : null;
         if (!a1) {
@@ -89,12 +88,7 @@ export class Book {
         return isReference(found) ? found : REF;
     }
 
-    private host(): Reference {
-        this.own ??= this.ctx.recalc.running();
-        return this.own;
-    }
-
-    private asked(): Reference {
-        return this.cell ?? this.host();
+    #asked(): Reference {
+        return this.#cell ?? this.#ctx.recalc.running();
     }
 }

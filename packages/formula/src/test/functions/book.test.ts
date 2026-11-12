@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { ENGINE, fn, REFERENCE } from '../../functions/registry';
 import { DIV0, NA, NULL, REF, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
-import { engineOf, evaluate, stored, valueAt } from '../recalc/support';
+import { engineOf, evaluate, stored, valueAt, valuesWith } from '../recalc/support';
 
 // The fixture of Excel batch 9: A1:A5 = 1.5, -2.5, 0, 10, 1E+300, B1 blank, B2 the text 3, B3 TRUE, B4 =1/0, B5 the
 // text abc, B6 ="", B7 =NA(), C1:C3 = 2, 4, 6, D1:D4 = k1 to k4, E1:E4 = 10 to 40.
@@ -252,6 +253,33 @@ describe('what a cell is: CELL, SHEET, SHEETS, INFO', () => {
     test('with no reference it is the cell the formula is in', () => {
         expect(evaluate('=CELL("address")', F9, 'Q7')).toBe('$Q$7');
         expect(evaluate('=CELL("row")', F9, 'Q7')).toBe(7);
+    });
+});
+
+// A book belongs to the call that was handed it: what it is asked about is that call's cell, whatever other
+// formula is computed while the body runs, and its formula's cell is the one that is running.
+describe('a book answers about the cell of its own call', () => {
+    // A row no function of this build is: it asks for the value first, which computes a formula that asks a book.
+    const VF = fn('VF', [REFERENCE, ENGINE], (_at, book) => `${String(book.value())}|${book.formula()}`);
+
+    test('after a value was computed whose formula asks a book too', () => {
+        const cells = { A1: '=VF(N1)', N1: '=ISFORMULA(B1)', B1: 7, A2: '=VF(N2)', N2: '=CELL("address",B1)' };
+        expect(valuesWith([VF], cells, ['A1', 'A2'])).toEqual(['false|=ISFORMULA(B1)', '$B$1|=CELL("address",B1)']);
+    });
+
+    test('two formulas in different cells each read a text from their own cell', () => {
+        const cells = { A2: 1, C4: 2, A3: '=INDIRECT("R[-1]C",FALSE)', C5: '=INDIRECT("R[-1]C",FALSE)' };
+        const engine = engineOf({ s1: { ...cells, E1: '=CELL("address")', F2: '=CELL("address")' } });
+        engine.recalc(Number.POSITIVE_INFINITY);
+        expect(['A3', 'C5', 'E1', 'F2'].map((host) => valueAt(engine, host))).toEqual([1, 2, '$E$1', '$F$2']);
+    });
+
+    test('another sheet is another than the sheet of the formula, not than the first sheet', () => {
+        const s2 = { A1: '=CELL("address",B2)', A2: '=CELL("address",Sheet1!B2)', A3: '=CELL("address",Sheet2!B2)' };
+        const engine = engineOf({ s1: { A1: '=CELL("address",Sheet2!B2)' }, s2 });
+        engine.recalc(Number.POSITIVE_INFINITY);
+        expect(['A1', 'A2', 'A3'].map((host) => valueAt(engine, host, 's2'))).toEqual(['$B$2', 'Sheet1!$B$2', '$B$2']);
+        expect(valueAt(engine, 'A1')).toBe('Sheet2!$B$2');
     });
 });
 

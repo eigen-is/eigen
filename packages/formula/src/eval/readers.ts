@@ -19,6 +19,7 @@ import {
     ValueType,
     widthOf,
 } from '../values/value';
+import { Book } from './book';
 import { Tally } from './criteria';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
@@ -45,6 +46,7 @@ export class Frame {
     private readonly tables: Table[] = [];
     private readonly lists: string[][] = [];
     private readonly numberLists: number[][] = [];
+    private asked: Book | null = null;
 
     public constructor(ctx: Evaluator) {
         this.ctx = ctx;
@@ -55,6 +57,13 @@ export class Frame {
         const { tables } = this;
         while (tables.length <= at) tables.push(new Table(this.ctx));
         return tables[at];
+    }
+
+    // What the body of the call in progress may ask of the workbook: a book of this frame's own, so the formulas
+    // that are computed while that body runs, a level deeper, aim another.
+    public book(): Book {
+        this.asked ??= new Book(this.ctx);
+        return this.asked;
     }
 
     // The list of the texts of one parameter.

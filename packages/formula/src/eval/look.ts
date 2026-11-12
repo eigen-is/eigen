@@ -36,7 +36,7 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
         const to = param.rest ? count : at + spanOf(param);
         const value = held[at];
         if (param.prepare === Prepare.Ambient) {
-            if (param.read === Read.Engine) args[p] = Book.aim(ctx.book, entry, held);
+            if (param.read === Read.Engine) args[p] = Book.aim(frame.book(), entry, held);
             else args[p] = param.read === Read.Room ? ctx.room : param.read === Read.Now ? ctx.now : ctx.draw();
         } else if (param.prepare !== Prepare.Walked) args[p] = param.rest ? held.slice(at, count) : value;
         else if (family !== null) {
