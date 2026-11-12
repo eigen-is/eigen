@@ -80,6 +80,7 @@ export async function receiveSharedPathChange(
 
 export async function listSharedWithMe(sharedDb: SharedDb, user: User): Promise<DrivePath[]> {
     const rows = sharedDb.select().from(sharedPaths).all();
+    if (rows.length === 0) return [];
     const visible = await pullVisiblePaths(user, await getMemberships(user.id), rows);
     return visible.sort((a, b) => a.row.sharedAt.getTime() - b.row.sharedAt.getTime()).map(({ path }) => path);
 }

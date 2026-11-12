@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 import { and, eq } from 'drizzle-orm';
@@ -7,7 +7,8 @@ import { sharedPaths } from '../../lib/drive/sharedschema';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import { drainHomeDeliveries } from '../../lib/home/home-relay';
-import { assertJson, authedRequest, driveGet, getTestContext } from '../setup';
+import * as user from '../../lib/user';
+import { assertJson, authedRequest, createTestUser, driveGet, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -147,5 +148,17 @@ describe('Shared with me reads each row from its owner', () => {
         expect(await listed(file.id)).toBeUndefined();
         await shareWithBob(file.id);
         expect(await listed(file.id)).toBeDefined();
+    });
+
+    test('a home nobody shared with reads no memberships', async () => {
+        const loner = await createTestUser('shared-with-me-loner@test.eigen.is', 'testpassword123', 'Loner');
+        const home = await getHome(loner.id);
+        const memberships = spyOn(user, 'getMemberships');
+        try {
+            expect(await home.drive.getSharedPathsWithMe()).toEqual([]);
+            expect(memberships).not.toHaveBeenCalled();
+        } finally {
+            memberships.mockRestore();
+        }
     });
 });
