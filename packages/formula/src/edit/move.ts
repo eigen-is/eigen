@@ -62,8 +62,8 @@ export function moveClasses(
     right: number,
 ): MoveClass[] {
     const fit = fitted(move);
-    const rowCuts = cuts(references, move, hostSheet, true, top, bottom);
-    const columnCuts = cuts(references, move, hostSheet, false, left, right);
+    const rowCuts = cuts(references, move, fit, hostSheet, true, top, bottom);
+    const columnCuts = cuts(references, move, fit, hostSheet, false, left, right);
     const classes: MoveClass[] = [];
     for (let i = 0; i < rowCuts.length; i += 1) {
         const row = rowCuts[i];
@@ -89,6 +89,7 @@ export function moveClasses(
 function cuts(
     references: readonly FormulaNode[],
     move: Move,
+    fit: Move,
     hostSheet: string,
     rows: boolean,
     from: number,
@@ -96,10 +97,10 @@ function cuts(
 ): number[] {
     const first = rows ? move.row : move.column;
     const target = rows ? move.toRow : move.toColumn;
-    const fit = fitted(move);
     const size = rows ? fit.rows : fit.columns;
     const whole = rows ? move.rows : move.columns;
-    const edges = [first, first + size, first + whole, target, target + size];
+    const edges = [first, first + size, target, target + size];
+    if (whole > size) edges.push(first + whole);
     const absolute = rows ? RefFlag.RowAbsolute : RefFlag.ColumnAbsolute;
     const absolute2 = rows ? RefFlag.Row2Absolute : RefFlag.Column2Absolute;
     const found: number[] = [];
