@@ -29,7 +29,7 @@ mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session,
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
     useRootFolder: () => root,
-    useListTrash: () => ({ data: [] }),
+    useTrash: () => ({ items: [], isLoading: false, error: null }),
     useAllWatches: () => watches,
 }));
 afterAll(() => {

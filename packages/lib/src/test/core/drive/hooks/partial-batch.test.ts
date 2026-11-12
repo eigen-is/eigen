@@ -63,7 +63,7 @@ async function run(hook: keyof Hooks, paths: readonly DrivePath[]): Promise<{ re
     const { latest, unmount } = await renderHook((): Hooks => {
         const move = useMovePaths();
         const trash = useDeletePaths();
-        const destroy = usePermanentlyDelete(OWNER, 'm1');
+        const destroy = usePermanentlyDelete();
         return {
             move: (items) => move.mutateAsync({ paths: items, targetParentId: 'elsewhere' }),
             trash: (items) => trash.mutateAsync(items),

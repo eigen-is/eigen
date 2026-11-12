@@ -6,6 +6,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Trash in Drive** — the Trash and its sidebar count include what was deleted from your team drives, so anyone in the team can restore it. **Empty trash** empties only your own drive
 - **Moving several items in Drive** — when some of them fail, the **Move to** dialog keeps only those, so **Move here** again leaves the moved ones alone. **Delete permanently** in the Trash does the same
 - **Dialogs in Drive that close** — a dialog keeps its text while it fades out, where **Move to trash** flashed "Remove 0 shared items". **Email collaborators** now fades out like the others
 - **Move to in Drive** — for an item of another drive, such as a team's file in a document app's list, the **Move to** dialog starts in that item's drive

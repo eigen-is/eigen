@@ -4,13 +4,16 @@
 // A trashed row's menu and the command palette offer the same two rows: Restore and Delete permanently.
 // When Delete permanently gets only part of a selection through, the dialog stays open on the items that
 // failed, and confirming again sends only those. A canceled dialog keeps its count while it fades out.
+// The list spans every drive the viewer can restore from, so a team drive's item shows its team under Owner,
+// and Restore and Delete permanently reach that team's drive. Empty trash empties the viewer's own mounts
+// only, and says so when team items are listed.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { PaletteSelectionActions } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { closingDialog, holdClosingDialogs } from '@workspace/ui/test/closing-dialog';
 import { drivePath } from '@workspace/ui/test/drive-path';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
-import { menuRows } from '@workspace/ui/test/menu-rows';
+import { clickRow, menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 const window = installHappyDom();
@@ -24,11 +27,14 @@ window.localStorage.setItem(
     JSON.stringify({ mode: 'list', sortKey: 'modified', sortDir: 'desc' }),
 );
 
-const trashed = (name: string, editedDay: number, trashedDay: number): DrivePath =>
+const OWN = { ownerId: 'trash-owner', mountId: 'default' };
+const TEAM = { ownerId: 'team_design', mountId: 'shared' };
+
+const trashed = (name: string, editedDay: number, trashedDay: number, drive = OWN): DrivePath =>
     drivePath({
         id: name,
         name,
-        ownerId: 'trash-owner',
+        ...drive,
         mimeType: 'text/plain',
         updatedAt: new Date(Date.UTC(2026, 9, editedDay)),
         trashedAt: new Date(Date.UTC(2026, 9, trashedDay)),
@@ -37,25 +43,53 @@ const trashed = (name: string, editedDay: number, trashedDay: number): DrivePath
 // The page's data, stubbed: one object per hook, so the effects that depend on them settle.
 const session = { user: { id: 'trash-owner', email: 'me@test.eigen.is', name: 'Me' } };
 const root = { data: drivePath({ id: 'root', name: 'My Drive', type: 'folder', mimeType: 'inode/directory' }) };
-const trash: { data: DrivePath[] | undefined; isLoading: boolean; error: Error | null } = {
-    data: [],
+const trash: { items: DrivePath[]; isLoading: boolean; error: Error | null } = {
+    items: [],
     isLoading: false,
     error: null,
 };
-const emptyTrash = { mutateAsync: mock(async () => {}), isPending: false };
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realDrive = { ...(await import('@workspace/lib/drive')) };
+const realPublic = { ...(await import('@workspace/lib/public')) };
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session, useIsGuest: () => false }));
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
     useRootFolder: () => root,
-    useListTrash: () => trash,
-    useEmptyTrash: () => emptyTrash,
+    useTrash: () => trash,
 }));
+// An owner's avatar reads its name from the server: the team is Design, the viewer Me.
+mock.module('@workspace/lib/public', () => ({
+    ...realPublic,
+    useResolvedUser: ({ userId }: { userId?: string }) => ({
+        displayName: userId === TEAM.ownerId ? 'Design' : 'Me',
+        resolvedEmail: '',
+        avatarSrc: undefined,
+        isLoading: false,
+    }),
+}));
+
+// The server behind the page's writes: the viewer has two mounts, every write to a trash route is recorded
+// as its method and path, and `b.txt` is refused.
+// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
+const g = globalThis as any;
+const realFetch = g.fetch;
+const writes: string[] = [];
+g.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    const route = decodeURIComponent(new URL(input instanceof Request ? input.url : String(input)).pathname);
+    if (route === `/drive/${OWN.ownerId}/mounts`) return Response.json([{ id: 'default' }, { id: 'archive' }]);
+    if (!route.includes('/trash') || !init?.method || init.method === 'GET') return realFetch(input, init);
+    writes.push(`${init.method} ${route}`);
+    if (route.endsWith('/b.txt')) return new Response('No access', { status: 403 });
+    return Response.json({ success: true });
+};
+const EMPTIED = ['DELETE /drive/trash-owner/archive/trash', 'DELETE /drive/trash-owner/default/trash'];
+
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@workspace/lib/drive', () => realDrive);
+    mock.module('@workspace/lib/public', () => realPublic);
+    g.fetch = realFetch;
 });
 
 const { act } = await import('react');
@@ -84,10 +118,10 @@ function PaletteReader() {
 let unmount = async () => {};
 afterEach(() => unmount());
 beforeEach(() => {
-    trash.data = [];
+    trash.items = [];
     trash.isLoading = false;
     trash.error = null;
-    emptyTrash.mutateAsync.mockClear();
+    writes.length = 0;
 });
 
 async function open() {
@@ -122,14 +156,22 @@ const click = (element: Element | null | undefined) =>
 const buttonLabels = (root: ParentNode) => [...root.querySelectorAll('button')].map((b) => b.textContent?.trim());
 const button = (root: ParentNode, label: string) =>
     [...root.querySelectorAll('button')].find((b) => b.textContent?.trim() === label);
+const dialog = () => document.querySelector('[role="alertdialog"], [role="dialog"]');
 // The names the list's rows show, in their order.
 const names = (container: HTMLElement, all: string[]) =>
     [...container.querySelectorAll('[role="grid"] [data-index]')].map((row) =>
         all.find((name) => row.textContent?.includes(name)),
     );
+// The row that shows `name`, and its menu.
+const row = (container: HTMLElement, name: string) =>
+    [...container.querySelectorAll('[role="grid"] [role="row"]')].find((entry) => entry.textContent?.includes(name));
+const openRowMenu = (container: HTMLElement, name: string) =>
+    act(async () => {
+        row(container, name)?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }));
+    });
 
 test('the trash sorts newest trashed first, whatever was edited last', async () => {
-    trash.data = [trashed('old-edit.txt', 1, 20), trashed('new-edit.txt', 25, 10), trashed('middle.txt', 5, 15)];
+    trash.items = [trashed('old-edit.txt', 1, 20), trashed('new-edit.txt', 25, 10), trashed('middle.txt', 5, 15)];
     const container = await open();
     expect(names(container, ['old-edit.txt', 'new-edit.txt', 'middle.txt'])).toEqual([
         'old-edit.txt',
@@ -145,7 +187,6 @@ test('an empty trash shows the standard empty text and offers nothing to empty',
 });
 
 test('a trash that failed to load shows the null vector, with no detail and no empty text', async () => {
-    trash.data = undefined;
     trash.error = new Error('The server is unreachable');
     const container = await open();
     expect(container.textContent).toContain('Encountering the null vector: a rendezvous with nothing at all.');
@@ -153,15 +194,33 @@ test('a trash that failed to load shows the null vector, with no detail and no e
     expect(container.textContent).not.toContain('Within this void, all possibilities are yet unobserved.');
 });
 
-test('Empty trash asks first, then deletes everything', async () => {
-    trash.data = [trashed('a.txt', 1, 2)];
+test('Empty trash asks first, then empties every mount of the viewer', async () => {
+    trash.items = [trashed('a.txt', 1, 2)];
     const container = await open();
     await click(button(container, 'Empty trash'));
-    expect(emptyTrash.mutateAsync).not.toHaveBeenCalled();
-    const dialog = document.querySelector('[role="alertdialog"], [role="dialog"]');
-    expect(dialog?.textContent).toContain('permanently delete all items in trash');
-    await click(dialog && button(dialog, 'Empty trash'));
-    expect(emptyTrash.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(writes).toEqual([]);
+    expect(dialog()?.textContent).toContain('permanently delete all items in trash');
+    expect(dialog()?.textContent).not.toContain('team drives');
+    await click(button(dialog() ?? document, 'Empty trash'));
+    expect([...writes].sort()).toEqual(EMPTIED);
+});
+
+test('with team items listed, Empty trash says they stay and empties no team drive', async () => {
+    trash.items = [trashed('a.txt', 1, 2), trashed('team.txt', 1, 3, TEAM)];
+    const container = await open();
+    await click(button(container, 'Empty trash'));
+    expect(dialog()?.querySelector('p')?.textContent).toBe(
+        'Are you sure you want to permanently delete all items from your own drive? Items from team drives stay in the trash. This action cannot be undone.',
+    );
+    await click(button(dialog() ?? document, 'Empty trash'));
+    expect([...writes].sort()).toEqual(EMPTIED);
+});
+
+test('a trash that holds only team items offers nothing to empty', async () => {
+    trash.items = [trashed('team.txt', 1, 3, TEAM)];
+    const container = await open();
+    expect(names(container, ['team.txt'])).toEqual(['team.txt']);
+    expect(buttonLabels(container)).not.toContain('Empty trash');
 });
 
 test('while the trash loads it claims nothing', async () => {
@@ -171,30 +230,56 @@ test('while the trash loads it claims nothing', async () => {
     expect(buttonLabels(container)).not.toContain('Empty trash');
 });
 
+test('an item trashed in a team drive shows its team under Owner', async () => {
+    trash.items = [trashed('a.txt', 1, 2), trashed('team.txt', 1, 3, TEAM)];
+    const container = await open();
+    expect(container.querySelector('[role="grid"]')?.textContent).toContain('Owner');
+    await act(async () => {
+        row(container, 'team.txt')
+            ?.querySelector('[data-slot="tooltip-trigger"]')
+            ?.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse' }));
+        await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Design');
+});
+
+test('Restore on a team drive’s item restores it in that team’s drive', async () => {
+    trash.items = [trashed('a.txt', 1, 2), trashed('team.txt', 1, 3, TEAM)];
+    const container = await open();
+    await openRowMenu(container, 'team.txt');
+    await clickRow('Restore');
+    expect(writes).toEqual(['POST /drive/team_design/shared/trash/team.txt/restore']);
+});
+
+test('Delete permanently on a team drive’s item deletes it from that team’s drive', async () => {
+    trash.items = [trashed('a.txt', 1, 2), trashed('team.txt', 1, 3, TEAM)];
+    const container = await open();
+    await openRowMenu(container, 'team.txt');
+    await clickRow('Delete permanently');
+    await click(button(dialog() ?? document, 'Delete permanently'));
+    expect(writes).toEqual(['DELETE /drive/team_design/shared/trash/team.txt']);
+});
+
 test('the palette offers a trashed item only Restore and Delete permanently', async () => {
-    trash.data = [trashed('a.txt', 1, 2)];
+    trash.items = [trashed('a.txt', 1, 2)];
     const container = await open();
     await click(container.querySelector('[role="grid"] [data-index] > *'));
     expect(palette.actions?.map(({ action }) => action.label)).toEqual(['Restore', 'Delete permanently']);
 });
 
 test('a trashed row’s menu draws the same rows, Delete permanently last and red', async () => {
-    trash.data = [trashed('a.txt', 1, 2)];
+    trash.items = [trashed('a.txt', 1, 2)];
     const container = await open();
-    await act(async () => {
-        container
-            .querySelector('[role="grid"] [data-index] > *')
-            ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }));
-    });
+    await openRowMenu(container, 'a.txt');
     expect(menuRows()).toEqual(['Restore', '—', 'Delete permanently']);
     const rows = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')];
-    expect(rows.map((row) => row.getAttribute('data-variant'))).toEqual(['default', 'destructive']);
+    expect(rows.map((entry) => entry.getAttribute('data-variant'))).toEqual(['default', 'destructive']);
 });
 
 test('the Delete permanently dialog keeps its count while it closes', async () => {
     const release = holdClosingDialogs();
     try {
-        trash.data = [trashed('a.txt', 1, 3), trashed('b.txt', 1, 2), trashed('c.txt', 1, 1)];
+        trash.items = [trashed('a.txt', 1, 3), trashed('b.txt', 1, 2), trashed('c.txt', 1, 1)];
         const container = await open();
         const rows = [...container.querySelectorAll('[role="grid"] [data-index] > *')];
         await click(rows[0]);
@@ -212,37 +297,19 @@ test('the Delete permanently dialog keeps its count while it closes', async () =
 });
 
 test('confirming Delete permanently again after a partial failure sends only the refused item', async () => {
-    // The trash ids the delete route was asked for, in order. The server refuses `b.txt`.
-    const deleted: string[] = [];
-    // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-    const g = globalThis as any;
-    const realFetch = g.fetch;
-    g.fetch = async (input: string | URL | Request, init?: RequestInit) => {
-        const url = input instanceof Request ? input.url : String(input);
-        const id = /\/trash\/([^/]+)$/.exec(url)?.[1];
-        if (!id || init?.method !== 'DELETE') return realFetch(input, init);
-        deleted.push(decodeURIComponent(id));
-        if (id === 'b.txt') return new Response('No access', { status: 403 });
-        return Response.json({ success: true });
-    };
-    try {
-        trash.data = [trashed('a.txt', 1, 3), trashed('b.txt', 1, 2), trashed('c.txt', 1, 1)];
-        const container = await open();
-        const rows = [...container.querySelectorAll('[role="grid"] [data-index] > *')];
-        await click(rows[0]);
-        await act(async () => {
-            rows[2]?.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
-        });
-        await act(async () => palette.actions?.find(({ action }) => action.id === 'delete-permanently')?.run());
-        const dialog = () => document.querySelector('[role="alertdialog"], [role="dialog"]');
-        const confirm = () => click(button(dialog() ?? document, 'Delete permanently'));
-        await confirm();
-        expect(deleted).toEqual(['a.txt', 'b.txt', 'c.txt']);
-        expect(dialog()?.textContent).toContain('b.txt');
-        deleted.length = 0;
-        await confirm();
-        expect(deleted).toEqual(['b.txt']);
-    } finally {
-        g.fetch = realFetch;
-    }
+    trash.items = [trashed('a.txt', 1, 3), trashed('b.txt', 1, 2), trashed('c.txt', 1, 1)];
+    const container = await open();
+    const rows = [...container.querySelectorAll('[role="grid"] [data-index] > *')];
+    await click(rows[0]);
+    await act(async () => {
+        rows[2]?.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+    });
+    await act(async () => palette.actions?.find(({ action }) => action.id === 'delete-permanently')?.run());
+    const confirm = () => click(button(dialog() ?? document, 'Delete permanently'));
+    await confirm();
+    expect(writes).toEqual(['a.txt', 'b.txt', 'c.txt'].map((id) => `DELETE /drive/trash-owner/default/trash/${id}`));
+    expect(dialog()?.textContent).toContain('b.txt');
+    writes.length = 0;
+    await confirm();
+    expect(writes).toEqual(['DELETE /drive/trash-owner/default/trash/b.txt']);
 });
