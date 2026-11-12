@@ -228,6 +228,76 @@ test('opened from a context menu row, the field has the focus and the selection 
     expect([nameField().selectionStart, nameField().selectionEnd]).toEqual([0, 5]);
 });
 
+// A ⋮ with a trigger of its own, such as the detail column's, as a mouse uses it. As it closes, the menu gives the
+// focus back to that ⋮, and while it animates out the dialog covers its row and the pointer leaves the row. Either
+// would move the focus out of the dialog, whose trap would take it back and select the whole name.
+async function renameFromKebab() {
+    const { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } = await import(
+        '../../../components/dropdown-menu'
+    );
+    function Detail() {
+        const [renaming, setRenaming] = useState(false);
+        return createElement(
+            'div',
+            null,
+            createElement(
+                DropdownMenu,
+                null,
+                createElement(DropdownMenuTrigger, null, '⋮'),
+                createElement(
+                    DropdownMenuContent,
+                    null,
+                    createElement(DropdownMenuItem, { onClick: () => setRenaming(true) }, 'Rename'),
+                ),
+            ),
+            createElement(DriveItemNameDialog, {
+                open: renaming,
+                onOpenChange: setRenaming,
+                onSave,
+                type: 'File',
+                path: drivePath({ name: 'notes.txt', mimeType: 'text/plain' }),
+                defaultValue: 'notes.txt',
+                selectionEnd: 5,
+            }),
+        );
+    }
+    ({ unmount } = await renderInDocument(createElement(Detail)));
+    const trigger = document.querySelector<HTMLElement>('[data-slot="dropdown-menu-trigger"]');
+    await act(async () => {
+        trigger?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+    });
+    await settle();
+    const rename = document.querySelector<HTMLElement>('[role="menuitem"]');
+    await act(async () => rename?.click());
+    await settle();
+    return rename;
+}
+
+test('opened from a ⋮ menu, the field keeps the focus and the selection as the menu gives its trigger the focus back', async () => {
+    await renameFromKebab();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(nameField());
+    expect([nameField().selectionStart, nameField().selectionEnd]).toEqual([0, 5]);
+});
+
+test('opened from a ⋮ menu, the field keeps the selection as the pointer leaves the closing menu’s row', async () => {
+    // An exit animation keeps the closed menu on the page until it ends, which happy-dom never reports.
+    const exit = document.head.appendChild(document.createElement('style'));
+    exit.textContent = '[role="menu"][data-state="closed"] { animation-name: exit; }';
+    const rename = await renameFromKebab();
+    expect(document.querySelector('[role="menu"]')?.getAttribute('data-state')).toBe('closed');
+    // React reads a pointer leaving the row from the pointerout it sends to what now lies under the pointer.
+    await act(async () => {
+        rename?.dispatchEvent(
+            new PointerEvent('pointerout', { bubbles: true, pointerType: 'mouse', relatedTarget: nameField() }),
+        );
+    });
+    await settle();
+    exit.remove();
+    expect(document.activeElement).toBe(nameField());
+    expect([nameField().selectionStart, nameField().selectionEnd]).toEqual([0, 5]);
+});
+
 test('a save that fails stays open with the typed name kept', async () => {
     onSave.mockImplementation(async () => {
         throw toasted('offline');

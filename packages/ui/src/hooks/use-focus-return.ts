@@ -35,11 +35,11 @@ export function useFocusReturn(
         return { content, target, ring: !target || hasFocusRing(target) };
     });
 
-    // A menu row that opened the dialog is gone a moment later. A context menu hands its list over through
-    // returnFocusTo and a bar menu its trigger through handFocusReturnTo, but a dropdown menu with its own Radix
-    // trigger focuses that trigger as it closes. The first element outside every open dialog that takes the focus
-    // then becomes the target. A target still on the page stays, and a field in a dialog opened over this one never
-    // becomes it.
+    // A menu row that opened the dialog is gone a moment later. A context menu hands its list over and a dropdown
+    // menu its trigger through returnFocusTo, and a bar menu its trigger through handFocusReturnTo. Otherwise, such
+    // as for a menu its owner opened, whose trigger Radix focuses as it closes, the first element outside every open
+    // dialog that takes the focus becomes the target. A target still on the page stays, and a field in a dialog
+    // opened over this one never becomes it.
     useLayoutEffect(() => {
         const replaceLostTarget = (event: FocusEvent) => {
             const focused = event.target;

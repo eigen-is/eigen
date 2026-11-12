@@ -2,7 +2,8 @@
 // a bar menu. A row takes the Radix parts of the menu it sits in: a DropdownMenu's by default, the Menubar's inside a
 // bar menu, which MenuRows provides. On a phone a submenu opens as a page of its menu, with a back row, instead of a
 // panel beside it. ChoiceMenuSub and ChoiceMenuItems draw a choice as a submenu with a check on the current option. A
-// menu a pointer opened gives its trigger the focus back without a focus ring.
+// closing menu leaves the focus with a dialog its row opened, and otherwise gives it back to its trigger, without a
+// focus ring if a pointer opened it.
 
 import { useIsMobile } from '@workspace/lib/media';
 import { cn } from '@workspace/ui/lib/utils';
@@ -21,6 +22,7 @@ import {
     useRef,
     useState,
 } from 'react';
+import { returnFocusTo } from '../hooks/use-focus-return';
 
 // After a drill-in transition, which row takes focus: the opened page's back row
 // ('back', on push) or the sub-trigger a pop returned to ('trigger', on pop).
@@ -51,7 +53,6 @@ const SubContext = createContext<{ id: string; label: React.ReactNode } | null>(
 // menu would find no menu around it.
 type MenuParts = Pick<
     typeof DropdownMenuPrimitive,
-    | 'Group'
     | 'Item'
     | 'CheckboxItem'
     | 'RadioGroup'
@@ -66,7 +67,7 @@ type MenuParts = Pick<
 const MenuPartsContext = createContext<MenuParts>(DropdownMenuPrimitive);
 
 // How a menu hands its trigger the focus back on close. After a pointer open it skips the ring, which would keep a
-// hover-revealed ⋮ shown; a keyboard open, or an outside press after which Radix focuses nothing, stays Radix's.
+// hover-revealed ⋮ shown; an outside press after which Radix focuses nothing stays Radix's.
 type TriggerFocus = { trigger: HTMLElement | null; byPointer: boolean; keepsFocusOutside: boolean };
 const NO_TRIGGER_FOCUS: TriggerFocus = { trigger: null, byPointer: false, keepsFocusOutside: false };
 const TriggerFocusContext = createContext<{ state: RefObject<TriggerFocus>; modal: boolean } | null>(null);
@@ -119,7 +120,7 @@ function useMobileMenu(): { value: MobileMenuState; reset: () => void } {
     return { value, reset };
 }
 
-function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
+function DropdownMenu(props: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
     const isMobile = useIsMobile();
     const { value, reset } = useMobileMenu();
     const triggerFocusState = useRef<TriggerFocus>({ ...NO_TRIGGER_FOCUS });
@@ -167,10 +168,6 @@ function MenuRows({ parts, children }: { parts: MenuParts; children: React.React
             <MobileMenuContext.Provider value={isMobile ? value : null}>{children}</MobileMenuContext.Provider>
         </MenuPartsContext.Provider>
     );
-}
-
-function DropdownMenuPortal({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
-    return <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />;
 }
 
 // Radix opens the menu on the trigger's pointerdown or keydown, so these tell which opened it.
@@ -230,9 +227,9 @@ function DropdownMenuContent({
                     if (!triggerFocus) return;
                     const { trigger, byPointer, keepsFocusOutside } = triggerFocus.state.current;
                     triggerFocus.state.current = { ...NO_TRIGGER_FOCUS };
-                    if (event.defaultPrevented || !trigger?.isConnected || !byPointer || keepsFocusOutside) return;
+                    if (event.defaultPrevented || !trigger?.isConnected || keepsFocusOutside) return;
                     event.preventDefault();
-                    trigger.focus({ focusVisible: false });
+                    returnFocusTo(trigger, !byPointer);
                 }}
                 className={cn(
                     'bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md',
@@ -248,22 +245,11 @@ function DropdownMenuContent({
     );
 }
 
-function DropdownMenuGroup({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Group>) {
-    const Parts = useContext(MenuPartsContext);
-    const hidden = useRowHidden();
-    return (
-        <Parts.Group
-            data-slot="dropdown-menu-group"
-            className={cn(className, hidden && 'hidden') || undefined}
-            {...props}
-        />
-    );
-}
-
 function DropdownMenuItem({
     className,
     inset,
     variant = 'default',
+    onPointerLeave,
     ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Item> & {
     inset?: boolean;
@@ -276,6 +262,12 @@ function DropdownMenuItem({
             data-slot="dropdown-menu-item"
             data-inset={inset}
             data-variant={variant}
+            // A closed menu stays on the page while it animates out, under a dialog its row opened. As that dialog covers
+            // the row, Radix would focus the menu, and the dialog would take the focus back with its field's text selected.
+            onPointerLeave={(event) => {
+                onPointerLeave?.(event);
+                if (event.currentTarget.closest('[role="menu"][data-state="closed"]')) event.preventDefault();
+            }}
             className={cn(
                 "focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:*:[svg]:!text-destructive [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-4 rounded-sm px-2 py-1.5 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-10 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
                 props.onClick || props.asChild ? 'cursor-pointer' : 'cursor-default',
@@ -599,10 +591,8 @@ export {
     DropdownMenu,
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
-    DropdownMenuGroup,
     DropdownMenuItem,
     DropdownMenuLabel,
-    DropdownMenuPortal,
     DropdownMenuSeparator,
     DropdownMenuShortcut,
     DropdownMenuSub,
