@@ -176,7 +176,7 @@ type Args<P extends readonly Param<unknown>[]> = { [K in keyof P]: P[K] extends 
 
 // A token only where a parameter is lazy, NEXT only where one is tried in turn, a table only from a row marked PART.
 type Picks<P extends readonly Param<unknown>[]> = true extends {
-    [K in keyof P]: P[K] extends Param<Lazy> ? true : false;
+    [K in keyof P]: P[K] extends Param<Lazy> | Param<readonly Lazy[]> ? true : false;
 }[number]
     ? Lazy
     : never;
