@@ -5,13 +5,10 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import type { SSEventDrive } from '@workspace/lib/types/sse';
 import { uniqBy } from 'es-toolkit';
 import { invalidateCollabDocument, invalidateCollabMount } from '../../collab/hooks/keys';
 import { invalidateHomeSize } from '../../home';
-
-export { DEFAULT_MOUNT_ID };
 
 export const driveKeys = {
     all: ['drive'] as const,

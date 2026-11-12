@@ -4,8 +4,9 @@
 // side, the selection and the viewer from that route, and a selected row goes into its URL.
 
 import { openDocument } from '@workspace/lib/api';
-import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths } from '@workspace/lib/drive';
+import { usePathInfo, useSharedPaths } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { useContext } from 'react';
 import { DRIVE_CAPABILITIES } from './drive-capabilities';
 import { DriveLayout } from './drive-layout';

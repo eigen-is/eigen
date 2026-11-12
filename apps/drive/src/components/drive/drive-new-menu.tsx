@@ -3,9 +3,10 @@
 // view moves to the folder it went into.
 
 import { useMatch, useNavigate } from '@tanstack/react-router';
-import { DEFAULT_MOUNT_ID, usePathInfo } from '@workspace/lib/drive';
+import { usePathInfo } from '@workspace/lib/drive';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { DriveCreateEigenDoc, useDriveUploadFiles } from '@workspace/ui/components/drive';
 import { getCreateMenuItems } from '@workspace/ui/components/drive/create-menu';
 import { DriveCreateFolder } from '@workspace/ui/components/drive/drive-create-folder';

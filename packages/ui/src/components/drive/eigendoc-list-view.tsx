@@ -6,8 +6,9 @@
 import { openDocument } from '@workspace/lib/api';
 import type { AuthUser } from '@workspace/lib/auth';
 import type { validateDriveSearch } from '@workspace/lib/drive';
-import { DEFAULT_MOUNT_ID, useAggregateMimeContent, useMountMimeContent, usePathInfo } from '@workspace/lib/drive';
+import { useAggregateMimeContent, useMountMimeContent, usePathInfo } from '@workspace/lib/drive';
 import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { useContext } from 'react';
 import { DRIVE_CAPABILITIES } from './drive-capabilities';
 import { DriveLayout } from './drive-layout';
