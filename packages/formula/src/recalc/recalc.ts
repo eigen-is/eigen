@@ -159,6 +159,7 @@ export class Recalc {
     // name, and what an earlier pass left, in sheet, column, row order where the reads do not ask for another.
     public pass(cap: number, now = 0, seed = 0): RecalcResult {
         const { workbook } = this;
+        workbook.sweep();
         this.evaluator.clock(now, seed);
         // With nothing written, what an edit or a pass that stopped left flagged is all there is to compute.
         if (this.seeds.length > 0) {
