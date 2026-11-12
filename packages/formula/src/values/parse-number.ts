@@ -4,7 +4,7 @@
 // what could have been typed, and DATEVALUE and TIMEVALUE read only the dates and times through parseDateTime. It
 // reads character codes and never asks the host: no Date and no clock, so the year of a date without one is given.
 
-import { dateSerial, FIRST_SERIAL, LAST_SERIAL, SECONDS_IN_DAY, serialDate } from './dates';
+import { dateSerial, daysInMonth, isDate, SECONDS_IN_DAY } from './dates';
 import { POWERS_OF_TEN } from './precision';
 
 const SPACE = 32;
@@ -31,8 +31,10 @@ const EURO = 8364;
 // A typed number keeps this many significant digits; the digits after them count as zeros.
 const DIGITS_KEPT = 15;
 
-// Under this a typed number is no number: Excel takes 1E-308, which a cell shows as 0, and refuses 1E-320.
-const SMALLEST = 1e-308;
+// Excel has no number under the smallest normal one: a typed number under it is 0, as 1E-308 and 1E-309 are, and
+// one under the last of those that Excel is known to take is no number, as 1E-320 is none.
+const SMALLEST_NORMAL = 2.2250738585072014e-308;
+const SMALLEST_TYPED = 1e-309;
 
 // A year under 100 is in the 2000s below this and in the 1900s from it on, however many digits it was written in.
 const YEAR_PIVOT = 30;
@@ -153,11 +155,13 @@ function readDecorated(text: string, start: number, end: number): number | undef
     const power = POWERS_OF_TEN[Math.abs(scale)];
     const value =
         power === undefined ? Number(`${mantissa}e${scale}`) : scale < 0 ? mantissa / power : mantissa * power;
-    if (value === Infinity || (mantissa > 0 && value < SMALLEST)) return undefined;
-    return negative && value !== 0 ? -value : value;
+    if (value === Infinity || (mantissa > 0 && value < SMALLEST_TYPED)) return undefined;
+    if (value < SMALLEST_NORMAL) return 0;
+    return negative ? -value : value;
 }
 
 // A whole number, spaces and a fraction, as in 1 1/2. A fraction alone is not one: Excel reads 1/2 as a date.
+// Digits without end add up to no number, and then the text is none.
 function readFraction(text: string, start: number, end: number): number | undefined {
     const negative = text.charCodeAt(start) === MINUS;
     const wholeAt = negative ? start + 1 : start;
@@ -170,11 +174,12 @@ function readFraction(text: string, start: number, end: number): number | undefi
     const bottom = toWhole(text, topEnd + 1, bottomEnd);
     if (bottom === 0) return undefined;
     const value = toWhole(text, wholeAt, wholeEnd) + toWhole(text, topAt, topEnd) / bottom;
+    if (!Number.isFinite(value)) return undefined;
     return negative && value !== 0 ? -value : value;
 }
 
 // A date, a time, or a date, spaces and a time. The time is found from its colon or its AM or PM, the date is
-// what stands before it.
+// what stands before it. A time that carries the last date into the next day leaves no date.
 function readDateTime(text: string, start: number, end: number, thisYear: number | undefined): number | undefined {
     const markAt = (text.charCodeAt(end - 1) | 32) === LOWER_M ? end - 2 : end - 1;
     const mark = text.charCodeAt(markAt) | 32;
@@ -197,7 +202,7 @@ function readDateTime(text: string, start: number, end: number, thisYear: number
     let dateEnd = timeAt;
     while (text.charCodeAt(dateEnd - 1) === SPACE) dateEnd -= 1;
     const date = readDate(text, start, dateEnd, thisYear);
-    return date === undefined ? undefined : date + time;
+    return date === undefined || !isDate(Math.floor(date + time)) ? undefined : date + time;
 }
 
 // Three parts: year, month and day with / or - between them, the year first when it has four digits and else the
@@ -227,6 +232,12 @@ function readDate(text: string, from: number, to: number, thisYear: number | und
             year = thisYear;
             month = secondNamed ? second : first;
             day = secondNamed ? first : second;
+            // A day that month does not have that year is a year of two digits and its first day, as Excel
+            // reads 2/29 in a year without a leap day: February 2029.
+            if (month >= 1 && month <= 12 && day < 100 && day > daysInMonth(year, month)) {
+                year = day;
+                day = 1;
+            }
         }
     } else {
         const thirdAt = named ? spacesEnd(text, secondEnd + 1) : secondEnd + 1;
@@ -240,15 +251,15 @@ function readDate(text: string, from: number, to: number, thisYear: number | und
             day = secondNamed ? first : second;
         }
     }
-    if (month < 1 || month > 12 || day < 1) return undefined;
     if (year < 100) year += year < YEAR_PIVOT ? 2000 : 1900;
+    if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) return undefined;
     const serial = dateSerial(year, month, day);
-    // A day past the end of its month would be read back as a day of the next.
-    return serial < FIRST_SERIAL || serial > LAST_SERIAL || serialDate(serial).day !== day ? undefined : serial;
+    return isDate(serial) ? serial : undefined;
 }
 
 // Hours, then minutes, seconds and parts of a second if given, as a fraction of a day. `half` is 1 for AM, 2 for PM
-// and 0 for a 24 hour time, which may count hours past 24. Minutes and seconds may be 60, the next hour or minute.
+// and 0 for a 24 hour time, which may count hours past 24. Minutes and seconds have one or two digits, and past 59
+// they are carried into the hour or the minute.
 function readTime(text: string, from: number, to: number, half: number): number | undefined {
     const hoursEnd = digitsEnd(text, from, to);
     if (hoursEnd === from || hoursEnd - from > 4) return undefined;
@@ -260,11 +271,11 @@ function readTime(text: string, from: number, to: number, half: number): number 
         const colon = spacesEnd(text, hoursEnd);
         const minutesAt = spacesEnd(text, colon + 1);
         const minutesEnd = digitsEnd(text, minutesAt, to);
-        if (text.charCodeAt(colon) !== COLON || minutesEnd === minutesAt) return undefined;
+        if (text.charCodeAt(colon) !== COLON || !isPair(minutesEnd - minutesAt)) return undefined;
         minutes = toWhole(text, minutesAt, minutesEnd);
         if (minutesEnd < to) {
             const secondsEnd = digitsEnd(text, minutesEnd + 1, to);
-            if (text.charCodeAt(minutesEnd) !== COLON || secondsEnd === minutesEnd + 1) return undefined;
+            if (text.charCodeAt(minutesEnd) !== COLON || !isPair(secondsEnd - minutesEnd - 1)) return undefined;
             seconds = toWhole(text, minutesEnd + 1, secondsEnd);
             if (secondsEnd < to) {
                 const parts = POWERS_OF_TEN[to - secondsEnd - 1];
@@ -275,7 +286,6 @@ function readTime(text: string, from: number, to: number, half: number): number 
             }
         }
     }
-    if (minutes > 60 || seconds > 60) return undefined;
     if (half !== 0) {
         if (hours > 12) return undefined;
         hours = (hours % 12) + (half === 2 ? 12 : 0);
@@ -318,6 +328,11 @@ function spacesEnd(text: string, from: number): number {
     let at = from;
     while (text.charCodeAt(at) === SPACE) at += 1;
     return at;
+}
+
+// Whether a count of digits is one minutes or seconds may be written in.
+function isPair(digits: number): boolean {
+    return digits === 1 || digits === 2;
 }
 
 function isDigit(code: number): boolean {

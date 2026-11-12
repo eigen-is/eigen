@@ -3,7 +3,7 @@
 
 import { rangeToA1 } from '../text/a1';
 import { quoteSheetName } from '../text/sheet-name';
-import { CALC, NA, VALUE } from '../values/errors';
+import { NA, VALUE } from '../values/errors';
 import { isError } from '../values/value';
 import {
     ANY,
@@ -21,6 +21,24 @@ import {
     TEXT,
 } from './registry';
 
+// Excel's errors in the order ERROR.TYPE numbers them, from 1. The order in which a cell stores ours is another.
+const EXCEL_ERRORS: readonly string[] = [
+    '#NULL!',
+    '#DIV/0!',
+    '#VALUE!',
+    '#REF!',
+    '#NAME?',
+    '#NUM!',
+    '#N/A',
+    '#GETTING_DATA',
+    '#SPILL!',
+    '#CONNECT!',
+    '#BLOCKED!',
+    '#UNKNOWN!',
+    '#FIELD!',
+    '#CALC!',
+];
+
 export const INFORMATION = [
     fn('ISBLANK', [ANY], (value) => value === null),
     fn('ISERROR', [ANY], isError),
@@ -34,11 +52,10 @@ export const INFORMATION = [
     // The fraction is cut off first, so 2.9 and -2.9 are even, and a number too large to hold a unit is even.
     fn('ISEVEN', [strict(INTEGER)], (whole) => whole % 2 === 0),
     fn('ISODD', [strict(INTEGER)], (whole) => whole % 2 !== 0),
-    // The place of the error in Excel's list, where #CALC! is 14, and #N/A for a value that is no error.
+    // The place of the error in Excel's list, and #N/A for a value that is no error or an error not in the list.
     fn('ERROR.TYPE', [ANY], (value) => {
-        if (!isError(value)) return NA;
-        if (value === CALC) return 14;
-        return value.code >= 1 && value.code <= NA.code ? value.code : NA;
+        const place = isError(value) ? EXCEL_ERRORS.indexOf(value.text) : -1;
+        return place < 0 ? NA : place + 1;
     }),
     // A number is itself and TRUE is 1. A text and a blank are 0, and an error stays the error it is.
     fn('N', [CORNER], (value) => (typeof value === 'number' || isError(value) ? value : value === true ? 1 : 0)),

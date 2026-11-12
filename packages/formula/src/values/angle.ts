@@ -3,8 +3,9 @@
 // with the angle, reaches the twelfth digit near 1E+8, and from 2^27 on Excel has no answer at all, which is a NaN
 // here. The function library calls these once per cell.
 
-// How far Excel's angle falls behind per radian: its pi is 5.0165576127E-20 too long, read off SIN(PI()).
-const LAG = 5.0165576127e-20 / Math.PI;
+// How far Excel's angle falls behind per radian. Its pi is the one an x87 processor loads, pi rounded to 64 bits,
+// which is 5.016557612668332E-20 too long: SIN(PI()) is that much above the true sine.
+const LAG = 5.016557612668332e-20 / Math.PI;
 
 const LIMIT = 2 ** 27;
 

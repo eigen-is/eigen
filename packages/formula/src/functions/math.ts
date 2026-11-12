@@ -6,7 +6,8 @@
 
 import { cosine, sine, tangent } from '../values/angle';
 import { DIV0, NUM } from '../values/errors';
-import { cutDecimal, equal15, roundDecimal, snapWhole } from '../values/precision';
+import { power } from '../values/powers';
+import { cutDecimal, round15, roundDecimal } from '../values/precision';
 import { greatestDivisor, leastMultiple, multinomial } from '../values/wholes';
 import {
     chosen,
@@ -28,9 +29,8 @@ import {
     WHOLES,
 } from './registry';
 
-// The largest whole number Excel counts with: a larger exponent of a negative base, or more things to choose
-// from, has no answer.
-const MOST_COUNTED = 2 ** 31;
+// COMBIN has no answer for this many things to choose from, or more.
+const MOST_THINGS = 2 ** 31 - 1;
 
 // MOD has no answer from this many times the divisor on.
 const MOST_DIVIDED = 1125900000000;
@@ -56,21 +56,8 @@ const SUBTOTALS = [
 function toStep(n: number, step: number, mode: number, up: boolean) {
     if (step === 0) return 0;
     const size = Math.abs(step);
-    const steps = snapWhole(n / size);
+    const steps = round15(n / size);
     return (up === (n >= 0 || mode === 0) ? Math.ceil(steps) : Math.floor(steps)) * size;
-}
-
-// A negative base has a power for a whole exponent and for an odd root, as (-8)^(1/3) is -2. A result too large
-// is #DIV/0! when the exponent is negative, as dividing by a power that came out 0.
-function power(base: number, exponent: number) {
-    if (base === 0) return exponent === 0 ? NUM : exponent < 0 ? DIV0 : 0;
-    let result = base ** exponent;
-    if (base < 0 && !(Number.isInteger(exponent) && Math.abs(exponent) < MOST_COUNTED)) {
-        const root = Math.round(1 / exponent);
-        if (Math.abs(root % 2) !== 1 || !equal15(1 / exponent, root)) return NUM;
-        result = -((-base) ** exponent);
-    }
-    return Number.isFinite(result) || exponent > 0 ? result : DIV0;
 }
 
 export const MATH = [
@@ -80,22 +67,23 @@ export const MATH = [
     fn('ROUNDUP', [NUMBER, INTEGER], (n, digits) => cutDecimal(n, digits, true)),
     fn('ROUNDDOWN', [NUMBER, INTEGER], (n, digits) => cutDecimal(n, digits, false)),
     fn('TRUNC', [NUMBER, optional(INTEGER, 0)], (n, digits) => cutDecimal(n, digits, false)),
-    fn('INT', [NUMBER], Math.floor),
+    // Of the 15 digits Excel shows: 0.29 times 100, a double just under 29, is 29.
+    fn('INT', [NUMBER], (n) => Math.floor(round15(n))),
     fn('EVEN', [NUMBER], (n) => Math.sign(n) * 2 * Math.ceil(Math.abs(n) / 2)),
     fn('ODD', [NUMBER], (n) => (n < 0 ? -1 : 1) * (2 * Math.ceil((Math.abs(n) - 1) / 2) + 1)),
-    // Half a multiple rounds away from zero, and unlike ROUND on the double as it is: MROUND(1.005,0.01) is 1.
+    // Half a multiple rounds away from zero, and unlike ROUND on the double as it is: MROUND(6.05,0.1) is 6.
     fn('MROUND', [strict(NUMBER), strict(NUMBER)], (n, multiple) => {
         if (Math.sign(n) * Math.sign(multiple) < 0) return NUM;
         return multiple === 0 ? 0 : Math.floor(n / multiple + 0.5) * multiple;
     }),
     fn('CEILING', [NUMBER, NUMBER], (n, step) => {
         if (n > 0 && step < 0) return NUM;
-        return step === 0 ? 0 : Math.ceil(snapWhole(n / step)) * step;
+        return step === 0 ? 0 : Math.ceil(round15(n / step)) * step;
     }),
     fn('FLOOR', [NUMBER, NUMBER], (n, step) => {
         if (n === 0) return 0;
         if (step === 0) return DIV0;
-        return n > 0 && step < 0 ? NUM : Math.floor(snapWhole(n / step)) * step;
+        return n > 0 && step < 0 ? NUM : Math.floor(round15(n / step)) * step;
     }),
     fn('CEILING.MATH', [NUMBER, skippable(NUMBER, 1), optional(NUMBER, 0)], (n, step, mode) =>
         toStep(n, step, mode, true),
@@ -103,11 +91,13 @@ export const MATH = [
     fn('FLOOR.MATH', [NUMBER, skippable(NUMBER, 1), optional(NUMBER, 0)], (n, step, mode) =>
         toStep(n, step, mode, false),
     ),
-    // The result has the sign of the divisor.
+    // The exact remainder, with the sign of the divisor. A number tiny against the divisor leaves nothing.
     fn('MOD', [NUMBER, NUMBER], (n, divisor) => {
         if (divisor === 0) return DIV0;
-        const times = Math.floor(n / divisor);
-        return Math.abs(times) >= MOST_DIVIDED ? NUM : n - divisor * times;
+        if (Math.abs(n / divisor) >= MOST_DIVIDED) return NUM;
+        const left = n % divisor;
+        const rest = left !== 0 && left < 0 !== divisor < 0 ? left + divisor : left;
+        return rest === divisor ? 0 : rest;
     }),
     fn('QUOTIENT', [strict(NUMBER), strict(NUMBER)], (n, divisor) => (divisor === 0 ? DIV0 : Math.trunc(n / divisor))),
     fn('POWER', [NUMBER, NUMBER], power),
@@ -121,18 +111,19 @@ export const MATH = [
         return base === 10 ? Math.log10(n) : Math.log(n) / Math.log(base);
     }),
     fn('LOG10', [NUMBER], Math.log10),
-    // The sign is tested before the fraction is cut off: FACT(-0.5) is #NUM!.
+    // The sign is tested before the fraction is cut off: FACT(-0.5) is #NUM!. Excel multiplies from the number
+    // down, which decides the last digit of a large factorial.
     fn('FACT', [NUMBER], (n) => {
         if (n < 0 || n >= 171) return NUM;
         let product = 1;
-        for (let factor = 2; factor <= n; factor += 1) product *= factor;
+        for (let factor = Math.floor(n); factor > 1; factor -= 1) product *= factor;
         return product;
     }),
     // Multiplied and divided in turn, exactly while the product is a whole number a double holds.
     fn('COMBIN', [NUMBER, NUMBER], (n, k) => {
         const things = Math.trunc(n);
         const picked = Math.trunc(k);
-        if (n < 0 || k < 0 || picked > things || things >= MOST_COUNTED) return NUM;
+        if (n < 0 || k < 0 || picked > things || things >= MOST_THINGS) return NUM;
         const fewer = Math.min(picked, things - picked);
         let ways = 1;
         for (let i = 1; i <= fewer && Number.isFinite(ways); i += 1) {
@@ -158,7 +149,8 @@ export const MATH = [
     fn('SINH', [NUMBER], Math.sinh),
     fn('COSH', [NUMBER], Math.cosh),
     fn('TANH', [NUMBER], Math.tanh),
-    fn('ASINH', [NUMBER], Math.asinh),
+    // Excel squares the number first, so one whose square no number holds has no answer.
+    fn('ASINH', [NUMBER], (n) => (Number.isFinite(n * n) ? Math.asinh(n) : NUM)),
     fn('ACOSH', [NUMBER], Math.acosh),
     fn('ATANH', [NUMBER], Math.atanh),
     fn('RAND', [RANDOM], (random) => random),
@@ -172,7 +164,7 @@ export const MATH = [
     fn('SUMSQ', [rest(NUMBERS)], (numbers) => {
         const list = numbers.list();
         let squares = 0;
-        for (let i = 0; i < list.length; i += 1) squares += (list[i] ?? 0) ** 2;
+        for (let i = 0; i < list.length; i += 1) squares += list[i] ** 2;
         return squares;
     }),
     // Of no number at all the product is 0.

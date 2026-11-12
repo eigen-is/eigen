@@ -8,6 +8,7 @@ import { toNumber, toText } from '../values/coerce';
 import { compareValues } from '../values/compare';
 import type { FormulaError } from '../values/errors';
 import { DIV0, NUM, VALUE } from '../values/errors';
+import { power } from '../values/powers';
 import { snapSum } from '../values/precision';
 import type { Scalar, Value } from '../values/value';
 import { isError, LONGEST_TEXT } from '../values/value';
@@ -21,17 +22,6 @@ export function real(result: number): number | FormulaError {
     return result > -SMALLEST_NORMAL && result < SMALLEST_NORMAL ? 0 : result;
 }
 
-function power(base: number, exponent: number): number | FormulaError {
-    if (base === 0 && exponent <= 0) return exponent === 0 ? NUM : DIV0;
-    if (base < 0 && !Number.isInteger(exponent)) {
-        // An odd root of a negative number is real: (-8)^(1/3) is -2.
-        const root = Math.round(1 / exponent);
-        if (root % 2 === 0 || Math.abs(1 / exponent - root) > 1e-9) return NUM;
-        return real(-((-base) ** exponent));
-    }
-    return real(base ** exponent);
-}
-
 export function arithmetic(op: number, x: number, y: number): number | FormulaError {
     switch (op) {
         case Token.Plus:
@@ -42,8 +32,10 @@ export function arithmetic(op: number, x: number, y: number): number | FormulaEr
             return real(x * y);
         case Token.Divide:
             return y === 0 ? DIV0 : real(x / y);
-        default:
-            return power(x, y);
+        default: {
+            const result = power(x, y);
+            return typeof result === 'number' ? real(result) : result;
+        }
     }
 }
 
