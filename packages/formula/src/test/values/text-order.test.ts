@@ -69,18 +69,27 @@ describe('compareText', () => {
         ]);
     });
 
-    test('everything else goes by its character code', () => {
-        expect(sorted(['b', 'a', '1', ' ', '_', '~', 'я', '中', 'α'])).toEqual([
+    // Excel: MATCH("k?",{"k1";"k2";"k3";"k4"}) and LOOKUP of the same are #N/A, so "k?" is before "k1".
+    test('a mark sorts before the digits, whatever its character code', () => {
+        expect(order('k?', 'k1')).toBe(-1);
+        expect(order('k1', 'k?')).toBe(1);
+        expect(sorted(['a', '~', '0', '_', '?', '9', '/', ' ', '@', 'Z', '['])).toEqual([
             ' ',
-            '1',
-            'a',
-            'b',
+            '/',
+            '?',
+            '@',
+            '[',
             '_',
             '~',
-            'α',
-            'я',
-            '中',
+            '0',
+            '9',
+            'a',
+            'Z',
         ]);
+    });
+
+    test('everything else goes by its character code', () => {
+        expect(sorted(['b', 'a', '1', ' ', 'я', '中', 'α'])).toEqual([' ', '1', 'a', 'b', 'α', 'я', '中']);
         expect(order('a', '😀')).toBe(-1);
         expect(order('😀', '😁')).toBe(-1);
     });
