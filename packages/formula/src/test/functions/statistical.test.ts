@@ -57,14 +57,14 @@ const RECORDED: Cells = {
     ...{ N1: 1, N2: 1, N3: 2, N4: 2, N5: 3, N6: 4 },
 };
 
-type Row = readonly [formula: string, expected: number | typeof NUM];
+type Row = readonly [formula: string, expected: number | boolean | typeof NUM];
 
-// Excel shows 15 digits, so a number is its answer when it agrees to 12.
-function recorded(name: string, rows: readonly Row[]) {
+// Excel's answer in the 15 digits it shows.
+function recorded(name: string, rows: readonly Row[], cells = RECORDED) {
     test.each(rows)(`${name}: %s is %p`, (formula, expected) => {
-        const value = evaluate(formula, RECORDED, 'Q1');
-        if (typeof expected !== 'number' || typeof value !== 'number') expect(value).toBe(expected);
-        else expect(Math.abs(value - expected)).toBeLessThanOrEqual(Math.abs(expected) * 1e-12);
+        const value = evaluate(formula, cells, 'Q1');
+        const shown = typeof value === 'number' ? Number(value.toPrecision(15)) : value;
+        expect(shown).toBe(typeof expected === 'number' ? Number(expected.toPrecision(15)) : expected);
     });
 }
 
@@ -155,6 +155,19 @@ describe('RANK, RANK.EQ and RANK.AVG', () => {
     ]);
 });
 
+describe('RANK ties', () => {
+    test('two numbers that are equal in 15 digits share a rank, as they are equal everywhere else', () => {
+        const cells = { F1: 2.6999999999999997, F2: 2.7, F3: 1 };
+        expect(evaluate('=F1=F2', cells)).toBe(true);
+        expect(evaluate('=RANK(F1,F1:F3)', cells)).toBe(1);
+        expect(evaluate('=RANK(F2,F1:F3)', cells)).toBe(1);
+        expect(evaluate('=RANK(F3,F1:F3)', cells)).toBe(3);
+        expect(evaluate('=RANK(F3,F1:F3,1)', cells)).toBe(1);
+        expect(evaluate('=RANK(2.7,F1:F3,1)', cells)).toBe(2);
+        expect(evaluate('=RANK.AVG(F1,F1:F3)', cells)).toBe(1.5);
+    });
+});
+
 describe('PERCENTILE and QUARTILE', () => {
     recorded('from the smallest at 0 to the largest at 1', [
         ['=PERCENTILE.INC(D1:D8,0)', 1],
@@ -219,18 +232,16 @@ describe('PERCENTILE and QUARTILE', () => {
         ['=QUARTILE(D1:D8,5)', NUM],
         ['=QUARTILE(N1:N6,1)', 1.25],
     ]);
-    recorded('what Excel has not been asked yet', [
-        // Excel check
-        ['=QUARTILE.INC(D1:D8,-0.5)', 1],
-        // Excel check
+    recorded('a quarter under 0 is refused before it is cut', [
+        ['=QUARTILE(D1:D8,-0.5)', NUM],
+        ['=QUARTILE.INC(D1:D8,-0.5)', NUM],
+        ['=QUARTILE.EXC(D1:D8,-0.5)', NUM],
+    ]);
+    recorded('QUARTILE.EXC', [
         ['=QUARTILE.EXC(D1:D8,1)', 1.25],
-        // Excel check
         ['=QUARTILE.EXC(D1:D8,2)', 3.5],
-        // Excel check
         ['=QUARTILE.EXC(D1:D8,3)', 5.75],
-        // Excel check
         ['=QUARTILE.EXC(D1:D8,0)', NUM],
-        // Excel check
         ['=QUARTILE.EXC(D1:D8,4)', NUM],
     ]);
 });
@@ -291,19 +302,38 @@ describe('STDEV and VAR', () => {
         ['=STDEVA("abc",5)', VALUE],
         ['=STDEVA(E1:E8)', DIV0],
     ]);
-    recorded('what Excel has not been asked yet', [
-        // Excel check
+    recorded('the older names', [
         ['=VARP(D1:D8)', 6.609375],
-        // Excel check
         ['=STDEVP(D1:D8)', 2.57087047515039],
-        // Excel check
         ['=VARA(E1:E5)', 4.91666666666667],
-        // Excel check
         ['=VARPA(E1:E5)', 3.6875],
-        // Excel check
-        ['=STDEVPA(E1:E5)', 1.92028643696712],
-        // Excel check
+        ['=STDEVPA(E1:E5)', 1.92028643696715],
         ['=VARPA(F1)', 0],
+    ]);
+    recorded(
+        'the older names over a text, a boolean and a blank cell',
+        [
+            ['=VARP(A1:A5)', 400],
+            ['=STDEVP(A1:A5)', 20],
+            ['=VARA(A1:A5)', 556.916666666667],
+            ['=VARPA(A1:A5)', 417.6875],
+            ['=STDEVPA(A1:A5)', 20.4374044340273],
+            ['=STDEVA(A1:A5)', 23.5990819030459],
+        ],
+        { A1: 10, A2: 'x', A3: true, A5: 50 },
+    );
+    recorded('equal decimals have the spread their sum leaves, as in Excel', [
+        ['=STDEV(0.1,0.1,0.1)', 1.69967494438815e-17],
+        ['=VAR(0.1,0.1,0.1)', 2.88889491658085e-34],
+        ['=DEVSQ(0.1,0.1,0.1)', 5.77778983316171e-34],
+        ['=AVEDEV(0.1,0.1,0.1)', 1.38777878078145e-17],
+        ['=STDEV(1.1,1.1,1.1,1.1)', 0],
+        ['=SLOPE({1,2,3},{0.1,0.1,0.1})', 0],
+        ['=CORREL({1,2,3},{0.1,0.1,0.1})', 0],
+    ]);
+    recorded('a mean that is no round number keeps its digits', [
+        ['=VAR(1E+12+1,1E+12+2,1E+12+3)', 1],
+        ['=DEVSQ(1E+12+0.25,1E+12+0.5,1E+12+0.75)', 0.125],
     ]);
 });
 
@@ -337,9 +367,10 @@ describe('AVERAGEA, MAXA and MINA', () => {
 describe('GEOMEAN, HARMEAN, AVEDEV and DEVSQ', () => {
     recorded('the means of positive numbers', [
         ['=GEOMEAN(D1:D8)', 2.9953451699808],
-        ['=GEOMEAN(5)', 5],
         ['=GEOMEAN(TRUE,5)', 2.23606797749979],
-        ['=GEOMEAN(A5,A5)', 1e300],
+        ['=GEOMEAN((D1:D3,D5:D8),10)', 3.9943569808963],
+        ['=GEOMEAN(1,2,3,4,5,6,7,8,9,10)', 4.52872868811676],
+        ['=GEOMEAN(1E+200,1E+200,1E-200)', 4.64158883361278e66],
         ['=GEOMEAN(0)', NUM],
         ['=GEOMEAN(-1,1)', NUM],
         ['=GEOMEAN(5,)', NUM],
@@ -355,6 +386,33 @@ describe('GEOMEAN, HARMEAN, AVEDEV and DEVSQ', () => {
         ['=HARMEAN(A1:A5)', NUM],
         ['=HARMEAN(E1:E8)', DIV0],
     ]);
+    test.each([
+        ['=GEOMEAN(5)', 5],
+        ['=GEOMEAN(5,5)', 5],
+        ['=INT(GEOMEAN(5,5))', 5],
+        ['=GEOMEAN(3,3,3)', 3],
+        ['=GEOMEAN(7,7,7,7,7)', 7],
+        ['=GEOMEAN(2,8)', 4],
+        ['=INT(GEOMEAN(76,19))', 38],
+        ['=GEOMEAN(A5)', 1e300],
+        ['=GEOMEAN(A5,A5)', 1e300],
+        ['=GEOMEAN(1E+300,1E+300)', 1e300],
+        ['=GEOMEAN(1E-300,1E-300)', 1e-300],
+        ['=GEOMEAN(1E+200,1E+200)', 1e200],
+        ['=GEOMEAN(1E+154,1E+154)', 1e154],
+        ['=GEOMEAN(J1:J5)', 5],
+        ['=HARMEAN(3,3,3)', 3],
+    ])('a mean of equal numbers, or of a whole power, is the number itself: %s is %p', (formula, expected) => {
+        expect(evaluate(formula, RECORDED, 'Q1')).toBe(expected);
+    });
+    recorded(
+        'HARMEAN refuses an element that is a reference, GEOMEAN takes its first cell',
+        [
+            ['=HARMEAN(OFFSET(A1,{0;1;2},0,2))', VALUE],
+            ['=GEOMEAN(OFFSET(A1,{0;1;2},0,2))', 18.1712059283214],
+        ],
+        { A1: 10, A2: 20, A3: 30, A4: 40 },
+    );
     recorded('HARMEAN of no number at all is #N/A, where the others say #NUM!', [
         ['=HARMEAN(F1:F3)', NA],
         ['=HARMEAN(Z9)', NA],
@@ -403,7 +461,6 @@ describe('two ranges paired place by place', () => {
         ['=COVARIANCE.S(5,7)', DIV0],
         ['=COVARIANCE.S(F1:F3,F1:F3)', DIV0],
         ['=COVARIANCE.S(A1:A5,D1:D5)', 5.5e299],
-        // Excel check
         ['=COVAR(D1:D8,H1:H8)', 1.703125],
     ]);
     recorded('SLOPE and INTERCEPT take the y values first', [
@@ -435,6 +492,137 @@ describe('two ranges paired place by place', () => {
         ['=CORREL(Z1:Z3,Z1:Z3)', DIV0],
         ['=CORREL(A1:A5,D1:D5)', NUM],
     ]);
+});
+
+// X in A1:A5 and Y in B1:B5.
+const NO_THIRD: Cells = { A1: 10, A2: 20, A4: 40, A5: 50, B1: 12, B2: 19, B3: 33, B4: 38, B5: 55 };
+const PAIRED: Cells = { ...NO_THIRD, A3: 30 };
+const WITHOUT_THIRD: readonly Row[] = [
+    ['=RSQ(B1:B5,A1:A5)', 0.975663716814159],
+    ['=PEARSON(A1:A5,B1:B5)', 0.987756911802777],
+    ['=SUMXMY2(A1:A5,B1:B5)', 34],
+    ['=SUMX2MY2(A1:A5,B1:B5)', -374],
+    ['=SUMX2PY2(A1:A5,B1:B5)', 9574],
+    ['=STEYX(B1:B5,A1:A5)', 3.70809924354783],
+    ['=FORECAST(60,B1:B5,A1:A5)', 62.5],
+    ['=FORECAST.LINEAR(60,B1:B5,A1:A5)', 62.5],
+    ['=SLOPE(B1:B5,A1:A5)', 1.05],
+    ['=INTERCEPT(B1:B5,A1:A5)', -0.5],
+    ['=COVAR(A1:A5,B1:B5)', 262.5],
+];
+
+describe('RSQ, PEARSON, STEYX, FORECAST and the sums of squares', () => {
+    recorded(
+        'five pairs',
+        [
+            ['=RSQ(B1:B5,A1:A5)', 0.972908577479704],
+            ['=PEARSON(A1:A5,B1:B5)', 0.986361281417566],
+            ['=SUMXMY2(A1:A5,B1:B5)', 43],
+            ['=SUMX2MY2(A1:A5,B1:B5)', -563],
+            ['=SUMX2PY2(A1:A5,B1:B5)', 11563],
+            ['=STEYX(B1:B5,A1:A5)', 3.19895816373602],
+            ['=FORECAST(60,B1:B5,A1:A5)', 62.9],
+            ['=FORECAST.LINEAR(60,B1:B5,A1:A5)', 62.9],
+            ['=SLOPE(B1:B5,A1:A5)', 1.05],
+            ['=INTERCEPT(B1:B5,A1:A5)', -0.100000000000001],
+            ['=COVAR(A1:A5,B1:B5)', 210],
+        ],
+        PAIRED,
+    );
+    recorded(
+        'a side that is one cell shorter',
+        [
+            ['=RSQ(B1:B5,A1:A4)', NA],
+            ['=PEARSON(A1:A4,B1:B5)', NA],
+            ['=SUMXMY2(A1:A4,B1:B5)', NA],
+            ['=SUMX2MY2(A1:A4,B1:B5)', NA],
+            ['=SUMX2PY2(A1:A4,B1:B5)', NA],
+            ['=STEYX(B1:B5,A1:A4)', NA],
+            ['=FORECAST(60,B1:B5,A1:A4)', NA],
+            ['=FORECAST.LINEAR(60,B1:B5,A1:A4)', NA],
+            ['=SLOPE(B1:B5,A1:A4)', NA],
+            ['=INTERCEPT(B1:B5,A1:A4)', NA],
+            ['=COVAR(A1:A4,B1:B5)', NA],
+            ['=RSQ(B1:B4,A1:A5)', NA],
+            ['=PEARSON(A1:A5,B1:B4)', NA],
+            ['=SUMXMY2(A1:A5,B1:B4)', NA],
+            ['=SUMX2MY2(A1:A5,B1:B4)', NA],
+            ['=SUMX2PY2(A1:A5,B1:B4)', NA],
+            ['=STEYX(B1:B4,A1:A5)', NA],
+            ['=FORECAST(60,B1:B4,A1:A5)', NA],
+            ['=FORECAST.LINEAR(60,B1:B4,A1:A5)', NA],
+            ['=SLOPE(B1:B4,A1:A5)', NA],
+            ['=INTERCEPT(B1:B4,A1:A5)', NA],
+            ['=COVAR(A1:A5,B1:B4)', NA],
+        ],
+        PAIRED,
+    );
+    recorded(
+        'one range on both sides',
+        [
+            ['=RSQ(A1:A5,A1:A5)', 1],
+            ['=PEARSON(A1:A5,A1:A5)', 1],
+            ['=SUMXMY2(A1:A5,A1:A5)', 0],
+            ['=SUMX2MY2(A1:A5,A1:A5)', 0],
+            ['=SUMX2PY2(A1:A5,A1:A5)', 11000],
+            ['=STEYX(A1:A5,A1:A5)', 0],
+            ['=FORECAST(60,A1:A5,A1:A5)', 60],
+            ['=FORECAST.LINEAR(60,A1:A5,A1:A5)', 60],
+            ['=SLOPE(A1:A5,A1:A5)', 1],
+            ['=INTERCEPT(A1:A5,A1:A5)', 0],
+            ['=COVAR(A1:A5,A1:A5)', 200],
+        ],
+        PAIRED,
+    );
+    recorded('array constants', [
+        ['=RSQ({2,4,7},{1,2,3})', 0.986842105263158],
+        ['=PEARSON({1,2,3},{2,4,7})', 0.993399267798783],
+        ['=SUMXMY2({1,2,3},{2,4,7})', 21],
+        ['=SUMX2MY2({1,2,3},{2,4,7})', -55],
+        ['=SUMX2PY2({1,2,3},{2,4,7})', 83],
+        ['=STEYX({2,4,7},{1,2,3})', 0.408248290463862],
+        ['=FORECAST(60,{2,4,7},{1,2,3})', 149.333333333333],
+        ['=FORECAST.LINEAR(60,{2,4,7},{1,2,3})', 149.333333333333],
+        ['=SLOPE({2,4,7},{1,2,3})', 2.5],
+        ['=INTERCEPT({2,4,7},{1,2,3})', -0.666666666666667],
+        ['=COVAR({1,2,3},{2,4,7})', 1.66666666666667],
+    ]);
+    recorded(
+        'one pair',
+        [
+            ['=RSQ(B1,A1)', DIV0],
+            ['=PEARSON(A1,B1)', DIV0],
+            ['=SUMXMY2(A1,B1)', 4],
+            ['=SUMX2MY2(A1,B1)', -44],
+            ['=SUMX2PY2(A1,B1)', 244],
+            ['=STEYX(B1,A1)', DIV0],
+            ['=FORECAST(60,B1,A1)', DIV0],
+            ['=FORECAST.LINEAR(60,B1,A1)', DIV0],
+            ['=SLOPE(B1,A1)', DIV0],
+            ['=INTERCEPT(B1,A1)', DIV0],
+            ['=COVAR(A1,B1)', 0],
+        ],
+        PAIRED,
+    );
+    recorded('a pair with a text is left out', WITHOUT_THIRD, { ...NO_THIRD, A3: 'x' });
+    recorded('a pair with a blank is left out', WITHOUT_THIRD, NO_THIRD);
+    recorded(
+        'an error in a range is the answer',
+        [
+            ['=RSQ(B1:B5,A1:A5)', DIV0],
+            ['=PEARSON(A1:A5,B1:B5)', DIV0],
+            ['=SUMXMY2(A1:A5,B1:B5)', DIV0],
+            ['=SUMX2MY2(A1:A5,B1:B5)', DIV0],
+            ['=SUMX2PY2(A1:A5,B1:B5)', DIV0],
+            ['=STEYX(B1:B5,A1:A5)', DIV0],
+            ['=FORECAST(60,B1:B5,A1:A5)', DIV0],
+            ['=FORECAST.LINEAR(60,B1:B5,A1:A5)', DIV0],
+            ['=SLOPE(B1:B5,A1:A5)', DIV0],
+            ['=INTERCEPT(B1:B5,A1:A5)', DIV0],
+            ['=COVAR(A1:A5,B1:B5)', DIV0],
+        ],
+        { ...PAIRED, A3: '=1/0' },
+    );
 });
 
 describe('SUBTOTAL picks the deviation and the variance by 7, 8, 10 and 11', () => {

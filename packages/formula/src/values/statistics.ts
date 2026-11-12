@@ -2,6 +2,8 @@
 // between two of a sorted list, and the rank of a number among others. Each takes plain lists of numbers that a
 // function already collected, and answers a number. What a function makes of no number at all is its own.
 
+import { compare15 } from './precision';
+
 // No number of an empty list.
 export function mean(values: Float64Array): number {
     let sum = 0;
@@ -29,14 +31,16 @@ export function interpolated(sorted: Float64Array, position: number): number {
     return part === 0 ? sorted[below] : sorted[below] + part * (sorted[below + 1] - sorted[below]);
 }
 
-// The rank from 1 of a number among the others, counted from the largest or, ascending, from the smallest. Equal
-// numbers take the first of their ranks, or share the mean of them. A number the list does not hold has rank 0.
+// The rank from 1 of a number among the others, counted from the largest or, ascending, from the smallest. Numbers
+// equal in the 15 digits Excel compares take the first of their ranks, or share the mean of them. A number the
+// list does not hold has rank 0.
 export function rankAmong(values: Float64Array, value: number, ascending: boolean, shared: boolean): number {
     let ahead = 0;
     let ties = 0;
     for (let i = 0; i < values.length; i += 1) {
-        if (values[i] === value) ties += 1;
-        else if (values[i] < value === ascending) ahead += 1;
+        const order = compare15(values[i], value);
+        if (order === 0) ties += 1;
+        else if (order < 0 === ascending) ahead += 1;
     }
     if (ties === 0) return 0;
     return shared ? ahead + (ties + 1) / 2 : ahead + 1;

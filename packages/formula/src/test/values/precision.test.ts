@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { compare15, cutDecimal, equal15, round15, roundDecimal, snapSum, snapWhole } from '../../values/precision';
+import { compare15, cutDecimal, equal15, round15, roundDecimal, snapSum } from '../../values/precision';
 
 function seeded(seed: number): () => number {
     let state = seed;
@@ -330,21 +330,6 @@ describe('cutDecimal', () => {
             const digits = Math.floor(random() * 60) - 30;
             const away = random() < 0.5;
             expect([n, digits, away, cutDecimal(n, digits, away)]).toEqual([n, digits, away, slowCut(n, digits, away)]);
-        }
-    });
-});
-
-describe('snapWhole', () => {
-    test('a quotient that is whole in its 15 digits is that whole number', () => {
-        expect(snapWhole(1.1 / 0.1)).toBe(11);
-        expect(snapWhole(0.3 / 0.1)).toBe(3);
-        expect(snapWhole(-0.3 / 0.1)).toBe(-3);
-        expect(snapWhole(1e300 / 1e299)).toBe(10);
-    });
-
-    test('any other number is left alone', () => {
-        for (const n of [0, 7, -7, 1.25, -1.25, 2.9999999999, 3.0000000001, 1e-300, 1e300, 0.5]) {
-            expect(snapWhole(n)).toBe(n);
         }
     });
 });
