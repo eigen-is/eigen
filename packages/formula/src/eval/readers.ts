@@ -326,10 +326,13 @@ export class Table {
         return value;
     }
 
-    // A rectangle of the table, for a row that may answer with one. It is good until `part` is asked again.
+    // A rectangle of the table, for a row that may answer with one: a table of #N/A when it does not lie inside the
+    // table. It is good until `part` is asked again.
     public part(top: number, left: number, rows: number, columns: number): Table {
         const { value } = this;
         const piece = this.spare();
+        const inside = top >= 0 && left >= 0 && rows > 0 && columns > 0;
+        if (!inside || top + rows > heightOf(value) || left + columns > widthOf(value)) return Table.over(piece, NA);
         if (isReference(value)) {
             const first = value.top + top;
             const start = value.left + left;
