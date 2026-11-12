@@ -13,7 +13,7 @@ import { VALUE } from '../values/errors';
 import { equal15 } from '../values/precision';
 import { textKey } from '../values/text-order';
 import type { Reference, Scalar, Value } from '../values/value';
-import { bandOf, isArray, isReference } from '../values/value';
+import { bandOf, heightOf, isArray, isReference, widthOf } from '../values/value';
 import { patternMatches, patternOf } from '../values/wildcard';
 import type { Evaluator } from './evaluator';
 import { Find } from './signature';
@@ -233,6 +233,10 @@ export class Vector {
 // Column `index` of a range or an array when `down`, else row `index`. The formulas in it are computed first.
 export function edge(ctx: Evaluator, range: Value, down: boolean, index: number): Vector {
     const { workbook } = ctx;
+    // Outside the range there is nothing to search: a row or a column of it holds no cell that it does not name.
+    if (index < 0 || index >= (down ? widthOf(range) : heightOf(range))) {
+        return new Vector(workbook, null, [], 0, 1, 0, 0, null);
+    }
     if (isReference(range) && down) {
         const left = range.left + index;
         ctx.recalc.settleArea({ ...range, left, right: left, next: null });

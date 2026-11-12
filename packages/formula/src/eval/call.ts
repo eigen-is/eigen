@@ -165,9 +165,9 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
         case Read.Table:
             if (isError(value)) return value;
             if (isReference(value) && value.next !== null && param.union !== null) return param.union;
-            return frame.table(at).over(value);
+            return Table.over(frame.table(at), value);
         case Read.Anything:
-            return frame.table(at).over(value);
+            return Table.over(frame.table(at), value);
         case Read.Here:
         case Read.Only:
             if (!isReference(value)) return isError(value) ? value : VALUE;

@@ -12,7 +12,7 @@ import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Errors, Families } from './families';
 import type { Frame } from './readers';
-import { Table } from './readers';
+import { Numbers, Pairs, Table } from './readers';
 import type { Entry, Held, Param } from './signature';
 import { Prepare, Read } from './signature';
 import { firstError } from './views';
@@ -48,12 +48,12 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
                 const error = errorIn(ctx, held[i], family, frame.skips);
                 if (error !== null) return error;
             }
-            args[p] = frame.numbers(p).bind(at, to, family, true);
-        } else if (param.read === Read.Matched) args[p] = frame.numbers(p).beside();
+            args[p] = Numbers.bind(frame.numbers(p), at, to, family, true);
+        } else if (param.read === Read.Matched) args[p] = Numbers.beside(frame.numbers(p));
         else if (param.read === Read.Products) {
             const error = sized(ctx, held, at, to);
             if (error !== null) return error;
-            args[p] = frame.numbers(p).together(at, to);
+            args[p] = Numbers.together(frame.numbers(p), at, to);
         } else if (param.read === Read.Texts) {
             const texts = frame.texts(p);
             const error = spell(ctx, held, at, to, texts);
@@ -62,7 +62,7 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
         } else if (param.read === Read.Pairs) {
             // Two ranges are paired or none: with one left out the call is #VALUE!.
             const second = held[at + 1];
-            const error = written(value) && written(second) ? frame.pairs.over(value, second) : VALUE;
+            const error = written(value) && written(second) ? Pairs.over(ctx, frame.pairs, value, second) : VALUE;
             if (error !== null) return error;
             args[p] = frame.pairs;
         } else args[p] = frame.matches;
