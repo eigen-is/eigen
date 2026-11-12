@@ -253,7 +253,6 @@ export class Walk {
             for (let c = 0; c < width; c += 1) {
                 const item = items[row * width + c];
                 let number = 0;
-                // A blank element is a 0 that counts, for every family, which a blank cell never is.
                 if (typeof item === 'number') number = item;
                 else if (isReference(item)) {
                     // In an array that is not one of references, such an element is a cell that holds nothing.

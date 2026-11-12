@@ -2,7 +2,8 @@
 // up, and the answers are an array of that shape. An array stores one element for a run of equal ones, so the body
 // runs once per stored element and its answer stands for the whole run. An operator on an array is lifted here too.
 // A lazy argument is evaluated after the elements, once, and only when an element picked it. A row whose arguments
-// come in groups that are tried in turn, such as IFS, is stepped through here too, array or not.
+// come in groups that are tried in turn, such as IFS, is stepped through here too, array or not. A blank answer is
+// a 0 in the array, as a formula's is in its cell, so every reader of a computed array meets the same value.
 
 import type { Sheet } from '../store/sheet';
 import type { FormulaNode } from '../text/tree';
@@ -66,7 +67,7 @@ export function lift(
             }
             if (makes && typeof item === 'string' && !ctx.recalc.spend(item.length)) return CALC;
             if (isLazy(result)) picks[items.length] = result;
-            items.push(item);
+            items.push(item ?? 0);
         }
     }
     const made = arrayOf(lined.rows, lined.columns, items, down.ends, across.ends, references);
@@ -255,7 +256,7 @@ function fill(
                 const at = isArray(value) ? placeAt(value, down, across, places[token.index], r, c) : -1;
                 item = !isArray(value) ? value : at < 0 ? NA : value.items[at];
             }
-            items.push(item);
+            items.push(item ?? 0);
         }
     }
     return arrayOf(lined.rows, lined.columns, items, down.ends, across.ends, made.references);

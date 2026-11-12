@@ -17,7 +17,7 @@ import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { arrayOf, isArray, isError, isReference, ValueType } from '../values/value';
 import { call } from './call';
 import { lift } from './lift';
-import { LIFTED_BINARY, LIFTED_NEGATE, LIFTED_PERCENT, negate, operate, percent } from './operators';
+import { LIFTED_BINARY, LIFTED_NEGATE, LIFTED_PERCENT, LIFTED_PLUS, negate, operate, percent } from './operators';
 import { Frame, Room } from './readers';
 import type { Entry } from './signature';
 import { toArray } from './views';
@@ -127,6 +127,13 @@ export class Evaluator {
         return this.read(this.evaluate(node, sheet, row, column));
     }
 
+    // What a unary plus gives: nothing is changed, not even a text into a number, but it is a value and no cell,
+    // so the cells of a range become a computed array.
+    public valued(node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
+        const value = this.operand(node, sheet, row, column);
+        return isArray(value) ? this.lifted(LIFTED_PLUS, value, undefined, node, sheet, row, column) : value;
+    }
+
     public read(value: Value): Scalar | ArrayValue {
         if (typeof value !== 'object' || value === null) return value;
         switch (value.type) {
@@ -212,8 +219,7 @@ export class Evaluator {
 
     private prefix(node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
         const child = node.children[0];
-        // A unary plus changes nothing, not even a text into a number, but what it gives is a value and no cell.
-        if (node.op === Token.Plus) return this.operand(child, sheet, row, column);
+        if (node.op === Token.Plus) return this.valued(child, sheet, row, column);
         if (node.op === Token.Minus) {
             const value = this.operand(child, sheet, row, column);
             return isArray(value)

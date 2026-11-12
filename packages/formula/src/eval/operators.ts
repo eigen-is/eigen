@@ -109,5 +109,6 @@ export const LIFTED_BINARY: readonly Entry[] = BINARY.reduce((entries: Entry[], 
     entries[op] = fn('', [ANY, ANY], (a, b) => operate(op, a, b, false));
     return entries;
 }, []);
+export const LIFTED_PLUS = fn('', [ANY], (a) => a);
 export const LIFTED_NEGATE = fn('', [ANY], negate);
 export const LIFTED_PERCENT = fn('', [ANY], percent);

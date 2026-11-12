@@ -1,7 +1,7 @@
 // What a function that takes every value of its arguments counts, per family: one record of data that the walk and
 // the call wrapper read. A cell, an element of an array and a value typed as an argument are three different
 // things to Excel, and each family treats them its own way, so a family is added with the Excel answers that need it.
-// Two rules are every family's and so are no data: a blank cell never counts, a blank element of an array is a 0.
+// One rule is every family's and so is no data: a blank cell never counts. A computed array holds no blank.
 
 import { CellKind } from '../store/column';
 import type { FormulaError } from '../values/errors';

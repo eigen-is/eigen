@@ -127,7 +127,7 @@ export function picked(
     if (child === null || (child.kind === NodeKind.Empty && param.skips)) return param.fallback ?? null;
     if (child.kind !== NodeKind.Empty) {
         return param.read === Read.Valued
-            ? ctx.operand(child, sheet, row, column)
+            ? ctx.valued(child, sheet, row, column)
             : ctx.evaluate(child, sheet, row, column);
     }
     // An empty argument that is picked is a blank, and the number 0 in a row whose groups are tried in turn.
