@@ -171,6 +171,7 @@ Verified, user-visible, bounded.
 - [ ] **A centred tick box draws half a pixel off vertically on 20 px rows**: at the default row height the box's top and bottom lines draw soft where its sides are sharp, because the centred top `checkboxRect` (`state/modules/data-validation.ts`) gives lands on a half pixel. The box then touches 11 pixel rows where it is 10 high, and the faint bottom row takes no click. Round the top, so the painter and the hit test share whole pixels. **S**
 - [ ] **The Format menu has no custom-formula conditional format**: a rule with a formula of its own, such as `=$B1>10`, arrives only through an xlsx import; Manage rules lists it as "Custom formula" and can delete it, but no dialog makes or edits one. Excel and Google Sheets both offer it. Add it to the Format menu's rules, with the formula anchored as [SHEETS.md](SHEETS.md#a-formula-rule-is-anchored-at-its-first-ranges-corner) says. **M**
 - [ ] **Manage rules lists the lowest priority first**: the dialog (`ManageRules` in `components/ConditionFormat/ManageRules.tsx`) shows the rules in stored order, in which a later rule paints over an earlier one, so the rule that wins is at the bottom. Excel and Google Sheets list the winner first. Show the list reversed. **S**
+- [ ] **A conditional format made from a column-header selection** stores the sheet's rows, `row: [0, rows-1]` (the header pick in `state/events/mouse-header.ts`), not the whole column, so a row insert still moves it. A product question: should a header pick mean the whole column? **S**
 
 ### Decided, not defects
 
@@ -319,7 +320,7 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 
 ### Table references
 
-- [ ] **Typed R1C1-looking text is a table reference**: `=RC[1]` and `=C[-1]:C[2]` parse as nameless table references and show `#REF!`; the editor in step 1b should say why. **S**
+- [ ] **Typed R1C1-looking text is a table reference**: `=RC[1]` reads as column `1` of a table named `rc`, and `=C[-1]:C[2]` as columns of a table `c`. With no such table they show `#REF!`, and a file that has one resolves them; the editor in step 1b should say why. **S**
 - [ ] **`Sheet2!T[a]` parses and is never resolved**, where Excel drops the prefix. **S**
 - [ ] **A this-row reference outside the table's data rows** is `#REF!`, Excel `#VALUE!`. **S**
 - [ ] **`tokens()` cuts a table reference into a name and a bracket**, so an editor highlighting references from it misses the reference. **S**
@@ -348,7 +349,6 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 ### Code
 
 - [ ] **`spell` in `eval/look.ts`** fills one of two lists by a nullable flag; split it. **S**
-- [ ] **A conditional format made from a column-header selection** stores the sheet's rows, `row: [0, rows-1]` (`selection.ts`), not the whole column, so a row insert still moves it. A product question: should a header pick mean the whole column? **S**
 
 ## Sync and undo
 
