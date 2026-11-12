@@ -96,17 +96,11 @@ export function cutDecimal(n: number, digits: number, away: boolean): number {
     const text = Math.abs(n).toExponential(14);
     const drop = 14 - Number(text.slice(17)) - digits;
     if (drop <= 0) return round15(n);
-    // Past 15 digits nothing is kept, and 1e16 is above every 15 digit number.
-    const unit = POWERS_OF_TEN[Math.min(drop, 16)] ?? 1e16;
+    // Past 15 digits nothing is kept: every 15 digit number is under 1e15.
+    const unit = POWERS_OF_TEN[Math.min(drop, 15)];
     const shown = Number(text.charAt(0) + text.slice(2, 16));
     const kept = Math.floor(shown / unit) + (away && shown % unit !== 0 ? 1 : 0);
     if (kept === 0) return 0;
     if (digits < -308) return n < 0 ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY;
     return Number(`${n < 0 ? '-' : ''}${kept}e${-digits}`);
-}
-
-// A quotient that is a whole number in its 15 digits is that whole number: 1.1 / 0.1 is 11, not a little more.
-export function snapWhole(n: number): number {
-    const whole = Math.round(n);
-    return equal15(n, whole) ? whole : n;
 }

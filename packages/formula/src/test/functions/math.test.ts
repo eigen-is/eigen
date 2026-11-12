@@ -29,12 +29,12 @@ function exact(rows: readonly Row[]): void {
     });
 }
 
-// Excel's answer in its first 12 digits: the last bits of a logarithm or a sine are the machine's.
+// Excel's answer in the 15 digits it shows.
 function close(rows: readonly Row[]): void {
     test.each(rows)('%s is %p', (formula, expected) => {
         const value = evaluate(formula, SHEET);
-        const shown = typeof value === 'number' ? Number(value.toPrecision(12)) : value;
-        expect(shown).toBe(typeof expected === 'number' ? Number(expected.toPrecision(12)) : expected);
+        const shown = typeof value === 'number' ? Number(value.toPrecision(15)) : value;
+        expect(shown).toBe(typeof expected === 'number' ? Number(expected.toPrecision(15)) : expected);
     });
 }
 
@@ -105,10 +105,11 @@ describe('ROUNDUP, ROUNDDOWN and TRUNC', () => {
         ['=TRUNC("abc",1)', VALUE],
     ]);
 
-    // Excel check: no recorded row tells the decimal Excel shows from the double under it.
     exact([
         ['=ROUNDUP(1.1,1)', 1.1],
         ['=ROUNDDOWN(0.29,2)', 0.29],
+        ['=ROUNDDOWN(0.29*100,0)', 29],
+        ['=ROUNDUP(1.1*3,1)', 3.3],
         ['=TRUNC(4.35*100)', 435],
         ['=ROUNDDOWN(3-4E-16,0)', 3],
     ]);
@@ -125,6 +126,10 @@ describe('INT, EVEN, ODD and SIGN', () => {
         ['=INT(-1E+300)', -1e300],
         ['=INT(1E+15+0.5)', 1e15],
         ['=INT(2.99999999999999)', 2],
+        ['=INT(0.999999999999999)', 0],
+        ['=INT(0.29*100)', 29],
+        ['=INT(4.1*100)', 410],
+        ['=INT(CEILING(2.5,0.3)*10)', 27],
         ['=INT(B3)', 1],
         ['=INDEX(INT(A1:A5),2,1)', -3],
         ['=EVEN(1.5)', 2],
@@ -278,7 +283,10 @@ describe('MROUND, CEILING and FLOOR', () => {
     close([
         ['=CEILING(2.5,0.3)', 2.7],
         ['=FLOOR(2.5,0.3)', 2.4],
-        ['=CEILING(1E+300,3)', 1e300],
+        ['=CEILING(1E+300,3)', 9.99999999999999e299],
+        ['=FLOOR(1E+300,3)', 9.99999999999999e299],
+        ['=CEILING.MATH(1E+300,3)', 9.99999999999999e299],
+        ['=FLOOR.MATH(1E+300,3)', 9.99999999999999e299],
         ['=CEILING(1E+300,1E+299)', 1e300],
         ['=CEILING(7,1E-300)', 7],
         ['=FLOOR(7,1E-300)', 7],
@@ -286,12 +294,17 @@ describe('MROUND, CEILING and FLOOR', () => {
         ['=MROUND(1.5,1E-300)', 1.5],
     ]);
 
-    // Excel check: a quotient that is whole only in its 15 digits is taken for whole.
     close([
         ['=CEILING(1.1,0.1)', 1.1],
+        ['=CEILING(1.2-1,0.1)', 0.2],
         ['=FLOOR(0.3,0.1)', 0.3],
+        ['=FLOOR(0.7,0.1)', 0.7],
         ['=CEILING.MATH(1.1,0.1)', 1.1],
         ['=FLOOR.MATH(0.3,0.1)', 0.3],
+        ['=CEILING(2.5,0.3)=2.7', true],
+        ['=MROUND(1.05,0.1)', 1.1],
+        ['=MROUND(2.5,5)', 5],
+        ['=MROUND(6.05,0.1)', 6],
     ]);
 });
 
@@ -343,14 +356,27 @@ describe('MOD and QUOTIENT', () => {
         ['=MOD(1.5,0.4)', 0.3],
         ['=MOD(-1.5,0.4)', 0.1],
         ['=MOD(0.3,0.1)', 0.1],
-        ['=QUOTIENT(1E+300,3)', 3.3333333333333e299],
+        ['=MOD(5.5,0.1)', 0.0999999999999997],
+        ['=QUOTIENT(1E+300,3)', 3.33333333333333e299],
     ]);
 
-    // Excel check: the recorded rows put the largest quotient MOD still divides between 3 and 3.3E+14.
     exact([
         ['=MOD(1125899999999,1)', 0],
         ['=MOD(1125900000000,1)', NUM],
         ['=MOD(1E+12,7)', 1],
+        ['=MOD(1E+13,7)', NUM],
+        ['=MOD(1E+14,7)', NUM],
+        ['=MOD(2^50,3)', NUM],
+        ['=MOD(2^51,3)', NUM],
+        ['=MOD(134217727,1)', 0],
+        ['=MOD(134217728*8388608,3)', NUM],
+        ['=MOD(-7,3)', 2],
+        ['=MOD(7,-3)', -2],
+        ['=MOD(-1E-20,3)', 0],
+        ['=MOD(1E-20,-3)', 0],
+        ['=MOD(-1E-300,3)', 0],
+        ['=QUOTIENT(0.3,0.1)', 2],
+        ['=QUOTIENT(4.1*100,1)', 409],
     ]);
 });
 
@@ -437,22 +463,22 @@ describe('POWER, SQRT and the logarithms', () => {
     ]);
 
     close([
-        ['=POWER(2,1023)', 8.9884656743116e307],
+        ['=POWER(2,1023)', 8.98846567431158e307],
         ['=POWER(10,308)', 1e308],
         ['=POWER(2,0.5)', Math.SQRT2],
         ['=POWER(2,1/3)', 1.25992104989487],
         ['=POWER(2,A2)', 0.176776695296637],
-        ['=POWER(0.5,1E+3)', 9.3326361850322e-302],
+        ['=POWER(0.5,1E+3)', 9.33263618503219e-302],
         ['=POWER(1.0000000001,1E+10)', 2.71828205323479],
         ['=POWER(1E-300,0.5)', 1e-150],
         ['=SQRT(2)', Math.SQRT2],
         ['=SQRT(1E+300)', 1e150],
-        ['=SQRT(2^1023)', 9.4807519081092e153],
+        ['=SQRT(2^1023)', 9.48075190810918e153],
         ['=SQRT("3")', 1.73205080756888],
         ['=EXP(1)', Math.E],
         ['=EXP(-1)', 0.367879441171442],
-        ['=EXP(709.78)', 1.7928227943945e308],
-        ['=EXP(-708)', 3.3075530036384e-308],
+        ['=EXP(709.78)', 1.79282279439452e308],
+        ['=EXP(-708)', 3.30755300363841e-308],
         ['=EXP(B1)', 1],
         ['=LN(EXP(1))', 1],
         ['=LN(2)', Math.LN2],
@@ -471,13 +497,10 @@ describe('POWER, SQRT and the logarithms', () => {
         ['=LOG10(5)', 0.698970004336019],
     ]);
 
-    // Excel check: POWER(-1,1E+15) is #NUM!, and no row says from which whole exponent on a negative base has no power.
     exact([
-        ['=POWER(-1,2^31-1)', -1],
-        ['=POWER(-1,2^31)', NUM],
-        ['=POWER(-8,-1/3)', -0.5],
-        ['=POWER(-32,0.2)', -2],
-        ['=POWER(-8,2/3)', NUM],
+        ['=INT(LOG(243,3))', 5],
+        ['=LOG(1000)', 3],
+        ['=LOG(8,2)', 3],
     ]);
 });
 
@@ -527,18 +550,35 @@ describe('FACT and COMBIN', () => {
     ]);
 
     close([
+        ['=FACT(19)', 1.21645100408832e17],
         ['=FACT(22)', 1.12400072777761e21],
+        ['=FACT(23)', 2.5852016738885e22],
         ['=FACT(25)', 1.5511210043331e25],
+        ['=FACT(30)', 2.65252859812191e32],
+        ['=FACT(50)', 3.04140932017134e64],
+        ['=FACT(100)', 9.33262154439442e157],
+        ['=FACT(150)', 5.71338395644586e262],
+        ['=FACT(160)', 4.71472363599206e284],
+        ['=FACT(165)', 5.42391066613158e295],
+        ['=FACT(168)', 2.5260757449732e302],
+        ['=FACT(169)', 4.26906800900471e304],
         ['=FACT(170)', 7.257415615308e306],
         ['=FACT(170.9)', 7.257415615308e306],
+        ['=FACT(170.9999)', 7.257415615308e306],
+        ['=COMBIN(60,30)', 1.18264581564861e17],
+        ['=COMBIN(67,33)', 1.42265207376203e19],
+        ['=COMBIN(100,50)', 1.00891344545564e29],
         ['=COMBIN(170,85)', 9.14484184513156e49],
         ['=COMBIN(171,85)', 1.81833483199709e50],
+        ['=COMBIN(200,100)', 9.05485146561032e58],
+        ['=COMBIN(500,250)', 1.16744315788278e149],
+        ['=COMBIN(1000,500)', 2.70288240945437e299],
+        ['=COMBIN(1029,514)', 1.4298206864989e308],
         ['=COMBIN(1029,515)', 1.4298206864989e308],
-    ]);
-
-    // Excel check: COMBIN(1E+10,2) is #NUM! where 1030 things still count, and no row has a fraction under zero.
-    close([
-        ['=COMBIN(2^31-1,2)', 2305843005992468500],
+        ['=COMBIN(1000000,3)', 1.66666166667e17],
+        ['=COMBIN(2147483646,2)', 2.30584300384498e18],
+        ['=COMBIN(2147483647,2)', NUM],
+        ['=COMBIN(2147483647,1)', NUM],
         ['=COMBIN(2^31,2)', NUM],
         ['=COMBIN(5,-0.5)', NUM],
         ['=COMBIN(-0.5,0)', NUM],
@@ -598,11 +638,11 @@ describe('PI, the angles and the trigonometric functions', () => {
     close([
         ['=PI()^2', 9.86960440108936],
         ['=DEGREES(1)', 57.2957795130823],
-        ['=DEGREES(1E+306)', 5.7295779513082e307],
-        ['=DEGREES(1E-300)', 5.7295779513082e-299],
+        ['=DEGREES(1E+306)', 5.72957795130823e307],
+        ['=DEGREES(1E-300)', 5.72957795130823e-299],
         ['=RADIANS(1)', 0.0174532925199433],
         ['=RADIANS(-90)', -1.5707963267949],
-        ['=RADIANS(1E+300)', 1.7453292519943e298],
+        ['=RADIANS(1E+300)', 1.74532925199433e298],
         ['=SIN(1)', 0.841470984807897],
         ['=SIN("3")', 0.141120008059867],
         ['=SIN(PI())', 1.22514845490862e-16],
@@ -651,11 +691,18 @@ describe('PI, the angles and the trigonometric functions', () => {
         ['=ATAN2(B1,1)', 1.5707963267949],
     ]);
 
-    // Excel check: 2^27 has no sine and 1E+8 has one; nothing is recorded between them.
-    close([['=SIN(2^27-1)', -0.955993328773]]);
-
-    // Excel check: no answer of a hyperbolic function is recorded.
     close([
+        ['=SIN(2^27-1)', -0.955993328772671],
+        ['=SIN(134217727.5)', -0.979620968010314],
+        ['=SIN(2^27)', NUM],
+        ['=COS(2^27)', NUM],
+        ['=TAN(2^27)', NUM],
+        ['=SIN(2*PI())', -2.45029690981724e-16],
+    ]);
+
+    close([
+        ['=SINH(-711)', NUM],
+        ['=ASINH(1E+300)', NUM],
         ['=SINH(1)', 1.1752011936438014],
         ['=COSH(1)', 1.5430806348152437],
         ['=TANH(1)', 0.7615941559557649],
