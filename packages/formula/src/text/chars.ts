@@ -1,5 +1,6 @@
-// The characters the text folder looks for, as the codes charCodeAt gives, and the test of a digit. The lexer, the
-// parser and the label helpers, such as columnIndex, read them here, so each is written once.
+// The characters the engine looks for in a text, as the codes charCodeAt gives, and the test of a digit. Whoever
+// reads a text code by code, such as the lexer, the parser and the reading of a typed number, takes them from
+// here, so each is written once.
 
 export const SPACE = 32;
 export const BANG = 33;

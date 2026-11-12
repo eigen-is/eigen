@@ -4,27 +4,29 @@
 // what could have been typed, and parseDateTime reads only the dates and times. It reads character codes and never
 // asks the host: no Date and no clock, so the year of a date without one is given, or such a date is no date.
 
+import {
+    COLON,
+    COMMA,
+    DOLLAR,
+    DOT,
+    isDigit,
+    LOWER_A,
+    LOWER_E,
+    LOWER_Z,
+    MINUS,
+    OPEN,
+    PLUS,
+    SPACE,
+    ZERO,
+} from '../text/chars';
 import { dateSerial, daysInMonth, isDate, SECONDS_IN_DAY } from './dates';
 import { POWERS_OF_TEN } from './precision';
 
-const SPACE = 32;
-const DOLLAR = 36;
 const PERCENT = 37;
-const OPEN = 40;
 const CLOSE = 41;
-const PLUS = 43;
-const COMMA = 44;
-const MINUS = 45;
-const POINT = 46;
 const SLASH = 47;
-const ZERO = 48;
-const NINE = 57;
-const COLON = 58;
-const LOWER_A = 97;
-const LOWER_E = 101;
 const LOWER_M = 109;
 const LOWER_P = 112;
-const LOWER_Z = 122;
 const ARABIC_ZERO = 1632;
 const EURO = 8364;
 
@@ -114,7 +116,7 @@ function readDecorated(text: string, start: number, end: number): number | undef
         } else break;
     }
     if (group >= 0 && group !== 3) return undefined;
-    if (text.charCodeAt(at) === POINT) {
+    if (text.charCodeAt(at) === DOT) {
         for (at += 1; at < end; at += 1) {
             const digit = digitOf(text.charCodeAt(at));
             if (digit < 0) break;
@@ -181,7 +183,7 @@ function readFraction(text: string, start: number, end: number): number | undefi
 // A date, a time, or a date, spaces and a time. The time is found from its colon or its AM or PM, and the date is
 // what stands before it. A time of 24 hours or more carries the date on, past the last date too, as in Excel.
 function readDateTime(text: string, start: number, end: number, thisYear: number | undefined): number | undefined {
-    const last = text.charCodeAt(end - 1) === POINT && (text.charCodeAt(end - 2) | 32) === LOWER_M ? end - 2 : end - 1;
+    const last = text.charCodeAt(end - 1) === DOT && (text.charCodeAt(end - 2) | 32) === LOWER_M ? end - 2 : end - 1;
     const markAt = (text.charCodeAt(last) | 32) === LOWER_M ? last - 1 : last;
     const mark = text.charCodeAt(markAt) | 32;
     let half = 0;
@@ -282,7 +284,7 @@ function readTime(text: string, from: number, to: number, half: number): number 
             seconds = toWhole(text, minutesEnd + 1, secondsEnd);
             if (secondsEnd < to) {
                 const parts = POWERS_OF_TEN[to - secondsEnd - 1];
-                if (text.charCodeAt(secondsEnd) !== POINT || secondsEnd + 1 === to || parts === undefined)
+                if (text.charCodeAt(secondsEnd) !== DOT || secondsEnd + 1 === to || parts === undefined)
                     return undefined;
                 if (digitsEnd(text, secondsEnd + 1, to) !== to) return undefined;
                 seconds += toWhole(text, secondsEnd + 1, to) / parts;
@@ -338,10 +340,6 @@ function spacesEnd(text: string, from: number): number {
 // Whether a count of digits is one minutes or seconds may be written in.
 function isPair(digits: number): boolean {
     return digits === 1 || digits === 2;
-}
-
-function isDigit(code: number): boolean {
-    return code >= ZERO && code <= NINE;
 }
 
 function digitsEnd(text: string, from: number, to: number): number {
