@@ -106,6 +106,12 @@ const FOCUS_REVEAL =
     /(?<![\w-])(?:group-)?focus(?:-within)?(?:\/[\w-]+)?:(?:opacity-\d+|visible|flex|grid|block|inline-flex|inline-block)(?![\w-])/;
 const POINTER_PASSES = /(?<![\w:-])pointer-events-none(?![\w-])/;
 
+// What biome cannot express of the formula engine's rules, where it bans the globals Date, Intl and performance: a
+// module-level binding that can be written or an empty collection to fill, any use of Math but a call of a function
+// other than random, and a method that reads the machine's locale.
+const ENGINE_STATE =
+    /^(?:export )?(?:let|var) |^(?:export )?const \w+(?:: (?!readonly\b|Readonly)[^=\n]+)? = (?:new (?:Map|Set|WeakMap|WeakSet)\b[^(\n]*\(\)|\[\]|\{\});?$|\bMath\b(?!\.(?!random\b)\w)|\.(?:localeCompare|toLocale\w*)\b/gm;
+
 function keyboardHostileReveal(literal: string): boolean {
     if (FOCUS_REVEAL.test(literal)) return true;
     if (POINTER_PASSES.test(literal) && !literal.includes('pointer-events-auto')) return false;
@@ -369,13 +375,11 @@ const METRICS: Metric[] = [
     },
     {
         id: 'formula-module-state',
-        label: 'Module state, a clock or a draw in the formula engine',
+        label: 'Module state, a draw or a locale call in the formula engine',
         hardZero: true,
-        count: ({ path, text }) =>
-            path.startsWith('packages/formula/src/') && !path.includes('/test/')
-                ? countMatches(text, /^(?:export )?(?:let|var) |\bMath\.random\b|\bnew Date\b|\bDate\.\w/gm)
-                : 0,
-        fix: 'The engine keeps nothing between calls and reads no clock: hold state on the Evaluator or a Frame, and take the time and a draw through the NOW and RANDOM parameters. See docs/CODE-EXAMPLES.md § Standards Gates.',
+        count: ({ path, code }) =>
+            path.startsWith('packages/formula/src/') && !path.includes('/test/') ? countMatches(code, ENGINE_STATE) : 0,
+        fix: 'The engine keeps nothing between calls and computes the same on every machine: hold state on the Evaluator or a Frame, take a draw through the RANDOM parameter, and order and show text by rules of its own. See docs/CODE-EXAMPLES.md § Standards Gates.',
     },
 ];
 

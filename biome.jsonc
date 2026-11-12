@@ -252,6 +252,7 @@
               "options": {
                 "deniedGlobals": {
                   "Date": "The engine reads no clock: take the time through the NOW parameter.",
+                  "globalThis": "Name a global by itself, so the rules on Date, Intl and performance see it.",
                   "Intl": "The engine's text order and number display are its own, the same on every machine.",
                   "performance": "The engine reads no clock."
                 }
