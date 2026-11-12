@@ -25,7 +25,15 @@ afterAll(() => {
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
-g.fetch = async () => Response.json([]);
+// The path ids the delete route was asked for, in order. The server refuses `bad`.
+const deleted: string[] = [];
+g.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const id = /\/path\/([^/]+)$/.exec(url)?.[1];
+    if (!id || init?.method !== 'DELETE') return Response.json([]);
+    deleted.push(id);
+    return id === 'bad' ? new Response('No access', { status: 403 }) : Response.json({ success: true });
+};
 
 const { act, createElement } = await import('react');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
@@ -68,8 +76,7 @@ function Probe() {
     return runner.dialogs;
 }
 
-// Runs the action, cancels the dialog it opens, and returns that dialog as it fades out.
-async function cancelDialogOf(id: DriveActionId, items: DrivePath[]) {
+async function openDialogOf(id: DriveActionId, items: DrivePath[]) {
     release = holdClosingDialogs();
     const router = createRouter({
         routeTree: createRootRoute({
@@ -80,9 +87,18 @@ async function cancelDialogOf(id: DriveActionId, items: DrivePath[]) {
     await router.load();
     ({ unmount } = await renderInDocument(createElement(RouterProvider, { router })));
     await act(async () => run(id, items));
-    const cancel = [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === 'Cancel');
-    if (!cancel) throw new Error('no Cancel button');
-    await act(async () => cancel.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+}
+
+async function click(label: string) {
+    const button = [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === label);
+    if (!button) throw new Error(`no ${label} button`);
+    await act(async () => button.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+}
+
+// Runs the action, cancels the dialog it opens, and returns that dialog as it fades out.
+async function cancelDialogOf(id: DriveActionId, items: DrivePath[]) {
+    await openDialogOf(id, items);
+    await click('Cancel');
     return closingDialog();
 }
 
@@ -90,6 +106,21 @@ test('the delete dialog keeps its count and its text while it closes', async () 
     const dialog = await cancelDialogOf('trash', files);
     expect(dialog?.querySelector('h2')?.textContent).toBe('Move 3 items to trash');
     expect(dialog?.querySelector('p')?.textContent).toStartWith('This will move 3 items to trash.');
+});
+
+test('after a partial failure the delete dialog asks about the failed item, again and while it closes', async () => {
+    const items = ['good', 'bad', 'other'].map((id) =>
+        drivePath({ id, name: `${id}.txt`, mimeType: 'text/plain', ownerId: 'user-1', parentId: 'root' }),
+    );
+    await openDialogOf('trash', items);
+    deleted.length = 0;
+    await click('Move to trash');
+    expect(deleted).toEqual(['good', 'bad', 'other']);
+    deleted.length = 0;
+    await click('Move to trash');
+    expect(deleted).toEqual(['bad']);
+    await click('Cancel');
+    expect(closingDialog()?.querySelector('h2')?.textContent).toBe('Move to trash');
 });
 
 test('Email collaborators stays mounted while it closes', async () => {

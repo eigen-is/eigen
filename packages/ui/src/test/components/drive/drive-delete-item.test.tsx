@@ -1,5 +1,5 @@
-// When Move to trash gets only part of a selection through, the dialog stays open on the items that failed,
-// the after-delete step runs for the ones that went, and confirming again sends only the failures.
+// When Move to trash gets only part of a selection through, the dialog stays open, the after-delete step
+// runs for the ones that went, and the failures go to the dialog's owner, which narrows it to them.
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
@@ -48,20 +48,19 @@ async function confirm() {
     });
 }
 
-test('confirming again after a partial failure trashes only the failed item', async () => {
+test('a partial failure hands the failed item to the owner and keeps the dialog open', async () => {
     const after: unknown[] = [];
+    const failed: unknown[] = [];
     ({ unmount } = await renderInDocument(
         createElement(DriveDeleteItem, {
             paths,
             open: true,
             onOpenChange: () => {},
             onAfterAction: (_type, data) => after.push(data.id),
+            onPartialFailure: (items) => failed.push(...items.map((item) => item.id)),
         }),
     ));
     await confirm();
-    expect(deleted).toEqual(['good', 'bad', 'other']);
-    expect(after).toEqual(['good', 'other']);
-    deleted.length = 0;
-    await confirm();
-    expect(deleted).toEqual(['bad']);
+    expect([deleted, after, failed]).toEqual([['good', 'bad', 'other'], ['good', 'other'], ['bad']]);
+    expect(document.querySelector('[role="alertdialog"], [role="dialog"]')).not.toBeNull();
 });

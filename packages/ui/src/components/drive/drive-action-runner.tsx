@@ -75,6 +75,10 @@ export function useDriveActionRunner({
     const actionsFor = useDriveActionsFor(capabilities);
     const { exportPath, isExporting } = useDocumentExport();
 
+    const afterDelete = (deleted: readonly DrivePath[]) => {
+        for (const path of deleted) onAfterAction?.('delete', path);
+    };
+
     // A delete asks first on touch, where a tap can land on the wrong row, and for an item in someone else's
     // drive, where it leaves a direct share or trashes the owner's copy.
     const deletePaths = (paths: readonly DrivePath[]) => {
@@ -83,8 +87,9 @@ export function useDriveActionRunner({
             return;
         }
         deletePathsMutation.mutate(paths, {
-            onSuccess: () => {
-                for (const path of paths) onAfterAction?.('delete', path);
+            onSuccess: afterDelete,
+            onError: (error) => {
+                if (error instanceof PartialBatchError) afterDelete(error.succeeded);
             },
         });
     };
@@ -274,6 +279,7 @@ export function useDriveActionRunner({
                         open={dialogs.delete.open}
                         onOpenChange={dialogs.delete.setOpen}
                         onAfterAction={onAfterAction}
+                        onPartialFailure={dialogs.delete.openDialog}
                     />
                 )}
 
