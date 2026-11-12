@@ -668,7 +668,7 @@ describe('document/sheets — patch op replay', () => {
     test('xlsx import e2e: formula-only cells get engine-computed v/m persisted; volatile stays empty', async () => {
         // Generator-blank case: a generator writes formula-only cells (no cached
         // result). Driven through the real import seam
-        // (importIntoDocument — the same call routes/drive.ts's /import makes),
+        // (importIntoDocument — the same call routes/drive-content.ts's /import makes),
         // so this covers xlsxToSheets → recalcSheets → writeSheetsToYjs end to end.
         const buffer = Buffer.from(
             xlsxFixture({

@@ -138,8 +138,8 @@ The session cookie is one per server. A signed-in user who opens `/s/<linkId>` a
 | Inventory of every user and guest listing, with the `isLinkAccount` filter at each source | `apps/api/src/lib/`, `packages/lib` | S |
 | Link account create, reset and delete; deletion after the chain | `apps/api/src/lib/drive/`, `guest-auth.ts`, `user/guest.ts` | M |
 | `GET /p/link/:linkId`, `POST /p/link/:linkId/enter`, rate limit | `routes/public.ts`, a new `lib/auth/link-auth.ts` | S |
-| `link` field on the ACL route | `routes/drive.ts`, `useUpdateACL` | S |
-| Server checks: no members, no comment chats, no file history for a link account | `routes/drive.ts`, `routes/chat.ts`, `SharedDrive` | S |
+| `link` field on the ACL route | `routes/drive-sharing.ts`, `useUpdateACL` | S |
+| Server checks: no members, no comment chats, no file history for a link account | `routes/drive-sharing.ts`, `routes/chat.ts`, `SharedDrive` | S |
 | Mailer guard, sweep skip | `mailer.ts`, `guest-cleanup.ts` | S |
 | `sharing.publicLinks` setting | server settings, Admin app | S |
 | Visitor view: no top bar or sidebar, slim bar, folder as root, no comments or remote cursors | `packages/lib/src/core/auth/hooks/`, `packages/ui/src/components/layout/`, the document apps | M |
