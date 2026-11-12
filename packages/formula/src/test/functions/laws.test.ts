@@ -455,8 +455,8 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         expect(values.slice(0, 7)).toEqual([NA, NA, NA, NA, DIV0, NA, VALUE]);
         expect(values[7]).toEqual(values[8]);
         expect(values[9]).toEqual(values[10]);
-        // An element that is a reference is no number, so its pair is left out.
-        expect(values[11]).toEqual(evaluateAll([both('{"a";"b"}', '{1;2}')])[0]);
+        // An array of references has no number to pair.
+        expect(values[11]).toBe(NUM);
         expect(values[12]).toEqual(values[13]);
     });
 

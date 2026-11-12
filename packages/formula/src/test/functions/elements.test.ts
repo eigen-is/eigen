@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { DIV0, NA, VALUE } from '../../index';
+import { DIV0, NA, NUM, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
 import { evaluate } from '../recalc/support';
 
@@ -92,5 +92,35 @@ describe('a call that runs once per element hands values, and only OFFSET and it
         ['INDEX(A1:B3,0,{1,2})', [10, 40]],
     ])('%s', (formula, expected) => {
         expect(pair(formula)).toEqual(expected);
+    });
+});
+
+// Excel batch 10, group 4, and the statistical family's rows: one cell that is an argument by itself is read
+// before the sizes are compared, and an array of references has no numbers to pair.
+describe('two ranges side by side: one cell alone is read first, and an array of references is #NUM!', () => {
+    const cells: Cells = { A1: 1, A2: 2, A3: 4, B1: 2, B2: 4, B3: 9, E4: '=1/0', E5: '=NA()' };
+    test.each([
+        ['=CORREL(A1:A3,Z9)', VALUE],
+        ['=CORREL(Z9,A1:A3)', VALUE],
+        ['=SLOPE(A1:A3,Z9)', VALUE],
+        ['=INTERCEPT(Z9,A1:A3)', VALUE],
+        ['=COVARIANCE.P(A1:A3,Z9)', VALUE],
+        ['=CORREL(A1:A3,E4)', DIV0],
+        ['=CORREL(E4,A1:A3)', DIV0],
+        ['=SLOPE(E4,A1:A3)', DIV0],
+        ['=COVARIANCE.S(A1:A3,E4)', DIV0],
+        ['=CORREL(E4,E5)', DIV0],
+        ['=CORREL(E5,Z9)', NA],
+        ['=CORREL(Z9,E5)', VALUE],
+        // A range of blanks is no cell alone, and a number alone is a size of one.
+        ['=CORREL(A1:A3,Z9:Z11)', DIV0],
+        ['=CORREL(A1:A3,A1)', NA],
+        ['=CORREL(A1:A3,)', VALUE],
+        ['=CORREL(OFFSET(A1,{0;1;2},0),A1:A3)', NUM],
+        ['=CORREL(OFFSET(A1,{0;1;2},0),B1:B3)', NUM],
+        ['=SLOPE(A1:A3,OFFSET(A1,{0;1;2},0))', NUM],
+        ['=SLOPE(INDEX(A1:A3,{1;2;3}),B1:B3)', 0.4230769230769231],
+    ])('%s', (formula, expected) => {
+        expect(evaluate(formula, cells)).toBe(expected);
     });
 });

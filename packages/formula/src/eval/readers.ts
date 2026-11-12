@@ -5,7 +5,7 @@
 // type has no member that reaches a cell the call does not name.
 
 import type { FormulaError } from '../values/errors';
-import { CALC, NA } from '../values/errors';
+import { CALC, NA, NUM, VALUE } from '../values/errors';
 import { snapSum } from '../values/precision';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import {
@@ -220,10 +220,15 @@ export class Pairs {
     private first = new Float64Array(0);
     private second = new Float64Array(0);
 
-    // Arguments of unequal size are #N/A, and else the first error at the earliest place is the answer.
+    // One cell that is an argument by itself is read first: a blank one is an argument left empty, and an error
+    // in it the answer. Then arguments of unequal size are #N/A, an array of references has no number to pair,
+    // and else the first error at the earliest place is the answer.
     public static over(ctx: Evaluator, pairs: Pairs, first: Value, second: Value): FormulaError | null {
+        const lone = alone(ctx, first) ?? alone(ctx, second);
+        if (lone !== null) return lone;
         const size = heightOf(first) * widthOf(first);
         if (heightOf(second) * widthOf(second) !== size) return NA;
+        if ((isArray(first) && first.references) || (isArray(second) && second.references)) return NUM;
         if (isReference(first)) ctx.recalc.settleArea(first);
         if (isReference(second)) ctx.recalc.settleArea(second);
         // Past the last cell of both ranges every place is a blank, which pairs with nothing.
@@ -249,6 +254,16 @@ export class Pairs {
         pairs.ys = pairs.second.subarray(0, count);
         return null;
     }
+}
+
+// What keeps one cell that is an argument by itself from being paired: #VALUE! when it holds nothing, and the
+// error it holds. Null for any other argument.
+function alone(ctx: Evaluator, value: Value): FormulaError | null {
+    if (!isReference(value) || value.next !== null || value.top !== value.bottom || value.left !== value.right) {
+        return null;
+    }
+    const held = ctx.first(value);
+    return held === null ? VALUE : isError(held) ? held : null;
 }
 
 // How many places of an argument, counted row by row, can hold a value: of a range, up to the last row that a
