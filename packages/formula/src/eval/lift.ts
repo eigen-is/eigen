@@ -64,10 +64,8 @@ export function lift(
     return picks.length === 0 || !isArray(made) ? made : fill(ctx, entry, made, picks, node, sheet, row, column);
 }
 
-// A call of a row whose arguments come in groups that are tried in turn, such as IFS and SWITCH. A group is
-// evaluated only while an element is still undecided, and the body says for one element and one group what the
-// element answers, which lazy argument it picks, or NEXT. So the first group that decides a call hides every later
-// one, its errors and its arrays included, and the shape of the answer grows with the groups that are reached.
+// A call of a row whose groups of arguments are tried in turn, such as IFS and SWITCH. A group is evaluated only
+// while an element is undecided, so the first group that decides a call hides every later one, errors included.
 export function step(
     ctx: Evaluator,
     entry: Entry,
