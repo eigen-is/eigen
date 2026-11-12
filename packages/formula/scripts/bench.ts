@@ -11,7 +11,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import type { CellSink, LineEdit, SheetSource } from '../src/index';
 import { Engine } from '../src/index';
-import { parseA1, printStored, sheetFinder } from '../src/text';
+import { sheetFinder, storedText } from '../src/text';
 import type { Book } from './xlsx';
 import { readBook, sourcesOf } from './xlsx';
 
@@ -85,12 +85,6 @@ function loadBook(name: string): Book {
     const file = bookPath(name);
     if (file === undefined) throw new Error(`No workbook ${name}`);
     return readBook(file);
-}
-
-function stored(formula: string, row: number, column: number, sheets: readonly { id: string; name: string }[]): string {
-    const tree = parseA1(formula, row, column, sheetFinder(sheets));
-    if ('reason' in tree) throw new Error(`${formula}: ${tree.reason}`);
-    return printStored(tree);
 }
 
 // What the formulas computed, so two runs that should agree can be told apart.
@@ -217,7 +211,7 @@ const LINE_EDITS: Record<string, (sheet: string) => LineEdit> = {
 // One formula per row in column H over contract data: A 1..100 repeating, B with zeros, C, D, E, and F, G 1..100.
 function perCall(formula: string, rows = 100_000) {
     return (reps: number): Measured => {
-        const text = stored(`=${formula}`, 0, 7, ONE_SHEET);
+        const text = storedText(`=${formula}`, 0, 7, sheetFinder(ONE_SHEET));
         const sheet = sheetOf('s1', (sink) => {
             for (let r = 0; r < rows; r += 1) {
                 sink(r, 0, (r % 100) + 1, null);
@@ -239,6 +233,7 @@ function perCall(formula: string, rows = 100_000) {
 // `count` formulas in column H over aggregate data down `rows`: non-integers, a key 0..9, text keys, a count.
 function aggregates(rows: number, count: number, formula: (i: number) => string) {
     return (reps: number): Measured => {
+        const find = sheetFinder(ONE_SHEET);
         const sheet = sheetOf('s1', (sink) => {
             for (let r = 0; r < rows; r += 1) {
                 sink(r, 0, r * 1.5 + 0.25, null);
@@ -249,7 +244,7 @@ function aggregates(rows: number, count: number, formula: (i: number) => string)
                 sink(r, 5, `v${r}`, null);
                 sink(r, 6, 1 + (r % 5) / 1000, null);
             }
-            for (let i = 0; i < count; i += 1) sink(i, 7, null, stored(formula(i), i, 7, ONE_SHEET));
+            for (let i = 0; i < count; i += 1) sink(i, 7, null, storedText(formula(i), i, 7, find));
         });
         return recalcOf([sheet], reps);
     };
@@ -259,7 +254,7 @@ function aggregates(rows: number, count: number, formula: (i: number) => string)
 function products(lengths: readonly number[], count: number, formula: string) {
     return (reps: number): Measured => {
         const at = lengths.length >= 2000 ? 3000 : 300;
-        const text = stored(formula, 0, at, TWO_SHEETS);
+        const text = storedText(formula, 0, at, sheetFinder(TWO_SHEETS));
         const sheet = sheetOf('s', (sink) => {
             for (const [k, length] of lengths.entries()) {
                 for (let r = 0; r < length; r += 1) sink(r, k, ((r * 31 + k * 17) % 97) + 1.25, null);
@@ -273,7 +268,7 @@ function products(lengths: readonly number[], count: number, formula: string) {
 // One formula over whole columns of a sheet whose few cells sit far apart.
 function far(formula: string, cells: (sink: CellSink) => void) {
     return (reps: number): Measured => {
-        const text = stored(formula, 0, 9, TWO_SHEETS);
+        const text = storedText(formula, 0, 9, sheetFinder(TWO_SHEETS));
         return recalcOf(
             [
                 { id: 's', name: 'S', cells: (sink) => sink(0, 9, null, text) },

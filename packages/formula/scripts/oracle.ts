@@ -8,22 +8,21 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { FUNCTIONS } from '../src/functions/library';
 import type { Literal, SheetSource } from '../src/index';
-import { Engine } from '../src/index';
+import { Engine, FUNCTIONS } from '../src/index';
 import { isExcelFunction } from '../src/names';
 import type { FormulaNode } from '../src/text';
 import {
     GRID_COLUMNS,
     GRID_ROWS,
     NodeKind,
-    parseA1,
+    parseA1Range,
     printA1,
-    printStored,
     RefFlag,
     RefKind,
     SheetKind,
     sheetFinder,
+    storedText,
     Token,
     toA1,
 } from '../src/text';
@@ -391,10 +390,9 @@ const PLANS: ReadonlyMap<string, readonly [string, Plan]> = new Map([
 ]);
 
 function cellAt(label: string): [number, number] {
-    const letters = label.replace(/\d+/, '');
-    let index = 0;
-    for (const letter of letters) index = index * 26 + letter.charCodeAt(0) - 64;
-    return [Number(label.slice(letters.length)) - 1, index - 1];
+    const range = parseA1Range(label);
+    if (!range) throw new Error(`${label} is no cell`);
+    return [range.start.row, range.start.column];
 }
 
 // The host cell's value for each formula, each in a fresh engine on the fixture, with every sheet the formula names.
@@ -405,22 +403,16 @@ function evaluateAll(formulas: readonly string[], fixture: Fixture, named: reado
     if (Object.keys(others).length === 0) others.Sheet2 = fixture.host;
     const sheets = [{ id: 's1', name: hostName }, ...Object.keys(others).map((name, i) => ({ id: `o${i}`, name }))];
     const find = sheetFinder(sheets);
-    const stored = (formula: string, label: string): string | undefined => {
-        const tree = parseA1(formula, ...cellAt(label), find);
-        return 'reason' in tree ? undefined : printStored(tree);
-    };
     const fill = (sink: Parameters<SheetSource['cells']>[0], cells: Cells) => {
         for (const [label, input] of Object.entries(cells)) {
             const [row, at] = cellAt(label);
-            const text = typeof input === 'string' && input.startsWith('=') ? stored(input, label) : null;
-            if (text === undefined) throw new Error(`fixture ${input} refused`);
+            const text = typeof input === 'string' && input.startsWith('=') ? storedText(input, row, at, find) : null;
             sink(row, at, text === null ? input : null, text);
         }
     };
     const [hostRow, hostColumn] = cellAt(HOST);
     return formulas.map((formula) => {
-        const text = stored(formula, HOST);
-        if (text === undefined) return 'PARSE-REFUSED';
+        const text = storedText(formula, hostRow, hostColumn, find);
         try {
             const engine = new Engine([
                 {

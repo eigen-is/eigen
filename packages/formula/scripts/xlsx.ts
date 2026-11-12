@@ -6,9 +6,8 @@
 
 import * as fs from 'node:fs';
 import * as zlib from 'node:zlib';
-import { FUNCTIONS } from '../src/functions/library';
 import type { Literal, SheetSource } from '../src/index';
-import { errorOf } from '../src/index';
+import { errorOf, FUNCTIONS } from '../src/index';
 import type { FormulaNode, Table } from '../src/text';
 import {
     intersect,
