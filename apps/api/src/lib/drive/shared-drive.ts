@@ -252,28 +252,41 @@ export class SharedDrive {
         return this.drive.renamePath(mountId, pathId, newName, this.user);
     }
 
-    // A copy to another mount or drive writes through that drive, and Drive.copyPath checks its write access.
+    // The copy writes through the target's drive, and Drive.copyPath checks the write access there.
     public async copyPath(
+        mountId: string,
+        srcPathId: string,
+        to: CopyTarget,
+        desiredName: string | undefined,
+        _user: User,
+    ): Promise<DrivePath> {
+        await this.requireRead(mountId, srcPathId, undefined, 'No read permission on source');
+        return this.drive.copyPath(mountId, srcPathId, to, desiredName, this.user);
+    }
+
+    // The copy trashes what holds the name. Write on the folder covers that path too, as access only widens down a
+    // chain of folders.
+    public async copyPathOver(
         mountId: string,
         srcPathId: string,
         destParentId: string,
         name: string,
         _user: User,
-        to?: CopyTarget,
     ): Promise<DrivePath> {
         const memberships = await getMemberships(this.user.id);
         await this.requireRead(mountId, srcPathId, memberships, 'No read permission on source');
-        if (!to) await this.requireWrite(mountId, destParentId, memberships, 'No write permission on target folder');
-        return this.drive.copyPath(mountId, srcPathId, destParentId, name, this.user, to);
+        await this.requireWrite(mountId, destParentId, memberships, 'No write permission on target folder');
+        return this.drive.copyPathOver(mountId, srcPathId, destParentId, name, this.user);
     }
 
-    // A copy from another drive writes its whole tree into the folder, so write access there is all it needs.
+    // Only Drive.copyPath calls this, after it listed the source under the caller's read access. So the tree and its
+    // mount are taken as given, and write access on the folder is all this checks.
     public async receiveCopy(
         mountId: string,
         destParentId: string,
         name: string,
         tree: CopyTree,
-        source: Drive,
+        source: Mount,
         _user: User,
     ): Promise<DrivePath> {
         await this.requireWrite(mountId, destParentId);
@@ -302,12 +315,6 @@ export class SharedDrive {
         }
         await this.requireWrite(mountId, pathId);
         return this.drive.deletePath(mountId, pathId, this.user);
-    }
-
-    // Removing a failed copy needs write access, the same as a trash.
-    public async deleteFailedCopy(mountId: string, pathId: string, createdIds: ReadonlySet<string>): Promise<void> {
-        await this.requireWrite(mountId, pathId);
-        return this.drive.deleteFailedCopy(mountId, pathId, createdIds, this.user);
     }
 
     public async restorePath(mountId: string, pathId: string): Promise<void> {

@@ -1,4 +1,4 @@
-// The last steps of a new file, such as an upload or a copy from another drive. They turn a temp
+// The last steps of a new file, such as an upload or an attachment saved from mail. They turn a temp
 // file into a file in the tree under a free name, tell open tabs and write the history row. A
 // thumbnail is then made in the background, by a helper that an overwrite of a file uses too.
 
@@ -30,9 +30,7 @@ export async function finalizeUpload(
     const pathId = await withFreeName(folderIn(mount, args.parentId), originalName, (name) =>
         mount.createFileFromTemp(args.parentId, name, args.mimeType, args.size, args.hash, args.tempId),
     );
-    const uploadedFile = originalName
-        ? await mount.updatePath(pathId, { details: { originalName } })
-        : await mount.getActivePath(pathId);
+    const uploadedFile = await mount.updatePath(pathId, { details: { originalName } });
     drive.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
     mount.history.record({ pathId, eventType: 'uploaded', actor: args.user, details: { size: uploadedFile.size } });
 

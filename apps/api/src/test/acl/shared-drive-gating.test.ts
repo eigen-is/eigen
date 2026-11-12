@@ -203,7 +203,19 @@ describe('SharedDrive gating enumeration', () => {
         copyPath: {
             gate: 'denies',
             reason: 'read-gated on source, write-gated on target',
-            call: (sd) => sd.copyPath(mountId, fileId, folderId, 'copy.txt', charlie),
+            call: (sd) =>
+                sd.copyPath(
+                    mountId,
+                    fileId,
+                    { drive: sd, ownerId: ctx.alice.user.id, mountId, parentId: folderId },
+                    'copy.txt',
+                    charlie,
+                ),
+        },
+        copyPathOver: {
+            gate: 'denies',
+            reason: 'read-gated on source, write-gated on target',
+            call: (sd) => sd.copyPathOver(mountId, fileId, folderId, 'copy.txt', charlie),
         },
         writeFileContent: {
             gate: 'denies',
@@ -241,9 +253,8 @@ describe('SharedDrive gating enumeration', () => {
             reason: 'write-gated on the destination folder',
             call: async (sd) => {
                 const { drive } = await getHome(ctx.alice.user.id);
-                const path = await drive.getPath(mountId, fileId);
-                if (!path) throw new Error('the probe file is gone');
-                return sd.receiveCopy(mountId, folderId, 'intruder.txt', { path, children: [] }, drive, charlie);
+                const { mount, path } = await drive.resolveFile(mountId, fileId);
+                return sd.receiveCopy(mountId, folderId, 'intruder.txt', { path, children: [] }, mount, charlie);
             },
         },
         emailCollaborators: {
@@ -262,11 +273,6 @@ describe('SharedDrive gating enumeration', () => {
             call: (sd) => sd.updateACLDelta(mountId, fileId, { add: [{ id: charlie.email, read: true, write: true }] }),
         },
         deletePath: { gate: 'denies', reason: 'write-gated', call: (sd) => sd.deletePath(mountId, fileId) },
-        deleteFailedCopy: {
-            gate: 'denies',
-            reason: 'write-gated: it can delete for good, without the trash',
-            call: (sd) => sd.deleteFailedCopy(mountId, folderId, new Set([folderId])),
-        },
         releaseLocksUnder: {
             gate: 'denies',
             reason: 'write-gated: it drops the locks of other users',

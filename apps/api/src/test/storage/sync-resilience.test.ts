@@ -478,6 +478,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
 
         // Copy the whole container: the recursion into data.db must copy the staged {1,2}, not "S3" {1}.
         const copy = await mount.copyPath(
+            mount,
             await mount.listCopy(containerId),
             rootId,
             'doc-copy',

@@ -27,9 +27,9 @@ export async function sweepDocument(drive: DriveLike, document: DrivePath, grace
     }
 }
 
-// Sweeps each document a copy made, the copy itself or each one in a copied folder, with no grace. The copy shows in
-// the target's tabs as it lands, so someone may add an image, a comment or a document to it before this runs: only
-// what `tree`, the listing the copy wrote from, names is swept. The copy itself succeeded, so a failure only logs.
+// Sweeps each document a copy made, the copy itself or each one in a copied folder, with no grace. A listing of the
+// target folder shows the copy while it lands, so someone may add an image, a comment or a document to it before this
+// runs: only what `tree`, the listing the copy wrote from, names is swept. The copy itself succeeded, so a failure only logs.
 export async function sweepCopy(drive: DriveLike, copy: DrivePath, tree: CopyTree): Promise<void> {
     try {
         const { mount } = await drive.resolveFile(copy.mountId, copy.id);

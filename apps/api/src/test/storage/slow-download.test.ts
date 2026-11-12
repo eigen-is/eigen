@@ -259,6 +259,7 @@ describe('S3 reads that fail', () => {
         fake.faults.set(await mount.getStorageKey(fileId), 'cut');
         await expect(
             mount.copyPath(
+                mount,
                 await mount.listCopy(fileId),
                 rootId,
                 'c copy.bin',

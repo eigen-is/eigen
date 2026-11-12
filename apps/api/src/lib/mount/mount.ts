@@ -912,14 +912,16 @@ export class Mount {
         return copy.listCopy(this, await this.getActivePath(srcPathId));
     }
 
+    // Writes a tree listed in `source`, this mount or another one, into a folder of this mount.
     public async copyPath(
+        source: Mount,
         tree: CopyTree,
         destParentId: string,
         name: string,
         discard: DiscardCopy,
         actor: { id: string; email: string },
     ): Promise<DrivePath> {
-        return copy.copyPath(this, tree, destParentId, name, discard, actor);
+        return copy.copyPath(this, source, tree, destParentId, name, discard, actor);
     }
 
     // ---- Storage keys ----

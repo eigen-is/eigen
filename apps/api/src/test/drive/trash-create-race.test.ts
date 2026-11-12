@@ -82,7 +82,15 @@ describe('a write into a folder that goes to the trash', () => {
             ];
             const attempts = Promise.all([
                 home.drive.create(mount.id, folder.id, 'inside', DRIVE_TYPE_DOC, home.user).catch((e: unknown) => e),
-                home.drive.copyPath(mount.id, doc.id, folder.id, 'copy', home.user).catch((e: unknown) => e),
+                home.drive
+                    .copyPath(
+                        mount.id,
+                        doc.id,
+                        { drive: home.drive, ownerId: home.user.id, mountId: mount.id, parentId: folder.id },
+                        'copy',
+                        home.user,
+                    )
+                    .catch((e: unknown) => e),
                 home.drive.movePath(mount.id, doc.id, folder.id, home.user).catch((e: unknown) => e),
             ]);
             try {

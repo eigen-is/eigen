@@ -346,6 +346,8 @@ describe('Delete history', () => {
 });
 
 describe('a copy', () => {
+    const intoRoot = () => ({ drive, ownerId: home.user.id, mountId: M, parentId: rootId });
+
     // A source with a named image, a loose one from a moment ago, a kept thread with a named and a loose file, and a
     // thread nothing names that was written in a moment ago.
     async function sourceDoc(name: string) {
@@ -373,7 +375,7 @@ describe('a copy', () => {
     test('holds what the source state names and nothing else, and the source keeps everything', async () => {
         const { path, kept, left } = await sourceDoc('Copy');
 
-        const copied = await drive.copyPath(M, path.id, rootId, `${path.name} copy`, home.user);
+        const copied = await drive.copyPath(M, path.id, intoRoot(), `${path.name} copy`, home.user);
         await expectOnlyNamed(copied, kept);
         expect(await mediaNames(mount, path.id)).toEqual(['kept.png', 'loose.png']);
         expect(await threadNames(mount, path.id)).toEqual([kept.name, left.name].sort());
@@ -381,13 +383,12 @@ describe('a copy', () => {
         await close(M, path);
     });
 
-    test('to another drive, and inside a copied folder, holds only what each state names', async () => {
+    test('inside a copied folder holds only what each state names', async () => {
         const folder = await drive.createFolder(M, rootId, `CopyFolder-${crypto.randomUUID()}`, home.user);
         const { path, kept } = await sourceDoc('CopyAcross');
         await drive.movePath(M, path.id, folder.id, home.user);
 
-        const to = { drive, ownerId: home.user.id, mountId: M };
-        const copied = await drive.copyPath(M, folder.id, rootId, `${folder.name} copy`, home.user, to);
+        const copied = await drive.copyPath(M, folder.id, intoRoot(), `${folder.name} copy`, home.user);
         const copiedDoc = await mount.getChildByName(copied.id, path.name);
         if (!copiedDoc) throw new Error('no copied document');
         await expectOnlyNamed(copiedDoc, kept);
@@ -405,13 +406,13 @@ describe('a copy', () => {
         added.setAttribute('mediaName', 'new.png');
         collab.doc.getXmlFragment('default').insert(0, [added]);
 
-        const copied = await drive.copyPath(M, path.id, rootId, `${path.name} copy`, home.user);
+        const copied = await drive.copyPath(M, path.id, intoRoot(), `${path.name} copy`, home.user);
         expect(await commentRows(M, copied.id)).toEqual([thread.name]);
         expect(await mediaNames(mount, copied.id)).toEqual(['new.png']);
         await close(M, path);
     });
 
-    // The copy shows in the target's tabs as it lands, so its owner may add to it before the cleanup runs.
+    // A listing of the target folder shows the copy while it lands, so its owner may add to it before the cleanup runs.
     test('keeps an image and a thread added to it before its cleanup runs', async () => {
         const { path, kept } = await sourceDoc('CopyAdded');
         let added: DrivePath | undefined;
@@ -423,7 +424,7 @@ describe('a copy', () => {
             return copied;
         });
         try {
-            const copied = await drive.copyPath(M, path.id, rootId, `${path.name} copy`, home.user);
+            const copied = await drive.copyPath(M, path.id, intoRoot(), `${path.name} copy`, home.user);
             if (!added) throw new Error('nothing added');
             expect(await mediaNames(mount, copied.id)).toEqual(['added.png', 'kept.png']);
             expect(await threadNames(mount, copied.id)).toEqual([added.name, kept.name].sort());
@@ -448,7 +449,7 @@ describe('a copy', () => {
             return listFolder(id);
         });
         try {
-            const copied = await drive.copyPath(M, folder.id, rootId, `${folder.name} copy`, home.user);
+            const copied = await drive.copyPath(M, folder.id, intoRoot(), `${folder.name} copy`, home.user);
             expect(copied.id).toBe(copyId);
         } finally {
             copies.mockRestore();

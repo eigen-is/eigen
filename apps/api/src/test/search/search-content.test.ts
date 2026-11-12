@@ -97,7 +97,13 @@ describe('Drive content-index', () => {
 
         // The search term lives only in the body (neither name contains it), so a hit on the
         // copy proves the copied container's body was indexed.
-        const copied = await home.drive.copyPath(mountId, src.id, rootId, 'rt-copydst', home.user);
+        const copied = await home.drive.copyPath(
+            mountId,
+            src.id,
+            { drive: home.drive, ownerId: home.user.id, mountId, parentId: rootId },
+            'rt-copydst',
+            home.user,
+        );
         await flushContentReindex(home.drive);
         expect((await searchFile('flibbercopy')).file.some((h) => h.id === copied.id)).toBe(true);
     });

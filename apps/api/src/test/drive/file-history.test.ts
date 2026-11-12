@@ -543,7 +543,13 @@ describe('Drive history recording', () => {
 
         const actor = await getUserById(ctx.alice.user.id);
         expect(actor).not.toBeNull();
-        const copied = await home.drive.copyPath(aliceMountId, folder.id, destFolder.id, 'CopiedFolder', actor!);
+        const copied = await home.drive.copyPath(
+            aliceMountId,
+            folder.id,
+            { drive: home.drive, ownerId: aliceOwnerId, mountId: aliceMountId, parentId: destFolder.id },
+            'CopiedFolder',
+            actor!,
+        );
 
         // Root folder copy records 'copied'
         const res = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${aliceMountId}/path/${copied.id}/history`);

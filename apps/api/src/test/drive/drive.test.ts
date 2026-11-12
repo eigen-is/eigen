@@ -3496,11 +3496,13 @@ describe('Drive', () => {
             const source = await getSharedDrive(ctx.alice.user.id, actor!);
             const target = await getSharedDrive(teamOwner, actor!);
 
-            const copied = await source.copyPath(aliceMountId, uploaded.id, teamRootId, 'bridge-file.txt', actor!, {
-                drive: target,
-                ownerId: teamOwner,
-                mountId: teamMountId,
-            });
+            const copied = await source.copyPath(
+                aliceMountId,
+                uploaded.id,
+                { drive: target, ownerId: teamOwner, mountId: teamMountId, parentId: teamRootId },
+                'bridge-file.txt',
+                actor!,
+            );
 
             expect(copied.ownerId).toBe(teamOwner);
             expect(copied.name).toBe('bridge-file.txt');
@@ -3527,11 +3529,13 @@ describe('Drive', () => {
             const source = await getSharedDrive(ctx.alice.user.id, actor!);
             const target = await getSharedDrive(teamOwner, actor!);
 
-            const copied = await source.copyPath(aliceMountId, doc.id, teamRootId, doc.name, actor!, {
-                drive: target,
-                ownerId: teamOwner,
-                mountId: teamMountId,
-            });
+            const copied = await source.copyPath(
+                aliceMountId,
+                doc.id,
+                { drive: target, ownerId: teamOwner, mountId: teamMountId, parentId: teamRootId },
+                doc.name,
+                actor!,
+            );
 
             expect(copied.ownerId).toBe(teamOwner);
             expect(copied.type).toBe(DRIVE_TYPE_DOC);

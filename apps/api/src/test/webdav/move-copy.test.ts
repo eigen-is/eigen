@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { getServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
 import type { TestUser } from '../setup';
-import { capUserDrive, createTestUser, getTestContext, setMaxUploadSizeMB } from '../setup';
+import { capUserDrive, createTestUser, driveGet, drivePost, getTestContext, setMaxUploadSizeMB } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
 describe('WebDAV MOVE/COPY', () => {
@@ -256,6 +257,69 @@ describe('WebDAV MOVE/COPY', () => {
             expect((await copyTo('big/a.bin', 'a-copy.bin')).status).toBe(507);
             expect(await used()).toBe(82 * MB);
             expect((await webdavRequest(user.email, 'GET', `${href}/a-copy.bin`)).status).toBe(404);
+        });
+
+        // An Overwrite: T COPY trashes the destination only once nothing can refuse it any more.
+        test('a COPY refused for space or size leaves the file it would overwrite', async () => {
+            for (const name of ['keep-507.txt', 'keep-413.txt']) {
+                expect((await webdavRequest(user.email, 'PUT', `${href}/${name}`, { body: 'old' })).status).toBe(201);
+            }
+            expect((await copyTo('big/a.bin', 'keep-507.txt')).status).toBe(507);
+            const before = getServerSettings().quotas.maxUploadSizeMB;
+            await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 1);
+            try {
+                expect((await copyTo('two-mb.bin', 'keep-413.txt')).status).toBe(413);
+            } finally {
+                await setMaxUploadSizeMB(ctx.alice.user.sessionToken, before);
+            }
+            for (const name of ['keep-507.txt', 'keep-413.txt']) {
+                expect(await (await webdavRequest(user.email, 'GET', `${href}/${name}`)).text()).toBe('old');
+            }
+        });
+    });
+
+    describe('a COPY over an existing destination', () => {
+        const email = () => ctx.alice.user.email;
+        const copy = (source: string, destination: string): Promise<Response> =>
+            webdavRequest(email(), 'COPY', `${baseHref}/${source}`, {
+                headers: { Destination: `http://localhost${baseHref}/${destination}`, Overwrite: 'T' },
+            });
+        const trashNames = async (): Promise<string[]> =>
+            (await (await getHome(ctx.alice.user.id)).drive.listTrash(mountId)).map((path) => path.name);
+
+        test('trashes the old file, lands the copy and answers 204', async () => {
+            await webdavRequest(email(), 'PUT', `${baseHref}/over-new.txt`, { body: 'new' });
+            await webdavRequest(email(), 'PUT', `${baseHref}/over-old.txt`, { body: 'old' });
+            expect((await copy('over-new.txt', 'over-old.txt')).status).toBe(204);
+            expect(await (await webdavRequest(email(), 'GET', `${baseHref}/over-old.txt`)).text()).toBe('new');
+            expect(await trashNames()).toContain('over-old.txt');
+        });
+
+        test('into its own subtree is a 409 and leaves the destination', async () => {
+            await webdavRequest(email(), 'MKCOL', `${baseHref}/OverCycle/`);
+            await webdavRequest(email(), 'MKCOL', `${baseHref}/OverCycle/Inner/`);
+            await webdavRequest(email(), 'PUT', `${baseHref}/OverCycle/Inner/kept-409.txt`, { body: 'old' });
+            expect((await copy('OverCycle', 'OverCycle/Inner/kept-409.txt')).status).toBe(409);
+            const kept = await webdavRequest(email(), 'GET', `${baseHref}/OverCycle/Inner/kept-409.txt`);
+            expect(await kept.text()).toBe('old');
+        });
+
+        test("over a file in a document's media/ is a 423 and leaves the destination", async () => {
+            const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+            const doc = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `folder/${root.id}/create/doc`,
+                { fileName: 'OverDoc' },
+            );
+            await webdavRequest(email(), 'PUT', `${baseHref}/over-423.txt`, { body: 'new' });
+            await webdavRequest(email(), 'PUT', `${baseHref}/${doc.name}/media/kept-423.txt`, { body: 'old' });
+            const res = await copy('over-423.txt', `${doc.name}/media/kept-423.txt`);
+            expect(`${res.status} ${await res.text()}`).toBe('423 Cannot change the inside of a document');
+            const kept = await webdavRequest(email(), 'GET', `${baseHref}/${doc.name}/media/kept-423.txt`);
+            expect(await kept.text()).toBe('old');
+            expect(await trashNames()).not.toContain('kept-423.txt');
         });
     });
 });

@@ -2168,6 +2168,7 @@ describe('Folder sizes', () => {
         expect((await mount.getPath(dstFolder))!.size).toBe(0);
 
         await mount.copyPath(
+            mount,
             await mount.listCopy(fileId),
             dstFolder,
             'copied.txt',

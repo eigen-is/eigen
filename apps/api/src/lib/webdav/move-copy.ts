@@ -1,7 +1,8 @@
 // The WebDAV MOVE and COPY methods. Both stay inside one mount of one owner, so a Destination anywhere
 // else is a 502 and the client downloads and uploads again. The WebDAV router calls them with the
 // signed-in user, and each goes through getSharedDrive, so the Drive ACL decides access. They apply the
-// overwrite rules and the WebDAV locks as RFC 4918 asks.
+// overwrite rules and the WebDAV locks as RFC 4918 asks. The drive trashes what an overwrite replaces,
+// once nothing can refuse the write any more.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types/drive';
@@ -59,13 +60,12 @@ export async function handleCopy(args: {
     });
 
     return await drive.withHomeHeld(async () => {
-        if (destExisting) await drive.deletePath(args.mountId, destExisting.id, args.user);
-
         // RFC 4918 §9.8.3: Depth: 0 on a folder copies the folder without its members. A file has none.
         if (args.depth === '0' && src.type !== DRIVE_TYPE_FILE) {
+            if (destExisting) await drive.deletePath(args.mountId, destExisting.id, args.user);
             await drive.createFolder(args.mountId, destParent.id, newName, args.user);
         } else {
-            await drive.copyPath(args.mountId, src.id, destParent.id, newName, args.user);
+            await drive.copyPathOver(args.mountId, src.id, destParent.id, newName, args.user);
         }
         return new Response(null, { status: destExisting ? 204 : 201 });
     });
