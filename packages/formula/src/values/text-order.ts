@@ -27,22 +27,19 @@ const ACCENTED = [
     'ZŹŻŽ',
 ];
 
-// The marks whose codes come after the digits. In Excel they sort before them, as the other marks do by their
-// code: "k?" is below "k1".
-const LATE_MARKS = ':;<=>?@[\\]^_`{|}~';
+// The slash, followed by the marks whose codes come after the digits. In Excel those sort before the digits, as
+// the marks up to the slash do by their code: "k?" is below "k1".
+const LATE_MARKS = '/:;<=>?@[\\]^_`{|}~';
 
-// Room between two character codes for the accented forms of a letter, and after the last early mark for the late.
+// Room after a character code for the characters that sort right behind it.
 const STEP = 32;
 
 // The sort weight of every character up to the last accented one; a character past them weighs its code times STEP.
 const WEIGHTS = new Uint16Array(0x180);
 for (let code = 0; code < WEIGHTS.length; code += 1) WEIGHTS[code] = code * STEP;
-for (let rank = 0; rank < LATE_MARKS.length; rank += 1) {
-    WEIGHTS[LATE_MARKS.charCodeAt(rank)] = '/'.charCodeAt(0) * STEP + 1 + rank;
-}
-for (const letters of ACCENTED) {
-    for (let rank = 1; rank < letters.length; rank += 1) {
-        WEIGHTS[letters.charCodeAt(rank)] = letters.charCodeAt(0) * STEP + rank;
+for (const group of [LATE_MARKS, ...ACCENTED]) {
+    for (let rank = 1; rank < group.length; rank += 1) {
+        WEIGHTS[group.charCodeAt(rank)] = group.charCodeAt(0) * STEP + rank;
     }
 }
 
