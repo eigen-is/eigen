@@ -140,10 +140,16 @@ describe('dateOf and timeOf', () => {
 
     test('a date outside the calendar, a negative year and a month from 32767 on are #NUM!', () => {
         expect(dateOf(9999, 12, 32)).toBe(NUM);
-        expect(dateOf(1000, 1, -365000)).toBe(NUM);
         expect(dateOf(-1, 1, 1)).toBe(NUM);
         expect(dateOf(2024, 32767, 1)).toBe(NUM);
+    });
+
+    test('a day that is no 16-bit number is the largest of them', () => {
         expect(dateOf(2024, 2, 32768)).toBe(78089);
+        expect(dateOf(2024, 2, 1e300)).toBe(78089);
+        expect(dateOf(2024, 2, -32769)).toBe(78089);
+        expect(dateOf(2024, 2, -32768)).toBe(45323 - 32769);
+        expect(dateOf(1000, 1, -365000)).toBe(dateOf(1000, 1, 32767));
     });
 
     test('the time is what the whole days leave, to the bit Excel leaves', () => {
@@ -153,6 +159,8 @@ describe('dateOf and timeOf', () => {
         expect(timeOf(1, -60, 0)).toBe(0);
         expect(timeOf(0, 0, -0.4)).toBe(NUM);
         expect(timeOf(0, 32768, 0)).toBe(NUM);
+        expect(timeOf(24, -98305, 0)).toBe(timeOf(0, 32767, 0));
+        expect(timeOf(0, -65536, 0)).toBe(0);
     });
 });
 
