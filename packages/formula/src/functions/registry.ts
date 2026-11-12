@@ -193,12 +193,12 @@ export function strict(param: Param<number>): Param<number> {
 }
 
 // A union is taken, every area of it.
-export function areas<T>(param: Param<T>): Param<T> {
+export function areas<P extends Param<unknown>>(param: P): P {
     return Object.freeze({ ...param, union: null });
 }
 
-// The error a union answers, in place of the reading's own.
-export function refusing<T>(param: Param<T>, error: FormulaError): Param<T> {
+// The error a union answers, in place of the reading's own. A family takes every area unless it is told so.
+export function refusing<P extends Param<unknown>>(param: P, error: FormulaError): P {
     return Object.freeze({ ...param, union: error });
 }
 

@@ -20,6 +20,7 @@ import {
     optional,
     PAIRS,
     rectangle,
+    refusing,
     rest,
     TABLE,
     TEXT,
@@ -98,6 +99,16 @@ describe('what a body can do wrong is caught by the wrapper', () => {
         fail = false;
         expect(recalc.pass(Number.POSITIVE_INFINITY)).toMatchObject({ loops: [], stopped: false });
         expect([value('B1'), value('B2'), value('B3')]).toEqual([2, 4, 8]);
+    });
+});
+
+describe('a union is refused where the row says so, by a family too', () => {
+    test('a family that may be left out refuses a union with the error it is given', () => {
+        const row = fn('DAYS2', [NUMBER, optional(refusing(NUMBERS, NA))], (first, rest) => first + rest.count());
+        const cells = { A1: 1, A2: 2, N1: '=DAYS2(1,(A1,A2))', N2: '=DAYS2(1,A1:A2)', N3: '=DAYS2(1)' };
+        const { recalc, value } = passOf(row, cells);
+        recalc.pass(Number.POSITIVE_INFINITY);
+        expect(['N1', 'N2', 'N3'].map(value)).toEqual([NA, 3, 1]);
     });
 });
 
