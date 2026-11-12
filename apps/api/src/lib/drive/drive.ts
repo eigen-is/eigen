@@ -108,7 +108,7 @@ import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp } from './streaming';
 import { sweepCopy, sweepDocument } from './sweep';
 import { deleteFailedCopy, deletePath, permanentlyDelete, restorePath } from './trash';
-import { commitFromTemp, finalizeUpload } from './upload';
+import { commitFromTemp, finalizeNamedUpload, finalizeUpload } from './upload';
 
 // How a content write is guarded and recorded. ifMatch is an If-Match value, checked under the file's
 // lock. The history row says `uploaded`, or `edited` for a save from the inline editor.
@@ -484,12 +484,36 @@ export class Drive {
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
         user: User,
     ): Promise<DrivePath> {
+        return this.createFile(mountId, parentId, name, mimeType, data, user, finalizeUpload);
+    }
+
+    // A WebDAV create, which keeps its name: a taken name is a 409, never a numbered name.
+    public async createNamedFile(
+        mountId: string,
+        parentId: string,
+        name: string,
+        mimeType: string,
+        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        user: User,
+    ): Promise<DrivePath> {
+        return this.createFile(mountId, parentId, name, mimeType, data, user, finalizeNamedUpload);
+    }
+
+    private async createFile(
+        mountId: string,
+        parentId: string,
+        name: string,
+        mimeType: string,
+        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        user: User,
+        finalize: typeof finalizeUpload,
+    ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         await this.personParent(mount, parentId, DRIVE_TYPE_FILE);
         const tempId = crypto.randomUUID();
         const created = await commitFromTemp(this, mount, tempId, async () => {
             const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
-            return finalizeUpload(this, mount, { parentId, name, mimeType, size, hash, tempId, user });
+            return finalize(this, mount, { parentId, name, mimeType, size, hash, tempId, user });
         });
         await this.fanOutUpload(mount, user, created);
         return created;

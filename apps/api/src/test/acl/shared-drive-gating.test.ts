@@ -237,6 +237,11 @@ describe('SharedDrive gating enumeration', () => {
             reason: 'write-gated on the parent',
             call: (sd) => sd.createFileFromData(mountId, folderId, 'intruder.txt', 'text/plain', Buffer.from('x')),
         },
+        createNamedFile: {
+            gate: 'denies',
+            reason: 'write-gated on the parent',
+            call: (sd) => sd.createNamedFile(mountId, folderId, 'intruder.txt', 'text/plain', Buffer.from('x')),
+        },
         create: {
             gate: 'denies',
             reason: 'write-gated on the parent',

@@ -230,6 +230,17 @@ export class SharedDrive {
         return this.drive.createFileFromData(mountId, parentId, name, mimeType, data, this.user);
     }
 
+    public async createNamedFile(
+        mountId: string,
+        parentId: string,
+        name: string,
+        mimeType: string,
+        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+    ): Promise<DrivePath> {
+        await this.requireWrite(mountId, parentId);
+        return this.drive.createNamedFile(mountId, parentId, name, mimeType, data, this.user);
+    }
+
     public async writeFileContent(
         mountId: string,
         pathId: string,

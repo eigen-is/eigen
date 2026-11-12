@@ -137,7 +137,7 @@ export async function handlePut(args: {
         const { path, etag } = existing
             ? await drive.writeFileContent(mountId, existing.id, data, { user, ifMatch: ifMatch || undefined })
             : await drive
-                  .createFileFromData(mountId, parent.id, name, mimeType, data, user)
+                  .createNamedFile(mountId, parent.id, name, mimeType, data, user)
                   .then((created) => ({ path: created, etag: computeEtag(created) }));
 
         return new Response(null, {

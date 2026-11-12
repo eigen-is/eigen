@@ -15,7 +15,7 @@ import {
     setMaxUploadSizeMB,
     TEST_PNG_BYTES,
 } from '../setup';
-import { getDefaultMountId, webdavRequest } from './setup';
+import { getDefaultMountId, webdavRequest, whenAllFindMissing } from './setup';
 
 describe('WebDAV GET/HEAD', () => {
     let ctx: TestContext;
@@ -117,6 +117,35 @@ describe('WebDAV PUT', () => {
         expect(res.status).toBe(204);
         const get = await webdavRequest(ctx.alice.user.email, 'GET', url);
         expect(await get.text()).toBe('overwritten\n');
+    });
+
+    // A URL names one file, so the PUT that loses the create is refused and its client sends it again as an overwrite.
+    test('of two PUTs of one new name at once, one creates the file and the other is a 409', async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-create-race.txt`;
+        const drive = (await getHome(ctx.alice.user.id)).drive;
+        const answers = await whenAllFindMissing(
+            drive,
+            '/put-create-race.txt',
+            ['first', 'second'].map((body) => async () => ({
+                body,
+                status: (await webdavRequest(ctx.alice.user.email, 'PUT', url, { body })).status,
+            })),
+        );
+
+        expect(answers.map((answer) => answer.status).toSorted()).toEqual([201, 409]);
+        const root = await drive.resolvePath(mountId, '/');
+        if (!root) throw new Error('expected the root');
+        const names = (await drive.getFolderContents(mountId, root.id)).map((path) => path.name);
+        expect(names.filter((name) => name.startsWith('put-create-race'))).toEqual(['put-create-race.txt']);
+        const winner = answers.find((answer) => answer.status === 201);
+        expect(await (await webdavRequest(ctx.alice.user.email, 'GET', url)).text()).toBe(winner?.body ?? '');
+        expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'again' })).status).toBe(204);
+    });
+
+    test('PUT of a name an upload would rewrite, such as one with a backslash → 400, and no file', async () => {
+        const base = `/webdav/${ctx.alice.user.id}/${mountId}`;
+        expect((await webdavRequest(ctx.alice.user.email, 'PUT', `${base}/put-back%5Cslash.txt`)).status).toBe(400);
+        expect((await webdavRequest(ctx.alice.user.email, 'GET', `${base}/put-back_slash.txt`)).status).toBe(404);
     });
 
     test('PUT with mismatched If-Match → 412', async () => {
@@ -524,8 +553,8 @@ describe('WebDAV PUT holds its Home', () => {
         const home = await getHome(user.id);
         // The rest of the body arrives only once the write waits for it, which is when the clock jumps.
         const writeStarted = Promise.withResolvers<void>();
-        const createFile = home.drive.createFileFromData.bind(home.drive);
-        const gatedWrite = spyOn(home.drive, 'createFileFromData').mockImplementation((...args) => {
+        const createFile = home.drive.createNamedFile.bind(home.drive);
+        const gatedWrite = spyOn(home.drive, 'createNamedFile').mockImplementation((...args) => {
             writeStarted.resolve();
             return createFile(...args);
         });

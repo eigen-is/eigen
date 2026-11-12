@@ -1,9 +1,9 @@
-import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { parseXml, xmlChild } from '../../lib/core/xml';
 import { getHome } from '../../lib/home';
 import type { TestContext } from '../setup';
 import { drivePut, getTestContext } from '../setup';
-import { getDefaultMountId, webdavRequest } from './setup';
+import { getDefaultMountId, webdavRequest, whenAllFindMissing } from './setup';
 
 describe('WebDAV LOCK/UNLOCK', () => {
     let ctx: TestContext;
@@ -277,44 +277,57 @@ describe('WebDAV LOCK/UNLOCK', () => {
             expect(await (await webdavRequest(ctx.alice.user.email, 'GET', url)).text()).toBe('alice');
         });
 
-        // Both find the name missing before either goes on, as two Office clients saving one new name at once can.
-        test('of two LOCKs on one new name at once, one creates and locks the file and the other is a 423', async () => {
-            const pathStr = '/lock-shared-with-bob/race-new.docx';
+        async function namesStarting(prefix: string): Promise<string[]> {
             const drive = (await getHome(ctx.alice.user.id)).drive;
-            const bothMissing = Promise.withResolvers<void>();
-            let missing = 0;
-            const resolvePath = drive.resolvePath.bind(drive);
-            const spy = spyOn(drive, 'resolvePath').mockImplementation(async (mount: string, path: string) => {
-                const found = await resolvePath(mount, path);
-                if (path === pathStr && !found && missing < 2) {
-                    if (++missing === 2) bothMissing.resolve();
-                    await bothMissing.promise;
-                }
-                return found;
-            });
-            let answers: { email: string; status: number }[];
-            try {
-                answers = await Promise.all(
-                    [ctx.alice.user.email, ctx.bob.user.email].map(async (email) => ({
-                        email,
-                        status: (await lockRequest(`${baseHref}${pathStr}`, { email })).status,
-                    })),
-                );
-            } finally {
-                bothMissing.resolve();
-                spy.mockRestore();
-            }
-
-            expect(answers.map((answer) => answer.status).toSorted()).toEqual([201, 423]);
             const folder = await drive.resolvePath(mountId, '/lock-shared-with-bob');
             if (!folder) throw new Error('expected the folder');
             const names = (await drive.getFolderContents(mountId, folder.id)).map((path) => path.name);
-            expect(names.filter((name) => name.startsWith('race-new'))).toEqual(['race-new.docx']);
+            return names.filter((name) => name.startsWith(prefix));
+        }
+
+        test('of two LOCKs on one new name at once, one creates and locks the file and the other is a 409', async () => {
+            const pathStr = '/lock-shared-with-bob/race-new.docx';
+            const drive = (await getHome(ctx.alice.user.id)).drive;
+            const answers = await whenAllFindMissing(
+                drive,
+                pathStr,
+                [ctx.alice.user, ctx.bob.user].map((user) => async () => ({
+                    userId: user.id,
+                    status: (await lockRequest(`${baseHref}${pathStr}`, { email: user.email })).status,
+                })),
+            );
+
+            expect(answers.map((answer) => answer.status).toSorted()).toEqual([201, 409]);
+            expect(await namesStarting('race-new')).toEqual(['race-new.docx']);
             const file = await drive.resolvePath(mountId, pathStr);
             if (!file) throw new Error('expected the file');
             const winner = answers.find((answer) => answer.status === 201);
-            const winnerId = winner?.email === ctx.bob.user.email ? ctx.bob.user.id : ctx.alice.user.id;
-            expect(drive.lockManager.listForPath(file.id).map((lock) => lock.userId)).toEqual([winnerId]);
+            expect(drive.lockManager.listForPath(file.id).map((lock) => lock.userId)).toEqual([winner?.userId ?? '']);
+        });
+
+        test('of a LOCK and a PUT on one new name at once, one creates the file and the other is a 409', async () => {
+            const pathStr = '/lock-shared-with-bob/race-lock-put.docx';
+            const drive = (await getHome(ctx.alice.user.id)).drive;
+            const statuses = await whenAllFindMissing(drive, pathStr, [
+                async () => (await lockRequest(`${baseHref}${pathStr}`)).status,
+                async () =>
+                    (await webdavRequest(ctx.bob.user.email, 'PUT', `${baseHref}${pathStr}`, { body: 'bob' })).status,
+            ]);
+
+            expect(statuses.toSorted()).toEqual([201, 409]);
+            expect(await namesStarting('race-lock-put')).toEqual(['race-lock-put.docx']);
+        });
+
+        test('a LOCK on a name another LOCK just created locks that file or is a 423, and creates nothing', async () => {
+            const url = `${folderHref}/locked-twice.docx`;
+            expect((await lockRequest(url, { scope: 'shared' })).status).toBe(201);
+            expect((await lockRequest(url, { scope: 'shared', email: ctx.bob.user.email })).status).toBe(200);
+            expect((await lockRequest(url, { email: ctx.bob.user.email })).status).toBe(423);
+            expect(await namesStarting('locked-twice')).toEqual(['locked-twice.docx']);
+            const drive = (await getHome(ctx.alice.user.id)).drive;
+            const file = await drive.resolvePath(mountId, '/lock-shared-with-bob/locked-twice.docx');
+            if (!file) throw new Error('expected the file');
+            expect(drive.lockManager.listForPath(file.id)).toHaveLength(2);
         });
 
         test('of two shared locks, each holder writes with their own token, and nobody without one', async () => {

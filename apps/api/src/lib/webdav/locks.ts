@@ -3,6 +3,7 @@
 // decides access. A LOCK on a name with nothing there yet creates the empty file, as Office's
 // "Save as" needs. The locks themselves, and the rule for who passes one, live in the Drive's LockManager.
 
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import type { XmlElement } from '../core/xml';
 import { parseXmlRoot, serializeXmlChildren, xmlChild } from '../core/xml';
@@ -11,7 +12,6 @@ import type { DriveLike } from '../drive/get-drive';
 import { getSharedDrive } from '../drive/get-drive';
 import type { Lock } from '../drive/lock-manager';
 import { LOCK_DEFAULT_TTL_MS } from '../drive/lock-manager';
-import { foldName } from '../mount/names';
 import type { User } from '../user';
 import { splitParentAndName } from './path';
 import { lockdiscoveryProp, MAX_XML_BODY_BYTES } from './xml';
@@ -54,16 +54,13 @@ export async function handleLock(args: {
     const scope = lockscope && xmlChild(lockscope, DAV, 'shared') ? 'shared' : 'exclusive';
     const owner = lockinfo ? readLockOwner(lockinfo) : undefined;
     const depth = depthHeader === '0' ? 0 : 'infinity';
-    const lockOn = (
-        pathId: string,
-        lockScope: Lock['scope'],
-        ancestorPathIds: readonly string[],
-        descendantPathIds: readonly string[],
-    ): Lock =>
-        drive.lockManager.acquire({
-            pathId,
+    const lockOn = async (target: DrivePath, status: 200 | 201): Promise<Response> => {
+        const ancestorPathIds = await drive.ancestorIds(mountId, target.id);
+        const descendantPathIds = depth === 0 ? [] : await drive.descendantIds(mountId, target.id);
+        const lock = drive.lockManager.acquire({
+            pathId: target.id,
             depth,
-            scope: lockScope,
+            scope,
             userId: user.id,
             owner,
             ttlMs,
@@ -71,12 +68,9 @@ export async function handleLock(args: {
             ancestorPathIds,
             descendantPathIds,
         });
-
-    if (path) {
-        const ancestorIds = await drive.ancestorIds(mountId, path.id);
-        const descendantIds = depth === 0 ? [] : await drive.descendantIds(mountId, path.id);
-        return buildLockResponse(lockOn(path.id, scope, ancestorIds, descendantIds), 200);
-    }
+        return buildLockResponse(lock, status);
+    };
+    if (path) return lockOn(path, 200);
 
     // RFC 4918 §7.3: a LOCK on an unmapped name creates an empty file, as an empty PUT would.
     const { parentStr, name } = splitParentAndName(pathStr);
@@ -84,14 +78,8 @@ export async function handleLock(args: {
     if (!parent) throw new ApiError(409, 'Parent not found');
     if (!(await drive.canWrite(mountId, parent.id, user))) throw new ApiError(403, 'No write permission');
     await assertWritable(drive, mountId, parent.id, ifHeader, user.id);
-    const ancestorPathIds = [...(await drive.ancestorIds(mountId, parent.id)), parent.id];
-    // The name itself is locked, exclusively, until the create lands: a second LOCK on it is a 423, not a second file.
-    const nameLock = lockOn(`${parent.id}/${foldName(name)}`, 'exclusive', ancestorPathIds, []);
     const mimeType = Bun.file(name).type || 'application/octet-stream';
-    const created = await drive
-        .createFileFromData(mountId, parent.id, name, mimeType, Buffer.alloc(0), user)
-        .finally(() => drive.lockManager.release(nameLock.token));
-    return buildLockResponse(lockOn(created.id, scope, ancestorPathIds, []), 201);
+    return lockOn(await drive.createNamedFile(mountId, parent.id, name, mimeType, Buffer.alloc(0), user), 201);
 }
 
 export async function handleUnlock(args: {
