@@ -47,7 +47,7 @@ type InsertLines = Pick<InsertRowColOp, 'type' | 'index' | 'count' | 'direction'
 type DeleteLines = Pick<DeleteRowColOp, 'type' | 'start' | 'end'>;
 
 // A row or column op as mapIndex and mapSpan read it: its `index` is the first line the op adds or deletes.
-export function lineEdit(op: InsertLines | DeleteLines): Edit {
+export function editOf(op: InsertLines | DeleteLines): Edit {
     const lines = op.type === 'row' ? REFERENCE_ROW_COUNT : REFERENCE_COLUMN_COUNT;
     return 'index' in op
         ? { insert: true, index: op.direction === 'lefttop' ? op.index : op.index + 1, count: op.count, lines }
@@ -93,7 +93,7 @@ export function shiftMerges(
 
 // Re-keys an "r_c" map, an entry on a line the op deletes dropped.
 export function shiftCellKeyed<T>(
-    map: Record<string, T> | undefined,
+    map: Readonly<Record<string, T>> | undefined,
     axis: 'row' | 'column',
     edit: Edit,
 ): Record<string, T> {
@@ -142,7 +142,7 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
 // A chart ref names its sheet by id, so an op moves the refs to its sheet on every sheet's charts. Only a chart whose
 // refs moved is rewritten.
 function shiftChartsAcrossSheets<S extends Sheet>(
-    sheets: S[],
+    sheets: readonly S[],
     sheetId: string,
     type: 'row' | 'column',
     edit: Edit,
@@ -167,7 +167,7 @@ export const LINE_MAPS = {
     column: ['colhidden', 'columnlen', 'customWidth'],
 } as const;
 
-export function shiftKeyedMap(map: Record<string, number>, edit: Edit): Record<string, number> {
+export function shiftKeyedMap(map: Readonly<Record<string, number>>, edit: Edit): Record<string, number> {
     const shifted: Record<string, number> = {};
     for (const [key, v] of Object.entries(map)) {
         const line = mapIndex(edit, Number.parseInt(key, 10));
@@ -205,7 +205,7 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     const newCfg: ExtendedSheetConfig = { ...target.config };
     const newData = op.type === 'row' ? [...data] : data.map((row) => [...row]);
     newTarget.data = newData;
-    const edit = lineEdit(op);
+    const edit = editOf(op);
     const insertAt = edit.index;
 
     const { merges, unmerged } = shiftMerges(cfg, op.type, edit);
@@ -273,7 +273,7 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
     const newData = op.type === 'row' ? [...data] : data.map((row) => [...row]);
     newTarget.data = newData;
     const removeCount = op.end - op.start + 1;
-    const edit = lineEdit(op);
+    const edit = editOf(op);
 
     const { merges, unmerged } = shiftMerges(cfg, op.type, edit);
     newCfg.merge = merges;

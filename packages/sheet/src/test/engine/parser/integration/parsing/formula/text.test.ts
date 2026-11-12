@@ -451,6 +451,9 @@ describe('.parse() text formulas', () => {
             error: null,
             result: '5 Jan 2026',
         });
+        // The cell's display has Google's day line, so TEXT does: serial 15 is 14 January 1900.
+        expect(parser!.parse('TEXT(15, "yyyy-mm-dd")')).toMatchObject({ error: null, result: '1900-01-14' });
+        expect(parser!.parse('TEXT(1, "dd/mm/yyyy000")')).toMatchObject({ error: '#VALUE!', result: null });
     });
 
     it('TRIM', () => {

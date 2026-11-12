@@ -69,11 +69,11 @@ test('Enter in the pattern field applies it', async () => {
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
-test('a pattern numfmt refuses disables Apply, says why, and keeps the typed text', async () => {
+test('a pattern numfmt refuses disables Apply, says so, and keeps the typed text', async () => {
     const dialog = await openNumberFormats();
     await dialog.type(PATTERN, '0[Red');
     expect(dialog.button('Apply')?.disabled).toBe(true);
-    expect(dialog.dialogs()[0]?.textContent).toContain('Illegal character');
+    expect(dialog.dialogs()[0]?.textContent).toContain('Illegal format');
     await act(async () => pressEnter(dialog.field(PATTERN)));
     expect(formats(dialog.context())).toEqual(['#,##0.00', undefined]);
     expect(dialog.field(PATTERN).value).toBe('0[Red');

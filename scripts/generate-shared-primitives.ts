@@ -1,7 +1,7 @@
-// Writes the shared primitives index: every hook, component, type and util that the ui, lib and math packages export,
-// so an author finds one before building it again. It reads each package's `exports` map and lists only what a barrel
-// reaches, so a primitive that isn't exported doesn't appear. `bun run primitives` writes the index, and with
-// `--check`, the CI gate, it fails on a stale index and prints the rows that differ.
+// Writes the shared primitives index: every hook, component, type and util that the ui, lib, math and formula
+// packages export, so an author finds one before building it again. It reads each package's `exports` map and lists
+// only what a barrel reaches, so a primitive that isn't exported doesn't appear. `bun run primitives` writes the index,
+// and with `--check`, the CI gate, it fails on a stale index and prints the rows that differ.
 
 import { basename, dirname, join, relative } from 'node:path';
 import { Glob } from 'bun';
@@ -16,6 +16,7 @@ const PACKAGES = [
     { name: '@workspace/lib', dir: 'packages/lib' },
     { name: '@workspace/ui', dir: 'packages/ui' },
     { name: '@workspace/math', dir: 'packages/math' },
+    { name: '@workspace/formula', dir: 'packages/formula' },
 ];
 
 type Kind = 'Component' | 'Provider' | 'Schema' | 'Hook' | 'Cache' | 'Type' | 'Util';
@@ -183,7 +184,7 @@ function render(): string {
         '',
         '> **Generated — do not edit by hand.** Run `bun run primitives` to regenerate;',
         '> `bun run primitives --check` is the CI gate. Source: the `exports` maps of `packages/lib`,',
-        '> `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it',
+        '> `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it',
         "> already exists, import it; if it doesn't, add it here by exporting it from its package barrel.",
         '',
         `${primitives.length} primitives across ${KINDS.length} kinds. \`packages/sheet\` internals are excluded.`,

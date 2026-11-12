@@ -67,7 +67,7 @@ export function updateFormatCell(
                 else if (fa === 'General' && !isRealNum(v)) t = 'g';
 
                 if (cell) {
-                    cell.m = `${m}`;
+                    cell.m = m;
                     Object.assign((cell.ct ??= {}), { fa, t });
                 } else {
                     d[r][c] = { ct: { fa, t }, v, m };

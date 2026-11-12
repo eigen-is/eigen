@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { numberDisplay } from '@workspace/formula/format';
 import type { Cell, CellWithRowAndCol, Op, Sheet } from '@workspace/lib/sheets';
 import {
     decodeSheetsSnapshot,
@@ -10,7 +11,6 @@ import {
 import type { DrivePath, ImportResult } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_SHEETS } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
-import { update } from '@workspace/sheet/engine';
 import JSZip from 'jszip';
 import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
@@ -2424,7 +2424,7 @@ describe("a number format's month and minute (Excel m/M → the Google conventio
         // Tue 2024-03-15 13:30:45 as an Excel serial.
         const serial = 45366.56302083333;
         for (const fmt of ['dd/mm/yyyy', 'HH:MM:SS', 'yyyy-mm-dd hh:mm', 'd"-"mmm', '[MM]:ss', 'mm:ss']) {
-            expect(update(faOf(fmt), serial)).toBe(update(fmt, serial));
+            expect(numberDisplay(serial, faOf(fmt))).toBe(numberDisplay(serial, fmt));
         }
     });
 });

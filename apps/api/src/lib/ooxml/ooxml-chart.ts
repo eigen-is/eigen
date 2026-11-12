@@ -385,8 +385,8 @@ function chartSpec(
 }
 
 // A series' id: Office's c16:uniqueId without its GUID's braces, when it is a valid series id no earlier series took.
-// Else x- and the c:idx, else that and the series' place, and a file that takes even that one is unsupported.
-function seriesIds(series: XmlElement[]): string[] {
+// Else x- and the c:idx, else that and the series' place.
+function seriesIds(series: readonly XmlElement[]): string[] {
     const ids: string[] = [];
     for (const [i, ser] of series.entries()) {
         const [unique] = elements(child(ser, 'extLst'))
@@ -403,7 +403,7 @@ function seriesIds(series: XmlElement[]): string[] {
 
 // Excel's chart title. Without a title element, or with one that has no text, a chart shows its only series' name,
 // unless the automatic title was deleted; with more series an empty title element shows a placeholder.
-function chartTitle(chart: XmlElement | undefined, groups: XmlElement[]): string {
+function chartTitle(chart: XmlElement | undefined, groups: readonly XmlElement[]): string {
     const title = child(chart, 'title');
     const text = titleText(child(title, 'tx'));
     if (text !== undefined) return chartLabel(text);
@@ -517,7 +517,7 @@ const GROUPINGS = new Map([
 
 // PowerPoint's name for a plot's groups. One group is named by its kind with its depth, direction, grouping, markers,
 // lines or wireframe. A volume bar group with a stock group is one stock chart, and any other two groups are a combo.
-function chartName(groups: XmlElement[]): string {
+function chartName(groups: readonly XmlElement[]): string {
     const kinds = groups.map((group) => group.local).join(' ');
     const stock = (group: XmlElement) =>
         children(group, 'ser').length === 4 ? 'Open-High-Low-Close' : 'High-Low-Close';

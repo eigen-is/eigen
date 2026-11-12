@@ -12,13 +12,13 @@ The sections run from the package's place, through the three spellings of a form
 
 ## It is a leaf, reached through four entries
 
-The engine runs unchanged in the browser, in Bun and in Node, and answers the same on every machine. So it imports no workspace package and no runtime API, and reads no clock and no locale. Biome enforces each part: the package imports nothing outside itself, numfmt only under `src/format/`, and `Date`, `Intl` and `performance` are refused globals; `scripts/check-standards.ts` also fails module-level state and `Math.random` there. Its tsconfig has `lib: ["ESNext"]` and no `types`, as `packages/math` does ([ARCHITECTURE.md § Dependency direction](ARCHITECTURE.md#dependency-direction)).
+The engine runs unchanged in the browser, in Bun and in Node. Arithmetic, `^` and what is built on them answer the same on every machine; `LN`, `LOG`, `LOG10`, `EXP`, `ATAN2` and the trigonometric and hyperbolic functions and their inverses use the runtime's `Math`, and over the same 3,000 such calls Bun and Node differed in the last bit on 283 and in the 15 digits a cell shows on 23. So it imports no workspace package and no runtime API, and reads no clock and no locale. Biome enforces each part: the package imports nothing outside itself, numfmt only under `src/format/`, and `Date`, `Intl` and `performance` are refused globals; `scripts/check-standards.ts` also fails module-level state and `Math.random` there. Its tsconfig has `lib: ["ESNext"]` and no `types`, as `packages/math` does ([ARCHITECTURE.md § Dependency direction](ARCHITECTURE.md#dependency-direction)).
 
 | Entry | What it holds | Who imports it today |
 |---|---|---|
 | `@workspace/formula` | `Engine`, the error values and the host's types | the package's tests |
 | `@workspace/formula/text` | the parser and printers, A1 labels and sheet names, `mapIndex` and `mapSpan`, the transforms, the xlsx dialect, `resolveTables`, `tokens` | `packages/sheet`, for the row and column map |
-| `@workspace/formula/format` | `numberDisplay` and `isDateFormat`, the one place numfmt is called | `packages/sheet`, `packages/lib`'s charts, the API's xlsx import, chart export and demo seed |
+| `@workspace/formula/format` | `numberDisplay` and `isDateFormat`, the product's one call of numfmt's `format` (the sheet asks numfmt only whether a format parses) | `packages/sheet`, `packages/lib`'s charts, the API's xlsx import, chart export and demo seed |
 | `@workspace/formula/names` | `isExcelFunction`, `EXCEL_FUTURE_FUNCTIONS` | the sheet engine's `#NAME?` rule, the API's xlsx writer |
 
 lib imports only `/format`, which a biome rule enforces, so lib, which every app and the server load, carries number display and not the engine. `/format` holds no engine for the same reason.
@@ -33,7 +33,7 @@ One lexer and one Pratt parser (`src/text/`) read every spelling into one immuta
 | Stored | `parseStored`, `printStored` | What a cell holds: offsets in R1C1 and sheets by id, so `=SUM(A1:A3)*2` at D5 is `=SUM(R[-4]C[-3]:R[-2]C[-3])*2` and `=Data!$B$2` is `=[id]!R2C2` |
 | File | `parseXlsx`, `printXlsx` | An xlsx `<f>`: A1 without the `=`, with Excel's prefixes ([§ The xlsx dialect](#the-xlsx-dialect-is-one-grammar-with-a-rule-for-implicit-intersection)) |
 
-The stored text is canonical: equal formulas print equal text, and that text is the key of the shape table. So a fill writes one shape into every cell, and a tab rename rewrites nothing, since no formula holds a name. A sheet a formula names before any sheet has that name is stored by its quoted name and bound when such a sheet appears (`bindSheet`). Text that does not parse is a result, never a throw: `storedText` keeps it behind a second `=`, which no grammar reads as a formula, so it shows again exactly as typed and evaluates to `#ERROR!` (`src/text/typed.ts`). The parser keeps Excel's limits on length, nesting and arguments (`MAX_FORMULA_LENGTH`, `MAX_NESTING`, `MAX_ARGUMENTS`).
+The stored text is canonical: equal formulas print equal text, and that text is the key of the shape table. So a fill writes one shape into every cell, and a tab rename rewrites nothing, since no formula holds a name. A sheet a formula names before any sheet has that name is stored by its quoted name and bound when such a sheet appears (`bindSheet`). Text that does not parse is a result, never a throw: `storedText` keeps it behind a second `=`, which no grammar reads as a formula, so it shows again exactly as typed and evaluates to `#ERROR!` (`src/text/typed.ts`). The parser keeps Excel's limits on nesting and arguments (`MAX_NESTING`, `MAX_ARGUMENTS`), and one bound on length for typed, stored and file text alike, `MAX_STORED_LENGTH`, 16 times Excel's 8,192 characters.
 
 ## Equal stored text is one shape
 
@@ -43,7 +43,7 @@ A shape no cell holds is forgotten when the reverse index is rebuilt, which happ
 
 ## A cell is a slot in four typed column planes
 
-A column (`src/store/column.ts`) is four parallel typed arrays over its rows: `kind` (the value's kind, with the recalc's flags in its high bits), `num` (a number), `ref` (a text's id, an error's code, or 1 for TRUE) and `shape`. Most arithmetic allocates nothing, and a loop over a column skips per-cell checks with the column's counts of errors, pending formulas and loops. A column ends at its last cell and grows by doubling, and a sheet has no column past the last one written, so a sheet costs what it holds. One exception follows from it: a column costs its last row, 17 bytes a row, so a single cell on the grid's last row costs its column about 18 MB.
+A column (`src/store/column.ts`) is four parallel typed arrays over its rows: `kind` (the value's kind, with the recalc's flags in its high bits), `num` (a number), `ref` (a text's id, an error's code, or 1 for TRUE) and `shape`. Most arithmetic allocates nothing, and a loop over a column skips per-cell checks with the column's counts of errors, pending formulas and loops. A column ends at its last cell and grows by doubling, and a sheet has no column past the last one written, so a sheet costs what it holds. One exception follows from it: a column costs its last row, 17 bytes a row, so a single cell on the grid's last row reserves about 18 MB for its column. The system hands out those pages only when they are written, so at load the cost is small: 200 cells on the last row, each in its own column, hold 50 MB resident on Bun and 74 MB on Node. The first row insert or delete moves every slot of each column and so writes them all: after it the same 200 cells hold 3.4 GB on both runtimes, and one cell holds about 20 MB.
 
 The string table (`src/store/strings.ts`) holds every distinct text once under an id, with the id of its upper-cased key beside it, so two texts that differ only by case compare as two integers. It forgets texts no cell holds in a sweep at the start of a pass (`Workbook.sweep`), when the table weighs more than `SWEEP_FLOOR` (2^22 characters) and twice what it weighed after its last sweep or load, or when a sheet was removed; a text counts its characters plus 16. A freed id goes to the next new text. A sweep was chosen over counting references per id: a count has no slow pass and less memory, but one miscount at any of the nine places that drop a cell shows a wrong value. The cost is an uneven pass on a sheet where one cell feeds a very large block of text formulas.
 
@@ -123,7 +123,7 @@ An Excel without dynamic arrays read one cell of a range wherever one value was 
 
 ## Excel's limits and bugs are not copied
 
-The owner's standing rule: no code whose only purpose is to copy an Excel limit or bug. The engine accepts more than Excel wherever the meaning is unambiguous, and refuses only where accepting would make one formula text mean two things, or cost code of its own. Every place it accepts more is a listed difference ([§ Known differences](#known-differences-from-excel)), since it can produce a file Excel refuses. Precedents: no 255-character limit on a criterion, a lookup key or the text of `CODE`, `UNICODE` and `REPT`, and no 255-character limit on a number format. Where Excel's answer is the meaning, as in a function's arithmetic, the engine follows Excel's recorded rows, and the tests pin them.
+The owner's standing rule: no code whose only purpose is to copy an Excel limit or bug. The engine accepts more than Excel wherever the meaning is unambiguous, and refuses only where accepting would make one formula text mean two things, or cost code of its own. Every place it accepts more is a listed difference ([§ Known differences](#known-differences-from-excel)), since it can produce a file Excel refuses. Precedents: no 255-character limit on a criterion, a lookup key or the text of `CODE`, `UNICODE` and `REPT`, no 255-character limit on a number format, and no 8,192-character limit on a formula. Where Excel's answer is the meaning, as in a function's arithmetic, the engine follows Excel's recorded rows, and the tests pin them.
 
 ## The day line is Google's, not Excel's
 
@@ -176,9 +176,9 @@ When a call is lifted over an array, each element's answer becomes a value: of a
 
 A body that builds an array asks `ROOM` first, and the recalc refuses past `MOST_STORED` elements. A reference is an object of about 137 bytes where a number is 8, so an array of references is charged 17 slots an element (`REFERENCE_ROOM` in `src/eval/views.ts`). So `ISFORMULA` or `FORMULATEXT` over more than 986,895 held cells is `#CALC!`, as Excel answers `FORMULATEXT(A:A)`, where a single formula could otherwise take gigabytes and get the server killed.
 
-## A sheet id must not hold a quote or a bracket
+## A sheet id must not hold a bracket
 
-Stored text writes a sheet as its id in brackets, `[id]!`, and reads a bracket by the table reference rule, so an id that holds `'`, `[` or `]` does not parse back. The editor's ids are UUIDs. A host hands the engine no other id: one from a file or a peer is checked or remapped where it enters.
+Stored text writes a sheet as its id in brackets, `[id]!`, and reads a bracket by the table reference rule, so an id that holds `[` or `]` does not parse back. A quote is fine: `[a'b]!R1C1` reads and prints back as it is. The editor's ids are UUIDs. A host hands the engine no other id: one from a file or a peer is checked or remapped where it enters.
 
 ## A source of cells never calls back into the engine
 
@@ -189,11 +189,19 @@ Stored text writes a sheet as its id in brackets, `[id]!`, and reads a bracket b
 Each line is a decided choice; the function-by-function list is `packages/formula/FUNCTIONS.md`.
 
 - The day line is Google's: a serial under 61 is a day earlier, and a negative serial is a date.
-- Empty text is 0 and FALSE in arithmetic, conditions, `VALUE` and `ABS`; `SUMPRODUCT` of one blank cell is 0.
+- Empty text is 0 and FALSE in arithmetic, conditions, `VALUE` and `ABS`, so `IF("",1,2)` is 2 and `NOT("")` TRUE, where Excel answers `#VALUE!`; `SUMPRODUCT` of one blank cell is 0.
 - No 255-character limit on criteria, lookup keys, `CODE`, `UNICODE`, `REPT` and number formats.
 - A formula that does not parse is stored and shows `#ERROR!`, where Excel refuses the entry.
 - Text lengths count UTF-16 code units.
-- A 1×1 array is a single value.
+- A 1×1 array is a single value, so `MATCH(2,2,0)` is 1, `VLOOKUP(5,5,1,FALSE)` 5 and `MATCH(2,{#DIV/0!},0)` `#DIV/0!`, where Excel answers `#N/A` for all three.
+- An exact `MATCH` finds what `=` calls equal: over `=0.1+0.2` in D1, `MATCH(0.3,D1,0)` is 1, where Excel answers `#N/A` though `D1=0.3` is TRUE.
+- `COUNTA` of the reference array a lifted `INDEX` or an `XLOOKUP` gives does not count a blank cell: `COUNTA(INDEX(C1:C4,{1;2;3;4}))` over a blank C4 is 3, Excel 4, though Excel's other readers of that array see the blank.
+- `AGGREGATE` with an error cell as `k` answers that error: `AGGREGATE(14,6,D1:D8,B4)` over `#DIV/0!` in B4 is `#DIV/0!`, Excel `#VALUE!`.
+- An intersection with a union is `#VALUE!`: `SUM((A1:A2,C1:C2) A1:C1)` is 3.5 in Excel, which intersects each area.
+- `&` past 32,767 characters is `#VALUE!`, where Excel cuts the text without a word.
+- On a true tie in the 16th digit, `&""`, `FIXED` and `ROUND` give the exact answer: `73938790243119/4` to one decimal ends `.8`, Excel `.7`. `TEXT` there shows `.7`.
+- Number display has two gaps of numfmt: `h:mm AM/pm` prints `12:28 A12/p12` for 0.52, Excel `12:28 PM`, and a negative duration is shown where Excel shows `#######` (`#VALUE!` from `TEXT`), its hours wrong past one day: -1.25 under `[h]:mm:ss` shows `-18:00:00`.
+- A formula longer than Excel's 8,192 characters is accepted up to the stored bound, so it can export to a file Excel refuses.
 - An approximate search on data not sorted as it assumes can land elsewhere (47 recorded rows).
 - `LOOKUP` with a result range shorter than its lookup range is `#N/A`, where Excel reads past the range.
 - A lifted lazy argument no element picks does not widen the result.

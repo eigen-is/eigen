@@ -1,10 +1,11 @@
 // Pins the pure pattern helpers behind the custom-format dialogs: the date/time
 // pattern ⇄ segments round-trip (tokenizer + serializer), the currency pattern
 // builder, and the number-dialog preset samples. Rendered strings come from
-// numfmt via engine/format.update against the fixed sample Tue 1930-08-05
-// 13:30:30 (serial 11175.5628…), so chip examples and previews stay truthful.
+// numberDisplay against the fixed sample Tue 1930-08-05 13:30:30 (serial
+// 11175.5628…), so chip examples and previews stay truthful.
 
 import { describe, expect, test } from 'bun:test';
+import { numberDisplay } from '@workspace/formula/format';
 import type { DateTokenId, FormatSegment } from '../../../components/FormatDialogs/format-pattern';
 import {
     buildCurrencyPattern,
@@ -17,7 +18,6 @@ import {
     serializeSegments,
     tokenizePattern,
 } from '../../../components/FormatDialogs/format-pattern';
-import { update } from '../../../engine/format';
 import { DATE_FORMAT_PRESETS } from '../../../state/modules/format-presets';
 
 function token(tokenId: DateTokenId, pattern: string): FormatSegment {
@@ -59,7 +59,7 @@ describe('tokenizePattern / serializeSegments round-trip', () => {
     test('every preset example except the elapsed row is the live rendering of its pattern', () => {
         for (const { name, value } of DATE_FORMAT_PRESETS) {
             if (value === '[h]:mm:ss') continue; // example shows a small duration, not the 1930 sample
-            expect(update(value, DATETIME_SAMPLE_SERIAL)).toBe(name);
+            expect(numberDisplay(DATETIME_SAMPLE_SERIAL, value)).toBe(name);
         }
     });
 
@@ -115,7 +115,7 @@ describe('tokenizePattern / serializeSegments round-trip', () => {
             literal('.'),
             token('millisecond', '000'),
         ]);
-        expect(update('hh:mm:ss.000', DATETIME_SAMPLE_SERIAL)).toBe('13:30:30.000');
+        expect(numberDisplay(DATETIME_SAMPLE_SERIAL, 'hh:mm:ss.000')).toBe('13:30:30.000');
         expect(tokenizePattern('000')).toEqual([literal('000')]);
         expect(tokenizePattern('mm.000')).toEqual([token('minute', 'mm'), literal('.000')]);
     });
@@ -148,12 +148,12 @@ describe('tokenizePattern / serializeSegments round-trip', () => {
     });
 
     test('h vs H with and without AM/PM: numfmt renders 12h whenever AM/PM is present', () => {
-        expect(update('h:mm', DATETIME_SAMPLE_SERIAL)).toBe('13:30');
-        expect(update('H:mm', DATETIME_SAMPLE_SERIAL)).toBe('13:30');
-        expect(update('h:mm AM/PM', DATETIME_SAMPLE_SERIAL)).toBe('1:30 PM');
-        expect(update('H:mm AM/PM', DATETIME_SAMPLE_SERIAL)).toBe('1:30 PM');
-        expect(update('hh:mm AM/PM', DATETIME_SAMPLE_SERIAL)).toBe('01:30 PM');
-        expect(update('HH:mm AM/PM', DATETIME_SAMPLE_SERIAL)).toBe('01:30 PM');
+        expect(numberDisplay(DATETIME_SAMPLE_SERIAL, 'h:mm')).toBe('13:30');
+        expect(numberDisplay(DATETIME_SAMPLE_SERIAL, 'H:mm')).toBe('13:30');
+        expect(numberDisplay(DATETIME_SAMPLE_SERIAL, 'h:mm AM/PM')).toBe('1:30 PM');
+        expect(numberDisplay(DATETIME_SAMPLE_SERIAL, 'H:mm AM/PM')).toBe('1:30 PM');
+        expect(numberDisplay(DATETIME_SAMPLE_SERIAL, 'hh:mm AM/PM')).toBe('01:30 PM');
+        expect(numberDisplay(DATETIME_SAMPLE_SERIAL, 'HH:mm AM/PM')).toBe('01:30 PM');
     });
 
     test('elapsed tokens round-trip and render running totals', () => {
@@ -164,9 +164,9 @@ describe('tokenizePattern / serializeSegments round-trip', () => {
             literal(':'),
             token('second', 'ss'),
         ]);
-        expect(update('[h]:mm:ss', 1.000694444444)).toBe('24:01:00');
-        expect(update('[m]', DATETIME_SAMPLE_SERIAL)).toBe('16092810');
-        expect(update('[s]', DATETIME_SAMPLE_SERIAL)).toBe('965568630');
+        expect(numberDisplay(1.000694444444, '[h]:mm:ss')).toBe('24:01:00');
+        expect(numberDisplay(DATETIME_SAMPLE_SERIAL, '[m]')).toBe('16092810');
+        expect(numberDisplay(DATETIME_SAMPLE_SERIAL, '[s]')).toBe('965568630');
     });
 });
 
@@ -186,14 +186,14 @@ describe('buildCurrencyPattern', () => {
     });
 
     test('all four variants render correctly for glyph and text symbols', () => {
-        expect(update(buildCurrencyPattern('€', 'symbolFirst'), 1000)).toBe('€1,000.00');
-        expect(update(buildCurrencyPattern('€', 'symbolFirstRounded'), 1000)).toBe('€1,000');
-        expect(update(buildCurrencyPattern('€', 'symbolLast'), 1000)).toBe('1,000.00€');
-        expect(update(buildCurrencyPattern('€', 'symbolLastRounded'), 1000)).toBe('1,000€');
-        expect(update(buildCurrencyPattern('Lek', 'symbolFirst'), 1000.12)).toBe('Lek1,000.12');
-        expect(update(buildCurrencyPattern('грн.', 'symbolLast'), 1000.12)).toBe('1,000.12грн.');
-        expect(update(buildCurrencyPattern('₼', 'symbolFirst'), 1000.12)).toBe('₼1,000.12');
-        expect(update(buildCurrencyPattern('₹', 'symbolFirst'), 1000.12)).toBe('₹1,000.12');
+        expect(numberDisplay(1000, buildCurrencyPattern('€', 'symbolFirst'))).toBe('€1,000.00');
+        expect(numberDisplay(1000, buildCurrencyPattern('€', 'symbolFirstRounded'))).toBe('€1,000');
+        expect(numberDisplay(1000, buildCurrencyPattern('€', 'symbolLast'))).toBe('1,000.00€');
+        expect(numberDisplay(1000, buildCurrencyPattern('€', 'symbolLastRounded'))).toBe('1,000€');
+        expect(numberDisplay(1000.12, buildCurrencyPattern('Lek', 'symbolFirst'))).toBe('Lek1,000.12');
+        expect(numberDisplay(1000.12, buildCurrencyPattern('грн.', 'symbolLast'))).toBe('1,000.12грн.');
+        expect(numberDisplay(1000.12, buildCurrencyPattern('₼', 'symbolFirst'))).toBe('₼1,000.12');
+        expect(numberDisplay(1000.12, buildCurrencyPattern('₹', 'symbolFirst'))).toBe('₹1,000.12');
     });
 
     test('the variant list covers exactly the four spec variants in order', () => {
@@ -223,11 +223,7 @@ describe('NUMBER_FORMAT_PRESETS samples', () => {
             ['# ??/??', '1234 14/25'],
             ['@', '1234.56'],
         ];
-        expect(NUMBER_FORMAT_PRESETS.map((p) => [p, update(p, 1234.56)])).toEqual(expected);
-    });
-
-    test('an invalid pattern makes update throw — the dialog error state relies on this', () => {
-        expect(() => update('#,##0.00"', 1234.56)).toThrow();
+        expect(NUMBER_FORMAT_PRESETS.map((p) => [p, numberDisplay(1234.56, p)])).toEqual(expected);
     });
 });
 
@@ -259,6 +255,6 @@ describe('previewPattern', () => {
     });
 
     test('an unterminated quote in a number pattern is an error, not a throw', () => {
-        expect(previewPattern('#,##0.00"', 1234.56)).toEqual({ ok: false, error: 'Illegal character: #,##0.00"' });
+        expect(previewPattern('#,##0.00"', 1234.56)).toEqual({ ok: false, error: 'Illegal format' });
     });
 });

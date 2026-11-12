@@ -7,7 +7,7 @@
 import { GONE, mapIndex } from '@workspace/formula/text';
 import { isRecord } from '@workspace/lib/guards';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
-import { lineEdit, shiftRange } from '../../engine/rowcol';
+import { editOf, shiftRange } from '../../engine/rowcol';
 import type { CellMatrix } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
@@ -25,7 +25,7 @@ export function insertRowCol(ctx: Context, op: InsertRowColOp, changeSelection =
     applyBatch(ctx, [insertMarker(op)]);
     const data = getFlowdata(ctx, op.id);
     if (changeSelection && data) {
-        const first = lineEdit(op).index;
+        const first = editOf(op).index;
         const span = [first, first + op.count - 1];
         ctx.selections =
             op.type === 'row'
@@ -40,8 +40,7 @@ export function deleteRowCol(ctx: Context, op: DeleteRowColOp) {
 }
 
 // The open cell editor and the selections move with their cells, so a commit lands where the person chose, not in the
-// row that slid under it. A delete of the editor's cell closes it without writing and drops the selection, so the keys
-// typed next land on no cell rather than on the one that took its place. `data` is the grid the op left.
+// row that slid under it. A delete of the editor's cell closes it without writing and drops the selection.
 export function followView(ctx: Context, move: RowColMove, data: CellMatrix) {
     const row = move.type === 'row';
     const last = (row ? data.length : data[0].length) - 1;

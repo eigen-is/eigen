@@ -14,8 +14,8 @@ import { functionStrChange, mayShiftOffSheet } from '../../engine/formula-shift'
 import { isFormula } from '../../engine/formula-utils';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
 import {
+    editOf,
     LINE_MAPS,
-    lineEdit,
     shiftCellKeyed,
     shiftKeyedMap,
     shiftMerges,
@@ -43,7 +43,7 @@ export function insertMove(op: InsertRowColOp): RowColMove {
     return {
         id,
         type,
-        edit: lineEdit(op),
+        edit: editOf(op),
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'add', axisName(type), direction, index, count, name, onTargetSheet, findSheet),
     };
@@ -55,7 +55,7 @@ export function deleteMove(op: DeleteRowColOp): RowColMove {
     return {
         id,
         type,
-        edit: lineEdit(op),
+        edit: editOf(op),
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'del', axisName(type), null, start, count, name, onTargetSheet, findSheet),
     };
@@ -63,7 +63,7 @@ export function deleteMove(op: DeleteRowColOp): RowColMove {
 
 // A structural entry records the workbook it found and left, so it can only step on that workbook. Each entry below it
 // fits the workbook as it leaves it, so those go too, on the undo and the redo stack alike.
-export function dropStructuralEntries(entries: History[]): History[] {
+export function dropStructuralEntries(entries: readonly History[]): History[] {
     return entries.slice(entries.findLastIndex(isStructural) + 1);
 }
 
@@ -97,7 +97,7 @@ export function unitOf(path: (string | number)[]) {
 
 // A peer's row or column op moves your entries on its sheet, and the formula text that points at it on any sheet. An
 // entry the op makes meaningless is dropped, such as one that writes inside deleted rows or cuts a merge.
-export function shiftEntries(entries: History[], move: RowColMove, sheets: Sheet[]): History[] {
+export function shiftEntries(entries: History[], move: RowColMove, sheets: readonly Sheet[]): History[] {
     const target = sheets.find((sheet) => sheet.id === move.id);
     if (!target) return entries;
     const shifter = new Shifter(move, target.name, sheets);
@@ -110,15 +110,13 @@ function axisName(type: 'row' | 'column') {
 
 // Shifts one entry for a peer's row or column op.
 class Shifter {
-    private readonly id: string;
     private readonly move: RowColMove;
     private readonly name: string;
-    private readonly sheets: Sheet[];
+    private readonly sheets: readonly Sheet[];
     private readonly findSheet: (name: string) => Sheet | undefined;
     private readonly mayShift: (txt: string) => boolean;
 
-    public constructor(move: RowColMove, name: string, sheets: Sheet[]) {
-        this.id = move.id;
+    public constructor(move: RowColMove, name: string, sheets: readonly Sheet[]) {
         this.move = move;
         this.name = name;
         this.sheets = sheets;
@@ -145,8 +143,8 @@ class Shifter {
     private patch(patch: Patch): Patch | null {
         const [, sheet, field, ...rest] = patch.path;
         if (field === 'charts') return this.chartNamesSheet(patch) ? null : patch;
-        if (field === 'conditionalFormats' && this.rewritesRule(patch.value, sheet === this.id)) return null;
-        if (sheet !== this.id) return field === 'data' ? this.otherSheetData(patch, rest.length) : patch;
+        if (field === 'conditionalFormats' && this.rewritesRule(patch.value, sheet === this.move.id)) return null;
+        if (sheet !== this.move.id) return field === 'data' ? this.otherSheetData(patch, rest.length) : patch;
         if (field === 'data') return this.dataPatch(patch, rest);
         if (field === 'config') return this.configPatch(patch, rest);
         if (field === 'dataValidations' || field === 'conditionalFormats') return this.rule(patch, rest);
@@ -293,7 +291,7 @@ class Shifter {
     private names(chart: SheetChart): boolean {
         let named = false;
         mapChartRefs(chart, (ref) => {
-            named ||= ref.sheetId === this.id;
+            named ||= ref.sheetId === this.move.id;
             return ref;
         });
         return named;

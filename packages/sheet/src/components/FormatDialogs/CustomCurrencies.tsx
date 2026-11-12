@@ -1,10 +1,10 @@
 // The Custom currencies dialog: a currency symbol and a layout, such as symbol first with two decimals, built
 // into a number format with buildCurrencyPattern and applied to the selection.
 
+import { numberDisplay } from '@workspace/formula/format';
 import { Input } from '@workspace/ui/components/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useState } from 'react';
-import { update } from '../../engine/format';
 import { CURRENCIES, MENU_CURRENCY } from '../../state';
 import { FormatDialog, PresetList, PresetRow } from './format-dialog';
 import type { CurrencyVariantId } from './format-pattern';
@@ -21,9 +21,9 @@ const LISTED_CURRENCIES = [...CURRENCIES]
     })
     .map((currency) => ({
         ...currency,
-        example: update(
-            buildCurrencyPattern(currency.value, currency.pos === 'after' ? 'symbolLast' : 'symbolFirst'),
+        example: numberDisplay(
             1000.12,
+            buildCurrencyPattern(currency.value, currency.pos === 'after' ? 'symbolLast' : 'symbolFirst'),
         ),
     }));
 
@@ -80,7 +80,7 @@ export function CustomCurrencies() {
                     <SelectContent>
                         {CURRENCY_VARIANT_IDS.map((id) => (
                             <SelectItem value={id} key={id}>
-                                {symbol ? update(buildCurrencyPattern(symbol, id), 1000) : ''}
+                                {symbol ? numberDisplay(1000, buildCurrencyPattern(symbol, id)) : ''}
                             </SelectItem>
                         ))}
                     </SelectContent>

@@ -1,6 +1,6 @@
 # @workspace/formula
 
-`@workspace/formula` is a headless spreadsheet formula engine: it reads and prints formula text, stores a workbook's cells, evaluates formulas, recalculates what an edit reaches, rewrites formulas when rows, columns, blocks or sheets move, and shows numbers as Excel's number formats do. It has no React, no DOM and no Bun or Node API, imports no other workspace package, and has one npm dependency, numfmt, used only for number display. So it runs the same in a browser, on Bun and on Node.
+`@workspace/formula` is a headless spreadsheet formula engine: it reads and prints formula text, stores a workbook's cells, evaluates formulas, recalculates what an edit reaches, rewrites formulas when rows, columns, blocks or sheets move, and shows numbers as Excel's number formats do. Its source, `src/`, has no React, no DOM and no Bun or Node API, imports no other workspace package, and has one npm dependency, numfmt, used only for number display. So it runs the same in a browser, on Bun and on Node. The bench and oracle scripts in `scripts/` run on Bun and Node and use their APIs.
 
 Excel is the reference: every function it computes is listed in [FUNCTIONS.md](FUNCTIONS.md) with how its answers compare to Excel's.
 
@@ -15,7 +15,7 @@ It computes 219 of Excel's 524 functions. Not built yet: spilled results and the
 | Import | What it exports |
 | --- | --- |
 | `@workspace/formula` | `Engine`; the error values `NULL`, `DIV0`, `VALUE`, `REF`, `NAME`, `NUM`, `NA`, `SPILL`, `CALC`, `ERROR` and `errorOf`; the types `SheetSource`, `CellSink`, `Literal`, `FormulaError`, `CellAddress`, `EditResult`, `RecalcResult`, `Rewrite`, `LineEdit`, `Move` |
-| `@workspace/formula/text` | Formula text without an engine. Reading: `parseA1`, `parseA1Range`, `parseStored`, `parseXlsx`, `tokens`, `resolveTables`, `intersect`, `isLegacy`, `xlsxTree`. Printing: `printA1`, `printStored`, `printXlsx`, `storedText`, `typedText`. Edits: `mapIndex`, `mapSpan`, `GONE`, `transformLines`, `hostClasses`, `transformMove`, `bindSheet`, `remapSheets`, `offGrid`. Labels and sheet names: `toA1`, `rangeToA1`, `columnIndex`, `columnLabel`, `GRID_ROWS`, `GRID_COLUMNS`, `quoteSheetName`, `sheetNameKey`, `sheetFinder`, `findSheetByName`. The tree: `FormulaNode`, `NodeKind`, `RefKind`, `RefFlag`, `SheetKind`, `Token`, `ERROR_LITERALS`. Limits: `MAX_FORMULA_LENGTH`, `MAX_STORED_LENGTH`, `MAX_NESTING`, `MAX_ARGUMENTS` |
+| `@workspace/formula/text` | Formula text without an engine. Reading: `parseA1`, `parseA1Range`, `parseStored`, `parseXlsx`, `tokens`, `resolveTables`, `intersect`, `isLegacy`, `xlsxTree`. Printing: `printA1`, `printStored`, `printXlsx`, `storedText`, `typedText`. Edits: `mapIndex`, `mapSpan`, `GONE`, `transformLines`, `hostClasses`, `transformMove`, `bindSheet`, `remapSheets`, `offGrid`, and the types `Edit`, `Span`, `LineEdit`, `Move`. Tables: the types `Table` and `TableFinder` that `resolveTables` takes. Labels and sheet names: `toA1`, `rangeToA1`, `columnIndex`, `columnLabel`, `GRID_ROWS`, `GRID_COLUMNS`, `quoteSheetName`, `sheetNameKey`, `sheetFinder`, `findSheetByName`. The tree: `FormulaNode`, `NodeKind`, `RefKind`, `RefFlag`, `SheetKind`, `Token`, `ERROR_LITERALS`. Limits: `MAX_FORMULA_LENGTH`, `MAX_STORED_LENGTH`, `MAX_NESTING`, `MAX_ARGUMENTS` |
 | `@workspace/formula/format` | `numberDisplay`, `isDateFormat` |
 | `@workspace/formula/names` | `isExcelFunction`, `EXCEL_FUTURE_FUNCTIONS` |
 
@@ -83,7 +83,7 @@ The stored text holds offsets from the formula's own cell, so inserting a row ab
 - The reverse index, which formulas read a cell, has entries per block of cells of one shape, not per cell, and is rebuilt whole when a formula comes or goes (`recalc/reverse-index.ts`).
 - A structural edit is one transform of stored text, worked out once per stretch of hosts with one outcome, on top of `mapIndex` and `mapSpan`, the one rule for where an index goes (`edit/`).
 - A function is one row: a name, a list of parameter words and a body. The call wrapper reads, coerces and checks every argument, so the body only computes (`functions/registry.ts`, `eval/call.ts`).
-- Numbers compare and round on the 15 digits Excel holds, and text orders by the engine's own rule, so no answer depends on the machine (`values/precision.ts`, `values/text-order.ts`).
+- Numbers compare and round on the 15 digits Excel holds, and text orders by the engine's own rule, so neither depends on the machine (`values/precision.ts`, `values/text-order.ts`). The trigonometric, logarithmic and hyperbolic functions use the runtime's `Math` and can differ in the last digit between runtimes.
 - No clock, no locale, no module-level state: the time and the draw of a pass are arguments of `recalc`.
 
 ## Tests and type check
@@ -99,7 +99,7 @@ Tests live in `src/test/`, one folder per source folder. `src/test/functions/fun
 
 ## Rules for contributors
 
-- The package imports no workspace package, no React, DOM, Bun or Node API, and one npm package, numfmt, only in `src/format/`. A Biome rule refuses any other import.
+- `src/` imports no workspace package, no React, DOM, Bun or Node API, and one npm package, numfmt, only in `src/format/`. A Biome rule refuses any other import. The scripts in `scripts/` may use Bun and Node.
 - No module-level mutable state, no options object, no `Date`, `Intl`, `localeCompare` or `toLocale*`, no clock, no `eval`. It runs the same on Bun and Node.
 - Performance is a goal: plain loops over typed arrays, a `switch` on an integer kind, no class per node kind, no callbacks into shared loops, no string-keyed stores.
 - Tests come first and fail first, and pin behavior through the public path. A test that passes on its first run is proven by a deliberate mutation that makes it fail.

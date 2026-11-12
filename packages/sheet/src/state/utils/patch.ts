@@ -7,7 +7,7 @@ import { cloneDeep, isNumber } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { dataToCelldata } from '../../engine/celldata';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
-import { lineEdit } from '../../engine/rowcol';
+import { editOf } from '../../engine/rowcol';
 import type { Context } from '../context';
 import type { Op, Sheet } from '../types';
 
@@ -45,25 +45,20 @@ export function renameSheetOps(id: string, name: string): Op[] {
 
 // The batch an edit sends. A sheet or row op ships its marker instead of the sheets it rewrote, because every reader
 // recomputes, and a value it shipped could land on a cell a peer has since moved or written.
-export function patchToOp(base: Context, ctx: Context, patches: Patch[], options: EntryOptions = {}): Op[] {
+export function patchToOp(base: Context, ctx: Context, patches: readonly Patch[], options: EntryOptions = {}): Op[] {
     if (options.renamedSheet) return renameSheetOps(options.renamedSheet.id, options.renamedSheet.to);
     if (options.deletedSheet) return deleteSheetOps(options.deletedSheet, base.sheets, ctx.sheets);
     if (options.addedSheet) return addSheetOps(options.addedSheet, base.sheets, ctx.sheets);
     const marker = rowColMarker(options);
     if (marker) return [marker];
-    const ops = patches.map((p) => {
-        const op: Op = {
-            op: p.op,
-            value: p.value,
-            path: p.path,
-        };
+    return patches.map((p) => {
+        const op: Op = { op: p.op, value: p.value, path: p.path };
         if (p.path[0] === 'sheets' && isNumber(p.path[1])) {
             op.id = ctx.sheets[p.path[1]].id;
             op.path = p.path.slice(2);
         }
         return op;
     });
-    return ops;
 }
 
 // The op a row or column edit ships in place of the sheets it rewrote.
@@ -110,7 +105,7 @@ export function storedCopy(sheet: Sheet): Sheet {
 export function inverseRowColOptions({ insertRowColOp, deleteRowColOp }: RowColOptions): RowColOptions {
     if (insertRowColOp) {
         const { type, id, count } = insertRowColOp;
-        const start = lineEdit(insertRowColOp).index;
+        const start = editOf(insertRowColOp).index;
         return { deleteRowColOp: { type, id, start, end: start + count - 1 } };
     }
     if (deleteRowColOp) {

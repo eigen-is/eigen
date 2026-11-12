@@ -3,8 +3,9 @@
 // clears the filter, and sorts its rows. It also gives the filter menu what it shows, such as a
 // column's values, dates and colors and the conditions it offers, and saves the rows a choice hides.
 
+import { numberDisplay } from '@workspace/formula/format';
 import { cloneDeep } from 'es-toolkit/compat';
-import { cellDisplay, cellValue, parseCellInput, update } from '../../engine/format';
+import { cellDisplay, cellValue, parseCellInput } from '../../engine/format';
 import { showFilterRows } from '../../engine/rowcol';
 import type { Cell } from '../../engine/types';
 import { getSheet } from '../api/common';
@@ -227,7 +228,7 @@ function compareFilterValues(cellValue: string, input: string): number {
 function toIsoDay(input: string): string | null {
     const [, ct, v] = parseCellInput(input);
     if (ct.t !== 'd') return null;
-    return update('YYYY-MM-DD', v);
+    return numberDisplay(v, 'YYYY-MM-DD');
 }
 
 // A blank cell matches only isEmpty and the negative conditions, as each negative is its positive's complement.
@@ -246,7 +247,7 @@ export function buildFilterConditionMatcher(condition: FilterCondition): (cell: 
         if (day == null) return () => true;
         return (cell) => {
             if (cell == null || cell.ct?.t !== 'd' || isRealNull(cell.v)) return false;
-            const cellDay = update('YYYY-MM-DD', cell.v);
+            const cellDay = numberDisplay(cell.v, 'YYYY-MM-DD');
             if (conditionName === 'dateEqual') return cellDay === day;
             if (conditionName === 'dateBefore') return cellDay < day;
             return cellDay > day;
@@ -358,7 +359,7 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
         const cell = flowdata[r][col];
 
         if (cell != null && !isRealNull(cell.v) && cell.ct?.t === 'd') {
-            const dateStr: string = update('YYYY-MM-DD', cell.v);
+            const dateStr: string = numberDisplay(cell.v, 'YYYY-MM-DD');
             const [y, m, d] = dateStr.split('-');
 
             let yearValue = dates.find((v) => v.value === y);
@@ -383,7 +384,7 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
                     type: 'month',
                     value: m,
                     // Excel's tree reads 2024 > August > 5.
-                    text: update('MMMM', cell.v),
+                    text: numberDisplay(cell.v, 'MMMM'),
                     children: [],
                     rows: [],
                     dateValues: [],

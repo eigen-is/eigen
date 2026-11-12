@@ -3,7 +3,8 @@
 // needs a pattern to turn into segments and back exactly. Tokens follow the Google Sheets builder: M is month and m
 // is minute, h is the 12-hour clock and H the 24-hour one, though numfmt itself picks the clock from an AM/PM part.
 
-import { update } from '../../engine/format';
+import { numberDisplay } from '@workspace/formula/format';
+import { isValidNumberFormat } from '../../engine/format';
 
 // The tokens in the order the dialog's insert menu lists them.
 export const DATE_TOKEN_IDS = [
@@ -248,14 +249,11 @@ export function serializeSegments(segments: FormatSegment[]): string {
 
 export type FormatPreview = { ok: true; text: string } | { ok: false; error: string };
 
-// A value in a pattern, for a dialog's preview line. numfmt throws on a pattern it can't read, such as a 000 run right
-// after yyyy, and a throw while rendering would blank the whole app, so the reason comes back instead.
+// A value in a pattern, for a dialog's preview line, or an error for a pattern numfmt can't read, such as a 000 run
+// right after yyyy, which the dialog shows in place of the preview.
 export function previewPattern(pattern: string, value: number): FormatPreview {
-    try {
-        return { ok: true, text: update(pattern, value) };
-    } catch (e) {
-        return { ok: false, error: e instanceof Error ? e.message : String(e) };
-    }
+    if (!isValidNumberFormat(pattern)) return { ok: false, error: 'Illegal format' };
+    return { ok: true, text: numberDisplay(value, pattern) };
 }
 
 // The layouts of a currency format, in the order the Custom currencies dialog lists them.

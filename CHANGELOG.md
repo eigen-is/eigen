@@ -63,8 +63,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Filling in Sheets** — Chinese number and weekday series copy, and 1, 2, 4 fills as a straight line
 - **Formulas Sheets can't calculate** — a function it doesn't have, such as `FILTER`, `ROW` or `FIXED`, keeps what the cell holds, an error included, when its inputs change or you sort or cut it. Typed new, copied or filled, it shows `#NAME?`
 - **Pasted errors in Sheets** — a copied formula that lands on an error, such as `#DIV/0!`, is an error to the formulas that read it, so `ISERROR` and `IFERROR` see it. A formula pasted as text, or under the format painter, keeps the type of its own result
-- **Empty results in Sheets** — a formula that gives empty text, such as `=IF(A1=1,"",5)`, plus 1 is `#VALUE!` as in Excel, whether you typed it or imported it
-- **Number formats in Sheets** — numbers round as in Excel, so 1.005 under 0.00 shows 1.01, very small numbers show their digits, a time just before midnight shows the next day, and dates before 1900 show their weekday. Chart labels too
+- **Empty results in Sheets** — a formula that gives empty text, such as `=IF(A1=1,"",5)`, plus 1 is 1, as in Google Sheets where Excel says `#VALUE!`, whether you typed it or imported it
+- **Number formats in Sheets** — numbers round as in Excel, so 1.005 under 0.00 shows 1.01, very small numbers show their digits, a time just before midnight shows the next day, dates before 1900 show their weekday, and Excel's long date shows March 5, not March 05. Chart labels too
 - **Dates in early 1900 in Sheets** — a date in January or February 1900 shows one day earlier than in Excel, as in Google Sheets, since 1900 had no 29 February
 - **Excel files in Sheets** — an import keeps what Excel saved, and calculates only a formula saved with no result or with an error, where Sheets can calculate it
 - **Large PDFs from Sheets** — a tall or chart-heavy spreadsheet prints up to the export's limit of 250,000 cells, or fails if it takes too long. The page count no longer cuts it. PDFs and web pages draw at most 1,000 images and charts, and about 200 MB of images
@@ -106,7 +106,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Comments on a text box in Docs** — **Add comment** on a text box opens the new comment form, where it did nothing
 - **Resolved comments in Docs** — resolving a comment removes its highlight from the text, which used to stay yellow
 - **Merged cells in Sheets** — pasting text over a merged cell replaces the merge, and wrapped text in a merged cell no longer makes its row very tall
-- **Merged cells and row changes in Sheets** — a row inserted right below a merged cell one row high stays out of the merge, and a merge that a delete leaves with one cell becomes a plain cell
+- **Merged cells and row or column changes in Sheets** — a row inserted right below a merged cell one row high stays out of the merge, as does a column inserted right of one a column wide, and a merge that a delete leaves with one cell becomes a plain cell
 - **Restoring in Slides and Vector** — restoring an earlier version of a deck or drawing brings back the comments deleted since, as Docs and Sheets do. Their replies stay as they are now
 - **Version history in other tabs** — after a restore or a Delete history, another tab open on the same document shows the new list of versions at once
 - **Pictures cropped in Google Slides** — a picture that Google Slides cropped to fit its box, such as a logo, no longer comes in squashed when you convert or import the deck
@@ -130,7 +130,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Undo while others type formulas in Sheets** — two people typing formulas at once no longer lose their undo
 - **Undo of an image or chart in Sheets** — undoing a step that edited an image or chart and then deleted it brings it back, and redoing one that added and then edited it adds it again. Both did nothing
 - **Rules while others edit in Sheets** — two people adding conditional formats at once both keep theirs, and deleting a rule no longer hits another one when someone else just removed a rule before it
-- **Whole-column rules in Sheets** — a conditional format or validation rule on a whole column, such as `B:B`, still covers the whole column after you insert or delete rows
+- **Whole-column rules and charts in Sheets** — a conditional format, validation rule or chart on a whole column, such as `B:B`, still covers the whole column after you insert or delete rows. A rule on the sheet's last row or column alone goes when an insert pushes it off
 - **Undo after a paste or a new rule in Sheets** — undoing a paste that added rows or columns, or a conditional format rule you added, no longer deletes what someone else put there. Once someone else edits, you can't undo such a paste or anything before it
 - **Excel downloads from Sheets** — a tab named like a cell, such as Q1, gets the quotes Excel expects in formulas, a formula follows a tab the file has to rename, and a fill down from a linked cell no longer makes the download fail
 - **Tab names from a file in Sheets** — an import repairs a tab name Sheets would refuse, such as one past 31 characters, and the formulas naming it follow

@@ -16,7 +16,7 @@ import { isFormula, matrixWidth, resolveCellRange } from './formula-utils';
 import { sheetFinder } from './parser/helper/cell';
 import type { RecalcBudgets } from './recalc';
 import type { DeleteRowColOp, InsertRowColOp } from './rowcol';
-import { lineEdit } from './rowcol';
+import { editOf } from './rowcol';
 import type { FormulaCellInfo, FormulaCellInfoMap, FormulaDependency } from './types';
 
 // A sheet's dense `data`, by id, which a pass reads and writes.
@@ -76,7 +76,7 @@ export class FormulaGraph {
     // Follows a row or column op, given the sheets it left: the formulas on its sheet move with their cells, one on a
     // deleted line goes, and one whose text the op rewrote lists its references again.
     public shift(sheets: readonly WorkingSheet[], op: InsertRowColOp | DeleteRowColOp): void {
-        const edit = lineEdit(op);
+        const edit = editOf(op);
         const moved = new Map<number, FormulaCellInfo>();
         for (const node of this.cells.get(op.id)?.values() ?? []) {
             const line = mapIndex(edit, op.type === 'row' ? node.r : node.c);

@@ -2,8 +2,8 @@
 // select all, clearing the selected cells' contents, the status bar's sum and count, and the format painter's
 // paste. The keyboard and mouse handlers call it on the context they are changing.
 
+import { numberDisplay } from '@workspace/formula/format';
 import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
-import { format } from 'numfmt';
 import { cellDisplay, writeFormulaResult } from '../../engine/format';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
@@ -1072,9 +1072,9 @@ export function calcSelectionInfo(ctx: Context) {
             }
         }
     }
-    const average: string = format('0.00', sum / numberC);
-    const sumStr: string = format('0.00', sum);
-    const maxStr: string = format('0.00', max);
-    const minStr: string = format('0.00', min);
+    const average = numberDisplay(sum / numberC, '0.00');
+    const sumStr = numberDisplay(sum, '0.00');
+    const maxStr = numberDisplay(max, '0.00');
+    const minStr = numberDisplay(min, '0.00');
     return { numberC, count, sum: sumStr, max: maxStr, min: minStr, average };
 }
