@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { ENGINE, fn, REFERENCE } from '../../functions/registry';
-import { DIV0, NA, NULL, REF, VALUE } from '../../index';
+import { CALC, DIV0, NA, NULL, REF, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
 import { engineOf, evaluate, stored, valueAt, valuesWith } from '../recalc/support';
 
@@ -280,6 +280,52 @@ describe('a book answers about the cell of its own call', () => {
         engine.recalc(Number.POSITIVE_INFINITY);
         expect(['A1', 'A2', 'A3'].map((host) => valueAt(engine, host, 's2'))).toEqual(['$B$2', 'Sheet1!$B$2', '$B$2']);
         expect(valueAt(engine, 'A1')).toBe('Sheet2!$B$2');
+    });
+});
+
+// Excel's rows of INDIRECT and OFFSET: an array of references is no value a cell can hold.
+describe('an array of references that reaches the cell is #CALC!', () => {
+    test.each([
+        ['=INDIRECT({"A1","B2"})', CALC],
+        ['=INDIRECT({"A1";"A2"})', CALC],
+        ['=INDIRECT({"A1","zzz"})', CALC],
+        ['=INDIRECT("A1",{TRUE,FALSE})', CALC],
+        ['=OFFSET(A1,{0,1,2},0)', CALC],
+        ['=OFFSET(A1,0,0,{1,2},1)', CALC],
+        // What takes the references still does.
+        ['=SUM(INDIRECT({"A1","C1"}))', 3.5],
+        ['=SUM(OFFSET(A1,{0;1;2},0))', -1],
+        ['=INDEX(ROW(OFFSET(A1,{0;1;2},0)),3,1)', 3],
+        ['=INDIRECT({"A1"})', 1.5],
+    ])('%s', (formula, expected) => {
+        expect(evaluate(formula, F9)).toBe(expected);
+    });
+});
+
+// A formula cannot read its own cell, so with no reference there is nothing to read: Excel answers for the cell
+// that was changed last, which only a host knows.
+describe('CELL with no reference reads no cell', () => {
+    test('the contents are a blank and the type is b, and the cell is on no loop', () => {
+        const engine = engineOf({ s1: { A1: '=CELL("contents")', A2: '=CELL("type")', A3: '=CELL("contents",A3)' } });
+        const { loops } = engine.recalc(Number.POSITIVE_INFINITY);
+        expect(['A1', 'A2', 'A3'].map((host) => valueAt(engine, host))).toEqual([0, 'b', REF]);
+        expect(loops).toEqual([{ sheet: 's1', row: 2, column: 0 }]);
+    });
+});
+
+// A name before the ! is read by one rule in both notations: what the grammar reads as one bare word, or quoted.
+describe('INDIRECT reads the name of a sheet the same way in A1 and in R1C1', () => {
+    test.each([
+        ['=INDIRECT("My Sheet!A1")', REF],
+        ['=INDIRECT("My Sheet!R1C1",FALSE)', REF],
+        [`=INDIRECT("'My Sheet'!A1")`, 7],
+        [`=INDIRECT("'My Sheet'!R1C1",FALSE)`, 7],
+        ['=INDIRECT("Sheet1!R1C1",FALSE)', 1],
+        [`=INDIRECT("'Sheet1'!R1C1",FALSE)`, 1],
+    ])('%s', (formula, expected) => {
+        const engine = engineOf({ s1: { A1: 1, N1: formula }, 'My Sheet': { A1: 7 } });
+        engine.recalc(Number.POSITIVE_INFINITY);
+        expect(valueAt(engine, 'N1')).toBe(expected);
     });
 });
 

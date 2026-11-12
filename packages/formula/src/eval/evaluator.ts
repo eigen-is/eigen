@@ -12,7 +12,7 @@ import { ERROR_LITERALS, Token } from '../text/lexer';
 import type { Ends, FormulaNode } from '../text/tree';
 import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from '../text/tree';
 import type { FormulaError } from '../values/errors';
-import { errorOf, NAME, NULL, REF, VALUE } from '../values/errors';
+import { CALC, errorOf, NAME, NULL, REF, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { arrayOf, isArray, isError, isReference, ValueType } from '../values/value';
 import { call } from './call';
@@ -60,6 +60,8 @@ export class Evaluator {
             ? this.read(this.binary(tree, sheet, row, column, true))
             : this.operand(tree, sheet, row, column);
         if (!isArray(value)) return value === null ? 0 : value;
+        // An array of references is no value a cell can hold, as Excel's INDIRECT({"A1","B2"}) is none.
+        if (value.references) return CALC;
         const first = this.first(value.items[0]);
         return first === null ? 0 : first;
     }

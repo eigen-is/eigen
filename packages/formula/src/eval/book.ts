@@ -7,7 +7,7 @@
 
 import { isUnparsed, parseA1, parseStored } from '../text/parser';
 import { printA1 } from '../text/printer';
-import { findSheetByName } from '../text/sheet-name';
+import { findSheetByName, quoteSheetName } from '../text/sheet-name';
 import { NodeKind, SheetKind } from '../text/tree';
 import type { FormulaError } from '../values/errors';
 import { REF } from '../values/errors';
@@ -27,10 +27,10 @@ export class Book {
         this.#ctx = ctx;
     }
 
-    // Makes `book` the book of a call of `entry`, whose arguments are read into `held`.
-    public static aim(book: Book, entry: Entry, held: readonly Held[]): Book {
+    // Makes `book` the book of a call of `entry`, whose `count` written arguments are read into `held`.
+    public static aim(book: Book, entry: Entry, held: readonly Held[], count: number): Book {
         const at = entry.slots.findIndex((slot) => slot.prepare === Prepare.Reference);
-        const given = at < 0 ? undefined : held[at];
+        const given = at < 0 || at >= count ? undefined : held[at];
         book.#cell = isReference(given) ? given : null;
         return book;
     }
@@ -48,9 +48,11 @@ export class Book {
         return printA1(tree, top, left, (id) => workbook.sheet(id)?.name);
     }
 
-    // The value of the cell, its own formula computed first.
+    // The value of the cell, its own formula computed first. A row that was given no reference reads nothing:
+    // the formula's own cell is still being computed, so it is a blank.
     public value(): Scalar {
-        const { sheet, top, left } = this.#asked();
+        if (this.#cell === null) return null;
+        const { sheet, top, left } = this.#cell;
         return this.#ctx.recalc.valueOf(this.#ctx.workbook.sheets[sheet], top, left);
     }
 
@@ -73,17 +75,18 @@ export class Book {
         let sheet = sheets[host.sheet];
         let tree = a1 ? parseA1(`=${text}`, host.top, host.left, (name) => findSheetByName(sheets, name)) : null;
         if (!a1) {
-            // The stored form of a reference is R1C1 with no sheet, so the name before the ! is read here.
+            // The stored form of a reference is R1C1 with no sheet, so the name before the ! is read here, by the
+            // rule a typed formula's is: in quotes, or one word that may stand bare.
             const bang = text.lastIndexOf('!');
             const quoted = bang > 1 && text.startsWith("'") && text[bang - 1] === "'";
             const name = quoted ? text.slice(1, bang - 1).replaceAll("''", "'") : text.slice(0, Math.max(bang, 0));
             const named = bang < 0 ? sheet : findSheetByName(sheets, name);
-            if (named === undefined) return REF;
+            if (named === undefined || (bang >= 0 && !quoted && quoteSheetName(name) !== name)) return REF;
             sheet = named;
             tree = parseStored(`=${text.slice(bang + 1).toUpperCase()}`);
         }
         if (tree === null || 'reason' in tree || tree.kind !== NodeKind.Ref || tree.space !== '') return REF;
-        if (tree.sheetKind !== SheetKind.Host && (!a1 || tree.sheetKind !== SheetKind.Id)) return REF;
+        if (tree.sheetKind !== SheetKind.Host && tree.sheetKind !== SheetKind.Id) return REF;
         const found = ctx.evaluate(tree, sheet, host.top, host.left);
         return isReference(found) ? found : REF;
     }
