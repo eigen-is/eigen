@@ -26,7 +26,8 @@ function usedOf(list: readonly Item[]): number {
 
 // MATCH type 1, LOOKUP and an approximate VLOOKUP or HLOOKUP. The list is halved. A probe at an item of another
 // kind moves to the next item of the key's kind after it, else to the one before it. A probe that equals the key
-// ends the search at the last of the equal items that follow it; a smaller one sends the search to the right.
+// ends the search at the last of the equal items that follow it; a smaller one sends the search to the right of
+// the item it moved to, a larger one to the left of that item.
 function upward(list: readonly Item[], key: Key): number {
     const used = usedOf(list);
     let low = 0;
@@ -47,7 +48,7 @@ function upward(list: readonly Item[], key: Key): number {
         if (order < 0) {
             before = at;
             low = at + 1;
-        } else high = Math.min(at, middle) - 1;
+        } else high = at - 1;
     }
     return before;
 }
@@ -65,8 +66,8 @@ function downward(list: readonly Item[], key: Key): number {
     return above;
 }
 
-// XMATCH search modes 2 and -2: a textbook bisection in the one order of all values (number, text, boolean), an
-// error past them all and a blank ahead of them (the blank is not recorded: Excel check). Of equal items the first when the list goes up, the last when it goes down.
+// XMATCH search modes 2 and -2: a textbook bisection in the one order of all values (number, text, boolean), with
+// an error and a blank past them all. Of equal items the first when the list goes up, the last when it goes down.
 // `match` 0 wants the key itself, -1 takes the next smaller item instead, 1 the next larger.
 function bisection(list: readonly Item[], key: Key, descending: boolean, match: number): number {
     let low = 0;
@@ -77,7 +78,7 @@ function bisection(list: readonly Item[], key: Key, descending: boolean, match: 
     while (low <= high) {
         const middle = (low + high) >> 1;
         const item = list[middle];
-        const order = item === null ? -1 : typeof item === 'object' ? 1 : compareValues(item, key);
+        const order = typeof item === 'object' ? 1 : compareValues(item, key);
         const right = order === 0 ? descending : order < 0 !== descending;
         if (order === 0) hit = middle;
         else if (right) before = middle;
@@ -136,6 +137,9 @@ const RANGES: Readonly<Record<string, readonly Item[]>> = {
     'A1:C1': [1.5, null, 2],
 };
 
+// The fixture of Excel's sheet b13_2e: a blank inside a sorted list.
+const BLANKED: Readonly<Record<string, readonly Item[]>> = { 'G1:G5': [1, 2, null, 3, 4] };
+
 function cellOf(item: Exclude<Item, null>): Literal {
     if (item === '') return '=""';
     return typeof item === 'object' ? (item === ERRORS.na ? '=NA()' : '=1/0') : item;
@@ -168,6 +172,7 @@ function modelOf(formula: string): string {
     const key = itemOf(first);
     const list =
         RANGES[second] ??
+        BLANKED[second] ??
         second
             .slice(1, -1)
             .split(/[,;]/)
@@ -468,12 +473,48 @@ describe("Excel's search order, the model", () => {
         expect(TYPED.length).toBe(175);
         expect(TYPED.filter(([formula, answer]) => modelOf(formula) !== answer)).toEqual([]);
     });
+
+    test('answers every row of batch 13, part 2e, but the XLOOKUP', () => {
+        const rows = BATCH_13.filter(([formula]) => !formula.startsWith('=XLOOKUP'));
+        expect(rows.filter(([formula, answer]) => modelOf(formula) !== answer)).toEqual([]);
+    });
 });
+
+// Excel batch 13, part 2e: the step after a probe moved right onto a larger item, MATCH type -1 on nine lists, and
+// a blank inside a list.
+const BATCH_13: readonly (readonly [string, string])[] = [
+    ['=MATCH(2,{2,1,"a",3,1},1)', '2'],
+    ['=MATCH(5,{9,7,5,5,3},-1)', '3'],
+    ['=MATCH(5,{9,7,6,4,3},-1)', '3'],
+    ['=MATCH(5,{9,7,5,6,5},-1)', '3'],
+    ['=MATCH(10,{9,7,5},-1)', '#N/A'],
+    ['=MATCH(1,{9,7,5},-1)', '3'],
+    ['=MATCH("b",{"d","c","b","a"},-1)', '3'],
+    ['=MATCH(5,{9,"x",5,3},-1)', '3'],
+    ['=MATCH(5,{9,#N/A,5,3},-1)', '3'],
+    ['=XMATCH(3,G1:G5,0,2)', '#N/A'],
+    ['=XMATCH(3,G1:G5,-1,2)', '2'],
+    ['=XMATCH(2.5,G1:G5,-1,2)', '2'],
+    ['=XMATCH(2.5,G1:G5,1,2)', '3'],
+    ['=XLOOKUP(3,G1:G5,G1:G5,"nf",0,2)', 'nf'],
+    ['=XMATCH(3,G1:G5,0,-2)', '4'],
+    ['=MATCH(3,G1:G5,1)', '4'],
+    ['=MATCH(2.5,G1:G5,1)', '2'],
+    ['=LOOKUP(2.5,G1:G5)', '2'],
+];
 
 describe("Excel's search order, the engine", () => {
     test('answers every cell of batch 12, part A', () => {
         const ours = engineOn(CELLS.map(([formula]) => formula));
         expect(CELLS.map(([formula], at) => [formula, ours[at]])).toEqual(CELLS.map((cell) => [...cell]));
+    });
+
+    test('answers every row of batch 13, part 2e', () => {
+        const ours = engineOn(
+            BATCH_13.map(([formula]) => formula),
+            BLANKED,
+        );
+        expect(BATCH_13.map(([formula], at) => [formula, ours[at]])).toEqual(BATCH_13.map((row) => [...row]));
     });
 
     // The escape of a pattern, "k~2", is the wildcard module's and not held here.
