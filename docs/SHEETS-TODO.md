@@ -283,7 +283,7 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 
 ### Values and text
 
-- [ ] **Typed numbers and dates Excel reads**: `VALUE("%12")` is `#VALUE!`, Excel 0.12; `VALUE("June 5, 26")` is `#VALUE!`, Excel 46178; `DATEVALUE("5 - 3")` is -241, Excel 46145. All in `values/parse-number.ts`. **S**
+- [ ] **Typed numbers and dates Excel reads**: `VALUE("%12")` is `#VALUE!`, Excel 0.12; `VALUE("June 5, 26")` is `#VALUE!`, Excel 46178. Both in `values/parse-number.ts`. **S**
 - [ ] **`NUMBERVALUE` keeps a 16th digit**: `NUMBERVALUE("1234567890123456")` is 1234567890123456, where a cell holds 15 digits. **S**
 - [ ] **`CODE(UNICHAR(128))`** is 63, Excel 128: the euro sign's code page entry. **S**
 - [ ] **`PROPER` after a combining mark**: `PROPER("e"&UNICHAR(769)&"lise")` is `Élise`, Excel `ÉLise`. **S**
