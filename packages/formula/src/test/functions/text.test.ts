@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { CALC, DIV0, NA, VALUE } from '../../index';
+import { grouped, seeded, typedDecimal } from '../format/typed-decimal';
 import type { Cells } from '../recalc/support';
 import { evaluate } from '../recalc/support';
 
@@ -64,6 +65,11 @@ describe('the parts of a text', () => {
         ['=MID(D1,1,-1)', VALUE],
         ['=MID(D1,32768,1)', ''],
         ['=MID(D6,299,5)', 'xx'],
+        ['=MID(D1,1.9,2.9)', 'He'],
+        ['=MID(D1,2^31-1,1)', ''],
+        ['=MID(D1,2^31,1)', VALUE],
+        ['=MID(D1,1,2^31-1)', 'Hello World'],
+        ['=MID(D1,1,2^31)', VALUE],
     ]);
     rows('REPLACE', [
         ['=REPLACE(D1,1,5,"X")', 'X World'],
@@ -74,6 +80,8 @@ describe('the parts of a text', () => {
         ['=REPLACE(D1,A5,5,"X")', VALUE],
         ['=REPLACE(D1,0,1,"X")', VALUE],
         ['=REPLACE(1234,2,1,9)', '1934'],
+        ['=REPLACE(D1,1.9,1.9,"X")', 'Xello World'],
+        ['=REPLACE(D1,1,4.9,"X")', 'Xo World'],
     ]);
     rows('LEN', [
         ['=LEN(D2)', 15],
@@ -100,6 +108,7 @@ describe('letter case, spaces and characters no one sees', () => {
         ['=LOWER(A5)', '1e+300'],
         ['=LOWER("ǆ ß İ ı ŉ")', 'ǆ ß i ı ŉ'],
         ['=LOWER("ΟΔΥΣΣΕΥΣ ΑΣ")', 'οδυσσευς ας'],
+        ['=LOWER("ΑΣ İ")', 'ας i'],
         ['=UPPER(D3)', 'STRAßE'],
         ['=PROPER(D2)', '  Two  Spaces  '],
         ['=PROPER(D3)', 'Straße'],
@@ -112,6 +121,7 @@ describe('letter case, spaces and characters no one sees', () => {
         ['=PROPER("ǆ ß İ ı ŉ")', 'Ǆ ß I I ŉ'],
         ['=PROPER("ΟΔΥΣΣΕΥΣ ΑΣ")', 'Οδυσσευς Ας'],
         ['=PROPER("ﬁ ﬂ")', 'ﬁ ﬂ'],
+        ['=PROPER("e"&UNICHAR(769)&"lise")', `E${String.fromCharCode(769)}lise`],
     ]);
     rows('TRIM', [
         ['=TRIM(D2)', 'two spaces'],
@@ -173,6 +183,9 @@ describe('finding and replacing', () => {
         ['=SEARCH("a*b",D5)', 1],
         ['=SEARCH("a??b",D5)', VALUE],
         ['=SEARCH("a~*?b",D5)', VALUE],
+        ['=SEARCH("~b","a~b")', 3],
+        ['=SEARCH("a~","a~b")', 1],
+        ['=SEARCH("~~b","a~b")', 2],
         ['=SEARCH("*c","abc")', 1],
         ['=SEARCH("b*","abc")', 2],
         ['=SEARCH("?c","abcabc")', 2],
@@ -245,6 +258,7 @@ describe('joining', () => {
         ['=LEN(TEXTJOIN("|",FALSE,REPT("x",32767)))', 32767],
         ['=TEXTJOIN("|",FALSE,REPT("x",32766),"y")', CALC],
         ['=TEXTJOIN("|",TRUE,REPT("x",32767),"")', CALC],
+        ['=LEN(TEXTJOIN("|",TRUE,REPT("x",32765),"","y"))', 32767],
         ['=LEN(TEXTJOIN(REPT("x",32000),FALSE,"a","b"))', 32002],
         ['=TEXTJOIN(REPT("x",32766),FALSE,"a","b")', CALC],
     ]);
@@ -263,6 +277,8 @@ describe('characters and their codes', () => {
         ['=CHAR(65.9)', 'A'],
         ['=CHAR(128)', '€'],
         ['=CODE(CHAR(129))', 129],
+        ['=CHAR(136)', 'ˆ'],
+        ['=CODE("ˆ")', 136],
         ['=CHAR(159)', 'Ÿ'],
         ['=CHAR(255.9)', 'ÿ'],
         ['=CHAR(256)', VALUE],
@@ -289,7 +305,12 @@ describe('characters and their codes', () => {
         ['=UNICHAR(55357)', NA],
         ['=UNICHAR(57343)', NA],
         ['=UNICODE(UNICHAR(57344))', 57344],
+        ['=UNICHAR(65534)', NA],
         ['=UNICHAR(65535)', NA],
+        ['=UNICODE(UNICHAR(64975))', 64975],
+        ['=UNICHAR(64976)', NA],
+        ['=UNICHAR(65007)', NA],
+        ['=UNICODE(UNICHAR(65008))', 65008],
         ['=UNICHAR(128512)', EMOJI],
         ['=UNICHAR(1114111)', NA],
         ['=UNICHAR(1114112)', VALUE],
@@ -342,6 +363,12 @@ describe('numbers as text', () => {
         ['=TEXT("2024-03-15","d mmm")', '15 Mar'],
         ['=TEXT("12:30","h:mm")', '12:30'],
         ['=TEXT(B4,"0")', DIV0],
+        ['=TEXT("a","0;;;""t:""@")', 't:a'],
+        ['=TEXT(TRUE,"0;;;""t:""@")', 'TRUE'],
+        ['=TEXT("abc",TRUE)', 'abc'],
+        ['=TEXT(0.285,"0%")', '29%'],
+        ['=TEXT(PI(),"0.000000000000000000")', '3.141592653589790000'],
+        ['=TEXT(1/3,"0.00000000000000000000")', '0.33333333333333300000'],
     ]);
     // The day line is Google's, by the owner's pick: day 0 is 30 December 1899, a negative number is an earlier day
     // and 1900 has no 29 February. Excel answers 1900-01-00 for 0, 1900-02-29 for 60 and #VALUE! below 0.
@@ -370,6 +397,17 @@ describe('numbers as text', () => {
         ['=TEXT(-141639,"dddd")', ''],
         ['=TEXT(-0.25,"dddd")', 'Saturday'],
     ]);
+    // numfmt defect: half a second before midnight the time is 0:00:00 and the day stays, where DAY answers 16.
+    // And from 1E+21 on it has no digits, where Excel writes all 22.
+    // And a decimal that ends in a 5 rounds down where the double under it lies below the half: Excel, FIXED and
+    // ROUND say 1.01.
+    rows('TEXT at midnight, from 1E+21 and at a half', [
+        ['=TEXT(45000.999995,"yyyy-mm-dd hh:mm:ss")', '2023-03-15 00:00:00'],
+        ['=DAY(45000.999995)', 16],
+        ['=TEXT(1E+21,"0")', VALUE],
+        ['=TEXT(1.005,"0.00")', '1.00'],
+        ['=TEXT(74.945,"#,##0.00")', '74.94'],
+    ]);
     rows('FIXED', [
         ['=FIXED(1234.567)', '1,234.57'],
         ['=FIXED(1234.567,,FALSE)', '1,234.57'],
@@ -388,8 +426,21 @@ describe('numbers as text', () => {
         ['=FIXED(-1234.567,-2,TRUE)', '-1200'],
         ['=FIXED(0.5,0,TRUE)', '1'],
         ['=FIXED(1.005,2)', '1.01'],
+        ['=FIXED(74.945,2)&" "&FIXED(260.405,2)&" "&DOLLAR(1.255)', '74.95 260.41 $1.26'],
         ['=FIXED(1E+15,2,TRUE)', '1000000000000000.00'],
         ['=FIXED(5E+20,0,TRUE)', '500000000000000000000'],
+        ['=FIXED(5E+20,2,TRUE)', '500000000000000000000.00'],
+        ['=FIXED(5E+20,-2,TRUE)', '500000000000000000000'],
+        ['=FIXED(1E+21,0)', '1,000,000,000,000,000,000,000'],
+        ['=FIXED(1E+21,0,TRUE)', '1000000000000000000000'],
+        ['=FIXED(123456789012345678,1,TRUE)', '123456789012345000.0'],
+        ['=FIXED(0.000001,2,TRUE)', '0.00'],
+        ['=FIXED(0,-2,TRUE)', '0'],
+        ['=FIXED(-0.001,2)', '0.00'],
+        ['=FIXED(999.995,2)', '1,000.00'],
+        ['=FIXED(0.05,1,TRUE)', '0.1'],
+        ['=LEN(FIXED(1E+254,0,TRUE))', 255],
+        ['=FIXED(1E+255,0,TRUE)', VALUE],
         ['=FIXED(1E+300,2,TRUE)', VALUE],
         ['=FIXED("abc",2)', VALUE],
     ]);
@@ -402,7 +453,12 @@ describe('numbers as text', () => {
         ['=LEN(DOLLAR(1234.567,127))', 134],
         ['=DOLLAR(1234.567,128)', VALUE],
         ['=DOLLAR(0.5,0)', '$1'],
+        ['=DOLLAR(0)', '$0.00'],
+        ['=DOLLAR(-0.001,2)', '($0.00)'],
         ['=DOLLAR(5E+20,0)', '$500,000,000,000,000,000,000'],
+        ['=DOLLAR(5E+20,2)', '$500,000,000,000,000,000,000.00'],
+        ['=DOLLAR(-1E+21,0)', '($1,000,000,000,000,000,000,000)'],
+        ['=DOLLAR(123456789.987654321,0)', '$123,456,790'],
         ['=DOLLAR(1E+300,0)', VALUE],
         ['=DOLLAR(TRUE,2)', '$1.00'],
     ]);
@@ -442,6 +498,18 @@ describe('numbers as text', () => {
         ['=NUMBERVALUE(" ")', 0],
         ['=NUMBERVALUE(B1)', 0],
         ['=NUMBERVALUE("1 2"&CHAR(9)&"3"&CHAR(10))', 123],
+        ['=NUMBERVALUE("3"&CHAR(160)&"000")', VALUE],
+        ['=NUMBERVALUE("1,2,3",".",",")', 123],
+        ['=NUMBERVALUE("1.000,5")', VALUE],
+        ['=NUMBERVALUE("1,000.5,0")', VALUE],
+        ['=NUMBERVALUE("1.5,5")', VALUE],
+        ['=NUMBERVALUE("(-5)")', VALUE],
+        ['=NUMBERVALUE("-$5")', -5],
+        ['=NUMBERVALUE("%")', 0],
+        ['=NUMBERVALUE("12:30")', 0.5208333333333334],
+        ['=NUMBERVALUE("2024-03-15")', 45366],
+        ['=NUMBERVALUE("3/15")', VALUE],
+        ['=NUMBERVALUE("Mar 15")', VALUE],
         ['=NUMBERVALUE(TRUE)', VALUE],
         ['=NUMBERVALUE(12.5)', 12.5],
     ]);
@@ -482,6 +550,8 @@ describe('TEXTBEFORE and TEXTAFTER', () => {
         ['=TEXTBEFORE("","",1,0,0,"nf")', ''],
         ['=TEXTBEFORE(D1,{"x","o"})', 'Hell'],
         ['=TEXTBEFORE("a-b-c",{"b","-"})', 'a'],
+        ['=TEXTBEFORE("abcabc",{"c","bc"},-1)', 'abcab'],
+        ['=TEXTBEFORE("abcabc",{"bc","c"},-1)', 'abca'],
         ['=TEXTBEFORE(D1,B1:B6)', DIV0],
         ['=TEXTBEFORE(D5,"*")', 'a~'],
         ['=TEXTBEFORE(D2,"  ",2)', '  two'],
@@ -510,6 +580,8 @@ describe('TEXTBEFORE and TEXTAFTER', () => {
         ['=TEXTAFTER(D1,"",-1)', ''],
         ['=TEXTAFTER(D1,"Hello World",2,0,1)', VALUE],
         ['=TEXTAFTER(D1,{" ","o"})', ' World'],
+        ['=TEXTAFTER("abcabc",{"b","bc"})', 'cabc'],
+        ['=TEXTAFTER("abcabc",{"bc","b"})', 'abc'],
         ['=TEXTAFTER(D2,"  ",3)', ''],
         ['=TEXTAFTER(D2,"  ",4)', NA],
         ['=TEXTAFTER("a---b","--")', '-b'],
@@ -519,6 +591,26 @@ describe('TEXTBEFORE and TEXTAFTER', () => {
         ['=TEXTAFTER(D6,"x",301)', VALUE],
         ['=TEXTAFTER(D1,"x",1,0,0,"nf")', 'nf'],
     ]);
+});
+
+// A typed decimal of up to 15 digits is written as that decimal rounded half away from zero, and past its digits
+// come zeros. TEXT is not held to it: numfmt rounds a half down for some.
+test('FIXED and DOLLAR write a typed decimal rounded half away from zero', () => {
+    const random = seeded(1005);
+    for (let run = 0; run < 1500; run += 1) {
+        const decimals = Math.floor(random() * 8);
+        const { typed, rounded, negative } = typedDecimal(random, decimals);
+        const sign = negative && Number(rounded) !== 0 ? '-' : '';
+        const more = Math.floor(random() * 12);
+        const texts = `FIXED(${typed},${decimals},TRUE)&"|"&DOLLAR(${typed},${decimals})`;
+        const longer = `FIXED(${rounded},${decimals + more},TRUE)`;
+        const money = negative ? `($${grouped(rounded)})` : `$${grouped(rounded)}`;
+        const padded = `${decimals === 0 && more > 0 ? `${rounded}.` : rounded}${'0'.repeat(more)}`;
+        expect([typed, evaluate(`=${texts}&"|"&${longer}`, SHEET)]).toEqual([
+            typed,
+            `${sign}${rounded}|${money}|${padded}`,
+        ]);
+    }
 });
 
 test('an array where one value is asked gives one answer per element', () => {

@@ -2,13 +2,14 @@
 // characters from 1. A count is refused for its sign before its fraction is cut: LEFT("abc",-0.9) is #VALUE!.
 // What a character is, how letters change case and how a number is shown are kernels these rows only call.
 
-import { numberAsText } from '../format/number-display';
+import { valueAsText } from '../format/number-display';
 import { ansiCharacter, ansiCode } from '../values/ansi';
-import { countCharacters, cutCharacters, findCharacters, searchCharacters } from '../values/characters';
+import { countCharacters, cutCharacters, findCharacters, firstCode, searchCharacters } from '../values/characters';
 import { partBeside } from '../values/delimited';
 import { CALC, NA, VALUE } from '../values/errors';
 import { lowerCase, properCase, upperCase } from '../values/letter-case';
-import { parseNumber } from '../values/parse-number';
+import { fixedText } from '../values/number-text';
+import { parseDateTime, parseNumber } from '../values/parse-number';
 import { roundDecimal } from '../values/precision';
 import { separatedNumber } from '../values/separated-number';
 import { isError, LONGEST_TEXT } from '../values/value';
@@ -17,7 +18,7 @@ import { BOOLEAN, fn, INTEGER, NUMBER, optional, PLAIN, rest, skippable, strict,
 // Past this a position is no position: MID("abc",2^31,1) is #VALUE!.
 const MOST = 2 ** 31;
 
-// REPT, CODE and UNICODE still refuse a text longer than the one Excel once held.
+// REPT, CODE and UNICODE still refuse a text longer than the one Excel once held, and FIXED and DOLLAR write none.
 const OLD_LONGEST_TEXT = 255;
 
 // The most decimals FIXED and DOLLAR write.
@@ -29,10 +30,10 @@ const LAST_CODE_POINT = 0x10ffff;
 const UNSEEN = /[^\P{Cc}\x7f]/gu;
 
 // The number rounded as ROUND does, with exactly `decimals` digits after the point.
-function fixed(number: number, decimals: number, whole: string) {
+function fixed(number: number, decimals: number, grouped: boolean) {
     if (decimals > MOST_DECIMALS) return VALUE;
-    const format = decimals > 0 ? `${whole}.${'0'.repeat(decimals)}` : whole;
-    return numberAsText(roundDecimal(number, decimals), format) ?? VALUE;
+    const text = fixedText(roundDecimal(number, decimals), decimals, grouped);
+    return countCharacters(text) > OLD_LONGEST_TEXT ? VALUE : text;
 }
 
 // TEXTBEFORE and TEXTAFTER. An instance that was written is refused when the text has no room for that many
@@ -48,8 +49,8 @@ function beside(after: boolean) {
     ) => {
         if (instance === 0 || (mode !== 0 && mode !== 1) || (toEnd !== 0 && toEnd !== 1)) return VALUE;
         let shortest = LONGEST_TEXT;
-        for (const delimiter of delimiters) shortest = Math.min(shortest, delimiter.length);
-        if (instance !== undefined && Math.abs(instance) > text.length - shortest + 1) return VALUE;
+        for (const delimiter of delimiters) shortest = Math.min(shortest, countCharacters(delimiter));
+        if (instance !== undefined && Math.abs(instance) > countCharacters(text) - shortest + 1) return VALUE;
         const part =
             mode === 1
                 ? partBeside(text, upperCase(text), delimiters.map(upperCase), instance ?? 1, toEnd === 1, after)
@@ -60,11 +61,11 @@ function beside(after: boolean) {
 
 export const TEXT_FUNCTIONS = [
     // What is past the longest text is cut off, where CONCAT refuses.
-    fn('CONCATENATE', [rest(TEXT)], (texts) => texts.join('').slice(0, LONGEST_TEXT)),
+    fn('CONCATENATE', [rest(TEXT)], (texts) => cutCharacters(texts.join(''), 0, LONGEST_TEXT)),
     fn('CONCAT', [rest(TEXTS)], (texts) => {
         let joined = '';
         for (const text of texts) {
-            if (joined.length + text.length > LONGEST_TEXT) return CALC;
+            if (countCharacters(joined) + countCharacters(text) > LONGEST_TEXT) return CALC;
             joined += text;
         }
         return joined;
@@ -76,7 +77,8 @@ export const TEXT_FUNCTIONS = [
         let count = 0;
         for (const text of texts) {
             const delimiter = count === 0 ? '' : delimiters[(count - 1) % delimiters.length];
-            if (joined.length + delimiter.length + text.length > LONGEST_TEXT) return CALC;
+            const length = countCharacters(joined) + countCharacters(delimiter) + countCharacters(text);
+            if (length > LONGEST_TEXT) return CALC;
             if (skip && text === '') continue;
             joined += delimiter + text;
             count += 1;
@@ -106,19 +108,22 @@ export const TEXT_FUNCTIONS = [
     fn('SUBSTITUTE', [TEXT, TEXT, TEXT, optional(strict(NUMBER))], (text, old, put, instance) => {
         if (instance !== undefined && (instance < 1 || instance >= MOST)) return VALUE;
         if (old === '') return text;
-        const step = instance === undefined ? old.length : 1;
+        const width = countCharacters(old);
+        const step = instance === undefined ? width : 1;
         let result = '';
         let kept = 0;
         let seen = 0;
-        for (let at = text.indexOf(old); at >= 0; at = text.indexOf(old, at + step)) {
+        for (let at = findCharacters(old, text, 1); at > 0; at = findCharacters(old, text, at + step)) {
             seen += 1;
             if (instance !== undefined && seen < Math.trunc(instance)) continue;
-            if (result.length + at - kept + put.length > LONGEST_TEXT) return VALUE;
-            result += text.slice(kept, at) + put;
-            kept = at + old.length;
+            const between = at - 1 - kept;
+            // The longest text times itself is more than a string can hold on Node.
+            if (countCharacters(result) + between + countCharacters(put) > LONGEST_TEXT) return VALUE;
+            result += cutCharacters(text, kept, between) + put;
+            kept = at - 1 + width;
             if (instance !== undefined) break;
         }
-        return result + text.slice(kept);
+        return result + cutCharacters(text, kept, LONGEST_TEXT);
     }),
     // An empty text is found at every position up to the one after the last character.
     fn('FIND', [TEXT, TEXT, optional(NUMBER, 1)], (sought, text, start) =>
@@ -131,11 +136,12 @@ export const TEXT_FUNCTIONS = [
             ? VALUE
             : searchCharacters(sought, text, Math.trunc(start)) || VALUE,
     ),
-    fn('REPT', [TEXT, NUMBER], (text, count) =>
-        count < 0 || text.length > OLD_LONGEST_TEXT || text.length * Math.trunc(count) > LONGEST_TEXT
+    fn('REPT', [TEXT, NUMBER], (text, count) => {
+        const length = countCharacters(text);
+        return count < 0 || length > OLD_LONGEST_TEXT || length * Math.trunc(count) > LONGEST_TEXT
             ? VALUE
-            : text.repeat(Math.trunc(count)),
-    ),
+            : text.repeat(Math.trunc(count));
+    }),
     fn('EXACT', [TEXT, TEXT], (one, other) => one === other),
     fn('LEN', [TEXT], countCharacters),
     fn('LOWER', [TEXT], lowerCase),
@@ -145,36 +151,42 @@ export const TEXT_FUNCTIONS = [
     fn('TRIM', [TEXT], (text) => text.replace(/ {2,}/g, ' ').replace(/^ | $/g, '')),
     fn('CLEAN', [TEXT], (text) => text.replace(UNSEEN, '')),
     fn('CHAR', [INTEGER], (code) => (code < 1 || code > 255 ? VALUE : ansiCharacter(code))),
-    fn('CODE', [TEXT], (text) =>
-        text === '' || text.length > OLD_LONGEST_TEXT ? VALUE : ansiCode(text.charCodeAt(0)),
-    ),
-    // Half of a surrogate pair and the last two code points of a plane are no character.
+    fn('CODE', [TEXT], (text) => {
+        const code = firstCode(text);
+        return code === undefined || countCharacters(text) > OLD_LONGEST_TEXT ? VALUE : ansiCode(code);
+    }),
+    // Half of a surrogate pair is no character, and neither are the code points Unicode sets aside for good: the
+    // last two of a plane and the 32 from U+FDD0.
     fn('UNICHAR', [INTEGER], (code) => {
         if (code < 1 || code > LAST_CODE_POINT) return VALUE;
-        return (code >= 0xd800 && code <= 0xdfff) || (code & 0xfffe) === 0xfffe ? NA : String.fromCodePoint(code);
+        const none = (code >= 0xd800 && code <= 0xdfff) || (code >= 0xfdd0 && code <= 0xfdef);
+        return none || (code & 0xfffe) === 0xfffe ? NA : String.fromCodePoint(code);
     }),
-    fn('UNICODE', [TEXT], (text) => (text.length > OLD_LONGEST_TEXT ? VALUE : (text.codePointAt(0) ?? VALUE))),
+    fn('UNICODE', [TEXT], (text) => (countCharacters(text) > OLD_LONGEST_TEXT ? VALUE : (firstCode(text) ?? VALUE))),
     // An empty text is 0, as it is wherever a number is read.
     fn('VALUE', [TEXT], (text) => (text === '' ? 0 : (parseNumber(text) ?? VALUE))),
-    // The first character of each separator counts. Left out, the comma groups unless it is the decimal sign.
+    // The first character of each separator counts. Left out, the comma groups unless it is the decimal sign. A
+    // date or a time is read too, but only one that says its year: no year is handed over, so the clock is not asked.
     fn('NUMBERVALUE', [TEXT, optional(TEXT, '.'), optional(TEXT)], (text, decimals, groups) => {
-        const decimal = decimals.charAt(0);
-        const group = groups === undefined ? (decimal === ',' ? '' : ',') : groups.charAt(0);
+        const decimal = cutCharacters(decimals, 0, 1);
+        const group = groups === undefined ? (decimal === ',' ? '' : ',') : cutCharacters(groups, 0, 1);
         if (decimal === '' || groups === '' || group === decimal) return VALUE;
-        return separatedNumber(text, decimal, group) ?? VALUE;
+        return separatedNumber(text, decimal, group) ?? parseDateTime(text, Number.NaN) ?? VALUE;
     }),
-    // A text that reads as a number is shown as that number, and any other text and a boolean as they are.
+    // A text that reads as a number is shown as that number. Any other text goes through the text section of the
+    // format and stays as it is under a format that does not parse, and a boolean is its name.
     fn('TEXT', [PLAIN, TEXT], (value, format) => {
-        const number = value === null ? 0 : typeof value === 'string' ? parseNumber(value) : value;
-        if (typeof number !== 'number') return value === true ? 'TRUE' : value === false ? 'FALSE' : value;
+        if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+        const number = typeof value === 'string' ? (parseNumber(value) ?? value) : (value ?? 0);
+        if (typeof number === 'string') return valueAsText(number, format) ?? number;
         if (format === '') return number < 0 ? '-' : '';
-        return numberAsText(number, format) ?? VALUE;
+        return valueAsText(number, format) ?? VALUE;
     }),
     fn('FIXED', [NUMBER, skippable(INTEGER, 2), optional(BOOLEAN, false)], (number, decimals, plain) =>
-        fixed(number, decimals, plain ? '0' : '#,##0'),
+        fixed(number, decimals, !plain),
     ),
     fn('DOLLAR', [NUMBER, optional(INTEGER, 2)], (number, decimals) => {
-        const digits = fixed(Math.abs(number), decimals, '#,##0');
+        const digits = fixed(Math.abs(number), decimals, true);
         return isError(digits) ? digits : number < 0 ? `($${digits})` : `$${digits}`;
     }),
     fn(
