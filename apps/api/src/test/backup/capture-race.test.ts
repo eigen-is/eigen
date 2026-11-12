@@ -1,9 +1,11 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import * as fsPromises from 'node:fs/promises';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
+import * as captureModule from '../../lib/backup/capture';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
 import { restoreHome } from '../../lib/backup/restore';
 import { verifyFolder } from '../../lib/backup/verify';
@@ -507,7 +509,7 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
 
 describe('a file whose stream overwrite is in flight when the capture reaches it', () => {
     for (const storageType of ['local-fullnames', 'local-id'] as const) {
-        test(`is archived whole, on ${storageType}`, async () => {
+        test(`is archived whole as it was, without waiting for the overwrite, on ${storageType}`, async () => {
             const user = await raceUser(storageType);
             const { root } = await seed(user);
             const size = 8 * 1024 * 1024;
@@ -520,53 +522,41 @@ describe('a file whose stream overwrite is in flight when the capture reaches it
             );
             const home = await getHome(user.id);
             const mount = await defaultMount(user);
-            const bigKey = await mount.getStorageKey(big.id);
+            const bigPath = join(mount.dataDir, await mount.getStorageKey(big.id));
             const frozen = Promise.withResolvers<void>();
             const release = Promise.withResolvers<void>();
-            // Frozen where Bun.write's thread is part-way: half of the new bytes over the file.
-            const write = mount.storage.write.bind(mount.storage);
-            const writeSpy = spyOn(mount.storage, 'write').mockImplementation(async (key, data) => {
-                if (key === bigKey) {
-                    writeFileSync(mount.storage.getPath!(key), Buffer.alloc(size / 2, 1));
+            // Frozen with every new byte written and the rename over the key still to come.
+            const rename = fsPromises.rename;
+            const renameSpy = spyOn(fsPromises, 'rename').mockImplementation(async (from, to) => {
+                if (to === bigPath) {
                     frozen.resolve();
                     await release.promise;
                 }
-                return write(key, data);
+                return rename(from, to);
             });
             const overwrite = home.drive.writeFileContent(
                 M,
                 big.id,
-                new Blob([new Uint8Array(size).fill(1)]).stream(),
+                new Blob([new Uint8Array(size / 2).fill(1)]).stream(),
                 {
                     user: home.user,
                 },
             );
             await frozen.promise;
-            // The capture's own request for the file's lock lets the overwrite finish.
-            const withPathLock = Mount.prototype.withPathLock;
-            const lock = spyOn(Mount.prototype, 'withPathLock').mockImplementation(function <T>(
-                this: Mount,
-                pathId: string,
-                fn: () => Promise<T>,
-            ) {
-                if (pathId === big.id) release.resolve();
-                return withPathLock.bind(this)(pathId, fn);
-            });
             let result: Awaited<ReturnType<typeof snapshotInto>>;
             try {
                 result = await snapshotInto(home, 'full');
             } finally {
                 release.resolve();
                 await overwrite;
-                lock.mockRestore();
-                writeSpy.mockRestore();
+                renameSpy.mockRestore();
             }
             const archived = readFileSync(join(result.folder, 'home/mounts', M, 'data/big.bin'));
-            expect(archived.byteLength).toBe(size);
-            expect(new Set(archived).size).toBe(1);
+            expect(archived.equals(Buffer.alloc(size))).toBe(true);
             const entry = findOrFail(result.manifest.entries, (e) => e.path.endsWith('/data/big.bin'));
             expect(entry.bytes).toBe(size);
             expect((await verifyFolder(result.folder)).status).toBe('verified');
+            expect(readFileSync(bigPath).equals(Buffer.alloc(size / 2, 1))).toBe(true);
         });
     }
 });
@@ -584,19 +574,17 @@ describe('a capture of a local mount shares the event loop', () => {
         );
         const turns = countLoopTurns();
         let turnsDuringBig = 0;
-        const withPathLock = Mount.prototype.withPathLock;
-        const lock = spyOn(Mount.prototype, 'withPathLock').mockImplementation(async function <T>(
-            this: Mount,
-            pathId: string,
-            fn: () => Promise<T>,
-        ) {
-            const before = turns.read();
-            try {
-                return await withPathLock.bind(this)(pathId, fn);
-            } finally {
-                if (pathId === big.id) turnsDuringBig = turns.read() - before;
-            }
-        });
+        const captureFile = captureModule.captureFile;
+        const capture = spyOn(captureModule, 'captureFile').mockImplementation(
+            async (bytes, destPath, relPath, yields) => {
+                const before = turns.read();
+                try {
+                    return await captureFile(bytes, destPath, relPath, yields);
+                } finally {
+                    if (relPath.endsWith('/big.bin')) turnsDuringBig = turns.read() - before;
+                }
+            },
+        );
         const samples: number[] = [];
         const readKey = Mount.prototype.readKey;
         const read = spyOn(Mount.prototype, 'readKey').mockImplementation(function (this: Mount, key: string) {
@@ -608,8 +596,9 @@ describe('a capture of a local mount shares the event loop', () => {
         } finally {
             turns.stop();
             read.mockRestore();
-            lock.mockRestore();
+            capture.mockRestore();
         }
+        expect(big.name).toBe('big.bin');
         expect(turnsDuringBig).toBeGreaterThanOrEqual(7);
         expect(samples.length).toBe(REPORTS.length + 2);
         expect(samples.slice(1).every((sample, i) => sample > samples[i])).toBe(true);
