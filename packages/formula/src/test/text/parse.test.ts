@@ -404,11 +404,15 @@ describe('literals and names (parsing.md 2.3)', () => {
         '=Sheet2! A1',
         '=$',
         '=A$B',
-        'SUM(1)',
         '=',
         '',
     ])('%p does not parse, and says so without throwing', (text) => {
         expect(failure(text)).toBe('syntax');
+    });
+
+    test('a formula reads without its =, as a file holds it', () => {
+        expect(treeA1('SUM(1)')).toEqual(treeA1('=SUM(1)'));
+        expect(failure('=')).toBe('syntax');
     });
 });
 
@@ -638,8 +642,8 @@ describe('references and sheets (parsing.md 2.4)', () => {
         ["=sheet2!$1:'Sheet2'!3", '=[s2]!R1:R[2]', '=Sheet2!$1:3'],
         ['=SUM(Sheet2!A:Sheet2!A)', '=SUM([s2]!C[-13]:C[-13])', '=SUM(Sheet2!A:A)'],
         ["='No Such'!A:'No Such'!B", "='No Such'!C[-13]:C[-12]", "='No Such'!A:B"],
-        ['=Jan:Dec!1:Jan:Dec!2', "='Jan:Dec'!R:R[1]", "='Jan:Dec'!1:2"],
-        ['=[1]Book!$A:[1]Book!B', "='[1]Book'!C1:C[-12]", "='[1]Book'!$A:B"],
+        ['=Jan:Dec!1:Jan:Dec!2', "='Jan:Dec'!R:R[1]", '=Jan:Dec!1:2'],
+        ['=[1]Book!$A:[1]Book!B', "='[1]Book'!C1:C[-12]", '=[1]Book!$A:B'],
         ['=Sheet2!A:Sheet2!B:Sheet2!C', '=[s2]!C[-13]:C[-12]:[s2]!c', '=Sheet2!A:B:Sheet2!c'],
     ])('a whole column or row may repeat its sheet too: %s is stored as %s and shows as %s', (text, kept, a1) => {
         expect(stored(text)).toBe(kept);
@@ -670,8 +674,8 @@ describe('references and sheets (parsing.md 2.4)', () => {
         expect(parseStored('=[s2]!C1:[s1]!C2')).toMatchObject({ reason: 'syntax' });
     });
 
-    test('a 3-D reference parses and is kept, and shows in quotes', () => {
-        expect(shown('=SUM(Sheet1:Sheet3!A1)')).toBe("=SUM('Sheet1:Sheet3'!A1)");
+    test('a 3-D reference parses and is kept, and shows bare, as it reads back', () => {
+        expect(shown('=SUM(Sheet1:Sheet3!A1)')).toBe('=SUM(Sheet1:Sheet3!A1)');
         expect(shown("=SUM('Sheet 1:Sheet 3'!A1)")).toBe("=SUM('Sheet 1:Sheet 3'!A1)");
         expect(stored('=SUM(Sheet1:Sheet3!A1:B2)', 'A1')).toBe("=SUM('Sheet1:Sheet3'!RC:R[1]C[1])");
         expect(treeA1('=Sheet1:Sheet3!A1')).toMatchObject({ sheetKind: SheetKind.Span, sheet: 'Sheet1:Sheet3' });
@@ -689,7 +693,7 @@ describe('references and sheets (parsing.md 2.4)', () => {
         expect(tree.children[0]).toMatchObject({ kind: NodeKind.Ref, sheetKind: SheetKind.Span, sheet: sheets });
         expect(printStored(tree)).toBe(`=SUM('${sheets}'!R[1]C[1])`);
         const a1 = printA1(tree, 0, 0, sheetName);
-        expect(a1).toBe(`=SUM('${sheets}'!B2)`);
+        expect(a1).toBe(`=SUM(${sheets}!B2)`);
         expect(treeA1(a1, 'A1')).toEqual(tree);
         expect(treeStored(printStored(tree))).toEqual(tree);
     });
@@ -708,11 +712,11 @@ describe('references and sheets (parsing.md 2.4)', () => {
         expect(parseStored('=A[1]:B[2]!RC')).toMatchObject({ reason: 'syntax' });
     });
 
-    test('a reference to another workbook parses and is kept, and shows in quotes', () => {
-        expect(shown('=[1]Sheet1!$A$1')).toBe("='[1]Sheet1'!$A$1");
+    test('a reference to another workbook parses and is kept, and shows bare where it reads back', () => {
+        expect(shown('=[1]Sheet1!$A$1')).toBe('=[1]Sheet1!$A$1');
         expect(shown("='[1]My Sheet'!$A$1")).toBe("='[1]My Sheet'!$A$1");
-        expect(shown('=[1]!GlobalName')).toBe("='[1]'!GlobalName");
-        expect(shown("='[1]x'!$A$1:'[1]x'!B2")).toBe("='[1]x'!$A$1:B2");
+        expect(shown('=[1]!GlobalName')).toBe('=[1]!GlobalName');
+        expect(shown("='[1]x'!$A$1:'[1]x'!B2")).toBe('=[1]x!$A$1:B2');
         expect(shown("='C:\\path\\[Book.xlsx]Sheet1'!A1")).toBe("='C:\\path\\[Book.xlsx]Sheet1'!A1");
         expect(stored('=[1]Sheet1!$A$1')).toBe("='[1]Sheet1'!R1C1");
         expect(stored('=[1]!GlobalName')).toBe("='[1]'!GlobalName");
@@ -720,23 +724,23 @@ describe('references and sheets (parsing.md 2.4)', () => {
     });
 
     test.each([
-        ['=[1]!Func(1)', "='[1]'!Func(1)"],
-        ['=[1]!PCovar($B$6:$B$17, 2 )', "='[1]'!PCovar($B$6:$B$17, 2 )"],
-        ['=[1]!wbname()', "='[1]'!wbname()"],
-        ['=1+[1]!Func(A1)(2)*3', "=1+'[1]'!Func(A1)(2)*3"],
+        ['=[1]!Func(1)', '=[1]!Func(1)'],
+        ['=[1]!PCovar($B$6:$B$17, 2 )', '=[1]!PCovar($B$6:$B$17, 2 )'],
+        ['=[1]!wbname()', '=[1]!wbname()'],
+        ['=1+[1]!Func(A1)(2)*3', '=1+[1]!Func(A1)(2)*3'],
         ["='C:\\x\\[Book.xlsx]'!Func(1)", "='C:\\x\\[Book.xlsx]'!Func(1)"],
-        ["=[1]!'SGJ212,LA'", "='[1]'!'SGJ212,LA'"],
-        ["=[1]!'it''s'+1", "='[1]'!'it''s'+1"],
-        ["=[1]!'Rate'", "='[1]'!Rate"],
-        ["=[1]!'A1'", "='[1]'!'A1'"],
-        ["=[1]!'RC'", "='[1]'!'RC'"],
-        ["=[1]!''", "='[1]'!''"],
-        ['=[1]!TAX2(1)', "='[1]'!'TAX2'(1)"],
-        ['=[1]!R[1]C(1)', "='[1]'!'R[1]C'(1)"],
-        ["=[1]!'my fn'(1)", "='[1]'!'my fn'(1)"],
-        ['=SUM([2]A:B!B11)', "=SUM('[2]A:B'!B11)"],
-        ['=SUM([2]Section3A:formulas!$B$11:C12)', "=SUM('[2]Section3A:formulas'!$B$11:C12)"],
-        ['=[2]Jan:Dec!A:[2]Jan:Dec!B', "='[2]Jan:Dec'!A:B"],
+        ["=[1]!'SGJ212,LA'", "=[1]!'SGJ212,LA'"],
+        ["=[1]!'it''s'+1", "=[1]!'it''s'+1"],
+        ["=[1]!'Rate'", '=[1]!Rate'],
+        ["=[1]!'A1'", "=[1]!'A1'"],
+        ["=[1]!'RC'", "=[1]!'RC'"],
+        ["=[1]!''", "=[1]!''"],
+        ['=[1]!TAX2(1)', "=[1]!'TAX2'(1)"],
+        ['=[1]!R[1]C(1)', "=[1]!'R[1]C'(1)"],
+        ["=[1]!'my fn'(1)", "=[1]!'my fn'(1)"],
+        ['=SUM([2]A:B!B11)', '=SUM([2]A:B!B11)'],
+        ['=SUM([2]Section3A:formulas!$B$11:C12)', '=SUM([2]Section3A:formulas!$B$11:C12)'],
+        ['=[2]Jan:Dec!A:[2]Jan:Dec!B', '=[2]Jan:Dec!A:B'],
     ])('a function, a quoted name and a 3-D pair of another workbook parse and are kept: %s', (text, a1) => {
         const tree = treeA1(text);
         expect(shown(text)).toBe(a1);

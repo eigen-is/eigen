@@ -1,11 +1,11 @@
 // The two printers over the one tree. printStored writes the canonical shape text, which is what a cell stores and
 // what the shape table keys on: offsets in R1C1 notation and sheets by id. printA1 writes what a person reads at a
 // given cell, such as in the formula bar: labels, sheet names, corners in order, and #REF! for a reference that
-// falls off the grid there or names a sheet that is gone.
+// falls off the grid there or names a sheet that is gone. printXlsx is printA1 without the =, as a file holds it.
 
 import { columnLabel, GRID_COLUMNS, GRID_ROWS } from './a1';
 import { ERROR_LITERALS, isWord, SYMBOLS, Token } from './lexer';
-import { readsAsReference } from './parser';
+import { readsAsReference, referenceAt } from './parser';
 import { quotedSheetName, quoteSheetName } from './sheet-name';
 import type { Ends, FormulaNode } from './tree';
 import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from './tree';
@@ -22,6 +22,11 @@ export function printStored(tree: FormulaNode): string {
 // The formula as it reads at a cell, row and column from 0. `sheetName` gives a sheet's name by its id.
 export function printA1(tree: FormulaNode, hostRow: number, hostColumn: number, sheetName: SheetNames): string {
     return `=${print(tree, false, hostRow, hostColumn, sheetName)}`;
+}
+
+// A tree in the spellings of a file, as xlsxTree makes one, at a cell.
+export function printXlsx(tree: FormulaNode, hostRow: number, hostColumn: number, sheetName: SheetNames): string {
+    return print(tree, false, hostRow, hostColumn, sheetName);
 }
 
 function noName(): undefined {
@@ -131,8 +136,14 @@ function sheetPrefix(node: FormulaNode, stored: boolean, sheetName: SheetNames):
         case SheetKind.Name:
             return `${stored ? quotedSheetName(sheet) : quoteSheetName(sheet)}!`;
         case SheetKind.External:
-        case SheetKind.Span:
-            return `${quotedSheetName(sheet)}!`;
+        case SheetKind.Span: {
+            // Stored text reads a bare bracket as a sheet id. Typed, the prefix is bare when it reads back as itself
+            // and the workbook in its brackets is one word, as Excel writes it.
+            const book = node.sheetKind === SheetKind.Span || isWord(`_${sheet.slice(1, sheet.indexOf(']'))}`);
+            const bare = stored || !book ? null : referenceAt(`${sheet}!A1`, 0);
+            const same = bare?.end === sheet.length + 3 && bare.node.sheetKind === node.sheetKind;
+            return `${same && bare.node.sheet === sheet ? sheet : quotedSheetName(sheet)}!`;
+        }
     }
 }
 

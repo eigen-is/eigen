@@ -1,6 +1,7 @@
 // What the call wrapper knows about a function: one record per parameter, saying how its argument is prepared,
 // read, defaulted and repeated, and one entry per function with what follows from its parameters. Everything here
-// is data the wrapper switches on. The words a function is written in are made from these records by the registry.
+// is data the wrapper switches on, and slotOf says which record an argument of a call falls under. The words a
+// function is written in are made from these records by the registry.
 
 import type { FormulaError } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
@@ -108,6 +109,9 @@ export type Param<T> = {
     readonly apiece: boolean;
     // What an argument that is no reference answers where only a reference is taken, unless it is an error itself.
     readonly stranger: FormulaError;
+    // Whether an Excel without dynamic arrays read this table as a reference, so an operator in it took one cell of
+    // a range. Nothing is evaluated by it: it says where the @ of a file's formula goes.
+    readonly placed: boolean;
     // Only in the type, never in a record: what the body gets.
     readonly [carries]?: () => T;
 };
@@ -185,3 +189,12 @@ export type Entry = {
     // the parameters of a method loosely. `fn` is the only writer.
     run(...args: readonly unknown[]): Result;
 };
+
+// What the argument at a place is read as, in a call of `count` arguments: past the last whole group it is the
+// one argument a row takes after its groups. The call wrapper steps through the same records in place, for speed.
+export function slotOf(entry: Entry, at: number, count: number): Param<unknown> {
+    const { fixed, group } = entry;
+    if (at < fixed) return entry.slots[at];
+    const grouped = count - fixed - ((count - fixed) % group);
+    return entry.slots[fixed + (at - fixed < grouped ? (at - fixed) % group : group)];
+}

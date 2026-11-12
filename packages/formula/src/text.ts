@@ -17,9 +17,10 @@ export {
     parseA1Range,
     parseStored,
 } from './text/parser';
-export { printA1, printStored } from './text/printer';
+export { printA1, printStored, printXlsx } from './text/printer';
 export { findSheetByName, quoteSheetName, sheetFinder, sheetNameKey } from './text/sheet-name';
 export { tokens } from './text/tokens';
 export type { FormulaNode } from './text/tree';
 export { NodeKind, RefFlag, RefKind, SheetKind } from './text/tree';
 export { storedText, typedText } from './text/typed';
+export { intersect, isLegacy, parseXlsx, xlsxTree } from './text/xlsx';
