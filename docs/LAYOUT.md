@@ -57,6 +57,12 @@ A target still on the page is never replaced, and an element inside an open dial
 
 The returned focus shows a ring only when its target had one as it left (`:focus-visible`). A dropdown menu a pointer opened focuses its trigger with `focusVisible: false`, because Radix's plain `focus()` after Escape draws a ring in Chrome, and a hover-revealed ⋮ with a ring stays shown after the pointer leaves.
 
+## A dialog opened by a value keeps it while it closes
+
+A dialog that shows a value, such as the items to delete, still draws its text while it fades out, so its owner never clears that value on close. `useDialogValue<T>()` (`packages/ui/src/hooks/use-dialog-value.ts`) holds the open flag and the last value: `openDialog(value)` sets both, `setOpen` is the dialog's `onOpenChange`, and the owner mounts the dialog once `value` is set. An `open` derived from `value !== null` is the bug, because the close then blanks the text or counts "0 items", and unmounting the dialog on close skips its fade-out.
+
+A test reads a closing dialog with `holdClosingDialogs` (`packages/ui/src/test/closing-dialog.ts`). It goes in before the dialog mounts, because Radix reads the content's animation as it mounts.
+
 ## One `DriveCapabilities` value gates every Drive action
 
 `DriveLayout` is the file-management UI: `DriveList`, `DriveDetail` and the Drive action runner (`useDriveActionRunner`), which runs each action and owns its dialogs. Each render site declares its whole surface as one `DriveCapabilities` value (presets in `drive-capabilities.ts`). `DRIVE_ACTIONS` (`packages/lib/src/core/drive/drive-actions.ts`) is the one list of Drive actions with each row's label, group and gate. `driveActionsFor` answers which rows apply, and `useDriveActionsFor` drops the guest-denied and mail-only rows, so the row menu, the detail column, the Delete key and the command palette offer the same set. Watch is no row: it shows live state, so the menu and the palette draw it from `useWatchToggle`.

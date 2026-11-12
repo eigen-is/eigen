@@ -4,7 +4,7 @@
 import { getDriveAppUrl } from '@workspace/lib/api';
 import type { AuthUser } from '@workspace/lib/auth';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
-import { DEFAULT_MOUNT_ID, useListTrash, useRootFolder } from '@workspace/lib/drive';
+import { DEFAULT_MOUNT_ID, useRootFolder, useTrash } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { EigenDocType } from '@workspace/lib/types/drive';
@@ -96,9 +96,8 @@ function UserAppSidebar({ user, condensed, newButton }: { user: AuthUser; conden
     const inDrive = host === null;
     const { data: personalRoot } = useRootFolder(user.id, DEFAULT_MOUNT_ID);
 
-    // Empty ownerId short-circuits the hook's enabled guard; only fetch trash count in Drive.
-    const { data: trashedItems } = useListTrash(inDrive ? user.id : '', DEFAULT_MOUNT_ID);
-    const trashCount = trashedItems?.length ?? 0;
+    // Only Drive shows the count, and without a viewer the hook reads no trash.
+    const trashCount = useTrash(inDrive ? user.id : '').items.length;
 
     const { data: myTeams } = useMyTeams();
 

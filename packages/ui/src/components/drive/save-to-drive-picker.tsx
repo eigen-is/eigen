@@ -3,7 +3,7 @@
 // server, and a mail part is written from the stored message.
 
 import { triggerDownload } from '@workspace/lib/download';
-import { PartialCopyError, useCopyToFolder } from '@workspace/lib/drive';
+import { PartialBatchError, useCopyToFolder } from '@workspace/lib/drive';
 import { subjectInfo } from '@workspace/lib/file-subject';
 import { useSaveMailAttachmentsToDrive } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -28,8 +28,8 @@ export function SaveToDrivePicker({ subjects, open, onClose, onSaved, title, con
     const mail = subjects[0]?.mail;
     const { mutateAsync: copyToFolder } = useCopyToFolder();
     const saveMailAttachments = useSaveMailAttachmentsToDrive();
-    // After a partial failure a retry sends only the files that failed, or the ones that copied would land twice.
-    const [failed, setFailed] = useState<DrivePath[] | null>(null);
+    // After a partial failure a retry sends only the files that failed, until the picker closes.
+    const [failed, setFailed] = useState<readonly DrivePath[] | null>(null);
     useEffect(() => {
         if (!open) setFailed(null);
     }, [open]);
@@ -78,8 +78,8 @@ export function SaveToDrivePicker({ subjects, open, onClose, onSaved, title, con
                           indexes: subjects.flatMap((subject) => (subject.mail ? [subject.mail.index] : [])),
                           ...target,
                       })
-                    : await copyToFolder({ items, ...target }).catch((error) => {
-                          if (error instanceof PartialCopyError) setFailed(error.failed);
+                    : await copyToFolder({ items, ...target }).catch((error: unknown) => {
+                          if (error instanceof PartialBatchError) setFailed(error.failed);
                           throw error;
                       });
                 onSaved?.(saved);

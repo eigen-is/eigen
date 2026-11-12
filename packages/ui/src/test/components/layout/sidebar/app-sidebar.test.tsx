@@ -1,6 +1,6 @@
 // A sidebar row stays selected while the user selects an item in its list: the click adds `?pid=` (and `?uid=`,
 // `?mid=`) to the URL, and the row names the page, not the selection. Only that one row looks selected. Recent files
-// sits right below Drive, and outside Drive it opens Drive's page.
+// sits right below Drive, and outside Drive it opens Drive's page. In Drive the Trash row counts what is in the trash.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../../happy-dom';
 import { renderInDocument } from '../../../render-in-document';
@@ -8,6 +8,9 @@ import { renderInDocument } from '../../../render-in-document';
 installHappyDom();
 
 const session = { user: { id: 'u1', email: 'me@test.eigen.is', name: 'Me' } };
+// What the trash of the viewer's drives holds together, their own and their teams', and whose trash the sidebar asked for.
+let trashedItems: { id: string }[] = [];
+let trashViewer = '';
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realDrive = { ...(await import('@workspace/lib/drive')) };
@@ -17,7 +20,10 @@ mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session,
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
     useRootFolder: () => ({ data: { id: 'root-1', ownerId: 'u1', mountId: 'default' } }),
-    useListTrash: () => ({ data: [] }),
+    useTrash: (viewerId: string) => {
+        trashViewer = viewerId;
+        return { items: trashedItems, isLoading: false, error: null };
+    },
 }));
 mock.module('@workspace/lib/home', () => ({
     ...realHome,
@@ -42,7 +48,10 @@ const { LayoutContext, useLayout } = await import('../../../../components/layout
 const { AppSidebar } = await import('../../../../components/layout/sidebar/app-sidebar');
 
 let unmount = async () => {};
-afterEach(() => unmount());
+afterEach(async () => {
+    await unmount();
+    trashedItems = [];
+});
 
 // The sidebar as an app draws it, `appName` '' being Drive, over the routes its rows link to.
 async function renderSidebar(appName: string, url: string): Promise<void> {
@@ -137,4 +146,20 @@ test('in another app Recent files sits right below Drive and opens Drive’s pag
     ]);
     await unmount();
     expect(await activeRows('docs', '/recent')).toEqual([]);
+});
+
+const trashRow = () => [...document.querySelectorAll('a')].find((row) => row.textContent?.startsWith('Trash'));
+
+test('in Drive the Trash row counts the trashed items of every drive', async () => {
+    trashedItems = [{ id: 'own' }, { id: 'archived' }, { id: 'teams' }];
+    await renderSidebar('', '/');
+    expect(trashRow()?.textContent).toBe('Trash3');
+    expect(trashViewer).toBe('u1');
+});
+
+test('in another app the Trash row shows no count and reads no trash', async () => {
+    trashedItems = [{ id: 'own' }];
+    await renderSidebar('docs', '/');
+    expect(trashRow()?.textContent).toBe('Trash');
+    expect(trashViewer).toBe('');
 });

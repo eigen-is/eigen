@@ -239,7 +239,6 @@ type DriveListProps = CreateCallbacks & {
     actions?: DriveActionRunner;
     onQuickLook?: (path: DrivePath) => void;
     unreadPathIds?: ReadonlySet<string>;
-    hideOwner?: boolean;
     hideShared?: boolean;
     date?: DriveListDate;
     // The rows of a listing with actions of its own, such as Trash, for the items they act on: the
@@ -266,7 +265,6 @@ export function DriveList({
     actions,
     onQuickLook,
     unreadPathIds,
-    hideOwner,
     hideShared,
     date,
     ownActions,
@@ -335,7 +333,6 @@ export function DriveList({
             ) : (
                 <DriveTable
                     {...sharedProps}
-                    hideOwner={hideOwner}
                     hideShared={hideShared}
                     date={date}
                     ancestorBreadcrumb={breadcrumbPaths ?? []}

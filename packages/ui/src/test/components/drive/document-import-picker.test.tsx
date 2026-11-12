@@ -2,11 +2,12 @@
 // closed by then. What is pinned here is that the blocking progress dialog covers that wait, for an
 // upload from the device and a pick from Drive alike, which Drive rows the picker offers, and that a pick
 // runs no import until the dialog after it says how the file comes in. That dialog waits for the import, and a failed
-// one leaves it open for another try.
+// one leaves it open for another try. A canceled one keeps naming the file while it fades out.
 import { expect, mock, test } from 'bun:test';
 import { PPTX_MIME } from '@workspace/lib/constants/mime';
 import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
+import { holdClosingDialogs } from '../../closing-dialog';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 
@@ -173,6 +174,22 @@ test('a spreadsheet can replace instead, and Cancel imports nothing', async () =
     expect(fromDrive).toEqual([]);
     expect(dialog()).toBeNull();
     await unmount();
+});
+
+test('a canceled choice keeps naming the file while it closes', async () => {
+    const release = holdClosingDialogs();
+    const unmount = await pickFromDrive('eigensheets', 'Budget.xlsx');
+    try {
+        // The picker closed on the pick and is held too, so the choice is the open one.
+        const choice = document.querySelector('[role="dialog"][data-state="open"]');
+        const cancel = [...(choice?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Cancel');
+        await act(async () => cancel?.click());
+        expect(choice?.getAttribute('data-state')).toBe('closed');
+        expect(choice?.querySelector('p')?.textContent).toBe('Budget.xlsx');
+    } finally {
+        release();
+        await unmount();
+    }
 });
 
 test('a doc offers no choice: it warns that the file replaces the document, a version saved first', async () => {

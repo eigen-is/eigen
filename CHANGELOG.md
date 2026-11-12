@@ -4,6 +4,13 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Fixed
+
+- **Trash in Drive** — the Trash and its sidebar count include what was deleted from your team drives, so anyone in the team can restore it. **Empty trash** empties only your own drive
+- **Moving several items in Drive** — when some of them fail, the **Move to** dialog keeps only those, so **Move here** again leaves the moved ones alone. **Delete permanently** in the Trash does the same
+- **Dialogs in Drive that close** — a dialog keeps its text while it fades out, where **Move to trash** flashed "Remove 0 shared items". **Email collaborators** now fades out like the others
+- **Move to in Drive** — for an item of another drive, such as a team's file in a document app's list, the **Move to** dialog starts in that item's drive
+
 ## [0.4.3] - 2026-11-11
 
 Drive gets a Recent files page, and every document app can make a copy of a file and delete its old versions to free space. Comments open on hover, and assigning one to a guest emails them. Sheets is much faster on large workbooks and keeps formulas right when rows, columns and tabs change, also with several people editing at once. Calendar invitations and repeating events, and drafts in Mail, are far more reliable. Four changes break old data: links, rules and some chart settings in existing spreadsheets need setting up again, and the storage limit for mail, contacts and calendar goes back to its default.

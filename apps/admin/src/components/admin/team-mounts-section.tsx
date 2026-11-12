@@ -11,6 +11,7 @@ import { EmptyState, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import type { MountFormValues } from '@workspace/ui/components/mount';
 import { Switch } from '@workspace/ui/components/switch';
+import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { HardDrive, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { MountDialog } from './mount-dialog';
@@ -21,7 +22,8 @@ type TeamMountsSectionProps = {
 
 export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
     const [showAddMount, setShowAddMount] = useState(false);
-    const [editingMount, setEditingMount] = useState<{ id: string; mount: MountSettings } | null>(null);
+    const editDialog = useDialogValue<{ id: string; mount: MountSettings }>();
+    const editing = editDialog.value;
 
     const { data: serverSettings } = useServerSettings();
     const s3Check = useCheckS3Connection();
@@ -40,10 +42,9 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
         });
     };
 
-    const handleEditMount = async (values: MountFormValues) => {
-        if (!editingMount) return;
+    const handleEditMount = async (mountId: string, values: MountFormValues) => {
         await updateMount.mutateAsync({
-            mountId: editingMount.id,
+            mountId,
             maxSizeMB: values.maxSizeMB,
             name: values.name,
             s3Config: values.s3Config,
@@ -77,28 +78,24 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
                 defaultS3Config={serverSettings?.defaults.mount.s3Config}
             />
 
-            <MountDialog
-                open={!!editingMount}
-                onOpenChange={(open) => {
-                    if (!open) setEditingMount(null);
-                }}
-                onSubmit={handleEditMount}
-                onS3Check={handleS3Check}
-                onS3Harden={handleS3Harden}
-                initialValues={
-                    editingMount
-                        ? {
-                              name: editingMount.mount.name ?? editingMount.id,
-                              storageType: editingMount.mount.storageType,
-                              maxSizeMB: editingMount.mount.maxSizeMB,
-                              s3Config: editingMount.mount.s3Config,
-                          }
-                        : undefined
-                }
-                title="Edit mount"
-                submitLabel="Save changes"
-                isEdit
-            />
+            {editing && (
+                <MountDialog
+                    open={editDialog.open}
+                    onOpenChange={editDialog.setOpen}
+                    onSubmit={(values) => handleEditMount(editing.id, values)}
+                    onS3Check={handleS3Check}
+                    onS3Harden={handleS3Harden}
+                    initialValues={{
+                        name: editing.mount.name ?? editing.id,
+                        storageType: editing.mount.storageType,
+                        maxSizeMB: editing.mount.maxSizeMB,
+                        s3Config: editing.mount.s3Config,
+                    }}
+                    title="Edit mount"
+                    submitLabel="Save changes"
+                    isEdit
+                />
+            )}
 
             {Object.keys(mounts).length === 0 ? (
                 <EmptyState
@@ -121,7 +118,7 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
                                 icon={Settings}
                                 tooltipText="Mount settings"
                                 className="h-7 w-7 shrink-0"
-                                onClick={() => setEditingMount({ id, mount })}
+                                onClick={() => editDialog.openDialog({ id, mount })}
                             />
                             <Switch
                                 checked={mount.enabled}

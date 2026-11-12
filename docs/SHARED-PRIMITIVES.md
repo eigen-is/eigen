@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2155 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2158 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -228,7 +228,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEProvider` | `@workspace/ui/components/sse-provider` | packages/ui/src/components/sse-provider/sse-provider.tsx |
 | `UploadProvider` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 
-## Contexts, schemas & classes (18)
+## Contexts, schemas & classes (17)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -242,8 +242,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PageNumberNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
 | `TableOfContentsNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-of-contents.ts |
 | `TextBoxNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/text-box.ts |
-| `PartialCopyError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
-| `PartialDeleteError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `PartialBatchError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `MathError` | `@workspace/math` | packages/math/src/error.ts |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
@@ -251,7 +250,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (306)
+## Hooks (307)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -390,7 +389,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useBreadcrumb` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useCheckPermissions` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useConvertDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-convert-document.ts |
-| `useCopyPaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useCopyToFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useCopyToMediaFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useCreateDriveItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
@@ -399,6 +397,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useDriveAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useDriveActionsFor` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-actions.ts |
 | `useDriveViewPreferences` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-view-preferences.ts |
+| `useDuplicatePaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useEffectiveMembers` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useEmailCollaborators` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useEmlPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
@@ -413,13 +412,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useIsEffectiveOwner` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useIsEffectiveOwnerOf` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useIsSharedWithMe` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
-| `useListTrash` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
 | `useMakeCopy` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useMediaResolver` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `useMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useMountMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useMounts` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
-| `useMovePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `useMovePaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `usePathInfo` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `usePathInfos` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `usePermanentlyDelete` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
@@ -432,6 +430,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useRootFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useSharedPaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useTextPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `useTrash` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
 | `useUpdateACL` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useUploadFile` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useVCardPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
@@ -546,6 +545,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useDialogOpen` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `useMenuOpen` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `useDialogPending` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
+| `useDialogValue` | `@workspace/ui/hooks/use-dialog-value` | packages/ui/src/hooks/use-dialog-value.ts |
 | `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useElementSize` | `@workspace/ui/hooks/use-element-size` | packages/ui/src/hooks/use-element-size.ts |
 | `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
@@ -1015,7 +1015,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1176)
+## Utilities & constants (1179)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1525,16 +1525,17 @@ rather than inlining `queryClient.invalidateQueries`.
 | `downloadDriveFile` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `triggerDownload` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `checkPathAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
-| `copiesBeside` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/types/mount.ts |
 | `driveActionsFor` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-actions.ts |
 | `folderContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `forgetPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/keys.ts |
 | `getDriveComparator` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `labelFor` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-actions.ts |
 | `mountMimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `PENDING_PREFIX` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
+| `settleEach` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `toastExportSummary` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-export-document.ts |
 | `validateDriveSearch` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-search-params.ts |
 | `EIGEN_DOC_ICONS` | `@workspace/lib/eigendoc-icons` | packages/lib/src/core/eigendoc-icons.ts |
@@ -2178,6 +2179,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `createEigenAppRouter` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
 | `mountEigenApp` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
 | `stubCanvasImageFonts` | `@workspace/ui/test/canvas-image` | packages/ui/src/test/canvas-image.ts |
+| `closingDialog` | `@workspace/ui/test/closing-dialog` | packages/ui/src/test/closing-dialog.ts |
+| `holdClosingDialogs` | `@workspace/ui/test/closing-dialog` | packages/ui/src/test/closing-dialog.ts |
 | `contextMenuEvent` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `KEY_SOURCES` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `POINTER_SOURCES` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
