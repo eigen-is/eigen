@@ -104,9 +104,10 @@ export function picked(
     row: number,
     column: number,
 ): Value {
-    const param = slotOf(entry, token.index, node.children.length);
-    if (token !== TOKENS[token.index] || param.prepare !== Prepare.Lazy)
-        throw new Error(`${entry.name}: a foreign token`);
+    // A token must be the one of a place the row has, and that place a lazy one.
+    const own = token === TOKENS[token.index] && token.index < entry.max;
+    const param = own ? slotOf(entry, token.index, node.children.length) : null;
+    if (param === null || param.prepare !== Prepare.Lazy) throw new Error(`${entry.name}: a foreign token`);
     const child = token.index < node.children.length ? node.children[token.index] : null;
     if (child === null || (child.kind === NodeKind.Empty && param.skips)) return param.fallback ?? null;
     if (child.kind !== NodeKind.Empty) return ctx.evaluate(child, sheet, row, column);
