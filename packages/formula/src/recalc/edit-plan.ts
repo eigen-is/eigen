@@ -37,13 +37,8 @@ export type EditPlan = {
     readonly rewrites: Rewrite[];
 };
 
-// `rectangles` are the blocks of one shape the reverse index found, and `facts` the facts of every shape by id.
-export function planEdit(
-    workbook: Workbook,
-    rectangles: readonly number[],
-    facts: readonly number[],
-    change: Change,
-): EditPlan {
+// `rectangles` are the blocks of one shape the reverse index found, the facts of each shape worked out.
+export function planEdit(workbook: Workbook, rectangles: readonly number[], change: Change): EditPlan {
     const { sheets, shapes } = workbook;
     const plan: EditPlan = { fills: [], seeds: [], rewrites: [] };
     for (let r = 0; r < rectangles.length; r += 6) {
@@ -58,7 +53,7 @@ export function planEdit(
         // Text that did not parse is kept as it is.
         if (tree === null) continue;
         const host = sheets[place];
-        const positional = (facts[id] & Fact.Positional) !== 0;
+        const positional = (shape.facts & Fact.Positional) !== 0;
         // One class of hosts, in the places before the edit, then the sheet and the distance it goes to.
         const outcome = (
             next: FormulaNode,
@@ -91,7 +86,7 @@ export function planEdit(
             case ChangeKind.Lines: {
                 const { edit } = change;
                 const { rows, index, insert, count } = edit;
-                const sized = (facts[id] & Fact.Sized) !== 0;
+                const sized = (shape.facts & Fact.Sized) !== 0;
                 const edited = workbook.known(edit.sheet);
                 const distance = insert ? count : -count;
                 // The first line whose cells an insert pushes off the grid.

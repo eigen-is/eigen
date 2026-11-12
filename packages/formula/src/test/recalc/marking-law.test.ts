@@ -165,7 +165,7 @@ function run(seed: number, books: number): { markings: number; flagged: number; 
         let readers: Reader[] = [];
         const rebuild = () => {
             const facts = factsOf(workbook);
-            index.rebuild(workbook, facts);
+            index.rebuild(workbook);
             readers = readersOf(workbook, facts);
         };
         rebuild();

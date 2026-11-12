@@ -62,8 +62,6 @@ export class Recalc {
     private readonly seeds: number[] = [];
     // The runs of cells whose value the pass changed.
     private changed: number[] = [];
-    // Per shape id, its facts.
-    private readonly facts: number[] = [];
     // The cells in progress, in the order they were entered. The list is the reading chain, each cell read by the
     // one before it on the chain, plus the cells whose formula ran and that wait for the first cell of their loop.
     private readonly sheets: Sheet[] = [];
@@ -131,7 +129,7 @@ export class Recalc {
     public edit(change: Change): EditResult {
         const { workbook } = this;
         this.reach();
-        const plan = planEdit(workbook, this.index.rectangles, this.facts, change);
+        const plan = planEdit(workbook, this.index.rectangles, change);
         const { seeds } = plan;
         for (let at = 0; at < seeds.length; at += 4) {
             const column = workbook.sheets[seeds[at]].columns[seeds[at + 1]];
@@ -264,12 +262,17 @@ export class Recalc {
         extend(this.seeds, sheet.place, c, row);
     }
 
-    // Makes the index describe the workbook as it is.
+    // Makes the index describe the workbook as it is. The rebuild lists every shape a cell holds, so the others
+    // are forgotten here: every edit that rewrites a formula would else leave its old shape behind for good.
     private reach(): void {
         if (!this.stale) return;
-        const { workbook } = this;
-        for (let shape = 1; shape <= workbook.shapes.size; shape += 1) this.factsOf(shape);
-        this.index.rebuild(workbook, this.facts);
+        const { index } = this;
+        const { shapes } = this.workbook;
+        for (let shape = 1; shape <= shapes.size; shape += 1) this.factsOf(shape);
+        index.rebuild(this.workbook);
+        const held = new Uint8Array(shapes.size + 1);
+        for (let r = 5; r < index.rectangles.length; r += 6) held[index.rectangles[r]] = 1;
+        shapes.keep(held);
         this.stale = false;
     }
 
@@ -378,13 +381,9 @@ export class Recalc {
     }
 
     public factsOf(shape: number): number {
-        let facts = this.facts[shape];
-        if (facts === undefined) {
-            const { tree } = this.workbook.shapes.shape(shape);
-            facts = tree === null ? 1 << FACT_BITS : shapeFacts(tree, this.functions);
-            this.facts[shape] = facts;
-        }
-        return facts;
+        const held = this.workbook.shapes.shape(shape);
+        if (held.facts < 0) held.facts = held.tree === null ? 1 << FACT_BITS : shapeFacts(held.tree, this.functions);
+        return held.facts;
     }
 }
 
