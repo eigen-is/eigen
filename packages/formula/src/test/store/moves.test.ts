@@ -5,6 +5,7 @@ import { ColumnIndex } from '../../store/column-index';
 import type { Sheet } from '../../store/sheet';
 import { ChangeKind, Workbook } from '../../store/workbook';
 import type { Move } from '../../text';
+import { GRID_COLUMNS, GRID_ROWS } from '../../text';
 import { DIV0 } from '../../values/errors';
 import { random } from '../edit/support';
 
@@ -114,6 +115,45 @@ describe('a block moved in the store', () => {
             });
         }
         expect(zeroed).toBeGreaterThan(500);
+    });
+    test('a block that does not fit on the grid moves the part that does, and the rest is gone and counted', () => {
+        const workbook = new Workbook([source('a')]);
+        const [sheet] = workbook.sheets;
+        for (let row = 0; row < 4; row += 1) {
+            workbook.setValue(sheet, row, 0, row + 1);
+            workbook.setValue(sheet, row, 1, 10 * (row + 1));
+        }
+        workbook.fillFormula(sheet, 3, 2, 3, 2, '=R1C1');
+        workbook.setValue(sheet, 4, 0, 99);
+        const move = { fromSheet: 'a', row: 0, column: 0, rows: 4, columns: 3, toSheet: 'a' };
+        const last = GRID_ROWS - 1;
+        const far = GRID_COLUMNS - 1;
+        const dropped = workbook.apply(
+            { kind: ChangeKind.Move, move: { ...move, toRow: last - 1, toColumn: far - 1 } },
+            [],
+        );
+        // Rows 3 and 4 of the first two columns, and the one cell of the third.
+        expect(dropped).toBe(5);
+        expect(sheet.columns.slice(0, 3).map((column) => `${column.length} ${column.pending}`)).toEqual([
+            '5 0',
+            '0 0',
+            '0 0',
+        ]);
+        expect([workbook.value(sheet.columns[0], 4), workbook.value(sheet.columns[far - 1], last - 1)]).toEqual([
+            99, 1,
+        ]);
+        expect([workbook.value(sheet.columns[far], last - 1), workbook.value(sheet.columns[far], last)]).toEqual([
+            10, 20,
+        ]);
+        // Back over its own cells: the two rows that fit above the cells the block leaves, which are gone.
+        const back = { fromSheet: 'a', row: last - 1, column: far - 1, rows: 2, columns: 2, toSheet: 'a' };
+        expect(workbook.apply({ kind: ChangeKind.Move, move: { ...back, toRow: last, toColumn: far - 1 } }, [])).toBe(
+            2,
+        );
+        expect([workbook.value(sheet.columns[far - 1], last), workbook.value(sheet.columns[far], last)]).toEqual([
+            1, 10,
+        ]);
+        expect(workbook.value(sheet.columns[far], last - 1)).toBeNull();
     });
     test('shapes are written where the cells are before they move, so they travel with them', () => {
         const workbook = new Workbook([source('a')]);

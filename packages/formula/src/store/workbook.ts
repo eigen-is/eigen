@@ -107,8 +107,7 @@ export class Workbook {
                 return 0;
             }
             case ChangeKind.Move:
-                this.known(change.move.toSheet).moveFrom(this.known(change.move.fromSheet), change.move);
-                return 0;
+                return this.known(change.move.toSheet).moveFrom(this.known(change.move.fromSheet), change.move);
             case ChangeKind.AddSheet:
                 // Whatever values its formulas came with were computed against another workbook than this one.
                 for (const column of change.sheet.columns) {

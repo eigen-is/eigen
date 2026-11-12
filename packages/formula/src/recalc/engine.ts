@@ -62,24 +62,11 @@ export class Engine {
     // the grid is a block like any other. The block is what lies on the grid, before and after: what would land
     // past the last line is cleared and counted instead.
     public moveCells(move: Move): EditResult {
-        const from = this.cell(move.fromSheet, move.row, move.column);
+        this.cell(move.fromSheet, move.row, move.column);
         this.cell(move.toSheet, move.toRow, move.toColumn);
         counted(move.rows);
         counted(move.columns);
-        const rows = Math.min(move.rows, GRID_ROWS - move.row, GRID_ROWS - move.toRow);
-        const columns = Math.min(move.columns, GRID_COLUMNS - move.column, GRID_COLUMNS - move.toColumn);
-        let dropped = 0;
-        for (let c = move.column; c < Math.min(move.column + move.columns, from.columns.length); c += 1) {
-            const held = from.columns[c];
-            for (let row = move.row; row < Math.min(move.row + move.rows, held.length); row += 1) {
-                if (row - move.row < rows && c - move.column < columns) continue;
-                if (held.kind[row] === 0 && held.shape[row] === 0) continue;
-                this.calc.clear(from, row, c);
-                dropped += 1;
-            }
-        }
-        const { rewrites } = this.calc.edit({ kind: ChangeKind.Move, move: { ...move, rows, columns } });
-        return { rewrites, dropped };
+        return this.calc.edit({ kind: ChangeKind.Move, move });
     }
 
     // Adds a sheet at a place among the tabs, from 0. Its formulas are computed by the next recalc whatever

@@ -4,7 +4,8 @@
 // the store's. The place is the workbook's to write, whenever the list of sheets changes.
 
 import type { Move } from '../edit/move';
-import { GRID_COLUMNS } from '../text/a1';
+import { fitted } from '../edit/move';
+import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { Column } from './column';
 
 export class Sheet {
@@ -47,7 +48,7 @@ export class Sheet {
         const blank = Array.from({ length: count }, () => new Column(0));
         this.held.splice(index, 0, ...blank);
         let dropped = 0;
-        for (let c = GRID_COLUMNS; c < this.held.length; c += 1) dropped += this.held[c].cells(0);
+        for (let c = GRID_COLUMNS; c < this.held.length; c += 1) dropped += this.held[c].cells(0, GRID_ROWS);
         if (this.held.length > GRID_COLUMNS) this.held.length = GRID_COLUMNS;
         return dropped;
     }
@@ -57,9 +58,16 @@ export class Sheet {
     }
 
     // Takes the block of a move from `source`, which may be this sheet, and empties what the block left behind.
-    // What the block lands on is gone, also where the source held nothing.
-    public moveFrom(source: Sheet, move: Move): void {
-        const { row, column, rows, columns, toRow, toColumn } = move;
+    // What the block lands on is gone, also where the source held nothing. What moves is the part of the block
+    // that is on the grid before and after: returns how many cells of the rest held something, which are gone.
+    public moveFrom(source: Sheet, move: Move): number {
+        const { row, column, toRow, toColumn } = move;
+        const { rows, columns } = fitted(move);
+        const last = Math.min(column + move.columns, source.held.length) - 1;
+        let dropped = 0;
+        for (let c = column; c <= last; c += 1) {
+            dropped += source.held[c].cells(c < column + columns ? row + rows : row, row + move.rows);
+        }
         // A column is read as a source before it is written as a target.
         const backwards = source === this && toColumn > column;
         for (let i = 0; i < columns; i += 1) {
@@ -68,12 +76,12 @@ export class Sheet {
             const supplies = from !== undefined && from.length > row;
             if (supplies || toColumn + c < this.held.length) this.column(toColumn + c).take(from, row, toRow, rows);
         }
-        const last = Math.min(column + columns, source.held.length) - 1;
         for (let c = column; c <= last; c += 1) {
             const landed = source === this && c >= toColumn && c < toColumn + columns;
-            if (!landed) source.held[c].clearRows(row, row + rows);
-            else if (toRow > row) source.held[c].clearRows(row, Math.min(row + rows, toRow));
-            else source.held[c].clearRows(Math.max(row, toRow + rows), row + rows);
+            if (!landed) source.held[c].clearRows(row, row + move.rows);
+            else if (toRow > row) source.held[c].clearRows(row, Math.min(row + move.rows, toRow));
+            else source.held[c].clearRows(Math.max(row, toRow + rows), row + move.rows);
         }
+        return dropped;
     }
 }
