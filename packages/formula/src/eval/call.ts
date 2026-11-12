@@ -21,7 +21,7 @@ import { look } from './look';
 import { real } from './operators';
 import { Frame, Table } from './readers';
 import type { Choice, Entry, Held, Lazy, Param, Result } from './signature';
-import { Prepare, Read, TOKENS } from './signature';
+import { Prepare, Read, slotOf, TOKENS } from './signature';
 import { cellsOf } from './views';
 
 // How far under a whole number a number is still read as that whole one, where a reading says so. Excel's own
@@ -137,15 +137,6 @@ export function picked(
 // Whether an error at a parameter ends the call: every reading but the ones that take an error as a value.
 export function ends(param: Param<unknown>): boolean {
     return param.read < Read.Anything;
-}
-
-// What the argument at a place is read as, in a call of `count` arguments: past the last whole group it is the
-// one argument a row takes after its groups. `call` steps through the same records in place, for its speed.
-export function slotOf(entry: Entry, at: number, count: number): Param<unknown> {
-    const { fixed, group } = entry;
-    if (at < fixed) return entry.slots[at];
-    const grouped = count - fixed - ((count - fixed) % group);
-    return entry.slots[fixed + (at - fixed < grouped ? (at - fixed) % group : group)];
 }
 
 // Whether an argument is one range at a parameter that takes a range as it is: all but the one that makes a

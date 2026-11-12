@@ -13,11 +13,11 @@ import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { arrayOf, isArray, isError, isReference } from '../values/value';
 import type { Axis } from './bands';
 import { align, apart } from './bands';
-import { ends, isLazy, picked, read, run, slotOf } from './call';
+import { ends, isLazy, picked, read, run } from './call';
 import type { Evaluator } from './evaluator';
 import type { Frame } from './readers';
 import type { Entry, Held, Lazy, Param } from './signature';
-import { ANYWHERE, NEXT, Prepare, TOKENS } from './signature';
+import { ANYWHERE, NEXT, Prepare, slotOf, TOKENS } from './signature';
 
 // The frame holds the arguments as prepared, `count` of them written. Each element is read into the frame itself,
 // so what a reader of the call was bound to is the element in progress.

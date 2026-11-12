@@ -8,9 +8,8 @@ import { CellKind } from '../store/column';
 import { Token } from '../text/lexer';
 import type { FormulaNode } from '../text/tree';
 import { NodeKind, RefFlag, RefKind, SheetKind } from '../text/tree';
-import { slotOf } from './call';
 import type { Param } from './signature';
-import { ANYWHERE, Read } from './signature';
+import { ANYWHERE, Read, slotOf } from './signature';
 
 export const Fact = {
     // A reference into another workbook or across sheets: the cell keeps the value it came with.

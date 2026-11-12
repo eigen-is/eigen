@@ -185,3 +185,12 @@ export type Entry = {
     // the parameters of a method loosely. `fn` is the only writer.
     run(...args: readonly unknown[]): Result;
 };
+
+// What the argument at a place is read as, in a call of `count` arguments: past the last whole group it is the
+// one argument a row takes after its groups. The call wrapper steps through the same records in place, for speed.
+export function slotOf(entry: Entry, at: number, count: number): Param<unknown> {
+    const { fixed, group } = entry;
+    if (at < fixed) return entry.slots[at];
+    const grouped = count - fixed - ((count - fixed) % group);
+    return entry.slots[fixed + (at - fixed < grouped ? (at - fixed) % group : group)];
+}
