@@ -5,25 +5,30 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, w
 import { basename, dirname, join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import { parseBackupManifest } from '@workspace/lib/validation';
 import { MAILDIR_ROOT } from '../../lib/backup/archive-layout';
 import * as captureModule from '../../lib/backup/capture';
 import { archiveHomePath, archiveMountPath } from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { verifyFolder } from '../../lib/backup/verify';
+import { getPublicConfig } from '../../lib/config/server-config';
 import type { Home } from '../../lib/home';
-import { evictHome, getHome } from '../../lib/home/get-home';
+import { evictHome, getHome, getTeamHome } from '../../lib/home/get-home';
+import { pullHomeSnapshot } from '../../lib/home/home-relay';
 import { createMountConfig } from '../../lib/mount';
-import { Mount } from '../../lib/mount/mount';
+import type { Mount } from '../../lib/mount/mount';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
 import type { FaultStorage } from '../fault-storage-helpers';
 import { createHomeFaultMount, provisionDoc, registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
-import { overwriteFile, seedFile } from '../mount-test-helpers';
+import { seedFile } from '../mount-test-helpers';
 import type { TestUser } from '../setup';
 import {
+    addMember,
     assertJson,
     authedRequest,
+    createTeam,
     createTestUser,
     drivePost,
     driveUpload,
@@ -383,68 +388,41 @@ describe('Backup capture modes', () => {
     });
 });
 
-describe('Backup of a disabled mount enabled while it is captured', () => {
-    const MOUNT_ID = 'modes-enabled-mid-capture';
-
-    // The capture reads a disabled mount through a Mount of its own. Enabling the mount gives writers a new Mount, such
-    // as the next home's, another object over the same folder, so an overwrite and the capture's copy must take turns.
-    test('an overwrite through the enabled mount waits for the copy of its file', async () => {
-        await getTestContext();
-        const owner = await createTestUser('backup-modes-enabled@test.eigen.is', 'testpassword123', 'Modes Enabled');
-        let ownerHome = await getHome(owner.id);
-        const on = await ownerHome.settings.set({
-            mounts: { [MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Toggled' } },
+describe('Backup of a disabled team drive switched on while it is captured', () => {
+    // The switch closes the home under the capture. Taken on, the capture skipped the drive as a disabled one whose
+    // database had closed, and archived the settings that switch it on: a restore brought it back empty.
+    test('fails the capture', async () => {
+        const ctx = await getTestContext();
+        const orgId = getPublicConfig().orgId;
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
         });
-        await ownerHome.drive.addMount(createMountConfig(MOUNT_ID, on.mounts![MOUNT_ID]));
-        const root = await ownerHome.drive
-            .getMounts()
-            .find((mount) => mount.id === MOUNT_ID)!
-            .getRootFolder();
-        const file = await driveUpload(
-            owner.sessionToken,
-            owner.id,
-            MOUNT_ID,
-            root!.id,
-            new File(['before the backup'], 'toggled.txt'),
-        );
-        await ownerHome.settings.set({
-            mounts: { [MOUNT_ID]: { ...on.mounts![MOUNT_ID], enabled: false } },
-        });
-        await evictHome(owner.id);
-        ownerHome = await getHome(owner.id);
+        const teamId = await createTeam(ctx, orgId, 'Modes Switched');
+        await addMember(ctx, teamId, ctx.alice.user.id);
+        const ownerId = teamOwnerId(teamId);
+        const teamHome = await getTeamHome(ownerId);
+        const { id: mountId } = await teamHome.addMount({ name: 'Toggled', storageType: 'local' });
+        const root = await teamHome.drive.getRootFolder(mountId);
+        await driveUpload(ctx.alice.user.sessionToken, ownerId, mountId, root!.id, new File(['kept'], 'toggled.txt'));
+        await teamHome.updateMount(mountId, { enabled: false });
+        await getTeamHome(ownerId);
 
-        let overwrite: Promise<DrivePath> | undefined;
-        let overwroteDuringCopy = false;
-        const withPathLock = Mount.prototype.withPathLock;
-        const lock = spyOn(Mount.prototype, 'withPathLock').mockImplementation(async function <T>(
-            this: Mount,
-            pathId: string,
-            fn: () => Promise<T>,
-        ) {
-            if (pathId !== file.id || overwrite) return withPathLock.bind(this)(pathId, fn);
-            return withPathLock.bind(this)(pathId, async () => {
-                const enabled = await ownerHome.settings.set({ mounts: { [MOUNT_ID]: on.mounts![MOUNT_ID] } });
-                await ownerHome.drive.addMount(createMountConfig(MOUNT_ID, enabled.mounts![MOUNT_ID]));
-                const live = ownerHome.drive.getMounts().find((mount) => mount.id === MOUNT_ID)!;
-                overwrite = overwriteFile(live, file.id, Buffer.from('written during the backup'));
-                overwroteDuringCopy = await Promise.race([
-                    overwrite.then(() => true),
-                    Bun.sleep(200).then(() => false),
-                ]);
-                return fn();
-            });
+        const archived = archiveMountPath(mountId, 'data/toggled.txt');
+        const capture = captureModule.captureFile;
+        const spy = spyOn(captureModule, 'captureFile').mockImplementation(async (source, destPath, relPath) => {
+            if (relPath === archived) await (await getTeamHome(ownerId)).updateMount(mountId, { enabled: true });
+            return capture(source, destPath, relPath);
         });
         try {
-            const { folder } = await snapshotInto(ownerHome, 'full');
-            await overwrite;
-            expect(readFileSync(join(folder, `home/mounts/${MOUNT_ID}/data/toggled.txt`), 'utf8')).toBe(
-                'before the backup',
-            );
+            const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-modes-switched-'));
+            await expect(pullHomeSnapshot(ownerId, target, { level: 'full' })).rejects.toThrow('closed');
+            expect(spy.mock.calls.some(([, , relPath]) => relPath === archived)).toBe(true);
         } finally {
-            lock.mockRestore();
-            await deleteUserCompletely(owner.id, null);
+            spy.mockRestore();
+            await evictHome(ownerId);
         }
-        expect(overwroteDuringCopy).toBe(false);
     });
 });
 

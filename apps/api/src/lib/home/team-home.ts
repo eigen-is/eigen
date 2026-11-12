@@ -95,6 +95,8 @@ export class TeamHome extends Home {
         // A mistyped s3Config would replace the working storage with a dead one, and every write would then pile up
         // in the upload queue.
         if (existing.storageType === 's3' && update.s3Config) await refuseDeadBucket(update.s3Config);
+        // The next home loads its own copy of the settings, so a save through this one once it closes is lost to it.
+        this.refuseIfClosing();
 
         // Only the changed fields are saved. The store merges them into what it holds at that moment,
         // so a change saved by someone else during the check stays.
