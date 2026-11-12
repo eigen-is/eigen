@@ -1,6 +1,7 @@
 // The trash lists what was deleted, and "Modified" sorts it by when each item was trashed, not by its last
-// edit. An empty or failed trash shows the standard text. Empty trash shows only when there is something to
-// empty, and asks before it deletes everything.
+// edit. An empty or failed trash shows the standard text, and a line names each drive that failed while
+// others loaded. Empty trash shows only when there is something to empty, and asks before it deletes
+// everything.
 // A trashed row's menu and the command palette offer the same two rows: Restore and Delete permanently.
 // When Delete permanently gets only part of a selection through, the dialog stays open on the items that
 // failed, and confirming again sends only those. A canceled dialog keeps its count while it fades out.
@@ -43,8 +44,9 @@ const trashed = (name: string, editedDay: number, trashedDay: number, drive = OW
 // The page's data, stubbed: one object per hook, so the effects that depend on them settle.
 const session = { user: { id: 'trash-owner', email: 'me@test.eigen.is', name: 'Me' } };
 const root = { data: drivePath({ id: 'root', name: 'My Drive', type: 'folder', mimeType: 'inode/directory' }) };
-const trash: { items: DrivePath[]; isLoading: boolean; error: Error | null } = {
+const trash: { items: DrivePath[]; failedDrives: readonly string[]; isLoading: boolean; error: Error | null } = {
     items: [],
+    failedDrives: [],
     isLoading: false,
     error: null,
 };
@@ -119,6 +121,7 @@ let unmount = async () => {};
 afterEach(() => unmount());
 beforeEach(() => {
     trash.items = [];
+    trash.failedDrives = [];
     trash.isLoading = false;
     trash.error = null;
     writes.length = 0;
@@ -192,6 +195,24 @@ test('a trash that failed to load shows the null vector, with no detail and no e
     expect(container.textContent).toContain('Encountering the null vector: a rendezvous with nothing at all.');
     expect(container.textContent).not.toContain('The server is unreachable');
     expect(container.textContent).not.toContain('Within this void, all possibilities are yet unobserved.');
+});
+
+test('a drive whose trash failed to load is named above the list of the others', async () => {
+    trash.items = [trashed('a.txt', 1, 2)];
+    trash.failedDrives = ['Design files', 'Archive'];
+    const container = await open();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+        'Could not load the trash of Design files, Archive',
+    );
+    expect(names(container, ['a.txt'])).toEqual(['a.txt']);
+});
+
+test('a trash where every drive failed shows only the null vector, with no line naming them', async () => {
+    trash.error = new Error('The server is unreachable');
+    trash.failedDrives = ['My Drive'];
+    const container = await open();
+    expect(container.textContent).toContain('Encountering the null vector: a rendezvous with nothing at all.');
+    expect(container.querySelector('[role="alert"]')).toBeNull();
 });
 
 test('Empty trash asks first, then empties every mount of the viewer', async () => {

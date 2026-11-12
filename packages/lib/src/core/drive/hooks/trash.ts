@@ -1,7 +1,8 @@
 // The hooks behind Drive's Trash page and the sidebar's count: what was deleted from every drive the viewer
-// owns or co-owns, and restoring, permanently deleting or emptying it. A trashed item names its own owner
-// and mount, so each write reaches the drive it came from and refreshes that drive's trash list. A permanent
-// delete of several items goes through settleEach, so a dialog can retry only the ones that failed.
+// owns or co-owns, the names of those whose trash failed to load, and restoring, permanently deleting or
+// emptying it. A trashed item names its own owner and mount, so each write reaches the drive it came from
+// and refreshes that drive's trash list. A permanent delete of several items goes through settleEach, so a
+// dialog can retry only the ones that failed.
 
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
@@ -15,13 +16,18 @@ import { useMounts } from './reads';
 import { settleEach } from './writes';
 
 // One list per drive the viewer may restore from: each of their own mounts and each mount of their teams.
-export function useTrash(viewerId: string): { items: DrivePath[]; isLoading: boolean; error: Error | null } {
+export function useTrash(viewerId: string): {
+    items: DrivePath[];
+    failedDrives: readonly string[];
+    isLoading: boolean;
+    error: Error | null;
+} {
     const mounts = useMounts(viewerId);
     const teams = useMyTeams();
     const drives = [
-        ...(mounts.data ?? []).map((mount) => ({ ownerId: viewerId, mountId: mount.id })),
+        ...(mounts.data ?? []).map((mount) => ({ ownerId: viewerId, mountId: mount.id, name: mount.name })),
         ...(teams.data ?? []).flatMap((team) =>
-            team.mounts.map((mount) => ({ ownerId: teamOwnerId(team.id), mountId: mount.id })),
+            team.mounts.map((mount) => ({ ownerId: teamOwnerId(team.id), mountId: mount.id, name: mount.name })),
         ),
     ];
     const lists = useQueries({
@@ -35,15 +41,17 @@ export function useTrash(viewerId: string): { items: DrivePath[]; isLoading: boo
             enabled: !!viewerId,
             staleTime: STALE_TIME.FIVE_MINUTES,
         })),
-        // A drive whose trash fails to load is left out, so the others still list.
+        // A drive whose trash fails to load is left out and named, so the others still list.
         combine: (results) => ({
             items: results.flatMap((result) => result.data ?? []),
+            failedDrives: results.flatMap((result, index) => (result.error ? [drives[index].name] : [])),
             isLoading: results.some((result) => result.isLoading),
             error: results.every((result) => result.error) ? (results[0]?.error ?? null) : null,
         }),
     });
     return {
         items: lists.items,
+        failedDrives: lists.failedDrives,
         isLoading: mounts.isLoading || teams.isLoading || lists.isLoading,
         error: mounts.error ?? lists.error,
     };

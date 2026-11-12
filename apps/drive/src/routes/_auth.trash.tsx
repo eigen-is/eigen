@@ -1,7 +1,8 @@
 // Drive's Trash: what was deleted from every drive the viewer can restore from, their own and their teams',
 // newest trashed first, with Restore and Delete permanently on each row's menu and in the command palette.
 // Empty trash empties the viewer's own drives only. The rows have no other actions, so the page hands the
-// list its own rows instead of the Drive item menu's.
+// list its own rows instead of the Drive item menu's. A line above the list names any drive whose trash
+// failed to load while others did.
 
 import { createFileRoute } from '@tanstack/react-router';
 import {
@@ -17,6 +18,7 @@ import {
 import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Column, ColumnLayout, DeleteDialog, LoadingState, ToolbarTitle } from '@workspace/ui';
+import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Button } from '@workspace/ui/components/button';
 import { DriveList, DriveViewControls } from '@workspace/ui/components/drive/drive-list';
 import type { DriveListDate } from '@workspace/ui/components/drive/drive-table';
@@ -50,7 +52,7 @@ function TrashToolbar({ canEmpty, onEmptyTrash }: { canEmpty: boolean; onEmptyTr
 function TrashRoute() {
     const { user } = Route.useRouteContext();
 
-    const { items: trashedItems, isLoading, error } = useTrash(user.id);
+    const { items: trashedItems, failedDrives, isLoading, error } = useTrash(user.id);
     const restorePath = useRestorePath();
     const permanentlyDelete = usePermanentlyDelete();
     const emptyTrash = useEmptyTrash(user.id);
@@ -106,15 +108,26 @@ function TrashRoute() {
                     onBack="sidebar"
                     toolbar={<TrashToolbar canEmpty={ownCount > 0} onEmptyTrash={() => setEmptyTrashOpen(true)} />}
                 >
-                    <DriveList
-                        items={sortedItems}
-                        error={error}
-                        ownerId={user.id}
-                        mountId={DEFAULT_MOUNT_ID}
-                        hideShared
-                        date={TRASHED}
-                        ownActions={trashActions}
-                    />
+                    <div className="flex h-full flex-col">
+                        {!error && failedDrives.length > 0 && (
+                            <Alert variant="warning" className="shrink-0 rounded-none border-x-0 border-t-0">
+                                <AlertDescription>
+                                    Could not load the trash of {failedDrives.join(', ')}
+                                </AlertDescription>
+                            </Alert>
+                        )}
+                        <div className="min-h-0 flex-1">
+                            <DriveList
+                                items={sortedItems}
+                                error={error}
+                                ownerId={user.id}
+                                mountId={DEFAULT_MOUNT_ID}
+                                hideShared
+                                date={TRASHED}
+                                ownActions={trashActions}
+                            />
+                        </div>
+                    </div>
                 </Column>
             </ColumnLayout>
 
