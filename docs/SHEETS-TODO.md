@@ -371,6 +371,9 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 - [ ] **`setFormula` interns the host's text as its key**: `=sum( R[1]C )` is a shape of its own until an edit rewrites it canonical. Harmless for values, but a peer's text is not canonical by construction; step 1b's adapter should hand stored text from `printStored`. **S**
 - [ ] **Duplicate sheet names are not refused**: `addSheet` takes a name that differs from another only by case, and which sheet a typed name binds is the host's finder. **S**
 - [ ] **`RecalcResult.loops` after a load with cached values** lists fewer loop cells than a fresh load: a self-loop `=SUMPRODUCT(R[0]C:R[2]C)` loaded holding `#REF!` is never recomputed, so it is not listed. A host that trusts `loops` after such a load misses it. **S**
+- [ ] **A date typed from 1 January to 28 February 1900 shows the day before**: `1900-01-15` shows `1900-01-14` at once. The sheet's input parse (`parseCellInput`, `dateToSerial`) still makes Excel's serial for those 59 days and the display reads the day line Google uses. No data is lost. Step 1b's typed-date parse decides it. **S**
+- [ ] **A unary plus over a range makes an array**: `SUM(+A1:A20000)` costs 2.8 times what it did, and a range as the fallback of IFERROR or IFNA takes the same path, because a blank that passes through a computed array is 0. `+A1` is unchanged. **S**
+- [ ] **A Hijri `B2` format on a number up to 60** makes numfmt throw on a valid pattern: `TEXT(60,"B2yyyy")` shows `60` and the format dialog's preview falls back the same way. Upstream. **S**
 
 ## Sync and undo
 
