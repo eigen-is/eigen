@@ -12,12 +12,14 @@ import {
     apiece,
     areas,
     BOOLEAN,
+    defaulted,
     ENGINE,
     Find,
     fn,
     HERE,
     INTEGER,
     LAZY,
+    NEARLY,
     NUMBER,
     optional,
     PART,
@@ -74,7 +76,7 @@ export const LOOKUP = [
     ),
     fn(
         'INDEX',
-        [areas(TABLE), NUMBER, optional(NUMBER), optional(INTEGER, 1)],
+        [defaulted(areas(TABLE), VALUE), NEARLY, optional(NEARLY), optional(INTEGER, 1)],
         (source, row, column, areaNumber) => {
             // The sign of an index is taken before its fraction is cut off: -0.5 is no index, 0.5 is 0.
             if (row < 0 || (column ?? 0) < 0 || areaNumber < 1) return VALUE;
@@ -126,7 +128,7 @@ export const LOOKUP = [
     }),
     fn(
         'XMATCH',
-        [PLAIN, refusing(TABLE, NA), optional(NUMBER, 0), skippable(NUMBER, 1)],
+        [PLAIN, defaulted(refusing(TABLE, NA), VALUE), optional(NUMBER, 0), skippable(NUMBER, 1)],
         (key, table, match, search) => {
             if (table.rows > 1 && table.columns > 1) return VALUE;
             const values = table.columns === 1 ? table.column(0) : table.row(0);
@@ -145,22 +147,26 @@ export const LOOKUP = [
     // The values are searched down the first column when the table is at least as high as it is wide, else along
     // the first row, and the result comes from the last column or row, or from the result range at that place:
     // one row or one column, never both.
-    fn('LOOKUP', [PLAIN, refusing(TABLE, NA), optional(refusing(TABLE, NA))], (key, table, result) => {
-        if (result !== undefined && result.rows > 1 && result.columns > 1) return NA;
-        const down = table.rows >= table.columns;
-        const at = (down ? table.column(0) : table.row(0)).find(key ?? 0, Find.AtMost);
-        if (at < 0) return NA;
-        if (result === undefined) return down ? table.at(at, table.columns - 1) : table.at(table.rows - 1, at);
-        return result.rows > 1 ? result.at(at, 0) : result.at(0, at);
-    }),
+    fn(
+        'LOOKUP',
+        [PLAIN, defaulted(refusing(TABLE, NA), VALUE), optional(refusing(TABLE, NA))],
+        (key, table, result) => {
+            if (result !== undefined && result.rows > 1 && result.columns > 1) return NA;
+            const down = table.rows >= table.columns;
+            const at = (down ? table.column(0) : table.row(0)).find(key ?? 0, Find.AtMost);
+            if (at < 0) return NA;
+            if (result === undefined) return down ? table.at(at, table.columns - 1) : table.at(table.rows - 1, at);
+            return result.rows > 1 ? result.at(at, 0) : result.at(0, at);
+        },
+    ),
     // The result is the row of the result range beside the value found in a column, or its column under the value
     // found in a row. One cell to search is a column beside a result of one row, and a row above any other.
     fn(
         'XLOOKUP',
         [
             PLAIN,
-            refusing(TABLE, NA),
-            refusing(TABLE, NA),
+            defaulted(refusing(TABLE, NA), VALUE),
+            defaulted(refusing(TABLE, NA), VALUE),
             skippable(LAZY, NA),
             optional(NUMBER, 0),
             skippable(NUMBER, 1),

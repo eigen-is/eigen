@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { DIV0, NA, NULL, REF, VALUE } from '../../index';
+import { ENGINE, fn, REFERENCE } from '../../functions/registry';
+import { CALC, DIV0, NA, NULL, REF, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
-import { engineOf, evaluate, stored, valueAt } from '../recalc/support';
+import { engineOf, evaluate, stored, valueAt, valuesWith } from '../recalc/support';
 
 // The fixture of Excel batch 9: A1:A5 = 1.5, -2.5, 0, 10, 1E+300, B1 blank, B2 the text 3, B3 TRUE, B4 =1/0, B5 the
 // text abc, B6 ="", B7 =NA(), C1:C3 = 2, 4, 6, D1:D4 = k1 to k4, E1:E4 = 10 to 40.
@@ -57,6 +58,28 @@ describe('whether a cell holds a formula, and its text: ISFORMULA, FORMULATEXT',
         expect(elements('=FORMULATEXT(B4:B6)', 3, 1)).toEqual(['=1/0', NA, '=""']);
         expect(evaluate('=SUM(--ISFORMULA(B1:B7))', F9)).toBe(3);
         expect(evaluate('=COUNTA(ISFORMULA(A:A))', F9)).toBe(1048576);
+    });
+
+    // A range costs the cells it holds and not its extent: a stretch that holds nothing is asked once. The whole
+    // grid is 17 thousand million cells, far past what one formula may make, and holds 21 here.
+    test('a range of any extent is as many calls as its rows and columns that hold a cell', () => {
+        expect(evaluate('=ROWS(ISFORMULA(A1:XFD1048576))', F9)).toBe(1048576);
+        expect(evaluate('=COLUMNS(FORMULATEXT(A1:XFD1048576))', F9)).toBe(16384);
+        expect(evaluate('=SUM(--ISFORMULA(A1:XFD1048576))', F9, 'A10')).toBe(4);
+        expect(evaluate('=SUM(--ISFORMULA(1:1048576))', { ...F9, XFD1048576: '=1' }, 'A10')).toBe(5);
+        expect(evaluate('=COUNTA(FORMULATEXT(A:M))-SUM(--ISNA(FORMULATEXT(A:M)))', F9)).toBe(3);
+        const far = { ...F9, B1048576: '=B4', K7: '=K8' };
+        expect(elements('=INDEX(FORMULATEXT(B:K),{1048575;1048576},{1,2,10})', 2, 3, far)).toEqual([
+            NA,
+            NA,
+            NA,
+            '=B4',
+            NA,
+            NA,
+        ]);
+        expect(evaluate('=INDEX(FORMULATEXT(B:K),7,10)', far)).toBe('=K8');
+        expect(evaluate('=INDEX(ISFORMULA(B:K),7,9)', far)).toBe(false);
+        expect(evaluate('=INDEX(ISFORMULA(B:K),8,10)', far)).toBe(false);
     });
 
     test('the text is the formula as it reads at its own cell, names of sheets and all', () => {
@@ -212,6 +235,16 @@ describe('what a cell is: CELL, SHEET, SHEETS, INFO', () => {
         ['=SHEETS((A1:A2,C1:C2))', 1],
         ['=SHEETS(Sheet2!A1)', 1],
         ['=SHEETS(1/0)', DIV0],
+        // Excel's 24 rows: what is no reference is #N/A to these two, where it is #VALUE! to ROW.
+        ['=SHEETS(1)', NA],
+        ['=SHEETS("abc")', NA],
+        ['=SHEETS(TRUE)', NA],
+        ['=SHEETS({1,2})', NA],
+        ['=SHEET("3")', NA],
+        ['=SHEET(12.5)', NA],
+        ['=SHEET({1,2})', NA],
+        ['=SHEET(NA())', NA],
+        ['=ROW(12.5)', VALUE],
         ['=INFO("system")', VALUE],
         ['=INFO("osversion")', VALUE],
         ['=INFO(1)', VALUE],
@@ -230,6 +263,79 @@ describe('what a cell is: CELL, SHEET, SHEETS, INFO', () => {
     test('with no reference it is the cell the formula is in', () => {
         expect(evaluate('=CELL("address")', F9, 'Q7')).toBe('$Q$7');
         expect(evaluate('=CELL("row")', F9, 'Q7')).toBe(7);
+    });
+});
+
+// A book belongs to the call that was handed it: what it is asked about is that call's cell, whatever other
+// formula is computed while the body runs, and its formula's cell is the one that is running.
+describe('a book answers about the cell of its own call', () => {
+    // A row no function of this build is: it asks for the value first, which computes a formula that asks a book.
+    const VF = fn('VF', [REFERENCE, ENGINE], (_at, book) => `${String(book.value())}|${book.formula()}`);
+
+    test('after a value was computed whose formula asks a book too', () => {
+        const cells = { A1: '=VF(N1)', N1: '=ISFORMULA(B1)', B1: 7, A2: '=VF(N2)', N2: '=CELL("address",B1)' };
+        expect(valuesWith([VF], cells, ['A1', 'A2'])).toEqual(['false|=ISFORMULA(B1)', '$B$1|=CELL("address",B1)']);
+    });
+
+    test('two formulas in different cells each read a text from their own cell', () => {
+        const cells = { A2: 1, C4: 2, A3: '=INDIRECT("R[-1]C",FALSE)', C5: '=INDIRECT("R[-1]C",FALSE)' };
+        const engine = engineOf({ s1: { ...cells, E1: '=CELL("address")', F2: '=CELL("address")' } });
+        engine.recalc(Number.POSITIVE_INFINITY);
+        expect(['A3', 'C5', 'E1', 'F2'].map((host) => valueAt(engine, host))).toEqual([1, 2, '$E$1', '$F$2']);
+    });
+
+    test('another sheet is another than the sheet of the formula, not than the first sheet', () => {
+        const s2 = { A1: '=CELL("address",B2)', A2: '=CELL("address",Sheet1!B2)', A3: '=CELL("address",Sheet2!B2)' };
+        const engine = engineOf({ s1: { A1: '=CELL("address",Sheet2!B2)' }, s2 });
+        engine.recalc(Number.POSITIVE_INFINITY);
+        expect(['A1', 'A2', 'A3'].map((host) => valueAt(engine, host, 's2'))).toEqual(['$B$2', 'Sheet1!$B$2', '$B$2']);
+        expect(valueAt(engine, 'A1')).toBe('Sheet2!$B$2');
+    });
+});
+
+// Excel's rows of INDIRECT and OFFSET: an array of references is no value a cell can hold.
+describe('an array of references that reaches the cell is #CALC!', () => {
+    test.each([
+        ['=INDIRECT({"A1","B2"})', CALC],
+        ['=INDIRECT({"A1";"A2"})', CALC],
+        ['=INDIRECT({"A1","zzz"})', CALC],
+        ['=INDIRECT("A1",{TRUE,FALSE})', CALC],
+        ['=OFFSET(A1,{0,1,2},0)', CALC],
+        ['=OFFSET(A1,0,0,{1,2},1)', CALC],
+        // What takes the references still does.
+        ['=SUM(INDIRECT({"A1","C1"}))', 3.5],
+        ['=SUM(OFFSET(A1,{0;1;2},0))', -1],
+        ['=INDEX(ROW(OFFSET(A1,{0;1;2},0)),3,1)', 3],
+        ['=INDIRECT({"A1"})', 1.5],
+    ])('%s', (formula, expected) => {
+        expect(evaluate(formula, F9)).toBe(expected);
+    });
+});
+
+// A formula cannot read its own cell, so with no reference there is nothing to read: Excel answers for the cell
+// that was changed last, which only a host knows.
+describe('CELL with no reference reads no cell', () => {
+    test('the contents are a blank and the type is b, and the cell is on no loop', () => {
+        const engine = engineOf({ s1: { A1: '=CELL("contents")', A2: '=CELL("type")', A3: '=CELL("contents",A3)' } });
+        const { loops } = engine.recalc(Number.POSITIVE_INFINITY);
+        expect(['A1', 'A2', 'A3'].map((host) => valueAt(engine, host))).toEqual([0, 'b', REF]);
+        expect(loops).toEqual([{ sheet: 's1', row: 2, column: 0 }]);
+    });
+});
+
+// A name before the ! is read by one rule in both notations: what the grammar reads as one bare word, or quoted.
+describe('INDIRECT reads the name of a sheet the same way in A1 and in R1C1', () => {
+    test.each([
+        ['=INDIRECT("My Sheet!A1")', REF],
+        ['=INDIRECT("My Sheet!R1C1",FALSE)', REF],
+        [`=INDIRECT("'My Sheet'!A1")`, 7],
+        [`=INDIRECT("'My Sheet'!R1C1",FALSE)`, 7],
+        ['=INDIRECT("Sheet1!R1C1",FALSE)', 1],
+        [`=INDIRECT("'Sheet1'!R1C1",FALSE)`, 1],
+    ])('%s', (formula, expected) => {
+        const engine = engineOf({ s1: { A1: 1, N1: formula }, 'My Sheet': { A1: 7 } });
+        engine.recalc(Number.POSITIVE_INFINITY);
+        expect(valueAt(engine, 'N1')).toBe(expected);
     });
 });
 

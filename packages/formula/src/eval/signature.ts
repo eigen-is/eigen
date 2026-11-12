@@ -27,7 +27,7 @@ export const Prepare = {
     // an element of it that is a reference gives its first cell.
     Corner: 6,
     // Read to a value as the first, but a range of several cells is #VALUE! for the whole call: an array still
-    // runs the call once per element.
+    // runs the call once per element. An argument left empty is #N/A where it must be given.
     Single: 7,
 } as const;
 
@@ -40,42 +40,44 @@ export const Read = {
     Integer: 1,
     // A date: a number cut down to a whole day, #NUM! below 0 or past the last date.
     Serial: 2,
-    Text: 3,
-    Boolean: 4,
-    Plain: 5,
-    Walked: 6,
-    Table: 7,
-    Here: 8,
+    // A number, and one a hair under a whole number is that whole number. It is not cut.
+    Near: 3,
+    Text: 4,
+    Boolean: 5,
+    Plain: 6,
+    Walked: 7,
+    Table: 8,
+    Here: 9,
     // A reference and nothing else, unread: a criteria range, the range of the numbers beside it, a place.
-    Only: 9,
+    Only: 10,
     // Ranges of one size, multiplied place by place: the products.
-    Products: 10,
+    Products: 11,
     // Every value of ranges, arrays and typed values, each as the text it is spelled as.
-    Texts: 11,
+    Texts: 12,
     // Two ranges or arrays of one size, read side by side: the numbers at the places where both hold one.
-    Pairs: 12,
+    Pairs: 13,
     // Every value of ranges, arrays and typed values as a whole number's source: a text is read as a number, in a
     // cell too, and a boolean is refused.
-    Wholes: 13,
+    Wholes: 14,
     // Whatever was written, as a table: an error is a value of it, and nothing fails.
-    Anything: 14,
-    Any: 15,
-    Lazy: 16,
+    Anything: 15,
+    Any: 16,
+    Lazy: 17,
     // As Lazy, and the argument that is picked is read to a value: a reference does not come back as one.
-    Valued: 25,
+    Valued: 18,
     // The value of the first cell of a reference, or the value itself.
-    Corner: 17,
+    Corner: 19,
     // Readings of a whole parameter, whose arguments are read as Only and Any: a criteria range with its
     // criterion, the numbers beside the cells every criterion accepts, and the cells that show nothing.
-    Where: 18,
-    Matched: 19,
-    Blanks: 20,
+    Where: 20,
+    Matched: 21,
+    Blanks: 22,
     // What takes no argument: room for an array, a draw in [0, 1), the date and time as a serial, and what a
     // body may ask of the workbook.
-    Room: 21,
-    Random: 22,
-    Now: 23,
-    Engine: 24,
+    Room: 23,
+    Random: 24,
+    Now: 25,
+    Engine: 26,
 } as const;
 
 export type Read = (typeof Read)[keyof typeof Read];
@@ -85,7 +87,7 @@ declare const carries: unique symbol;
 export type Param<T> = {
     readonly prepare: Prepare;
     readonly read: Read;
-    // Whether a number reading refuses a boolean, and an argument left empty with #N/A.
+    // Whether a number reading refuses a boolean.
     readonly strict: boolean;
     // What a walked reading counts.
     readonly family: Family | null;
@@ -104,6 +106,8 @@ export type Param<T> = {
     readonly only: boolean;
     // Whether a range of several cells runs the call once per cell, each a reference of its own.
     readonly apiece: boolean;
+    // What an argument that is no reference answers where only a reference is taken, unless it is an error itself.
+    readonly stranger: FormulaError;
     // Only in the type, never in a record: what the body gets.
     readonly [carries]?: () => T;
 };

@@ -36,7 +36,7 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
         const to = param.rest ? count : at + spanOf(param);
         const value = held[at];
         if (param.prepare === Prepare.Ambient) {
-            if (param.read === Read.Engine) args[p] = Book.aim(ctx.book, entry, held);
+            if (param.read === Read.Engine) args[p] = Book.aim(frame.book(), entry, held, count);
             else args[p] = param.read === Read.Room ? ctx.room : param.read === Read.Now ? ctx.now : ctx.draw();
         } else if (param.prepare !== Prepare.Walked) args[p] = param.rest ? held.slice(at, count) : value;
         else if (family !== null) {
@@ -105,7 +105,7 @@ function errorIn(ctx: Evaluator, value: Held, family: Family, skips: number): Fo
     if (!isArray(value) || value.nums !== null) return null;
     for (let i = 0; i < value.items.length; i += 1) {
         const item = value.items[i];
-        const found = isReference(item) ? ctx.walk.referred(item, family) : item;
+        const found = isReference(item) && value.references ? ctx.walk.referred(item, family) : item;
         if (isError(found) && (skips & ERRORS) === 0) return found;
     }
     return null;
@@ -144,7 +144,9 @@ function spell(
             for (let row = 0; row < value.rows && error === null; row += 1) {
                 for (let c = 0; c < value.columns && error === null; c += 1) {
                     const item = elementAt(value, row, c);
-                    error = wholes === null ? spelled(texts, item) : whole(wholes, item);
+                    // An element that is a cell and no reference of an array of references holds nothing.
+                    const read = isReference(item) && !value.references ? null : item;
+                    error = wholes === null ? spelled(texts, read) : whole(wholes, read);
                 }
             }
         } else if (!isReference(value)) error = wholes === null ? spelled(texts, value) : whole(wholes, value);

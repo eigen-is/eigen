@@ -152,3 +152,15 @@ describe('SUBTOTAL with a code that picks nothing is #VALUE!, whatever the range
         expect(evaluate(formula, F7, 'P1')).toBe(expected);
     });
 });
+
+// The count of arguments is the picked row's own: one too many is #VALUE!, as one too few is.
+describe('AGGREGATE takes as many arguments as the row it picks', () => {
+    test.each([
+        ['=AGGREGATE(14,6,D1:D8,1,2)', VALUE],
+        ['=AGGREGATE(14,6,D1:D8)', VALUE],
+        ['=AGGREGATE(14,6,D1:D8,1)', 9],
+        ['=AGGREGATE(12,6,D1:D8,1,2)', VALUE],
+    ])('%s', (formula, expected) => {
+        expect(evaluate(formula, F7)).toBe(expected);
+    });
+});

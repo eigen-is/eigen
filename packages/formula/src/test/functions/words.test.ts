@@ -139,6 +139,12 @@ describe('every value as a text: TEXTJOIN and CONCAT', () => {
         ['=TEXTJOIN(",",TRUE,I1:I3,H1:H3)', NA, F3],
         ['=TEXTJOIN(I1:I3,TRUE,H1:H3)', NA, F3],
         ['=TEXTJOIN(",",TRUE)', VALUE, F1],
+        // Excel's two rows of the text family: an EMPTY second argument is TRUE, where a blank cell there is FALSE.
+        ['=TEXTJOIN(",",,"a",P7:P9)', 'a,3,TRUE', { P8: '3', P9: true }],
+        ['=TEXTJOIN(",",,"a","")', 'a', F1],
+        ['=TEXTJOIN(",",Z99,"a","")', 'a,', F1],
+        ['=TEXTJOIN(",",FALSE,"a","")', 'a,', F1],
+        ['=TEXTJOIN(",",)', VALUE, F1],
         // A text of more than 32,767 characters is #CALC! for these two.
         ['=LEN(CONCAT(P1))', 20000, { P1: LONG }],
         ['=CONCAT(P1,P1)', CALC, { P1: LONG }],

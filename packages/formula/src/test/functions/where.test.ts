@@ -71,10 +71,13 @@ describe('criteria: the walk goes row by row, and only an error beside a matchin
         ['=SUMIFS(A1:A3,B1:B3,{"a";"c"})', 2, 1, [10, 30]],
         ['=COUNTIFS(A1:A3,{">5",">15"},B1:B3,{"a";"b"})', 2, 2, [1, 0, 1, 1]],
         // Batch 5: where only a reference is taken, an array of references gives one answer each.
-        ['=SUMIF(INDEX(A1:B3,0,{1,2}),">15")', 1, 2, [50, 0]],
-        ['=COUNTIF(INDEX(A1:A3,{1,2,3}),10)', 1, 3, [1, 0, 0]],
-        ['=COUNTBLANK(INDEX(A1:C3,0,{1,3}))', 1, 2, [0, 3]],
-        ['=AVERAGEIF(INDEX(A1:B3,0,{1,2}),">15")', 1, 2, [25, DIV0]],
+        ['=SUMIF(OFFSET(A1:A3,0,{0,1}),">15")', 1, 2, [50, 0]],
+        ['=COUNTIF(OFFSET(A1,{0,1,2},0),10)', 1, 3, [1, 0, 0]],
+        ['=COUNTBLANK(OFFSET(A1:A3,0,{0,2}))', 1, 2, [0, 3]],
+        ['=AVERAGEIF(OFFSET(A1:A3,0,{0,1}),">15")', 1, 2, [25, DIV0]],
+        // Batch 12: a lifted INDEX hands values, which are no criteria range.
+        ['=SUMIF(INDEX(A1:B3,0,{1,2}),">15")', 1, 2, [VALUE, VALUE]],
+        ['=COUNTIF(INDEX(A1:A3,{1,2,3}),10)', 1, 2, [VALUE, VALUE]],
     ])('%s', (formula, rows, columns, expected) => {
         expect(elements(formula, rows, columns, C3)).toEqual(expected);
     });

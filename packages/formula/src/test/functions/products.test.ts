@@ -26,7 +26,8 @@ describe('SUMPRODUCT: any argument’s error in argument order, then the sizes, 
         ['=SUMPRODUCT(2,3)', 6],
         ['=SUMPRODUCT((C1:C3,B2:B3))', VALUE],
         ['=SUMPRODUCT(C1:C3,C1:C3)', 1400],
-        ['=SUMPRODUCT(INDEX(C1:C3,{1,2,3}))', 0],
+        ['=SUMPRODUCT(INDEX(C1:C3,{1,2,3}))', 60],
+        ['=SUMPRODUCT(OFFSET(C1,{0,1,2},0))', 0],
     ])('%s', (formula, expected) => {
         expect(evaluate(formula, E)).toBe(expected);
     });

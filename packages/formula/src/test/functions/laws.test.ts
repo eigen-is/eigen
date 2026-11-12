@@ -174,18 +174,22 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         }
     });
 
-    test('a strict number refuses a boolean and a range of several cells, and takes one cell and an array', () => {
+    test('a strict number refuses a boolean, and an add-in one a range of several cells too', () => {
         for (const at of scalars.filter((slot) => params[slot].strict)) {
             const put = (argument: string) => written(entry, withArg(base, at, argument));
             const lifted = put('C1:C3*1').slice(1);
-            const [typed, cell, range, union, one, plain, element] = evaluateAll([
+            const [typed, cell, range, union, one, plain, element, ranged] = evaluateAll([
                 ...[put('TRUE'), put('D1'), put('C1:C3'), put('(C1,C2)'), put('C2:C2'), put('2')],
                 `=INDEX(${lifted},2,1)`,
+                `=INDEX(${put('C1:C3').slice(1)},2,1)`,
             ]);
-            expect([typed, cell, range, union]).toEqual([VALUE, VALUE, VALUE, VALUE]);
+            expect([typed, cell, union]).toEqual([VALUE, VALUE, VALUE]);
+            if (params[at].prepare === Prepare.Single) expect(range).toBe(VALUE);
             if (entry.volatile) continue;
             expect(one).toEqual(plain);
             expect(element).toEqual(plain);
+            // What is no add-in argument takes a range as any scalar does: one answer per cell.
+            if (params[at].prepare !== Prepare.Single) expect(ranged).toEqual(plain);
         }
     });
 
@@ -259,7 +263,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             expect(cell).toEqual(blank);
             // An empty argument is a blank that is read, or left out where the parameter says so.
             if (param.skips && at === params.length - 1) expect(empty).toEqual(evaluateAll([written(entry, upTo)])[0]);
-            else if (param.strict && !param.optional && at > 0) expect(empty).toBe(NA);
+            else if (param.prepare === Prepare.Single && !param.optional && at > 0) expect(empty).toBe(NA);
             else if (!param.skips && at > 0) expect(empty).toEqual(blank);
             if (!param.optional || param.fallback === undefined || at !== params.length - 1) continue;
             const fallback =
@@ -399,7 +403,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         equals('F1:F3,E1:E3', NA);
         equals('E1:E3,NA()', NA);
         // An element that is a reference is refused, where a family of numbers reads its first cell.
-        equals('INDEX(A1:A5,{2,4})', VALUE);
+        equals('OFFSET(A1,{1,3},0)', VALUE);
         const whole = written(entry, [...base, '{1,2,3}']).slice(1);
         expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);
     });
@@ -422,7 +426,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         equals('F1:F3,E1:E3', NA);
         equals('E1:E3,NA()', NA);
         equals('(A1:A3,C1:C3)', VALUE);
-        equals('INDEX(A1:A5,{2,4})', VALUE);
+        equals('OFFSET(A1,{1,3},0)', VALUE);
         const whole = written(entry, [...base, '{1,2,3}']).slice(1);
         expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);
     });
@@ -444,15 +448,15 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             both('{10;30;40}', '{10;1;20}'),
             both('A1:C6', 'A1:C6'),
             both('{10;1;20;2;30;3;40;50}', '{10;1;20;2;30;3;40;50}'),
-            both('A1:A5', 'INDEX(A1:A5,{1;2;3;4;5})'),
+            both('A1:A5', 'OFFSET(A1,{0;1;2;3;4},0)'),
             both('{10;20}', '{10;20}'),
             both('A1:A2', 'A1:A2'),
         ]);
         expect(values.slice(0, 7)).toEqual([NA, NA, NA, NA, DIV0, NA, VALUE]);
         expect(values[7]).toEqual(values[8]);
         expect(values[9]).toEqual(values[10]);
-        // An element that is a reference is no number, so its pair is left out.
-        expect(values[11]).toEqual(evaluateAll([both('{"a";"b"}', '{1;2}')])[0]);
+        // An array of references has no number to pair.
+        expect(values[11]).toBe(NUM);
         expect(values[12]).toEqual(values[13]);
     });
 
@@ -476,8 +480,8 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
                 put('A2:B4'),
                 put('(A2:A3,C1:C3)'),
                 `=INDEX(${put('A2:A4').slice(1)},2,1)`,
-                `=INDEX(${put('INDEX(A1:A5,{2,4})').slice(1)},1,1)`,
-                `=INDEX(${put('INDEX(A1:A5,{2,4})').slice(1)},1,2)`,
+                `=INDEX(${put('OFFSET(A1,{1,3},0)').slice(1)},1,1)`,
+                `=INDEX(${put('OFFSET(A1,{1,3},0)').slice(1)},1,2)`,
             ]);
             expect([range, union, second]).toEqual([cell, cell, REF]);
             expect(lifted).toEqual([cell, other]);
@@ -503,7 +507,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
     test('where only a reference is taken, an array of references gives one answer per reference', () => {
         for (const at of params.map((param, i) => (param.prepare === Prepare.Reference ? i : -1))) {
             if (at < 0) continue;
-            const lifted = written(entry, withArg(base, at, 'INDEX(A1:A5,{2,4})')).slice(1);
+            const lifted = written(entry, withArg(base, at, 'OFFSET(A1,{1,3},0)')).slice(1);
             const values = evaluateAll([
                 `=INDEX(${lifted},1,1)`,
                 `=INDEX(${lifted},1,2)`,
@@ -512,7 +516,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
                 written(entry, withArg(base, at, '{1,2}')),
             ]);
             expect(values.slice(0, 2)).toEqual(values.slice(2, 4));
-            expect(values[4]).toBe(VALUE);
+            expect(values[4]).toBe(params[at].stranger);
         }
     });
 });

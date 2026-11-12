@@ -34,6 +34,7 @@ const REQUIRED = {
     union: null,
     only: false,
     apiece: false,
+    stranger: VALUE,
 };
 
 function scalar<T>(read: Read): Param<T> {
@@ -55,6 +56,9 @@ function walked(family: Family): Collector {
 export const NUMBER = scalar<number>(Read.Number);
 // A number cut toward zero, as a count or a position is.
 export const INTEGER = scalar<number>(Read.Integer);
+// A number, and one a hair under a whole number is that whole number, as Excel reads the counts of LEFT, INDEX,
+// ROUND and FACT. It is not cut: the body tests its sign and cuts it.
+export const NEARLY = scalar<number>(Read.Near);
 // A date: a number cut down to a whole day, and #NUM! before 1 January of the year 1 or past 31 December 9999.
 export const SERIAL = scalar<number>(Read.Serial);
 // A number and a boolean are spelled out, a blank is empty text.
@@ -186,9 +190,24 @@ export function skippable(param: Param<unknown>, fallback?: Scalar): Param<unkno
     return Object.freeze({ ...param, optional: true, skips: true, fallback });
 }
 
-// A number as Excel's add-in functions read one: a boolean, typed or in a cell, is #VALUE!, a range of several
-// cells is #VALUE! for the whole call where an array runs it once per element, and an argument left empty is #N/A.
+// The parameter must be given, and an argument left empty is `fallback`, where a blank cell there is still read as
+// a blank: TEXTJOIN(",",,"a","") leaves the empty text out. It may stand before a parameter that repeats. Of a
+// table it is the error an empty argument answers, where without it the body gets a table of one blank.
+export function defaulted<P extends Param<Table>>(param: P, fallback: FormulaError): P;
+export function defaulted<T>(param: Param<T>, fallback: NoInfer<T> & Scalar): Param<T>;
+export function defaulted(param: Param<unknown>, fallback: Scalar): Param<unknown> {
+    return Object.freeze({ ...param, skips: true, fallback });
+}
+
+// A number that refuses a boolean, typed or in a cell, with #VALUE!, and nothing else: SUBSTITUTE's instance.
 export function strict(param: Param<number>): Param<number> {
+    return Object.freeze({ ...param, strict: true });
+}
+
+// A number as Excel's add-in functions read one, three answers that every recorded one has together: a boolean
+// is #VALUE! as for `strict`, a range of several cells is #VALUE! for the whole call where an array runs it once
+// per element, and an argument left empty is #N/A where it must be given.
+export function addin(param: Param<number>): Param<number> {
     return Object.freeze({ ...param, strict: true, prepare: Prepare.Single });
 }
 
@@ -209,7 +228,7 @@ export function referring(param: Collector, error: FormulaError): Collector {
 }
 
 // The parameter takes every argument from its own to the last: as one reader over all of them, or as a list.
-export function rest<T>(param: Walked<T>): Param<T>;
+export function rest<T>(param: Walked<T>): Walked<T>;
 export function rest<T>(param: Param<T>): Param<readonly T[]>;
 export function rest(param: Param<unknown>): Param<unknown> {
     return Object.freeze({ ...param, rest: true });
@@ -231,6 +250,12 @@ export function cells<T>(param: Walked<T>): Walked<T> {
 // a union the first area: ISFORMULA(B1:B7) is seven answers.
 export function apiece(param: Param<Reference>): Param<Reference> {
     return Object.freeze({ ...param, apiece: true });
+}
+
+// The error that what is no reference answers at a parameter that takes a reference only, in place of #VALUE!:
+// SHEETS(1) is #N/A. An argument that is an error still answers itself.
+export function expecting(param: Param<Reference>, error: FormulaError): Param<Reference> {
+    return Object.freeze({ ...param, stranger: error });
 }
 
 type Args<P extends readonly Param<unknown>[]> = { [K in keyof P]: P[K] extends Param<infer T> ? T : never };
@@ -286,12 +311,7 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
         if (param.read === Read.Pairs && (param.rest || param.optional)) {
             throw new Error(`${name}: two ranges side by side that repeat or may be left out`);
         }
-        if (
-            param.optional &&
-            param.fallback !== undefined &&
-            param.read !== Read.Lazy &&
-            reads(param) !== param.fallback
-        ) {
+        if (param.fallback !== undefined && param.read !== Read.Lazy && reads(param) !== param.fallback) {
             throw new Error(`${name}: a fallback of another kind`);
         }
         if (!param.optional && optionals) throw new Error(`${name}: a required parameter after an optional one`);
@@ -368,6 +388,7 @@ function reads(param: Param<unknown>): unknown {
     const fallback = param.fallback ?? null;
     switch (param.read) {
         case Read.Number:
+        case Read.Near:
             return toNumber(fallback);
         case Read.Integer:
         case Read.Serial:

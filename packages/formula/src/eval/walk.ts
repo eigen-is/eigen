@@ -256,6 +256,8 @@ export class Walk {
                 // A blank element is a 0 that counts, for every family, which a blank cell never is.
                 if (typeof item === 'number') number = item;
                 else if (isReference(item)) {
+                    // In an array that is not one of references, such an element is a cell that holds nothing.
+                    if (!array.references) continue;
                     const referred = this.referred(item, this.family);
                     if (typeof referred !== 'number' || Number.isNaN(referred)) continue;
                     number = referred;

@@ -75,27 +75,56 @@ describe('a table is handed over whole and never looked into for an error', () =
         ['=VLOOKUP({10;20;30},A1:B5,2,0)', 3, 1, ['a', 'b', 'c']],
         ['=INDEX(A1:B5,{1;2},2)', 2, 1, ['a', 'b']],
         ['=MATCH({20,50,7},A1:A5,0)', 1, 3, [2, 5, NA]],
-        // Batch 3 and 5: an element that is a reference stays one, and is its first cell where a value is wanted.
+        // Batch 3, 5 and 12: an element that answers a range is the value of its first cell, and no reference.
         ['=INDEX(A1:A3,{1,0})', 1, 2, [10, 10]],
         ['=INDEX(A1:A3,{1,2})+0', 1, 2, [10, 20]],
-        ['=INDEX(A1:A3,{1,0})+0', 1, 2, [10, VALUE]],
-        ['=ROW(INDEX(A1:A5,{2,4}))', 1, 2, [2, 4]],
+        ['=INDEX(A1:A3,{1,0})+0', 1, 2, [10, 10]],
+        ['=ROW(INDEX(A1:A5,{2,4}))', 1, 2, [VALUE, VALUE]],
+        ['=ROW(OFFSET(A1,{1,3},0))', 1, 2, [2, 4]],
         ['=ROW(A2:A3)', 2, 1, [2, 3]],
         ['=COLUMN(B1:C1)', 1, 2, [2, 3]],
     ])('%s', (formula, rows, columns, expected) => {
         expect(elements(formula, rows, columns, F2)).toEqual(expected);
     });
 
-    test('a reference element is a cell to a collector: SUM passes over the blank and snaps, COUNT passes it by', () => {
+    // Batch 4 and 6 (the sum that snaps) and batch 12 (the count): C4 is blank, and an element that names it is
+    // that cell still, which a collector passes over as it does a blank cell of a range. IF's blank is a 0.
+    test('an element of a lifted INDEX is a value, and a cell that holds nothing where it names one', () => {
         expect(evaluate('=INDEX(A1:A3,{1,0})', F2)).toBe(10);
         expect(evaluate('=SUM(INDEX(C1:C4,{1;2;3;4}))', F1)).toBe(0);
         expect(evaluate('=SUM(C1:C4)', F1)).toBe(0);
+        expect(evaluate('=SUM(IF({1;1;1;1},C1:C4))', F1)).toBe(5.551115123125783e-17);
+        expect(evaluate('=COUNT(INDEX(C1:C4,{1;2;3;4}))', F1)).toBe(3);
+        expect(evaluate('=COUNTA(INDEX(C1:C4,{1;2;3;4}))', F1)).toBe(3);
+        expect(evaluate('=CONCAT(INDEX(C1:C4,{4;4}),"x")', F1)).toBe('x');
+        expect(evaluate('=INDEX(C1:C4,{4;4})+1', F1)).toBe(1);
         expect(evaluate('=SUM(INDEX(A1:A3,{1,2,3}))', F2)).toBe(60);
         expect(evaluate('=AVERAGE(INDEX(A1:A3,{1,2,3}))', F2)).toBe(20);
+        expect(evaluate('=MEDIAN(INDEX(A1:A3,{1,2,3}))', F2)).toBe(20);
         expect(evaluate('=MAX(INDEX(A1:A3,{1,0}))', F2)).toBe(10);
-        expect(evaluate('=COUNT(INDEX(A1:A3,{1,2,3}))', F2)).toBe(0);
+        expect(evaluate('=COUNT(INDEX(A1:A3,{1,2,3}))', F2)).toBe(3);
         expect(evaluate('=SUM(INDEX(A1:A5,{1,4}))', F2)).toBe(DIV0);
         expect(evaluate('=SUM(1,INDEX(A1:A3,{1,2}))', F2)).toBe(31);
+    });
+});
+
+// Excel's rows of the reference family: an argument left empty is no table to INDEX, LOOKUP, XMATCH and XLOOKUP,
+// which say so in their rows, and a blank that is searched to MATCH, VLOOKUP and HLOOKUP.
+describe('an empty argument is no table to the rows that say so', () => {
+    test.each([
+        ['=INDEX(,2,2,1)', VALUE],
+        ['=LOOKUP(4,,A1:A3)', VALUE],
+        ['=XMATCH(2,,0,1)', VALUE],
+        ['=XLOOKUP("k2",,A1:A3,"nf",0,1)', VALUE],
+        ['=XLOOKUP("k2",B1:B3,,"nf",0,1)', VALUE],
+        ['=MATCH(2,,1)', NA],
+        ['=VLOOKUP("k2",,2,FALSE)', NA],
+        ['=HLOOKUP(2,,2,FALSE)', NA],
+        ['=ROWS(IF(TRUE,))', 1],
+        ['=ISREF(,)', VALUE],
+        ['=TYPE(IF(TRUE,))', 1],
+    ])('%s', (formula, expected) => {
+        expect(evaluate(formula, F2)).toBe(expected);
     });
 });
 

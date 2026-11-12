@@ -37,6 +37,32 @@ describe('a parameter of an add-in function refuses a range, a boolean and an em
     });
 });
 
+// Excel's two rows of the text family (fixture of batch 9): SUBSTITUTE's instance refuses a boolean and is no
+// add-in argument, so a range there is one answer per cell and an empty one is a blank.
+describe('a strict number that is no add-in argument refuses a boolean and nothing else', () => {
+    const F9: Cells = {
+        ...{ A1: 1.5, A2: -2.5, A3: 0, A4: 10, A5: 1e300, D1: 'Hello World' },
+        ...{ B2: '3', B3: true, B4: '=1/0', B5: 'abc', B6: '=""' },
+    };
+    const each = (formula: string, rows: number) =>
+        Array.from({ length: rows }, (_, r) => evaluate(`=INDEX(${formula},${r + 1},1)`, F9));
+
+    test('a range is one answer per cell', () => {
+        expect(each('SUBSTITUTE(D1,"o","0",A1:A5)', 5)).toEqual(['Hell0 World', VALUE, VALUE, 'Hello World', VALUE]);
+        expect(each('SUBSTITUTE(D1,"o","0",B1:B6)', 6)).toEqual([VALUE, 'Hello World', VALUE, DIV0, VALUE, VALUE]);
+    });
+
+    test.each([
+        ['=SUBSTITUTE(D1,"o","0",TRUE)', VALUE],
+        ['=SUBSTITUTE(D1,"o","0",B3)', VALUE],
+        ['=SUBSTITUTE(D1,"o","0",)', VALUE],
+        ['=SUBSTITUTE(D1,"o","0",2)', 'Hello W0rld'],
+        ['=SUBSTITUTE(D1,"o","0",B2)', 'Hello World'],
+    ])('%s', (formula, expected) => {
+        expect(evaluate(formula, F9)).toBe(expected);
+    });
+});
+
 // Excel's rows of the logical family: what is no reference is refused with its own error, an array with its first.
 describe('where only a reference is taken, an array is refused with the error its first element is', () => {
     test.each([
