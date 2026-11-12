@@ -377,6 +377,48 @@ describe('WebDAV MOVE/COPY', () => {
         });
     });
 
+    // RFC 4918 §9.8.3: Depth 0 copies the folder without its members. It never overwrites, whatever Overwrite says.
+    describe('a Depth 0 COPY of a folder', () => {
+        const email = () => ctx.alice.user.email;
+        const copy = (source: string, destination: string): Promise<Response> =>
+            webdavRequest(email(), 'COPY', `${baseHref}/${source}`, {
+                headers: { Destination: `http://localhost${baseHref}/${destination}`, Overwrite: 'T', Depth: '0' },
+            });
+        const read = async (path: string): Promise<string> => {
+            const res = await webdavRequest(email(), 'GET', `${baseHref}/${path}`);
+            return `${res.status} ${await res.text()}`;
+        };
+        const trashNames = async (): Promise<string[]> =>
+            (await (await getHome(ctx.alice.user.id)).drive.listTrash(mountId)).map((path) => path.name);
+
+        test('to a free name creates the folder without its members', async () => {
+            await webdavRequest(email(), 'MKCOL', `${baseHref}/D0From/`);
+            await webdavRequest(email(), 'PUT', `${baseHref}/D0From/member.txt`, { body: 'm' });
+            expect((await copy('D0From', 'D0To')).status).toBe(201);
+            const { drive } = await getHome(ctx.alice.user.id);
+            expect((await drive.resolvePath(mountId, '/D0To'))?.name).toBe('D0To');
+            expect(await drive.resolvePath(mountId, '/D0To/member.txt')).toBeNull();
+        });
+
+        test('onto an existing folder is a 412 and leaves it with its members', async () => {
+            await webdavRequest(email(), 'MKCOL', `${baseHref}/D0Src/`);
+            await webdavRequest(email(), 'MKCOL', `${baseHref}/D0Old/`);
+            await webdavRequest(email(), 'PUT', `${baseHref}/D0Old/kept.txt`, { body: 'old' });
+            expect((await copy('D0Src', 'D0Old')).status).toBe(412);
+            expect(await read('D0Old/kept.txt')).toBe('200 old');
+            expect(await trashNames()).not.toContain('D0Old');
+        });
+
+        test("onto the source's own parent is a 412 and leaves both", async () => {
+            await webdavRequest(email(), 'MKCOL', `${baseHref}/D0Parent/`);
+            await webdavRequest(email(), 'MKCOL', `${baseHref}/D0Parent/child/`);
+            await webdavRequest(email(), 'PUT', `${baseHref}/D0Parent/child/kept.txt`, { body: 'old' });
+            expect((await copy('D0Parent/child', 'D0Parent')).status).toBe(412);
+            expect(await read('D0Parent/child/kept.txt')).toBe('200 old');
+            expect(await trashNames()).not.toContain('D0Parent');
+        });
+    });
+
     describe('a COPY over an existing destination', () => {
         const email = () => ctx.alice.user.email;
         const copy = (source: string, destination: string): Promise<Response> =>

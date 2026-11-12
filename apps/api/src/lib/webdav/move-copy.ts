@@ -38,16 +38,14 @@ export async function handleMove(args: MoveCopyArgs): Promise<Response> {
 export async function handleCopy(args: MoveCopyArgs & { depth: '0' | '1' | 'infinity' }): Promise<Response> {
     const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy(args, 'COPY');
 
-    return await drive.withHomeHeld(async () => {
-        // RFC 4918 §9.8.3: Depth: 0 on a folder copies the folder without its members. A file has none.
-        if (args.depth === '0' && src.type !== DRIVE_TYPE_FILE) {
-            if (destExisting) await drive.deletePath(args.mountId, destExisting.id, args.user);
-            await drive.createFolder(args.mountId, destParent.id, newName, args.user);
-        } else {
-            await drive.copyPathOver(args.mountId, src.id, destParent.id, newName, args.user);
-        }
-        return new Response(null, { status: destExisting ? 204 : 201 });
-    });
+    // RFC 4918 §9.8.3: Depth: 0 on a folder copies the folder without its members. A file has none.
+    if (args.depth === '0' && src.type !== DRIVE_TYPE_FILE) {
+        if (destExisting) throw new ApiError(412, 'Destination exists, a Depth 0 folder COPY never overwrites');
+        await drive.createFolder(args.mountId, destParent.id, newName, args.user);
+        return new Response(null, { status: 201 });
+    }
+    await drive.withHomeHeld(() => drive.copyPathOver(args.mountId, src.id, destParent.id, newName, args.user));
+    return new Response(null, { status: destExisting ? 204 : 201 });
 }
 
 type Resolved = {
