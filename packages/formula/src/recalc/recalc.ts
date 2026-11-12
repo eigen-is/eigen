@@ -23,6 +23,8 @@ export type CellAddress = { readonly sheet: string; readonly row: number; readon
 export type RecalcResult = {
     // Every cell of the workbook that is on a circular reference, in sheet, column, row order. Final only when
     // `stopped` is false: a pass that stopped can still list a loop that a write broke, until a later one computes it.
+    // A loop is found by computing it and by nothing else, as what a formula reads can hang on values: so the cells
+    // of a loop that came from a load with values are listed once one of them is computed, and not before.
     readonly loops: readonly CellAddress[];
     // True when the pass met its cap with formulas still to compute. What it computed stays, and the next goes on.
     readonly stopped: boolean;

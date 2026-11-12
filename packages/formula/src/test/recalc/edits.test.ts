@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { Fact, shapeFacts } from '../../eval/facts';
 import { FUNCTIONS } from '../../functions/library';
-import type { Engine, LineEdit, Move } from '../../index';
-import { REF } from '../../index';
+import type { LineEdit, Move } from '../../index';
+import { Engine, REF } from '../../index';
 import { GRID_COLUMNS, GRID_ROWS, parseA1, sheetFinder } from '../../text';
 import type { Cells } from './support';
 import { at, engineOf, stored, valueAt } from './support';
@@ -562,6 +562,29 @@ describe('what a host reads back', () => {
             false,
         ]);
         expect(engine.recalc(NO_CAP).changed).toEqual([0, 1, 50, 99, 0, 2, 0, 99]);
+    });
+    test('a loop that came with its values is listed once a cell of it is computed again, and not before', () => {
+        const engine = new Engine([
+            {
+                id: 's1',
+                name: 'Sheet1',
+                cells: (cell) => {
+                    cell(0, 0, REF, '=R[1]C');
+                    cell(1, 0, REF, '=R[-1]C');
+                    cell(0, 2, 5, null);
+                    cell(0, 3, 6, '=RC[-1]+1');
+                },
+            },
+        ]);
+        // A load brings values and no word on loops, and nothing here is to be computed.
+        expect(engine.recalc(NO_CAP).loops).toEqual([]);
+        engine.setValue('s1', 0, 2, 7);
+        expect(engine.recalc(NO_CAP).loops).toEqual([]);
+        engine.setFormula('s1', 0, 0, '=R[1]C');
+        expect(engine.recalc(NO_CAP).loops).toEqual([
+            { sheet: 's1', row: 0, column: 0 },
+            { sheet: 's1', row: 1, column: 0 },
+        ]);
     });
     test('the stored text of a cell, and a block filled with one', () => {
         const engine = engineOf({ s1: { A1: 4, B1: '=A1*2' } });

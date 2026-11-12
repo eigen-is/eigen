@@ -29,7 +29,7 @@ export type Rewrite = {
     readonly lost: string | null;
 };
 
-export type EditPlan = {
+type EditPlan = {
     // The blocks that get another shape: sheet, first and last column, first and last row, and shape.
     readonly fills: number[];
     // The formulas to compute again, as spans of rows: sheet, column, first and last row.
@@ -148,7 +148,8 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
     // is in no place yet and nothing reads it, so they get their new shape where they stand.
     if (change.kind === ChangeKind.AddSheet) {
         const { sheet } = change;
-        sheet.columns.forEach((column, c) => {
+        for (let c = 0; c < sheet.columns.length; c += 1) {
+            const column = sheet.columns[c];
             for (let row = 0; row < column.length; ) {
                 const id = column.shape[row];
                 const top = row;
@@ -166,7 +167,7 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
                 const formula = shapes.shape(shaped).text;
                 plan.rewrites.push({ sheet: sheet.id, top, left: c, bottom, right: c, formula, lost: shape.text });
             }
-        });
+        }
     }
     return plan;
 }

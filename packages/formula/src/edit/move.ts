@@ -2,8 +2,7 @@
 // reference to cells that are all in the block follows them, from any sheet; one to cells the block landed on is
 // #REF!; a formula that moved keeps reading what it read; any other reference keeps its text, and is a seed when it
 // reads a cell the block left or landed on. Whether a reference lies in a block is a test per row and per column,
-// so moveClasses cuts a block of hosts into a grid of blocks with one outcome each, not one per formula. What moves
-// is the part of the block that is on the grid before and after: the rest of it is gone.
+// so moveClasses cuts a block of hosts into a grid of blocks with one outcome each, not one per formula.
 
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { Ends, FormulaNode } from '../text/tree';
@@ -25,7 +24,8 @@ export type Move = {
 
 export type Moved = Omit<Transformed, 'resized' | 'slid'>;
 
-// The move of the part of a block that is on the grid where it is: the cells the block leaves.
+// What moves is the part of a block that is on the grid before and after, and the rest of it is gone. This is the
+// move of the part that is on the grid where it is: the cells the block leaves.
 function onGrid(move: Move): Move {
     const rows = Math.min(move.rows, GRID_ROWS - move.row);
     const columns = Math.min(move.columns, GRID_COLUMNS - move.column);

@@ -1,10 +1,8 @@
 // The engine as a host holds it: one workbook loaded from a description of its sheets, the writes of a cell, the
 // structural edits, a recalc of what they reach, and the value and the formula of a cell. A sheet is named by its
-// id and a cell by its row and column from 0. It reads the store and changes it only through the recalc. A host
-// lets a stopped recalc run on before it writes more, or raises the cap: writes between every stopped recalc can
-// keep one from ever finishing when the cap is no larger than what every recalc after a write computes again.
-// What makes it refuse a write or an edit is checked here, once, before anything is noted or changed: a sheet
-// that is not there, a cell off the grid, a count that is none. So a call that throws left the workbook as it was.
+// id and a cell by its row and column from 0. It reads the store and changes it only through the recalc. What makes
+// it refuse a write or an edit, such as a sheet that is not there or a cell off the grid, is checked here, once,
+// before anything is noted or changed: so a call that throws left the workbook as it was.
 
 import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';
@@ -95,6 +93,8 @@ export class Engine {
 
     // Computes the formulas that the writes and edits since the last recalc reach: one that came with a value and
     // reads nothing written keeps it. After `cap` formulas the pass stops, and the next recalc goes on from there.
+    // A host lets a stopped recalc run on before it writes more, or raises the cap: writes between every stopped
+    // recalc keep one from ever finishing when the cap is no larger than what a recalc after a write computes again.
     public recalc(cap: number, now = 0, seed = 0): RecalcResult {
         return this.calc.pass(cap, now, seed);
     }
