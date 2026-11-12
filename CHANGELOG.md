@@ -20,7 +20,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **All images in Drive** — the list includes the images someone shared with you directly
 - **Saving from Word and Excel over WebDAV** — **Save as** into a mounted drive works. A save, move or copy over an existing file that the server refuses leaves that file in place instead of in the Trash
 - **Folders over WebDAV** — renaming a file in Finder to change only its capitals works, and copying a folder without its contents onto an existing one is refused instead of replacing it. Folder listings give addresses a client can follow on a standard install
-- **Locks over WebDAV** — a file someone locked stays locked to everyone else, and only they can renew the lock
+- **New files over WebDAV** — when two clients create a file of the same name at once, one gets the file and the other an error, instead of a second, numbered copy
+- **Locks over WebDAV** — a file someone locked stays locked to everyone else, and only they can renew the lock. A lock on a folder also holds for people who only have a subfolder shared with them
+- **Folders with a locked file over WebDAV** — deleting, moving or replacing a folder is refused while someone else has a file inside it locked
+- **Download names in Drive** — a file downloads and attaches to mail under the name you see in Drive, also after a rename or a save from Word or Excel over WebDAV. Attachments in a chat or document keep the name they were uploaded with
 - **Dialogs in Drive that close** — a dialog keeps its text while it fades out, where **Move to trash** flashed "Remove 0 shared items". **Email collaborators** now fades out like the others
 - **Move to in Drive** — for an item of another drive, such as a team's file in a document app's list, the **Move to** dialog starts in that item's drive
 
