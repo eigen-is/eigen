@@ -19,7 +19,7 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
 
     // Read before the trash for the same reason. The trash takes the item away from everyone it is
     // shared with, and they must still hear that it left their view.
-    const members = await drive.getEffectiveMembers(mount.id, item.id);
+    const members = await drive.membersToTell(mount.id, item.id);
 
     // The mark comes first: after it an open is a 404 and a sync writes to the trashed row's key, so what was
     // open under the item closes after it and saves its last edits into the trash.

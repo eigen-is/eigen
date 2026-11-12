@@ -621,7 +621,7 @@ export class Drive {
         const newParentId = to.parentId;
         // Read before the move: whoever could see the path through its old folders, or watches one, hears that it left.
         const oldChain = newParentId ? await mount.getBreadcrumb(path.id) : [];
-        const oldMembers = newParentId ? await this.getEffectiveMembers(mount.id, path.id) : [];
+        const oldMembers = newParentId ? await this.membersToTell(mount.id, path.id) : [];
         // A file's type follows its name: a new extension with a known type gives the file that type. Bun answers
         // octet-stream for a name it doesn't know, and then the type stays.
         const named = to.name !== undefined && path.type === DRIVE_TYPE_FILE ? Bun.file(to.name).type : UNKNOWN_TYPE;
@@ -638,7 +638,7 @@ export class Drive {
         if (newParentId) {
             this.emit(SSEventType.DRIVE_PATH_MOVED, updated, {
                 oldParentId,
-                members: this.getEffectiveMembers(mount.id, path.id).then((members) => [...oldMembers, ...members]),
+                members: this.membersToTell(mount.id, path.id).then((members) => [...oldMembers, ...members]),
             });
         }
         if (newParentId && oldParentId) {
@@ -963,18 +963,24 @@ export class Drive {
         return this.membersFromCrumbs(await mount.getBreadcrumb(pathId));
     }
 
-    // The members to tell about a change to the path. An unshared path in a user's home has nobody but the owner, so
-    // the answer costs one breadcrumb read and no account lookup, which halves what such an event costs.
-    private async membersToTell(mountId: string, pathId: string): Promise<EffectiveMember[]> {
-        const crumbs = await this.getMount(mountId).getBreadcrumb(pathId);
+    // The members to tell about a change to the path. A folder's change also reaches the sharees of the paths shared
+    // below it, as their Shared with me shows each of those where it lives. An unshared path in a user's home has
+    // nobody but the owner, so the answer costs no account lookup, which halves what such an event costs.
+    public async membersToTell(mountId: string, pathId: string): Promise<EffectiveMember[]> {
+        const mount = this.getMount(mountId);
+        const crumbs = await mount.getBreadcrumb(pathId);
+        const path = crumbs.at(-1);
+        const below = new Set(path?.type === DRIVE_TYPE_FOLDER ? mount.collectDescendantIds(path.id) : []);
+        const sharedBelow = below.size ? (await mount.getPathsWithACL()).filter((shared) => below.has(shared.id)) : [];
+        const reached = [...crumbs, ...sharedBelow];
         const shared =
             parseOwnerId(this.owner.id).type === 'team' ||
-            (!isTrashedChain(crumbs) && crumbs.some((crumb) => crumb.acl?.length));
-        return shared ? this.membersFromCrumbs(crumbs) : [];
+            (!isTrashedChain(crumbs) && reached.some((crumb) => crumb.acl?.length));
+        return shared ? this.membersFromCrumbs(reached) : [];
     }
 
-    // Takes the breadcrumb, so a caller that read one already reads no second. A path in the trash is its owner's
-    // alone, so the ACLs of its chain let nobody else in until the restore.
+    // Takes the paths whose ACLs count, the breadcrumb first, so a caller that read one already reads no second. A
+    // path in the trash is its owner's alone, so the ACLs of its chain let nobody else in until the restore.
     private async membersFromCrumbs(crumbs: DrivePath[]): Promise<EffectiveMember[]> {
         const allACL = isTrashedChain(crumbs) ? [] : crumbs.flatMap((crumb) => crumb.acl ?? []);
 
