@@ -1,5 +1,9 @@
+import type { Entry } from '../../eval/signature';
+import { FUNCTIONS } from '../../functions/library';
 import type { Literal, SheetSource } from '../../index';
 import { Engine } from '../../index';
+import { Recalc } from '../../recalc/recalc';
+import { Workbook } from '../../store/workbook';
 import { parseA1, printStored, sheetFinder } from '../../text';
 
 export type Cells = Readonly<Record<string, Literal>>;
@@ -51,4 +55,12 @@ export function evaluate(formula: string, cells: Cells = {}, host = 'N1') {
     const engine = engineOf({ s1: { ...cells, [host]: formula }, s2: { D3: 300 } });
     engine.recalc(Number.POSITIVE_INFINITY);
     return valueAt(engine, host);
+}
+
+// The same, in a recalc whose functions are those of this build and `rows`: for what no function of it does yet.
+export function evaluateWith(rows: readonly Entry[], formula: string, cells: Cells = {}, host = 'N1') {
+    const workbook = new Workbook([source('s1', { ...cells, [host]: formula })]);
+    const functions = new Map([...FUNCTIONS, ...rows.map((entry) => [entry.name, entry] as const)]);
+    new Recalc(workbook, functions).pass(Number.POSITIVE_INFINITY);
+    return workbook.value(workbook.sheets[0].columns[at(host)[1]], at(host)[0]);
 }

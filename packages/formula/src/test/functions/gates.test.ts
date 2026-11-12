@@ -50,6 +50,18 @@ describe('what a body can do wrong is caught by the wrapper', () => {
         expect([value('A1'), value('A2'), value('B1'), value('B2')]).toEqual([1, 2, 3, 6]);
     });
 
+    test('a write into the list of every number changes no cell, and no later list', () => {
+        const wrote = fn('WROTE', [rest(NUMBERS)], (numbers) => {
+            const list = numbers.list();
+            const first = list[0];
+            list.fill(99);
+            return first + numbers.list()[0] + numbers.sum();
+        });
+        const { recalc, value } = passOf(wrote, { A1: 1, A2: 2, B1: '=WROTE(A1:A2)', B2: '=WROTE(A1:A2)+SUM(A1:A2)' });
+        recalc.pass(Number.POSITIVE_INFINITY);
+        expect([value('A1'), value('A2'), value('B1'), value('B2')]).toEqual([1, 2, 5, 8]);
+    });
+
     test('a body that throws leaves the cells as a recalc that never ran, and the next recalc computes them', () => {
         let fail = true;
         const thrower = fn('THROWER', [NUMBER], (number) => {

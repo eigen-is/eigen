@@ -13,6 +13,12 @@ export const STATISTICAL = [
     fn('AVERAGE', [rest(NUMBERS)], average),
     fn('MAX', [rest(NUMBERS)], (numbers) => (numbers.count() === 0 ? 0 : numbers.max())),
     fn('MIN', [rest(NUMBERS)], (numbers) => (numbers.count() === 0 ? 0 : numbers.min())),
+    // With no number at all the middle is no number, which is #NUM!.
+    fn('MEDIAN', [rest(NUMBERS)], (numbers) => {
+        const sorted = numbers.list().sort();
+        const half = sorted.length >> 1;
+        return sorted.length % 2 === 1 ? sorted[half] : (sorted[half - 1] + sorted[half]) / 2;
+    }),
     fn('COUNT', [rest(COUNTED)], (numbers) => numbers.count()),
     fn('COUNTA', [rest(FILLED)], (values) => values.count()),
     fn('COUNTBLANK', [BLANKS], (blanks) => blanks.count),

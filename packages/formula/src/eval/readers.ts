@@ -122,6 +122,28 @@ export class Numbers {
         return most;
     }
 
+    // Every number in written order, one that is written many times over as often: a list of the body's own.
+    public list(): Float64Array {
+        const size = this.count();
+        if (!this.ctx.recalc.room(size)) {
+            this.frame.failed = CALC;
+            return new Float64Array(0);
+        }
+        const list = new Float64Array(size);
+        const { walk } = this.start();
+        let at = 0;
+        while (walk.next()) {
+            const { num, from, to, reps } = walk;
+            for (let row = 0; row < walk.rows; row += 1) {
+                for (let i = from; i < to; i += 1) {
+                    for (let times = reps === null ? 1 : reps[i]; times > 0; times -= 1) list[at++] = num[i];
+                }
+            }
+        }
+        this.done();
+        return list;
+    }
+
     // Whether `value` is one of the numbers.
     public holds(value: number): boolean {
         const { walk } = this.start();
