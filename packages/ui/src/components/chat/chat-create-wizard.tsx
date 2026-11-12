@@ -82,7 +82,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     const [locationTouched, setLocationTouched] = useState(false);
     const [locationExpanded, setLocationExpanded] = useState(false);
     const [createError, setCreateError] = useState<string | null>(null);
-    const destination = useResolvedDriveLocation(location, locationTouched);
+    const destination = useResolvedDriveLocation(location);
 
     const selectedTeam = myTeams?.find((t) => t.id === selectedTeamId) ?? null;
     const teamMode = !!selectedTeam;

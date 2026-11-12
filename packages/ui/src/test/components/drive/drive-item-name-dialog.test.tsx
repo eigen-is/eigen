@@ -186,6 +186,48 @@ test('the name opens selected whole, or up to where the caller ends the selectio
     ]);
 });
 
+// A menu row opens the dialog while the closing menu still traps the focus. The field must hold the focus and the
+// selection the caller asked for once the menu is gone, not have its whole name selected by a trap that took it back.
+test('opened from a context menu row, the field has the focus and the selection the caller asked for', async () => {
+    const { ContextMenuAnchor } = await import('../../../components/context-menu/context-menu-anchor');
+    const { useContextMenu } = await import('../../../components/context-menu/use-context-menu');
+    const { DropdownMenuItem } = await import('../../../components/dropdown-menu');
+    let openMenu = () => {};
+    function Listing() {
+        const menu = useContextMenu<string>();
+        const [renaming, setRenaming] = useState(false);
+        openMenu = () => menu.openAt('notes.txt', 0, 0);
+        return createElement(
+            'div',
+            null,
+            createElement('div', { tabIndex: 0, 'data-list': '' }, 'notes.txt'),
+            createElement(ContextMenuAnchor, {
+                contextMenu: menu,
+                children: createElement(DropdownMenuItem, { onClick: () => setRenaming(true) }, 'Rename'),
+            }),
+            createElement(DriveItemNameDialog, {
+                open: renaming,
+                onOpenChange: setRenaming,
+                onSave,
+                type: 'File',
+                path: drivePath({ name: 'notes.txt', mimeType: 'text/plain' }),
+                defaultValue: 'notes.txt',
+                selectionEnd: 5,
+            }),
+        );
+    }
+    ({ unmount } = await renderInDocument(createElement(Listing)));
+    document.querySelector<HTMLElement>('[data-list]')?.focus();
+    await act(async () => openMenu());
+    await settle();
+    const rename = document.querySelector<HTMLElement>('[role="menuitem"]');
+    await act(async () => rename?.click());
+    await settle();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(nameField());
+    expect([nameField().selectionStart, nameField().selectionEnd]).toEqual([0, 5]);
+});
+
 test('a save that fails stays open with the typed name kept', async () => {
     onSave.mockImplementation(async () => {
         throw toasted('offline');

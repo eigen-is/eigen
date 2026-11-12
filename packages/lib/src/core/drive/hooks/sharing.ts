@@ -1,6 +1,6 @@
 // The hooks behind sharing a Drive item: changing its ACL, mailing its collaborators, asking for access, and
 // reading who may open it, such as the viewer's own permissions, its effective members and the shared lists.
-// The Share dialog and the details pane call them; checkPathAccess is the mail composer's one-off probe at send.
+// Sharing UI such as the Share dialog calls them; checkPathAccess is the mail composer's one-off probe at send.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
@@ -9,7 +9,7 @@ import type { DriveACL, DriveAccessCheckResult, DrivePath, DriveVisibility } fro
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
-import { driveKeys, invalidateAclSharedOrUnshared, invalidateAclUpdated } from './keys';
+import { driveKeys, invalidateAclUpdated, invalidateViewerLists } from './keys';
 
 export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID, currentUserId?: string) {
     const queryClient = useQueryClient();
@@ -38,9 +38,9 @@ export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
         },
         onSuccess: (_data, variables) => {
             invalidateAclUpdated(queryClient, variables.path);
-            // A sharer other than the owner, such as an editor, has a Shared with me list of their own.
+            // A sharer other than the owner, such as an editor, has lists of their own.
             if (currentUserId && currentUserId !== ownerId) {
-                invalidateAclSharedOrUnshared(queryClient, currentUserId);
+                invalidateViewerLists(queryClient, currentUserId);
             }
             toast.success('Sharing updated');
         },

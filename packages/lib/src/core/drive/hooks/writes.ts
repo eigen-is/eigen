@@ -55,10 +55,14 @@ export function useUploadFile(ownerId: string, mountId: string) {
 }
 
 // Drive's Upload files: the whole batch is one request, and the caller draws its progress and may cancel it.
-export function useUploadFiles() {
+export function useUploadFiles(): UseMutationResult<
+    DrivePath[],
+    unknown,
+    { folder: DrivePath; files: readonly File[] } & UploadOptions
+> {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ folder, files, ...options }: { folder: DrivePath; files: readonly File[] } & UploadOptions) =>
+        mutationFn: ({ folder, files, ...options }) =>
             uploadFiles(folder.ownerId, folder.mountId, folder.id, files, options),
         onSuccess: (_data, { folder }) => invalidateItemCreated(queryClient, folder.ownerId, folder.mountId, folder.id),
         onError: (error, { signal }) => {

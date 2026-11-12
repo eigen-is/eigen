@@ -88,16 +88,28 @@ describe('handleDriveSSEvent — DRIVE_ACL_SHARED / DRIVE_ACL_UNSHARED', () => {
         }
     });
 
-    // The viewer's own lists of one type hold what others shared with them, so a share adds a row there.
-    test("refreshes the viewer's own lists of one type", () => {
+    // The viewer's lists of one type span their teams and what others shared with them, so a share adds a row there.
+    test("refreshes the viewer's lists of one type", () => {
         for (const type of [SSEventType.DRIVE_ACL_SHARED, SSEventType.DRIVE_ACL_UNSHARED] as const) {
             const { queryClient, invalidated } = trackingClient();
             handleDriveSSEvent(driveEvent(type), queryClient, VIEWER);
-            expect(hasKey(invalidated, driveKeys.mimeTypes(VIEWER))).toBe(true);
             expect(hasKey(invalidated, driveKeys.mimeAllTypes())).toBe(true);
         }
     });
 });
+
+// An unshare takes the path out of the sharee's reach, so their open Recent and Watched drop it now.
+test.each([SSEventType.DRIVE_ACL_SHARED, SSEventType.DRIVE_ACL_UNSHARED, SSEventType.DRIVE_ACL_UPDATED] as const)(
+    "%s refreshes the viewer's Recent and Watched",
+    (type) => {
+        const { queryClient, invalidated } = trackingClient();
+        handleDriveSSEvent(driveEvent(type), queryClient, VIEWER);
+        expect([driveKeys.recent(VIEWER), driveKeys.watchesAll()].map((key) => hasKey(invalidated, key))).toEqual([
+            true,
+            true,
+        ]);
+    },
+);
 
 // An open document reads its canRead/canWrite from its info query, so an owner who makes a writer a viewer, on the
 // document or on a folder above it, reaches the open tab now. A role change on an existing share is DRIVE_ACL_UPDATED.
@@ -224,7 +236,6 @@ test.each([
     handleDriveSSEvent(driveEvent(type), queryClient, VIEWER);
     await Bun.sleep(400);
     expect(hasKey(invalidated, driveKeys.shared(VIEWER, 'with-me'))).toBe(true);
-    expect(hasKey(invalidated, driveKeys.mimeTypes(VIEWER))).toBe(true);
     expect(hasKey(invalidated, driveKeys.mimeAllTypes())).toBe(true);
 });
 

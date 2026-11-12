@@ -162,8 +162,7 @@ export function DriveBrowser({
 }
 
 // The location with an empty folder id filled in as the mount's root, which stays empty until the root has loaded.
-// A host that stays mounted while its picker is closed passes false then, so a closed picker reads no root.
-export function useResolvedDriveLocation(value: DriveLocationValue, enabled = true): DriveLocationValue {
-    const { data: rootFolder } = useRootFolder(enabled ? value.ownerId : '', value.mountId);
+export function useResolvedDriveLocation(value: DriveLocationValue): DriveLocationValue {
+    const { data: rootFolder } = useRootFolder(value.ownerId, value.mountId);
     return value.folderId ? value : { ...value, folderId: rootFolder?.id ?? '' };
 }

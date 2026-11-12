@@ -5,13 +5,10 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import type { SSEventDrive } from '@workspace/lib/types/sse';
 import { uniqBy } from 'es-toolkit';
 import { invalidateCollabDocument, invalidateCollabMount } from '../../collab/hooks/keys';
 import { invalidateHomeSize } from '../../home';
-
-export { DEFAULT_MOUNT_ID };
 
 export const driveKeys = {
     all: ['drive'] as const,
@@ -22,7 +19,6 @@ export const driveKeys = {
     folder: (ownerId: string, mountId: string, pathId: string) =>
         [...driveKeys.folders(ownerId), mountId, pathId] as const,
     mimeTypes: (ownerId: string) => [...driveKeys.owner(ownerId), 'mime'] as const,
-    mime: (ownerId: string, mimeType: string) => [...driveKeys.mimeTypes(ownerId), mimeType] as const,
     // The user's own and their teams' files of one type, so the key has no owner.
     mimeAllTypes: () => [...driveKeys.all, 'mimeAll'] as const,
     mimeAll: (mimeType: string) => [...driveKeys.mimeAllTypes(), mimeType] as const,
@@ -63,13 +59,8 @@ export const driveKeys = {
 // Where an item is listed: its folder, and the lists of its type when it has one.
 type Listed = { ownerId: string; mountId: string; parentId?: string | null; mimeType?: string | null };
 
-// The viewer's lists that hold what others shared with them: Shared with me and their own lists of one type.
-export function invalidateAclSharedOrUnshared(queryClient: QueryClient, viewerId: string): void {
-    queryClient.invalidateQueries({ queryKey: driveKeys.shared(viewerId, 'with-me') });
-    queryClient.invalidateQueries({ queryKey: driveKeys.mimeTypes(viewerId) });
-}
-
-// The viewer's own lists of items from several owners, which show each item by name wherever it lives.
+// The viewer's own lists of items from several owners, which show each item by name wherever it lives and only
+// while the viewer may read it.
 export function invalidateViewerLists(queryClient: QueryClient, viewerId: string): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.shared(viewerId, 'by-me') });
     queryClient.invalidateQueries({ queryKey: driveKeys.shared(viewerId, 'with-me') });

@@ -1,6 +1,6 @@
 // A Stickies board's Yjs doc as the state its components read: readBoard lists the columns and their cards, and the
-// hook opens the doc, seeds a new board, runs the shared ref repair on sync, and adds a column. The board component
-// calls it; the cards themselves go through the shared comment-card code.
+// hook opens the doc, seeds a new board for someone who may write it, runs the shared ref repair on sync, and adds a
+// column. The board component calls it; the cards themselves go through the shared comment-card code.
 
 import { useAuth } from '@workspace/lib/auth';
 import { getIdArray, getIdArrayRoot, getItemMapRoot, useCollabDoc } from '@workspace/lib/collab';
@@ -50,7 +50,13 @@ export function readBoard(doc: Y.Doc): BoardData {
     return { columns, columnOrder };
 }
 
-export const useBoard = (ownerId: string, mountId: string, pathId: string, chatFolderId: string | null) => {
+export const useBoard = (
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+    chatFolderId: string | null,
+    canWrite: boolean,
+) => {
     const [board, setBoard] = useState<BoardData>({ columns: {}, columnOrder: [] });
     const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
 
@@ -66,6 +72,8 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
     createChatRef.current = createChat;
     const chatFolderIdRef = useRef(chatFolderId);
     chatFolderIdRef.current = chatFolderId;
+    const canWriteRef = useRef(canWrite);
+    canWriteRef.current = canWrite;
 
     const createCardChat = useCallback(async (): Promise<string | undefined> => {
         const folderId = chatFolderIdRef.current;
@@ -173,7 +181,8 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             if (!synced || initializedRef.current) return;
             initializedRef.current = true;
             normalizeBoard(doc);
-            if (doc.getMap('columns').size === 0) {
+            // A reader can't write the seed or create its thread in the sharer's drive.
+            if (canWriteRef.current && doc.getMap('columns').size === 0) {
                 initializeDefaultBoard(doc, userEmailRef.current || 'user@localhost').catch(console.error);
             }
         },

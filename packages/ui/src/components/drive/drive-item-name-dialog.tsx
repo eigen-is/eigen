@@ -9,7 +9,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { Field, FieldDescription, FieldLabel, FieldTitle } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
-import { useLayoutEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
+import { useRef, useState } from 'react';
 
 // The word the title, the label and the placeholder use for the item.
 type ItemType = 'Folder' | 'File';
@@ -39,12 +40,24 @@ export function DriveItemNameDialog({
     submitLabel = 'Create',
 }: DriveItemNameDialogProps) {
     const { data: breadcrumbPaths = [] } = useBreadcrumb(path.ownerId, path.mountId, open ? path.id : undefined);
+    const fieldRef = useRef<HTMLInputElement>(null);
     return (
-        <FormDialog open={open} onOpenChange={onOpenChange} title={title || `New ${type.toLowerCase()}`}>
+        <FormDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            title={title || `New ${type.toLowerCase()}`}
+            // The dialog's focus trap places the focus once a closing menu has let go of it. A field that took the focus
+            // earlier would lose it to that menu, and the trap would take it back with the whole name selected.
+            onOpenAutoFocus={(event) => {
+                event.preventDefault();
+                fieldRef.current?.focus();
+                fieldRef.current?.setSelectionRange(0, selectionEnd);
+            }}
+        >
             <ItemNameForm
+                fieldRef={fieldRef}
                 type={type}
                 defaultValue={defaultValue}
-                selectionEnd={selectionEnd}
                 submitLabel={submitLabel}
                 location={breadcrumbPaths.map((crumb) => crumb.name || 'Drive').join(' > ')}
                 onSave={onSave}
@@ -55,27 +68,21 @@ export function DriveItemNameDialog({
 
 // Mounted with the dialog, so each opening starts from the default name.
 function ItemNameForm({
+    fieldRef,
     type,
     defaultValue,
-    selectionEnd,
     submitLabel,
     location,
     onSave,
 }: {
+    fieldRef: RefObject<HTMLInputElement | null>;
     type: ItemType;
     defaultValue: string;
-    selectionEnd: number;
     submitLabel: string;
     location: string;
     onSave: (itemName: string) => Promise<unknown>;
 }) {
     const [itemName, setItemName] = useState(defaultValue);
-    // Selected here, so the field opens alike from a menu, a row's ⋮ or the command palette, whichever way the focus
-    // arrived.
-    const fieldRef = useRef<HTMLInputElement>(null);
-    useLayoutEffect(() => {
-        fieldRef.current?.setSelectionRange(0, selectionEnd);
-    }, [selectionEnd]);
 
     return (
         <FormDialogForm
@@ -93,7 +100,6 @@ function ItemNameForm({
                     value={itemName}
                     onChange={(e) => setItemName(e.target.value)}
                     placeholder={`Enter ${type.toLowerCase()} name`}
-                    autoFocus
                 />
             </Field>
             <Field>
