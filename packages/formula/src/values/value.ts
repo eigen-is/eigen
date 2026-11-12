@@ -60,6 +60,15 @@ export function isArray(value: Tagged): value is ArrayValue {
     return typeof value === 'object' && value !== null && value.type === ValueType.Array;
 }
 
+// How many rows and columns a range or an array has as it was written. Anything else is one value.
+export function heightOf(value: Tagged): number {
+    return isReference(value) ? value.bottom - value.top + 1 : isArray(value) ? value.rows : 1;
+}
+
+export function widthOf(value: Tagged): number {
+    return isReference(value) ? value.right - value.left + 1 : isArray(value) ? value.columns : 1;
+}
+
 // An array of `rows` by `columns` over a stored block, or the element itself when the array is one: a 1×1 array is
 // a scalar everywhere.
 export function arrayOf<T extends Scalar | Reference>(

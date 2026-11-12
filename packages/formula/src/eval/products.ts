@@ -5,10 +5,9 @@
 
 import { CALC, NUM } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
-import { arrayOf, isArray, isReference } from '../values/value';
+import { arrayOf, heightOf, isArray, isReference, widthOf } from '../values/value';
 import { align } from './bands';
 import type { Evaluator } from './evaluator';
-import { heightOf, widthOf } from './search';
 
 // The products of arguments of one size.
 export function productsOf(ctx: Evaluator, args: readonly Value[]): Value {

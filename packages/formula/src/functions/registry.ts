@@ -245,6 +245,10 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
         if (closed && !ambient) throw new Error(`${name}: a parameter after a repeating or an ambient one`);
         // Tables that repeat would be read value by value in the body, which is the call wrapper's to do.
         if (param.rest && param.prepare === Prepare.Whole) throw new Error(`${name}: a table that repeats`);
+        // Two ranges are paired or none, so there is nothing a pair left out or a third range could mean.
+        if (param.read === Read.Pairs && (param.rest || param.optional)) {
+            throw new Error(`${name}: two ranges side by side that repeat or may be left out`);
+        }
         if (
             param.optional &&
             param.fallback !== undefined &&

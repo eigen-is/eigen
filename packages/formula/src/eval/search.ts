@@ -79,14 +79,6 @@ export class Vector {
     }
 }
 
-export function heightOf(range: Value): number {
-    return isReference(range) ? range.bottom - range.top + 1 : isArray(range) ? range.rows : 1;
-}
-
-export function widthOf(range: Value): number {
-    return isReference(range) ? range.right - range.left + 1 : isArray(range) ? range.columns : 1;
-}
-
 // Column `index` of a range or an array when `down`, else row `index`. The formulas in it are computed first.
 export function edge(ctx: Evaluator, range: Value, down: boolean, index: number): Vector {
     const { workbook } = ctx;

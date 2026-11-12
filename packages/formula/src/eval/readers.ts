@@ -6,13 +6,23 @@ import type { FormulaError } from '../values/errors';
 import { CALC, NA } from '../values/errors';
 import { snapSum } from '../values/precision';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
-import { arrayOf, elementAt, isArray, isError, isReference, partOf, ValueType } from '../values/value';
+import {
+    arrayOf,
+    elementAt,
+    heightOf,
+    isArray,
+    isError,
+    isReference,
+    partOf,
+    ValueType,
+    widthOf,
+} from '../values/value';
 import { Tally } from './criteria';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Families } from './families';
 import type { Vector } from './search';
-import { edge, heightOf, widthOf } from './search';
+import { edge } from './search';
 import type { Held } from './signature';
 import { add } from './sum';
 
