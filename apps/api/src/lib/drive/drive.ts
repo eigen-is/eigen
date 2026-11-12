@@ -5,7 +5,6 @@
 // public methods serve server code, such as chat, collab and the home relay.
 
 import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
-import { CHATS_FOLDER_NAME } from '@workspace/lib/types/chat';
 import type {
     DriveACL,
     DriveACLDelta,
@@ -32,15 +31,13 @@ import type {
     FileEventRecord,
     PathWatchStatus,
 } from '@workspace/lib/types/file-history';
-import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import type { MountConfig, MountInfo } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries } from '@workspace/lib/validation';
-import { ChatRoom, withCommentIndex } from '../chat';
-import { broadcastCommentIndexUpdated } from '../chat/sse-events';
+import { ChatRoom } from '../chat';
 import { CollabDocument } from '../collab/collab-document';
 import { enforceMaxUploadSize, enforceMountQuota } from '../config/enforcement';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
@@ -76,7 +73,7 @@ import {
 } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
 import { diffACLPrincipals, propagateSharedPathChange } from './acl-propagation';
-import { propagateAssignment } from './assignment-propagation';
+import { assignComment, ensureChatsFolder, seedCommentRow, setCommentStatus } from './chats';
 import { CollabRegistry } from './collab-registry';
 import type { DriveLike } from './get-drive';
 import { LockManager } from './lock-manager';
@@ -356,7 +353,7 @@ export class Drive {
         try {
             if (type === DRIVE_TYPE_CHAT) {
                 await ChatRoom.create(this, mount, pathId);
-                await this.seedCommentRow(mountId, pathId, parentId, user.email);
+                await seedCommentRow(this, mountId, pathId, parentId, user.email);
             } else {
                 await CollabDocument.create(this, mount, pathId);
             }
@@ -372,21 +369,6 @@ export class Drive {
         // Not a burst: a single new document gets its own notification.
         await this.recordFileEvent(mountId, created.id, user, { eventType: 'created' });
         return created;
-    }
-
-    // A chat created inside a document is a comment thread, so it gets its row in the document's
-    // comment index. A chat on its own has no document, and nothing to seed.
-    private async seedCommentRow(
-        mountId: string,
-        chatPathId: string,
-        parentId: string,
-        createdBy: string,
-    ): Promise<void> {
-        const container = await this.findContainerPath(mountId, parentId);
-        if (!container) return;
-        const chatPath = await this.getPath(mountId, chatPathId);
-        if (!chatPath) return;
-        await withCommentIndex(this, mountId, container.id, (index) => index.ensureComment(chatPath.name, createdBy));
     }
 
     public async uploadFiles(
@@ -787,27 +769,9 @@ export class Drive {
         await this.getMount(mountId).flushContainerDb(containerId);
     }
 
-    // The folder new chats go in, looked up by name every time, so the user may rename, move or delete it. A file of
-    // that name sends new chats to the mount root. The route checks ownership, so SharedDrive has no wrapper.
+    // The route checks ownership, so SharedDrive has no wrapper.
     public async ensureChatsFolder(mountId: string, user: User): Promise<string> {
-        const mount = this.getMount(mountId);
-        const root = await mount.getRootFolder();
-        if (!root) throw new Error(`Mount '${mountId}' has no root folder`);
-
-        const existing = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
-        if (existing) return existing.type === DRIVE_TYPE_FOLDER ? existing.id : root.id;
-
-        // Drive.createFolder tells other tabs about the new folder. Two first chats at once both try to
-        // create it, and the one that loses the race uses the folder of the winner.
-        try {
-            return (await this.createFolder(mountId, root.id, CHATS_FOLDER_NAME, user)).id;
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 409) {
-                const winner = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
-                if (winner) return winner.type === DRIVE_TYPE_FOLDER ? winner.id : root.id;
-            }
-            throw err;
-        }
+        return ensureChatsFolder(this, this.getMount(mountId), user);
     }
 
     // ---- Trash ----
@@ -1082,8 +1046,6 @@ export class Drive {
         return ChatRoom.open(this, this.home, path);
     }
 
-    // The server's comment index holds who is assigned, so the history row is written here and not from a client event,
-    // and only for an assignment. The assignee gets a direct notification, so the watchers' copy skips them.
     public async assignComment(
         mountId: string,
         pathId: string,
@@ -1092,42 +1054,7 @@ export class Drive {
         user: User,
         title?: string,
     ): Promise<void> {
-        const assignee = assigneeEmail ? assigneeEmail.toLowerCase() : null;
-        // Read once for the check and the broadcast, because it walks the whole ACL.
-        let members: EffectiveMember[] | undefined;
-        if (assignee) {
-            members = await this.getEffectiveMembers(mountId, pathId);
-            if (!members.some((member) => member.email === assignee)) {
-                throw new ApiError(400, 'Assignee is not a member of this document');
-            }
-        }
-        const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
-        const changed = await withCommentIndex(this, mountId, pathId, async (index) => {
-            const current = await index.get(chatName);
-            if (!current) throw new ApiError(404, 'Comment thread not found');
-            // The client sends the card title, which may have changed in the same edit. So the title is
-            // saved even when the assignee stays the same.
-            if (card) await index.setTitle(chatName, card);
-            const assigneeChanged = current.assignee !== assignee;
-            if (assigneeChanged) await index.assign(chatName, assignee);
-            return assigneeChanged;
-        });
-        if (changed && assignee) {
-            await this.recordFileEvent(
-                mountId,
-                pathId,
-                user,
-                { eventType: 'assigned', details: { assignee, card, chatName } },
-                { excludeEmails: new Set([assignee]) },
-            );
-        }
-        broadcastCommentIndexUpdated(this, this.owner.id, mountId, pathId, members).catch(() => {});
-        if (changed && assignee && assignee !== user.email.toLowerCase()) {
-            // The assignment stands whatever happens to the notice, such as a home a restore holds.
-            await this.resolveFile(mountId, pathId)
-                .then(({ path }) => propagateAssignment(path, chatName, assignee, user, card))
-                .catch((err) => console.error('Failed to propagate assignment:', err));
-        }
+        return assignComment(this, this.owner.id, mountId, pathId, chatName, assigneeEmail, user, title);
     }
 
     public async setCommentStatus(
@@ -1138,16 +1065,7 @@ export class Drive {
         user: User,
         title?: string,
     ): Promise<void> {
-        const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
-        await withCommentIndex(this, mountId, pathId, async (index) => {
-            if (!(await index.get(chatName))) throw new ApiError(404, 'Comment thread not found');
-            if (card) await index.setTitle(chatName, card);
-            if (status === 'resolved') await index.resolve(chatName, user.email);
-            else await index.reopen(chatName);
-        });
-        const eventType = status === 'resolved' ? 'resolved' : 'reopened';
-        await this.recordFileEvent(mountId, pathId, user, { eventType, details: { card, chatName } });
-        broadcastCommentIndexUpdated(this, this.owner.id, mountId, pathId).catch(() => {});
+        return setCommentStatus(this, this.owner.id, mountId, pathId, chatName, status, user, title);
     }
 
     // ---- Collab documents and versions ----

@@ -61,7 +61,7 @@ Paths are under `apps/api/src/` unless they say otherwise.
 | **Recent files** | `lib/drive/recent.ts`, `lib/drive/aggregate.ts`, `apps/drive/src/routes/_auth.recent.tsx` | Which paths a user opened or was notified about, in their own `shared.db`, checked against each owner on every load ([STORAGE.md](STORAGE.md#recent-files-stores-only-which-path-and-when)) |
 | **File history** | `lib/drive/history.ts` | Typed file events and watcher notifications ([FILE-HISTORY.md](FILE-HISTORY.md)) |
 | **Trash** | `lib/mount/trash.ts`, `lib/drive/trash.ts` | A delete moves to trash and revokes shares ([SOFT-DELETE.md](SOFT-DELETE.md)) |
-| **Comments** | `lib/chat/` | A card in the Y.Doc and a chat thread in its container ([COMMENTS.md](COMMENTS.md)) |
+| **Comments** | `lib/chat/`, `lib/drive/chats.ts` | A card in the Y.Doc and a chat thread in its container ([COMMENTS.md](COMMENTS.md)) |
 | **Mail store** | `lib/mail/` | A per-user Maildir++ Dovecot serves too; the files are the truth ([MAIL.md](MAIL.md), [IMAP.md](IMAP.md)) |
 | **Export and import** | `lib/export/`, `lib/import/` | One HTML document per format (PDF via WeasyPrint), except xlsx, docx and pptx, which have their own readers and writers ([EXPORT.md](EXPORT.md)) |
 
