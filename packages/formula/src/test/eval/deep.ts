@@ -7,12 +7,13 @@ import type { Cells } from '../recalc/support';
 import { engineOf, valueAt } from '../recalc/support';
 
 const LEVELS = 58;
-const CELLS = 40;
 
 const nested = (open: string, inner: string, close: string) => `${open.repeat(LEVELS)}${inner}${close.repeat(LEVELS)}`;
 
+type Chain = (a: string, b: string) => string;
+
 // Each formula reads the cell below it, `A`, from as deep inside itself as it can; `B` holds a 1 beside every cell.
-export const DEEP: Readonly<Record<string, (a: string, b: string) => string>> = {
+const CHAINS: Readonly<Record<string, Chain>> = {
     'a lifted IF, 60 deep': (a) => `=${'IF({1,1},'.repeat(60)}${a}${')'.repeat(60)}+1`,
     'a lifted IF over a sum': (a, b) => `=SUM(${nested('IF({1,1},', `SUM(${a}:${b})`, ')')})`,
     'a lifted SWITCH over a lifted lookup': (a, b) =>
@@ -28,11 +29,27 @@ export const DEEP: Readonly<Record<string, (a: string, b: string) => string>> = 
     'minus signs': (a) => `=${nested('-', a, '')}+1`,
 };
 
+// The chains above 40 cells long, and two chains of 3,000 cells that end in a 0.
+export const DEEP: Readonly<Record<string, readonly [cells: number, last: number, chain: Chain]>> = {
+    ...Object.fromEntries(Object.entries(CHAINS).map(([name, chain]) => [name, [40, 1, chain] as const])),
+    '3,000 cells of a sum of lifted IFs, 40 deep': [
+        3000,
+        0,
+        (a) => `=SUM(${'IF({1,1},'.repeat(40)}${a}${')'.repeat(40)})`,
+    ],
+    '3,000 cells of a sum of lifted IFS, 40 deep': [
+        3000,
+        0,
+        (a) => `=SUM(${'IFS({1,1},'.repeat(40)}${a}${')'.repeat(40)})`,
+    ],
+};
+
 // The value of the first cell of a chain, or the name of what the recalc threw.
 export function deepest(shape: string) {
-    const cells: Record<string, string | number> = { B1: 1, [`A${CELLS + 2}`]: 1, [`B${CELLS + 2}`]: 1 };
-    for (let row = 2; row < CELLS + 2; row += 1) {
-        cells[`A${row}`] = DEEP[shape](`A${row + 1}`, `B${row + 1}`);
+    const [count, last, chain] = DEEP[shape];
+    const cells: Record<string, string | number> = { B1: 1, [`A${count + 2}`]: last, [`B${count + 2}`]: 1 };
+    for (let row = 2; row < count + 2; row += 1) {
+        cells[`A${row}`] = chain(`A${row + 1}`, `B${row + 1}`);
         cells[`B${row}`] = 1;
     }
     const typed: Cells = cells;
