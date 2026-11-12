@@ -5,6 +5,7 @@
 import { roundDecimal } from '../values/precision';
 import {
     chosen,
+    FACTORS,
     fn,
     INTEGER,
     MATCHED,
@@ -40,6 +41,7 @@ export const MATH = [
     fn('RAND', [RANDOM], (random) => random),
     fn('RANDBETWEEN', [NUMBER, NUMBER, RANDOM], (low, high, random) => Math.floor(low + random * (high - low + 1))),
     fn('SUM', [rest(NUMBERS)], (numbers) => numbers.sum()),
+    fn('PRODUCT', [rest(FACTORS)], (factors) => factors.list().reduce((product, factor) => product * factor, 1)),
     fn('SUMPRODUCT', [rest(PRODUCTS)], (products) => products.sum()),
     fn('SUMIF', [WHERE, optional(MATCHED)], (_where, numbers) => numbers.sum()),
     fn('SUMIFS', [MATCHED, rest(WHERE)], (numbers) => numbers.sum()),

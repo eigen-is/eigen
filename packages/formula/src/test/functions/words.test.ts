@@ -52,6 +52,23 @@ describe('the list of every number: MEDIAN', () => {
     });
 });
 
+describe('numbers to multiply: PRODUCT', () => {
+    test.each([
+        // Excel batch 3 and 4: an empty argument and a blank value are passed over, where SUM adds a 0.
+        ['=PRODUCT(2,)', 2],
+        ['=PRODUCT(,2)', 2],
+        ['=PRODUCT(2,IF(TRUE,))', 2],
+        ['=PRODUCT(2,D3)', 2],
+        ['=PRODUCT("2",3)', 6],
+        ['=PRODUCT(A1:A3)', 6000],
+        ['=PRODUCT(A1:A3,B1:B2)', 12000000],
+        ['=PRODUCT(A1:A2*1,0.5)', 100],
+        ['=SUBTOTAL(6,A1:A3)', 6000],
+    ])('%s', (formula, expected) => {
+        expect(evaluate(formula, F1)).toBe(expected);
+    });
+});
+
 // LARGE is not a function of this build: the row is the test's own, on the list and a number after it.
 describe('a parameter that takes every value before one that takes a single value', () => {
     // A k below 1 is refused before it is rounded up.

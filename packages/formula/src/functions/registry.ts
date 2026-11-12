@@ -71,6 +71,8 @@ export const COUNTED = walked(Families.Counted);
 export const FILLED = walked(Families.Filled);
 // The numbers and booleans. A typed text counts when it spells TRUE or FALSE and is passed over otherwise.
 export const TRUTHS = walked(Families.Truths);
+// The numbers, to be multiplied: as NUMBERS, but an empty argument and a blank element of an array are passed over.
+export const FACTORS = walked(Families.Factors);
 
 // A range, an array or one value, as it is: the body searches it, picks from it or measures it. A union is #VALUE!.
 export const TABLE: Param<Table> = Object.freeze({

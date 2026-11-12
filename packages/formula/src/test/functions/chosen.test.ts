@@ -38,7 +38,8 @@ describe('SUBTOTAL picks a function by its first argument and hands it the refer
         // A code that picks no function, and one whose function this build does not have.
         ['=SUBTOTAL(12,A1:A5)', VALUE],
         ['=SUBTOTAL(0,A1:A5)', VALUE],
-        ['=SUBTOTAL(6,A1:A5)', errorOf('#NAME?')],
+        ['=SUBTOTAL(6,A1:A5)', 120],
+        ['=SUBTOTAL(7,A1:A5)', errorOf('#NAME?')],
         ['=SUBTOTAL(9)', VALUE],
         ['=SUBTOTAL("x",A1:A5)', VALUE],
         ['=SUBTOTAL(1/0,A1:A5)', DIV0],
