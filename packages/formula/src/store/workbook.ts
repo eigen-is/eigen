@@ -28,13 +28,14 @@ export type SheetSource = {
     readonly cells: (cell: CellSink) => void;
 };
 
-// A structural edit. A sheet is added at a place among the tabs, and moved to one; both count from 0.
+// A structural edit. A sheet is added as `load` made it, at a place among the tabs, and moved to one; both count
+// from 0.
 export const ChangeKind = { Lines: 0, Move: 1, AddSheet: 2, RemoveSheet: 3, RenameSheet: 4, MoveSheet: 5 } as const;
 
 export type Change =
     | { readonly kind: typeof ChangeKind.Lines; readonly edit: LineEdit }
     | { readonly kind: typeof ChangeKind.Move; readonly move: Move }
-    | { readonly kind: typeof ChangeKind.AddSheet; readonly source: SheetSource; readonly place: number }
+    | { readonly kind: typeof ChangeKind.AddSheet; readonly sheet: Sheet; readonly place: number }
     | { readonly kind: typeof ChangeKind.RemoveSheet; readonly sheet: string }
     | { readonly kind: typeof ChangeKind.RenameSheet; readonly sheet: string; readonly name: string }
     | { readonly kind: typeof ChangeKind.MoveSheet; readonly sheet: string; readonly place: number };
@@ -68,6 +69,24 @@ export class Workbook {
         return sheet;
     }
 
+    // One sheet from its description, in no place yet: `apply` adds it.
+    public load(source: SheetSource): Sheet {
+        const lengths: number[] = [];
+        source.cells((row, column, value, formula) => {
+            if (value === null && formula === null) return;
+            while (lengths.length <= column) lengths.push(0);
+            if (row >= lengths[column]) lengths[column] = row + 1;
+        });
+        const sheet = new Sheet(source.id, source.name, lengths);
+        source.cells((row, column, value, formula) => {
+            const held = sheet.columns[column];
+            if (formula !== null) held.shape[row] = this.shapes.intern(formula);
+            if (value !== null) this.put(held, row, value);
+            else if (formula !== null) held.markDirty(row);
+        });
+        return sheet;
+    }
+
     // Writes the new shape of the formulas an edit rewrites, each a block in the places before the edit (sheet,
     // first and last column, first and last row, shape), then performs the edit, so the shapes travel with their
     // cells. Returns how many cells that held something the edit pushed off the grid.
@@ -88,20 +107,16 @@ export class Workbook {
                 return 0;
             }
             case ChangeKind.Move:
-                this.known(change.move.toSheet).moveFrom(this.known(change.move.fromSheet), change.move);
-                return 0;
-            case ChangeKind.AddSheet: {
-                if (this.byId.has(change.source.id)) throw new Error(`Sheet ${change.source.id} exists`);
-                const sheet = this.load(change.source);
+                return this.known(change.move.toSheet).moveFrom(this.known(change.move.fromSheet), change.move);
+            case ChangeKind.AddSheet:
                 // Whatever values its formulas came with were computed against another workbook than this one.
-                for (const column of sheet.columns) {
+                for (const column of change.sheet.columns) {
                     for (let row = 0; row < column.length; row += 1) {
                         if (column.shape[row] !== 0) column.markDirty(row);
                     }
                 }
-                this.insert(sheet, change.place);
+                this.insert(change.sheet, change.place);
                 return 0;
-            }
             case ChangeKind.RemoveSheet: {
                 const sheet = this.known(change.sheet);
                 this.held.splice(sheet.place, 1);
@@ -185,24 +200,6 @@ export class Workbook {
         held.setShape(row, 0);
         this.put(held, row, null);
         held.trim();
-    }
-
-    // One sheet from its description, in no place yet.
-    private load(source: SheetSource): Sheet {
-        const lengths: number[] = [];
-        source.cells((row, column, value, formula) => {
-            if (value === null && formula === null) return;
-            while (lengths.length <= column) lengths.push(0);
-            if (row >= lengths[column]) lengths[column] = row + 1;
-        });
-        const sheet = new Sheet(source.id, source.name, lengths);
-        source.cells((row, column, value, formula) => {
-            const held = sheet.columns[column];
-            if (formula !== null) held.shape[row] = this.shapes.intern(formula);
-            if (value !== null) this.put(held, row, value);
-            else if (formula !== null) held.markDirty(row);
-        });
-        return sheet;
     }
 
     // Puts a sheet at a place among the tabs, the last one when the place is past it.

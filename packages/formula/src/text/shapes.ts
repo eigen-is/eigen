@@ -1,6 +1,8 @@
 // The shape table of one workbook: every distinct stored formula text once, under a small integer id that a cell
 // holds in place of the text. A shape is the text, its tree, and the facts that need only the tree, computed once
-// when it is interned. Equal text is one shape, so a formula filled down ten thousand rows is parsed once.
+// when it is interned. Equal text is one shape, so a formula filled down ten thousand rows is parsed once. A shape
+// no cell holds any more is forgotten when the holder of the cells says which are held, and its id is given out
+// again: so an id means one shape only for as long as a cell holds it.
 
 import { parseStored } from './parser';
 import { printStored } from './printer';
@@ -16,10 +18,19 @@ export type Shape = {
     readonly namesSheet: boolean;
 };
 
+// What the slot of a forgotten shape holds until a new shape takes it.
+const FORGOTTEN: Shape = { text: '', tree: null, refs: [], namesSheet: false };
+
 export class ShapeTable {
     private readonly ids = new Map<string, number>();
     private readonly shapes: Shape[] = [];
+    // The ids of the forgotten shapes, each for the next new shape.
+    private readonly free: number[] = [];
+    // Per id, what the recalc worked out of the shape's tree and its functions, or -1 until it has. The list is
+    // kept here because it is here that an id goes to another shape, which starts with nothing.
+    public readonly facts: number[] = [-1];
 
+    // The highest id given out so far.
     public get size(): number {
         return this.shapes.length;
     }
@@ -42,12 +53,26 @@ export class ShapeTable {
         return this.ids.get(text) ?? this.add(text, tree);
     }
 
+    // Forgets every shape whose id is not set in `held`, which says for each id up to `size` whether a cell holds
+    // it. The id of a shape that stays does not change.
+    public keep(held: Uint8Array): void {
+        for (let id = 1; id <= this.shapes.length; id += 1) {
+            const shape = this.shapes[id - 1];
+            if (held[id] !== 0 || shape === FORGOTTEN) continue;
+            this.ids.delete(shape.text);
+            this.shapes[id - 1] = FORGOTTEN;
+            this.free.push(id);
+        }
+    }
+
     private add(text: string, tree: FormulaNode | null): number {
         const refs: FormulaNode[] = [];
         const namesSheet = tree !== null && collect(tree, refs);
-        this.shapes.push({ text, tree, refs, namesSheet });
-        this.ids.set(text, this.shapes.length);
-        return this.shapes.length;
+        const id = this.free.pop() ?? this.shapes.length + 1;
+        this.shapes[id - 1] = { text, tree, refs, namesSheet };
+        this.facts[id] = -1;
+        this.ids.set(text, id);
+        return id;
     }
 }
 

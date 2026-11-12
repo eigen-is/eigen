@@ -65,6 +65,27 @@ describe('ShapeTable', () => {
         expect(chain.refs.slice(-3).map((ref) => ref.column)).toEqual([2, 3, 4]);
     });
 
+    test('a shape that is not kept is forgotten, and its id goes to a new shape that starts with nothing', () => {
+        const table = new ShapeTable();
+        const [a, b, c] = ['=R1C1', '=R1C2', '=R1C3'].map((text) => table.intern(text));
+        table.facts[a] = 7;
+        table.facts[c] = 9;
+        const held = new Uint8Array(table.size + 1);
+        held[b] = 1;
+        table.keep(held);
+        // Kept twice, a forgotten id is still given out once.
+        table.keep(held);
+        expect(table.intern('=R1C2')).toBe(b);
+        const next = table.intern('=ROW()');
+        const again = table.intern('=R1C1');
+        expect([next, again].sort()).toEqual([a, c].sort());
+        expect([table.shape(next).text, table.shape(again).text]).toEqual(['=ROW()', '=R1C1']);
+        expect([table.facts[next], table.facts[again], table.facts[b]]).toEqual([-1, -1, -1]);
+        expect(table.intern('=ROW()')).toBe(next);
+        expect(table.size).toBe(3);
+        expect(table.intern('=R1C3')).toBe(4);
+    });
+
     test('a shape that names a sheet that does not exist says so', () => {
         const table = new ShapeTable();
         expect(table.shape(table.intern("=SUM('Later'!RC)")).namesSheet).toBe(true);

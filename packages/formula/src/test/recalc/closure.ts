@@ -17,11 +17,13 @@ export type Reader = {
     readonly areas: readonly number[];
 };
 
+// The facts of every shape by its id, which the shape table is given too, as the index reads them there.
 export function factsOf(workbook: Workbook): number[] {
     const facts: number[] = [];
     for (let id = 1; id <= workbook.shapes.size; id += 1) {
         const { tree } = workbook.shapes.shape(id);
         facts[id] = tree === null ? 1 << FACT_BITS : shapeFacts(tree, FUNCTIONS);
+        workbook.shapes.facts[id] = facts[id];
     }
     return facts;
 }

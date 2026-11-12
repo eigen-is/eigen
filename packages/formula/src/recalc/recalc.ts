@@ -10,7 +10,8 @@ import type { Registry } from '../functions/registry';
 import type { Column } from '../store/column';
 import { DIRTY, KIND_MASK, LOOP, RUNNING, SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
-import type { Change, Literal, Workbook } from '../store/workbook';
+import type { Change, Literal, SheetSource, Workbook } from '../store/workbook';
+import { ChangeKind } from '../store/workbook';
 import { ERROR, REF } from '../values/errors';
 import type { Reference, Scalar } from '../values/value';
 import type { Rewrite } from './edit-plan';
@@ -22,6 +23,8 @@ export type CellAddress = { readonly sheet: string; readonly row: number; readon
 export type RecalcResult = {
     // Every cell of the workbook that is on a circular reference, in sheet, column, row order. Final only when
     // `stopped` is false: a pass that stopped can still list a loop that a write broke, until a later one computes it.
+    // A loop is found by computing it and by nothing else, as what a formula reads can hang on values: so the cells
+    // of a loop that came from a load with values are listed once one of them is computed, and not before.
     readonly loops: readonly CellAddress[];
     // True when the pass met its cap with formulas still to compute. What it computed stays, and the next goes on.
     readonly stopped: boolean;
@@ -62,8 +65,8 @@ export class Recalc {
     private readonly seeds: number[] = [];
     // The runs of cells whose value the pass changed.
     private changed: number[] = [];
-    // Per shape id, its facts.
-    private readonly facts: number[] = [];
+    // Per shape id, its facts, or -1 until they are worked out: the shape table's own list.
+    private readonly facts: number[];
     // The cells in progress, in the order they were entered. The list is the reading chain, each cell read by the
     // one before it on the chain, plus the cells whose formula ran and that wait for the first cell of their loop.
     private readonly sheets: Sheet[] = [];
@@ -95,6 +98,7 @@ export class Recalc {
     public constructor(workbook: Workbook, functions: Registry) {
         this.workbook = workbook;
         this.functions = functions;
+        this.facts = workbook.shapes.facts;
         this.evaluator = new Evaluator(workbook, functions, this);
         // A formula that came without a value was never computed, which the ones that came with a value have to hear.
         for (let s = 0; s < workbook.sheets.length; s += 1) {
@@ -125,13 +129,20 @@ export class Recalc {
         this.workbook.fillFormula(sheet, top, left, bottom, right, text);
     }
 
+    // Adds a sheet from its description. The index is brought up to date before the sheet is loaded, as that
+    // forgets the shapes no cell of the workbook holds, and the cells of the new sheet are not the workbook's yet.
+    public addSheet(source: SheetSource, place: number): EditResult {
+        this.reach();
+        return this.edit({ kind: ChangeKind.AddSheet, sheet: this.workbook.load(source), place });
+    }
+
     // Performs a structural edit. The formulas whose value it can change are flagged with everything that reads
     // them while the index still describes the cells as they are, together with the cells written since the last
     // pass: so nothing but the flags, which move with their cells, has to find its way across the edit.
     public edit(change: Change): EditResult {
         const { workbook } = this;
         this.reach();
-        const plan = planEdit(workbook, this.index.rectangles, this.facts, change);
+        const plan = planEdit(workbook, this.index.rectangles, change);
         const { seeds } = plan;
         for (let at = 0; at < seeds.length; at += 4) {
             const column = workbook.sheets[seeds[at]].columns[seeds[at + 1]];
@@ -264,12 +275,17 @@ export class Recalc {
         extend(this.seeds, sheet.place, c, row);
     }
 
-    // Makes the index describe the workbook as it is.
+    // Makes the index describe the workbook as it is. The rebuild lists every shape a cell holds, so the others
+    // are forgotten here: every edit that rewrites a formula would else leave its old shape behind for good.
     private reach(): void {
         if (!this.stale) return;
-        const { workbook } = this;
-        for (let shape = 1; shape <= workbook.shapes.size; shape += 1) this.factsOf(shape);
-        this.index.rebuild(workbook, this.facts);
+        const { index } = this;
+        const { shapes } = this.workbook;
+        for (let shape = 1; shape <= shapes.size; shape += 1) this.factsOf(shape);
+        index.rebuild(this.workbook);
+        const held = new Uint8Array(shapes.size + 1);
+        for (let r = 5; r < index.rectangles.length; r += 6) held[index.rectangles[r]] = 1;
+        shapes.keep(held);
         this.stale = false;
     }
 
@@ -379,7 +395,7 @@ export class Recalc {
 
     public factsOf(shape: number): number {
         let facts = this.facts[shape];
-        if (facts === undefined) {
+        if (facts < 0) {
             const { tree } = this.workbook.shapes.shape(shape);
             facts = tree === null ? 1 << FACT_BITS : shapeFacts(tree, this.functions);
             this.facts[shape] = facts;

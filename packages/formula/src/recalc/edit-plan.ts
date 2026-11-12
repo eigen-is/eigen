@@ -6,12 +6,12 @@
 import { sheetOf } from '../edit/leaves';
 import { moveClasses } from '../edit/move';
 import { bindSheet } from '../edit/sheets';
-import type { LineEdit } from '../edit/transform';
 import { hostClasses } from '../edit/transform';
 import { Fact } from '../eval/facts';
 import type { Sheet } from '../store/sheet';
 import type { Change, Workbook } from '../store/workbook';
 import { ChangeKind } from '../store/workbook';
+import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { Ends, FormulaNode } from '../text/tree';
 import { endsAt, RefKind, SheetKind } from '../text/tree';
 
@@ -29,7 +29,7 @@ export type Rewrite = {
     readonly lost: string | null;
 };
 
-export type EditPlan = {
+type EditPlan = {
     // The blocks that get another shape: sheet, first and last column, first and last row, and shape.
     readonly fills: number[];
     // The formulas to compute again, as spans of rows: sheet, column, first and last row.
@@ -37,13 +37,8 @@ export type EditPlan = {
     readonly rewrites: Rewrite[];
 };
 
-// `rectangles` are the blocks of one shape the reverse index found, and `facts` the facts of every shape by id.
-export function planEdit(
-    workbook: Workbook,
-    rectangles: readonly number[],
-    facts: readonly number[],
-    change: Change,
-): EditPlan {
+// `rectangles` are the blocks of one shape the reverse index found, the facts of each shape worked out.
+export function planEdit(workbook: Workbook, rectangles: readonly number[], change: Change): EditPlan {
     const { sheets, shapes } = workbook;
     const plan: EditPlan = { fills: [], seeds: [], rewrites: [] };
     for (let r = 0; r < rectangles.length; r += 6) {
@@ -58,7 +53,7 @@ export function planEdit(
         // Text that did not parse is kept as it is.
         if (tree === null) continue;
         const host = sheets[place];
-        const positional = (facts[id] & Fact.Positional) !== 0;
+        const positional = (shapes.facts[id] & Fact.Positional) !== 0;
         // One class of hosts, in the places before the edit, then the sheet and the distance it goes to.
         const outcome = (
             next: FormulaNode,
@@ -90,15 +85,23 @@ export function planEdit(
         switch (change.kind) {
             case ChangeKind.Lines: {
                 const { edit } = change;
-                const { rows, index } = edit;
-                const sized = (facts[id] & Fact.Sized) !== 0;
+                const { rows, index, insert, count } = edit;
+                const sized = (shapes.facts[id] & Fact.Sized) !== 0;
                 const edited = workbook.known(edit.sheet);
-                const distance = edit.insert ? edit.count : -edit.count;
+                const distance = insert ? count : -count;
+                // The first line whose cells an insert pushes off the grid.
+                const lost = Math.max(index, (rows ? GRID_ROWS : GRID_COLUMNS) - count);
+                const first = rows ? left : top;
+                const last = rows ? right : top;
                 for (const found of hostClasses(tree, refs, edit, host.id, rows ? top : left, rows ? bottom : right)) {
                     const { start, end } = found;
                     const shift = host === edited && start >= index ? distance : 0;
+                    // The cells an insert moves keep their order and lose none, so a formula that only passes
+                    // over the empty ones answers as before: unless the insert pushed a cell off the grid.
                     const slides =
-                        found.slid && slid(edited, refs, host.id, edit, rows ? left : top, rows ? right : top);
+                        found.slid &&
+                        holds(edited, refs, host.id, rows, index, first, last) &&
+                        (!insert || sized || holds(edited, refs, host.id, rows, lost, first, last));
                     const seed = found.recompute || (found.resized && sized) || slides;
                     if (rows) outcome(found.tree, found.lossy, seed, [start, left, end, right], host.id, shift, 0);
                     else outcome(found.tree, found.lossy, seed, [top, start, bottom, end], host.id, 0, shift);
@@ -128,8 +131,8 @@ export function planEdit(
                 let bound = tree;
                 let named = '';
                 if (change.kind === ChangeKind.AddSheet) {
-                    named = change.source.id;
-                    if (shape.namesSheet) bound = bindSheet(tree, change.source.name, named);
+                    named = change.sheet.id;
+                    if (shape.namesSheet) bound = bindSheet(tree, change.sheet.name, named);
                 } else if (change.kind === ChangeKind.RenameSheet) {
                     if (shape.namesSheet) bound = bindSheet(tree, change.name, change.sheet);
                 } else if (change.kind === ChangeKind.RemoveSheet) named = change.sheet;
@@ -141,22 +144,48 @@ export function planEdit(
             }
         }
     }
+    // The formulas of a sheet that comes, typed with the name of a sheet that is there or with its own. The sheet
+    // is in no place yet and nothing reads it, so they get their new shape where they stand.
+    if (change.kind === ChangeKind.AddSheet) {
+        const { sheet } = change;
+        for (let c = 0; c < sheet.columns.length; c += 1) {
+            const column = sheet.columns[c];
+            for (let row = 0; row < column.length; ) {
+                const id = column.shape[row];
+                const top = row;
+                do row += 1;
+                while (row < column.length && column.shape[row] === id);
+                if (id === 0) continue;
+                const shape = shapes.shape(id);
+                if (shape.tree === null || !shape.namesSheet) continue;
+                let bound = bindSheet(shape.tree, sheet.name, sheet.id);
+                for (const other of sheets) bound = bindSheet(bound, other.name, other.id);
+                if (bound === shape.tree) continue;
+                const shaped = shapes.internTree(bound);
+                const bottom = row - 1;
+                column.fillShape(top, bottom, shaped);
+                const formula = shapes.shape(shaped).text;
+                plan.rewrites.push({ sheet: sheet.id, top, left: c, bottom, right: c, formula, lost: shape.text });
+            }
+        }
+    }
     return plan;
 }
 
-// Whether a whole column or row that a formula names on the edited sheet holds a cell at or past the edit, for
-// some host of a block: the hosts on the columns `first` to `last` when rows are edited, the hosts from the row
-// `first` down when columns are. Only then did a cell it reads change place.
-function slid(
+// Whether a whole column or row that a formula names on the edited sheet holds a cell at or past `line`, a row
+// when `rows` and else a column, for some host of a block: the hosts on the columns `first` to `last` when rows
+// are edited, the hosts from the row `first` down when columns are. From the line of an edit on, those are the
+// cells it reads that change place.
+function holds(
     edited: Sheet,
     refs: readonly FormulaNode[],
     hostSheet: string,
-    edit: LineEdit,
+    rows: boolean,
+    line: number,
     first: number,
     last: number,
 ): boolean {
     const { columns } = edited;
-    const { rows, index } = edit;
     const ends: Ends = { first: 0, second: 0 };
     for (const ref of refs) {
         if (ref.op !== (rows ? RefKind.Columns : RefKind.Rows) || sheetOf(ref, hostSheet) !== edited.id) continue;
@@ -165,10 +194,10 @@ function slid(
         const low = Math.max(0, Math.min(ends.first, ends.second));
         endsAt(ref, !rows, last, 0, ends);
         const high = Math.max(ends.first, ends.second);
-        const from = rows ? low : index;
+        const from = rows ? low : line;
         const to = Math.min(rows ? high : columns.length - 1, columns.length - 1);
         for (let c = from; c <= to; c += 1) {
-            if (columns[c].length > (rows ? index : low)) return true;
+            if (columns[c].length > (rows ? line : low)) return true;
         }
     }
     return false;

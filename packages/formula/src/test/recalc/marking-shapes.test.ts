@@ -22,7 +22,8 @@ type Shape = {
 function marked(shape: Shape, n: number): number {
     const workbook = new Workbook([{ id: 's', name: 's', cells: (cell) => shape.cells(n, cell) }]);
     const index = new ReverseIndex();
-    index.rebuild(workbook, factsOf(workbook));
+    factsOf(workbook);
+    index.rebuild(workbook);
     const seeds = shape.seeds(n);
     let best = Number.POSITIVE_INFINITY;
     for (let run = 0; run < 7; run += 1) {
@@ -215,7 +216,8 @@ describe('the work of a marking grows with the workbook, not with its square', (
             },
         ]);
         const index = new ReverseIndex();
-        index.rebuild(workbook, factsOf(workbook));
+        factsOf(workbook);
+        index.rebuild(workbook);
         const seeds: number[] = [];
         for (let i = 0; i < 400; i += 1) {
             const row = 100 + Math.floor(next() * (n - 200));
@@ -245,7 +247,8 @@ describe('the work of a marking grows with the workbook, not with its square', (
             },
         ]);
         const index = new ReverseIndex();
-        index.rebuild(workbook, factsOf(workbook));
+        factsOf(workbook);
+        index.rebuild(workbook);
         index.mark(workbook, [0, 0, 0, 0]);
         expect(workbook.sheets[0].columns.map((column) => column.pending)).toEqual([0, 1, 1, 0, 0, 0, 1]);
     });

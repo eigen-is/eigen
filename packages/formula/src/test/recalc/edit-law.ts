@@ -22,7 +22,6 @@ import {
     keyOf,
     RANGE,
     ROWS,
-    rebound,
     rowOf,
     sourcesOf,
     textOf,
@@ -73,6 +72,25 @@ const TEMPLATES = [
     '=SUMIF(#r,">0",#r)',
     '=#r',
     '=IF(#c>2,#c,SUM(#r))',
+    // The families that pass over empty cells, each over whole columns and over whole rows.
+    '=AND(#C)',
+    '=AND(#W)',
+    '=OR(#C)',
+    '=OR(#W)',
+    '=SUM(#C,#W)',
+    '=PRODUCT(#C)',
+    '=PRODUCT(#W)',
+    '=AVERAGE(#C)',
+    '=AVERAGE(#W)',
+    '=MAX(#C)',
+    '=MAX(#W)',
+    '=MIN(#C)',
+    '=MIN(#W)',
+    '=MEDIAN(#C)',
+    '=MEDIAN(#W)',
+    '=COUNT(#W)',
+    '=COUNTA(#C)',
+    '=COUNTA(#W)',
 ];
 
 // Stored text that is kept as it is: text that does not parse, a span of sheets and another workbook.
@@ -91,6 +109,7 @@ export type Counts = {
     undone: number;
     rewrites: number;
     several: number;
+    refused: number;
 };
 
 type Op =
@@ -141,6 +160,7 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
         undone: 0,
         rewrites: 0,
         several: 0,
+        refused: 0,
     };
     const rows = edge === Edge.Rows ? [...span(0, 5), ...span(GRID_ROWS - 6, 6)] : span(0, 10);
     const columns =
@@ -424,12 +444,9 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
         const sheetEdit = (): Op => {
             const drawn = pick(5);
             if (drawn === 0 && model.length > 1) return { kind: 'remove', id: present() };
+            // A sheet comes back as it went: what it holds typed with a name is the engine's to bind.
             if (drawn === 1 && removed.length > 0) {
-                // The host binds what the sheet holds to the sheets there are before it hands the sheet over.
-                const later = model.find((sheet) => sheet.name === 'Later');
-                const back = one(removed);
-                const sheet = later === undefined ? back : rebound(back, 'Later', later.id);
-                return { kind: 'add', sheet, place: pick(model.length + 1) };
+                return { kind: 'add', sheet: one(removed), place: pick(model.length + 1) };
             }
             if (
                 drawn === 2 &&
@@ -452,6 +469,33 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
         const anyEdit = (): Op => {
             const drawn = pick(6 + Math.ceil(12 / sheets));
             return drawn < 3 ? lineEdit() : drawn < 6 ? blockMove() : sheetEdit();
+        };
+        // An edit as it comes from someone who has not heard that a sheet went, or that names no line: the engine
+        // refuses it, and holds what it held.
+        const refuse = () => {
+            const gone = removed.length > 0 ? one(removed).id : 's0';
+            const from = { fromSheet: present(), row: one(rows), column: one(columns), rows: 1, columns: 1 };
+            const refused = one([
+                () => engine.editLines({ insert: true, index: one(rows), count: 1, sheet: gone, rows: true }),
+                () => engine.editLines({ insert: false, index: -1 - pick(3), count: 1, sheet: present(), rows: true }),
+                () => engine.editLines({ insert: true, index: one(columns), count: 0, sheet: present(), rows: false }),
+                () => engine.moveCells({ ...from, toSheet: gone, toRow: one(rows), toColumn: one(columns) }),
+                () => engine.moveCells({ ...from, toSheet: present(), toRow: GRID_ROWS, toColumn: one(columns) }),
+                () => engine.renameSheet(gone, 'Later'),
+                () => engine.removeSheet(gone),
+                () => engine.moveSheet(gone, 0),
+                () => engine.addSheet(handed({ ...one(model), name: 'Later' }), 0),
+            ]);
+            log.push('refused');
+            let threw = false;
+            try {
+                refused();
+            } catch {
+                threw = true;
+            }
+            if (!threw) fail('an edit to be refused went through');
+            inputs();
+            counts.refused += 1;
         };
         const write = (sheet: string, row: number, column: number, cell: Cell | null) => {
             const text = cell === null ? null : textOf(cell, row, column);
@@ -536,7 +580,8 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
                 else if (cell.value !== null) engine.setValue(sheet, row, column, cell.value);
             }
             for (const rewrite of rewrites) {
-                if (rewrite.lost === null) continue;
+                // The texts a sheet lost when it was added went with the sheet.
+                if (rewrite.lost === null || (op.kind === 'add' && rewrite.sheet === op.sheet.id)) continue;
                 const { sheet, top, left, bottom, right } = back(rewrite);
                 engine.fillFormula(sheet, top, left, bottom, right, rewrite.lost);
             }
@@ -576,8 +621,10 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
                     }
                     unmarked = true;
                 } else write(sheet, row, column, what === 1 ? null : what < 4 ? value() : formula());
-            } else if (drawn < 10) perform(anyEdit());
-            else if (drawn < 12) recalc(NO_CAP);
+            } else if (drawn < 10) {
+                if (pick(5) === 0) refuse();
+                perform(anyEdit());
+            } else if (drawn < 12) recalc(NO_CAP);
             else if (drawn < 14) recalc(1 + pick(8));
             else {
                 // An edit, taken back, and done again. What was written before it is computed first, as undo's

@@ -24,6 +24,14 @@ export type Move = {
 
 export type Moved = Omit<Transformed, 'resized' | 'slid'>;
 
+// What moves is the part of a block that is on the grid where it is and where it goes, and the rest of it is gone.
+// This is the move of that part.
+export function fitted(move: Move): Move {
+    const rows = Math.min(move.rows, GRID_ROWS - move.row, GRID_ROWS - move.toRow);
+    const columns = Math.min(move.columns, GRID_COLUMNS - move.column, GRID_COLUMNS - move.toColumn);
+    return rows === move.rows && columns === move.columns ? move : { ...move, rows, columns };
+}
+
 // The hosts of one formula on the rows `top` to `bottom` and the columns `left` to `right`, before the move, which
 // all get this outcome. `carried` says they are in the block and move with it.
 export type MoveClass = Moved & {
@@ -35,7 +43,7 @@ export type MoveClass = Moved & {
 };
 
 // The outcomes for the hosts of one formula in a block of one sheet. Hosts the move lands on are left out, as they
-// are gone. `references` are the tree's reference leaves.
+// are gone, and so are those of the block that do not fit on the grid. `references` are the tree's reference leaves.
 export function moveClasses(
     tree: FormulaNode,
     references: readonly FormulaNode[],
@@ -46,8 +54,9 @@ export function moveClasses(
     left: number,
     right: number,
 ): MoveClass[] {
-    const rowCuts = cuts(references, move, hostSheet, true, top, bottom);
-    const columnCuts = cuts(references, move, hostSheet, false, left, right);
+    const fit = fitted(move);
+    const rowCuts = cuts(references, move, fit, hostSheet, true, top, bottom);
+    const columnCuts = cuts(references, move, fit, hostSheet, false, left, right);
     const classes: MoveClass[] = [];
     for (let i = 0; i < rowCuts.length; i += 1) {
         const row = rowCuts[i];
@@ -55,11 +64,12 @@ export function moveClasses(
         for (let j = 0; j < columnCuts.length; j += 1) {
             const column = columnCuts[j];
             const lastColumn = j + 1 < columnCuts.length ? columnCuts[j + 1] - 1 : right;
-            const carried =
+            const inBlock =
                 hostSheet === move.fromSheet && covers(move, move.row, move.column, row, column, row, column);
+            const carried = inBlock && covers(fit, move.row, move.column, row, column, row, column);
             const landedOn =
-                hostSheet === move.toSheet && covers(move, move.toRow, move.toColumn, row, column, row, column);
-            if (landedOn && !carried) continue;
+                hostSheet === move.toSheet && covers(fit, move.toRow, move.toColumn, row, column, row, column);
+            if ((landedOn || inBlock) && !carried) continue;
             const moved = transformMove(tree, move, hostSheet, row, column);
             classes.push({ ...moved, top: row, bottom: lastRow, left: column, right: lastColumn, carried });
         }
@@ -68,10 +78,11 @@ export function moveClasses(
 }
 
 // The host lines from `from` to `to` on one axis where a class starts: where the host, or an end of a reference
-// that travels with it, crosses an edge of the block or of where the block lands.
+// that travels with it, crosses an edge of the block, of the part of it that moves or of where that part lands.
 function cuts(
     references: readonly FormulaNode[],
     move: Move,
+    fit: Move,
     hostSheet: string,
     rows: boolean,
     from: number,
@@ -79,12 +90,14 @@ function cuts(
 ): number[] {
     const first = rows ? move.row : move.column;
     const target = rows ? move.toRow : move.toColumn;
-    const size = rows ? move.rows : move.columns;
+    const size = rows ? fit.rows : fit.columns;
+    const whole = rows ? move.rows : move.columns;
     const edges = [first, first + size, target, target + size];
+    if (whole > size) edges.push(first + whole);
     const absolute = rows ? RefFlag.RowAbsolute : RefFlag.ColumnAbsolute;
     const absolute2 = rows ? RefFlag.Row2Absolute : RefFlag.Column2Absolute;
     const found: number[] = [];
-    if (hostSheet === move.fromSheet) found.push(first, first + size);
+    if (hostSheet === move.fromSheet) found.push(first, first + size, first + whole);
     if (hostSheet === move.toSheet) found.push(target, target + size);
     for (const reference of references) {
         const { op, flags } = reference;
@@ -104,7 +117,8 @@ function cuts(
     return starts;
 }
 
-// The host is the formula's cell before the move. A formula the block landed on is gone and is not asked.
+// The host is the formula's cell before the move. A formula the block landed on is gone and is not asked, nor is
+// one of the block that does not fit on the grid.
 export function transformMove(
     tree: FormulaNode,
     move: Move,
@@ -114,8 +128,10 @@ export function transformMove(
 ): Moved {
     const rowShift = move.toRow - move.row;
     const columnShift = move.toColumn - move.column;
+    const whole = onGrid(move);
+    const fit = fitted(move);
     const carried =
-        hostSheet === move.fromSheet && covers(move, move.row, move.column, hostRow, hostColumn, hostRow, hostColumn);
+        hostSheet === move.fromSheet && covers(fit, move.row, move.column, hostRow, hostColumn, hostRow, hostColumn);
     const sheetAfter = carried ? move.toSheet : hostSheet;
     const rowAfter = carried ? hostRow + rowShift : hostRow;
     const columnAfter = carried ? hostColumn + columnShift : hostColumn;
@@ -140,21 +156,21 @@ export function transformMove(
             const bottom = rowless ? GRID_ROWS - 1 : Math.max(row, row2);
             const left = columnless ? 0 : Math.min(column, column2);
             const right = columnless ? GRID_COLUMNS - 1 : Math.max(column, column2);
-            if (sheet === move.fromSheet && covers(move, move.row, move.column, top, left, bottom, right)) {
+            if (sheet === move.fromSheet && covers(fit, move.row, move.column, top, left, bottom, right)) {
                 row += rowShift;
                 row2 += rowShift;
                 column += columnShift;
                 column2 += columnShift;
                 sheet = move.toSheet;
-            } else if (sheet === move.toSheet && covers(move, move.toRow, move.toColumn, top, left, bottom, right)) {
+            } else if (sheet === move.toSheet && covers(fit, move.toRow, move.toColumn, top, left, bottom, right)) {
                 lossy = true;
                 recompute = true;
                 return broken(node);
             } else if (
-                (sheet === move.fromSheet && meets(move, move.row, move.column, top, left, bottom, right)) ||
-                (sheet === move.toSheet && meets(move, move.toRow, move.toColumn, top, left, bottom, right))
+                (sheet === move.fromSheet && meets(whole, move.row, move.column, top, left, bottom, right)) ||
+                (sheet === move.toSheet && meets(fit, move.toRow, move.toColumn, top, left, bottom, right))
             ) {
-                // It reads a cell the block left empty or one the block landed on.
+                // It reads a cell the block left empty, moved or not, or one the block landed on.
                 recompute = true;
             }
         }
@@ -182,6 +198,13 @@ export function transformMove(
         return referenceNode(op, node.space, nextKind, nextSheet, nextRow, nextColumn, nextRow2, nextColumn2, flags);
     });
     return { tree: mapped, lossy, recompute };
+}
+
+// The move of the part of a block that is on the grid where it is: the cells the block leaves, moved or gone.
+function onGrid(move: Move): Move {
+    const rows = Math.min(move.rows, GRID_ROWS - move.row);
+    const columns = Math.min(move.columns, GRID_COLUMNS - move.column);
+    return rows === move.rows && columns === move.columns ? move : { ...move, rows, columns };
 }
 
 // Whether the block of the move's size at `row`, `column` holds the whole rectangle.

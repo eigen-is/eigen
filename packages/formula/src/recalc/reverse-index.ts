@@ -58,8 +58,8 @@ export class ReverseIndex {
     private readonly lowered: number[] = [];
     private readonly recorded: number[] = [];
 
-    // `facts` holds the facts of every shape, by its id.
-    public rebuild(workbook: Workbook, facts: readonly number[]): void {
+    // The facts of every shape a cell holds are to be worked out.
+    public rebuild(workbook: Workbook): void {
         const { sheets, shapes } = workbook;
         const rectangles: number[] = [];
         for (let s = 0; s < sheets.length; s += 1) {
@@ -103,8 +103,9 @@ export class ReverseIndex {
         for (let r = 0; r < rectangles.length; r += 6) {
             const s = rectangles[r];
             const id = rectangles[r + 5];
-            if (facts[id] & Fact.Kept) continue;
-            if (facts[id] & Fact.ReadsUnnamed) this.unnamed.push(...rectangles.slice(r, r + 5));
+            const facts = shapes.facts[id];
+            if (facts & Fact.Kept) continue;
+            if (facts & Fact.ReadsUnnamed) this.unnamed.push(...rectangles.slice(r, r + 5));
             for (const ref of shapes.shape(id).refs) {
                 const { op, sheetKind, flags } = ref;
                 const target =

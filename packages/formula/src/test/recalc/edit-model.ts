@@ -251,11 +251,19 @@ function bound(model: Model, name: string, id: string): Applied {
     );
 }
 
+// What was typed with the name of the sheet that comes reads it, and what the sheet itself holds, typed with the
+// name of a sheet that is there, reads that one.
 export function applyAdd(model: Model, sheet: ModelSheet, place: number): Applied {
     const sheets = model.slice();
     sheets.splice(Math.min(place, sheets.length), 0, sheet);
-    const applied = bound(sheets, sheet.name, sheet.id);
-    return { ...applied, kept: applied.kept.filter((cell) => cell.sheet !== sheet.id) };
+    return apply(
+        sheets,
+        (id, row, column) => ({ sheet: id, row, column }),
+        (ref, host) => {
+            const named = sheets.find((held) => held.name === ref.name && (held === sheet || host === sheet.id));
+            return named === undefined ? ref : { ...ref, name: null, sheet: named.id };
+        },
+    );
 }
 
 export function applyRemove(model: Model, id: string): Model {
@@ -285,9 +293,4 @@ export function written(model: Model, sheet: string, row: number, column: number
         else cells.set(keyOf(row, column), cell);
         return { ...held, cells };
     });
-}
-
-// A sheet as a host hands it over to be added: what it holds typed with `name` reads the sheet of this id.
-export function rebound(sheet: ModelSheet, name: string, id: string): ModelSheet {
-    return bound([sheet], name, id).model[0];
 }

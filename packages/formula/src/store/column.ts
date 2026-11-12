@@ -100,10 +100,10 @@ export class Column {
         this.pending -= 1;
     }
 
-    // How many cells from `from` on hold a value or a formula.
-    public cells(from: number): number {
+    // How many cells of the rows from `from` up to `to` hold a value or a formula.
+    public cells(from: number, to: number): number {
         let cells = 0;
-        for (let row = from; row < this.length; row += 1) {
+        for (let row = from; row < Math.min(to, this.length); row += 1) {
             if (this.kind[row] !== 0 || this.shape[row] !== 0) cells += 1;
         }
         return cells;
@@ -114,7 +114,7 @@ export class Column {
         if (index >= this.length) return 0;
         // Rows from `kept` on would land past the last row of the grid.
         const kept = Math.max(index, Math.min(this.length, GRID_ROWS - count));
-        const dropped = this.cells(kept);
+        const dropped = this.cells(kept, this.length);
         this.tally(kept, this.length, -1);
         const length = kept > index ? kept + count : index;
         if (length > this.kind.length) this.resize(Math.min(GRID_ROWS, Math.max(length, this.kind.length * 2)));

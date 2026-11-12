@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { Fact, shapeFacts } from '../../eval/facts';
 import { FUNCTIONS } from '../../functions/library';
-import type { Engine, LineEdit, Move } from '../../index';
-import { REF } from '../../index';
+import type { LineEdit, Move } from '../../index';
+import { Engine, REF } from '../../index';
 import { GRID_COLUMNS, GRID_ROWS, parseA1, sheetFinder } from '../../text';
 import type { Cells } from './support';
 import { at, engineOf, stored, valueAt } from './support';
@@ -77,7 +77,7 @@ describe('a whole column read by many formulas, and a row inserted', () => {
         expect(valueAt(engine, 'C1')).toBe(39 + 1275 - 10);
     });
     test('a whole row and columns inserted, past its cells and among them', () => {
-        const engine = computed({ s1: { A2: 1, B2: 2, C2: 3, A5: '=SUM(2:2)', A6: '=MATCH(3,$2:$2,0)' } });
+        const engine = computed({ s1: { A2: 1, B2: 2, C2: 3, A5: '=SUM(2:2*1)', A6: '=MATCH(3,$2:$2,0)' } });
         engine.editLines(columns(true, 'F'));
         expect([pending(engine, 'A5'), pending(engine, 'A6')]).toEqual([false, false]);
         engine.editLines(columns(true, 'B'));
@@ -86,7 +86,7 @@ describe('a whole column read by many formulas, and a row inserted', () => {
         expect([valueAt(engine, 'A5'), valueAt(engine, 'A6')]).toEqual([6, 4]);
     });
     test('on another sheet than the one it reads, and a formula that only reads what moved keeps its value', () => {
-        const engine = computed({ s1: { ...counting('A1', 9), C1: '=A9' }, s2: { B1: '=SUM(Sheet1!A:A)' } });
+        const engine = computed({ s1: { ...counting('A1', 9), C1: '=A9' }, s2: { B1: '=MATCH(9,Sheet1!A:A,0)' } });
         engine.editLines(rows(true, 20));
         expect(pending(engine, 'B1', 's2')).toBe(false);
         engine.editLines(rows(true, 3));
@@ -95,6 +95,71 @@ describe('a whole column read by many formulas, and a row inserted', () => {
             false,
             '=R[9]C[-2]',
         ]);
+    });
+    test.each([
+        '=SUM(A:A)',
+        '=COUNT($A:$B)+MAX(A:A)',
+        '=AVERAGE(A:A)+MIN(A:B)+PRODUCT(A:A)+MEDIAN(A:A)+COUNTA(A:A)',
+        '=IF(AND(A:A),1,2)+IF(OR(A:B),1,2)',
+    ])(
+        'a row inserted inside the cells of the column computes no reader that passes over empty cells: %s',
+        (formula) => {
+            const engine = computed({ s1: { ...counting('A1', 50), ...readers(formula, 300) } });
+            const before = valueAt(engine, 'C1');
+            expect(engine.editLines(rows(true, 10, 2)).dropped).toBe(0);
+            expect(waiting(engine, 300)).toBe(0);
+            expect(valueAt(engine, 'C1')).toBe(before);
+            // A row deleted takes a cell away, and the reader on it.
+            engine.editLines(rows(false, 20));
+            expect(waiting(engine, 300)).toBe(299);
+            engine.recalc(NO_CAP);
+            expect(valueAt(engine, 'C1')).toBe(valueAt(engine, 'C299'));
+            if (formula === '=SUM(A:A)') expect(valueAt(engine, 'C1')).toBe(1275 - 18);
+        },
+    );
+    test.each([
+        ['=MATCH(40,A:A,0)', 41],
+        ['=INDEX(A:A,40)', 39],
+        ['=COUNTBLANK(A:A)', GRID_ROWS - 50],
+        ['=SUM(A:A*1)', 1275],
+        ['=SUM(A:A)+INDEX($A:$A,40)', 1275 + 39],
+        ['=LOOKUP(40,A:A)', 40],
+    ])('and every reader that looks a cell up or counts the empty ones: %s', (formula, expected) => {
+        const engine = computed({ s1: { ...counting('A1', 50), ...readers(formula, 300) } });
+        engine.editLines(rows(true, 10));
+        expect(waiting(engine, 300)).toBe(300);
+        engine.recalc(NO_CAP);
+        expect(valueAt(engine, 'C300')).toBe(expected);
+    });
+    test('a column inserted among the cells of a whole row computes the lookups and not the sums', () => {
+        const engine = computed({ s1: { A2: 1, B2: 2, C2: 3, A5: '=SUM(2:2)+COUNTA($2:$3)', A6: '=INDEX(2:2,3)' } });
+        engine.editLines(columns(true, 'B', 2));
+        expect([pending(engine, 'A5'), pending(engine, 'A6')]).toEqual([false, true]);
+        engine.editLines(columns(false, 'B'));
+        expect([pending(engine, 'A5'), pending(engine, 'A6')]).toEqual([true, true]);
+        engine.recalc(NO_CAP);
+        expect([valueAt(engine, 'A5'), valueAt(engine, 'A6')]).toEqual([6 + 3, 2]);
+    });
+    test('a row inserted into a full column pushes its last cell off the grid, and every reader is computed', () => {
+        const last = `A${GRID_ROWS}`;
+        const cells = { A1: 1, B5: 7, [last]: 5, C1: '=SUM(A:A)', C2: '=COUNTA(A:B)', D1: '=SUM($B:$B)' };
+        const engine = computed({ s1: cells, s2: { A1: '=SUM(Sheet1!A:A)+MAX(Sheet1!$A:$A)' } });
+        expect([valueAt(engine, 'C1'), valueAt(engine, 'C2'), valueAt(engine, 'A1', 's2')]).toEqual([6, 3, 11]);
+        expect(engine.editLines(rows(true, 3)).dropped).toBe(1);
+        // Column B loses nothing, so its sum stays.
+        expect(['C1', 'C2', 'D1'].map((host) => pending(engine, host))).toEqual([true, true, false]);
+        expect(pending(engine, 'A1', 's2')).toBe(true);
+        engine.recalc(NO_CAP);
+        expect([valueAt(engine, 'C1'), valueAt(engine, 'C2'), valueAt(engine, 'A1', 's2')]).toEqual([1, 2, 2]);
+    });
+    test('a column inserted into a full row pushes its last cell off the grid, and every reader is computed', () => {
+        const cells = { A3: 1, XFD3: 5, C6: 7, A8: '=SUM(3:3)', A9: '=COUNTA(3:4)', A10: '=SUM(6:6)' };
+        const engine = computed({ s1: cells });
+        expect([valueAt(engine, 'A8'), valueAt(engine, 'A9')]).toEqual([6, 2]);
+        expect(engine.editLines(columns(true, 'B')).dropped).toBe(1);
+        expect(['A8', 'A9', 'A10'].map((host) => pending(engine, host))).toEqual([true, true, false]);
+        engine.recalc(NO_CAP);
+        expect([valueAt(engine, 'A8'), valueAt(engine, 'A9'), valueAt(engine, 'A10')]).toEqual([1, 1, 7]);
     });
 });
 
@@ -401,6 +466,62 @@ describe('sheets', () => {
         other.recalc(NO_CAP);
         expect([valueAt(other, 'C1'), other.sheetAt(2)]).toEqual([8, 's7']);
     });
+    test('a sheet that comes with formulas typed with the name of a sheet that is there reads that sheet', () => {
+        const engine = book();
+        // As a sheet comes back that was removed before the others got their names: nothing bound its texts.
+        const added = engine.addSheet(
+            {
+                id: 's3',
+                name: 'Third',
+                cells: (cell) => {
+                    cell(0, 0, 77, "='sheet2'!R1C2+1");
+                    cell(1, 0, 77, "='sheet2'!R1C2+1");
+                    cell(2, 0, null, '=[s1]!R1C1');
+                    cell(0, 1, null, "='Third'!R[1]C+'Sheet1'!R1C1");
+                    cell(1, 1, 3, null);
+                    cell(0, 2, null, "='Nowhere'!R1C1");
+                },
+            },
+            1,
+        );
+        expect(added.rewrites).toEqual([
+            { sheet: 's3', top: 0, left: 0, bottom: 1, right: 0, formula: '=[s2]!R1C2+1', lost: "='sheet2'!R1C2+1" },
+            {
+                sheet: 's3',
+                top: 0,
+                left: 1,
+                bottom: 0,
+                right: 1,
+                formula: '=[s3]!R[1]C+[s1]!R1C1',
+                lost: "='Third'!R[1]C+'Sheet1'!R1C1",
+            },
+        ]);
+        expect(engine.formulaOf('s3', 1, 0)).toBe('=[s2]!R1C2+1');
+        engine.recalc(NO_CAP);
+        expect([0, 1, 2].map((row) => engine.valueOf('s3', row, 0))).toEqual([10, 10, 1]);
+        expect([engine.valueOf('s3', 0, 1), engine.valueOf('s3', 0, 2)]).toEqual([4, REF]);
+        // What was bound stays bound when the name goes to another sheet.
+        engine.renameSheet('s2', 'Other');
+        engine.setValue('s2', 0, 1, 20);
+        engine.recalc(NO_CAP);
+        expect(engine.valueOf('s3', 0, 0)).toBe(21);
+    });
+    test('a sheet whose cells cannot be read is not added, and nothing changes', () => {
+        const engine = book();
+        const broken = {
+            id: 's7',
+            name: 'Later',
+            cells: () => {
+                throw new Error('no cells');
+            },
+        };
+        expect(() => engine.addSheet(broken, 0)).toThrow('no cells');
+        expect([text(engine, 'C1'), engine.sheetAt(0)]).toEqual(["='Later'!RC[-2]", 's1']);
+        expect(() => engine.valueOf('s7', 0, 0)).toThrow('No sheet s7');
+        engine.setValue('s1', 0, 0, 3);
+        expect(engine.recalc(NO_CAP).stopped).toBe(false);
+        expect([valueAt(engine, 'C1'), engine.valueOf('s2', 0, 0)]).toEqual([REF, 7]);
+    });
     test('a loop through a sheet that goes is no loop any more, and is one again when the sheet returns', () => {
         const engine = computed({ s1: { A1: '=Sheet2!A1' }, s2: { A1: '=Sheet1!A1' } });
         expect(engine.recalc(NO_CAP).loops).toHaveLength(2);
@@ -441,6 +562,29 @@ describe('what a host reads back', () => {
             false,
         ]);
         expect(engine.recalc(NO_CAP).changed).toEqual([0, 1, 50, 99, 0, 2, 0, 99]);
+    });
+    test('a loop that came with its values is listed once a cell of it is computed again, and not before', () => {
+        const engine = new Engine([
+            {
+                id: 's1',
+                name: 'Sheet1',
+                cells: (cell) => {
+                    cell(0, 0, REF, '=R[1]C');
+                    cell(1, 0, REF, '=R[-1]C');
+                    cell(0, 2, 5, null);
+                    cell(0, 3, 6, '=RC[-1]+1');
+                },
+            },
+        ]);
+        // A load brings values and no word on loops, and nothing here is to be computed.
+        expect(engine.recalc(NO_CAP).loops).toEqual([]);
+        engine.setValue('s1', 0, 2, 7);
+        expect(engine.recalc(NO_CAP).loops).toEqual([]);
+        engine.setFormula('s1', 0, 0, '=R[1]C');
+        expect(engine.recalc(NO_CAP).loops).toEqual([
+            { sheet: 's1', row: 0, column: 0 },
+            { sheet: 's1', row: 1, column: 0 },
+        ]);
     });
     test('the stored text of a cell, and a block filled with one', () => {
         const engine = engineOf({ s1: { A1: 4, B1: '=A1*2' } });
