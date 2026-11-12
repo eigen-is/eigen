@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, jest, test } from 'bun:test';
+import { LOCK_DEFAULT_TTL_MS } from '../../lib/drive/lock-manager';
 import { getHome } from '../../lib/home';
 import { DAV_PASSWORD } from '../dav-test-helpers';
 import type { TestUser } from '../setup';
@@ -134,7 +135,16 @@ describe('a WebDAV lock holds its Home', () => {
         const home = await getHome(user.id);
         const closing = home.close();
         expect(() =>
-            home.drive.lockManager.acquire({ pathId: 'p', depth: 0, scope: 'exclusive', userId: user.id }),
+            home.drive.lockManager.acquire({
+                pathId: 'p',
+                depth: 0,
+                scope: 'exclusive',
+                userId: user.id,
+                ttlMs: LOCK_DEFAULT_TTL_MS,
+                ifHeader: null,
+                ancestorPathIds: [],
+                descendantPathIds: [],
+            }),
         ).toThrow('Home is closing');
         await closing;
     });

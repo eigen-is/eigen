@@ -838,6 +838,11 @@ export class Drive {
         this.lockManager.releaseAllForPaths([pathId, ...mount.collectDescendantIds(pathId)]);
     }
 
+    // A WebDAV LOCK on a folder reaches everything under it, so it checks these for the locks of others.
+    public async descendantIds(mountId: string, pathId: string): Promise<string[]> {
+        return this.getMount(mountId).collectDescendantIds(pathId);
+    }
+
     public async restorePath(mountId: string, pathId: string, user: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);

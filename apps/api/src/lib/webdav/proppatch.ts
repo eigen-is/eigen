@@ -11,7 +11,7 @@ import { DAV_NAMESPACES } from '../dav/xml';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { assertWritable } from './locks';
-import { encodeHref } from './path';
+import { encodeHref, mountHref } from './path';
 import { buildXmlResponse, MAX_XML_BODY_BYTES, multistatus, propstatStatus, response } from './xml';
 
 // RFC 4918 §15's live properties, which the server derives or controls. A PROPPATCH on one is a 403 in its propstat,
@@ -33,25 +33,6 @@ const PROTECTED_PROPS = new Set([
 const DAV = DAV_NAMESPACES.D;
 
 type PropOp = { op: 'set' | 'remove'; prop: WebdavDeadProp };
-
-// RFC 4918 §9.2: set and remove run in document order, so a remove between two sets of one prop lands between them.
-function extractPropOps(body: Uint8Array): PropOp[] {
-    const root = parseXmlRoot(body, DAV, 'propertyupdate');
-    if (!root) return [];
-    const ops: PropOp[] = [];
-    for (const verb of xmlElements(root)) {
-        if (verb.ns !== DAV || (verb.local !== 'set' && verb.local !== 'remove')) continue;
-        for (const element of xmlChildren(verb, DAV, 'prop').flatMap(xmlElements)) {
-            const { ns, local: name } = element;
-            // Element content stays XML; text is kept as written, whitespace included.
-            const prop: WebdavDeadProp = xmlElements(element).length
-                ? { ns, name, value: serializeXmlChildren(element), xml: true }
-                : { ns, name, value: xmlText(element) };
-            ops.push({ op: verb.local, prop });
-        }
-    }
-    return ops;
-}
 
 export async function handleProppatch(args: {
     user: User;
@@ -79,7 +60,7 @@ export async function handleProppatch(args: {
     // All ops apply in memory, in document order as RFC 4918 §9.2 asks, and write once. A set on an existing prop
     // keeps its slot.
     if (!refused) {
-        let webdavProps = path.details?.webdavProps ? [...path.details.webdavProps] : [];
+        let webdavProps = [...(path.details?.webdavProps ?? [])];
         let mutated = false;
         for (const op of ops) {
             const idx = webdavProps.findIndex((p) => p.ns === op.prop.ns && p.name === op.prop.name);
@@ -120,6 +101,25 @@ export async function handleProppatch(args: {
             ? propstatStatus(403, 'Forbidden', [propEl])
             : propstatStatus(424, 'Failed Dependency', [propEl]);
     });
-    const href = `/webdav/${encodeHref(ownerId)}/${encodeHref(mountId)}${encodeHref(pathStr)}`;
+    const href = `${mountHref(ownerId, mountId)}${encodeHref(pathStr)}`;
     return buildXmlResponse(multistatus([response(href, propstats)]));
+}
+
+// RFC 4918 §9.2: set and remove run in document order, so a remove between two sets of one prop lands between them.
+function extractPropOps(body: Uint8Array): PropOp[] {
+    const root = parseXmlRoot(body, DAV, 'propertyupdate');
+    if (!root) return [];
+    const ops: PropOp[] = [];
+    for (const verb of xmlElements(root)) {
+        if (verb.ns !== DAV || (verb.local !== 'set' && verb.local !== 'remove')) continue;
+        for (const element of xmlChildren(verb, DAV, 'prop').flatMap(xmlElements)) {
+            const { ns, local: name } = element;
+            // Element content stays XML; text is kept as written, whitespace included.
+            const prop: WebdavDeadProp = xmlElements(element).length
+                ? { ns, name, value: serializeXmlChildren(element), xml: true }
+                : { ns, name, value: xmlText(element) };
+            ops.push({ op: verb.local, prop });
+        }
+    }
+    return ops;
 }

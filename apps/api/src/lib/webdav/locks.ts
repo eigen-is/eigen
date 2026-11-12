@@ -1,6 +1,7 @@
 // The WebDAV LOCK and UNLOCK methods, and the lock check every WebDAV write makes. The WebDAV router
 // calls them with the signed-in user, and each one goes through getSharedDrive, so the Drive ACL
-// decides access. The locks themselves live in the Drive's LockManager.
+// decides access. A LOCK on a name with nothing there yet creates the empty file, as Office's
+// "Save as" needs. The locks themselves, and the rule for who passes one, live in the Drive's LockManager.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
@@ -9,8 +10,10 @@ import { parseXmlRoot, serializeXmlChildren, xmlChild } from '../core/xml';
 import { DAV_NAMESPACES, XML_CONTENT_TYPE, XML_DECLARATION } from '../dav/xml';
 import { getSharedDrive } from '../drive/get-drive';
 import type { Lock, LockManager } from '../drive/lock-manager';
-import { LOCK_DEFAULT_TTL_MS, parseIfHeaderTokens } from '../drive/lock-manager';
+import { LOCK_DEFAULT_TTL_MS } from '../drive/lock-manager';
+import { foldName } from '../mount/names';
 import type { User } from '../user';
+import { splitParentAndName } from './path';
 import { lockdiscoveryProp, MAX_XML_BODY_BYTES } from './xml';
 
 const DAV = DAV_NAMESPACES.D;
@@ -32,42 +35,64 @@ export async function handleLock(args: {
     const { user, ownerId, mountId, pathStr, body, timeoutHeader, ifHeader, depthHeader } = args;
     const drive = await getSharedDrive(ownerId, user);
     const path = await drive.resolvePath(mountId, pathStr);
-    if (!path) throw new ApiError(404, 'Not found');
+    // resolvePath only checks read. A lock means writes will follow, so a reader takes or refreshes none.
+    if (path && !(await drive.canWrite(mountId, path.id, user))) throw new ApiError(403, 'No write permission');
 
     const ttlMs = parseTimeoutHeader(timeoutHeader);
-    const depth: Lock['depth'] = depthHeader === '0' ? 0 : 'infinity';
     const lockinfo = parseXmlRoot(body, DAV, 'lockinfo');
 
     // RFC 4918 §9.10.2: a LOCK with no body and an If header refreshes the lock it names.
     if (!lockinfo && ifHeader) {
-        for (const token of parseIfHeaderTokens(ifHeader)) {
-            const refreshed = drive.lockManager.refresh(token, ttlMs);
-            if (refreshed) return buildLockResponse(refreshed);
-        }
-        throw new ApiError(412, 'No matching lock to refresh');
+        if (!path) throw new ApiError(404, 'Not found');
+        const refreshed = drive.lockManager.refresh(path.id, user.id, ifHeader, ttlMs);
+        if (!refreshed) throw new ApiError(412, 'No matching lock to refresh');
+        return buildLockResponse(refreshed, 200);
     }
 
-    // resolvePath only checks read. A new lock means writes will follow, so a reader is refused before a
-    // token is made.
-    if (!(await drive.canWrite(mountId, path.id, user))) {
-        throw new ApiError(403, 'No write permission');
-    }
-
-    const breadcrumb = await drive.breadCrumb(mountId, path.id);
-    const ancestorPathIds = breadcrumb.slice(0, -1).map((p) => p.id);
     // Exclusive unless the body asks for shared, an omitted <lockscope> included (RFC 4918 §9.10).
     const lockscope = lockinfo && xmlChild(lockinfo, DAV, 'lockscope');
-    const lock = drive.lockManager.acquire({
-        pathId: path.id,
-        depth,
-        scope: lockscope && xmlChild(lockscope, DAV, 'shared') ? 'shared' : 'exclusive',
-        userId: user.id,
-        owner: lockinfo ? readLockOwner(lockinfo) : undefined,
-        ttlMs,
-        ifHeader,
-        ancestorPathIds,
-    });
-    return buildLockResponse(lock);
+    const scope = lockscope && xmlChild(lockscope, DAV, 'shared') ? 'shared' : 'exclusive';
+    const owner = lockinfo ? readLockOwner(lockinfo) : undefined;
+    const depth = depthHeader === '0' ? 0 : 'infinity';
+    const lockOn = (
+        pathId: string,
+        lockScope: Lock['scope'],
+        ancestorPathIds: readonly string[],
+        descendantPathIds: readonly string[],
+    ): Lock =>
+        drive.lockManager.acquire({
+            pathId,
+            depth,
+            scope: lockScope,
+            userId: user.id,
+            owner,
+            ttlMs,
+            ifHeader,
+            ancestorPathIds,
+            descendantPathIds,
+        });
+
+    if (path) {
+        const ancestorIds = (await drive.breadCrumb(mountId, path.id)).slice(0, -1).map((p) => p.id);
+        const descendantIds = depth === 0 ? [] : await drive.descendantIds(mountId, path.id);
+        return buildLockResponse(lockOn(path.id, scope, ancestorIds, descendantIds), 200);
+    }
+
+    // RFC 4918 §7.3: a LOCK on an unmapped name creates an empty file, as an empty PUT would.
+    const { parentStr, name } = splitParentAndName(pathStr);
+    const parent = await drive.resolvePath(mountId, parentStr);
+    if (!parent) throw new ApiError(409, 'Parent not found');
+    if (!(await drive.canWrite(mountId, parent.id, user))) throw new ApiError(403, 'No write permission');
+    const parentCrumb = await drive.breadCrumb(mountId, parent.id);
+    assertWritable(drive.lockManager, parentCrumb, ifHeader, user.id);
+    const ancestorPathIds = parentCrumb.map((p) => p.id);
+    // The name itself is locked, exclusively, until the create lands: a second LOCK on it is a 423, not a second file.
+    const nameLock = lockOn(`${parent.id}/${foldName(name)}`, 'exclusive', ancestorPathIds, []);
+    const mimeType = Bun.file(name).type || 'application/octet-stream';
+    const created = await drive
+        .createFileFromData(mountId, parent.id, name, mimeType, Buffer.alloc(0), user)
+        .finally(() => drive.lockManager.release(nameLock.token));
+    return buildLockResponse(lockOn(created.id, scope, ancestorPathIds, []), 201);
 }
 
 export async function handleUnlock(args: {
@@ -96,7 +121,7 @@ export async function handleUnlock(args: {
 // pass the locks of its ancestors. The breadcrumb runs from the root to the path itself.
 export function assertWritable(
     lockManager: LockManager,
-    breadcrumb: DrivePath[],
+    breadcrumb: readonly DrivePath[],
     ifHeader: string | null,
     userId: string,
 ): void {
@@ -124,11 +149,11 @@ function readLockOwner(lockinfo: XmlElement): string | undefined {
     return owner || undefined;
 }
 
-function buildLockResponse(lock: Lock): Response {
+function buildLockResponse(lock: Lock, status: 200 | 201): Response {
     const body = `${XML_DECLARATION}
 <D:prop xmlns:D="DAV:">${lockdiscoveryProp([lock])}</D:prop>`;
     return new Response(body, {
-        status: 200,
+        status,
         headers: {
             'Content-Type': XML_CONTENT_TYPE,
             'Lock-Token': `<${lock.token}>`,
