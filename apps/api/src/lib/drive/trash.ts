@@ -1,5 +1,5 @@
 // The drive side of the trash: moving a path to the trash, back out of it, and deleting it for good,
-// from the trash or, for a failed copy that holds only what it wrote, without it. Drive methods such as
+// from the trash or, for a path nobody needs back such as a failed copy, without it. Drive methods such as
 // deletePath check the path and then call these. They close open documents, take away sharing, tell
 // open tabs and write the history.
 
@@ -36,13 +36,11 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
         chainRootIds: [item.parentId],
         verifyAncestors: preTrashChain,
     });
-    // Nobody waits for it, the same as in Drive.recordFileEvent.
+    // Nobody waits for it, so a failed broadcast never fails the trash.
     broadcastFileHistoryUpdated(item.ownerId, item, members).catch(() => {});
 
-    // The sharing goes last, the same as in Drive.renamePath. It goes only once the trash is in, so a
-    // trash that fails leaves it as it was. The rows keep their ACL in the trash, so the walk below
-    // still finds every entry. Drive.deletePath holds the item's ACL chain, so the item's own push
-    // goes out directly.
+    // The sharing goes last, as it reaches other homes, and only once the trash is in. The rows keep their ACL in
+    // the trash, so the walk below finds every entry, and the item's ACL chain is held, so its own push goes directly.
     if (trashedItem.acl) await propagateSharedPathChange(trashedItem, trashedItem.acl, null, user);
     if (isContainerType(item.type)) await pushSharingBelow(drive, mount, item.id, 'trashed', user);
 }
@@ -53,7 +51,7 @@ export async function restorePath(drive: Drive, mount: Mount, pathId: string, us
     // recordFileEvent reads the path again, so it walks the parent chain of the restored path.
     await drive.recordFileEvent(mount.id, pathId, user, { eventType: 'restored' });
 
-    // The sharing comes back last, the same as in Drive.renamePath, and nobody gets an email again.
+    // The sharing comes back last, as it reaches other homes, and nobody gets an email again.
     await drive.pushSharing(mount.id, pathId, 'live', user);
     if (isContainerType(restoredItem.type)) await pushSharingBelow(drive, mount, restoredItem.id, 'live', user);
 }
@@ -112,14 +110,20 @@ export async function deleteFailedCopy(
     user: User,
 ): Promise<void> {
     if (!(await holdsOnlyCopy(mount, item, createdIds))) return deletePath(drive, mount, item, user);
+    return deleteForGood(drive, mount, item, user);
+}
+
+// Deletes a live path without the trash, such as the source of a move whose bytes went into the file it replaced.
+export async function deleteForGood(drive: Drive, mount: Mount, item: DrivePath, user: User): Promise<void> {
     const members = await drive.getEffectiveMembers(mount.id, item.id);
-    // A document opened in the half-built copy between this close and the delete loses its database under the
-    // editor, which logs until its socket's read check closes it. The copy goes for good either way.
+    // A document opened under the path between this close and the delete loses its database under the editor,
+    // which logs until its socket's read check closes it. The path goes for good either way.
     await closeOpenDocumentsUnder(drive, mount, item.id);
     await mount.deletePath(item.id);
     drive.emit(isContainerType(item.type) ? SSEventType.DRIVE_FOLDER_DELETED : SSEventType.DRIVE_FILE_DELETED, item, {
         members,
     });
+    if (item.acl) await propagateSharedPathChange(item, item.acl, null, user);
 }
 
 // True when the copy made the path and everything below it, and nobody shared any of it since.

@@ -1,17 +1,21 @@
 // The detail column of a Drive view: the selected item's preview, its Open, Download, Share and Watch
-// buttons, a ⋮ with the item's whole menu, and its details, sharing and recent activity. DriveLayout
-// draws it beside the list.
+// buttons, a ⋮ with the item's whole menu, and its details, sharing and recent activity. A layout such
+// as DriveLayout draws it beside the list.
 
+import { getDriveItemUrl } from '@workspace/lib/api';
 import { formatDateTime } from '@workspace/lib/date';
+import { useBreadcrumb } from '@workspace/lib/drive';
 import { formatFileSize } from '@workspace/lib/format';
+import { useResolvedUser } from '@workspace/lib/public';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isDocumentType, stripEigenExtension } from '@workspace/lib/types/drive';
+import { isDocumentType, sharedChainHead, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { DriveActionId } from '@workspace/lib/types/drive-actions';
 import type { FileActionId } from '@workspace/lib/types/file-subject';
 import { Button } from '@workspace/ui/components/button';
 import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
 import { KebabTrigger } from '@workspace/ui/components/layout/toolbar';
 import { WatchToggleButton } from '@workspace/ui/components/layout/toolbar/watch-toggle-button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useLayout } from '../layout/app/layout-context';
@@ -19,6 +23,7 @@ import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { DriveAccessList } from './drive-access-list';
 import type { DriveActionRunner } from './drive-action-runner';
 import { DriveItemMenuItems } from './drive-item-menu';
+import { useMountLabel } from './drive-mount-list';
 import { DrivePreview } from './drive-preview';
 import { getFilePresentation } from './file-presentation';
 import { RecentActivity } from './recent-activity';
@@ -103,7 +108,7 @@ export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
                         </DropdownMenu>
                     </div>
                 </div>
-                <DetailsSection path={path} />
+                <DetailsSection path={path} actions={actions} />
                 <h3 className="eigen-section-label mt-6 mb-2">Shared with</h3>
                 <DriveAccessList path={path} onShareClick={share && (() => actions.run(share.id, [path]))} />
                 <RecentActivity path={path} />
@@ -115,18 +120,63 @@ export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
 
 const EXTRA_DETAIL_HIDDEN_KEYS = new Set(['width', 'height', 'duration', 'pageCount', 'webdavProps', 'originalName']);
 
-function DetailsSection({ path }: { path: DrivePath }) {
+function DetailsSection({ path, actions }: { path: DrivePath; actions: DriveActionRunner }) {
     const presentation = getFilePresentation(path.mimeType, path.type, path.name);
     const details = path.details;
     const extraEntries = details ? Object.entries(details).filter(([key]) => !EXTRA_DETAIL_HIDDEN_KEYS.has(key)) : [];
+
+    // The item's own chain, which its sharing list reads too, less the item. Cut short above the viewer's reach, it
+    // no longer starts at the drive, so the owner stands in for it.
+    const { data: itemChain = [], isPending, isError } = useBreadcrumb(path.ownerId, path.mountId, path.id);
+    const chain = itemChain.slice(0, -1);
+    const mountLabel = useMountLabel(path.ownerId, path.mountId);
+    const { displayName: ownerName } = useResolvedUser({ userId: path.ownerId });
+    const fromRoot = chain.length > 0 && !sharedChainHead(chain);
+    const location = [
+        fromRoot ? mountLabel : ownerName,
+        ...chain.slice(fromRoot ? 1 : 0).map((folder) => stripEigenExtension(folder.name)),
+    ].join(' › ');
+    const parent = chain.at(-1);
+    const parentHref = parent && getDriveItemUrl(parent);
 
     return (
         <>
             <h3 className="eigen-section-label mt-2 mb-2">Details</h3>
             <dl className="text-sm space-y-1.5">
                 <Row label="Type" value={presentation.label} />
+                {/* Drawn empty while the chain loads, so the rows below don't jump when it arrives. */}
+                {path.parentId && !isError && (
+                    <Row
+                        label="Location"
+                        value={
+                            !isPending && (
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        {parentHref ? (
+                                            <a
+                                                href={parentHref}
+                                                className="hover:underline"
+                                                onClick={(event) => {
+                                                    // A modified click keeps the link's own, such as a new tab.
+                                                    if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+                                                    event.preventDefault();
+                                                    actions.run('open', [parent]);
+                                                }}
+                                            >
+                                                {location}
+                                            </a>
+                                        ) : (
+                                            <span>{location}</span>
+                                        )}
+                                    </TooltipTrigger>
+                                    <TooltipContent>{location}</TooltipContent>
+                                </Tooltip>
+                            )
+                        }
+                    />
+                )}
                 <Row label="Size" value={formatFileSize(path.size)} />
-                {path.createdAt && <Row label="Created" value={formatDateTime(path.createdAt)} />}
+                <Row label="Created" value={formatDateTime(path.createdAt)} />
                 {details?.width && details?.height && (
                     <Row label="Dimensions" value={`${details.width} × ${details.height}`} />
                 )}

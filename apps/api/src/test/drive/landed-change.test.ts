@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, readdirSync } from 'node:fs';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { ApiError } from '../../lib/core/errors';
+import { ApiError, StaleWriteError } from '../../lib/core/errors';
 import * as aclPropagation from '../../lib/drive/acl-propagation';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
@@ -10,7 +10,7 @@ import * as thumbnails from '../../lib/shared/thumbnails';
 import * as publicInfo from '../../lib/space/public';
 import type { User } from '../../lib/user';
 import { getUserById } from '../../lib/user';
-import { getTestContext } from '../setup';
+import { getTestContext, TEST_PNG_BYTES } from '../setup';
 
 // A change that has landed in the tree stays a success when the work after it fails, such as
 // telling the watchers. The caller sees the change, and no temp file stays behind.
@@ -31,7 +31,7 @@ describe('a change that has landed', () => {
     });
 
     async function settledTempFiles(): Promise<string[]> {
-        await Promise.allSettled(mount.thumbnailJobs);
+        await mount.backgroundDone();
         return readdirSync(mount.tmpDir).sort();
     }
 
@@ -86,6 +86,88 @@ describe('a change that has landed', () => {
         }
     });
 
+    // Every write of a file's bytes goes through a temp file of the mount. However the write ends, that
+    // temp file is gone once the thumbnail job is done.
+    async function bytesOf(pathId: string): Promise<Uint8Array> {
+        return new Uint8Array((await mount.readBytes(pathId)) ?? []);
+    }
+
+    const PNG = TEST_PNG_BYTES;
+    const sources = [
+        ['a stream', () => new Blob([PNG]).stream()],
+        ['a Buffer', () => Buffer.from(PNG)],
+    ] as const;
+
+    test('an upload leaves no temp file, of a picture or an empty file, and the picture gets its thumbnail', async () => {
+        const before = await settledTempFiles();
+        const form = new FormData();
+        form.append('file', new File([PNG], 'temp-owner.png', { type: 'image/png' }));
+        form.append('file', new File([], 'temp-owner-empty.txt', { type: 'text/plain' }));
+        const request = new Request('http://localhost/upload', { method: 'POST', body: form });
+
+        const [picture, empty] = await home.drive.uploadFiles(mount.id, rootId, request, 1024 * 1024, alice);
+
+        expect(await settledTempFiles()).toEqual(before);
+        expect(await bytesOf(picture.id)).toEqual(PNG);
+        expect((await mount.getPath(picture.id))?.thumbnail).toBe(`${picture.id}.webp`);
+        expect(await mount.getPath(empty.id)).toMatchObject({ size: 0, thumbnail: null });
+    });
+
+    test.each(sources)('an overwrite from %s leaves no temp file and makes the thumbnail', async (_name, from) => {
+        const file = await home.drive.createFileFromData(
+            mount.id,
+            rootId,
+            'temp-owner-overwrite.png',
+            'image/png',
+            Buffer.from('no picture yet'),
+            alice,
+        );
+        const before = await settledTempFiles();
+        expect((await mount.getPath(file.id))?.thumbnail).toBeNull();
+
+        await home.drive.writeFileContent(mount.id, file.id, from(), { user: alice });
+
+        expect(await settledTempFiles()).toEqual(before);
+        expect(await bytesOf(file.id)).toEqual(PNG);
+        expect((await mount.getPath(file.id))?.thumbnail).toBe(`${file.id}.webp`);
+    });
+
+    test.each(sources)('a refused overwrite from %s leaves no temp file and the old bytes', async (_name, from) => {
+        const file = await home.drive.createFileFromData(
+            mount.id,
+            rootId,
+            'temp-owner-refused.txt',
+            'text/plain',
+            Buffer.from('kept'),
+            alice,
+        );
+        const before = await settledTempFiles();
+
+        const write = home.drive.writeFileContent(mount.id, file.id, from(), { user: alice, ifMatch: '"stale"' });
+
+        await expect(write).rejects.toBeInstanceOf(StaleWriteError);
+        expect(await settledTempFiles()).toEqual(before);
+        expect(await bytesOf(file.id)).toEqual(new TextEncoder().encode('kept'));
+    });
+
+    test('an empty overwrite, such as an empty WebDAV PUT, leaves no temp file', async () => {
+        const file = await home.drive.createFileFromData(
+            mount.id,
+            rootId,
+            'temp-owner-emptied.txt',
+            'text/plain',
+            Buffer.from('full'),
+            alice,
+        );
+        const before = await settledTempFiles();
+
+        const { path } = await home.drive.writeFileContent(mount.id, file.id, Buffer.alloc(0), { user: alice });
+
+        expect(path.size).toBe(0);
+        expect(await settledTempFiles()).toEqual(before);
+        expect(await bytesOf(file.id)).toEqual(new Uint8Array());
+    });
+
     // A shared path keeps a copy in the homes of the people it is shared with. Updating those copies
     // is the last step, so a failure there leaves the owner's tabs and the history up to date.
     async function sharedFile(name: string) {
@@ -137,6 +219,34 @@ describe('a change that has landed', () => {
         expect(error).toBeInstanceOf(Error);
         expect(events).toContain(SSEventType.DRIVE_PATH_RENAMED);
         expect(await historyOf(file.id)).toContain('renamed');
+    });
+
+    test('a rename that changes the type answers, reaches the open tabs and the history when the bytes cannot be read', async () => {
+        const file = await home.drive.createFileFromData(
+            mount.id,
+            rootId,
+            'landed-retype.bin',
+            'application/octet-stream',
+            Buffer.from(PNG),
+            alice,
+        );
+        const before = await settledTempFiles();
+        const events: string[] = [];
+        const broadcast = spyOn(home, 'broadcast').mockImplementation((event) => {
+            events.push(event.type);
+        });
+        const download = spyOn(mount, 'downloadToTemp').mockRejectedValueOnce(new Error('storage down'));
+        try {
+            await home.drive.renamePath(mount.id, file.id, 'landed-retype.png', alice);
+
+            expect(await mount.getPath(file.id)).toMatchObject({ name: 'landed-retype.png', mimeType: 'image/png' });
+            expect(events).toContain(SSEventType.DRIVE_PATH_RENAMED);
+            expect(await historyOf(file.id)).toContain('renamed');
+            expect(await settledTempFiles()).toEqual(before);
+        } finally {
+            download.mockRestore();
+            broadcast.mockRestore();
+        }
     });
 
     test('a sharing change reaches the open tabs and the history when the share copies fail', async () => {

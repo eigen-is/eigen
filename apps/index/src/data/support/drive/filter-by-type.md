@@ -5,7 +5,7 @@ type: how-to
 tags: [drive, files, images, filter, type]
 related: [drive/get-started]
 order: 80
-updated: 2026-09-13
+updated: 2026-11-12
 ---
 
 Drive shows you your files inside folders, but sometimes you want to see all your images, or all your chats, without hunting through every folder. The **Filters** section in the sidebar collects every file of a given type across all your drives in one list.
@@ -15,7 +15,7 @@ Drive shows you your files inside folders, but sometimes you want to see all you
 1. Open Drive.
 2. In the left sidebar, scroll to the **Filters** section.
 3. Click one of the filter rows:
-   - **All images**: shows every image file across your drives.
+   - **All images**: shows every image file across your drives, and the images someone shared with you directly.
    - **All docs**: opens Docs and lists your documents there.
    - **All stickies**: opens Stickies and lists your boards there.
    - **All chats**: shows every chat in your Drive.

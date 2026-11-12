@@ -24,9 +24,12 @@ import {
     drivePost,
     drivePut,
     driveUpload,
+    eventually,
     findOrFail,
     getTestContext,
+    TEST_PNG_BYTES,
 } from '../setup';
+import { webdavRequest } from '../webdav/setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 const BOB_EMAIL = 'bob@test.eigen.is';
@@ -141,18 +144,6 @@ describe('Drive', () => {
                 },
             );
             expect(res.status).toBe(400);
-        });
-
-        test('createFolder can create a typed container', async () => {
-            const home = await getHome(ctx.alice.user.id);
-            const created = await home.drive.createFolder(
-                aliceMountId,
-                aliceRootId,
-                'Typed.eigendoc',
-                home.user,
-                'doc',
-            );
-            expect(created.type).toBe('doc');
         });
     });
 
@@ -2707,6 +2698,41 @@ describe('Drive', () => {
             expect(res.status).toBe(200);
         });
 
+        test('a move into the folder the item is in changes nothing', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const file = await driveUpload(
+                token,
+                ctx.alice.user.id,
+                aliceMountId,
+                uniqueRoot,
+                new File(['x'], 'stays.txt'),
+            );
+            const { drive } = await getHome(ctx.alice.user.id);
+            const before = new Date('2001-02-03T04:05:06Z');
+            await drive.touchUpdatedAt(aliceMountId, file.id, before);
+            const url = `/webdav/${ctx.alice.user.id}/${aliceMountId}/UniqueNameTests/stays.txt`;
+            const lock = await webdavRequest(ctx.alice.user.email, 'LOCK', url, {
+                body: `<?xml version="1.0" encoding="utf-8" ?>
+<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`,
+                headers: { 'Content-Type': 'application/xml' },
+            });
+            expect(lock.status).toBe(200);
+
+            const moved = await drivePut<DrivePath>(token, ctx.alice.user.id, aliceMountId, `path/${file.id}/move`, {
+                targetParentId: uniqueRoot,
+            });
+
+            expect(new Date(moved.updatedAt)).toEqual(before);
+            expect((await drive.getPath(aliceMountId, file.id))?.updatedAt).toEqual(before);
+            const events = (await drive.getFileHistory(aliceMountId, file.id)).map((event) => event.eventType);
+            expect(events).not.toContain('moved');
+            expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'no token' })).status).toBe(423);
+            const unlock = await webdavRequest(ctx.alice.user.email, 'UNLOCK', url, {
+                headers: { 'Lock-Token': lock.headers.get('Lock-Token') ?? '' },
+            });
+            expect(unlock.status).toBe(204);
+        });
+
         test('name becomes available after deletion', async () => {
             const folder = await drivePost(
                 ctx.alice.user.sessionToken,
@@ -2749,6 +2775,149 @@ describe('Drive', () => {
                 },
             );
             expect(res.status).toBe(409);
+        });
+    });
+
+    describe('The name of a download', () => {
+        let folder: DrivePath;
+        const token = () => ctx.alice.user.sessionToken;
+        const ownerId = () => ctx.alice.user.id;
+
+        beforeAll(async () => {
+            folder = await drivePost(token(), ownerId(), aliceMountId, `folder/${aliceRootId}`, {
+                folderName: 'DownloadNames',
+            });
+        });
+
+        const upload = (parentId: string, name: string) =>
+            driveUpload(token(), ownerId(), aliceMountId, parentId, new File(['x'], name, { type: 'text/plain' }));
+
+        async function downloadName(pathId: string): Promise<string | null> {
+            const res = await authedRequest(token(), `/drive/${ownerId()}/${aliceMountId}/file/${pathId}/download`);
+            expect(res.status).toBe(200);
+            await res.text();
+            return res.headers.get('Content-Disposition');
+        }
+
+        test('a renamed file downloads under its new name', async () => {
+            const file = await upload(folder.id, 'draft.docx');
+            await drivePut(token(), ownerId(), aliceMountId, `path/${file.id}/rename`, { newName: 'final.docx' });
+            expect(await downloadName(file.id)).toBe('attachment; filename="final.docx"');
+        });
+
+        test('a file an office app saved over WebDAV downloads under the name it was moved to', async () => {
+            const base = `/webdav/${ownerId()}/${aliceMountId}/DownloadNames`;
+            const email = ctx.alice.user.email;
+            expect((await webdavRequest(email, 'PUT', `${base}/report.docx`, { body: 'v1' })).status).toBe(201);
+            expect((await webdavRequest(email, 'PUT', `${base}/~WRD0001.tmp`, { body: 'v2' })).status).toBe(201);
+            const move = await webdavRequest(email, 'MOVE', `${base}/~WRD0001.tmp`, {
+                headers: { Destination: `http://localhost${base}/report.docx`, Overwrite: 'T' },
+            });
+            expect(move.status).toBe(204);
+            const saved = await (await getHome(ownerId())).drive.resolvePath(
+                aliceMountId,
+                '/DownloadNames/report.docx',
+            );
+            if (!saved) throw new Error('expected the saved file');
+            expect(saved.details?.originalName).toBeUndefined();
+            expect(await downloadName(saved.id)).toBe('attachment; filename="report.docx"');
+        });
+
+        test('a numbered upload downloads under the name Drive shows', async () => {
+            await upload(folder.id, 'photo.png');
+            const second = await upload(folder.id, 'photo.png');
+            expect(second.name).not.toBe('photo.png');
+            expect(await downloadName(second.id)).toBe(`attachment; filename="${second.name}"`);
+        });
+
+        test("two uploads of one name into a document's media/ both download under that name", async () => {
+            const doc = await drivePost(token(), ownerId(), aliceMountId, `folder/${folder.id}/create/doc`, {
+                fileName: 'with-media',
+            });
+            const media = await (await getHome(ownerId())).drive.resolvePath(
+                aliceMountId,
+                `/DownloadNames/${doc.name}/media`,
+            );
+            if (!media) throw new Error('expected the media folder');
+            const first = await upload(media.id, 'photo.png');
+            const second = await upload(media.id, 'photo.png');
+            expect(second.name).not.toBe(first.name);
+            for (const file of [first, second]) {
+                expect(await downloadName(file.id)).toBe('attachment; filename="photo.png"');
+            }
+        });
+    });
+
+    describe('The type of a renamed file', () => {
+        let folder: DrivePath;
+        const token = () => ctx.alice.user.sessionToken;
+        const ownerId = () => ctx.alice.user.id;
+
+        beforeAll(async () => {
+            folder = await drivePost(token(), ownerId(), aliceMountId, `folder/${aliceRootId}`, {
+                folderName: 'RenamedTypes',
+            });
+        });
+
+        const upload = (name: string, type: string, bytes: BlobPart = 'x') =>
+            driveUpload(token(), ownerId(), aliceMountId, folder.id, new File([bytes], name, { type }));
+        const rename = (pathId: string, newName: string) =>
+            drivePut(token(), ownerId(), aliceMountId, `path/${pathId}/rename`, { newName });
+        const read = (pathId: string) => driveGet<DrivePath>(token(), ownerId(), aliceMountId, `path/${pathId}`);
+        const imageIds = async (): Promise<string[]> => {
+            const res = await authedRequest(token(), `/drive/${ownerId()}/${aliceMountId}/mime/image-png`);
+            return (await assertJson<DrivePath[]>(res)).map((path) => path.id);
+        };
+
+        test('a rename to an extension with a known type takes the type, a thumbnail and a place among the images', async () => {
+            const file = await upload('photo.bin', 'application/octet-stream', TEST_PNG_BYTES);
+            expect(file.mimeType).toBe('application/octet-stream');
+            expect(await imageIds()).not.toContain(file.id);
+
+            await rename(file.id, 'photo.png');
+            expect((await read(file.id)).mimeType).toBe('image/png');
+            expect(await imageIds()).toContain(file.id);
+            await eventually(async () => (await read(file.id)).thumbnail ?? undefined, 'the thumbnail');
+        });
+
+        test('a WebDAV MOVE that renames takes the type too', async () => {
+            const base = `/webdav/${ownerId()}/${aliceMountId}/RenamedTypes`;
+            const email = ctx.alice.user.email;
+            expect((await webdavRequest(email, 'PUT', `${base}/scan.bin`, { body: TEST_PNG_BYTES })).status).toBe(201);
+            const move = await webdavRequest(email, 'MOVE', `${base}/scan.bin`, {
+                headers: { Destination: `http://localhost${base}/scan.png` },
+            });
+            expect(move.status).toBe(201);
+            const moved = await (await getHome(ownerId())).drive.resolvePath(aliceMountId, '/RenamedTypes/scan.png');
+            if (!moved) throw new Error('expected the moved file');
+            expect(moved.mimeType).toBe('image/png');
+            expect(await imageIds()).toContain(moved.id);
+        });
+
+        test('a rename to an unknown or missing extension, or within one type, keeps the type', async () => {
+            const file = await upload('keeps.png', 'image/x-uploaded');
+            for (const newName of ['kept.png', 'kept.xyzq', 'kept']) {
+                await rename(file.id, newName);
+                expect((await read(file.id)).mimeType).toBe('image/x-uploaded');
+            }
+        });
+
+        test('a file renamed to a text type is found by its text', async () => {
+            const file = await upload('notes.bin', 'application/octet-stream', 'quokkaword in a note');
+            const { drive } = await getHome(ownerId());
+            const found = () => drive.search({ q: 'quokkaword', limit: 10 }).some((path) => path.id === file.id);
+            await rename(file.id, 'notes.txt');
+            await eventually(async () => found() || undefined, 'the text in the search index');
+        });
+
+        test('a renamed document keeps its type', async () => {
+            const doc = await drivePost(token(), ownerId(), aliceMountId, `folder/${folder.id}/create/doc`, {
+                fileName: 'TypeDoc',
+            });
+            await rename(doc.id, 'TypeDoc.png');
+            const renamed = await read(doc.id);
+            expect(renamed.name).toBe('TypeDoc.png');
+            expect(renamed.mimeType).toBe(doc.mimeType);
         });
     });
 
@@ -3508,11 +3677,13 @@ describe('Drive', () => {
             const source = await getSharedDrive(ctx.alice.user.id, actor!);
             const target = await getSharedDrive(teamOwner, actor!);
 
-            const copied = await source.copyPath(aliceMountId, uploaded.id, teamRootId, 'bridge-file.txt', actor!, {
-                drive: target,
-                ownerId: teamOwner,
-                mountId: teamMountId,
-            });
+            const copied = await source.copyPath(
+                aliceMountId,
+                uploaded.id,
+                { drive: target, mountId: teamMountId, parentId: teamRootId },
+                'bridge-file.txt',
+                actor!,
+            );
 
             expect(copied.ownerId).toBe(teamOwner);
             expect(copied.name).toBe('bridge-file.txt');
@@ -3539,11 +3710,13 @@ describe('Drive', () => {
             const source = await getSharedDrive(ctx.alice.user.id, actor!);
             const target = await getSharedDrive(teamOwner, actor!);
 
-            const copied = await source.copyPath(aliceMountId, doc.id, teamRootId, doc.name, actor!, {
-                drive: target,
-                ownerId: teamOwner,
-                mountId: teamMountId,
-            });
+            const copied = await source.copyPath(
+                aliceMountId,
+                doc.id,
+                { drive: target, mountId: teamMountId, parentId: teamRootId },
+                doc.name,
+                actor!,
+            );
 
             expect(copied.ownerId).toBe(teamOwner);
             expect(copied.type).toBe(DRIVE_TYPE_DOC);

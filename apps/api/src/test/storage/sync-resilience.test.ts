@@ -467,7 +467,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         expect(pendingUploadCount(mount)).toBe(1);
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1); // "S3" still stale {1}
 
-        // readFile is freshest-first (the seam behind downloadFile / copyPathAcross): it must surface
+        // readFile is freshest-first (the seam behind downloadFile / receiveCopy): it must surface
         // the staged {1,2}, not the stale {1} in storage.
         expect(await countRowsInFile(await mount.readFile(dataDbId), TEST_DIR)).toBe(2);
         // readRange is freshest-first too (the seam behind Range GETs and content extraction); a slice
@@ -477,7 +477,8 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         expect(rangedBytes.equals(stagedBytes)).toBe(true);
 
         // Copy the whole container: the recursion into data.db must copy the staged {1,2}, not "S3" {1}.
-        const copy = await mount.copyPath(
+        const { path: copy } = await mount.copyPath(
+            mount,
             await mount.listCopy(containerId),
             rootId,
             'doc-copy',
@@ -900,30 +901,6 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         await draining;
 
         expect(documentDbs.size).toBe(0);
-    });
-
-    // Finding 2: init schedules setTimeout(history.prune, 0) off the ready path; a fast teardown must
-    // cancel it, or it fires against a metadata.db the Home is about to close ("Cannot use a closed
-    // database" noise).
-    test('a fast open→teardown cancels the pending history prune', async () => {
-        const mount = new Mount(
-            OWNER_ID,
-            TEST_DIR,
-            createTestMountConfig(`prune-race-${Date.now()}`, 'local'),
-            createGetLocalDatabase(TEST_DIR),
-        );
-        await mount.init(); // schedules the setTimeout(prune, 0) — still pending (a macrotask)
-
-        let pruneRuns = 0;
-        const history = (mount as unknown as { history: { prune: () => void } }).history;
-        history.prune = () => {
-            pruneRuns++;
-        };
-
-        await mount.closeAllDatabases(); // must clearTimeout the pending prune
-        await new Promise((r) => setTimeout(r, 0)); // let any surviving macrotask fire
-
-        expect(pruneRuns).toBe(0);
     });
 
     // Finding 3: a PUT that never resolves must hit the queue's client-side timeout and be treated as

@@ -13,7 +13,7 @@ import type {
     ImportResult,
     RecentPath,
 } from '@workspace/lib/types/drive';
-import { EXPORT_SUMMARY_HEADER, isContainerType, isConvertTarget } from '@workspace/lib/types/drive';
+import { EXPORT_SUMMARY_HEADER, isConvertTarget } from '@workspace/lib/types/drive';
 import type { ClientFileEventInput, FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
@@ -33,7 +33,6 @@ import {
 import { getDrive, getSharedDrive, readImportSourceBytes } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { aggregateMimeContents, aggregateRecents, aggregateWatches } from '../lib/drive/aggregate';
-import { folderIn, withFreeName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { EXPORT_CSP } from '../lib/export/sanitize';
@@ -233,31 +232,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // Without this the client would retry and copy the tree twice.
             server?.timeout(request, 0);
             const sourceDrive = await getSharedDrive(params.ownerId, user);
-            const source = await sourceDrive.getPath(params.mountId, params.pathId);
-            if (!source) throw new ApiError(404, 'Source not found');
-            return await sourceDrive.withHomeHeld(async () => {
-                const sameMount = params.ownerId === body.targetOwnerId && params.mountId === body.targetMountId;
-
-                // Every copy needs read on the target folder, wherever it comes from.
-                const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
-                const target = await targetDrive.resolveFile(body.targetMountId, body.targetParentId);
-                if (!isContainerType(target.path.type)) throw new ApiError(404, 'Folder not found');
-                return await targetDrive.withHomeHeld(async () => {
-                    // NFC first: the store keeps names NFC, so the compare below has to see the same form.
-                    const desired = (body.name ?? source.name).replace(/[/\\]/g, '_').normalize('NFC');
-                    const to = sameMount
-                        ? undefined
-                        : { drive: targetDrive, ownerId: body.targetOwnerId, mountId: body.targetMountId };
-                    const copy = (name: string): Promise<DrivePath> =>
-                        sourceDrive.copyPath(params.mountId, params.pathId, body.targetParentId, name, user, to);
-                    // A file copied to another mount is uploaded there, and the upload picks its free name.
-                    if (!sameMount && !isContainerType(source.type)) return await copy(desired);
-
-                    // A WebDAV COPY overwrites or answers 409 instead, so the free name is picked here and not in
-                    // Drive.copyPath, which checks the target's limits and its own subtree for both.
-                    return await withFreeName(folderIn(target.mount, body.targetParentId), desired, copy);
-                });
-            });
+            const drive = await getSharedDrive(body.targetOwnerId, user);
+            const to = { drive, mountId: body.targetMountId, parentId: body.targetParentId };
+            return await sourceDrive.copyPath(params.mountId, params.pathId, to, body.name, user);
         },
         {
             body: t.Object({
@@ -291,7 +268,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/convert/:targetType',
         async ({ params, request, user, server }): Promise<DrivePath> => {
-            // The same as the export route: it sends nothing while the job waits and runs.
+            // It sends nothing while the job waits and runs, which can outlast the idle timeout.
             server?.timeout(request, 0);
             const { targetType } = params;
             if (!isConvertTarget(targetType)) {
@@ -311,7 +288,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/import',
         async ({ params, query, request, user, server }): Promise<ImportResult> => {
-            // The same as the export route: it sends nothing while the job waits and runs.
+            // It sends nothing while the job waits and runs, which can outlast the idle timeout.
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { path } = await drive.resolveFile(params.mountId, params.pathId);
@@ -340,7 +317,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/import-from-drive',
         async ({ params, body, request, user, server }): Promise<ImportResult> => {
-            // The same as the export route: it sends nothing while the job waits and runs.
+            // It sends nothing while the job waits and runs, which can outlast the idle timeout.
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { path } = await drive.resolveFile(params.mountId, params.pathId);
@@ -627,8 +604,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/request-access',
         async ({ params, user, body }) => {
-            // A guest can't be given a share, so there is nothing to request, the same as on the other
-            // share routes.
+            // A guest can't be given a share, so there is nothing to request.
             requireNonGuest(user);
             // This skips SharedDrive on purpose, since the caller has no access yet. propagateAccessRequest only
             // notifies the owner through the home relay and never reads the path for the requester.

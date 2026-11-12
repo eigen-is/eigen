@@ -155,6 +155,92 @@ test('a burst of uploads refetches the open folder listing once', async () => {
     expect(fetches).toBe(1);
 });
 
+// Emptying a trash of 500 items, or moving 500 files, sends one event per item too. The listings wait for the
+// burst to end, but each path's own detail is dropped or marked stale as its event arrives.
+describe.each([
+    [SSEventType.DRIVE_PATH_TRASHED, 'gone'],
+    [SSEventType.DRIVE_FILE_DELETED, 'gone'],
+    [SSEventType.DRIVE_FOLDER_DELETED, 'gone'],
+    [SSEventType.DRIVE_PATH_MOVED, 'stale'],
+    [SSEventType.DRIVE_PATH_RENAMED, 'stale'],
+] as const)('a burst of %s events', (type, detail) => {
+    test('refetches an open folder listing once per owner, and each path detail at once', async () => {
+        const queryClient = new QueryClient();
+        const owners = [OWNER, 'owner-2'];
+        const fetches: Record<string, number> = {};
+        const unsubscribes = owners.map((ownerId) =>
+            new QueryObserver(queryClient, {
+                queryKey: driveKeys.folder(ownerId, MOUNT, PARENT),
+                queryFn: async () => {
+                    fetches[ownerId] = (fetches[ownerId] ?? 0) + 1;
+                    return [];
+                },
+                staleTime: 60_000,
+            }).subscribe(() => {}),
+        );
+        await Bun.sleep(10);
+        for (const ownerId of owners) fetches[ownerId] = 0;
+
+        const details: string[] = [];
+        for (let i = 0; i < 20; i++) {
+            const ownerId = owners[i % 2];
+            const key = driveKeys.path(ownerId, MOUNT, `item-${i}`);
+            queryClient.setQueryData(key, { id: `item-${i}` });
+            handleDriveSSEvent(
+                { type, path: { ...driveEvent(type).path, ownerId, id: `item-${i}` }, oldParentId: PARENT },
+                queryClient,
+                VIEWER,
+            );
+            const state = queryClient.getQueryState(key);
+            details.push(state ? (state.isInvalidated ? 'stale' : 'fresh') : 'gone');
+        }
+        await Bun.sleep(400);
+        for (const unsubscribe of unsubscribes) unsubscribe();
+
+        expect(details).toEqual(Array(20).fill(detail));
+        expect(fetches).toEqual({ [OWNER]: 1, 'owner-2': 1 });
+    });
+});
+
+// The trash list is a listing too: a Trash view open while another tab empties it refetches once.
+test('a burst of deletes refetches the open trash list once', async () => {
+    const queryClient = new QueryClient();
+    let fetches = 0;
+    const unsubscribe = new QueryObserver(queryClient, {
+        queryKey: driveKeys.trashList(OWNER, MOUNT),
+        queryFn: async () => {
+            fetches++;
+            return [];
+        },
+        staleTime: 60_000,
+    }).subscribe(() => {});
+    await Bun.sleep(10);
+    fetches = 0;
+    for (let i = 0; i < 20; i++) {
+        const event = driveEvent(SSEventType.DRIVE_FILE_DELETED);
+        handleDriveSSEvent({ ...event, path: { ...event.path, id: `item-${i}` } }, queryClient, VIEWER);
+    }
+    await Bun.sleep(400);
+    unsubscribe();
+    expect(fetches).toBe(1);
+});
+
+// A breadcrumb holds the names of the folders above its path, so a folder's rename or move reaches the open
+// documents and folders below it.
+test.each([SSEventType.DRIVE_PATH_RENAMED, SSEventType.DRIVE_PATH_MOVED] as const)(
+    '%s refreshes the breadcrumb of an open item below the path',
+    async (type) => {
+        const queryClient = new QueryClient();
+        const below = driveKeys.breadcrumb(OWNER, MOUNT, 'doc-below');
+        const otherOwner = driveKeys.breadcrumb('owner-2', MOUNT, 'doc-elsewhere');
+        for (const key of [below, otherOwner]) queryClient.setQueryData(key, []);
+        handleDriveSSEvent(driveEvent(type), queryClient, VIEWER);
+        await Bun.sleep(400);
+        const invalidated = (key: readonly unknown[]) => queryClient.getQueryState(key)?.isInvalidated;
+        expect([invalidated(below), invalidated(otherOwner)]).toEqual([true, false]);
+    },
+);
+
 // A member's tab hears every change on a team drive and in the folders shared with them. It refetches, and that
 // is all: no toast and no entry in the bell.
 test('a drive event on a path someone else owns raises no toast and no notification', () => {
@@ -184,13 +270,37 @@ describe('handleDriveSSEvent — DRIVE_FILE_HISTORY_UPDATED', () => {
     });
 });
 
-// A delete is always a delete from the trash, so a Trash view open in another tab must drop the row.
-describe('handleDriveSSEvent — DRIVE_FILE_DELETED / DRIVE_FOLDER_DELETED', () => {
-    test("refreshes the mount's trash list", () => {
-        for (const type of [SSEventType.DRIVE_FILE_DELETED, SSEventType.DRIVE_FOLDER_DELETED] as const) {
-            const { queryClient, invalidated } = trackingClient();
-            handleDriveSSEvent(driveEvent(type), queryClient, VIEWER);
-            expect(hasKey(invalidated, driveKeys.trashList(OWNER, MOUNT))).toBe(true);
-        }
-    });
+// A delete is always a delete from the trash, so a Trash view open in another tab must drop the row. The sidebar
+// keeps every drive's trash list open, so the events that cannot change a trash leave it alone.
+test.each([
+    [SSEventType.DRIVE_PATH_TRASHED, true],
+    [SSEventType.DRIVE_PATH_RESTORED, true],
+    [SSEventType.DRIVE_FILE_DELETED, true],
+    [SSEventType.DRIVE_FOLDER_DELETED, true],
+    [SSEventType.DRIVE_FILE_CREATED, false],
+    [SSEventType.DRIVE_FILE_UPLOADED, false],
+    [SSEventType.DRIVE_FOLDER_CREATED, false],
+    [SSEventType.DRIVE_PATH_RENAMED, false],
+    [SSEventType.DRIVE_PATH_MOVED, false],
+] as const)("%s refreshes the owner's trash lists: %p", (type, refreshes) => {
+    const invalidated = invalidatedBy((queryClient) => handleDriveSSEvent(driveEvent(type), queryClient, VIEWER));
+    expect(hasKey(invalidated, driveKeys.trash(OWNER))).toBe(refreshes);
+});
+
+// Shared by me, Shared with me, Recent and Watched list items of several owners by name, and they are the viewer's.
+test.each([
+    SSEventType.DRIVE_PATH_RENAMED,
+    SSEventType.DRIVE_PATH_MOVED,
+    SSEventType.DRIVE_PATH_TRASHED,
+    SSEventType.DRIVE_FILE_DELETED,
+] as const)("%s refreshes the viewer's lists of other owners' items", (type) => {
+    const invalidated = invalidatedBy((queryClient) => handleDriveSSEvent(driveEvent(type), queryClient, VIEWER));
+    expect(
+        [
+            driveKeys.shared(VIEWER, 'by-me'),
+            driveKeys.shared(VIEWER, 'with-me'),
+            driveKeys.recent(VIEWER),
+            driveKeys.watchesAll(),
+        ].map((key) => hasKey(invalidated, key)),
+    ).toEqual([true, true, true, true]);
 });

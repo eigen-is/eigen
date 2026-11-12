@@ -1,26 +1,27 @@
-// Handles the drive events from the stream: each names one path, and the handler refetches the
-// queries that show it, such as its folder listing, its own detail, the trash and the search results.
-// handleSSEvent calls it for every event, and it ignores the events of the other domains.
+// Handles the drive events from the stream: each names one path. The handler refreshes that path's own
+// detail at once, and once per burst of events the owner's listings, such as its folders and the search
+// results, and the viewer's lists of several owners' items, such as Recent. handleSSEvent calls it for every
+// event, and it ignores the events of the other domains.
 
 import type { QueryClient } from '@tanstack/react-query';
 import { DRIVE_MIME_CHAT } from '@workspace/lib/types/drive';
 import type { SSEvent, SSEventTypeName } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { invalidateChatMatches } from '../chat/hooks/keys';
+import { invalidateCollabDocument } from '../collab/hooks/keys';
 import { debouncePerOwner } from '../debounce-per-owner';
 import { invalidateSearchOwner } from '../search';
 import { invalidateVersions } from '../versioning/hooks/keys';
 import {
+    driveKeys,
+    forgetPath,
     invalidateAclSharedOrUnshared,
     invalidateAclUpdated,
+    invalidateBreadcrumbs,
     invalidateEffectiveMembers,
-    invalidateItemCreated,
-    invalidateItemDeleted,
     invalidateListings,
     invalidatePath,
-    invalidatePathMoved,
-    invalidatePathRenamed,
-    invalidateTrash,
+    invalidateViewerLists,
 } from './hooks/keys';
 import { invalidateFileHistory } from './hooks/use-file-history';
 
@@ -37,15 +38,28 @@ const CHAT_MATCH_EVENTS = new Set<SSEventTypeName>([
     SSEventType.DRIVE_FOLDER_DELETED,
 ]);
 
-// A burst, such as 500 files dropped into a team folder, sends every open tab of every member one event
-// per file. Each invalidation restarts the open listing's fetch, and 500 fetches per tab trip the server's
-// per-IP rate limit, which the tabs of one office share. So the listings refetch once, after the burst,
-// and every 1.5 s while a long upload goes on.
-const invalidateNewPathsSoon = debouncePerOwner(
+// A burst, such as 500 files dropped into a team folder or a trash of 500 items emptied, sends every open
+// tab of every member one event per item. Each invalidation restarts the open listing's fetch, and 500
+// fetches per tab trip the server's per-IP rate limit, which the tabs of one office share. So the listings
+// refetch once, after the burst, and every 1.5 s while a long upload goes on.
+const invalidateListingsSoon = debouncePerOwner(
     (queryClient, ownerId) => {
         invalidateListings(queryClient, ownerId);
+        invalidateBreadcrumbs(queryClient, ownerId);
         invalidateSearchOwner(queryClient, ownerId);
         invalidateFileHistory(queryClient, ownerId);
+    },
+    250,
+    1500,
+);
+
+// Keyed by the viewer, whose lists these are, where the listings above are keyed by the path's owner.
+const invalidateViewerListsSoon = debouncePerOwner(invalidateViewerLists, 250, 1500);
+
+// The sidebar keeps every drive's trash list open, so only the events that change a trash refetch it.
+const invalidateTrashSoon = debouncePerOwner(
+    (queryClient, ownerId) => {
+        queryClient.invalidateQueries({ queryKey: driveKeys.trash(ownerId) });
     },
     250,
     1500,
@@ -64,69 +78,40 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
         case SSEventType.DRIVE_ACL_UNSHARED:
         case SSEventType.DRIVE_ACL_UPDATED:
             invalidateAclSharedOrUnshared(queryClient, userId);
-            invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
+            invalidateAclUpdated(queryClient, path);
             invalidateEffectiveMembers(queryClient, path.ownerId);
             invalidateFileHistory(queryClient, path.ownerId);
-            break;
-
-        case SSEventType.DRIVE_FOLDER_CREATED:
-        case SSEventType.DRIVE_FILE_CREATED:
-            invalidateNewPathsSoon(queryClient, path.ownerId);
-            break;
-
-        case SSEventType.DRIVE_FILE_UPLOADED:
-            // An overwrite keeps the path, so its own detail refetches too. The size, the thumbnail's
-            // cache-bust and the text preview's key all come from it. It refetches only while it is open.
-            invalidatePath(queryClient, path.ownerId, path.mountId, path.id);
-            invalidateNewPathsSoon(queryClient, path.ownerId);
-            break;
-
-        case SSEventType.DRIVE_FOLDER_DELETED:
-        case SSEventType.DRIVE_FILE_DELETED:
-            invalidateItemDeleted(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
-            invalidateTrash(queryClient, path.ownerId, path.mountId);
-            invalidateSearchOwner(queryClient, path.ownerId);
-            invalidateFileHistory(queryClient, path.ownerId);
-            break;
-
-        case SSEventType.DRIVE_PATH_RENAMED:
-            invalidatePathRenamed(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
-            invalidateSearchOwner(queryClient, path.ownerId);
-            invalidateFileHistory(queryClient, path.ownerId);
-            break;
-
-        case SSEventType.DRIVE_PATH_MOVED:
-            invalidatePathMoved(queryClient, path.ownerId, path.mountId, path.id, path.parentId, event.oldParentId);
-            invalidateFileHistory(queryClient, path.ownerId);
-            break;
-
-        case SSEventType.DRIVE_PATH_TRASHED:
-            if (event.oldParentId) {
-                invalidateItemDeleted(
-                    queryClient,
-                    path.ownerId,
-                    path.mountId,
-                    path.id,
-                    event.oldParentId,
-                    path.mimeType,
-                );
-            }
-            invalidateTrash(queryClient, path.ownerId, path.mountId);
-            invalidateSearchOwner(queryClient, path.ownerId);
-            invalidateFileHistory(queryClient, path.ownerId);
-            break;
-
-        case SSEventType.DRIVE_PATH_RESTORED:
-            invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.parentId, path.mimeType);
-            invalidateTrash(queryClient, path.ownerId, path.mountId);
-            invalidateSearchOwner(queryClient, path.ownerId);
-            invalidateFileHistory(queryClient, path.ownerId);
-            break;
+            return;
 
         // A restore and Delete history record a file event too, so the document's version list refetches with it.
         case SSEventType.DRIVE_FILE_HISTORY_UPDATED:
             invalidateFileHistory(queryClient, path.ownerId);
             invalidateVersions(queryClient, path.ownerId, path.mountId, path.id);
+            return;
+
+        // An open preview reads the path's detail: an overwrite changes its size, its thumbnail's cache-bust
+        // and its text preview's key.
+        case SSEventType.DRIVE_FILE_UPLOADED:
+        case SSEventType.DRIVE_PATH_MOVED:
+            invalidatePath(queryClient, path.ownerId, path.mountId, path.id);
+            break;
+
+        case SSEventType.DRIVE_PATH_RENAMED:
+            invalidatePath(queryClient, path.ownerId, path.mountId, path.id);
+            invalidateCollabDocument(queryClient, path.ownerId, path.mountId, path.id);
+            break;
+
+        case SSEventType.DRIVE_PATH_TRASHED:
+        case SSEventType.DRIVE_FOLDER_DELETED:
+        case SSEventType.DRIVE_FILE_DELETED:
+            forgetPath(queryClient, path.ownerId, path.mountId, path.id);
+            invalidateTrashSoon(queryClient, path.ownerId);
+            break;
+
+        case SSEventType.DRIVE_PATH_RESTORED:
+            invalidateTrashSoon(queryClient, path.ownerId);
             break;
     }
+    invalidateListingsSoon(queryClient, path.ownerId);
+    invalidateViewerListsSoon(queryClient, userId);
 }

@@ -62,7 +62,7 @@ The exports keep their own walks over their part of the document, and share with
 
 One function (`sweepDocument`, `apps/api/src/lib/drive/sweep.ts`) removes what a document's current state does not name, and `sweepCopy` runs it on each document a copy made, over only the parts that copy wrote. It reads the state through the same `data.db` read an export makes, so an open and a closed document read alike. It deletes the unnamed media and the threads no card in use names that nobody wrote in for the grace, through `Mount.deletePath`, so the folder sizes and the quota follow, then their `comments.db` rows and mentions. It runs again inside each thread it keeps, with the thread's messages as the state, so a file no message names goes too. Later it runs inside an embedded sheet or drawing, with that type's reader. Any failure logs and deletes nothing more. [MEDIA-REFERENCES.md](../MEDIA-REFERENCES.md#the-sweep-reads-the-state-once-and-deletes-nothing-more-after-a-failure) has the reads.
 
-**A thread goes before its row.** A swept thread's `comments.db` row and its `comment_mentions` rows go after the thread: an orphan row is harmless, but a thread without a row heals as open and unassigned and would lose its status. No person trashes, renames or moves a part of a document on its own ([STORAGE.md](../STORAGE.md#a-person-never-trashes-renames-or-moves-a-part-of-a-document)), so a thread that is not in `chat/` is gone, and its row goes too.
+**A thread goes before its row.** A swept thread's `comments.db` row and its `comment_mentions` rows go after the thread: an orphan row is harmless, but a thread without a row heals as open and unassigned and would lose its status. No person trashes, renames or moves a part of a document on its own ([STORAGE.md](../STORAGE.md#a-person-only-adds-new-files-and-threads-inside-a-document)), so a thread that is not in `chat/` is gone, and its row goes too.
 
 ### A swept thread leaves pointers behind
 
@@ -72,7 +72,7 @@ So one rule marks a comment deleted: its thread is gone from `chat/`, or its hos
 
 ### A copy keeps only what its state names
 
-A Drive copy writes every part's bytes and leaves the versions behind, then sweeps each document it made with no grace (`sweepCopy`). The sweep only considers the parts the copy wrote, matched by name against the listing it wrote from. A copy to another drive shows in the target's tabs as each piece lands, so a part someone adds to it meanwhile is never a candidate. So the copy holds what the source's state names, plus whatever someone added since, and the source keeps everything. [STORAGE.md](../STORAGE.md#copy-goes-anywhere-a-move-stays-in-its-mount) has the rest. A portable package ([PROPOSAL_PORTABLE_DOCUMENTS.md](PROPOSAL_PORTABLE_DOCUMENTS.md)) packs only the names a state uses when it is built.
+A Drive copy writes every part's bytes and leaves the versions behind, then sweeps each document it made with no grace (`sweepCopy`). The sweep only considers the parts the copy wrote, known by the ids the copy returns. A copy to another drive shows in the target's tabs as each piece lands, so a part someone adds to it meanwhile is never a candidate. So the copy holds what the source's state names, plus whatever someone added since, and the source keeps everything. [STORAGE.md](../STORAGE.md#copy-goes-anywhere-a-move-stays-in-its-mount) has the rest. A portable package ([PROPOSAL_PORTABLE_DOCUMENTS.md](PROPOSAL_PORTABLE_DOCUMENTS.md)) packs only the names a state uses when it is built.
 
 ### A version of a document is a set
 

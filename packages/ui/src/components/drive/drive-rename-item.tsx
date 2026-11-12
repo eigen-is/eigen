@@ -15,12 +15,7 @@ export type DriveRenameItemProps = {
 };
 
 export function DriveRenameItem({ path, open, onOpenChange, onAfterAction }: DriveRenameItemProps) {
-    const renamePathMutation = useRenamePath(
-        path.ownerId,
-        path.mountId,
-        path.parentId || undefined,
-        path.mimeType || undefined,
-    );
+    const renamePathMutation = useRenamePath();
     const isFolder = isFolderType(path.type);
     const dotIndex = path.name.lastIndexOf('.');
     // A leading dot, as in .gitignore, is part of the name rather than an extension.
@@ -29,7 +24,7 @@ export function DriveRenameItem({ path, open, onOpenChange, onAfterAction }: Dri
 
     const handleRename = async (typedName: string) => {
         const newName = typedName.endsWith(extension) ? typedName : typedName + extension;
-        await renamePathMutation.mutateAsync({ pathId: path.id, newName });
+        await renamePathMutation.mutateAsync({ path, newName });
         onAfterAction?.('rename', { name: newName });
     };
 

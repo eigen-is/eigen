@@ -6,7 +6,7 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { ApiError, storageUnavailable } from '../core/errors';
 import { consumeStream, eventLoopTurn } from '../core/stream';
-import type { StorageFile } from './types';
+import type { FileBytes, StorageFile } from './types';
 
 // Eigen's own bound on an S3 metadata call and on a storage read that stops delivering bytes: Bun's
 // S3Client gives up only after about 360 s of silence.
@@ -129,7 +129,7 @@ export async function readStorageFile(
 // deadline; a request body is the client's to pace.
 export async function writeTempWithHash(
     tempPath: string,
-    data: Buffer | Uint8Array | StorageFile | ReadableStream<Uint8Array>,
+    data: FileBytes,
     opts: { signal?: AbortSignal; yields?: boolean } = {},
 ): Promise<{ size: number; hash: string }> {
     const hasher = new Bun.CryptoHasher('sha256');

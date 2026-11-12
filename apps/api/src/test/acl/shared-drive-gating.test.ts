@@ -71,6 +71,7 @@ describe('SharedDrive gating enumeration', () => {
         requireRead: { gate: 'private-helper', reason: 'the read gate itself' },
         requireWrite: { gate: 'private-helper', reason: 'the write gate itself' },
         requireDriveOwner: { gate: 'private-helper', reason: 'the drive-wide listing and trash gate' },
+        requireMove: { gate: 'private-helper', reason: 'the write gates of a move, on source and target' },
         isEffectiveOwner: { gate: 'private-helper', reason: 'team co-owner check feeding the gates' },
         sharingRestrictedFor: { gate: 'private-helper', reason: 'the sharingRestricted gate for ACL changes' },
 
@@ -203,7 +204,12 @@ describe('SharedDrive gating enumeration', () => {
         copyPath: {
             gate: 'denies',
             reason: 'read-gated on source, write-gated on target',
-            call: (sd) => sd.copyPath(mountId, fileId, folderId, 'copy.txt', charlie),
+            call: (sd) => sd.copyPath(mountId, fileId, { drive: sd, mountId, parentId: folderId }, 'copy.txt'),
+        },
+        copyPathOver: {
+            gate: 'denies',
+            reason: 'read-gated on source, write-gated on target',
+            call: (sd) => sd.copyPathOver(mountId, fileId, folderId, 'copy.txt', null),
         },
         writeFileContent: {
             gate: 'denies',
@@ -213,7 +219,7 @@ describe('SharedDrive gating enumeration', () => {
         createFolder: {
             gate: 'denies',
             reason: 'write-gated on the parent',
-            call: (sd) => sd.createFolder(mountId, folderId, 'intruder', charlie),
+            call: (sd) => sd.createFolder(mountId, folderId, 'intruder'),
         },
         uploadFiles: {
             gate: 'denies',
@@ -231,10 +237,24 @@ describe('SharedDrive gating enumeration', () => {
             reason: 'write-gated on the parent',
             call: (sd) => sd.createFileFromData(mountId, folderId, 'intruder.txt', 'text/plain', Buffer.from('x')),
         },
+        createNamedFile: {
+            gate: 'denies',
+            reason: 'write-gated on the parent',
+            call: (sd) => sd.createNamedFile(mountId, folderId, 'intruder.txt', 'text/plain', Buffer.from('x')),
+        },
         create: {
             gate: 'denies',
             reason: 'write-gated on the parent',
             call: (sd) => sd.create(mountId, folderId, 'intruder', 'doc'),
+        },
+        receiveCopy: {
+            gate: 'denies',
+            reason: 'write-gated on the destination folder',
+            call: async (sd) => {
+                const { drive } = await getHome(ctx.alice.user.id);
+                const { mount, path } = await drive.resolveFile(mountId, fileId);
+                return sd.receiveCopy(mountId, folderId, mount, path, 'intruder.txt');
+            },
         },
         emailCollaborators: {
             gate: 'denies',
@@ -252,15 +272,15 @@ describe('SharedDrive gating enumeration', () => {
             call: (sd) => sd.updateACLDelta(mountId, fileId, { add: [{ id: charlie.email, read: true, write: true }] }),
         },
         deletePath: { gate: 'denies', reason: 'write-gated', call: (sd) => sd.deletePath(mountId, fileId) },
-        deleteFailedCopy: {
+        ancestorIds: {
             gate: 'denies',
-            reason: 'write-gated: it can delete for good, without the trash',
-            call: (sd) => sd.deleteFailedCopy(mountId, folderId, new Set([folderId])),
+            reason: 'read-gated on the path: it gives the ids of every folder above it',
+            call: (sd) => sd.ancestorIds(mountId, fileId),
         },
-        releaseLocksUnder: {
+        descendantIds: {
             gate: 'denies',
-            reason: 'write-gated: it drops the locks of other users',
-            call: (sd) => sd.releaseLocksUnder(mountId, fileId),
+            reason: 'read-gated: it names every path under a folder',
+            call: (sd) => sd.descendantIds(mountId, folderId),
         },
         renamePath: {
             gate: 'denies',
@@ -271,6 +291,11 @@ describe('SharedDrive gating enumeration', () => {
             gate: 'denies',
             reason: 'write-gated on source and target',
             call: (sd) => sd.movePath(mountId, fileId, folderId),
+        },
+        movePathOver: {
+            gate: 'denies',
+            reason: 'write-gated on source and target',
+            call: (sd) => sd.movePathOver(mountId, fileId, folderId, 'moved.txt', null),
         },
         saveVersion: { gate: 'denies', reason: 'write-gated', call: (sd) => sd.saveVersion(mountId, docId) },
         restoreContainer: {
@@ -350,4 +375,51 @@ describe('SharedDrive gating enumeration', () => {
             }
         });
     }
+
+    const refusal = (call: Promise<unknown>): Promise<unknown> =>
+        call.then(
+            () => null,
+            (e: unknown) => (e instanceof ApiError ? `${e.status} ${e.message}` : e),
+        );
+
+    test('a copy into a folder the caller may only read is a 403 and writes nothing', async () => {
+        const home = await getHome(ctx.alice.user.id);
+        const bob = await getUserById(ctx.bob.user.id);
+        if (!bob) throw new Error('bob user not found');
+        const folder = await home.drive.createFolder(mountId, folderId, 'Read Only Probe', home.user);
+        const file = await home.drive.createFileFromData(
+            mountId,
+            folder.id,
+            'readable.txt',
+            'text/plain',
+            Buffer.from('x'),
+            home.user,
+        );
+        const share = { add: [{ id: bob.email, read: true, write: false }] };
+        await home.drive.updateACLDelta(mountId, folder.id, share, undefined, undefined, home.user);
+        const reader = new SharedDrive(home, bob);
+        expect((await reader.resolveFile(mountId, file.id)).path.id).toBe(file.id);
+
+        const to = { drive: reader, mountId, parentId: folder.id };
+        expect(await refusal(reader.copyPath(mountId, file.id, to, 'copy.txt'))).toBe(
+            '403 No write permission on target folder',
+        );
+        expect(await refusal(reader.copyPathOver(mountId, file.id, folder.id, 'copy.txt', null))).toBe(
+            '403 No write permission on target folder',
+        );
+        expect((await home.drive.getFolderContents(mountId, folder.id)).map((path) => path.name)).toEqual([
+            'readable.txt',
+        ]);
+    });
+
+    test('a copy of a path the caller may not read into their own drive is a 403 and writes nothing', async () => {
+        const { drive } = await getHome(charlie.id);
+        const [mount] = drive.getMounts();
+        const root = mount ? await mount.getRootFolder() : null;
+        if (!mount || !root) throw new Error('charlie has no drive');
+
+        const to = { drive, mountId: mount.id, parentId: root.id };
+        expect(await refusal(sd.copyPath(mountId, fileId, to, 'stolen.txt'))).toBe('403 No read permission on source');
+        expect(await drive.getChildByName(mount.id, root.id, 'stolen.txt')).toBeNull();
+    });
 });

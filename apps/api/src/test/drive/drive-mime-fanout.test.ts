@@ -155,4 +155,39 @@ describe('Aggregate mime endpoint with team fan-out', () => {
         expect(matches.length).toBe(1);
         expect(matches[0].hash).not.toBeNull();
     });
+
+    test('a type prefix finds a shared file the way it finds an own one, and an exact type only itself', async () => {
+        const aliceToken = ctx.alice.user.sessionToken;
+        const aliceId = ctx.alice.user.id;
+        const mountId = await firstMountId(aliceToken, aliceId);
+        const root = await driveGet(aliceToken, aliceId, mountId, 'root');
+        const fanout = await uploadFanout(aliceToken, aliceId, mountId, 'shared-fanout.bin');
+        const other = await driveUpload(
+            aliceToken,
+            aliceId,
+            mountId,
+            root.id,
+            new File(['other'], 'shared-other.bin', { type: 'application/x-eigen-other' }),
+        );
+        for (const file of [fanout, other]) {
+            await drivePut(aliceToken, aliceId, mountId, `path/${file.id}/acl`, {
+                add: [{ id: ctx.bob.user.email, read: true, write: false }],
+                visibility: 'private',
+            });
+        }
+
+        const bobList = async (segment: string): Promise<Set<string>> => {
+            const items = await assertJson<DrivePath[]>(
+                await authedRequest(ctx.bob.user.sessionToken, `/drive/${ctx.bob.user.id}/mime/${segment}`),
+            );
+            return new Set(items.map((p) => p.id));
+        };
+        const byPrefix = await bobList('application-x-eigen-');
+        expect(byPrefix.has(fanout.id)).toBe(true);
+        expect(byPrefix.has(other.id)).toBe(true);
+
+        const exact = await bobList(MIME_SEGMENT);
+        expect(exact.has(fanout.id)).toBe(true);
+        expect(exact.has(other.id)).toBe(false);
+    });
 });

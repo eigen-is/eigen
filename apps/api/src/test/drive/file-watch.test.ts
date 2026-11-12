@@ -759,7 +759,9 @@ describe('File events: collab edits, client posts, comments', () => {
         // comment-…" rows the design suppresses).
         test('entities created inside an eigendoc container stay out of the timeline', async () => {
             const board = await createDoc('SuppressBoard', 'stickies');
-            const thread = await drivePost(aliceToken, aliceOwnerId, mountId, `folder/${board.id}/create/chat`, {
+            const children = await driveGet<DrivePath[]>(aliceToken, aliceOwnerId, mountId, `folder/${board.id}`);
+            const chatFolder = findOrFail(children, (c) => c.name === 'chat');
+            const thread = await drivePost(aliceToken, aliceOwnerId, mountId, `folder/${chatFolder.id}/create/chat`, {
                 fileName: 'comment-internal',
             });
             expect(thread.id).toBeDefined();
@@ -771,12 +773,13 @@ describe('File events: collab edits, client posts, comments', () => {
             const chat = await drivePost(aliceToken, aliceOwnerId, mountId, `folder/${rootId}/create/chat`, {
                 fileName: 'TeamChat',
             });
-            const sub = await drivePost(aliceToken, aliceOwnerId, mountId, `folder/${chat.id}`, {
-                folderName: 'media2',
-            });
-            expect(sub.id).toBeDefined();
+            const children = await driveGet<DrivePath[]>(aliceToken, aliceOwnerId, mountId, `folder/${chat.id}`);
+            const media = findOrFail(children, (c) => c.name === 'media');
+            const file = new File(['x'], 'attachment.txt', { type: 'text/plain' });
+            const attachment = await driveUpload<DrivePath>(aliceToken, aliceOwnerId, mountId, media.id, file);
+            expect(attachment.parentId).toBe(media.id);
             const evts = await history(chat.id);
-            expect(evts.some((e) => e.pathName === 'media2')).toBe(false);
+            expect(evts.some((e) => e.pathName === 'attachment.txt')).toBe(false);
         });
     });
 

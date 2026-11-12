@@ -17,7 +17,7 @@ import {
     settlesWithin,
     waitFor,
 } from '../fault-storage-helpers';
-import { seedFile } from '../mount-test-helpers';
+import { overwriteFile, seedFile } from '../mount-test-helpers';
 
 // Shutdown drain, further edits and direct (non-queued) PUTs while one PUT is parked on the wire.
 
@@ -204,9 +204,9 @@ describe('direct (non-queued) PUTs', () => {
         const key = await mount.getStorageKey(fileId);
 
         fault.parkWrites = true;
-        const first = mount.writeFile(fileId, Buffer.from('v1'));
+        const first = overwriteFile(mount, fileId, Buffer.from('v1'));
         const firstPut = await fault.waitForParked((p) => p.key === key);
-        const second = mount.writeFile(fileId, Buffer.from('v2'));
+        const second = overwriteFile(mount, fileId, Buffer.from('v2'));
         const isSecond = (p: ParkedWrite) => p !== firstPut;
         // The path lock holds the second write behind the first, so its PUT never starts while the first is parked.
         const secondParkedEarly = await fault.waitForParked(isSecond, STALL_BOUND_MS).then(
@@ -230,7 +230,7 @@ describe('direct (non-queued) PUTs', () => {
         const key = await mount.getStorageKey(fileId);
 
         fault.parkWrites = true;
-        const write = mount.writeFile(fileId, Buffer.from('v1')).catch(() => {});
+        const write = overwriteFile(mount, fileId, Buffer.from('v1')).catch(() => {});
         await fault.waitForParked((p) => p.key === key);
         await mount.deletePath(fileId);
         expect(await mount.getPath(fileId)).toBeNull();

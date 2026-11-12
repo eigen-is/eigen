@@ -67,6 +67,21 @@ describe('WebDAV PROPPATCH', () => {
         expect(await res.text()).toContain('HTTP/1.1 403 Forbidden');
     });
 
+    test('the href names the path under the API base path', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-base.txt`, { body: 'b' });
+        const before = process.env['VITE_API_HOST'];
+        process.env['VITE_API_HOST'] = '/eigen';
+        try {
+            const res = await webdavRequest(ctx.alice.user.email, 'PROPPATCH', `${baseHref}/proppatch-base.txt`, {
+                body: `<D:propertyupdate xmlns:D="DAV:" xmlns:Z="urn:eigen-test"><D:set><D:prop><Z:Tag>t</Z:Tag></D:prop></D:set></D:propertyupdate>`,
+            });
+            expect(await res.text()).toContain(`<D:href>/eigen${baseHref}/proppatch-base.txt</D:href>`);
+        } finally {
+            if (before === undefined) delete process.env['VITE_API_HOST'];
+            else process.env['VITE_API_HOST'] = before;
+        }
+    });
+
     test('PROPPATCH with one refused op saves nothing: 403 for it, 424 for the rest', async () => {
         await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-atomic.txt`, { body: 'd' });
         const body = `<?xml version="1.0"?>

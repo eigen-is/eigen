@@ -290,10 +290,10 @@ describe('FileHistory', () => {
         expect(events).toHaveLength(2);
     });
 
-    test('prune trims per-path rows beyond 500', async () => {
+    test('a recorded event trims its path to the newest 500 rows', async () => {
         const fileId = await mount.touchFile(rootId, 'prune-test.txt', 'text/plain');
 
-        // Seed 502 events via raw insert; prune should trim back to 500
+        // Seeded past the limit, as rows an older build left.
         for (let i = 0; i < 502; i++) {
             metaDb.db
                 .insert(fileEvents)
@@ -304,18 +304,30 @@ describe('FileHistory', () => {
                     actorUserId: 'u6',
                     actorEmail: 'u6@test',
                     details: null,
-                    createdAt: new Date(),
+                    createdAt: new Date(Date.now() - 60_000),
                 })
                 .run();
         }
+        expect(mount.history.list(fileId, { limit: 600 })).toHaveLength(502);
 
-        const beforePrune = mount.history.list(fileId, { limit: 600 });
-        expect(beforePrune.length).toBe(502);
+        mount.history.record({ pathId: fileId, eventType: 'restored', actor: { id: 'u6', email: 'u6@test' } });
 
-        mount.history.prune();
+        const trimmed = mount.history.list(fileId, { limit: 600 });
+        expect(trimmed).toHaveLength(500);
+        expect(trimmed[0].eventType).toBe('restored');
+    });
 
-        const afterPrune = mount.history.list(fileId, { limit: 600 });
-        expect(afterPrune.length).toBe(500);
+    test('recording alone never lets a path grow past 500 rows', async () => {
+        const fileId = await mount.touchFile(rootId, 'record-only.txt', 'text/plain');
+        const otherId = await mount.touchFile(rootId, 'record-other.txt', 'text/plain');
+        mount.history.record({ pathId: otherId, eventType: 'restored', actor: { id: 'u6', email: 'u6@test' } });
+
+        for (let i = 0; i < 510; i++) {
+            mount.history.record({ pathId: fileId, eventType: 'restored', actor: { id: 'u6', email: 'u6@test' } });
+        }
+
+        expect(mount.history.list(fileId, { limit: 600 })).toHaveLength(500);
+        expect(mount.history.list(otherId, { limit: 600 })).toHaveLength(1);
     });
 });
 
@@ -333,7 +345,7 @@ describe('FileHistory edited-row prune', () => {
         metaDb = captured.get('mounts/test-prune-old/metadata.db')!;
     });
 
-    test('prune trims edited rows beyond 100 but keeps an older structural row', async () => {
+    test('a recorded edit trims edited rows beyond 100 but keeps an older structural row', async () => {
         const fileId = await mount.touchFile(rootId, 'edited-events.txt', 'text/plain');
 
         // Backdated so it is the oldest row: an age cap or a naive trim would drop it first.
@@ -367,11 +379,11 @@ describe('FileHistory edited-row prune', () => {
 
         expect(mount.history.list(fileId, { limit: 600 })).toHaveLength(151);
 
-        mount.history.prune();
+        mount.history.record({ pathId: fileId, eventType: 'edited', actor: { id: 'u7', email: 'u7@test' } });
 
-        const afterPrune = mount.history.list(fileId, { limit: 600 });
-        expect(afterPrune).toHaveLength(101);
-        expect(afterPrune.at(-1)?.eventType).toBe('created');
+        const trimmed = mount.history.list(fileId, { limit: 600 });
+        expect(trimmed).toHaveLength(101);
+        expect(trimmed.at(-1)?.eventType).toBe('created');
     });
 });
 
@@ -531,7 +543,13 @@ describe('Drive history recording', () => {
 
         const actor = await getUserById(ctx.alice.user.id);
         expect(actor).not.toBeNull();
-        const copied = await home.drive.copyPath(aliceMountId, folder.id, destFolder.id, 'CopiedFolder', actor!);
+        const copied = await home.drive.copyPath(
+            aliceMountId,
+            folder.id,
+            { drive: home.drive, mountId: aliceMountId, parentId: destFolder.id },
+            'CopiedFolder',
+            actor!,
+        );
 
         // Root folder copy records 'copied'
         const res = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${aliceMountId}/path/${copied.id}/history`);

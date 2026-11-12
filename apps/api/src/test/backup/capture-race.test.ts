@@ -10,6 +10,7 @@ import { verifyFolder } from '../../lib/backup/verify';
 import { getHome } from '../../lib/home/get-home';
 import { Mount } from '../../lib/mount/mount';
 import { paths } from '../../lib/mount/schema';
+import { overwriteFile } from '../mount-test-helpers';
 import type { TestUser } from '../setup';
 import {
     assertJson,
@@ -166,7 +167,7 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         // Indexed with its old bytes when the database is copied.
         mount.clearContentDirty(single.id);
         const overwritten = Buffer.from('single, overwritten');
-        const { folder } = await captureDuring(user, () => mount.writeFile(single.id, overwritten));
+        const { folder } = await captureDuring(user, () => overwriteFile(mount, single.id, overwritten));
         expect(readFileSync(join(folder, 'home/mounts', M, 'data/zz-single.txt'))).toEqual(overwritten);
         expect(archivedRow(folder, single.id)).toMatchObject({
             size: overwritten.byteLength,
@@ -427,7 +428,7 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
             if (key === bigKey && !overwritten) {
                 const { promise, resolve } = Promise.withResolvers<unknown>();
                 overwritten = promise;
-                setImmediate(() => resolve(mount.writeFile(big.id, Buffer.alloc(size, 1))));
+                setImmediate(() => resolve(overwriteFile(mount, big.id, Buffer.alloc(size, 1))));
             }
             return readKey.call(this, key);
         });

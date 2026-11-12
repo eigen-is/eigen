@@ -17,7 +17,7 @@ export const DRIVE_CAPABILITIES = {
         showBreadcrumb: true,
     },
     // Flat views over existing items (mime filters, per-app doc lists): act on the items, but no
-    // folder ops, because a move needs the folder context these views lack.
+    // folder ops. They also list items shared with the viewer, whose drive the move picker can't open.
     listing: {
         canCreateFolder: false,
         canUpload: false,

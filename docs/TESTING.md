@@ -49,7 +49,7 @@ Setup is lazy: the setup wizard runs once per file, when a test first awaits `en
 
 Each Home's idle timeout and Elysia's sucrose cache sweep are unref'd timers whose callbacks keep a finished file's whole app alive. The preload's `afterAll` clears them with `shutdownAllHomes()` and `clearSucroseCache(0)`; a `(fail) (unnamed) hook timed out` after the last file is that hook. `--isolate` needs Bun 1.4.1 or newer (`.bun-version`): older Bun leaks every finished file's globals.
 
-A native Worker that outlives its test file crashes the parallel suite with `panic: NAPI FATAL ERROR: napi_define_properties`. Register such a job on its Mount, as `thumbnailJobs` does, so `closeAllDatabases` drains it. Never add `documentTransformRunner.close()` to the preload.
+A native Worker that outlives its test file crashes the parallel suite with `panic: NAPI FATAL ERROR: napi_define_properties`. Start such a job through `Mount.runInBackground`, as a thumbnail does, so `closeAllDatabases` waits for it. Never add `documentTransformRunner.close()` to the preload.
 
 ## Every package test file runs isolated, so file order doesn't matter
 

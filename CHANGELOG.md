@@ -4,9 +4,34 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Added
+
+- **Location in Drive** — the details panel shows the drive and folders a file is in, and links to its folder. For a file shared with you, it starts at the owner's name where you can't see the folders above
+
 ### Changed
 
+- **Documents over WebDAV** — a WebDAV client can add a file to a document's `media` folder by saving or copying it there. Moving a file into a document is refused, since the next **Delete history…** would delete it
 - **Guest sign-in code** — the code mailed to a guest works for 15 minutes instead of 5, so a mail that arrives late still gets them in
+
+### Fixed
+
+- **Trash in Drive** — the Trash and its sidebar count include what was deleted from every drive of yours and from your team drives, so anyone in the team can restore it. **Empty trash** empties only your own drives, and its dialog says so. A drive whose trash fails to load is named above the list
+- **Moving several items in Drive** — when some of them fail, the **Move to** dialog keeps only those, so **Move here** again leaves the moved ones alone. **Delete permanently** in the Trash does the same
+- **Copying to another drive** — the copy appears once it is complete, and a copied document is found by searching its text right away
+- **All images in Drive** — the list includes the images someone shared with you directly
+- **Saving from Word and Excel over WebDAV** — **Save as** into a mounted drive works. A save, move or copy over an existing file that the server refuses leaves that file in place instead of in the Trash
+- **Sharing after a save over WebDAV** — saving from Word or Excel into a mounted drive keeps the file's sharing, history and watchers. Such a save, or **Replace** in Finder or Explorer, overwrites the file as an upload does, so its old content no longer goes to the Trash
+- **Folders over WebDAV** — renaming a file in Finder to change only its capitals works, and copying a folder without its contents onto an existing one is refused instead of replacing it. Folder listings give addresses a client can follow on a standard install
+- **New files over WebDAV** — when two clients create a file of the same name at once, one gets the file and the other an error, instead of a second, numbered copy
+- **Locks over WebDAV** — a file someone locked stays locked to everyone else, and only they can renew the lock. A lock on a folder also holds for people who only have a subfolder shared with them
+- **Folders with a locked file over WebDAV** — deleting, moving or replacing a folder is refused while someone else has a file inside it locked
+- **Download names in Drive** — a file downloads and attaches to mail under the name you see in Drive, also after a rename or a save from Word or Excel over WebDAV. Attachments in a chat or document keep the name they were uploaded with
+- **Renamed files in Drive** — a file renamed to another extension, such as `photo.bin` to `photo.png`, gets the icon, preview and thumbnail of its new type and shows under **All images**. A file renamed earlier keeps its old type until its extension changes again
+- **Dialogs in Drive that close** — a dialog keeps its text while it fades out, where **Move to trash** flashed "Remove 0 shared items". **Email collaborators** now fades out like the others
+- **Shared and Recent in Drive** — **Shared by me**, **Shared with me**, **Recent** and **Watched** show a renamed, moved or deleted item right away, not minutes later
+- **Restoring several items in Drive** — when some of them fail, one message says how many, and those stay in the Trash
+- **Empty lists in Drive** — the empty text sits in the middle of the list again, in Drive and in the file lists of Docs, Sheets, Slides, Stickies and Vector
+- **Move to in Drive** — for an item of another drive, such as a team's file in a document app's list, the **Move to** dialog starts in that item's drive
 
 ## [0.4.3] - 2026-11-11
 

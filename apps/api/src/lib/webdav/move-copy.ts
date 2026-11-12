@@ -1,7 +1,8 @@
 // The WebDAV MOVE and COPY methods. Both stay inside one mount of one owner, so a Destination anywhere
 // else is a 502 and the client downloads and uploads again. The WebDAV router calls them with the
 // signed-in user, and each goes through getSharedDrive, so the Drive ACL decides access. They apply the
-// overwrite rules and the WebDAV locks as RFC 4918 asks.
+// overwrite rules and the WebDAV locks as RFC 4918 asks, and tell the drive which path they checked under
+// the destination name. The drive replaces that path, once nothing can refuse the write any more.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types/drive';
@@ -10,11 +11,10 @@ import { ApiError } from '../core/errors';
 import type { DriveLike } from '../drive/get-drive';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
-import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 import { decodeHref, splitParentAndName } from './path';
 
-export async function handleMove(args: {
+type MoveCopyArgs = {
     user: User;
     ownerId: string;
     mountId: string;
@@ -23,53 +23,28 @@ export async function handleMove(args: {
     destinationHeader: string | null;
     overwrite: boolean;
     ifHeader: string | null;
-}): Promise<Response> {
-    const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy({
-        ...args,
-        verb: 'MOVE',
-    });
+};
 
-    if (destExisting) await drive.deletePath(args.mountId, destExisting.id, args.user);
+export async function handleMove(args: MoveCopyArgs): Promise<Response> {
+    const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy(args, 'MOVE');
 
-    if (src.parentId !== destParent.id) {
-        await drive.movePath(args.mountId, src.id, destParent.id, args.user);
-    }
-    if (src.name !== newName) {
-        await drive.renamePath(args.mountId, src.id, newName, args.user);
-    }
-    // RFC 4918 §7.7: a lock does not move with its resource. Left in place, it would hold the Home
-    // until it expires, because the client can't refresh it at the old URL.
-    await drive.releaseLocksUnder(args.mountId, src.id);
+    await drive.movePathOver(args.mountId, src.id, destParent.id, newName, destExisting?.id ?? null, args.user);
     return new Response(null, { status: destExisting ? 204 : 201 });
 }
 
-export async function handleCopy(args: {
-    user: User;
-    ownerId: string;
-    mountId: string;
-    pathStr: string;
-    requestUrl: string;
-    destinationHeader: string | null;
-    overwrite: boolean;
-    ifHeader: string | null;
-    depth: '0' | '1' | 'infinity';
-}): Promise<Response> {
-    const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy({
-        ...args,
-        verb: 'COPY',
-    });
+export async function handleCopy(args: MoveCopyArgs & { depth: '0' | '1' | 'infinity' }): Promise<Response> {
+    const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy(args, 'COPY');
 
-    return await drive.withHomeHeld(async () => {
-        if (destExisting) await drive.deletePath(args.mountId, destExisting.id, args.user);
-
-        // RFC 4918 §9.8.3: Depth: 0 on a folder copies the folder without its members. A file has none.
-        if (args.depth === '0' && src.type !== DRIVE_TYPE_FILE) {
-            await drive.createFolder(args.mountId, destParent.id, newName, args.user);
-        } else {
-            await drive.copyPath(args.mountId, src.id, destParent.id, newName, args.user);
-        }
-        return new Response(null, { status: destExisting ? 204 : 201 });
-    });
+    // RFC 4918 §9.8.3: Depth: 0 on a folder copies the folder without its members. A file has none.
+    if (args.depth === '0' && src.type !== DRIVE_TYPE_FILE) {
+        if (destExisting) throw new ApiError(412, 'Destination exists, a Depth 0 folder COPY never overwrites');
+        await drive.createFolder(args.mountId, destParent.id, newName, args.user);
+        return new Response(null, { status: 201 });
+    }
+    await drive.withHomeHeld(() =>
+        drive.copyPathOver(args.mountId, src.id, destParent.id, newName, destExisting?.id ?? null, args.user),
+    );
+    return new Response(null, { status: destExisting ? 204 : 201 });
 }
 
 type Resolved = {
@@ -80,18 +55,8 @@ type Resolved = {
     newName: string;
 };
 
-async function resolveMoveCopy(args: {
-    user: User;
-    ownerId: string;
-    mountId: string;
-    pathStr: string;
-    requestUrl: string;
-    destinationHeader: string | null;
-    overwrite: boolean;
-    ifHeader: string | null;
-    verb: 'MOVE' | 'COPY';
-}): Promise<Resolved> {
-    const { user, ownerId, mountId, pathStr, requestUrl, destinationHeader, overwrite, ifHeader, verb } = args;
+async function resolveMoveCopy(args: MoveCopyArgs, verb: 'MOVE' | 'COPY'): Promise<Resolved> {
+    const { user, ownerId, mountId, pathStr, requestUrl, destinationHeader, overwrite, ifHeader } = args;
     if (!destinationHeader) throw new ApiError(400, 'Missing Destination');
     const dest = parseDestination(destinationHeader, requestUrl);
     if (dest.ownerId !== ownerId) throw new ApiError(502, `Cross-owner ${verb}s not supported`);
@@ -102,38 +67,32 @@ async function resolveMoveCopy(args: {
     const src = await drive.resolvePath(mountId, pathStr);
     if (!src) throw new ApiError(404, 'Source not found');
 
-    // MOVE takes the source out of its folder, so the container guard and the lock check apply to it. COPY
-    // leaves the source as it is and needs only the resolve above.
-    if (verb === 'MOVE') {
-        const srcBreadcrumb = await drive.breadCrumb(mountId, src.id);
-        if (enclosingDocumentContainer(srcBreadcrumb, { includeSelf: false })) {
-            throw new ApiError(423, 'Container internals are read-only');
-        }
-        assertWritable(drive.lockManager, srcBreadcrumb, ifHeader, user.id);
-    }
-
-    const destExisting = await drive.resolvePath(mountId, dest.pathStr);
-    // RFC 4918 §9.8.5 and §9.9.4: the same source and destination is a 403. Otherwise the overwrite below
-    // would trash the source before it moves it.
-    if (destExisting?.id === src.id) throw new ApiError(403, 'Source and destination are the same');
-    if (destExisting && !overwrite) throw new ApiError(412, 'Destination exists, no overwrite');
+    // A MOVE takes the source and everything under it out of its folder, so their locks count. A COPY leaves the
+    // source as it is.
+    const withMembers = async (path: DrivePath) =>
+        assertWritable(drive, mountId, path.id, ifHeader, user.id, await drive.descendantIds(mountId, path.id));
+    if (verb === 'MOVE') await withMembers(src);
 
     const { parentStr: destParentStr, name: newName } = splitParentAndName(dest.pathStr);
     if (!newName) throw new ApiError(400, 'Destination name missing');
 
+    // A name is found without case, so a destination that differs from the source only in case finds the source
+    // itself. That is a rename with nothing in its way, as Finder sends one.
+    const found = await drive.resolvePath(mountId, dest.pathStr);
+    const isSource = found?.id === src.id;
+    // RFC 4918 §9.8.5 and §9.9.4: the same source and destination is a 403.
+    if (isSource && newName.normalize('NFC') === src.name) {
+        throw new ApiError(403, 'Source and destination are the same');
+    }
+    const destExisting = isSource ? null : found;
+    if (destExisting && !overwrite) throw new ApiError(412, 'Destination exists, no overwrite');
+
     const destParent = await drive.resolvePath(mountId, destParentStr);
     if (!destParent) throw new ApiError(409, 'Destination parent not found');
 
-    // One destination-side breadcrumb: destExisting's chain minus its last entry is destParent's.
-    // An overwrite touches destExisting and replaces a child of destParent, so both must be unlocked.
-    const destBreadcrumb = destExisting
-        ? await drive.breadCrumb(mountId, destExisting.id)
-        : await drive.breadCrumb(mountId, destParent.id);
-    if (enclosingDocumentContainer(destBreadcrumb, { includeSelf: !destExisting })) {
-        throw new ApiError(423, 'Container internals are read-only');
-    }
-    assertWritable(drive.lockManager, destBreadcrumb, ifHeader, user.id);
-    if (destExisting) assertWritable(drive.lockManager, destBreadcrumb.slice(0, -1), ifHeader, user.id);
+    // An overwrite replaces destExisting with its members, which is a child of destParent.
+    if (destExisting) await withMembers(destExisting);
+    await assertWritable(drive, mountId, destParent.id, ifHeader, user.id);
 
     return { drive, src, destParent, destExisting, newName };
 }

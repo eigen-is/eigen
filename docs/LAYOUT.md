@@ -57,6 +57,12 @@ A target still on the page is never replaced, and an element inside an open dial
 
 The returned focus shows a ring only when its target had one as it left (`:focus-visible`). A dropdown menu a pointer opened focuses its trigger with `focusVisible: false`, because Radix's plain `focus()` after Escape draws a ring in Chrome, and a hover-revealed ⋮ with a ring stays shown after the pointer leaves.
 
+## A dialog opened by a value keeps it while it closes
+
+A dialog that shows a value, such as the items to delete, still draws its text while it fades out, so its owner never clears that value on close. `useDialogValue<T>()` (`packages/ui/src/hooks/use-dialog-value.ts`) holds the open flag and the last value: `openDialog(value)` sets both, `setOpen` is the dialog's `onOpenChange`, and the owner mounts the dialog once `value` is set. An `open` derived from `value !== null` is the bug, because the close then blanks the text or counts "0 items", and unmounting the dialog on close skips its fade-out.
+
+A test reads a closing dialog with `holdClosingDialogs` (`packages/ui/src/test/closing-dialog.ts`). It goes in before the dialog mounts, because Radix reads the content's animation as it mounts.
+
 ## One `DriveCapabilities` value gates every Drive action
 
 `DriveLayout` is the file-management UI: `DriveList`, `DriveDetail` and the Drive action runner (`useDriveActionRunner`), which runs each action and owns its dialogs. Each render site declares its whole surface as one `DriveCapabilities` value (presets in `drive-capabilities.ts`). `DRIVE_ACTIONS` (`packages/lib/src/core/drive/drive-actions.ts`) is the one list of Drive actions with each row's label, group and gate. `driveActionsFor` answers which rows apply, and `useDriveActionsFor` drops the guest-denied and mail-only rows, so the row menu, the detail column, the Delete key and the command palette offer the same set. Watch is no row: it shows live state, so the menu and the palette draw it from `useWatchToggle`.
@@ -68,6 +74,8 @@ The returned focus shows a ring only when its target had one as it left (`:focus
 - Shared with me turns `canWrite` and `canRename` off, because its feed carries no per-row permission. Delete stays on and means leaving the share.
 
 `canWrite` also rides into every file subject the view builds, because a convert writes beside its source and a read-only view has nowhere to write ([PREVIEWS.md](PREVIEWS.md#a-file-subject-stores-identity-everything-else-is-derived)).
+
+The detail column's Location row reads the parent's `useBreadcrumb`, the query the folder view reads, and names the drive as the sidebar does, or the owner or team where the server cut the chain short, then the folders down to the parent, as a link only when the viewer can read that parent.
 
 ## One item menu serves the row and the detail column
 
@@ -167,7 +175,7 @@ Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Shee
 
 ## Every Drive list has one empty text and one error text
 
-`DriveList` draws both, so no page passes copy of its own. An empty list shows `EmptyState`'s default sentence, with a hint only where you can drop or create (the button's own label when the list creates one kind). A failed load shows `ErrorState`'s default sentence alone, with no error detail; the error boundary shows the same one. A page that needs other words is a different screen, such as `RequestAccessView` for a folder you can't read.
+`DriveList` draws both, so no page passes copy of its own. An empty list shows `EmptyState`'s default sentence in place of the table or grid, so it centers in the whole list area, with a hint only where you can drop or create (the button's own label when the list creates one kind). Drawn below the table, the two `flex-1` children split the column and the sentence sat in its lower half. A failed load shows `ErrorState`'s default sentence alone, with no error detail; the error boundary shows the same one. A page that needs other words is a different screen, such as `RequestAccessView` for a folder you can't read.
 
 ## A file's icon comes from its name as well as its MIME type
 

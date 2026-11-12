@@ -1,23 +1,29 @@
-// Drive's Trash: what the viewer deleted, newest trashed first, with Restore and Delete permanently on
-// each row's menu and in the command palette, and Empty trash for everything at once. The rows have
-// no other actions, so the page hands the list its own rows instead of the Drive item menu's.
+// Drive's Trash: what was deleted from every drive the viewer can restore from, their own and their teams',
+// newest trashed first, with Restore and Delete permanently on each row's menu and in the command palette.
+// Empty trash empties the viewer's own drives only. The rows have no other actions, so the page hands the
+// list its own rows instead of the Drive item menu's. A line above the list names any drive whose trash
+// failed to load while others did.
 
 import { createFileRoute } from '@tanstack/react-router';
 import {
     DEFAULT_MOUNT_ID,
     getDriveComparator,
+    PartialBatchError,
     useDriveViewPreferences,
     useEmptyTrash,
-    useListTrash,
     usePermanentlyDelete,
-    useRestorePath,
+    useRestorePaths,
+    useTrash,
 } from '@workspace/lib/drive';
 import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Column, ColumnLayout, DeleteDialog, LoadingState, ToolbarTitle } from '@workspace/ui';
+import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Button } from '@workspace/ui/components/button';
 import { DriveList, DriveViewControls } from '@workspace/ui/components/drive/drive-list';
 import type { DriveListDate } from '@workspace/ui/components/drive/drive-table';
+import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -27,13 +33,13 @@ export const Route = createFileRoute('/_auth/trash')({
 
 const TRASHED: DriveListDate = { label: 'Trashed', of: (item) => item.trashedAt };
 
-function TrashToolbar({ itemCount, onEmptyTrash }: { itemCount: number; onEmptyTrash: () => void }) {
+function TrashToolbar({ canEmpty, onEmptyTrash }: { canEmpty: boolean; onEmptyTrash: () => void }) {
     return (
         <div className="flex items-center justify-between w-full">
             <ToolbarTitle>Trash</ToolbarTitle>
             <div className="flex items-center gap-1">
                 <DriveViewControls dateLabel={TRASHED.label} />
-                {itemCount > 0 && (
+                {canEmpty && (
                     <Button variant="outline" size="sm" onClick={onEmptyTrash}>
                         <Trash2 className="h-4 w-4 mr-2" />
                         Empty trash
@@ -46,16 +52,17 @@ function TrashToolbar({ itemCount, onEmptyTrash }: { itemCount: number; onEmptyT
 
 function TrashRoute() {
     const { user } = Route.useRouteContext();
-    const ownerId = user.id;
-    const mountId = DEFAULT_MOUNT_ID;
 
-    const { data: trashedItems = [], isLoading, error } = useListTrash(ownerId, mountId);
-    const restorePath = useRestorePath(ownerId, mountId);
-    const permanentlyDelete = usePermanentlyDelete(ownerId, mountId);
-    const emptyTrash = useEmptyTrash(ownerId, mountId);
+    const { items: trashedItems, failedDrives, isLoading, error } = useTrash(user.id);
+    const restorePaths = useRestorePaths();
+    const permanentlyDelete = usePermanentlyDelete();
+    const emptyTrash = useEmptyTrash(user.id);
 
     const [emptyTrashOpen, setEmptyTrashOpen] = useState(false);
-    const [deleteItems, setDeleteItems] = useState<readonly DrivePath[]>([]);
+    const deleteDialog = useDialogValue<readonly DrivePath[]>();
+    const deleteItems = deleteDialog.value;
+
+    const ownCount = trashedItems.filter((item) => item.ownerId === user.id).length;
 
     // The date sort orders by the time an item was trashed, the date this page shows.
     const { sortKey, sortDir } = useDriveViewPreferences();
@@ -74,9 +81,7 @@ function TrashRoute() {
                 icon: RotateCcw,
                 group: 'organize',
             },
-            run: () => {
-                for (const item of items) restorePath.mutate(item.id);
-            },
+            run: () => restorePaths.mutate(items),
         },
         {
             action: {
@@ -86,7 +91,7 @@ function TrashRoute() {
                 icon: Trash2,
                 group: 'destructive',
             },
-            run: () => setDeleteItems(items),
+            run: () => deleteDialog.openDialog(items),
         },
     ];
 
@@ -99,20 +104,28 @@ function TrashRoute() {
                     id="trash"
                     width="flex"
                     onBack="sidebar"
-                    toolbar={
-                        <TrashToolbar itemCount={trashedItems.length} onEmptyTrash={() => setEmptyTrashOpen(true)} />
-                    }
+                    toolbar={<TrashToolbar canEmpty={ownCount > 0} onEmptyTrash={() => setEmptyTrashOpen(true)} />}
                 >
-                    <DriveList
-                        items={sortedItems}
-                        error={error}
-                        ownerId={ownerId}
-                        mountId={mountId}
-                        hideOwner
-                        hideShared
-                        date={TRASHED}
-                        ownActions={trashActions}
-                    />
+                    <div className="flex h-full flex-col">
+                        {!error && failedDrives.length > 0 && (
+                            <Alert variant="warning" className="shrink-0 rounded-none border-x-0 border-t-0">
+                                <AlertDescription>
+                                    Could not load the trash of {failedDrives.join(', ')}
+                                </AlertDescription>
+                            </Alert>
+                        )}
+                        <div className="min-h-0 flex-1">
+                            <DriveList
+                                items={sortedItems}
+                                error={error}
+                                ownerId={user.id}
+                                mountId={DEFAULT_MOUNT_ID}
+                                hideShared
+                                date={TRASHED}
+                                ownActions={trashActions}
+                            />
+                        </div>
+                    </div>
                 </Column>
             </ColumnLayout>
 
@@ -120,30 +133,37 @@ function TrashRoute() {
                 open={emptyTrashOpen}
                 onOpenChange={setEmptyTrashOpen}
                 title="Empty trash"
-                description="Are you sure you want to permanently delete all items in trash? This action cannot be undone."
+                description={
+                    ownCount < trashedItems.length
+                        ? 'Are you sure you want to permanently delete all items from your own drive? Items from team drives stay in the trash. This action cannot be undone.'
+                        : 'Are you sure you want to permanently delete all items in trash? This action cannot be undone.'
+                }
                 onDelete={async () => {
                     await emptyTrash.mutateAsync();
                 }}
                 deleteText="Empty trash"
             />
 
-            <DeleteDialog
-                open={deleteItems.length > 0}
-                onOpenChange={(open) => {
-                    if (!open) setDeleteItems([]);
-                }}
-                title="Delete permanently"
-                description={
-                    deleteItems.length > 1
-                        ? `Are you sure you want to permanently delete ${deleteItems.length} items? This action cannot be undone.`
-                        : 'Are you sure you want to permanently delete'
-                }
-                itemName={deleteItems.length === 1 ? deleteItems[0].name : undefined}
-                onDelete={async () => {
-                    await Promise.all(deleteItems.map((item) => permanentlyDelete.mutateAsync(item.id)));
-                }}
-                deleteText="Delete permanently"
-            />
+            {deleteItems && (
+                <DeleteDialog
+                    open={deleteDialog.open}
+                    onOpenChange={deleteDialog.setOpen}
+                    title="Delete permanently"
+                    description={
+                        deleteItems.length > 1
+                            ? `Are you sure you want to permanently delete ${deleteItems.length} items? This action cannot be undone.`
+                            : 'Are you sure you want to permanently delete'
+                    }
+                    itemName={deleteItems.length === 1 ? stripEigenExtension(deleteItems[0].name) : undefined}
+                    onDelete={async () => {
+                        await permanentlyDelete.mutateAsync(deleteItems).catch((error: unknown) => {
+                            if (error instanceof PartialBatchError) deleteDialog.openDialog(error.failed);
+                            throw error;
+                        });
+                    }}
+                    deleteText="Delete permanently"
+                />
+            )}
         </>
     );
 }

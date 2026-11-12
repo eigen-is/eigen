@@ -1,24 +1,38 @@
 import { afterAll, afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types';
+import { teamOwnerId } from '@workspace/lib/types';
 import { DRIVE_TYPE_FOLDER } from '@workspace/lib/types/drive';
+import type { MountInfo } from '@workspace/lib/types/mount';
+import { SSEventType } from '@workspace/lib/types/sse';
+import * as Y from 'yjs';
 import * as enforcement from '../../lib/config/enforcement';
+import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home';
+import { drainHomeDeliveries } from '../../lib/home/home-relay';
 import { copySize } from '../../lib/mount/copy';
+import { getThumbnail } from '../../lib/shared/thumbnails';
 import { getUserById } from '../../lib/user';
 import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
+import { flushContentReindex } from '../mount-test-helpers';
 import type { TestUser } from '../setup';
 import {
+    addMember,
+    addTeamMount,
     assertJson,
     authedRequest,
     capUserDrive,
+    collectSSE,
+    createTeam,
     createTestUser,
     driveGet,
     drivePost,
     drivePut,
     driveUpload,
+    eventually,
     findOrFail,
     getTestContext,
     setMaxUploadSizeMB,
+    TEST_PNG_BYTES,
 } from '../setup';
 
 const isWindows = process.platform === 'win32';
@@ -231,21 +245,6 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 // The half-built folder held only the copy's own files, so it went for good, not to the trash.
                 expect(await drive.listTrash(mountId)).toEqual(trashBefore);
             });
-
-            test('a copy to another drive fails and leaves no folder in the target', async () => {
-                const target = await emptyFolder();
-                const home = await getHome(ctx.alice.user.id);
-                const user = await getUserById(ctx.alice.user.id);
-                if (!user) throw new Error('alice has no user row');
-                const copy = home.drive.copyPath(mountId, folder.id, target.id, folder.name, user, {
-                    drive: home.drive,
-                    ownerId: user.id,
-                    mountId,
-                });
-                expect(copy).rejects.toThrow();
-                await copy.catch(() => {});
-                expect(await contents(target)).toEqual([]);
-            });
         });
 
         // The per-file upload cap is for one file. A folder or a document is bounded by the free space.
@@ -327,6 +326,136 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 const sized = await driveGet(user.sessionToken, user.id, mountId, `file/${doc.id}`);
                 expect(copySize(tree)).toBe(sized.size - versions.size);
             });
+        });
+
+        // One writer makes every copy, so a copy is the same wherever it lands. The source is a folder on a team
+        // drive, and Alice, a member, copies it.
+        describe('a copy of a folder holding an image and a document', () => {
+            let teamOwner: string;
+            let teamMounts: string[];
+            let folder: DrivePath;
+            let image: DrivePath;
+            let doc: DrivePath;
+            const token = () => ctx.alice.user.sessionToken;
+
+            beforeAll(async () => {
+                const orgId = getServerConfig()?.orgId;
+                if (!orgId) throw new Error('the server has no org');
+                await authedRequest(token(), '/auth/organization/set-active', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ organizationId: orgId }),
+                });
+                const teamId = await createTeam(ctx, orgId, `Copy Parity ${crypto.randomUUID()}`);
+                teamOwner = teamOwnerId(teamId);
+                await addMember(ctx, teamId, ctx.alice.user.id);
+                await addTeamMount(ctx, teamId, 'Parity A');
+                await addTeamMount(ctx, teamId, 'Parity B');
+                const mounts = await assertJson<MountInfo[]>(
+                    await authedRequest(token(), `/drive/${teamOwner}/mounts`),
+                );
+                teamMounts = mounts.map((mount) => mount.id);
+                expect(teamMounts).toHaveLength(2);
+
+                const [sourceMount] = teamMounts;
+                const drive = (await getHome(teamOwner)).drive;
+                const root = await driveGet(token(), teamOwner, sourceMount, 'root');
+                folder = await drivePost<DrivePath>(token(), teamOwner, sourceMount, `folder/${root.id}`, {
+                    folderName: 'parity',
+                });
+                const uploaded = await driveUpload<DrivePath>(
+                    token(),
+                    teamOwner,
+                    sourceMount,
+                    folder.id,
+                    new File([TEST_PNG_BYTES], 'photo.png', { type: 'image/png' }),
+                );
+                // An upload gets its thumbnail in the background.
+                image = await eventually(async () => {
+                    const path = await drive.getPath(sourceMount, uploaded.id);
+                    return path?.thumbnail ? path : undefined;
+                }, 'the thumbnail of the source image');
+                doc = await drivePost<DrivePath>(token(), teamOwner, sourceMount, `folder/${folder.id}/create/doc`, {
+                    fileName: 'parity-doc',
+                });
+                const collab = await drive.getCollabDocument(sourceMount, doc.id);
+                const paragraph = new Y.XmlElement('paragraph');
+                paragraph.insert(0, [new Y.XmlText('quizzaciously written body')]);
+                collab.doc.getXmlFragment('default').insert(0, [paragraph]);
+                await drive.flushContainerDb(sourceMount, doc.id);
+            });
+
+            const targets: [string, () => { ownerId: string; mountId: string }][] = [
+                ['in the same mount', () => ({ ownerId: teamOwner, mountId: teamMounts[0] })],
+                ['to another mount of its owner', () => ({ ownerId: teamOwner, mountId: teamMounts[1] })],
+                ["to another owner's drive", () => ({ ownerId: ctx.alice.user.id, mountId })],
+            ];
+
+            for (const [where, target] of targets) {
+                test(`${where} has the source's history, thumbnail and search text, and shows once`, async () => {
+                    const to = target();
+                    const drive = (await getHome(to.ownerId)).drive;
+                    const root = await driveGet(token(), to.ownerId, to.mountId, 'root');
+
+                    const sse = await collectSSE(ctx.alice.user.id);
+                    const res = await copyFile(token(), teamOwner, teamMounts[0], folder.id, {
+                        targetOwnerId: to.ownerId,
+                        targetMountId: to.mountId,
+                        targetParentId: root.id,
+                    });
+                    const copied = await assertJson<DrivePath>(res);
+                    await sse.next((event) => 'path' in event && event.path.id === copied.id);
+                    await drainHomeDeliveries();
+                    await Bun.sleep(50);
+                    sse.stop();
+
+                    const inside = await drive.getFolderContents(to.mountId, copied.id);
+                    const copiedImage = findOrFail(inside, (child) => child.name === image.name);
+                    const copiedDoc = findOrFail(inside, (child) => child.name === doc.name);
+
+                    const pairs = [
+                        [copied, folder],
+                        [copiedImage, image],
+                        [copiedDoc, doc],
+                    ];
+                    for (const [copy, source] of pairs) {
+                        const events = (await drive.getFileHistory(to.mountId, copy.id))
+                            .filter((event) => event.pathId === copy.id)
+                            .map((event) => ({ eventType: event.eventType, details: event.details }));
+                        expect(events).toEqual([
+                            {
+                                eventType: 'copied',
+                                details: {
+                                    sourceOwnerId: teamOwner,
+                                    sourceMountId: teamMounts[0],
+                                    sourcePathId: source.id,
+                                },
+                            },
+                        ]);
+                    }
+
+                    const { mount } = await drive.resolveFile(to.mountId, copied.id);
+                    const written = new Set([copied.id, ...mount.collectDescendantIds(copied.id)]);
+                    const shown = sse.events
+                        .filter((event) => 'path' in event && written.has(event.path.id))
+                        .filter((event) => event.type !== SSEventType.DRIVE_FILE_HISTORY_UPDATED)
+                        .map((event) => ('path' in event ? `${event.type} ${event.path.id}` : event.type));
+                    expect(shown).toEqual([`${SSEventType.DRIVE_FOLDER_CREATED} ${copied.id}`]);
+
+                    expect(copiedImage.thumbnail).toBe(`${copiedImage.id}.webp`);
+                    expect(await getThumbnail(mount.thumbsDir, copiedImage.id)).not.toBeNull();
+                    expect(copiedImage.details).toEqual({
+                        width: image.details?.width,
+                        height: image.details?.height,
+                    });
+                    expect(image.details?.originalName).toBe('photo.png');
+                    expect(image.details?.width).toBe(4);
+
+                    await flushContentReindex(drive);
+                    const found = drive.search({ q: 'quizzaciously', limit: 20 }).map((hit) => hit.id);
+                    expect(found).toContain(copiedDoc.id);
+                });
+            }
         });
 
         // A writer, and an owner who shares a folder with them for writing.
@@ -459,11 +588,11 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
 
                 // The opposite copy runs once this one wrote its first file into the inbox, so it copies that
                 // partial output back into the source.
-                const ownerDrive = (await getHome(owner.id)).drive;
-                const createFileFromData = ownerDrive.createFileFromData.bind(ownerDrive);
+                const { mount } = await (await getHome(owner.id)).drive.resolveFile(mountId, inbox.id);
+                const createFileFromTemp = mount.createFileFromTemp.bind(mount);
                 let opposite = 0;
-                const copyBack = spyOn(ownerDrive, 'createFileFromData').mockImplementationOnce(async (...args) => {
-                    const created = await createFileFromData(...args);
+                const copyBack = spyOn(mount, 'createFileFromTemp').mockImplementationOnce(async (...args) => {
+                    const created = await createFileFromTemp(...args);
                     const back = await copyFile(writer.sessionToken, owner.id, mountId, inbox.id, {
                         targetOwnerId: writer.id,
                         targetMountId: mountId,
@@ -535,11 +664,11 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             const ownerUser = await getUserById(owner.id);
             if (!ownerUser) throw new Error('the owner has no user row');
             const ownerDrive = (await getHome(owner.id)).drive;
-            const createFileFromData = ownerDrive.createFileFromData.bind(ownerDrive);
-            const moveIn = spyOn(ownerDrive, 'createFileFromData').mockImplementationOnce(async (...args) => {
-                const created = await createFileFromData(...args);
-                if (!created.parentId) throw new Error('the copied file has no folder');
-                await ownerDrive.movePath(mountId, mine.id, created.parentId, ownerUser);
+            const { mount } = await ownerDrive.resolveFile(mountId, inbox.id);
+            const createFileFromTemp = mount.createFileFromTemp.bind(mount);
+            const moveIn = spyOn(mount, 'createFileFromTemp').mockImplementationOnce(async (parentId, ...rest) => {
+                const created = await createFileFromTemp(parentId, ...rest);
+                await ownerDrive.movePath(mountId, mine.id, parentId, ownerUser);
                 return created;
             });
             let res: Response;
@@ -638,28 +767,34 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
         // A copy to another drive writes the same listing as a copy in one mount, so it leaves versions/
         // behind too. mount-copy.test.ts pins the copy in one mount.
         test('copying a container across drives starts the copy without the source versions/', async () => {
-            const token = ctx.alice.user.sessionToken;
-            const ownerId = ctx.alice.user.id;
-            const doc = await drivePost<DrivePath>(token, ownerId, mountId, `folder/${aliceRootId}/create/doc`, {
-                fileName: 'copy-across-versions',
-            });
-            const saved = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${doc.id}/versions/save`, {
-                method: 'POST',
-            });
+            const { writer, owner, inbox } = await writerAndInbox();
+            const root = await driveGet(writer.sessionToken, writer.id, mountId, 'root');
+            const doc = await drivePost<DrivePath>(
+                writer.sessionToken,
+                writer.id,
+                mountId,
+                `folder/${root.id}/create/doc`,
+                { fileName: 'copy-across-versions' },
+            );
+            const saved = await authedRequest(
+                writer.sessionToken,
+                `/drive/${writer.id}/${mountId}/file/${doc.id}/versions/save`,
+                { method: 'POST' },
+            );
             expect(saved.status).toBe(200);
 
-            const home = await getHome(ownerId);
-            const user = await getUserById(ownerId);
-            if (!user) throw new Error('alice has no user row');
-            const copied = await home.drive.copyPath(mountId, doc.id, aliceRootId, 'copy-across-versions-copy', user, {
-                drive: home.drive,
-                ownerId,
-                mountId,
+            const res = await copyFile(writer.sessionToken, writer.id, mountId, doc.id, {
+                targetOwnerId: owner.id,
+                targetMountId: mountId,
+                targetParentId: inbox.id,
             });
+            const copied = await assertJson<DrivePath>(res);
 
-            const sourceNames = (await home.drive.getFolderContents(mountId, doc.id)).map((c) => c.name);
+            const sourceDrive = (await getHome(writer.id)).drive;
+            const sourceNames = (await sourceDrive.getFolderContents(mountId, doc.id)).map((c) => c.name);
             expect(sourceNames).toContain('versions');
-            const copiedNames = (await home.drive.getFolderContents(mountId, copied.id)).map((c) => c.name);
+            const targetDrive = (await getHome(owner.id)).drive;
+            const copiedNames = (await targetDrive.getFolderContents(mountId, copied.id)).map((c) => c.name);
             expect(copiedNames).toContain('data.db');
             expect(copiedNames).not.toContain('versions');
         });
@@ -726,16 +861,15 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
 
                 const sourceHome = await getHome(writer.id);
                 const targetHome = await getHome(owner.id);
-                const download = sourceHome.drive.downloadFile.bind(sourceHome.drive);
+                const { mount } = await sourceHome.drive.resolveFile(mountId, source.id);
+                const readFile = mount.readFile.bind(mount);
                 let closingMidCopy: boolean[] | undefined;
                 // The copy reads the source between its checks and its write, which is where the clock jumps.
-                const slowDownload = spyOn(sourceHome.drive, 'downloadFile').mockImplementation(
-                    async (sourceMountId, pathId) => {
-                        jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
-                        closingMidCopy = [sourceHome.closing, targetHome.closing];
-                        return download(sourceMountId, pathId);
-                    },
-                );
+                const slowDownload = spyOn(mount, 'readFile').mockImplementation(async (pathId) => {
+                    jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
+                    closingMidCopy = [sourceHome.closing, targetHome.closing];
+                    return readFile(pathId);
+                });
                 jest.useFakeTimers();
                 // A request re-arms the idle on the fake clock, so only the copy's holds can keep the homes past it.
                 sourceHome.touch();

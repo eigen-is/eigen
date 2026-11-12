@@ -56,7 +56,7 @@ Paths are under `apps/api/src/` unless they say otherwise.
 | **Previews** | `lib/preview/` | Version-keyed preview cache and thumbnails ([PREVIEWS.md](PREVIEWS.md)) |
 | **Upload pipeline** | `lib/mount/upload-queue.ts` | Write-behind uploads of an `s3` mount's databases, one queue per mount ([SYNC.md](SYNC.md)) |
 | **Versioning** | `lib/versioning/` | Opt-in snapshots inside the container ([STORAGE.md](STORAGE.md#version-snapshots-live-inside-the-container)) |
-| **Copy and move** | `lib/mount/copy.ts`, `lib/drive/copy-across.ts` | A move stays in its mount; a copy goes anywhere ([STORAGE.md](STORAGE.md#copy-goes-anywhere-a-move-stays-in-its-mount)) |
+| **Copy and move** | `lib/mount/copy.ts`, `lib/drive/drive.ts` | A move stays in its mount; a copy goes anywhere ([STORAGE.md](STORAGE.md#copy-goes-anywhere-a-move-stays-in-its-mount)) |
 | **Import from Drive** | `lib/drive/import-source.ts` | `readImportSourceBytes`, the one import-from-drive reader, with the user's access and a byte cap |
 | **Recent files** | `lib/drive/recent.ts`, `lib/drive/aggregate.ts`, `apps/drive/src/routes/_auth.recent.tsx` | Which paths a user opened or was notified about, in their own `shared.db`, checked against each owner on every load ([STORAGE.md](STORAGE.md#recent-files-stores-only-which-path-and-when)) |
 | **File history** | `lib/drive/history.ts` | Typed file events and watcher notifications ([FILE-HISTORY.md](FILE-HISTORY.md)) |

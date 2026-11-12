@@ -106,9 +106,9 @@ describe('AppError messages', () => {
 
 // A refusal is the server's settled no, such as deleting the organization's default team: asking again gets the same
 // answer. A conflict, a busy server or a lost connection may go through on another try.
-test('a refusal is a 400, 403, 404 or 422, and nothing a retry could change', () => {
+test('a refusal is a 400, 403, 404, 422 or 423, and nothing a retry could change', () => {
     const withStatus = (status: number) => new AppError({ error: { status, value: 'No' }, status });
-    expect([400, 403, 404, 422].map((status) => isRefusal(withStatus(status)))).toEqual([true, true, true, true]);
+    expect([400, 403, 404, 422, 423].filter((status) => !isRefusal(withStatus(status)))).toEqual([]);
     expect([409, 429, 500, 503].map((status) => isRefusal(withStatus(status)))).toEqual([false, false, false, false]);
     expect(isRefusal(new Error('Failed to fetch'))).toBe(false);
 });

@@ -26,7 +26,7 @@ export function buildXmlResponse(body: string, status = 207): Response {
     });
 }
 
-export function lockdiscoveryProp(locks: Lock[]): string {
+export function lockdiscoveryProp(locks: readonly Lock[]): string {
     if (locks.length === 0) return '<D:lockdiscovery/>';
     const inner = locks
         .map((l) => {
@@ -49,7 +49,7 @@ export function resourceProps(args: {
     isCollection: boolean;
     quotaUsed?: number;
     quotaAvailable?: number;
-    locks?: Lock[];
+    locks?: readonly Lock[];
 }): string[] {
     const { path, isCollection, quotaUsed, quotaAvailable, locks = [] } = args;
     const props: string[] = [

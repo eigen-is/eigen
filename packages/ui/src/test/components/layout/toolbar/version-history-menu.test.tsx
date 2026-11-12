@@ -6,7 +6,7 @@ import { formatDateTime } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
-import type { ReactElement } from 'react';
+import { closingDialog, holdClosingDialogs } from '../../../closing-dialog';
 import { drivePath } from '../../../drive-path';
 import { installHappyDom } from '../../../happy-dom';
 import { clickRow, openSubmenu, renderOpenMenu } from '../../../menu-rows';
@@ -42,8 +42,8 @@ afterAll(() => {
     mock.module('@workspace/lib/drive', () => realDrive);
 });
 
-const { act, createElement, useState } = await import('react');
-const { DeleteHistoryDialog, RestoreVersionDialog, VersionHistoryMenu } = await import(
+const { act, createElement } = await import('react');
+const { DeleteHistoryDialog, RestoreVersionDialog, StorageGoneVersions, VersionHistoryMenu } = await import(
     '../../../../components/layout/toolbar/version-history-menu'
 );
 
@@ -55,10 +55,8 @@ afterEach(async () => {
     unmount = async () => {};
 });
 
-const realGetComputedStyle = globalThis.getComputedStyle;
 afterEach(() => {
     listed = versions;
-    globalThis.getComputedStyle = realGetComputedStyle;
 });
 
 async function openVersionHistory(onRequestDeleteHistory = (_size: number) => {}): Promise<Element | undefined> {
@@ -101,7 +99,9 @@ test('an editor who does not own the drive gets no Delete history', async () => 
 test('the dialog names the size the menu passed and deletes on its button', async () => {
     deleteVersions.mockClear();
     const size = 5 * 1024 * 1024;
-    ({ unmount } = await renderInDocument(createElement(DeleteHistoryDialog, { path, size, onClose: () => {} })));
+    ({ unmount } = await renderInDocument(
+        createElement(DeleteHistoryDialog, { path, size, open: true, onOpenChange: () => {} }),
+    ));
     const dialog = document.querySelector('[role="dialog"]');
 
     expect(dialog?.querySelector('h2')?.textContent).toBe('Delete version history?');
@@ -117,41 +117,6 @@ test('the dialog names the size the menu passed and deletes on its button', asyn
     expect(deleteVersions).toHaveBeenCalledTimes(1);
 });
 
-// Renders a dialog, cancels it and returns its text as it fades out. Radix keeps a closing dialog mounted while its
-// animation runs. happy-dom computes no animation from a style sheet and never ends one, so the content reports a
-// fade-out once it closes and stays.
-async function textWhileClosing(dialogHarness: () => ReactElement): Promise<string | null | undefined> {
-    globalThis.getComputedStyle = (element, pseudo) => {
-        const style = realGetComputedStyle(element, pseudo);
-        if (!(element instanceof HTMLElement) || element.dataset.slot !== 'dialog-content') return style;
-        return new Proxy(style, {
-            get: (target, key) =>
-                key === 'animationName'
-                    ? element.dataset.state === 'closed'
-                        ? 'fade-out'
-                        : 'fade-in'
-                    : Reflect.get(target, key),
-        });
-    };
-    ({ unmount } = await renderInDocument(createElement(dialogHarness)));
-    const cancel = [...document.querySelectorAll('[role="dialog"] button')].find(
-        (button) => button.textContent === 'Cancel',
-    );
-    await act(async () => cancel?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    const dialog = document.querySelector('[role="dialog"]');
-    expect(dialog?.getAttribute('data-state')).toBe('closed');
-    return dialog?.querySelector('p')?.textContent;
-}
-
-test('the dialog keeps naming the size while it closes', async () => {
-    const size = 5 * 1024 * 1024;
-    function Harness() {
-        const [shown, setShown] = useState<number | null>(size);
-        return createElement(DeleteHistoryDialog, { path, size: shown, onClose: () => setShown(null) });
-    }
-    expect(await textWhileClosing(Harness)).toStartWith(`Frees ${formatFileSize(size)}.`);
-});
-
 test('Delete history is grayed out while there are no versions, and live with one', async () => {
     isEffectiveOwner = true;
     listed = [];
@@ -164,18 +129,26 @@ test('Delete history is grayed out while there are no versions, and live with on
     expect(deleteRow(submenu)?.hasAttribute('data-disabled')).toBe(false);
 });
 
-test('the restore dialog keeps naming the version while it closes', async () => {
-    const [version] = versions;
-    function Harness() {
-        const [shown, setShown] = useState<Snapshot | null>(version ?? null);
-        return createElement(RestoreVersionDialog, { path, snapshot: shown, onClose: () => setShown(null) });
+test('the restore dialog on the gone screen keeps naming the version while it closes', async () => {
+    const release = holdClosingDialogs();
+    try {
+        const [version] = versions;
+        ({ unmount } = await renderInDocument(createElement(StorageGoneVersions, { path })));
+        const click = (button: Element | null | undefined) =>
+            act(async () => button?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        await click(document.querySelector('button'));
+        await click([...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === 'Cancel'));
+        expect(closingDialog()?.querySelector('p')?.textContent).toContain(
+            `the ${formatDateTime(version.createdAt)} version`,
+        );
+    } finally {
+        release();
     }
-    expect(await textWhileClosing(Harness)).toContain(`the ${version && formatDateTime(version.createdAt)} version`);
 });
 
 test('the restore dialog says comments go back with their text and replies stay', async () => {
     ({ unmount } = await renderInDocument(
-        createElement(RestoreVersionDialog, { path, snapshot: versions[0], onClose: () => {} }),
+        createElement(RestoreVersionDialog, { path, snapshot: versions[0], open: true, onOpenChange: () => {} }),
     ));
     const text = document.querySelector('[role="dialog"] p')?.textContent;
     expect(text).toContain("Comments go back with the text they're on. Their replies stay as they are now.");

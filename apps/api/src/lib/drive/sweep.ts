@@ -1,77 +1,51 @@
 // Deletes the parts of a document that its current state does not name, such as an image deleted from a doc or the
-// thread of a deleted comment. Nothing runs it on its own: Delete history runs it once the versions are gone, and a
-// copy runs it on each document it copied. Inside each thread it keeps, a file no message names goes too. A part
-// younger than the grace stays, a file by its upload and a thread by its last write, because an upload lands before
-// the edit that names it. A copy deletes only parts it wrote itself. A failure is logged and deletes nothing more.
+// thread of a deleted comment. It runs only when a change asks for it, such as Delete history or a copy. Inside each
+// thread it keeps, a file no message names goes too. A part younger than the grace stays, because an upload lands
+// before the edit that names it. A copy deletes only parts it wrote itself. A failure is logged and deletes no more.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DRIVE_TYPE_CHAT, DRIVE_TYPE_FILE, DRIVE_TYPE_FOLDER, isCollabType } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_CHAT, DRIVE_TYPE_FILE, isCollabType } from '@workspace/lib/types/drive';
 import { CHAT_ROOM_DB_CONFIG, withCommentIndex } from '../chat';
 import * as chatSchema from '../chat/schema';
 import { captureCollabSource } from '../document/transform/collab-source';
 import { runDocumentReferences } from '../document/transform/run-transform';
 import type { Mount } from '../mount';
 import { CONTAINER_CHAT_FOLDER, CONTAINER_DATA_DB, CONTAINER_MEDIA_FOLDER } from '../mount/container-dbs';
-import type { CopyTree } from '../mount/copy';
+import type { Copied } from '../mount/copy';
 import { foldName } from '../mount/names';
 import { withSvgSiblings } from '../preview/svg-media-inline';
-import type { DriveLike } from './get-drive';
+import type { Drive } from './drive';
 
 // Runs on an open document as well as a closed one, as both read the same data.db. The grace is how old a part must
 // be to go.
-export async function sweepDocument(drive: DriveLike, document: DrivePath, graceMs: number): Promise<void> {
+export async function sweepDocument(drive: Drive, mount: Mount, document: DrivePath, graceMs: number): Promise<void> {
     try {
-        await sweepParts(drive, document, Date.now() - graceMs, null);
+        await sweepParts(drive, mount, document, Date.now() - graceMs, null);
     } catch (error) {
         console.warn(`[sweep] stopped in ${document.id}:`, error instanceof Error ? error.message : error);
     }
 }
 
-// Sweeps each document a copy made, the copy itself or each one in a copied folder, with no grace. The copy shows in
-// the target's tabs as it lands, so someone may add an image, a comment or a document to it before this runs: only
-// what `tree`, the listing the copy wrote from, names is swept. The copy itself succeeded, so a failure only logs.
-export async function sweepCopy(drive: DriveLike, copy: DrivePath, tree: CopyTree): Promise<void> {
+// Sweeps each document a copy made, with no grace. Someone may add a part to the copy while it lands, so only the
+// paths the copy made may go. The copy itself succeeded, so a failure only logs.
+export async function sweepCopy(drive: Drive, mount: Mount, copy: Copied): Promise<void> {
     try {
-        const { mount } = await drive.resolveFile(copy.mountId, copy.id);
-        if (copy.type === DRIVE_TYPE_FOLDER) {
-            for (const [child, written] of await listWritten(mount, copy, tree)) await sweepCopy(drive, child, written);
-        } else if (copy.type !== DRIVE_TYPE_FILE) {
-            await sweepParts(drive, copy, Date.now(), await writtenIds(mount, copy, tree));
+        for (const id of copy.documentIds) {
+            await sweepParts(drive, mount, await mount.getActivePath(id), Date.now(), copy.createdIds);
         }
     } catch (error) {
-        console.warn(`[sweep] stopped in ${copy.id}:`, error instanceof Error ? error.message : error);
+        console.warn(`[sweep] stopped in ${copy.path.id}:`, error instanceof Error ? error.message : error);
     }
 }
 
-// The paths in `folder` that a copy wrote, each with the part of `tree` it was written from, matched by name. A path
-// added since is left out.
-async function listWritten(mount: Mount, folder: DrivePath, tree: CopyTree): Promise<[DrivePath, CopyTree][]> {
-    const written = new Map(tree.children.map((child) => [foldName(child.path.name), child]));
-    return (await mount.listFolder(folder.id)).flatMap((path): [DrivePath, CopyTree][] => {
-        const child = written.get(foldName(path.name));
-        return child ? [[path, child]] : [];
-    });
-}
-
-// The ids of every path below `container` that a copy wrote.
-async function writtenIds(mount: Mount, container: DrivePath, tree: CopyTree): Promise<Set<string>> {
-    const ids = new Set<string>();
-    for (const [path, written] of await listWritten(mount, container, tree)) {
-        ids.add(path.id);
-        if (written.children.length > 0) for (const id of await writtenIds(mount, path, written)) ids.add(id);
-    }
-    return ids;
-}
-
-// A copy passes `written`, the ids of the parts it wrote, and only those may go. Delete history passes null, as any
-// part may go.
+// Only a part in `written` may go. With null any part may.
 async function sweepParts(
-    drive: DriveLike,
+    drive: Drive,
+    mount: Mount,
     document: DrivePath,
     cutoff: number,
     written: ReadonlySet<string> | null,
 ): Promise<void> {
-    const { mount } = await drive.resolveFile(document.mountId, document.id);
     const isCandidate = (part: DrivePath) => !written || written.has(part.id);
     const isOld = (file: DrivePath) => file.createdAt.getTime() <= cutoff;
     const media = await mount.getChildByName(document.id, CONTAINER_MEDIA_FOLDER);
@@ -107,21 +81,22 @@ async function sweepParts(
     }
 
     const unnamedFiles = files.filter((file) => isOld(file) && !keptFiles.has(foldName(file.name)));
+    const gone = [...unnamedFiles, ...idleThreads];
     // One at a time, so a failure deletes nothing more after it.
-    for (const path of [...unnamedFiles, ...idleThreads]) await mount.deletePath(path.id);
+    for (const path of gone) await mount.deletePath(path.id);
     // A row goes once its thread is gone, as one still there would lose its status and its assignee.
     if (chat) {
         await withCommentIndex(drive, document.mountId, document.id, async (index) =>
             index.deleteRowsWithoutThread(new Set(mount.liveChildNames(chat.id).map(foldName))),
         );
     }
-    const freed = [...unnamedFiles, ...idleThreads].reduce((sum, path) => sum + path.size, 0);
+    const freed = gone.reduce((sum, path) => sum + path.size, 0);
     if (freed > 0) {
         console.log(
             `[sweep] ${document.id}: deleted ${unnamedFiles.length} files, ${idleThreads.length} threads, ${freed} bytes`,
         );
     }
-    for (const thread of keptThreads) await sweepParts(drive, thread, cutoff, written);
+    for (const thread of keptThreads) await sweepParts(drive, mount, thread, cutoff, written);
 }
 
 // The files a thread's messages name, a deleted message's included. An attachment is a file in the thread's media

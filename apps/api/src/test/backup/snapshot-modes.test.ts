@@ -19,7 +19,7 @@ import { saveThumbnail } from '../../lib/shared/thumbnails';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
 import type { FaultStorage } from '../fault-storage-helpers';
 import { createHomeFaultMount, provisionDoc, registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
-import { seedFile } from '../mount-test-helpers';
+import { overwriteFile, seedFile } from '../mount-test-helpers';
 import type { TestUser } from '../setup';
 import {
     assertJson,
@@ -425,7 +425,7 @@ describe('Backup of a disabled mount enabled while it is captured', () => {
                 const enabled = await ownerHome.settings.set({ mounts: { [MOUNT_ID]: on.mounts![MOUNT_ID] } });
                 await ownerHome.drive.updateMount(createMountConfig(MOUNT_ID, enabled.mounts![MOUNT_ID]), true);
                 const live = ownerHome.drive.getMounts().find((mount) => mount.id === MOUNT_ID)!;
-                overwrite = live.writeFile(file.id, Buffer.from('written during the backup'));
+                overwrite = overwriteFile(live, file.id, Buffer.from('written during the backup'));
                 overwroteDuringCopy = await Promise.race([
                     overwrite.then(() => true),
                     Bun.sleep(200).then(() => false),

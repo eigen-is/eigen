@@ -1,5 +1,5 @@
-// The Import… picker docs, sheets and slides share: pick a file from Drive or the device, then say how it comes in,
-// and only then does either import mutation run. The choice stays open, under the progress dialog, until the import
+// The Import… picker of an editor such as Docs or Slides: pick a file from Drive or the device, then say how it comes
+// in, and only then does either import mutation run. The choice stays open, under the progress dialog, until the import
 // is done, and a failed import leaves it open for another try. A Drive file is offered by its extension, as Convert
 // takes it: Drive stores the type its upload claimed, which for an Office file can be application/octet-stream.
 
@@ -9,6 +9,7 @@ import { CONVERT_SOURCES, isConvertSource } from '@workspace/lib/types/drive';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Label } from '@workspace/ui/components/label';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
+import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { useState } from 'react';
 import { FileImportPicker } from './file-import-picker';
 
@@ -46,7 +47,8 @@ const IMPORT_CHOICES: Record<ConvertTarget, { mode: ImportMode; label: string; d
 export function DocumentImportPicker({ path, open, onOpenChange, target, afterFrameId }: DocumentImportPickerProps) {
     const importMutation = useImportDocument(path.ownerId, path.mountId);
     const importFromDriveMutation = useImportFromDrive(path.ownerId, path.mountId);
-    const [source, setSource] = useState<ImportSource | null>(null);
+    const choice = useDialogValue<ImportSource>();
+    const source = choice.value;
     const { format } = CONVERT_SOURCES[target];
     const title = `Import ${format} file`;
 
@@ -73,29 +75,31 @@ export function DocumentImportPicker({ path, open, onOpenChange, target, afterFr
                 title={title}
                 accept={`.${format}`}
                 canPick={(item) => isConvertSource(item.name, target)}
-                onDeviceFile={(file) => setSource({ name: file.name, file })}
-                onDrivePick={(drive) => setSource({ name: drive.name, drive })}
+                onDeviceFile={(file) => choice.openDialog({ name: file.name, file })}
+                onDrivePick={(drive) => choice.openDialog({ name: drive.name, drive })}
                 pending={importMutation.isPending || importFromDriveMutation.isPending}
                 progressTitle={`Importing ${format} file`}
             />
-            <FormDialog
-                open={source !== null}
-                onOpenChange={(next) => !next && setSource(null)}
-                title={title}
-                description={
-                    source && IMPORT_CHOICES[target].length === 0
-                        ? `${source.name} replaces this whole document: its text, headers and footers, and page setup. ${VERSION_NOTE}`
-                        : source?.name
-                }
-                size="sm"
-            >
-                {source && <ImportModeForm target={target} onImport={(mode) => runImport(source, mode)} />}
-            </FormDialog>
+            {source && (
+                <FormDialog
+                    open={choice.open}
+                    onOpenChange={choice.setOpen}
+                    title={title}
+                    description={
+                        IMPORT_CHOICES[target].length === 0
+                            ? `${source.name} replaces this whole document: its text, headers and footers, and page setup. ${VERSION_NOTE}`
+                            : source.name
+                    }
+                    size="sm"
+                >
+                    <ImportModeForm target={target} onImport={(mode) => runImport(source, mode)} />
+                </FormDialog>
+            )}
         </>
     );
 }
 
-// Mounted per pick, so each one starts on the default.
+// Mounted with the dialog, so each pick starts on the default.
 function ImportModeForm({
     target,
     onImport,

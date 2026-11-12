@@ -1,76 +1,50 @@
-// The last steps of a new file, such as an upload or a copy from another drive. They turn a temp
-// file into a file in the tree under a free name, tell open tabs and write the history row. A
-// thumbnail is then made in the background, by a helper that an overwrite of a file uses too.
+// The last steps of a write of a file's bytes, such as an upload, an attachment saved from mail or an overwrite. The
+// bytes wait in a temp file of the mount: commitFromTemp runs the commit, and thumbnailInBackground then makes the
+// thumbnail from that file and removes it. A rename that gives a file a new type remakes its thumbnail the same way.
+// finalizeNamedUpload is the commit of a new file: its row, a word to open tabs and the history row.
+// finalizeUpload is that commit under a free name, for a create that may not refuse a taken one.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Mount } from '../mount';
+import { cleanName } from '../mount/names';
 import { saveThumbnail } from '../shared/thumbnails';
 import type { User } from '../user';
 import type { Drive } from './drive';
 import { folderIn, withFreeName } from './naming';
 
-// The caller tells the watchers, so an upload of many files notifies them once. When this throws, the
-// caller removes the temp file.
-export async function finalizeUpload(
+// `commit` writes the temp file when its caller has not yet and puts the bytes in the tree. No caller removes the temp
+// file: a failed commit does here, then the thumbnail job.
+export async function commitFromTemp(
     drive: Drive,
     mount: Mount,
-    args: {
-        parentId: string;
-        name: string;
-        mimeType: string;
-        size: number;
-        hash: string;
-        tempId: string;
-        user: User;
-    },
+    tempId: string,
+    commit: () => Promise<DrivePath>,
 ): Promise<DrivePath> {
-    // The store keeps names in NFC, so the name is compared with its siblings in that form too.
-    const originalName = args.name.replace(/[/\\]/g, '_').normalize('NFC');
-    const pathId = await withFreeName(folderIn(mount, args.parentId), originalName, (name) =>
-        mount.createFileFromTemp(args.parentId, name, args.mimeType, args.size, args.hash, args.tempId),
-    );
-    const uploadedFile = originalName
-        ? await mount.updatePath(pathId, { details: { originalName } })
-        : await mount.getActivePath(pathId);
-    drive.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
-    mount.history.record({ pathId, eventType: 'uploaded', actor: args.user, details: { size: uploadedFile.size } });
-
-    if (uploadedFile.size === 0) {
-        // An empty file has no thumbnail. Finder copies in two steps: an empty file first, and the
-        // bytes later through writeFileContent.
-        await mount.cleanupTemp(args.tempId);
-    } else {
-        regenerateThumbnailAsync(
-            drive,
-            mount,
-            pathId,
-            mount.getTempPath(args.tempId),
-            args.mimeType,
-            uploadedFile.name,
-            () => mount.cleanupTemp(args.tempId),
-        );
-    }
-
-    return uploadedFile;
+    const file = await commit().catch(async (e: unknown) => {
+        await mount.cleanupTemp(tempId);
+        throw e;
+    });
+    thumbnailInBackground(drive, mount, file, tempId, async () => mount.getTempPath(tempId));
+    return file;
 }
 
-export function regenerateThumbnailAsync(
+// `source` gives the temp file's path, and fills it first when the bytes are not there yet, such as by a download.
+export function thumbnailInBackground(
     drive: Drive,
     mount: Mount,
-    pathId: string,
-    source: Buffer | string,
-    mimeType: string,
-    fileName: string,
-    onCleanup?: () => Promise<void>,
+    file: DrivePath,
+    tempId: string,
+    source: () => Promise<string>,
 ): void {
-    const job = (async () => {
+    mount.runInBackground(`thumbnail of ${file.id}`, async () => {
         try {
-            const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, source, mimeType, fileName);
+            if (file.size === 0) return;
+            const thumbnail = await saveThumbnail(mount.thumbsDir, file.id, await source(), file.mimeType, file.name);
             if (!thumbnail) return;
-            const current = await mount.getPath(pathId);
+            const current = await mount.getPath(file.id);
             if (!current) return;
-            const updated = await mount.updatePath(pathId, {
+            const updated = await mount.updatePath(file.id, {
                 thumbnail: thumbnail.fileName,
                 details: {
                     ...current.details,
@@ -81,9 +55,44 @@ export function regenerateThumbnailAsync(
             });
             drive.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
         } finally {
-            await onCleanup?.();
+            await mount.cleanupTemp(tempId);
         }
-    })().catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
-    mount.thumbnailJobs.add(job);
-    job.finally(() => mount.thumbnailJobs.delete(job));
+    });
+}
+
+type StagedFile = {
+    parentId: string;
+    name: string;
+    mimeType: string;
+    size: number;
+    hash: string;
+    tempId: string;
+    user: User;
+};
+
+// The file keeps the name it came with beside the free one: inside a document nobody sees the stored name, so
+// an attachment shows and downloads under this one.
+export async function finalizeUpload(drive: Drive, mount: Mount, file: StagedFile): Promise<DrivePath> {
+    const originalName = cleanName(file.name);
+    return withFreeName(folderIn(mount, file.parentId), originalName, (name) =>
+        finalizeNamedUpload(drive, mount, { ...file, name }, originalName),
+    );
+}
+
+// A WebDAV URL names one file, so its create never picks another name: on a taken one the mount's 409 stands.
+// It tells no watcher, so an upload of many files can notify them once.
+export async function finalizeNamedUpload(
+    drive: Drive,
+    mount: Mount,
+    file: StagedFile,
+    originalName?: string,
+): Promise<DrivePath> {
+    const { parentId, name, mimeType, size, hash, tempId, user } = file;
+    const pathId = await mount.createFileFromTemp(parentId, name, mimeType, size, hash, tempId);
+    const uploaded = originalName
+        ? await mount.updatePath(pathId, { details: { originalName } })
+        : await mount.getActivePath(pathId);
+    drive.emit(SSEventType.DRIVE_FILE_UPLOADED, uploaded);
+    mount.history.record({ pathId, eventType: 'uploaded', actor: user, details: { size: uploaded.size } });
+    return uploaded;
 }
