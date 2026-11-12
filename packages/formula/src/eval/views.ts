@@ -7,7 +7,7 @@ import { GRID_ROWS } from '../text/a1';
 import type { FormulaError } from '../values/errors';
 import { CALC } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
-import { arrayOf, ValueType } from '../values/value';
+import { arrayOf, heightOf, ValueType, widthOf } from '../values/value';
 import type { Evaluator } from './evaluator';
 import { skipped } from './walk';
 
@@ -37,8 +37,8 @@ export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
     ctx.recalc.settleArea(area);
     const { top, left } = area;
     const sheet = ctx.workbook.sheets[area.sheet].columns;
-    const rows = area.bottom - top + 1;
-    const columns = area.right - left + 1;
+    const rows = heightOf(area);
+    const columns = widthOf(area);
     const across = Math.max(0, Math.min(columns, sheet.length - left));
     let down = 0;
     for (let c = 0; c < across; c += 1) down = Math.max(down, Math.min(rows, sheet[left + c].length - top));
@@ -113,8 +113,8 @@ const REFERENCE_ROOM = 17;
 // stretch. So a range costs the cells it holds and not its extent. A formula still to be computed is held.
 export function cellsOf(ctx: Evaluator, area: Reference): Reference | ArrayValue | FormulaError {
     const { type, sheet, top, left } = area;
-    const rows = area.bottom - top + 1;
-    const columns = area.right - left + 1;
+    const rows = heightOf(area);
+    const columns = widthOf(area);
     if (rows * columns === 1) return area.next === null ? area : { ...area, next: null };
     const held = ctx.workbook.sheets[sheet].columns;
     const across = Math.max(0, Math.min(columns, held.length - left));

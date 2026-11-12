@@ -11,7 +11,7 @@ import { NodeKind } from '../text/tree';
 import type { FormulaError } from '../values/errors';
 import { CALC, NA, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
-import { arrayOf, isArray, isError, isReference } from '../values/value';
+import { arrayOf, isArray, isCell, isError, isReference } from '../values/value';
 import type { Axis } from './bands';
 import { align, apart } from './bands';
 import { ends, isLazy, picked, read, run } from './call';
@@ -215,7 +215,7 @@ function placeAt(array: ArrayValue, down: Axis, across: Axis, k: number, r: numb
 // An element where one value is read: a reference to one cell is that cell, and one to several is #VALUE!.
 export function single(ctx: Evaluator, item: Scalar | Reference): Scalar {
     if (!isReference(item)) return item;
-    const value = item.next === null && item.top === item.bottom && item.left === item.right ? ctx.read(item) : VALUE;
+    const value = isCell(item) ? ctx.read(item) : VALUE;
     return isArray(value) ? VALUE : value;
 }
 

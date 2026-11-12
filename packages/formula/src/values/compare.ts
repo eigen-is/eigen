@@ -4,8 +4,7 @@
 
 import { compare15 } from './precision';
 import { compareText, textKey } from './text-order';
-
-type Plain = number | string | boolean;
+import type { Plain } from './value';
 
 function rank(value: Plain): number {
     return typeof value === 'number' ? 0 : typeof value === 'string' ? 1 : 2;

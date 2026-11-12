@@ -8,6 +8,8 @@ import type { Column } from '../store/column';
 import { CellKind, KIND_MASK } from '../store/column';
 import { ColumnIndex, firstFrom } from '../store/column-index';
 import type { StringTable } from '../store/strings';
+import { EQUALS, GREATER, HASH, LESS } from '../text/chars';
+import { spelledBoolean } from '../values/coerce';
 import type { FormulaError } from '../values/errors';
 import { errorOf } from '../values/errors';
 import { parseNumber } from '../values/parse-number';
@@ -22,11 +24,6 @@ import type { Held } from './signature';
 import { Reach } from './walk';
 
 const Op = { Equal: 0, NotEqual: 1, Less: 2, LessEqual: 3, Greater: 4, GreaterEqual: 5 } as const;
-
-const LESS = 60;
-const EQUALS = 61;
-const GREATER = 62;
-const HASH = 35;
 
 type Criterion = {
     readonly op: number;
@@ -74,10 +71,12 @@ function criterionOf(strings: StringTable, value: Held): Criterion {
         const number = parseNumber(operand);
         key = textKey(operand);
         const error = key.charCodeAt(0) === HASH ? errorOf(key) : null;
+        // An operand is typed the way a cell entry is, so one that spells a boolean matches booleans and no text.
+        const truth = spelledBoolean(operand);
         if (number !== undefined) num = number;
-        else if (key === 'TRUE' || key === 'FALSE') {
+        else if (truth !== undefined) {
             kind = CellKind.Boolean;
-            ref = key === 'TRUE' ? 1 : 0;
+            ref = truth ? 1 : 0;
         } else if (error !== null && error.code !== 0) {
             kind = CellKind.Error;
             ref = error.code;

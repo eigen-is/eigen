@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Element, Errors, TypedText } from '../../eval/families';
+import { Element, OnError, TypedText } from '../../eval/families';
 import type { Entry, Param } from '../../eval/signature';
 import { Prepare, Read } from '../../eval/signature';
 import { FUNCTIONS } from '../../functions/library';
@@ -136,7 +136,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
     const scalars = params.map((param, at) => (reads(param) ? at : -1)).filter((at) => at >= 0);
     // The parameters whose reading an error ends, and those read as a number or a truth value.
     const ends = (param: Param<unknown>) =>
-        param.read < Read.Anything && (param.family === null || param.family.errors === Errors.Result);
+        param.read < Read.Anything && (param.family === null || param.family.errors === OnError.Result);
     const failing = params.map((param, at) => (ends(param) ? at : -1)).filter((at) => at >= 0);
     const corners = params.map((param, at) => (param.prepare === Prepare.Corner ? at : -1)).filter((at) => at >= 0);
     const coerced = scalars.filter((at) => params[at].read <= Read.Boolean && params[at].read !== Read.Text);
@@ -330,8 +330,8 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         if (family.text === TypedText.Passed) same('"x y"', null);
         if (family.text === TypedText.Counted) same('"x y"', '1');
         if (family.text === TypedText.Spelled) same('"true"', 'TRUE');
-        if (family.errors === Errors.Result) equals('1/0', DIV0);
-        else same('1/0', family.errors === Errors.Counted ? '1' : null);
+        if (family.errors === OnError.Result) equals('1/0', DIV0);
+        else same('1/0', family.errors === OnError.Counted ? '1' : null);
     });
 
     test('a cell counts by its kind, a blank cell never, a blank element of an array as a 0', () => {
@@ -368,8 +368,8 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
 
     test('an error in a range is found in argument order, after every typed argument is read', () => {
         if (family === undefined || family === null) return;
-        if (family.errors !== Errors.Result) {
-            same('E1:E3', family.errors === Errors.Counted ? '{1,1,1}' : '{1,1}');
+        if (family.errors !== OnError.Result) {
+            same('E1:E3', family.errors === OnError.Counted ? '{1,1,1}' : '{1,1}');
             return;
         }
         equals('E1:E3', DIV0);

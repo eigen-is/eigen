@@ -2,6 +2,7 @@
 // key two names are compared by, and the sheet a typed name reads. The parser resolves names through these and the
 // A1 printer writes them, as does anything else that builds a reference to another sheet.
 
+import { upperCase } from '../values/letter-case';
 import { isWord } from './lexer';
 import { readsAsReference } from './parser';
 
@@ -18,17 +19,10 @@ export function quoteSheetName(name: string): string {
     return bare ? name : quotedSheetName(name);
 }
 
-// What two sheet names are compared by. Each character folds to its uppercase on its own, so the Greek final ς
-// matches σ, and one whose uppercase is longer keeps its case, so ß never matches ss.
+// What two sheet names are compared by: Excel's upper case, which folds each character on its own, so the Greek
+// final ς matches σ and ß never matches ss.
 export function sheetNameKey(name: string): string {
-    const upper = name.toUpperCase();
-    if (upper.length === name.length) return upper;
-    let key = '';
-    for (const char of name) {
-        const folded = char.toUpperCase();
-        key += folded.length === char.length ? folded : char;
-    }
-    return key;
+    return upperCase(name);
 }
 
 // The sheet a name reads: the one of exactly that name, else one in another case. A workbook can hold Data and

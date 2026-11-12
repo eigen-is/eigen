@@ -8,13 +8,12 @@ import { toNumber, toText } from '../values/coerce';
 import { compareValues } from '../values/compare';
 import type { FormulaError } from '../values/errors';
 import { DIV0, NUM, VALUE } from '../values/errors';
+import { SMALLEST_NORMAL } from '../values/parse-number';
 import { power } from '../values/powers';
 import { snapSum } from '../values/precision';
 import type { Scalar, Value } from '../values/value';
 import { isError, LONGEST_TEXT } from '../values/value';
 import type { Entry } from './signature';
-
-const SMALLEST_NORMAL = 2.2250738585072014e-308;
 
 // A number as a cell can hold it: an overflow is #NUM!, and what is too small to be a normal double is 0.
 export function real(result: number): number | FormulaError {

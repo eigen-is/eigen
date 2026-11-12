@@ -12,10 +12,10 @@ import { Book } from './book';
 import { isLazy } from './call';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
-import { Errors, Families } from './families';
+import { Families, OnError } from './families';
 import type { Frame } from './readers';
 import { Numbers, Pairs, Table } from './readers';
-import type { Entry, Held, Param } from './signature';
+import type { Entry, Held } from './signature';
 import { ERRORS, Prepare, Read } from './signature';
 import { firstError } from './views';
 
@@ -33,7 +33,10 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
     for (let p = 0; p < params.length; p += 1) {
         const param = params[p];
         const { family } = param;
-        const to = param.rest ? count : at + spanOf(param);
+        // A parameter that takes no argument spans none, and one that reads two ranges side by side spans two.
+        const span =
+            param.prepare === Prepare.Ambient ? 0 : param.read === Read.Where || param.read === Read.Pairs ? 2 : 1;
+        const to = param.rest ? count : at + span;
         const value = held[at];
         if (param.prepare === Prepare.Ambient) {
             if (param.read === Read.Engine) args[p] = Book.aim(frame.book(), entry, held, count);
@@ -45,9 +48,9 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
             if (one !== null) ctx.recalc.settleArea(one);
             else for (let i = at; i < to; i += 1) settle(ctx, held[i]);
             const found =
-                family.errors !== Errors.Result ? null : one !== null ? firstError(ctx, one, frame.skips) : null;
+                family.errors !== OnError.Result ? null : one !== null ? firstError(ctx, one, frame.skips) : null;
             if (found !== null) return found;
-            for (let i = at; one === null && family.errors === Errors.Result && i < to; i += 1) {
+            for (let i = at; one === null && family.errors === OnError.Result && i < to; i += 1) {
                 const error = errorIn(ctx, held[i], family, frame.skips);
                 if (error !== null) return error;
             }
@@ -78,12 +81,6 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
     }
     if (args.length !== params.length) args.length = params.length;
     return null;
-}
-
-// How many arguments one occurrence of a parameter takes.
-function spanOf(param: Param<unknown>): number {
-    if (param.prepare === Prepare.Ambient) return 0;
-    return param.read === Read.Where || param.read === Read.Pairs ? 2 : 1;
 }
 
 // Whether a slot holds what an argument was evaluated to, which is all it holds where a range is taken.

@@ -8,7 +8,10 @@ import type { FormulaError } from './errors';
 
 export const ValueType = { Error: 1, Reference: 2, Array: 3, Lazy: 4, Table: 5 } as const;
 
-export type Scalar = number | string | boolean | null | FormulaError;
+// A value a person can type into a cell.
+export type Plain = number | string | boolean;
+
+export type Scalar = Plain | null | FormulaError;
 
 // The most characters a text holds: a longer one is #VALUE!.
 export const LONGEST_TEXT = 32767;
@@ -58,6 +61,11 @@ export function isReference(value: Tagged): value is Reference {
 
 export function isArray(value: Tagged): value is ArrayValue {
     return typeof value === 'object' && value !== null && value.type === ValueType.Array;
+}
+
+// Whether a reference names one cell and nothing else.
+export function isCell(reference: Reference): boolean {
+    return reference.next === null && reference.top === reference.bottom && reference.left === reference.right;
 }
 
 // How many rows and columns a range or an array has as it was written. Anything else is one value.

@@ -5,9 +5,7 @@
 import { isDate, weekdayFromMonday } from './dates';
 import type { FormulaError } from './errors';
 import { NUM, VALUE } from './errors';
-
-// What a week's days off may be written as: a code, or a text of seven digits.
-type Weekend = number | string | boolean | null;
+import type { Plain } from './value';
 
 const SIGNS = '01';
 
@@ -15,7 +13,7 @@ const SIGNS = '01';
 export function countWorkdays(
     start: number,
     end: number,
-    weekend: Weekend,
+    weekend: Plain | null,
     holidays: Float64Array,
 ): number | FormulaError {
     const off = daysOff(weekend);
@@ -38,7 +36,7 @@ export function countWorkdays(
 export function addWorkdays(
     start: number,
     days: number,
-    weekend: Weekend,
+    weekend: Plain | null,
     holidays: Float64Array,
 ): number | FormulaError {
     const count = Math.floor(days);
@@ -69,7 +67,7 @@ export function addWorkdays(
 
 // The days off as seven bits, Monday the lowest. A code 1 to 7 is two days from Saturday and Sunday on, 11 to 17
 // one day from Sunday on; a text names each day from Monday with 1 for off.
-function daysOff(weekend: Weekend): number | FormulaError {
+function daysOff(weekend: Plain | null): number | FormulaError {
     if (typeof weekend === 'string') {
         if (weekend.length !== 7) return VALUE;
         let off = 0;

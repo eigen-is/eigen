@@ -13,6 +13,7 @@ import {
     elementAt,
     heightOf,
     isArray,
+    isCell,
     isError,
     isReference,
     partOf,
@@ -232,7 +233,7 @@ export class Pairs {
         if (isReference(first)) ctx.recalc.settleArea(first);
         if (isReference(second)) ctx.recalc.settleArea(second);
         // Past the last cell of both ranges every place is a blank, which pairs with nothing.
-        const used = Math.max(reach(ctx, first), reach(ctx, second));
+        const used = Math.max(placesOf(ctx, first), placesOf(ctx, second));
         // Two lists are made, and each may be as long as an array is.
         if (!ctx.recalc.room(used) || !ctx.recalc.spend(used)) return CALC;
         if (pairs.first.length < used) {
@@ -259,16 +260,14 @@ export class Pairs {
 // What keeps one cell that is an argument by itself from being paired: #VALUE! when it holds nothing, and the
 // error it holds. Null for any other argument.
 function alone(ctx: Evaluator, value: Value): FormulaError | null {
-    if (!isReference(value) || value.next !== null || value.top !== value.bottom || value.left !== value.right) {
-        return null;
-    }
+    if (!isReference(value) || !isCell(value)) return null;
     const held = ctx.first(value);
     return held === null ? VALUE : isError(held) ? held : null;
 }
 
 // How many places of an argument, counted row by row, can hold a value: of a range, up to the last row that a
 // column of it reaches.
-function reach(ctx: Evaluator, value: Value): number {
+function placesOf(ctx: Evaluator, value: Value): number {
     if (!isReference(value)) return heightOf(value) * widthOf(value);
     const { columns } = ctx.workbook.sheets[value.sheet];
     let rows = 0;
@@ -370,16 +369,10 @@ export class Table {
     private aim(value: Value): this {
         this.value = value;
         this.areas = 1;
-        this.reference = false;
-        if (isReference(value)) {
-            this.reference = true;
-            this.rows = value.bottom - value.top + 1;
-            this.columns = value.right - value.left + 1;
-            for (let area = value.next; area !== null; area = area.next) this.areas += 1;
-        } else {
-            this.rows = isArray(value) ? value.rows : 1;
-            this.columns = isArray(value) ? value.columns : 1;
-        }
+        this.reference = isReference(value);
+        this.rows = heightOf(value);
+        this.columns = widthOf(value);
+        for (let area = isReference(value) ? value.next : null; area !== null; area = area.next) this.areas += 1;
         return this;
     }
 

@@ -34,7 +34,7 @@ const DIGITS_KEPT = 15;
 
 // Excel has no number under the smallest normal one: a typed number under it is 0, as 1E-308 and 1E-309 are, and
 // one under the last of those that Excel is known to take is no number, as 1E-320 is none.
-const SMALLEST_NORMAL = 2.2250738585072014e-308;
+export const SMALLEST_NORMAL = 2.2250738585072014e-308;
 const SMALLEST_TYPED = 1e-309;
 
 // A year under 100 is in the 2000s below this and in the 1900s from it on, however many digits it was written in.

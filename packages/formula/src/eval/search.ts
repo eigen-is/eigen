@@ -13,14 +13,12 @@ import type { FormulaError } from '../values/errors';
 import { VALUE } from '../values/errors';
 import { equal15 } from '../values/precision';
 import { textKey } from '../values/text-order';
-import type { Reference, Scalar, Value } from '../values/value';
+import type { Plain, Reference, Scalar, Value } from '../values/value';
 import { bandOf, heightOf, isArray, isReference, widthOf } from '../values/value';
 import { patternMatches, patternOf } from '../values/wildcard';
 import type { Evaluator } from './evaluator';
 import { Find } from './signature';
 import { toArray } from './views';
-
-type Key = number | string | boolean;
 
 // One row or one column of a table, ready to be searched.
 export class Vector {
@@ -61,13 +59,13 @@ export class Vector {
 
     // The place of the key itself, a text key as a pattern, or of the last value at most the key among values taken
     // to be sorted upward, or of the key or else the last value above it among values taken to be sorted downward.
-    public find(key: Key, mode: Find): number {
+    public find(key: Plain, mode: Find): number {
         return mode === Find.Exact ? this.exact(key, true, false) : this.halve(key, mode === Find.AtLeast);
     }
 
     // XMATCH's own codes. `match`: 0 the key itself, -1 it or the next smaller value, 1 it or the next larger, 2 the
     // key as a pattern. `search`: 1 from the first value on, -1 from the last back, 2 or -2 a bisection up or down.
-    public seek(key: Key | null, match: number, search: number): number | FormulaError {
+    public seek(key: Plain | null, match: number, search: number): number | FormulaError {
         if (match !== 0 && match !== -1 && match !== 1 && match !== 2) return VALUE;
         if (search === 1 || search === -1) {
             if (match === 0 || match === 2) return this.exact(key, match === 2, search < 0);
@@ -99,7 +97,7 @@ export class Vector {
 
     // The first value that equals the key, or the last one when `reverse`. With `wild` a text key is a pattern, and
     // a blank key finds a blank.
-    private exact(key: Key | null, wild: boolean, reverse: boolean): number {
+    private exact(key: Plain | null, wild: boolean, reverse: boolean): number {
         const { column, start } = this;
         const used = this.stored;
         const step = reverse ? -1 : 1;
@@ -168,7 +166,7 @@ export class Vector {
 
     // The value that equals the key, or else the nearest smaller one, or the nearest larger one with `larger`. Every
     // value is looked at, in order or from the last one back with `reverse`, and of equal candidates the first wins.
-    private nearest(key: Key, larger: boolean, reverse: boolean): number {
+    private nearest(key: Plain, larger: boolean, reverse: boolean): number {
         const used = this.stored;
         const step = reverse ? -1 : 1;
         const end = reverse ? -1 : used;
@@ -193,7 +191,7 @@ export class Vector {
     // last value above it, among values taken to be sorted downward. A probe at a value of another kind moves to the
     // next of the key's kind after it, else before it, and the search goes on beside the value it moved to. Of equal
     // keys the halving goes on to the last one upward and to the first one downward.
-    private halve(key: Key, descending: boolean): number {
+    private halve(key: Plain, descending: boolean): number {
         let low = 0;
         let high = this.used - 1;
         let hit = -1;
@@ -226,7 +224,7 @@ export class Vector {
     // Bisection over values taken to be sorted in the one order of values, kinds and all, with an error and a
     // blank past every value. Of equal keys it finds the first when the values go up and the last when they go
     // down. `mode` is seek's `match`.
-    private bisect(key: Key, descending: boolean, mode: number): number {
+    private bisect(key: Plain, descending: boolean, mode: number): number {
         let low = 0;
         let high = this.used - 1;
         let hit = -1;
@@ -259,7 +257,7 @@ export function edge(ctx: Evaluator, range: Value, down: boolean, index: number)
         const left = range.left + index;
         ctx.recalc.settleArea({ ...range, left, right: left, next: null });
         const column = workbook.sheets[range.sheet].columns[left];
-        const length = range.bottom - range.top + 1;
+        const length = heightOf(range);
         // The blanks at the end of the range take no part, whatever cells the column holds below it.
         let used = column === undefined ? 0 : Math.max(0, Math.min(length, column.length - range.top));
         while (used > 0 && (column.kind[range.top + used - 1] & KIND_MASK) === CellKind.Empty) used -= 1;
@@ -288,6 +286,6 @@ export function edge(ctx: Evaluator, range: Value, down: boolean, index: number)
 }
 
 // How a value sorts against the key, and NaN when it is of another kind.
-function against(value: Scalar | Reference, key: Key): number {
+function against(value: Scalar | Reference, key: Plain): number {
     return typeof value === 'object' || typeof value !== typeof key ? Number.NaN : compareValues(value, key);
 }

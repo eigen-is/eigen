@@ -8,11 +8,11 @@ import type { Column } from '../store/column';
 import { CellKind, KIND_MASK } from '../store/column';
 import type { FormulaError } from '../values/errors';
 import type { ArrayValue, Reference } from '../values/value';
-import { isArray, isError, isReference } from '../values/value';
+import { isArray, isCell, isError, isReference } from '../values/value';
 import type { Evaluator } from './evaluator';
 import { Fact } from './facts';
 import type { Family } from './families';
-import { Element, Errors, Families } from './families';
+import { Element, Families, OnError } from './families';
 import { Products } from './products';
 import type { Held } from './signature';
 import { ERRORS, NESTED } from './signature';
@@ -115,10 +115,7 @@ export class Walk {
     }
 
     private argument(value: Held): boolean {
-        if (isReference(value)) {
-            const one = value.top === value.bottom && value.left === value.right && value.next === null;
-            return one ? this.cell(value) : this.enter(value);
-        }
+        if (isReference(value)) return isCell(value) ? this.cell(value) : this.enter(value);
         if (isArray(value)) {
             this.array = value;
             this.item = 0;
@@ -135,7 +132,7 @@ export class Walk {
         if (element === Element.Counted) return 0;
         if (element !== Element.First) return element;
         const first = this.ctx.first(at);
-        return isError(first) && family.errors === Errors.Result ? first : this.counted(at, family, 0);
+        return isError(first) && family.errors === OnError.Result ? first : this.counted(at, family, 0);
     }
 
     private cell(at: Reference): boolean {

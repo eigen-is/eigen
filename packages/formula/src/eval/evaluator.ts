@@ -14,7 +14,7 @@ import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from '../text/tree';
 import type { FormulaError } from '../values/errors';
 import { CALC, errorOf, NAME, NULL, REF, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
-import { arrayOf, isArray, isError, isReference, ValueType } from '../values/value';
+import { arrayOf, isArray, isCell, isError, isReference, ValueType } from '../values/value';
 import { call } from './call';
 import { lift } from './lift';
 import { LIFTED_BINARY, LIFTED_NEGATE, LIFTED_PERCENT, LIFTED_PLUS, negate, operate, percent } from './operators';
@@ -138,11 +138,8 @@ export class Evaluator {
         if (typeof value !== 'object' || value === null) return value;
         switch (value.type) {
             case ValueType.Reference:
-                if (value.next !== null) return VALUE;
-                if (value.top === value.bottom && value.left === value.right) {
-                    return this.recalc.valueOf(this.workbook.sheets[value.sheet], value.top, value.left);
-                }
-                return toArray(this, value);
+                if (isCell(value)) return this.recalc.valueOf(this.workbook.sheets[value.sheet], value.top, value.left);
+                return value.next === null ? toArray(this, value) : VALUE;
             default:
                 return value;
         }

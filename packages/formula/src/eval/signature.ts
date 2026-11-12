@@ -3,13 +3,14 @@
 // is data the wrapper switches on, and slotOf says which record an argument of a call falls under. The words a
 // function is written in are made from these records by the registry.
 
+import { MAX_ARGUMENTS } from '../text/parser';
 import type { FormulaError } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { ValueType } from '../values/value';
 import type { Family } from './families';
 import type { Table } from './readers';
 
-export const MAX_ARGUMENTS = 255;
+export { MAX_ARGUMENTS };
 
 export const Prepare = {
     // Read to a value: a range becomes an array, and an array runs the call once per element.
