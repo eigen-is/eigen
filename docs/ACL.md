@@ -21,7 +21,7 @@ type DriveACL = { id: string; read: boolean; write: boolean }  // id = email or 
 type DriveVisibility = 'private' | 'public-read' | 'public-write'
 ```
 
-Defined in `packages/lib/src/types/drive.ts`.
+Defined in `packages/lib/src/types/drive-access.ts`.
 
 ## Core Logic
 
