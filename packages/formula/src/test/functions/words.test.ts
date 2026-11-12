@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { fn, NUMBER, NUMBERS, NUMBERS_A, rest } from '../../functions/registry';
 import { DIV0, NA, NUM, REF, VALUE } from '../../index';
+import { dateSerial } from '../../values/dates';
 import type { Cells } from '../recalc/support';
 import { evaluate, evaluateWith } from '../recalc/support';
 
@@ -253,4 +254,15 @@ describe('the numbers, with a boolean in a cell as 1 or 0 and a text in a cell a
     ])('%s', (formula, expected) => {
         expect(evaluateWith(ROWS, formula, F1)).toBe(expected);
     });
+});
+
+// DATE is not a function of this build, and it needs no word of its own: Excel cuts its parts down, which a
+// body does to a NUMBER.
+test('a whole number that is cut down is a NUMBER and the body', () => {
+    const DATE = fn('DATE', [NUMBER, NUMBER, NUMBER], (year, month, day) =>
+        dateSerial(Math.floor(year), Math.floor(month), Math.floor(day)),
+    );
+    // Excel batch 4 and 5: 1 January 2020, and 1 November 2019 for a month of -0.5.
+    expect(evaluateWith([DATE], '=DATE(2020,1.9,1.9)')).toBe(43831);
+    expect(evaluateWith([DATE], '=DATE(2020,-0.5,1)')).toBe(43770);
 });
