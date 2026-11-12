@@ -66,7 +66,7 @@ export function useDriveActionRunner({
     onAfterAction,
 }: UseDriveActionRunnerOptions): DriveActionRunner {
     const dialogs = useDriveDialogs();
-    const { mutateAsync: movePaths } = useMovePaths(ownerId, mountId, currentPath?.id);
+    const { mutateAsync: movePaths } = useMovePaths();
     const { mutateAsync: copyToFolder } = useCopyToFolder();
     const { mutate: duplicatePaths } = useDuplicatePaths();
     const deletePathsMutation = useDeletePaths();
@@ -75,9 +75,8 @@ export function useDriveActionRunner({
     const actionsFor = useDriveActionsFor(capabilities);
     const { exportPath, isExporting } = useDocumentExport();
 
-    // A delete asks first on touch, where a tap can land on the wrong row and nothing hovers to warn of it.
-    // It asks too for an item in someone else's drive, where it leaves a direct share or trashes the owner's
-    // copy. With a mouse in the viewer's own drive, it deletes at once.
+    // A delete asks first on touch, where a tap can land on the wrong row, and for an item in someone else's
+    // drive, where it leaves a direct share or trashes the owner's copy.
     const deletePaths = (paths: readonly DrivePath[]) => {
         if (isCoarsePointer || paths.some((path) => !isEffectiveOwnerOf(path.ownerId))) {
             dialogs.delete.openDialog(paths);
@@ -92,7 +91,8 @@ export function useDriveActionRunner({
 
     const handlePickDestination = async (location: { ownerId: string; mountId: string; folderId: string }) => {
         const { items, mode } = dialogs.copyMove;
-        if (mode === 'move' && (location.ownerId !== ownerId || location.mountId !== mountId)) {
+        const leavesDrive = (item: DrivePath) => item.ownerId !== location.ownerId || item.mountId !== location.mountId;
+        if (mode === 'move' && items.some(leavesDrive)) {
             toast.error('Moving across drives isn’t supported yet. Use Copy to… instead.');
             return;
         }
@@ -257,9 +257,8 @@ export function useDriveActionRunner({
                     confirmLabel={dialogs.copyMove.mode === 'move' ? 'Move here' : 'Copy here'}
                     defaultOwnerId={ownerId}
                     defaultMountId={mountId}
-                    // currentPath can sit on another drive: a document app's index passes the viewer's own root
-                    // while a team drive item is selected. So it seeds the start folder only when it is on the
-                    // layout's drive, and the picker starts at that drive's root otherwise.
+                    // currentPath can sit on another drive, as a document app's index passes the viewer's own root
+                    // while a team drive item is selected. Then the picker starts at the layout drive's root.
                     defaultFolderId={
                         currentPath?.ownerId === ownerId && currentPath?.mountId === mountId
                             ? currentPath?.id

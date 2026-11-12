@@ -127,16 +127,7 @@ export function useDeletePaths() {
                     return path;
                 },
                 (deleted) => {
-                    for (const path of deleted) {
-                        invalidateItemDeleted(
-                            queryClient,
-                            path.ownerId,
-                            path.mountId,
-                            path.id,
-                            path.parentId,
-                            path.mimeType,
-                        );
-                    }
+                    for (const path of deleted) invalidateItemDeleted(queryClient, path);
                     // Deleting a direct share leaves it, which drops the row from the caller's shared-with-me list.
                     if (user) invalidateAclSharedOrUnshared(queryClient, user.id);
                 },
@@ -145,7 +136,8 @@ export function useDeletePaths() {
     });
 }
 
-export function useMovePaths(ownerId: string, mountId: string = DEFAULT_MOUNT_ID, currentParentId?: string) {
+// A move stays inside one drive, so the target folder is looked up in each item's own.
+export function useMovePaths() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: ({ paths, targetParentId }: { paths: readonly DrivePath[]; targetParentId: string }) =>
@@ -153,16 +145,14 @@ export function useMovePaths(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
                 'move',
                 paths,
                 async (path) => {
-                    const response = await driveApi({ ownerId })({ mountId })
+                    const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
                         .path({ pathId: path.id })
                         .move.put({ targetParentId });
                     if (response.error) throw new AppError(response);
                     return path;
                 },
                 (moved) => {
-                    for (const path of moved) {
-                        invalidatePathMoved(queryClient, ownerId, mountId, path.id, targetParentId, currentParentId);
-                    }
+                    for (const path of moved) invalidatePathMoved(queryClient, path, targetParentId);
                 },
             ),
         onError: onMutationError,
@@ -230,21 +220,17 @@ export function useCopyToMediaFolder(ownerId: string, mountId: string) {
     });
 }
 
-export function useRenamePath(
-    ownerId: string,
-    mountId: string = DEFAULT_MOUNT_ID,
-    parentId?: string,
-    mimeType?: string,
-) {
+export function useRenamePath() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({ pathId, newName }: { pathId: string; newName: string }) => {
-            const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).rename.put({ newName });
+        mutationFn: async ({ path, newName }: { path: DrivePath; newName: string }) => {
+            const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
+                .path({ pathId: path.id })
+                .rename.put({ newName });
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, variables) =>
-            invalidatePathRenamed(queryClient, ownerId, mountId, variables.pathId, parentId, mimeType),
+        onSuccess: (_data, { path }) => invalidatePathRenamed(queryClient, path),
         onError: onMutationError,
     });
 }

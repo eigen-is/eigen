@@ -11,7 +11,7 @@ import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
-const renamePath = mock(async (_variables: { pathId: string; newName: string }) => {});
+const renamePath = mock(async (_variables: { path: DrivePath; newName: string }) => {});
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realDrive = { ...(await import('@workspace/lib/drive')) };
 mock.module('@workspace/lib/drive', () => ({
@@ -101,7 +101,7 @@ test('Rename puts the extension back once, closes, and reports the rename', asyn
     await type('Minutes.eigendoc');
     await act(async () => pressEnter(nameField()));
     await settle();
-    expect(renamePath.mock.calls).toEqual([[{ pathId: 'notes', newName: 'Minutes.eigendoc' }]]);
+    expect(renamePath.mock.calls).toEqual([[{ path: notes, newName: 'Minutes.eigendoc' }]]);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
     expect(onAfterAction.mock.calls).toEqual([['rename', { name: 'Minutes.eigendoc' }]]);
 });
@@ -111,7 +111,7 @@ test('a folder is renamed to the name as typed', async () => {
     await type('Archive');
     await act(async () => button('Rename')?.click());
     await settle();
-    expect(renamePath.mock.calls).toEqual([[{ pathId: 'projects', newName: 'Archive' }]]);
+    expect(renamePath.mock.calls).toEqual([[{ path: projects, newName: 'Archive' }]]);
 });
 
 test('a rename that fails stays open with the typed name', async () => {

@@ -68,10 +68,7 @@ async function confirm(label: string) {
     });
 }
 
-test.each([
-    ['copy-to', 'Copy here'],
-    ['move-to', 'Move here'],
-] as const)('%s: confirming again after a partial failure sends only the failed item', async (id, label) => {
+async function openPicker(id: 'copy-to' | 'move-to', picked: DrivePath[]) {
     posted.length = 0;
     const router = createRouter({
         routeTree: createRootRoute({
@@ -81,10 +78,32 @@ test.each([
     });
     await router.load();
     ({ unmount } = await renderInDocument(createElement(RouterProvider, { router })));
-    await act(async () => run(id, items));
+    await act(async () => run(id, picked));
+}
+
+test.each([
+    ['copy-to', 'Copy here'],
+    ['move-to', 'Move here'],
+] as const)('%s: confirming again after a partial failure sends only the failed item', async (id, label) => {
+    await openPicker(id, items);
     await confirm(label);
     expect(posted).toEqual(['good', 'bad', 'other']);
     posted.length = 0;
     await confirm(label);
     expect(posted).toEqual(['bad']);
+});
+
+// A view can list another drive's items, as a document app's index lists a team's. The picker starts in the
+// view's drive, and a move never leaves the item's own.
+test('move-to: an item of another drive is not moved into the drive the view shows', async () => {
+    const teamItem = drivePath({
+        id: 'team-item',
+        name: 'Plan.txt',
+        mimeType: 'text/plain',
+        ownerId: 'team-1',
+        parentId: 'team-root',
+    });
+    await openPicker('move-to', [teamItem]);
+    await confirm('Move here');
+    expect(posted).toEqual([]);
 });

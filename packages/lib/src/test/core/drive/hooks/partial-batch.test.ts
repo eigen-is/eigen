@@ -61,7 +61,7 @@ async function run(hook: keyof Hooks, paths: readonly DrivePath[]): Promise<{ re
     const { usePermanentlyDelete } = await import('../../../../core/drive/hooks/trash');
     const { queryClient } = trackingClient();
     const { latest, unmount } = await renderHook((): Hooks => {
-        const move = useMovePaths(OWNER, 'm1', 'folder');
+        const move = useMovePaths();
         const trash = useDeletePaths();
         const destroy = usePermanentlyDelete(OWNER, 'm1');
         return {
