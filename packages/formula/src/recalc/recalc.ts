@@ -75,6 +75,8 @@ export class Recalc {
     private stored = false;
     // What each cell in progress has made since its formula last started.
     private readonly made: number[] = [];
+    // The area each cell in progress is having computed, which a throw for depth leaves for the pass, or null.
+    private readonly areas: (Reference | null)[] = [];
 
     public constructor(workbook: Workbook, functions: Registry) {
         this.workbook = workbook;
@@ -146,9 +148,15 @@ export class Recalc {
                         this.enter(sheet, column, c, row);
                         // After a throw for depth the innermost cell in progress goes first, with no call above it.
                         while (this.current >= 0) {
-                            this.depth = this.nesting(this.columns[this.current].shape[this.rows[this.current]]);
+                            const at = this.current;
+                            const area = this.areas[at];
                             this.evaluator.calls = 0;
                             try {
+                                // The area it was reading is computed from here, with nothing of its formula on
+                                // the stack: a formula too deep to read one cell starts again once, not per cell.
+                                this.depth = 0;
+                                if (area !== null) this.settleArea(area);
+                                this.depth = this.nesting(this.columns[at].shape[this.rows[at]]);
                                 this.compute();
                             } catch (thrown) {
                                 if (thrown !== UNWIND) throw thrown;
@@ -199,6 +207,8 @@ export class Recalc {
     // Computes what is still to be computed in one area, so a loop over its planes meets values only.
     public settleArea(area: Reference): void {
         const { top } = area;
+        const reader = this.current;
+        this.areas[reader] = area;
         const sheet = this.workbook.sheets[area.sheet];
         const right = Math.min(area.right, sheet.columns.length - 1);
         for (let c = area.left; c <= right; c += 1) {
@@ -208,6 +218,7 @@ export class Recalc {
                 if (column.kind[row] > SETTLED) this.resolve(sheet, column, c, row);
             }
         }
+        this.areas[reader] = null;
     }
 
     // Asks for an array of so many stored elements before the running formula makes it: false when one array may
@@ -260,6 +271,7 @@ export class Recalc {
         this.parents[at] = this.current;
         this.lows[at] = at;
         this.made[at] = 0;
+        this.areas[at] = null;
         this.size = at + 1;
         this.current = at;
     }

@@ -202,6 +202,27 @@ describe('depth', () => {
         expect(engine.valueOf('s1', 0, 0)).toBe(5000);
     });
 
+    // A formula that draws before it reads tells how often it ran: its value is that draw of the pass.
+    test('a formula too deep to read a range still to be computed starts again once, however long the range', () => {
+        const draws = sheetOf((cell) => {
+            for (let row = 0; row < 10; row += 1) cell(row, 0, null, '=RAND()');
+        });
+        draws.recalc(NO_CAP, 0, 5);
+        const drawn = Array.from({ length: 10 }, (_, row) => draws.valueOf('s1', row, 0));
+        for (const length of [1000, 4000]) {
+            const deep = `${'IF(1,0+'.repeat(50)}SUM(R1C2:R${length}C2)${')'.repeat(50)}`;
+            const engine = sheetOf((cell) => {
+                cell(0, 0, null, `=RAND()+0*${deep}`);
+                cell(1, 0, null, `=${deep}`);
+                cell(0, 2, 1, null);
+                for (let row = 0; row < length; row += 1) cell(row, 1, null, '=R1C3+1');
+            });
+            expect(engine.recalc(NO_CAP, 0, 5)).toEqual({ loops: [], stopped: false });
+            expect(drawn.indexOf(engine.valueOf('s1', 0, 0))).toBe(1);
+            expect(engine.valueOf('s1', 1, 0)).toBe(2 * length);
+        }
+    });
+
     test('a loop longer than the stack is still a loop, on every cell of it', () => {
         const engine = sheetOf((cell) => {
             cell(0, 0, null, '=R[1]C+1');
@@ -293,6 +314,19 @@ describe('the cap', () => {
         expect([stopped, loops.length, valueAt(engine, 'D1')]).toEqual([true, 3, null]);
         expect(engine.recalc(2).stopped).toBe(false);
         expect(valueAt(engine, 'D1')).toBe(2);
+    });
+
+    test('a pass that stops inside a range a deep formula reads leaves the range to no later formula', () => {
+        const deep = (inner: string) => `=${'IF(1,0+'.repeat(50)}${inner}${')'.repeat(50)}`;
+        const engine = sheetOf((cell) => {
+            cell(0, 0, null, deep('SUM(R1C1:R10C2)'));
+            for (let row = 0; row < 10; row += 1) cell(row, 1, null, '=1+1');
+            cell(0, 2, null, '=1+1');
+        });
+        expect(engine.recalc(1).stopped).toBe(true);
+        engine.setFormula('s1', 0, 0, deep('R1C3'));
+        expect(engine.recalc(NO_CAP)).toEqual({ loops: [], stopped: false });
+        expect(engine.valueOf('s1', 0, 0)).toBe(2);
     });
 
     test('a pass that stops inside a loop leaves no cell in progress and no loop half found', () => {
