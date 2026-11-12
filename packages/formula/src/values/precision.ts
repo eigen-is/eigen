@@ -1,7 +1,8 @@
 // Excel's 15 significant digits on top of plain doubles. Arithmetic keeps every bit; these rules apply where a
-// number is compared, where a sum comes out next to zero and where a rounding function cuts decimals, so that
-// 0.1+0.2 equals 0.3 and ROUND(1.005,2) is 1.01. The evaluator's operators and the function library call them
-// once per cell, so each takes its cheap exit before it reads any decimal digits.
+// number is compared, where a sum comes out next to zero and where a rounding function cuts decimals or counts
+// whole steps, so that 0.1+0.2 equals 0.3, ROUND(1.005,2) is 1.01 and ROUNDDOWN(0.29,2) is 0.29. The evaluator's
+// operators and the function library call them once per cell, so each takes its cheap exit before it reads any
+// decimal digits.
 
 // A sum whose leading bit lies this many bits or more under its left operand's is what binary rounding left of a
 // decimal zero.
@@ -74,4 +75,38 @@ export function roundDecimal(n: number, digits: number): number {
     if (2 * (shown - kept * unit) >= unit) kept += 1;
     if (kept === 0) return 0;
     return Number(`${n < 0 ? '-' : ''}${kept}e${-digits}`);
+}
+
+// Cuts at `digits` decimals toward zero, or with `away` steps to the next number of that many decimals away from
+// zero when anything is cut off. As roundDecimal it works on the 15 digit decimal, so 0.29 times 100, a double
+// just under 29, cuts to 29. A step past the largest number is an infinity.
+export function cutDecimal(n: number, digits: number, away: boolean): number {
+    const power = POWERS_OF_TEN[Math.abs(digits)];
+    if (power !== undefined) {
+        const scaled = Math.abs(digits < 0 ? n / power : n * power);
+        const whole = Math.floor(scaled);
+        const margin = HALF_RATIO * scaled;
+        if (scaled - whole > margin && whole + 1 - scaled > margin) {
+            const kept = away ? whole + 1 : whole;
+            if (kept === 0) return 0;
+            const cut = digits < 0 ? kept * power : kept / power;
+            return n < 0 ? -cut : cut;
+        }
+    }
+    const text = Math.abs(n).toExponential(14);
+    const drop = 14 - Number(text.slice(17)) - digits;
+    if (drop <= 0) return round15(n);
+    // Past 15 digits nothing is kept, and 1e16 is above every 15 digit number.
+    const unit = POWERS_OF_TEN[Math.min(drop, 16)] ?? 1e16;
+    const shown = Number(text.charAt(0) + text.slice(2, 16));
+    const kept = Math.floor(shown / unit) + (away && shown % unit !== 0 ? 1 : 0);
+    if (kept === 0) return 0;
+    if (digits < -308) return n < 0 ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY;
+    return Number(`${n < 0 ? '-' : ''}${kept}e${-digits}`);
+}
+
+// A quotient that is a whole number in its 15 digits is that whole number: 1.1 / 0.1 is 11, not a little more.
+export function snapWhole(n: number): number {
+    const whole = Math.round(n);
+    return equal15(n, whole) ? whole : n;
 }
