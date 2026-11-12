@@ -7,7 +7,7 @@ import { GRID_ROWS } from '../text/a1';
 import type { FormulaError } from '../values/errors';
 import { CALC } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
-import { ValueType } from '../values/value';
+import { arrayOf, ValueType } from '../values/value';
 import type { Evaluator } from './evaluator';
 import { skipped } from './walk';
 
@@ -102,4 +102,21 @@ function runs(filled: Uint8Array, length: number, size: number): Int32Array | nu
     }
     ends[count - 1] = size;
     return ends;
+}
+
+// The cells of the first area of a reference, each as a reference of its own, for a parameter that takes a range
+// cell by cell. One cell is itself.
+export function cellsOf(ctx: Evaluator, area: Reference): Reference | ArrayValue | FormulaError {
+    const { type, sheet } = area;
+    const rows = area.bottom - area.top + 1;
+    const columns = area.right - area.left + 1;
+    if (rows * columns === 1) return area.next === null ? area : { ...area, next: null };
+    if (!ctx.recalc.room(rows * columns)) return CALC;
+    const items: Reference[] = [];
+    for (let row = area.top; row <= area.bottom; row += 1) {
+        for (let c = area.left; c <= area.right; c += 1) {
+            items.push({ type, sheet, top: row, left: c, bottom: row, right: c, next: null });
+        }
+    }
+    return arrayOf(rows, columns, items, null, null, true);
 }

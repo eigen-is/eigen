@@ -77,6 +77,8 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
     if (entry !== undefined && entry.chosen !== null) flags |= Fact.Chosen;
     if (entry?.volatile) flags |= Fact.Volatile;
     if (entry?.returns === ANYWHERE) flags |= Fact.ReadsUnnamed;
+    // What a row asks of the workbook itself, such as the text of a formula, is the value of no cell it names.
+    if (entry?.params.some((param) => param.read === Read.Engine)) flags |= Fact.ReadsUnnamed;
     // A range that takes its size from another names cells of its own only when the two are of one size.
     if (entry !== undefined && entry.matched > entry.where && entry.matched < node.children.length) {
         if (!sameSize(node.children[entry.where], node.children[entry.matched])) flags |= Fact.ReadsUnnamed;

@@ -6,8 +6,10 @@ import { NA, REF, VALUE } from '../values/errors';
 import type { Table } from './registry';
 import {
     ANYWHERE,
+    apiece,
     areas,
     BOOLEAN,
+    ENGINE,
     Find,
     fn,
     HERE,
@@ -23,6 +25,7 @@ import {
     refusing,
     skippable,
     TABLE,
+    TEXT,
 } from './registry';
 
 type Key = number | string | boolean | null;
@@ -126,4 +129,7 @@ export const LOOKUP = [
         },
         PART,
     ),
+    fn('FORMULATEXT', [apiece(areas(REFERENCE)), ENGINE], (_cell, book) => book.formula() ?? NA),
+    // The text is read as A1, and as R1C1 when the second argument is FALSE.
+    fn('INDIRECT', [TEXT, optional(BOOLEAN, true), ENGINE], (text, a1, book) => book.refer(text, a1), ANYWHERE),
 ];

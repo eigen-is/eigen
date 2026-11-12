@@ -62,10 +62,12 @@ export const Read = {
     Where: 17,
     Matched: 18,
     Blanks: 19,
-    // What takes no argument: room for an array, a draw in [0, 1), and the date and time as a serial.
+    // What takes no argument: room for an array, a draw in [0, 1), the date and time as a serial, and what a
+    // body may ask of the workbook.
     Room: 20,
     Random: 21,
     Now: 22,
+    Engine: 23,
 } as const;
 
 export type Read = (typeof Read)[keyof typeof Read];
@@ -92,6 +94,8 @@ export type Param<T> = {
     readonly union: FormulaError | null;
     // Whether the parameter takes nothing but a reference, so an array of references runs the call once for each.
     readonly only: boolean;
+    // Whether a range of several cells runs the call once per cell, each a reference of its own.
+    readonly apiece: boolean;
     // Only in the type, never in a record: what the body gets.
     readonly [carries]?: () => T;
 };

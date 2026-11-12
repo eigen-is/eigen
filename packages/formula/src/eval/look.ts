@@ -7,6 +7,7 @@ import type { FormulaError } from '../values/errors';
 import { CALC, VALUE } from '../values/errors';
 import type { Value } from '../values/value';
 import { elementAt, heightOf, isArray, isError, isReference, widthOf } from '../values/value';
+import { Book } from './book';
 import { isLazy } from './call';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
@@ -34,7 +35,8 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
         const to = param.rest ? count : at + spanOf(param);
         const value = held[at];
         if (param.prepare === Prepare.Ambient) {
-            args[p] = param.read === Read.Room ? ctx.room : param.read === Read.Now ? ctx.now : ctx.draw();
+            if (param.read === Read.Engine) args[p] = Book.aim(ctx.book, entry, held);
+            else args[p] = param.read === Read.Room ? ctx.room : param.read === Read.Now ? ctx.now : ctx.draw();
         } else if (param.prepare !== Prepare.Walked) args[p] = param.rest ? held.slice(at, count) : value;
         else if (family !== null) {
             // Most often the one argument is one range: its cells are computed and looked at in one go.

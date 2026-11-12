@@ -253,6 +253,12 @@ export class Recalc {
         this.areas[reader] = null;
     }
 
+    // The cell whose formula is running, as a reference.
+    public running(): Reference {
+        const at = this.current;
+        return this.evaluator.here(this.sheets[at], this.rows[at], this.places[at]);
+    }
+
     // Asks for an array of so many stored elements before the running formula makes it: false when one array may
     // not store that many, or the formula may not do the work.
     public room(elements: number): boolean {

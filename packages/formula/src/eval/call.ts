@@ -22,6 +22,7 @@ import { real } from './operators';
 import { Frame, Table } from './readers';
 import type { Entry, Held, Lazy, Param, Result } from './signature';
 import { Prepare, Read, TOKENS } from './signature';
+import { cellsOf } from './views';
 
 export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
     const entry = ctx.functions.get(node.text);
@@ -65,7 +66,8 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
             // The preparations that take a place or a first cell are the last two an argument can have.
             if (slot.prepare >= Prepare.Reference) {
                 if (slot.prepare === Prepare.Corner && isReference(value)) value = ctx.first(value);
-                else if (isArray(value) && lifts(slot, value)) lifted = true;
+                else if (slot.apiece && isReference(value)) value = cellsOf(ctx, value);
+                if (isArray(value) && lifts(slot, value)) lifted = true;
             }
         }
         held[i] = value;
@@ -182,6 +184,7 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
         case Read.Blanks:
         case Read.Random:
         case Read.Now:
+        case Read.Engine:
             return value;
         case Read.Pairs:
         case Read.Products:

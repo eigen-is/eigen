@@ -4,6 +4,7 @@
 // read a cell or aim a reader. A row that picks another row by its first argument, such as SUBTOTAL, is made by
 // `chosen` and is all data. The constants and modifiers below are the whole vocabulary a family file is written in.
 
+import type { Book } from '../eval/book';
 import type { Family } from '../eval/families';
 import { Families } from '../eval/families';
 import type { Matches, Numbers, Pairs, Room, Table } from '../eval/readers';
@@ -14,6 +15,7 @@ import type { FormulaError } from '../values/errors';
 import { REF, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
 
+export type { Book } from '../eval/book';
 export type { Matches, Numbers, Pairs, Room, Table } from '../eval/readers';
 export type { Vector } from '../eval/search';
 export { ANYWHERE, Find, NESTED, NEXT, PART } from '../eval/signature';
@@ -31,6 +33,7 @@ const REQUIRED = {
     each: false,
     union: null,
     only: false,
+    apiece: false,
 };
 
 function scalar<T>(read: Read): Param<T> {
@@ -102,6 +105,9 @@ export const RANDOM = ambient<number>(Read.Random);
 export const NOW = ambient<number>(Read.Now);
 // Takes no argument: where a body that builds an array gets it.
 export const ROOM = ambient<Room>(Read.Room);
+// Takes no argument: what a body may ask of the workbook itself, about the one cell its row names. The row then
+// answers anew in every pass that has a write, since what it asks can change with no value changing.
+export const ENGINE = ambient<Book>(Read.Engine);
 
 // What the arguments of the three readings below are read as: a reference and nothing else, and any value.
 const ONLY: Param<Reference> = Object.freeze({
@@ -203,6 +209,12 @@ export function each<T>(param: Param<T>): Param<T> & { readonly each: true } {
 // references runs the call once per reference. RANK and SUBTOTAL take their ranges so.
 export function cells<T>(param: Walked<T>): Walked<T> {
     return Object.freeze({ ...param, only: true });
+}
+
+// A range of several cells runs the call once per cell, each handed over as a reference to that one cell, and of
+// a union the first area: ISFORMULA(B1:B7) is seven answers.
+export function apiece(param: Param<Reference>): Param<Reference> {
+    return Object.freeze({ ...param, apiece: true });
 }
 
 type Args<P extends readonly Param<unknown>[]> = { [K in keyof P]: P[K] extends Param<infer T> ? T : never };

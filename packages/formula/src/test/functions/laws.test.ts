@@ -31,9 +31,12 @@ const ROWS = [...FUNCTIONS.values(), ...OWN];
 const BASES: Readonly<Record<string, readonly string[]>> = {
     XMATCH: ['20', 'A1:A5', '0', '1'],
     AVERAGEIFS: ['A1:A5', 'A1:A5', '">5"'],
+    CELL: ['"row"', 'A2'],
+    FORMULATEXT: ['E2'],
+    INDIRECT: ['"A1"', 'TRUE'],
 };
-// The one row whose answer is an error by definition.
-const ERRORS = new Set(['NA']);
+// The rows whose answer is an error by definition.
+const ERRORS = new Set(['NA', 'INFO']);
 
 // What can be written for a parameter, by its reading: values every reading of that kind takes.
 function pool(param: Param<unknown>): readonly string[] {
@@ -141,7 +144,8 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             expect(evaluateAll([written(entry, [...base, base[entry.fixed]])])[0]).toBe(VALUE);
         }
         const fewest = evaluateAll([written(entry, base.slice(0, entry.min))])[0];
-        expect(fewest).not.toBe(VALUE);
+        // A row that answers #VALUE! whatever it is given cannot show that its count was accepted.
+        if (!ERRORS.has(entry.name)) expect(fewest).not.toBe(VALUE);
     });
 
     test('a text that is no value of the reading is #VALUE!, one that is reads as the value', () => {
@@ -413,6 +417,22 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             ]);
             expect([range, union, second]).toEqual([cell, cell, REF]);
             expect(lifted).toEqual([cell, other]);
+        }
+    });
+
+    test('where a range is taken cell by cell, it gives one answer per cell, and of a union the first area', () => {
+        for (const at of params.map((param, i) => (param.apiece ? i : -1))) {
+            if (at < 0) continue;
+            const put = (argument: string) => written(entry, withArg(base, at, argument));
+            const [cell, other, ...lifted] = evaluateAll([
+                put('E2'),
+                put('F1'),
+                `=INDEX(${put('E1:F2').slice(1)},2,1)`,
+                `=INDEX(${put('(E1:E2,A1:A5)').slice(1)},2,1)`,
+                `=INDEX(${put('E1:F2').slice(1)},1,2)`,
+                `=INDEX(${put('E1:E2').slice(1)},3,1)`,
+            ]);
+            expect(lifted).toEqual([cell, cell, other, REF]);
         }
     });
 
