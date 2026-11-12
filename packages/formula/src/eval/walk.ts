@@ -1,9 +1,8 @@
 // The one walk over the arguments of a function that takes every value, such as SUM, MAX or AND. It hands out
-// spans of numbers in argument order: a value typed as an argument, a stretch of a column's own plane for a
-// reference, and the stored rows of an array. What counts is the family's data. The call wrapper has computed every
-// cell and found every error before the walk starts, so it meets none. A stored row of an array can stand for a
-// million written ones, which the walk says beside the span. Arguments that are multiplied place by place are
-// walked side by side instead, and the spans are their products.
+// spans of numbers in argument order: a typed value, a stretch of a column's own plane for a reference, the stored
+// rows of an array, which can each stand for a million written ones, or, for arguments that are multiplied place by
+// place, their products. What counts is the family's data. The call wrapper has computed every cell and found
+// every error before the walk starts, so it meets none.
 
 import type { Column } from '../store/column';
 import { CellKind, KIND_MASK } from '../store/column';
