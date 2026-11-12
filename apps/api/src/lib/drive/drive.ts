@@ -601,6 +601,7 @@ export class Drive {
     public async movePath(mountId: string, pathId: string, targetParentId: string, user: User): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const path = await this.personPath(mount, pathId);
+        if (targetParentId === path.parentId) return path;
         await this.personMoveTarget(mount, path, targetParentId);
         return this.changePlace(mount, path, { parentId: targetParentId }, user);
     }

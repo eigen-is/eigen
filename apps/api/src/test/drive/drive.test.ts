@@ -2698,6 +2698,41 @@ describe('Drive', () => {
             expect(res.status).toBe(200);
         });
 
+        test('a move into the folder the item is in changes nothing', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const file = await driveUpload(
+                token,
+                ctx.alice.user.id,
+                aliceMountId,
+                uniqueRoot,
+                new File(['x'], 'stays.txt'),
+            );
+            const { drive } = await getHome(ctx.alice.user.id);
+            const before = new Date('2001-02-03T04:05:06Z');
+            await drive.touchUpdatedAt(aliceMountId, file.id, before);
+            const url = `/webdav/${ctx.alice.user.id}/${aliceMountId}/UniqueNameTests/stays.txt`;
+            const lock = await webdavRequest(ctx.alice.user.email, 'LOCK', url, {
+                body: `<?xml version="1.0" encoding="utf-8" ?>
+<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`,
+                headers: { 'Content-Type': 'application/xml' },
+            });
+            expect(lock.status).toBe(200);
+
+            const moved = await drivePut<DrivePath>(token, ctx.alice.user.id, aliceMountId, `path/${file.id}/move`, {
+                targetParentId: uniqueRoot,
+            });
+
+            expect(new Date(moved.updatedAt)).toEqual(before);
+            expect((await drive.getPath(aliceMountId, file.id))?.updatedAt).toEqual(before);
+            const events = (await drive.getFileHistory(aliceMountId, file.id)).map((event) => event.eventType);
+            expect(events).not.toContain('moved');
+            expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'no token' })).status).toBe(423);
+            const unlock = await webdavRequest(ctx.alice.user.email, 'UNLOCK', url, {
+                headers: { 'Lock-Token': lock.headers.get('Lock-Token') ?? '' },
+            });
+            expect(unlock.status).toBe(204);
+        });
+
         test('name becomes available after deletion', async () => {
             const folder = await drivePost(
                 ctx.alice.user.sessionToken,
