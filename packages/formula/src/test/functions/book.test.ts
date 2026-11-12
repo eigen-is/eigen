@@ -59,6 +59,28 @@ describe('whether a cell holds a formula, and its text: ISFORMULA, FORMULATEXT',
         expect(evaluate('=COUNTA(ISFORMULA(A:A))', F9)).toBe(1048576);
     });
 
+    // A range costs the cells it holds and not its extent: a stretch that holds nothing is asked once. The whole
+    // grid is 17 thousand million cells, far past what one formula may make, and holds 21 here.
+    test('a range of any extent is as many calls as its rows and columns that hold a cell', () => {
+        expect(evaluate('=ROWS(ISFORMULA(A1:XFD1048576))', F9)).toBe(1048576);
+        expect(evaluate('=COLUMNS(FORMULATEXT(A1:XFD1048576))', F9)).toBe(16384);
+        expect(evaluate('=SUM(--ISFORMULA(A1:XFD1048576))', F9, 'A10')).toBe(4);
+        expect(evaluate('=SUM(--ISFORMULA(1:1048576))', { ...F9, XFD1048576: '=1' }, 'A10')).toBe(5);
+        expect(evaluate('=COUNTA(FORMULATEXT(A:M))-SUM(--ISNA(FORMULATEXT(A:M)))', F9)).toBe(3);
+        const far = { ...F9, B1048576: '=B4', K7: '=K8' };
+        expect(elements('=INDEX(FORMULATEXT(B:K),{1048575;1048576},{1,2,10})', 2, 3, far)).toEqual([
+            NA,
+            NA,
+            NA,
+            '=B4',
+            NA,
+            NA,
+        ]);
+        expect(evaluate('=INDEX(FORMULATEXT(B:K),7,10)', far)).toBe('=K8');
+        expect(evaluate('=INDEX(ISFORMULA(B:K),7,9)', far)).toBe(false);
+        expect(evaluate('=INDEX(ISFORMULA(B:K),8,10)', far)).toBe(false);
+    });
+
     test('the text is the formula as it reads at its own cell, names of sheets and all', () => {
         const cells = { ...F9, G5: '=SUM(A1:A$3)+Sheet2!D3*$C2', G6: '=sum(a1,2)' };
         expect(evaluate('=FORMULATEXT(G5)', cells)).toBe('=SUM(A1:A$3)+Sheet2!D3*$C2');

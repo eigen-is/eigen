@@ -105,18 +105,43 @@ function runs(filled: Uint8Array, length: number, size: number): Int32Array | nu
 }
 
 // The cells of the first area of a reference, each as a reference of its own, for a parameter that takes a range
-// cell by cell. One cell is itself.
+// cell by cell. One cell is itself. It is stored as `toArray` stores a range: a row or a column that holds a cell
+// is a run of its own, and a stretch that holds none is one run, whose element is the reference to that whole
+// stretch. So a range costs the cells it holds and not its extent. A formula still to be computed is held.
 export function cellsOf(ctx: Evaluator, area: Reference): Reference | ArrayValue | FormulaError {
-    const { type, sheet } = area;
-    const rows = area.bottom - area.top + 1;
-    const columns = area.right - area.left + 1;
+    const { type, sheet, top, left } = area;
+    const rows = area.bottom - top + 1;
+    const columns = area.right - left + 1;
     if (rows * columns === 1) return area.next === null ? area : { ...area, next: null };
-    if (!ctx.recalc.room(rows * columns)) return CALC;
-    const items: Reference[] = [];
-    for (let row = area.top; row <= area.bottom; row += 1) {
-        for (let c = area.left; c <= area.right; c += 1) {
-            items.push({ type, sheet, top: row, left: c, bottom: row, right: c, next: null });
+    const held = ctx.workbook.sheets[sheet].columns;
+    const across = Math.max(0, Math.min(columns, held.length - left));
+    let down = 0;
+    for (let c = 0; c < across; c += 1) down = Math.max(down, Math.min(rows, held[left + c].length - top));
+    const filledRows = ctx.marks(down, true);
+    const filledColumns = ctx.marks(across, false);
+    for (let c = 0; c < across; c += 1) {
+        const { kind, shape, length } = held[left + c];
+        const end = Math.min(rows, length - top);
+        for (let r = 0; r < end; r += 1) {
+            if (kind[top + r] === 0 && shape[top + r] === 0) continue;
+            filledRows[r] = 1;
+            filledColumns[c] = 1;
         }
     }
-    return arrayOf(rows, columns, items, null, null, true);
+    const rowEnds = runs(filledRows, down, rows);
+    const columnEnds = runs(filledColumns, across, columns);
+    const height = rowEnds?.length ?? rows;
+    const width = columnEnds?.length ?? columns;
+    if (!ctx.recalc.room(height * width)) return CALC;
+    const items: Reference[] = [];
+    for (let i = 0; i < height; i += 1) {
+        const first = top + (rowEnds === null || i === 0 ? i : rowEnds[i - 1]);
+        const last = top + (rowEnds === null ? i : rowEnds[i] - 1);
+        for (let j = 0; j < width; j += 1) {
+            const start = left + (columnEnds === null || j === 0 ? j : columnEnds[j - 1]);
+            const end = left + (columnEnds === null ? j : columnEnds[j] - 1);
+            items.push({ type, sheet, top: first, left: start, bottom: last, right: end, next: null });
+        }
+    }
+    return arrayOf(rows, columns, items, rowEnds, columnEnds, true);
 }
