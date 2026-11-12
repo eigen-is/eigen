@@ -354,7 +354,8 @@ export class Reach {
 // holds a call of a row that picks another, an error in it too.
 export function skipped(ctx: Evaluator, skips: number, held: Column, row: number): boolean {
     if (skips === 0) return false;
-    if ((skips & ERRORS) !== 0 && (held.kind[row] & KIND_MASK) === CellKind.Error) return true;
-    if ((skips & NESTED) === 0 || held.shape[row] === 0) return false;
-    return (ctx.recalc.factsOf(held.shape[row]) & Fact.Chosen) !== 0;
+    // Tested as one number first: most walks that pass over anything pass over nested calls and nothing else.
+    if (skips !== NESTED && (skips & ERRORS) !== 0 && (held.kind[row] & KIND_MASK) === CellKind.Error) return true;
+    if (held.shape[row] === 0) return false;
+    return (skips & NESTED) !== 0 && (ctx.recalc.factsOf(held.shape[row]) & Fact.Chosen) !== 0;
 }
