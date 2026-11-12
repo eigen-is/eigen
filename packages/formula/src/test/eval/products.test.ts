@@ -5,10 +5,12 @@ import type { Book, Grid, Held } from './ragged';
 import {
     book,
     computed,
+    filledOf,
     GRID_COLUMNS,
     GRID_ROWS,
     generator,
     isError,
+    live,
     NUMBERS,
     rangeText,
     SMALLEST_NORMAL,
@@ -65,8 +67,8 @@ function element(factor: Factor, grid: Grid, row: number, column: number): numbe
     return typeof value === 'number' || value === null ? ((value ?? 0) > factor.than ? 1 : 0) : 1;
 }
 
-// `last` is one past the last row of the grid that holds a cell: from there on every place is blank.
-function model(factors: readonly Factor[], grid: Grid, last: number): number | FormulaError {
+// Only the rows of the grid that hold a cell are looked up: at every other row every place is the same blank.
+function model(factors: readonly Factor[], grid: Grid, filled: readonly number[]): number | FormulaError {
     const { rows, columns } = factors[0];
     // A value that is computed before the call is looked at first, whatever range comes before it.
     for (const factor of factors) {
@@ -74,11 +76,15 @@ function model(factors: readonly Factor[], grid: Grid, last: number): number | F
         const value = element(factor, grid, 0, 0);
         if (isError(value)) return value;
     }
-    let dense = 0;
+    // The rows of an argument at which it can hold anything but a blank: of a typed one, all of them.
+    const held = (factor: Factor) =>
+        factor.kind === 'typed'
+            ? Array.from({ length: factor.rows }, (_, row) => row)
+            : live(filled, [factor.top], factor.rows);
+    const dense = new Set<number>();
     for (const factor of factors) {
-        const held = factor.kind === 'typed' ? factor.rows : Math.max(0, Math.min(factor.rows, last - factor.top));
-        dense = Math.max(dense, held);
-        for (let row = 0; row < held; row += 1) {
+        for (const row of held(factor)) {
+            dense.add(row);
             for (let column = 0; column < factor.columns; column += 1) {
                 const value = element(factor, grid, row, column);
                 if (isError(value)) return value;
@@ -86,9 +92,14 @@ function model(factors: readonly Factor[], grid: Grid, last: number): number | F
         }
     }
     if (factors.some((factor) => factor.rows !== rows || factor.columns !== columns)) return VALUE;
+    let blank = 1;
+    for (const factor of factors) blank *= Number(element(factor, [], 0, 0));
     let sum = 0;
-    for (let row = 0; row < dense; row += 1) {
-        for (let column = 0; column < columns; column += 1) {
+    let next = 0;
+    // Row by row: the blank rows before each row that holds something, that row, and after the last the rest.
+    for (const row of [...[...dense].sort((a, b) => a - b), rows]) {
+        for (let place = (row - next) * columns; blank !== 0 && place > 0; place -= 1) sum += blank;
+        for (let column = 0; row < rows && column < columns; column += 1) {
             let product = 1;
             for (const factor of factors) {
                 product *= Number(element(factor, grid, row, column));
@@ -96,11 +107,8 @@ function model(factors: readonly Factor[], grid: Grid, last: number): number | F
             }
             sum += product;
         }
+        next = row + 1;
     }
-    // Under the last cell of the grid every place of an argument is the same blank.
-    let blank = 1;
-    for (const factor of factors) blank *= Number(element(factor, [], 0, 0));
-    for (let place = (rows - dense) * columns; blank !== 0 && place > 0; place -= 1) sum += blank;
     if (sum - sum !== 0) return NUM;
     return sum > -SMALLEST_NORMAL && sum < SMALLEST_NORMAL ? 0 : sum;
 }
@@ -109,10 +117,11 @@ function model(factors: readonly Factor[], grid: Grid, last: number): number | F
 function differences(made: Book, calls: readonly (readonly Factor[])[], kinds: Map<string, number>): string[] {
     const texts = calls.map((factors) => `=SUMPRODUCT(${factors.map(textOf).join(',')})`);
     const engine = computed(made, texts);
+    const filled = filledOf(made.grid).rows;
     const wrong: string[] = [];
     calls.forEach((factors, row) => {
         const got = engine.valueOf('s1', row, 0);
-        const want = model(factors, made.grid, made.last);
+        const want = model(factors, made.grid, filled);
         const kind = isError(want) ? want.text : want === 0 ? 'zero' : 'number';
         kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
         if (!Object.is(got, want)) wrong.push(`${texts[row]}: ${spell(got)}, and the model ${spell(want)}`);
@@ -248,7 +257,6 @@ describe('SUMPRODUCT answers what a cell by cell model answers', () => {
         made.grid[0][GRID_ROWS - 1] = 3;
         made.grid[3][GRID_ROWS - 3] = 0.5;
         made.grid[702] = [4, 'x', 6];
-        made.last = GRID_ROWS;
         const range = (kind: Factor['kind'], top: number, left: number, rows: number, columns: number): Factor => ({
             ...{ kind, top, left, rows, columns, than: 2, typed: [] },
         });

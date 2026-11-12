@@ -57,6 +57,29 @@ export function spell(value: Held): string {
     return String(value);
 }
 
+// The rows and the columns of a grid that hold a cell, each in order.
+export type Filled = { readonly rows: readonly number[]; readonly columns: readonly number[] };
+
+export function filledOf(grid: Grid): Filled {
+    const rows = new Set<number>();
+    const columns: number[] = [];
+    grid.forEach((cells, column) => {
+        columns.push(column);
+        for (const row of Object.keys(cells)) rows.add(Number(row));
+    });
+    return { rows: [...rows].sort((a, b) => a - b), columns };
+}
+
+// The places along areas of `size` rows, or columns, that start at `starts`, at which one of them reaches a filled
+// row, or column, of the grid, in order. At every other place every area is blank, so a model does not look there.
+export function live(filled: readonly number[], starts: readonly number[], size: number): number[] {
+    const places = new Set<number>();
+    for (const start of starts) {
+        for (const at of filled) if (at >= start && at - start < size) places.add(at - start);
+    }
+    return [...places].sort((a, b) => a - b);
+}
+
 export const NUMBERS = [0, 1, 2, 3, -1, -2.5, 0.1, 0.7, 1e-3, 12345.678, 1e15, -1e15, 7];
 const BIG = [1e200, -1e200, 1e308, 1e-200, 1e155];
 
