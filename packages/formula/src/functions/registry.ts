@@ -187,7 +187,8 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
     let min = 0;
     let fixed = 0;
     let group = 1;
-    let sized = -1;
+    let where = -1;
+    let matched = -1;
     // Whether an optional parameter was met, and one that repeats or takes no argument.
     let optionals = false;
     let closed = false;
@@ -209,7 +210,10 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
             throw new Error(`${name}: a fallback of another kind`);
         }
         if (!param.optional && optionals) throw new Error(`${name}: a required parameter after an optional one`);
-        if (param.read === Read.Matched && slots.includes(ONLY)) sized = slots.length;
+        const criteria = param.read >= Read.Where && param.read <= Read.Blanks;
+        if (where >= 0 && !criteria) throw new Error(`${name}: a parameter after the criteria`);
+        if (param.read === Read.Matched) matched = slots.length;
+        else if (criteria && where < 0) where = slots.length;
         optionals ||= param.optional && !ambient;
         closed ||= ambient || param.rest;
         if (!param.optional) min += own.length;
@@ -217,6 +221,7 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
         else fixed += own.length;
         slots.push(...own);
     }
+    if (matched >= 0 && where < 0) throw new Error(`${name}: numbers beside criteria, and no criteria`);
     const plain = params.every(
         (param) => !param.rest && param.prepare !== Prepare.Walked && param.prepare !== Prepare.Ambient,
     );
@@ -230,8 +235,8 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
         max,
         fixed,
         group,
-        sized,
-        criteria: params.some((param) => param.read >= Read.Where && param.read <= Read.Blanks),
+        where,
+        matched,
         volatile: params.some((param) => param.read === Read.Random || param.read === Read.Now),
         plain,
         run: body,

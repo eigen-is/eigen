@@ -4,10 +4,9 @@
 
 import type { FormulaError } from '../values/errors';
 import { VALUE } from '../values/errors';
-import type { Reference, Value } from '../values/value';
-import { arrayOf, isArray, isError, isReference } from '../values/value';
+import type { Value } from '../values/value';
+import { isArray, isError, isReference } from '../values/value';
 import { isLazy } from './call';
-import { tally } from './criteria';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Errors, Families } from './families';
@@ -24,7 +23,7 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
     const { params } = entry;
     const { held, args } = frame;
     frame.failed = null;
-    const unmatched = entry.criteria ? weigh(ctx, entry, frame, count) : null;
+    const unmatched = entry.where >= 0 ? weigh(ctx, entry, frame, count) : null;
     if (unmatched !== null) return unmatched;
     let at = 0;
     for (let p = 0; p < params.length; p += 1) {
@@ -35,7 +34,7 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
         if (param.prepare === Prepare.Ambient) {
             args[p] = param.read === Read.Room ? ctx.room : param.read === Read.Now ? ctx.now : ctx.draw();
         } else if (param.prepare !== Prepare.Walked) args[p] = param.rest ? held.slice(at, count) : value;
-        else if (param.read === Read.Matched) args[p] = frame.numbers(p).bind(at, to, Families.Numbers, false);
+        else if (param.read === Read.Matched) args[p] = frame.numbers(p).beside();
         else if (param.read === Read.Products) {
             const error = multiply(ctx, held, at, to);
             if (error !== null) return error;
@@ -107,51 +106,40 @@ function multiply(ctx: Evaluator, held: Held[], from: number, to: number): Formu
     return isError(made) ? made : null;
 }
 
-// The criteria of a call, walked: the count for its Matches, and the numbers beside the matching cells in the
-// place of the range they came from, for its Numbers. Ranges of unequal size are #VALUE!, and so the first error
-// is the one beside a cell that matched.
+// The criteria of a call, walked: the count for its Matches, and the numbers beside the matching cells for its
+// Numbers. Ranges of unequal size are #VALUE!, and so the first error is the one beside a cell that matched.
 function weigh(ctx: Evaluator, entry: Entry, frame: Frame, count: number): FormulaError | null {
-    const { held } = frame;
-    const ranges: Reference[] = [];
-    const criteria: Held[] = [];
-    let values: Reference | null = null;
-    let place = -1;
-    let at = 0;
-    for (const param of entry.params) {
-        const to = param.rest ? count : at + spanOf(param);
-        const first = held[at];
-        if (param.read === Read.Matched) {
-            place = at;
-            if (isReference(first)) values = first;
-        } else if (param.read === Read.Blanks && isReference(first)) {
-            ranges.push(first);
-            criteria.push('');
-        }
-        for (let i = at; param.read === Read.Where && i < to; i += 2) {
-            const range = held[i];
-            if (isReference(range)) ranges.push(range);
-            criteria.push(held[i + 1]);
-        }
-        at = to;
+    const { held, tally } = frame;
+    const { ranges, criteria } = tally;
+    const { where, matched } = entry;
+    // Written after the criteria, the range of the numbers takes its size from the first criteria range.
+    const sized = matched > where;
+    const to = sized ? matched : count;
+    let pairs = 0;
+    for (let i = where; i < to; i += 2) {
+        const range = held[i];
+        if (!isReference(range)) return VALUE;
+        ranges[pairs] = range;
+        // A range with no criterion is asked for its cells that show nothing, which the criterion "" accepts.
+        criteria[pairs] = i + 1 < to ? held[i + 1] : '';
+        pairs += 1;
     }
-    if (ranges.length === 0) return null;
     const rows = ranges[0].bottom - ranges[0].top;
     const columns = ranges[0].right - ranges[0].left;
-    for (const range of ranges) {
-        if (range.bottom - range.top !== rows || range.right - range.left !== columns) return VALUE;
+    for (let i = 1; i < pairs; i += 1) {
+        if (ranges[i].bottom - ranges[i].top !== rows || ranges[i].right - ranges[i].left !== columns) return VALUE;
     }
-    if (place >= 0 && entry.sized >= 0) {
-        values = values === null ? ranges[0] : { ...values, bottom: values.top + rows, right: values.left + columns };
-    } else if (values !== null && (values.bottom - values.top !== rows || values.right - values.left !== columns)) {
-        return VALUE;
+    const given = matched < 0 ? undefined : held[matched];
+    let values = isReference(given) ? given : null;
+    if (sized && values === null) values = ranges[0];
+    else if (values !== null && (values.bottom - values.top !== rows || values.right - values.left !== columns)) {
+        if (!sized) return VALUE;
+        values = { ...values, bottom: values.top + rows, right: values.left + columns };
     }
     // Every cell is computed before a criterion is read: a text is known by its id only once a cell holds it.
-    for (const range of ranges) ctx.recalc.settleArea(range);
+    for (let i = 0; i < pairs; i += 1) ctx.recalc.settleArea(ranges[i]);
     if (values !== null) ctx.recalc.settleArea(values);
-    const { tally: found } = frame;
-    tally(ctx, ranges, criteria, values, found);
-    frame.matches.count = found.count;
-    if (place >= 0)
-        held[place] = found.found === 0 ? undefined : arrayOf(found.found, 1, found.numbers.subarray(0, found.found));
-    return found.error;
+    tally.walk(ctx, pairs, values);
+    frame.matches.count = tally.count;
+    return tally.error;
 }

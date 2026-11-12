@@ -1,5 +1,5 @@
 // Criteria, as COUNTIF, SUMIFS and their kin take them. A criterion is read once per call: an operator in front if
-// there is one, and an operand typed the way a cell entry is. `tally` then walks the criteria ranges row by row
+// there is one, and an operand typed the way a cell entry is. A tally then walks the criteria ranges row by row
 // over the planes of their columns, stops at the first criterion a cell fails, and keeps the count of the cells
 // that met them all and the numbers beside those. An equality criterion on a column that has an index gives the
 // rows to walk, so the rest are never read.
@@ -140,110 +140,131 @@ function meets(criterion: Criterion, strings: StringTable, kind: number, num: nu
     }
 }
 
-export type Tally = {
+// What the criteria of a call matched, with the lists it is worked out in. There is one per level of calls, used
+// again by every call, so a criteria function allocates nothing but its criteria as read.
+export class Tally {
     // The cells that met every criterion.
-    count: number;
+    public count = 0;
     // The numbers beside them, row by row: the first `found` of `numbers`.
-    numbers: Float64Array;
-    found: number;
+    public numbers = new Float64Array(8);
+    public found = 0;
     // The first error beside them, which is then the result of the call.
-    error: FormulaError | null;
-};
-
-// Walks `ranges`, which are of one size and computed, each against its criterion, into `tally`. `values` is the
-// range of that size whose numbers are kept beside the cells that match, or null for none.
-export function tally(
-    ctx: Evaluator,
-    ranges: readonly Reference[],
-    criteria: readonly Held[],
-    values: Reference | null,
-    into: Tally,
-): void {
-    const { strings, sheets } = ctx.workbook;
-    const rows = ranges[0].bottom - ranges[0].top + 1;
-    const width = ranges[0].right - ranges[0].left + 1;
-    const read = criteria.map((criterion) => criterionOf(strings, criterion));
-    const blanks = read.map((criterion) => meets(criterion, strings, CellKind.Empty, 0, 0));
-    const open = !blanks.includes(false);
-    into.count = 0;
-    into.found = 0;
-    into.error = null;
+    public error: FormulaError | null = null;
+    // The criteria ranges of the call, each with its criterion: the call wrapper writes them.
+    public readonly ranges: Reference[] = [];
+    public readonly criteria: Held[] = [];
+    // Per criterion: as it is read, and whether a blank cell meets it.
+    private readonly read: Criterion[] = [];
+    private readonly blanks: boolean[] = [];
     // Per column, then per criterion: the column it is checked in and how many of its rows hold a cell.
-    const columns: (Column | undefined)[] = [];
-    const used: number[] = [];
-    const counted: (Column | undefined)[] = [];
-    // Per column, the row from which no cell can change the outcome: with a criterion that refuses a blank none
-    // matches from there on, and without one every cell does and holds no number.
-    const stops: number[] = [];
-    let last = 0;
-    for (let across = 0; across < width; across += 1) {
-        const value = values === null ? undefined : sheets[values.sheet].columns[values.left + across];
-        counted[across] = value;
-        let stop = open
-            ? value === undefined || values === null
-                ? 0
-                : Math.min(value.length - values.top, rows)
-            : rows;
-        for (let i = 0; i < read.length; i += 1) {
-            const column = sheets[ranges[i].sheet].columns[ranges[i].left + across];
-            const held = column === undefined ? 0 : Math.max(0, Math.min(column.length - ranges[i].top, rows));
-            columns[across * read.length + i] = column;
-            used[across * read.length + i] = held;
-            if (open) stop = Math.max(stop, held);
-            else if (!blanks[i]) stop = Math.min(stop, held);
+    private readonly columns: (Column | undefined)[] = [];
+    private readonly used: number[] = [];
+    // Per column: the column of the numbers, and the row from which no cell can change the outcome. With a
+    // criterion that refuses a blank none matches from there on, and without one every cell does and holds no number.
+    private readonly counted: (Column | undefined)[] = [];
+    private readonly stops: number[] = [];
+
+    // Walks the first `pairs` of the ranges, which are of one size and computed, each against its criterion.
+    // `values` is the range of that size whose numbers are kept beside the cells that match, or null for none.
+    public walk(ctx: Evaluator, pairs: number, values: Reference | null): void {
+        const { ranges, criteria, read, blanks, columns, used, counted, stops } = this;
+        const { strings, sheets } = ctx.workbook;
+        const rows = ranges[0].bottom - ranges[0].top + 1;
+        const width = ranges[0].right - ranges[0].left + 1;
+        // Whether a blank cell meets every criterion.
+        let open = true;
+        for (let i = 0; i < pairs; i += 1) {
+            read[i] = criterionOf(strings, criteria[i]);
+            blanks[i] = meets(read[i], strings, CellKind.Empty, 0, 0);
+            open &&= blanks[i];
         }
-        stops[across] = Math.max(stop, 0);
-        last = Math.max(last, stops[across]);
-        if (open) into.count += rows - stops[across];
-    }
-    // Of one column an equality criterion can list its rows, and the shortest list is the one walked.
-    let driver = -1;
-    let listed: readonly number[] | null = null;
-    for (let i = 0; width === 1 && i < read.length; i += 1) {
-        const criterion = read[i];
-        const exact = criterion.op === Op.Equal && criterion.pattern === null && !blanks[i];
-        const column = columns[i];
-        if (column === undefined || !exact || criterion.kind === CellKind.Error) continue;
-        const found = ColumnIndex.rows(column, strings, criterion.kind, criterion.num, criterion.ref);
-        if (found !== null && (listed === null || found.length < listed.length)) {
-            listed = found;
-            driver = i;
-        }
-    }
-    let at = listed === null ? 0 : firstFrom(listed, ranges[driver].top);
-    const end = listed === null ? last : listed.length;
-    for (; at < end; at += 1) {
-        const offset = listed === null ? at : listed[at] - ranges[driver].top;
-        if (offset >= last) break;
+        this.count = 0;
+        this.found = 0;
+        this.error = null;
+        let last = 0;
         for (let across = 0; across < width; across += 1) {
-            if (offset >= stops[across]) continue;
-            let i = 0;
-            for (; i < read.length; i += 1) {
-                if (i === driver) continue;
-                const column = columns[across * read.length + i];
-                const row = ranges[i].top + offset;
-                if (column === undefined || offset >= used[across * read.length + i]) {
-                    if (!blanks[i]) break;
-                } else if (!meets(read[i], strings, column.kind[row] & KIND_MASK, column.num[row], column.ref[row]))
-                    break;
+            const value = values === null ? undefined : sheets[values.sheet].columns[values.left + across];
+            counted[across] = value;
+            let stop = open
+                ? value === undefined || values === null
+                    ? 0
+                    : Math.min(value.length - values.top, rows)
+                : rows;
+            for (let i = 0; i < pairs; i += 1) {
+                const column = sheets[ranges[i].sheet].columns[ranges[i].left + across];
+                const held = column === undefined ? 0 : Math.max(0, Math.min(column.length - ranges[i].top, rows));
+                columns[across * pairs + i] = column;
+                used[across * pairs + i] = held;
+                if (open) stop = Math.max(stop, held);
+                else if (!blanks[i]) stop = Math.min(stop, held);
             }
-            if (i < read.length) continue;
-            into.count += 1;
-            const value = counted[across];
-            const row = (values?.top ?? 0) + offset;
-            if (value === undefined || row >= value.length) continue;
-            const kind = value.kind[row] & KIND_MASK;
-            if (kind === CellKind.Error) {
-                into.error = ctx.workbook.error(value.ref[row]);
-                return;
-            }
-            if (kind !== CellKind.Number) continue;
-            if (into.found === into.numbers.length) {
-                const longer = new Float64Array(into.found * 2);
-                longer.set(into.numbers);
-                into.numbers = longer;
-            }
-            into.numbers[into.found++] = value.num[row];
+            stops[across] = Math.max(stop, 0);
+            last = Math.max(last, stops[across]);
+            if (open) this.count += rows - stops[across];
         }
+        // Of one column an equality criterion can list its rows, and the shortest list is the one walked.
+        let driver = -1;
+        let listed: readonly number[] | null = null;
+        for (let i = 0; width === 1 && i < pairs; i += 1) {
+            const criterion = read[i];
+            const exact = criterion.op === Op.Equal && criterion.pattern === null && !blanks[i];
+            const column = columns[i];
+            if (column === undefined || !exact || criterion.kind === CellKind.Error) continue;
+            const found = ColumnIndex.rows(column, strings, criterion.kind, criterion.num, criterion.ref);
+            if (found !== null && (listed === null || found.length < listed.length)) {
+                listed = found;
+                driver = i;
+            }
+        }
+        // Cells are walked row by row. Of one column all rows are one band, so the loop over its rows is the inner
+        // one, which is what a criteria function costs; of several columns every row is a band of its own.
+        const first = listed === null ? 0 : ranges[driver].top;
+        const top = values === null ? 0 : values.top;
+        const end = listed === null ? last : listed.length;
+        const band = width === 1 ? Math.max(end, 1) : 1;
+        let { numbers } = this;
+        let count = this.count;
+        let found = 0;
+        for (let from = listed === null ? 0 : firstFrom(listed, first); from < end; from += band) {
+            const to = Math.min(from + band, end);
+            for (let across = 0, base = 0; across < width; across += 1, base += pairs) {
+                const stop = stops[across];
+                const value = counted[across];
+                for (let at = from; at < to; at += 1) {
+                    const offset = listed === null ? at : listed[at] - first;
+                    if (offset >= stop) break;
+                    let i = 0;
+                    for (; i < pairs; i += 1) {
+                        if (i === driver) continue;
+                        const column = columns[base + i];
+                        const row = ranges[i].top + offset;
+                        if (column === undefined || offset >= used[base + i]) {
+                            if (!blanks[i]) break;
+                        } else if (
+                            !meets(read[i], strings, column.kind[row] & KIND_MASK, column.num[row], column.ref[row])
+                        )
+                            break;
+                    }
+                    if (i < pairs) continue;
+                    count += 1;
+                    const row = top + offset;
+                    if (value === undefined || row >= value.length) continue;
+                    const kind = value.kind[row] & KIND_MASK;
+                    if (kind === CellKind.Error) {
+                        this.error = ctx.workbook.error(value.ref[row]);
+                        return;
+                    }
+                    if (kind !== CellKind.Number) continue;
+                    if (found === numbers.length) {
+                        numbers = new Float64Array(found * 2);
+                        numbers.set(this.numbers);
+                        this.numbers = numbers;
+                    }
+                    numbers[found++] = value.num[row];
+                }
+            }
+        }
+        this.count = count;
+        this.found = found;
     }
 }

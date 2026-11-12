@@ -52,6 +52,8 @@ export class Walk {
     private item = 0;
     // The additions made so far for cells that no array stores.
     private unstored = 0;
+    // Whether a span that `hand` was given is still to be handed out.
+    private handed = false;
 
     public constructor(ctx: Evaluator) {
         this.ctx = ctx;
@@ -71,6 +73,16 @@ export class Walk {
         this.count = 0;
         this.error = null;
         this.unstored = 0;
+        this.handed = false;
+    }
+
+    // The first `count` of `numbers` as the one span of a walk that has no arguments: numbers that lie in no
+    // argument, such as the ones beside the cells that met the criteria of a call.
+    public hand(numbers: Float64Array, count: number): void {
+        this.num = numbers;
+        this.from = 0;
+        this.to = count;
+        this.handed = count > 0;
     }
 
     // Moves to the next span. False when there is none.
@@ -80,8 +92,12 @@ export class Walk {
                 if (this.cells(this.area)) return true;
             } else if (this.array !== null) {
                 if (this.elements(this.array)) return true;
-            } else if (this.arg === this.last) return false;
-            else if (this.argument(this.args[this.arg++])) return true;
+            } else if (this.arg === this.last) {
+                if (!this.handed) return false;
+                this.handed = false;
+                this.count = this.to;
+                return true;
+            } else if (this.argument(this.args[this.arg++])) return true;
             if (this.error !== null) return false;
         }
     }

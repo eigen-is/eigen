@@ -27,7 +27,8 @@ export const Prepare = {
 
 export type Prepare = (typeof Prepare)[keyof typeof Prepare];
 
-// How a prepared argument becomes what the body gets. An error ends the call for every reading before Any.
+// How a prepared argument becomes what the body gets. An error ends the call for every reading before Anything,
+// and from Any on the argument is what the body gets as it stands.
 export const Read = {
     Number: 0,
     Integer: 1,
@@ -43,10 +44,10 @@ export const Read = {
     Only: 9,
     // Ranges of one size, multiplied place by place: the products.
     Products: 10,
-    Any: 11,
-    Lazy: 12,
     // Whatever was written, as a table: an error is a value of it, and nothing fails.
-    Anything: 13,
+    Anything: 11,
+    Any: 12,
+    Lazy: 13,
     // Readings of a whole parameter, whose arguments are read as Only and Any: a criteria range with its
     // criterion, the numbers beside the cells every criterion accepts, and the cells that show nothing.
     Where: 14,
@@ -122,10 +123,10 @@ export type Entry = {
     // How many arguments come before the ones that repeat, and how many repeat together.
     readonly fixed: number;
     readonly group: number;
-    // Whether a parameter takes criteria, or the numbers or blanks they match.
-    readonly criteria: boolean;
-    // The place of the range of numbers that takes its size from the criteria range before it, or -1.
-    readonly sized: number;
+    // The place of the first criteria range, and of the range of the numbers beside the cells the criteria accept,
+    // or -1. The criteria run up to that range when it comes after them, and it then takes its size from the first.
+    readonly where: number;
+    readonly matched: number;
     // Whether the body gets its arguments as they are read, one per argument: no reader, no list.
     readonly plain: boolean;
     // Whether the row takes a draw or the time, so its answer differs from call to call.

@@ -7,12 +7,12 @@ import { CALC, NA } from '../values/errors';
 import { snapSum } from '../values/precision';
 import type { ArrayValue, Scalar, Value } from '../values/value';
 import { arrayOf, elementAt, isArray, isReference, MOST_ELEMENTS, partOf, ValueType } from '../values/value';
-import type { Tally } from './criteria';
+import { Tally } from './criteria';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Families } from './families';
 import type { Vector } from './search';
-import { edge, heightOf, widthOf } from './search';
+import { edge } from './search';
 import type { Held } from './signature';
 
 export class Frame {
@@ -24,7 +24,7 @@ export class Frame {
     private readonly ctx: Evaluator;
     // What the criteria of the call in progress matched.
     public readonly matches = new Matches();
-    public readonly tally: Tally = { count: 0, numbers: new Float64Array(8), found: 0, error: null };
+    public readonly tally = new Tally();
     private readonly readers: Numbers[] = [];
     private readonly tables: Table[] = [];
 
@@ -32,8 +32,11 @@ export class Frame {
         this.ctx = ctx;
     }
 
-    public table(param: number): Table {
-        return (this.tables[param] ??= new Table(this.ctx));
+    // The table of the argument at a place.
+    public table(at: number): Table {
+        const { tables } = this;
+        while (tables.length <= at) tables.push(new Table(this.ctx));
+        return tables[at];
     }
 
     // The reader of the numbers of one parameter.
@@ -57,6 +60,8 @@ export class Numbers {
     // How many cells count, once a walk has found out.
     private counted = -1;
     private snaps = true;
+    // Whether the numbers are the ones the criteria of the call left beside their matches, and no argument's.
+    private matched = false;
     private gathered: Float64Array = new Float64Array(8);
 
     public constructor(ctx: Evaluator, frame: Frame) {
@@ -71,6 +76,14 @@ export class Numbers {
         this.to = to;
         this.family = family;
         this.counted = -1;
+        this.matched = false;
+        return this;
+    }
+
+    // The numbers beside the cells that the criteria of the call accepted. Their sum is the plain one.
+    public beside(): this {
+        this.bind(0, 0, Families.Numbers, false);
+        this.matched = true;
         return this;
     }
 
@@ -132,7 +145,9 @@ export class Numbers {
     }
 
     private start(): Evaluator {
-        this.ctx.walk.start(this.frame.held, this.from, this.to, this.family);
+        const { walk } = this.ctx;
+        walk.start(this.frame.held, this.from, this.to, this.family);
+        if (this.matched) walk.hand(this.frame.tally.numbers, this.frame.tally.found);
         return this.ctx;
     }
 
@@ -167,10 +182,15 @@ export class Table {
 
     public over(value: Value): this {
         this.value = value;
-        this.rows = heightOf(value);
-        this.columns = widthOf(value);
         this.areas = 1;
-        for (let area = isReference(value) ? value.next : null; area !== null; area = area.next) this.areas += 1;
+        if (isReference(value)) {
+            this.rows = value.bottom - value.top + 1;
+            this.columns = value.right - value.left + 1;
+            for (let area = value.next; area !== null; area = area.next) this.areas += 1;
+        } else {
+            this.rows = isArray(value) ? value.rows : 1;
+            this.columns = isArray(value) ? value.columns : 1;
+        }
         return this;
     }
 

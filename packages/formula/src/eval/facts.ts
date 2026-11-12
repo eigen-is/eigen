@@ -43,8 +43,8 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
     // An answer that differs from pass to pass, or cells that no argument names, must be computed in every pass.
     if (entry !== undefined && (entry.volatile || entry.returns === ANYWHERE)) flags |= Fact.ReadsUnnamed;
     // A range that takes its size from another names cells of its own only when the two are of one size.
-    if (entry !== undefined && entry.sized >= 0 && entry.sized < node.children.length) {
-        if (!sameSize(node.children[entry.sized - 2], node.children[entry.sized])) flags |= Fact.ReadsUnnamed;
+    if (entry !== undefined && entry.matched > entry.where && entry.matched < node.children.length) {
+        if (!sameSize(node.children[entry.where], node.children[entry.matched])) flags |= Fact.ReadsUnnamed;
     }
     return flags | ((depth + 1) << FACT_BITS);
 }

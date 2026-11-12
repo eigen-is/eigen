@@ -36,14 +36,17 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
     const level = ctx.calls;
     const frame = (ctx.frames[level] ??= new Frame(ctx));
     const { held } = frame;
-    const { slots, group } = entry;
+    const { slots } = entry;
     ctx.calls = level + 1;
     const size = Math.max(count, fixed);
     if (held.length !== size) held.length = size;
     let lifted = false;
+    // The record of the argument in hand: after the last one, the records of the arguments that repeat come again.
+    let at = 0;
     for (let i = 0; i < size; i += 1) {
         let value: Held;
-        const slot = i < fixed ? slots[i] : slots[fixed + ((i - fixed) % group)];
+        const slot = slots[at];
+        at = at + 1 < slots.length ? at + 1 : fixed;
         if (slot.prepare === Prepare.Lazy) value = TOKENS[i];
         // An argument left out is what the body gets for it, and so is one left empty where that means left out.
         // Any other empty argument is a blank, and is read as one.
@@ -61,11 +64,15 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
     let result: Value | Lazy | null = null;
     if (lifted) result = lift(ctx, entry, frame, count, node, sheet, row, column);
     else {
+        at = 0;
         for (let i = 0; i < count && result === null; i += 1) {
-            const param = i < fixed ? slots[i] : slots[fixed + ((i - fixed) % group)];
+            const param = slots[at];
             const written = held[i];
-            // Read already: a number where a number is read, and one range wherever a range is taken as it is.
-            if (typeof written === 'number' ? param.read === Read.Number : taken(param, written)) continue;
+            at = at + 1 < slots.length ? at + 1 : fixed;
+            // Read already: what is taken as it stands, a number where a number is read, and one range wherever
+            // a range is walked or is only a place.
+            if (param.read >= Read.Any) continue;
+            if (typeof written === 'number' ? param.read === Read.Number : alone(param, written)) continue;
             const value = read(param, written, frame, i);
             if (isError(value) && ends(param)) result = value;
             held[i] = value;
@@ -101,7 +108,7 @@ export function picked(
 
 // Whether an error at a parameter ends the call: every reading but the ones that take an error as a value.
 export function ends(param: Param<unknown>): boolean {
-    return param.read < Read.Any;
+    return param.read < Read.Anything;
 }
 
 // What the argument at a place is read as.
@@ -110,11 +117,10 @@ export function slotOf(entry: Entry, at: number): Param<unknown> {
     return entry.slots[at < fixed ? at : fixed + ((at - fixed) % entry.group)];
 }
 
-// Whether an argument is what the body gets as it stands: a token, and one range for a parameter that walks it or
-// only takes it as a place.
-function taken(param: Param<unknown>, value: Held): boolean {
-    if (param.prepare === Prepare.Lazy) return true;
-    return param.prepare !== Prepare.Whole && isReference(value) && value.next === null;
+// Whether an argument is one range at a parameter that takes a range as it is: all but the one that makes a
+// table of it.
+function alone(param: Param<unknown>, value: Held): boolean {
+    return isReference(value) && value.next === null && param.prepare !== Prepare.Whole;
 }
 
 // One prepared argument as the body gets it, or the error that ends the call. A table is the one of its place
@@ -211,6 +217,9 @@ export function run(ctx: Evaluator, entry: Entry, held: readonly Held[], count: 
             break;
         case 3:
             result = entry.run(args[0], args[1], args[2]);
+            break;
+        case 4:
+            result = entry.run(args[0], args[1], args[2], args[3]);
             break;
         default:
             result = entry.run(...args);

@@ -95,7 +95,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
     const scalars = params.map((param, at) => (param.prepare === Prepare.Scalar ? at : -1)).filter((at) => at >= 0);
     // The parameters whose reading an error ends, and those read as a number or a truth value.
     const ends = (param: Param<unknown>) =>
-        param.read < Read.Any && (param.family === null || param.family.errors === Errors.Result);
+        param.read < Read.Anything && (param.family === null || param.family.errors === Errors.Result);
     const failing = params.map((param, at) => (ends(param) ? at : -1)).filter((at) => at >= 0);
     const coerced = scalars.filter((at) => params[at].read <= Read.Boolean && params[at].read !== Read.Text);
 
