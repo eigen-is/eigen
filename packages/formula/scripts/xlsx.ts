@@ -1,4 +1,4 @@
-// Reads an xlsx workbook from disk into what the engine loads, for the bench and the oracle scripts beside it: each
+// Reads an xlsx workbook from disk into what the engine loads, for a script such as the bench beside it: each
 // sheet's cells with the values Excel cached, and every formula through the xlsx dialect, defined names put in
 // place first, table references resolved, the @ of a plain formula added, a shared formula's followers given their
 // master's stored text. The file is untrusted data that is only read: the zip is opened with node:zlib and the
@@ -9,9 +9,19 @@ import * as zlib from 'node:zlib';
 import type { Literal, SheetSource } from '../src/index';
 import { errorOf, FUNCTIONS } from '../src/index';
 import type { FormulaNode, Table } from '../src/text';
-import { intersect, parseA1Range, parseXlsx, resolveTables, sheetFinder, storedKey, Token, tokens } from '../src/text';
+import {
+    findSheetByName,
+    intersect,
+    parseA1Range,
+    parseXlsx,
+    resolveTables,
+    sheetFinder,
+    storedKey,
+    Token,
+    tokens,
+} from '../src/text';
 
-export type BookFormula = {
+type BookFormula = {
     // The tree the engine loads and its stored text, or null with the reason the file's text could not be loaded.
     readonly tree: FormulaNode | null;
     readonly stored: string | null;
@@ -28,7 +38,7 @@ export type BookCell = {
     readonly formula: BookFormula | null;
 };
 
-export type BookSheet = { readonly id: string; readonly name: string; readonly cells: readonly BookCell[] };
+type BookSheet = { readonly id: string; readonly name: string; readonly cells: readonly BookCell[] };
 
 export type Book = {
     readonly sheets: readonly BookSheet[];
@@ -41,7 +51,7 @@ export type Book = {
     readonly date1904: boolean;
 };
 
-type Names = Map<string, { global: string | undefined; local: Map<number, string> }>;
+type Names = Map<string, { global?: string; local: Map<number, string> }>;
 
 const REFERENCE_TOKENS = new Set<number>([Token.Name, Token.Word, Token.Quote]);
 const DEEPEST_NAME = 8;
@@ -57,7 +67,9 @@ export function readBook(path: string): Book {
     const zip = openZip(fs.readFileSync(path));
     const workbook = zip('xl/workbook.xml') ?? '';
     const targets = relationships(zip, 'xl/workbook.xml');
-    const strings = sharedStrings(zip('xl/sharedStrings.xml') ?? '');
+    const strings = [...(zip('xl/sharedStrings.xml') ?? '').matchAll(/<(?:\w+:)?si>([\s\S]*?)<\/(?:\w+:)?si>/g)].map(
+        (item) => unescapeText(textOf(item[1])),
+    );
     const listed = [...workbook.matchAll(/<(?:\w+:)?sheet\b([^>]*)\/?>/g)].map((match, place) => ({
         id: `s${place}`,
         name: decodeXml(attribute(match[1], 'name') ?? ''),
@@ -66,7 +78,7 @@ export function readBook(path: string): Book {
     const names: Names = new Map();
     for (const match of workbook.matchAll(/<(?:\w+:)?definedName\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?definedName>/g)) {
         const key = (attribute(match[1], 'name') ?? '').toLowerCase();
-        const entry = names.get(key) ?? { global: undefined, local: new Map<number, string>() };
+        const entry = names.get(key) ?? { local: new Map<number, string>() };
         const scope = attribute(match[1], 'localSheetId');
         if (scope === undefined) entry.global = decodeXml(match[2]);
         else entry.local.set(Number(scope), decodeXml(match[2]));
@@ -206,7 +218,8 @@ function withNames(
         const sheet = list[i - 2];
         if (list[i - 1]?.kind === Token.Bang && sheet !== undefined && REFERENCE_TOKENS.has(sheet.kind)) {
             const qualifier = text.slice(sheet.start, sheet.end).replace(/^'|'$/g, '').replace(/''/g, "'");
-            scope = sheets.findIndex((candidate) => candidate.name.toLowerCase() === qualifier.toLowerCase());
+            const named = findSheetByName(sheets, qualifier);
+            scope = named === undefined ? -1 : sheets.indexOf(named);
             start = sheet.start;
         }
         const own = entry.local.get(scope);
@@ -237,10 +250,6 @@ function literalOf(type: string | undefined, inner: string, strings: readonly st
         default:
             return Number(v);
     }
-}
-
-function sharedStrings(xml: string): string[] {
-    return [...xml.matchAll(/<(?:\w+:)?si>([\s\S]*?)<\/(?:\w+:)?si>/g)].map((item) => unescapeText(textOf(item[1])));
 }
 
 // The text of a string item, its runs joined, without the phonetic guide some East Asian files carry.
