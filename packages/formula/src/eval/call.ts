@@ -89,7 +89,11 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
             // Read already: what is taken as it stands, a number where a number is read, and one range wherever
             // a range is walked or is only a place.
             if (param.read >= Read.Any) continue;
-            if (typeof written === 'number' ? param.read === Read.Number : alone(param, written)) continue;
+            if (typeof written === 'number') {
+                // And a whole number where one near a whole number is read.
+                if (param.read === Read.Number) continue;
+                if (param.read === Read.Near && Math.floor(written) === written) continue;
+            } else if (alone(param, written)) continue;
             const value = read(param, written, frame, i);
             if (isError(value) && ends(param)) result = value;
             held[i] = value;
