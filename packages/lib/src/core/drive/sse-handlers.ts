@@ -53,8 +53,16 @@ const invalidateListingsSoon = debouncePerOwner(
     1500,
 );
 
-// Keyed by the viewer, whose lists these are, where the listings above are keyed by the path's owner.
-const invalidateViewerListsSoon = debouncePerOwner(invalidateViewerLists, 250, 1500);
+// Keyed by the viewer, whose lists these are, where the listings above are keyed by the path's owner. The viewer's
+// lists of one type hold what others shared with them too.
+const invalidateViewerListsSoon = debouncePerOwner(
+    (queryClient, viewerId) => {
+        invalidateViewerLists(queryClient, viewerId);
+        queryClient.invalidateQueries({ queryKey: driveKeys.mimeTypes(viewerId) });
+    },
+    250,
+    1500,
+);
 
 // The sidebar keeps every drive's trash list open, so only the events that change a trash refetch it.
 const invalidateTrashSoon = debouncePerOwner(

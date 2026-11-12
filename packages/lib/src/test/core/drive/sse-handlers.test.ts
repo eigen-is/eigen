@@ -202,6 +202,22 @@ describe.each([
     });
 });
 
+// The viewer's lists show another owner's item as it is now, and nothing else tells them that it changed.
+test.each([
+    SSEventType.DRIVE_PATH_TRASHED,
+    SSEventType.DRIVE_PATH_RESTORED,
+    SSEventType.DRIVE_PATH_MOVED,
+    SSEventType.DRIVE_PATH_RENAMED,
+    SSEventType.DRIVE_FILE_UPLOADED,
+] as const)("%s on a shared path refreshes the viewer's Shared with me and type lists", async (type) => {
+    const { queryClient, invalidated } = trackingClient();
+    handleDriveSSEvent(driveEvent(type), queryClient, VIEWER);
+    await Bun.sleep(400);
+    expect(hasKey(invalidated, driveKeys.shared(VIEWER, 'with-me'))).toBe(true);
+    expect(hasKey(invalidated, driveKeys.mimeTypes(VIEWER))).toBe(true);
+    expect(hasKey(invalidated, driveKeys.mimeAllTypes())).toBe(true);
+});
+
 // The trash list is a listing too: a Trash view open while another tab empties it refetches once.
 test('a burst of deletes refetches the open trash list once', async () => {
     const queryClient = new QueryClient();
