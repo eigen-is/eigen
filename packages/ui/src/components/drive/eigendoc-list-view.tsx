@@ -28,9 +28,6 @@ type EigenDocListViewProps = {
     mid?: string;
     ownerId?: string;
     mountId?: string;
-    // Move to… works inside the layout's one owner and mount, so it is safe only in a list of one mount.
-    // The default index spans several mounts and shared items, so moving is off unless a route asks.
-    allowMove?: boolean;
     onNavigate: (search: DriveSearchParams) => void;
     onNavigateBack: () => void;
 };
@@ -43,7 +40,6 @@ export function EigenDocListView({
     mid,
     ownerId,
     mountId,
-    allowMove = false,
     onNavigate,
     onNavigateBack,
 }: EigenDocListViewProps) {
@@ -58,7 +54,8 @@ export function EigenDocListView({
     const { isMobile } = useLayout();
     const capabilities = {
         ...DRIVE_CAPABILITIES.listing,
-        canMove: allowMove,
+        // Move to works inside the layout's one owner and mount, so only a list of one mount offers it.
+        canMove: isMountScoped,
         createTypes: new Set([config.type]),
     };
     const onQuickLook = useDriveQuickLook(capabilities.canWrite);
