@@ -8,7 +8,7 @@ import { shareTag } from '@workspace/lib/notification/tags';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByType, isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import type { Home } from '../home';
 import { actorDisplayName, getMemberships, getOwnerExists } from '../user';
 import { matchesACL } from './acl';
@@ -112,11 +112,11 @@ export function listSharedOwnerIds(sharedDb: SharedDb): string[] {
     return rows.map((row) => row.ownerId);
 }
 
-export async function listSharedWithMeByMimeType(sharedDb: SharedDb, mimeType: string): Promise<DrivePath[]> {
+export async function listSharedWithMeByMimeType(sharedDb: SharedDb, mimeTypePrefix: string): Promise<DrivePath[]> {
     const rows = sharedDb
         .select()
         .from(sharedSchema.sharedPaths)
-        .where(eq(sharedSchema.sharedPaths.mimeType, mimeType))
+        .where(sql`${sharedSchema.sharedPaths.mimeType} LIKE ${`${mimeTypePrefix}%`}`)
         .all();
     return (await dropRowsOfDeletedOwners(sharedDb, rows)).map(sharedRowToDrivePath);
 }
