@@ -55,14 +55,11 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
         at = at + 1 < slots.length ? at + 1 : fixed;
         if (slot.prepare === Prepare.Lazy) value = TOKENS[i];
         // An argument left out is what the body gets for it, and so is one left empty where that means left out.
-        // Any other empty argument is a blank, and is read as one: but an add-in argument that must be given is
-        // #N/A, and no table is #VALUE!.
+        // Any other empty argument is a blank, and is read as one.
         else if (i >= count) value = slot.read === Read.Here ? ctx.here(sheet, row, column) : slot.fallback;
-        else if (given[i].kind === NodeKind.Empty) {
-            if (slot.skips) value = slot.fallback;
-            else if (slot.prepare === Prepare.Single && !slot.optional) value = NA;
-            else value = slot.read === Read.Table ? VALUE : null;
-        } else if (slot.prepare === Prepare.Scalar) {
+        else if (given[i].kind === NodeKind.Empty)
+            value = slot.skips ? slot.fallback : slot.prepare === Prepare.Single && !slot.optional ? NA : null;
+        else if (slot.prepare === Prepare.Scalar) {
             value = ctx.operand(given[i], sheet, row, column);
             if (isArray(value)) lifted = true;
         } else {

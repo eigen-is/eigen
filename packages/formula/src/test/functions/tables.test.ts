@@ -108,17 +108,18 @@ describe('a table is handed over whole and never looked into for an error', () =
     });
 });
 
-// Excel's rows of the reference family: an argument left empty where a table is taken is #VALUE!, before the body.
-describe('an empty argument is no table', () => {
+// Excel's rows of the reference family: an argument left empty is no table to INDEX, LOOKUP, XMATCH and XLOOKUP,
+// which say so in their rows, and a blank that is searched to MATCH, VLOOKUP and HLOOKUP.
+describe('an empty argument is no table to the rows that say so', () => {
     test.each([
         ['=INDEX(,2,2,1)', VALUE],
         ['=LOOKUP(4,,A1:A3)', VALUE],
-        ['=LOOKUP(4,A1:A3,)', VALUE],
         ['=XMATCH(2,,0,1)', VALUE],
         ['=XLOOKUP("k2",,A1:A3,"nf",0,1)', VALUE],
         ['=XLOOKUP("k2",B1:B3,,"nf",0,1)', VALUE],
-        ['=MATCH(2,,0)', VALUE],
-        ['=VLOOKUP(2,,1)', VALUE],
+        ['=MATCH(2,,1)', NA],
+        ['=VLOOKUP("k2",,2,FALSE)', NA],
+        ['=HLOOKUP(2,,2,FALSE)', NA],
         ['=ROWS(IF(TRUE,))', 1],
         ['=ISREF(,)', VALUE],
         ['=TYPE(IF(TRUE,))', 1],

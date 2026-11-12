@@ -188,8 +188,11 @@ export function skippable(param: Param<unknown>, fallback?: Scalar): Param<unkno
 }
 
 // The parameter must be given, and an argument left empty is `fallback`, where a blank cell there is still read as
-// a blank: TEXTJOIN(",",,"a","") leaves the empty text out. It may stand before a parameter that repeats.
-export function defaulted<T>(param: Param<T>, fallback: NoInfer<T> & Scalar): Param<T> {
+// a blank: TEXTJOIN(",",,"a","") leaves the empty text out. It may stand before a parameter that repeats. Of a
+// table it is the error an empty argument answers, where without it the body gets a table of one blank.
+export function defaulted<P extends Param<Table>>(param: P, fallback: FormulaError): P;
+export function defaulted<T>(param: Param<T>, fallback: NoInfer<T> & Scalar): Param<T>;
+export function defaulted(param: Param<unknown>, fallback: Scalar): Param<unknown> {
     return Object.freeze({ ...param, skips: true, fallback });
 }
 
