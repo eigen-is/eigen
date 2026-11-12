@@ -19,6 +19,7 @@ import {
     HERE,
     INTEGER,
     LAZY,
+    NEARLY,
     NUMBER,
     optional,
     PART,
@@ -75,7 +76,7 @@ export const LOOKUP = [
     ),
     fn(
         'INDEX',
-        [defaulted(areas(TABLE), VALUE), NUMBER, optional(NUMBER), optional(INTEGER, 1)],
+        [defaulted(areas(TABLE), VALUE), NEARLY, optional(NEARLY), optional(INTEGER, 1)],
         (source, row, column, areaNumber) => {
             // The sign of an index is taken before its fraction is cut off: -0.5 is no index, 0.5 is 0.
             if (row < 0 || (column ?? 0) < 0 || areaNumber < 1) return VALUE;

@@ -24,6 +24,10 @@ import type { Choice, Entry, Held, Lazy, Param, Result } from './signature';
 import { Prepare, Read, TOKENS } from './signature';
 import { cellsOf } from './views';
 
+// How far under a whole number a number is still read as that whole one, where a reading says so. Excel's own
+// reach lies between 0.00001, where FACT(4.99999) is 24, and 0.000000001, where FACT(4.999999999) is 120.
+const NEAR_REACH = 1e-7;
+
 export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
     const entry = ctx.functions.get(node.text);
     if (entry === undefined) return NAME;
@@ -163,6 +167,12 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
             // Cut before the bound is tested: a time on the last day is still a date.
             const day = Math.floor(number);
             return isDate(day) ? day : NUM;
+        }
+        case Read.Near: {
+            const number = typeof value === 'number' ? value : toNumber(value);
+            if (typeof number !== 'number') return number;
+            const above = Math.ceil(number);
+            return above - number <= NEAR_REACH ? above : number;
         }
         case Read.Text:
             return toText(value);

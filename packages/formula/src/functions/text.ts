@@ -18,6 +18,7 @@ import {
     defaulted,
     fn,
     INTEGER,
+    NEARLY,
     NUMBER,
     optional,
     PLAIN,
@@ -98,7 +99,7 @@ export const TEXT_FUNCTIONS = [
         }
         return joined;
     }),
-    fn('LEFT', [TEXT, optional(NUMBER, 1)], (text, count) =>
+    fn('LEFT', [TEXT, optional(NEARLY, 1)], (text, count) =>
         count < 0 ? VALUE : cutCharacters(text, 0, Math.trunc(count)),
     ),
     fn('RIGHT', [TEXT, optional(NUMBER, 1)], (text, count) => {

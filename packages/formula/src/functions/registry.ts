@@ -56,6 +56,9 @@ function walked(family: Family): Collector {
 export const NUMBER = scalar<number>(Read.Number);
 // A number cut toward zero, as a count or a position is.
 export const INTEGER = scalar<number>(Read.Integer);
+// A number, and one a hair under a whole number is that whole number, as Excel reads the counts of LEFT, INDEX,
+// ROUND and FACT. It is not cut: the body tests its sign and cuts it.
+export const NEARLY = scalar<number>(Read.Near);
 // A date: a number cut down to a whole day, and #NUM! before 1 January of the year 1 or past 31 December 9999.
 export const SERIAL = scalar<number>(Read.Serial);
 // A number and a boolean are spelled out, a blank is empty text.
@@ -385,6 +388,7 @@ function reads(param: Param<unknown>): unknown {
     const fallback = param.fallback ?? null;
     switch (param.read) {
         case Read.Number:
+        case Read.Near:
             return toNumber(fallback);
         case Read.Integer:
         case Read.Serial:

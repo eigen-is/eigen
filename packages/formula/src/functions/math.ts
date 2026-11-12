@@ -17,6 +17,7 @@ import {
     fn,
     INTEGER,
     MATCHED,
+    NEARLY,
     NESTED,
     NUMBER,
     NUMBERS,
@@ -31,10 +32,6 @@ import {
 
 // COMBIN has no answer for this many things to choose from, or more.
 const MOST_THINGS = 2 ** 31 - 1;
-
-// FACT takes a number this close under a whole one, or closer, as that whole one. Excel's own reach lies between
-// 0.00001, where FACT(4.99999) is 24, and 0.000000001, where FACT(4.999999999) is 120.
-const WHOLE_REACH = 1e-7;
 
 // MOD has no answer from this many times the divisor on.
 const MOST_DIVIDED = 1125900000000;
@@ -67,7 +64,7 @@ function toStep(n: number, step: number, mode: number, up: boolean) {
 export const MATH = [
     fn('ABS', [NUMBER], Math.abs),
     fn('SIGN', [NUMBER], Math.sign),
-    fn('ROUND', [NUMBER, INTEGER], roundDecimal),
+    fn('ROUND', [NUMBER, NEARLY], (n, digits) => roundDecimal(n, Math.trunc(digits))),
     fn('ROUNDUP', [NUMBER, INTEGER], (n, digits) => cutDecimal(n, digits, true)),
     fn('ROUNDDOWN', [NUMBER, INTEGER], (n, digits) => cutDecimal(n, digits, false)),
     fn('TRUNC', [NUMBER, optional(INTEGER, 0)], (n, digits) => cutDecimal(n, digits, false)),
@@ -117,8 +114,8 @@ export const MATH = [
     fn('LOG10', [NUMBER], Math.log10),
     // The sign is tested before the fraction is cut off: FACT(-0.5) is #NUM!. Excel multiplies from the number
     // down, which decides the last digit of a large factorial.
-    fn('FACT', [NUMBER], (n) => {
-        const whole = Math.floor(n + WHOLE_REACH);
+    fn('FACT', [NEARLY], (n) => {
+        const whole = Math.floor(n);
         if (n < 0 || whole >= 171) return NUM;
         let product = 1;
         for (let factor = whole; factor > 1; factor -= 1) product *= factor;
