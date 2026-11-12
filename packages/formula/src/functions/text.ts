@@ -1,8 +1,10 @@
 // The functions on text. A number or a boolean among their arguments is spelled out first, and a position counts
 // characters from 1. A count is refused for its sign before its fraction is cut: LEFT("abc",-0.9) is #VALUE!.
+// VALUE reads a text as the number, date or time a person could have typed into a cell.
 
 import { VALUE } from '../values/errors';
 import { upperCase } from '../values/letter-case';
+import { parseNumber } from '../values/parse-number';
 import { LONGEST_TEXT } from '../values/value';
 import { BOOLEAN, fn, NUMBER, optional, rest, TEXT, TEXTS } from './registry';
 
@@ -47,5 +49,6 @@ export const TEXT_FUNCTIONS = [
         return text.slice(0, from) + put + text.slice(from + Math.trunc(count));
     }),
     fn('LEN', [TEXT], (text) => text.length),
+    fn('VALUE', [TEXT], (text) => parseNumber(text) ?? VALUE),
     fn('UPPER', [TEXT], upperCase),
 ];

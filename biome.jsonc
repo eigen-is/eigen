@@ -203,7 +203,7 @@
       }
     },
     {
-      // A function's body only computes: the call wrapper reads its arguments, so a family file imports no evaluator, store, recalc or coercion. The registry is the one file that makes the vocabulary from them.
+      // A function's body only computes: the call wrapper reads its arguments, so a family file imports no evaluator, store, recalc or coercion. The registry is the one file that makes the vocabulary from them. The reader of a text as a number, values/parse-number, is open: reading a text is what VALUE does.
       "includes": ["packages/formula/src/functions/**", "!packages/formula/src/functions/registry.ts"],
       "linter": {
         "rules": {
@@ -213,13 +213,7 @@
               "options": {
                 "patterns": [
                   {
-                    "group": [
-                      "../eval/**",
-                      "../store/**",
-                      "../recalc/**",
-                      "../values/coerce",
-                      "../values/parse-number"
-                    ],
+                    "group": ["../eval/**", "../store/**", "../recalc/**", "../values/coerce"],
                     "message": "A function body does not coerce, evaluate or read a cell: declare a parameter from ./registry instead (see packages/formula/src/functions/registry.ts)."
                   },
                   // Overrides replace the root rule options wholesale — restate the leaf rule and the suffix ban.

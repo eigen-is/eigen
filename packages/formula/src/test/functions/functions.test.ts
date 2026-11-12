@@ -342,3 +342,18 @@ describe('the small ones', () => {
         expect(evaluate('=ISBLANK(B1)', { B1: '=""' })).toBe(false);
     });
 });
+
+describe('VALUE reads a text the way a cell entry is read', () => {
+    // The fact documents' rows for Excel: no text is no number, and a decorated number is the number.
+    test.each([
+        ['=VALUE("")', VALUE],
+        ['=VALUE(" 1,000 ")', 1000],
+        ['=VALUE("10%")', 0.1],
+        ['=VALUE("(5)")', -5],
+        ['=VALUE(1/0)', DIV0],
+        ['=SUM(VALUE({" 1,000 ","10%","(5)"}))', 1000 + 0.1 - 5],
+        ['=SUM(VALUE({"10%",""}))', VALUE],
+    ])('%s is %p', (formula, expected) => {
+        expect(evaluate(formula)).toBe(expected);
+    });
+});
