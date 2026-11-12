@@ -87,7 +87,7 @@ describe('a table is handed over whole and never looked into for an error', () =
         expect(elements(formula, rows, columns, F2)).toEqual(expected);
     });
 
-    // Batch 4 and 6 (the sum that snaps) and batch 12 (the count): C4 is blank, and an element that names it is
+    // Batch 4 and 6 (the sum that snaps) and batch 20 (the counts): C4 is blank, and an element that names it is
     // that cell still, which a collector passes over as it does a blank cell of a range. IF's blank is a 0.
     test('an element of a lifted INDEX is a value, and a cell that holds nothing where it names one', () => {
         expect(evaluate('=INDEX(A1:A3,{1,0})', F2)).toBe(10);

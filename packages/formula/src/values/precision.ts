@@ -20,6 +20,19 @@ export const POWERS_OF_TEN: readonly number[] = [
     1e21, 1e22,
 ];
 
+// The 15 digit decimal of a number without its sign: one digit, a point, 14 digits, e, a sign and the exponent.
+export function decimal15(n: number): string {
+    return Math.abs(n).toExponential(14);
+}
+
+export function digitsOf(decimal: string): string {
+    return decimal.charAt(0) + decimal.slice(2, 16);
+}
+
+export function exponentOf(decimal: string): number {
+    return Number(decimal.slice(17));
+}
+
 export function round15(n: number): number {
     return Number(n.toPrecision(15));
 }
@@ -65,12 +78,12 @@ export function roundDecimal(n: number, digits: number): number {
         }
     }
     // The 15 digits as one whole number, cut where the rounding falls, in arithmetic that is exact.
-    const text = Math.abs(n).toExponential(14);
-    const cut = 14 - Number(text.slice(17)) - digits;
+    const decimal = decimal15(n);
+    const cut = 14 - exponentOf(decimal) - digits;
     if (cut <= 0) return round15(n);
     const unit = POWERS_OF_TEN[cut];
     if (unit === undefined || unit > 1e15) return 0;
-    const shown = Number(text.charAt(0) + text.slice(2, 16));
+    const shown = Number(digitsOf(decimal));
     let kept = Math.floor(shown / unit);
     if (2 * (shown - kept * unit) >= unit) kept += 1;
     if (kept === 0) return 0;
@@ -78,8 +91,7 @@ export function roundDecimal(n: number, digits: number): number {
 }
 
 // Cuts at `digits` decimals toward zero, or with `away` steps to the next number of that many decimals away from
-// zero when anything is cut off. As roundDecimal it works on the 15 digit decimal, so 0.29 times 100, a double
-// just under 29, cuts to 29. A step past the largest number is an infinity.
+// zero when anything is cut off. As roundDecimal it works on the 15 digit decimal.
 export function cutDecimal(n: number, digits: number, away: boolean): number {
     const power = POWERS_OF_TEN[Math.abs(digits)];
     if (power !== undefined) {
@@ -93,12 +105,12 @@ export function cutDecimal(n: number, digits: number, away: boolean): number {
             return n < 0 ? -cut : cut;
         }
     }
-    const text = Math.abs(n).toExponential(14);
-    const drop = 14 - Number(text.slice(17)) - digits;
+    const decimal = decimal15(n);
+    const drop = 14 - exponentOf(decimal) - digits;
     if (drop <= 0) return round15(n);
     // Past 15 digits nothing is kept: every 15 digit number is under 1e15.
     const unit = POWERS_OF_TEN[Math.min(drop, 15)];
-    const shown = Number(text.charAt(0) + text.slice(2, 16));
+    const shown = Number(digitsOf(decimal));
     const kept = Math.floor(shown / unit) + (away && shown % unit !== 0 ? 1 : 0);
     if (kept === 0) return 0;
     if (digits < -308) return n < 0 ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY;

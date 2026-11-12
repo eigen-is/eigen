@@ -7,7 +7,7 @@ import { GRID_ROWS } from '../text/a1';
 import type { FormulaError } from '../values/errors';
 import { CALC } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
-import { arrayOf, ValueType } from '../values/value';
+import { arrayOf, heightOf, ValueType, widthOf } from '../values/value';
 import type { Evaluator } from './evaluator';
 import { skipped } from './walk';
 
@@ -37,8 +37,8 @@ export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
     ctx.recalc.settleArea(area);
     const { top, left } = area;
     const sheet = ctx.workbook.sheets[area.sheet].columns;
-    const rows = area.bottom - top + 1;
-    const columns = area.right - left + 1;
+    const rows = heightOf(area);
+    const columns = widthOf(area);
     const across = Math.max(0, Math.min(columns, sheet.length - left));
     let down = 0;
     for (let c = 0; c < across; c += 1) down = Math.max(down, Math.min(rows, sheet[left + c].length - top));
@@ -59,8 +59,7 @@ export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
     const height = rowEnds?.length ?? rows;
     const width = columnEnds?.length ?? columns;
     if (!ctx.recalc.room(height * width)) return CALC;
-    // Filled with blanks one by one and never made at its size: an array made ten thousand long or longer throws
-    // the engine that runs this out of its compiled code, for every reference read after it too.
+    // Filled with blanks one by one and never made at its size, which would slow every reference read after it.
     const items: Scalar[] = [];
     for (let at = height * width; at > 0; at -= 1) items.push(null);
     for (let j = 0; j < width; j += 1) {
@@ -104,17 +103,15 @@ function runs(filled: Uint8Array, length: number, size: number): Int32Array | nu
     return ends;
 }
 
-// A reference is an object of about 137 bytes, where the room of an array counts an element as a number's 8.
+// What an element that is a reference takes of an array's room, which counts an element as a number.
 const REFERENCE_ROOM = 17;
 
-// The cells of the first area of a reference, each as a reference of its own, for a parameter that takes a range
-// cell by cell. One cell is itself. It is stored as `toArray` stores a range: a row or a column that holds a cell
-// is a run of its own, and a stretch that holds none is one run, whose element is the reference to that whole
-// stretch. So a range costs the cells it holds and not its extent. A formula still to be computed is held.
+// The cells of the first area of a reference, each as a reference of its own, stored as `toArray` stores a range:
+// a stretch that holds no cell is one run, whose element is the reference to that whole stretch.
 export function cellsOf(ctx: Evaluator, area: Reference): Reference | ArrayValue | FormulaError {
     const { type, sheet, top, left } = area;
-    const rows = area.bottom - top + 1;
-    const columns = area.right - left + 1;
+    const rows = heightOf(area);
+    const columns = widthOf(area);
     if (rows * columns === 1) return area.next === null ? area : { ...area, next: null };
     const held = ctx.workbook.sheets[sheet].columns;
     const across = Math.max(0, Math.min(columns, held.length - left));

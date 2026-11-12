@@ -43,13 +43,16 @@ export function toBoolean(value: Value): boolean | FormulaError {
             return value;
         case 'number':
             return value !== 0;
-        case 'string': {
-            if (value === '') return false;
-            const upper = value.toUpperCase();
-            return upper === 'TRUE' ? true : upper === 'FALSE' ? false : VALUE;
-        }
+        case 'string':
+            return value === '' ? false : (spelledBoolean(value) ?? VALUE);
         default:
             if (value === null) return false;
             return isError(value) ? value : VALUE;
     }
+}
+
+// The boolean a text spells, in any letter case and with nothing around it.
+export function spelledBoolean(text: string): boolean | undefined {
+    const upper = text.toUpperCase();
+    return upper === 'TRUE' ? true : upper === 'FALSE' ? false : undefined;
 }

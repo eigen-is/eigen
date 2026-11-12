@@ -8,7 +8,10 @@ import type { FormulaError } from './errors';
 
 export const ValueType = { Error: 1, Reference: 2, Array: 3, Lazy: 4, Table: 5 } as const;
 
-export type Scalar = number | string | boolean | null | FormulaError;
+// A value a person can type into a cell.
+export type Plain = number | string | boolean;
+
+export type Scalar = Plain | null | FormulaError;
 
 // The most characters a text holds: a longer one is #VALUE!.
 export const LONGEST_TEXT = 32767;
@@ -39,7 +42,7 @@ export type ArrayValue = {
     // One past the last written row, or column, that each stored one stands for. Null when each stands for one.
     readonly rowEnds: Int32Array | null;
     readonly columnEnds: Int32Array | null;
-    // Whether an element is a reference, which only a lifted call makes.
+    // Whether its elements are references and no values.
     readonly references: boolean;
 };
 
@@ -58,6 +61,11 @@ export function isReference(value: Tagged): value is Reference {
 
 export function isArray(value: Tagged): value is ArrayValue {
     return typeof value === 'object' && value !== null && value.type === ValueType.Array;
+}
+
+// Whether a reference names one cell and nothing else.
+export function isCell(reference: Reference): boolean {
+    return reference.next === null && reference.top === reference.bottom && reference.left === reference.right;
 }
 
 // How many rows and columns a range or an array has as it was written. Anything else is one value.
@@ -95,9 +103,18 @@ export function arrayOf<T extends Scalar | Reference>(
     }
     const height = rowEnds?.length ?? rows;
     const width = columnEnds?.length ?? columns;
+    const stored = nums ?? items;
     return {
         type: ValueType.Array,
-        ...{ rows, columns, height, width, items: nums ?? items, nums, rowEnds, columnEnds, references },
+        rows,
+        columns,
+        height,
+        width,
+        items: stored,
+        nums,
+        rowEnds,
+        columnEnds,
+        references,
     };
 }
 
@@ -136,7 +153,8 @@ export function partOf(
         for (let column = firstColumn; column <= lastColumn; column += 1) part.push(items[row * width + column]);
     }
     const down = cut(rowEnds, firstRow, lastRow, top, rows);
-    return arrayOf(rows, columns, part, down, cut(columnEnds, firstColumn, lastColumn, left, columns));
+    const across = cut(columnEnds, firstColumn, lastColumn, left, columns);
+    return arrayOf(rows, columns, part, down, across, array.references);
 }
 
 // The ends of the stored rows or columns `first` to `last`, for a part that starts at `start` and is `size` long.

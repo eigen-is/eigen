@@ -3,13 +3,14 @@
 // is data the wrapper switches on, and slotOf says which record an argument of a call falls under. The words a
 // function is written in are made from these records by the registry.
 
+import { MAX_ARGUMENTS } from '../text/parser';
 import type { FormulaError } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { ValueType } from '../values/value';
 import type { Family } from './families';
 import type { Table } from './readers';
 
-export const MAX_ARGUMENTS = 255;
+export { MAX_ARGUMENTS };
 
 export const Prepare = {
     // Read to a value: a range becomes an array, and an array runs the call once per element.
@@ -186,12 +187,12 @@ export type Entry = {
     // what the code says. Null for a row that takes none.
     readonly options: readonly number[] | null;
     // A method on purpose: a body typed by its parameters is stored here without a cast, since TypeScript compares
-    // the parameters of a method loosely. `fn` is the only writer.
+    // the parameters of a method loosely.
     run(...args: readonly unknown[]): Result;
 };
 
 // What the argument at a place is read as, in a call of `count` arguments: past the last whole group it is the
-// one argument a row takes after its groups. The call wrapper steps through the same records in place, for speed.
+// one argument a row takes after its groups.
 export function slotOf(entry: Entry, at: number, count: number): Param<unknown> {
     const { fixed, group } = entry;
     if (at < fixed) return entry.slots[at];

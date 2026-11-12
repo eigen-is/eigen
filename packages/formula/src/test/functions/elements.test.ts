@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { DIV0, NA, NUM, VALUE } from '../../index';
+import { CALC, DIV0, NA, NUM, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
 import { evaluate } from '../recalc/support';
 
@@ -42,6 +42,20 @@ describe('an element of an array that is a reference is what Excel makes of it, 
         [`=AND(${R},E1:E3)`, NA],
         [`=OR(E1:E3,${R})`, DIV0],
         [`=OR(${R},E1:E3)`, NA],
+    ])('%s', (formula, expected) => {
+        expect(evaluate(formula, CELLS)).toBe(expected);
+    });
+});
+
+// No Excel row: a part of an array of references is the same references, so it reads as the whole array does.
+describe('a part of an array of references is an array of references', () => {
+    test.each([
+        [`=SUM(INDEX(${R},1,0))`, 60],
+        [`=SUM(INDEX(${R},0,0))`, 60],
+        [`=COUNTA(INDEX(${R},1,0))`, 3],
+        [`=SUM(INDEX(${R},1,2))`, 50],
+        [`=TEXTJOIN(",",TRUE,INDEX(${R},1,0))`, VALUE],
+        [`=INDEX(${R},1,0)`, CALC],
     ])('%s', (formula, expected) => {
         expect(evaluate(formula, CELLS)).toBe(expected);
     });

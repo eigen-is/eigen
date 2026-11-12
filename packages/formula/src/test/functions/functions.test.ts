@@ -129,9 +129,12 @@ describe('IF and IFERROR', () => {
         ['=IFERROR(1/0,)&"x"', 'x'],
         ['=IF(TRUE,)', 0],
         ['=COUNTBLANK(IF(TRUE,))', VALUE],
-        ['=INDEX(IF({TRUE,FALSE},,5),1,1)&"x"', 'x'],
     ])('an empty argument that a function hands on is a blank: %s is %p', (formula, expected) => {
         expect(evaluate(formula)).toBe(expected);
+    });
+
+    test('and a 0 as an element of the array a function computes', () => {
+        expect(evaluate('=INDEX(IF({TRUE,FALSE},,5),1,1)&"x"')).toBe('0x');
     });
 
     // The pick taken from Google: empty text is FALSE as a condition, where Excel answers #VALUE!.

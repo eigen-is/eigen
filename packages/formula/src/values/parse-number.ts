@@ -1,9 +1,8 @@
 // Text read as a number, the way a person could type one into a cell: a plain or decorated number, a fraction, a
 // date or a time, in one fixed notation (a point for decimals, a comma between thousands, the month before the
 // day). Whatever coerces text, such as an operator or a criterion, does it through parseNumber, so what coerces is
-// what could have been typed, and DATEVALUE and TIMEVALUE read only the dates and times through parseDateTime. It
-// reads character codes and never asks the host: no Date and no clock, so the year of a date without one is given,
-// and where none is given such a date is no date.
+// what could have been typed, and parseDateTime reads only the dates and times. It reads character codes and never
+// asks the host: no Date and no clock, so the year of a date without one is given, or such a date is no date.
 
 import { dateSerial, daysInMonth, isDate, SECONDS_IN_DAY } from './dates';
 import { POWERS_OF_TEN } from './precision';
@@ -34,7 +33,7 @@ const DIGITS_KEPT = 15;
 
 // Excel has no number under the smallest normal one: a typed number under it is 0, as 1E-308 and 1E-309 are, and
 // one under the last of those that Excel is known to take is no number, as 1E-320 is none.
-const SMALLEST_NORMAL = 2.2250738585072014e-308;
+export const SMALLEST_NORMAL = 2.2250738585072014e-308;
 const SMALLEST_TYPED = 1e-309;
 
 // A year under 100 is in the 2000s below this and in the 1900s from it on, however many digits it was written in.
@@ -73,9 +72,8 @@ export function parseDateTime(text: string, year?: number): number | undefined {
     return start >= end ? undefined : readDateTime(text, start, end, year);
 }
 
-// Digits with what may stand around them: a sign in front or a pair of brackets, a currency sign in front or a
-// euro sign behind, commas between groups of three, a decimal point, an exponent and a percent sign, which may
-// follow the brackets. Spaces may follow the sign, as in - 5. The digits may be Arabic-Indic ones.
+// Digits with what may stand around them, such as a sign or a pair of brackets, a currency sign, commas between
+// groups of three, a decimal point, an exponent and a percent sign. The digits may be Arabic-Indic ones.
 function readDecorated(text: string, start: number, end: number): number | undefined {
     let at = start;
     const bracketed = text.charCodeAt(at) === OPEN;
@@ -180,9 +178,8 @@ function readFraction(text: string, start: number, end: number): number | undefi
     return negative && value !== 0 ? -value : value;
 }
 
-// A date, a time, or a date, spaces and a time. The time is found from its colon or its AM or PM, which may end
-// in a point, and the date is what stands before it. A time of 24 hours or more carries the date on, past the
-// last date too, as Excel has it.
+// A date, a time, or a date, spaces and a time. The time is found from its colon or its AM or PM, and the date is
+// what stands before it. A time of 24 hours or more carries the date on, past the last date too, as in Excel.
 function readDateTime(text: string, start: number, end: number, thisYear: number | undefined): number | undefined {
     const last = text.charCodeAt(end - 1) === POINT && (text.charCodeAt(end - 2) | 32) === LOWER_M ? end - 2 : end - 1;
     const markAt = (text.charCodeAt(last) | 32) === LOWER_M ? last - 1 : last;
@@ -209,10 +206,8 @@ function readDateTime(text: string, start: number, end: number, thisYear: number
     return date === undefined ? undefined : date + time;
 }
 
-// Three parts: year, month and day with / or - between them, the year first when it has four digits and else the
-// month first; a day, a month by name and a year; a month by name, a day, a comma and a year. Two parts: a month
-// and a year of four digits, which is its first day, or a month and a day of `thisYear`. Spaces may stand around
-// a / or a -. A year has up to four digits and is the year it says from 100 on.
+// A date of three parts, in digits with / or - between them or with the month by name, or of two: a month and a
+// year of four digits, which is its first day, or a month and a day of `thisYear`.
 function readDate(text: string, from: number, to: number, thisYear: number | undefined): number | undefined {
     const named = !isDigit(text.charCodeAt(from));
     const firstEnd = named ? lettersEnd(text, from, to) : digitsEnd(text, from, to);
@@ -267,8 +262,7 @@ function readDate(text: string, from: number, to: number, thisYear: number | und
 }
 
 // Hours, then minutes, seconds and parts of a second if given, as a fraction of a day. `half` is 1 for AM, 2 for PM
-// and 0 for a 24 hour time, which may count hours past 24. Minutes and seconds have one or two digits, and past 59
-// they are carried into the hour or the minute. Only one of the three may be past its range: 25:61 is no time.
+// and 0 for a 24 hour time. Only one of the three parts may be past its range.
 function readTime(text: string, from: number, to: number, half: number): number | undefined {
     const hoursEnd = digitsEnd(text, from, to);
     if (hoursEnd === from || hoursEnd - from > 4) return undefined;

@@ -2,7 +2,8 @@
 // up, and the answers are an array of that shape. An array stores one element for a run of equal ones, so the body
 // runs once per stored element and its answer stands for the whole run. An operator on an array is lifted here too.
 // A lazy argument is evaluated after the elements, once, and only when an element picked it. A row whose arguments
-// come in groups that are tried in turn, such as IFS, is stepped through here too, array or not.
+// come in groups that are tried in turn, such as IFS, is stepped through here too, array or not. A blank answer is
+// a 0 in the array, as a formula's is in its cell, so every reader of a computed array meets the same value.
 
 import type { Sheet } from '../store/sheet';
 import type { FormulaNode } from '../text/tree';
@@ -10,7 +11,7 @@ import { NodeKind } from '../text/tree';
 import type { FormulaError } from '../values/errors';
 import { CALC, NA, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
-import { arrayOf, isArray, isError, isReference } from '../values/value';
+import { arrayOf, isArray, isCell, isError, isReference } from '../values/value';
 import type { Axis } from './bands';
 import { align, apart } from './bands';
 import { ends, isLazy, picked, read, run } from './call';
@@ -41,8 +42,7 @@ export function lift(
     const lined = lineUp(ctx, arrays, entry.volatile);
     if (lined === null) return CALC;
     const { down, across } = lined;
-    // Filled element by element and never made at its size: an array made ten thousand long or longer throws the
-    // engine that runs this out of its compiled code, for every call after it too.
+    // Filled element by element and never made at its size, which would slow every call after it.
     const items: (Scalar | Reference)[] = [];
     // Per element, the lazy argument it picked, or undefined for an element that has its value.
     const picks: (Lazy | undefined)[] = [];
@@ -56,17 +56,15 @@ export function lift(
             const result = failed ?? run(ctx, entry, frame.held, count, 0);
             // Of an element that answers an array, the first value: ROW of a range of three rows is its first row.
             let item = isLazy(result) ? null : isArray(result) ? result.items[0] : result;
-            // And of one that answers a reference, the value of its first cell: a part of a range is a value
-            // here, as Excel's INDEX(A1:B3,{1,2},1) is. A cell that holds nothing stays that cell, which is
-            // passed over where a blank cell of a range is. Only a row that works a reference out keeps one
-            // per element, and its array is then one of references.
+            // Of one that answers a reference, the value of its first cell, and a cell that holds nothing stays
+            // that cell. Only a row that works a reference out keeps one per element.
             if (isReference(item)) {
                 if (entry.returns === ANYWHERE) references = true;
                 else item = ctx.first(item) ?? { ...item, bottom: item.top, right: item.left, next: null };
             }
             if (makes && typeof item === 'string' && !ctx.recalc.spend(item.length)) return CALC;
             if (isLazy(result)) picks[items.length] = result;
-            items.push(item);
+            items.push(item ?? 0);
         }
     }
     const made = arrayOf(lined.rows, lined.columns, items, down.ends, across.ends, references);
@@ -214,7 +212,7 @@ function placeAt(array: ArrayValue, down: Axis, across: Axis, k: number, r: numb
 // An element where one value is read: a reference to one cell is that cell, and one to several is #VALUE!.
 export function single(ctx: Evaluator, item: Scalar | Reference): Scalar {
     if (!isReference(item)) return item;
-    const value = item.next === null && item.top === item.bottom && item.left === item.right ? ctx.read(item) : VALUE;
+    const value = isCell(item) ? ctx.read(item) : VALUE;
     return isArray(value) ? VALUE : value;
 }
 
@@ -255,7 +253,7 @@ function fill(
                 const at = isArray(value) ? placeAt(value, down, across, places[token.index], r, c) : -1;
                 item = !isArray(value) ? value : at < 0 ? NA : value.items[at];
             }
-            items.push(item);
+            items.push(item ?? 0);
         }
     }
     return arrayOf(lined.rows, lined.columns, items, down.ends, across.ends, made.references);

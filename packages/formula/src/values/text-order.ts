@@ -1,9 +1,8 @@
 // The engine's own order of text, the same on every browser and on the server, where the host's collation would
 // follow the language data of whichever machine runs it. Text is compared on its key, the upper-cased form, so
 // case never matters and "straße" equals "STRASSE" as in Excel. Keys order by character: the space, the marks,
-// the digits, the letters, an accented Latin letter right after its base letter. A hyphen and an apostrophe take
-// no part, as in Excel, and only order two texts that are equal without them: "co-op" sorts right after "coop".
-// Whatever orders text, such as a comparison operator or a sorted lookup, does it through textKey and compareText.
+// the digits, the letters, an accented Latin letter right after its base letter. A hyphen and an apostrophe only
+// order two texts that are equal without them, such as "co-op" right after "coop".
 
 // Each base letter followed by its accented forms, in the order they sort.
 const ACCENTED = [

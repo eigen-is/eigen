@@ -4,6 +4,7 @@
 // of the recompute. Everything is in the places before the edit, but the blocks reported to the host.
 
 import { mapLeaves, sheetOf } from '../edit/leaves';
+import { firstPushed } from '../edit/map';
 import { moveClasses } from '../edit/move';
 import { bindSheet } from '../edit/sheets';
 import { hostClasses } from '../edit/transform';
@@ -90,8 +91,7 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
                 const sized = (shapes.facts[id] & Fact.Sized) !== 0;
                 const edited = workbook.known(edit.sheet);
                 const distance = insert ? count : -count;
-                // The first line whose cells an insert pushes off the grid.
-                const lost = Math.max(index, (rows ? GRID_ROWS : GRID_COLUMNS) - count);
+                const lost = firstPushed(index, count, rows ? GRID_ROWS : GRID_COLUMNS);
                 const first = rows ? left : top;
                 const last = rows ? right : top;
                 for (const found of hostClasses(tree, refs, edit, host.id, rows ? top : left, rows ? bottom : right)) {
@@ -126,9 +126,8 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
                 break;
             }
             default: {
-                // A formula typed with the name of a sheet that was not there reads the sheet that now has the
-                // name. One that names the sheet that comes or goes by its id reads other cells than it did, and
-                // so does one that reads a span of sheets, whichever sheet comes, goes or moves.
+                // A formula typed with the name of a sheet that was not there reads the sheet that now has it. One
+                // that names the changed sheet by its id, or reads a span of sheets, reads other cells than it did.
                 let bound = tree;
                 let named = '';
                 if (change.kind === ChangeKind.AddSheet) {
@@ -145,9 +144,8 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
             }
         }
     }
-    // The formulas of a sheet that comes, typed with the name of a sheet that is there or with its own, which each
-    // read as a typed name does, the new sheet first. The sheet is in no place yet and nothing reads it, so they
-    // get their new shape where they stand.
+    // The formulas of the sheet that comes read a sheet by the name they were typed with, the new sheet first.
+    // The sheet is in no place yet and nothing reads it, so they get their new shape where they stand.
     if (change.kind === ChangeKind.AddSheet) {
         const { sheet } = change;
         const candidates = [sheet, ...sheets];
@@ -178,10 +176,8 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
     return plan;
 }
 
-// Whether a whole column or row that a formula names on the edited sheet holds a cell at or past `line`, a row
-// when `rows` and else a column, for some host of a block: the hosts on the columns `first` to `last` when rows
-// are edited, the hosts from the row `first` down when columns are. From the line of an edit on, those are the
-// cells it reads that change place.
+// Whether a whole column or row that a formula names on the edited sheet holds a cell at or past `line`, for some
+// host of a block on the lines `first` to `last` across the edit: those are the cells it reads that change place.
 function holds(
     edited: Sheet,
     refs: readonly FormulaNode[],

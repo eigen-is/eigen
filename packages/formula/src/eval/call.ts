@@ -7,7 +7,7 @@
 import type { Sheet } from '../store/sheet';
 import type { FormulaNode } from '../text/tree';
 import { NodeKind } from '../text/tree';
-import { toBoolean, toNumber, toText } from '../values/coerce';
+import { spelledBoolean, toBoolean, toNumber, toText } from '../values/coerce';
 import { isDate } from '../values/dates';
 import { NA, NAME, NUM, VALUE } from '../values/errors';
 import { parseNumber } from '../values/parse-number';
@@ -15,7 +15,7 @@ import type { Value } from '../values/value';
 import { isArray, isError, isReference, LONGEST_TEXT, ValueType } from '../values/value';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
-import { Errors, TypedText } from './families';
+import { OnError, TypedText } from './families';
 import { lift, lifts, single, step } from './lift';
 import { look } from './look';
 import { real } from './operators';
@@ -24,8 +24,7 @@ import type { Choice, Entry, Held, Lazy, Param, Result } from './signature';
 import { Prepare, Read, slotOf, TOKENS } from './signature';
 import { cellsOf } from './views';
 
-// How far under a whole number a number is still read as that whole one, where a reading says so. Excel's own
-// reach lies between 0.00001, where FACT(4.99999) is 24, and 0.000000001, where FACT(4.999999999) is 120.
+// How far under a whole number a number is still read as that whole one, where a reading says so.
 const NEAR_REACH = 1e-7;
 
 export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
@@ -93,7 +92,7 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
                 // And a whole number where one near a whole number is read.
                 if (param.read === Read.Number) continue;
                 if (param.read === Read.Near && Math.floor(written) === written) continue;
-            } else if (alone(param, written)) continue;
+            } else if (isReference(written) && written.next === null && param.prepare !== Prepare.Whole) continue;
             const value = read(param, written, frame, i);
             if (isError(value) && ends(param)) result = value;
             held[i] = value;
@@ -127,7 +126,7 @@ export function picked(
     if (child === null || (child.kind === NodeKind.Empty && param.skips)) return param.fallback ?? null;
     if (child.kind !== NodeKind.Empty) {
         return param.read === Read.Valued
-            ? ctx.operand(child, sheet, row, column)
+            ? ctx.valued(child, sheet, row, column)
             : ctx.evaluate(child, sheet, row, column);
     }
     // An empty argument that is picked is a blank, and the number 0 in a row whose groups are tried in turn.
@@ -137,12 +136,6 @@ export function picked(
 // Whether an error at a parameter ends the call: every reading but the ones that take an error as a value.
 export function ends(param: Param<unknown>): boolean {
     return param.read < Read.Anything;
-}
-
-// Whether an argument is one range at a parameter that takes a range as it is: all but the one that makes a
-// table of it.
-function alone(param: Param<unknown>, value: Held): boolean {
-    return isReference(value) && value.next === null && param.prepare !== Prepare.Whole;
 }
 
 // One prepared argument as the body gets it, or the error that ends the call. A table is the one of its place
@@ -225,21 +218,24 @@ function collected(family: Family, value: Value): Held {
             return value;
         case 'boolean':
             return value ? 1 : 0;
-        case 'string':
+        case 'string': {
             if (family.text === TypedText.Parsed) return toNumber(value);
             if (family.text === TypedText.Numeric) return parseNumber(value) === undefined ? null : 0;
             if (family.text === TypedText.Counted) return 0;
             if (family.text === TypedText.Passed) return null;
-            return value.toUpperCase() === 'TRUE' ? 1 : value.toUpperCase() === 'FALSE' ? 0 : null;
+            // Where IF refuses a text that spells no boolean, AND and its kind pass it over, as Excel does.
+            const truth = spelledBoolean(value);
+            return truth === undefined ? null : truth ? 1 : 0;
+        }
         default:
             if (value === null) return typeof family.empty === 'object' ? family.empty : family.empty ? 0 : null;
             if (!isError(value)) return value;
-            return family.errors === Errors.Result ? value : family.errors === Errors.Counted ? 0 : null;
+            return family.errors === OnError.Result ? value : family.errors === OnError.Counted ? 0 : null;
     }
 }
 
 // The body on arguments that are read, with what its walk passes over in `skips`, and its answer as a cell can hold
-// it: a number that is no number is #NUM!, and a text has at most 32,767 characters. `held` are the call's slots.
+// it: a number that is no number is #NUM!, and a text is no longer than a cell's. `held` are the call's slots.
 export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number, skips: number): Value | Lazy {
     let args: readonly unknown[] = held;
     if (entry.chosen !== null) return choose(ctx, entry, entry.chosen, held, count);
@@ -276,8 +272,7 @@ export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number, s
 }
 
 // A call of a row that picks another by its first argument, and what the walk passes over by its second when it
-// takes one: the row that is picked runs on the arguments after those, each read now by that row's own parameter.
-// A code or an option that does not exist is #VALUE! before any range is looked into.
+// takes one: the row that is picked runs on the arguments after those, each read by that row's own parameter.
 function choose(
     ctx: Evaluator,
     entry: Entry,

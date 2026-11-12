@@ -1,6 +1,6 @@
 // The error values of a formula. Each kind the engine computes is one frozen object, so an error is told from
 // another by identity and never by its text. An error the engine does not know, which only a file can bring in, is
-// carried as an object of its own with code 0: a workbook gives it a code when it stores it.
+// carried as an object of its own with code 0.
 
 import { ValueType } from './value';
 

@@ -3,6 +3,7 @@
 // still to compute and its cells on a loop, so that a loop over it can skip the per-cell checks. The high bits of
 // `kind` are the recalc's own flags, which move with the cell when rows do.
 
+import { firstPushed } from '../edit/map';
 import { GRID_ROWS } from '../text/a1';
 import type { ColumnIndex } from './column-index';
 
@@ -29,7 +30,7 @@ export class Column {
     public errors = 0;
     public pending = 0;
     public loops = 0;
-    // Goes up with every change to a cell of the column.
+    // Goes up when a cell of the column is written, moved or emptied.
     public version = 0;
     // What exact lookups keep of the column, true for one version of it.
     public index: ColumnIndex | null = null;
@@ -112,8 +113,7 @@ export class Column {
     // Returns how many cells the new rows pushed past the last row of the grid, which are gone.
     public insertRows(index: number, count: number): number {
         if (index >= this.length) return 0;
-        // Rows from `kept` on would land past the last row of the grid.
-        const kept = Math.max(index, Math.min(this.length, GRID_ROWS - count));
+        const kept = Math.min(this.length, firstPushed(index, count, GRID_ROWS));
         const dropped = this.cells(kept, this.length);
         this.tally(kept, this.length, -1);
         const length = kept > index ? kept + count : index;

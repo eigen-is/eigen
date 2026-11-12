@@ -136,7 +136,7 @@ function isScalar(value: Dense): boolean {
 }
 
 // One result per written element of the largest of the arrays: an array of one row or column repeats, and a
-// shorter one that is not one is #N/A past its end.
+// shorter one that is not one is #N/A past its end. A blank result is a 0: only a cell of a range is blank.
 function each(args: readonly Dense[], body: (values: Plain[]) => Plain): Dense {
     const height = Math.max(...args.map((arg) => arg.rows.length));
     const width = Math.max(...args.map((arg) => arg.rows[0].length));
@@ -151,7 +151,7 @@ function each(args: readonly Dense[], body: (values: Plain[]) => Plain): Dense {
                         const x = arg.rows[0].length === 1 ? 0 : c;
                         return y < arg.rows.length && x < arg.rows[0].length ? arg.rows[y][x] : NA;
                     }),
-                ),
+                ) ?? 0,
             );
         }
         rows.push(row);
@@ -194,7 +194,9 @@ function call(name: 'NEG' | 'ABS' | 'IF' | 'IFERROR', args: readonly Dense[]): D
         });
     }
     if (name === 'IFERROR') {
-        if (isScalar(first)) return isError(first.rows[0][0]) ? args[1] : { rows: first.rows, cells: false };
+        if (isScalar(first)) {
+            return isError(first.rows[0][0]) ? each([args[1]], ([value]) => value) : { rows: first.rows, cells: false };
+        }
         return lazy(
             each([first], ([value]) => (isError(value) ? PICKS[0] : value)),
             args.slice(1),
@@ -225,13 +227,11 @@ function lazy(state: Dense, options: readonly Dense[]): Dense {
     });
 }
 
-// A blank element of an array is a 0 that counts, which a blank cell of a range is not.
 function numbers(value: Dense, booleans: boolean): { list: number[]; error: FormulaError | null } {
     const list: number[] = [];
     for (const item of value.rows.flat()) {
         if (isError(item)) return { list, error: item };
         if (typeof item === 'number') list.push(item);
-        else if (item === null && !value.cells) list.push(0);
         else if (typeof item === 'boolean' && booleans) list.push(item ? 1 : 0);
     }
     return { list, error: null };
@@ -247,9 +247,8 @@ function snapped(sum: number, before: number): number {
 // What an aggregate makes of one array or one range of more than one cell.
 export function aggregate(name: string, value: Dense): Plain {
     const all = value.rows.flat();
-    const blanks = value.cells ? 0 : all.filter((item) => item === null).length;
-    if (name === 'COUNTA') return all.filter((item) => item !== null).length + blanks;
-    if (name === 'COUNT') return all.filter((item) => typeof item === 'number').length + blanks;
+    if (name === 'COUNTA') return all.filter((item) => item !== null).length;
+    if (name === 'COUNT') return all.filter((item) => typeof item === 'number').length;
     const { list, error } = numbers(value, name === 'AND' || name === 'OR');
     if (error !== null) return error;
     if (name === 'AND' || name === 'OR') {

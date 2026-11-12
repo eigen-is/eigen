@@ -46,9 +46,8 @@ export class Engine {
         this.calc.clear(this.cell(sheet, row, column), row, column);
     }
 
-    // Inserts or deletes rows or columns. Every formula keeps naming the cells it named: the result lists the
-    // blocks of formulas whose stored text changed, and those whose old text only the host can keep for undo.
-    // Cells an insert pushes past the last line are gone and counted; refusing such an insert is the host's.
+    // Inserts or deletes rows or columns: every formula keeps naming the cells it named. Cells an insert pushes
+    // past the last line are gone and counted, so refusing such an insert is the host's.
     public editLines(edit: LineEdit): EditResult {
         this.workbook.known(edit.sheet);
         if (!within(edit.index, edit.rows ? GRID_ROWS : GRID_COLUMNS)) throw new RangeError(`No line ${edit.index}`);
@@ -56,9 +55,8 @@ export class Engine {
         return this.calc.edit({ kind: ChangeKind.Lines, edit });
     }
 
-    // Moves a block of cells, as a cut and paste does, over whatever it lands on. A block as high or as wide as
-    // the grid is a block like any other. The block is what lies on the grid, before and after: what would land
-    // past the last line is cleared and counted instead.
+    // Moves a block of cells, as a cut and paste does, over whatever it lands on. The block is what lies on the
+    // grid before and after: what would land past the last line is cleared and counted.
     public moveCells(move: Move): EditResult {
         this.cell(move.fromSheet, move.row, move.column);
         this.cell(move.toSheet, move.toRow, move.toColumn);
@@ -68,8 +66,7 @@ export class Engine {
     }
 
     // Adds a sheet at a place among the tabs, from 0. Its formulas are computed by the next recalc whatever
-    // values they came with. A formula typed with its name while no sheet had it now reads it, and a formula of
-    // its own typed with the name of a sheet that is there reads that one: the result lists both.
+    // values they came with, and the result lists the formulas that now read a sheet by the name they were typed with.
     public addSheet(source: SheetSource, place: number): EditResult {
         if (this.workbook.sheet(source.id) !== undefined) throw new Error(`Sheet ${source.id} exists`);
         return this.calc.addSheet(source, place);
@@ -93,8 +90,6 @@ export class Engine {
 
     // Computes the formulas that the writes and edits since the last recalc reach: one that came with a value and
     // reads nothing written keeps it. After `cap` formulas the pass stops, and the next recalc goes on from there.
-    // A host lets a stopped recalc run on before it writes more, or raises the cap: writes between every stopped
-    // recalc keep one from ever finishing when the cap is no larger than what a recalc after a write computes again.
     public recalc(cap: number, now = 0, seed = 0): RecalcResult {
         return this.calc.pass(cap, now, seed);
     }

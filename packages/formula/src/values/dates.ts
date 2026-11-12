@@ -23,7 +23,7 @@ const DAYS_BEFORE_MONTH = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334
 const LARGEST_PART = 32767;
 const PARTS = 65536;
 
-// Whether a whole day is a date. A day that is no number is none.
+// Whether a whole day is a date.
 export function isDate(day: number): boolean {
     return day >= FIRST_SERIAL && day <= LAST_SERIAL;
 }
@@ -58,7 +58,7 @@ export function daysInMonth(year: number, month: number): number {
 }
 
 // DATE: each part is cut down to a whole number, and a year under 1000 counts from 1900. A day that is no 16-bit
-// number counts as the largest of them, as Excel has it on either side: a day of -100000 is one of 32767.
+// number counts as the largest of them, as Excel has it on either side.
 export function dateOf(year: number, month: number, day: number): number | FormulaError {
     const whole = Math.floor(year);
     const months = Math.floor(month);
@@ -73,8 +73,7 @@ export function dateOf(year: number, month: number, day: number): number | Formu
 }
 
 // TIME: each part is cut down to a whole number, and what the whole days leave is the time. A part past the
-// largest 16-bit number is refused, and one below the smallest comes round as such a number does, as Excel has
-// it: -32769 minutes are 32767, and so are -98305.
+// largest 16-bit number is refused, and one below the smallest comes round as such a number does, as in Excel.
 export function timeOf(hours: number, minutes: number, seconds: number): number | FormulaError {
     const hour = Math.floor(hours);
     const minute = Math.floor(minutes);
