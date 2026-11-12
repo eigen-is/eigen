@@ -233,7 +233,7 @@ Still to do:
 - Chat with its lib hooks.
 - Calendar with CalDAV (`routes/calendar.ts`, `lib/ical`, `lib/caldav`, share and invite propagation, recurrence, iMIP); audit the two DAV servers side by side.
 - Notification center, versioning, share, search, waitlist.
-- `packages/lib` absences: owner-scoped query keys carry `ownerId`, mutations use `onMutationError`, SSE handlers invalidate what their emitter changes. Split `types/drive.ts` into per-concern modules.
+- `packages/lib` absences: owner-scoped query keys carry `ownerId`, mutations use `onMutationError`, SSE handlers invalidate what their emitter changes.
 - `packages/ui`.
 - The apps, thin ones last.
 - Duplication folding, on the next touch of each domain: its actions are built again in the toolbar, compact menu, right-click, command palette and mobile menus, and have drifted in permission, label, keyboard and visibility. Extract a small action catalog per domain, not a generic menu framework. Drive is the model: `DRIVE_ACTIONS` (`packages/lib/src/core/drive/drive-actions.ts`) next to `FILE_ACTIONS` (`packages/lib/src/core/file-actions.ts`). The other domains still build their own.
