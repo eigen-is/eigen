@@ -1,14 +1,26 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import { and, eq } from 'drizzle-orm';
+import { getServerConfig } from '../../lib/config/server-config';
 import { getSharedDatabase } from '../../lib/drive/shared';
 import { sharedPaths } from '../../lib/drive/sharedschema';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import { drainHomeDeliveries } from '../../lib/home/home-relay';
 import * as user from '../../lib/user';
-import { assertJson, authedRequest, createTestUser, driveGet, getTestContext } from '../setup';
+import {
+    addMember,
+    addTeamMount,
+    assertJson,
+    authedRequest,
+    createTeam,
+    createTestUser,
+    driveGet,
+    firstMountId,
+    getTestContext,
+} from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -160,5 +172,67 @@ describe('Shared with me reads each row from its owner', () => {
         } finally {
             memberships.mockRestore();
         }
+    });
+});
+
+describe('Shared with me never lists what the user owns', () => {
+    let ctx: TestCtx;
+    let teamId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const orgId = getServerConfig()?.orgId;
+        if (!orgId) throw new Error('the test server has no org');
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+        teamId = await createTeam(ctx, orgId, `Own shares ${crypto.randomUUID()}`);
+        await addMember(ctx, teamId, ctx.alice.user.id);
+        await addMember(ctx, teamId, ctx.bob.user.id);
+        await addTeamMount(ctx, teamId, 'Own shares drive');
+    });
+
+    async function listedAndBell(token: string, userId: string, name: string): Promise<[boolean, string[]]> {
+        const res = await authedRequest(token, `/drive/${userId}/shared/with-me`);
+        const listed = (await assertJson<DrivePath[]>(res)).some((path) => path.name === name);
+        const bell = await assertJson<Notification[]>(await authedRequest(token, `/notifications/${userId}?limit=100`));
+        return [listed, bell.filter((notification) => notification.body === name).map((n) => n.title)];
+    }
+
+    test('a file its owner shares with their own team reaches the other members only', async () => {
+        const alice = await getHome(ctx.alice.user.id);
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, MOUNT, 'root');
+        const name = `${crypto.randomUUID()}.txt`;
+        const file = await alice.drive.createFileFromData(
+            MOUNT,
+            root.id,
+            name,
+            'text/plain',
+            Buffer.from('x'),
+            alice.user,
+        );
+        const add = [{ id: teamOwnerId(teamId), read: true, write: false }];
+        await alice.drive.updateACLDelta(MOUNT, file.id, { add }, undefined, undefined, alice.user);
+        await drainHomeDeliveries();
+
+        expect(await listedAndBell(ctx.alice.user.sessionToken, ctx.alice.user.id, name)).toEqual([false, []]);
+        expect((await listedAndBell(ctx.bob.user.sessionToken, ctx.bob.user.id, name))[0]).toBe(true);
+    });
+
+    test('a team file shared with a member by address stays in the team drive only', async () => {
+        const owner = teamOwnerId(teamId);
+        const team = await getHome(owner);
+        const { user: alice } = await getHome(ctx.alice.user.id);
+        const mountId = await firstMountId(ctx.alice.user.sessionToken, owner);
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, owner, mountId, 'root');
+        const name = `${crypto.randomUUID()}.txt`;
+        const file = await team.drive.createFileFromData(mountId, root.id, name, 'text/plain', Buffer.from('x'), alice);
+        const add = [{ id: ctx.bob.user.email, read: true, write: false }];
+        await team.drive.updateACLDelta(mountId, file.id, { add }, undefined, undefined, alice);
+        await drainHomeDeliveries();
+
+        expect(await listedAndBell(ctx.bob.user.sessionToken, ctx.bob.user.id, name)).toEqual([false, []]);
     });
 });

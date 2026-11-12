@@ -134,19 +134,18 @@ describe('Aggregate mime endpoint with team fan-out', () => {
         expect(aggregated.status).toBe(403);
     });
 
-    test('a team doc also shared with a member by name is listed once', async () => {
-        // Bob reaches the doc through his team and through his own Shared with me row for it.
+    test('a team doc also shared with a member by name is listed once, from the team drive', async () => {
         const dedupeDoc = await uploadFanout(ctx.alice.user.sessionToken, team1Owner, team1MountId, 'dedupe-doc.bin');
         await drivePut(ctx.alice.user.sessionToken, team1Owner, team1MountId, `path/${dedupeDoc.id}/acl`, {
             add: [{ id: ctx.bob.user.email, read: true, write: false }],
             visibility: 'private',
         });
 
-        // Bob's own list, without his teams, shows it as a shared item.
+        // A member sees the team drive itself, so the entry by name adds no Shared with me row.
         const personal = await assertJson<DrivePath[]>(
             await mimeList(ctx.bob.user.sessionToken, ctx.bob.user.id, false),
         );
-        expect(personal.some((p) => p.id === dedupeDoc.id)).toBe(true);
+        expect(personal.some((p) => p.id === dedupeDoc.id)).toBe(false);
 
         const items = await assertJson<DrivePath[]>(await mimeList(ctx.bob.user.sessionToken, ctx.bob.user.id, true));
         const matches = items.filter((p) => p.id === dedupeDoc.id);
