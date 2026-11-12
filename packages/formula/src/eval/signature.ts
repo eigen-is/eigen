@@ -1,6 +1,7 @@
 // What the call wrapper knows about a function: one record per parameter, saying how its argument is prepared,
 // read, defaulted and repeated, and one entry per function with what follows from its parameters. Everything here
-// is data the wrapper switches on. The words a function is written in are made from these records by the registry.
+// is data the wrapper switches on, and slotOf says which record an argument of a call falls under. The words a
+// function is written in are made from these records by the registry.
 
 import type { FormulaError } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';

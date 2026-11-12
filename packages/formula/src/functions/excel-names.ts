@@ -537,6 +537,55 @@ export const EXCEL_2007_FUNCTIONS: ReadonlySet<string> = new Set([
     'ZTEST',
 ]);
 
+// The future functions a file stores with a second prefix, the worksheet functions': `_xlfn._xlws.FILTER`.
+export const EXCEL_WORKSHEET_FUNCTIONS: ReadonlySet<string> = new Set(['FILTER', 'SORT']);
+
+// Of the functions the engine lacks, the ones that answer an array whatever they are given. The engine has no row
+// to read that from, and the xlsx reader and writer must still know such a call may be more than one cell. A name
+// leaves this list when the engine gets the function.
+export const EXCEL_ARRAY_FUNCTIONS: ReadonlySet<string> = new Set([
+    'BYCOL',
+    'BYROW',
+    'CHOOSECOLS',
+    'CHOOSEROWS',
+    'DROP',
+    'EXPAND',
+    'FILTER',
+    'FILTERXML',
+    'FREQUENCY',
+    'GROUPBY',
+    'GROWTH',
+    'HSTACK',
+    'LINEST',
+    'LOGEST',
+    'MAKEARRAY',
+    'MAP',
+    'MINVERSE',
+    'MMULT',
+    'MODE.MULT',
+    'MUNIT',
+    'PIVOTBY',
+    'RANDARRAY',
+    'REDUCE',
+    'REGEXEXTRACT',
+    'SCAN',
+    'SEQUENCE',
+    'SORT',
+    'SORTBY',
+    'STOCKHISTORY',
+    'TAKE',
+    'TEXTSPLIT',
+    'TOCOL',
+    'TOROW',
+    'TRANSPOSE',
+    'TREND',
+    'TRIMRANGE',
+    'UNIQUE',
+    'VSTACK',
+    'WRAPCOLS',
+    'WRAPROWS',
+]);
+
 const FUTURE_PREFIXES = /^(?:_xlfn\.)?(?:_xlws\.)?/i;
 
 // True for a name Excel knows as a function, in any case and with or without its file prefixes: XLOOKUP,
