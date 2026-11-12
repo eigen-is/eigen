@@ -3,10 +3,11 @@ import { Errors, TypedText } from '../../eval/families';
 import type { Entry, Param } from '../../eval/signature';
 import { Prepare, Read } from '../../eval/signature';
 import { FUNCTIONS } from '../../functions/library';
+import { fn, NUMBER, NUMBERS, NUMBERS_A, rest } from '../../functions/registry';
 import type { FormulaError } from '../../index';
-import { DIV0, NA, REF, VALUE } from '../../index';
+import { DIV0, NA, NUM, REF, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
-import { engineOf, valueAt } from '../recalc/support';
+import { valuesWith } from '../recalc/support';
 
 // Every law below is derived from a row's own data, for every row of the one table: no law names a function.
 // A1:A5 = 10..50, B1:B5 = a..e, C1:C3 = 1, 2, 3, D1 = TRUE, E1:E3 = 1, #DIV/0!, 3, F1:F3 = 1, #N/A, 3, Z9 is blank.
@@ -17,7 +18,13 @@ const SHEET: Cells = {
     ...{ E1: 1, E2: '=1/0', E3: 3, F1: 1, F2: '=NA()', F3: 3 },
 };
 
-const ROWS = [...FUNCTIONS.values()];
+// Rows of this test's own, for what no function of this build does yet: a family that reads a text in a cell,
+// and a parameter that takes every value before one that takes a single value.
+const OWN = [
+    fn('MAXA', [rest(NUMBERS_A)], (numbers) => (numbers.count() === 0 ? 0 : numbers.max())),
+    fn('LARGE', [NUMBERS, NUMBER], (numbers, k) => numbers.list().sort()[numbers.count() - Math.ceil(k)] ?? NUM),
+];
+const ROWS = [...FUNCTIONS.values(), ...OWN];
 
 // A row for which no call from the pools answers a value names one here.
 const BASES: Readonly<Record<string, readonly string[]>> = {
@@ -58,9 +65,7 @@ function together(formulas: readonly string[]) {
     formulas.forEach((formula, at) => {
         cells[`N${at + 1}`] = formula;
     });
-    const engine = engineOf({ s1: { ...SHEET, ...cells } });
-    engine.recalc(Number.POSITIVE_INFINITY);
-    return formulas.map((_, at) => valueAt(engine, `N${at + 1}`));
+    return valuesWith(OWN, { ...SHEET, ...cells }, Object.keys(cells));
 }
 
 // Each formula in a pass of its own, so every one of them starts from the same draw.

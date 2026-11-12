@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { fn, NUMBER, NUMBERS } from '../../functions/registry';
+import { fn, NUMBER, NUMBERS, NUMBERS_A, rest } from '../../functions/registry';
 import { DIV0, NUM, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
 import { evaluate, evaluateWith } from '../recalc/support';
@@ -103,5 +103,26 @@ describe('a parameter that takes every value before one that takes a single valu
         ['=LARGE(A1:A5,{1,2,9})', [5, 4, NUM]],
     ])('%s', (formula, expected) => {
         expect(across(formula, 3, F3, large)).toEqual(expected);
+    });
+});
+
+// AVERAGEA and MAXA are not functions of this build: the rows are the test's own.
+describe('the numbers, with a boolean in a cell as 1 or 0 and a text in a cell as 0', () => {
+    const ROWS = [
+        fn('MAXA', [rest(NUMBERS_A)], (numbers) => (numbers.count() === 0 ? 0 : numbers.max())),
+        fn('AVERAGEA', [rest(NUMBERS_A)], (numbers) => numbers.sum() / numbers.count()),
+    ];
+
+    test.each([
+        // Excel batch 4.
+        ['=MAXA(D1:D2)', 1],
+        ['=AVERAGEA("x",1)', VALUE],
+        ['=AVERAGEA(D1:D2)', 0.5],
+        ['=AVERAGEA(D1:D3,A1)', 11 / 3],
+        ['=MAXA(D2:D3)', 0],
+        ['=MAXA(D2:E2)', DIV0],
+        ['=AVERAGEA(D1:E1,D2:E2)', DIV0],
+    ])('%s', (formula, expected) => {
+        expect(evaluateWith(ROWS, formula, F1)).toBe(expected);
     });
 });

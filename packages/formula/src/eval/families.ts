@@ -24,12 +24,20 @@ export type Family = {
 
 const NUMBER = 1 << CellKind.Number;
 const BOOLEAN = 1 << CellKind.Boolean;
-const EVERY = NUMBER | BOOLEAN | (1 << CellKind.Text) | (1 << CellKind.Error);
+const TEXT = 1 << CellKind.Text;
+const EVERY = NUMBER | BOOLEAN | TEXT | (1 << CellKind.Error);
 
 export const Families = {
     Numbers: { kinds: NUMBER, text: TypedText.Parsed, errors: Errors.Result, first: true, blanks: true },
     Counted: { kinds: NUMBER, text: TypedText.Numeric, errors: Errors.Passed, first: false, blanks: true },
     Filled: { kinds: EVERY, text: TypedText.Counted, errors: Errors.Counted, first: false, blanks: true },
     Truths: { kinds: NUMBER | BOOLEAN, text: TypedText.Spelled, errors: Errors.Result, first: true, blanks: true },
+    NumbersA: {
+        kinds: NUMBER | BOOLEAN | TEXT,
+        text: TypedText.Parsed,
+        errors: Errors.Result,
+        first: true,
+        blanks: true,
+    },
     Factors: { kinds: NUMBER, text: TypedText.Parsed, errors: Errors.Result, first: true, blanks: false },
 } as const satisfies Record<string, Family>;

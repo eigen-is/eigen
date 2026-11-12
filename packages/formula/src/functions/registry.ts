@@ -71,6 +71,8 @@ export const COUNTED = walked(Families.Counted);
 export const FILLED = walked(Families.Filled);
 // The numbers and booleans. A typed text counts when it spells TRUE or FALSE and is passed over otherwise.
 export const TRUTHS = walked(Families.Truths);
+// The numbers, with a boolean in a cell as 1 or 0 and a text in a cell as 0, as AVERAGEA and MAXA take them.
+export const NUMBERS_A = walked(Families.NumbersA);
 // The numbers, to be multiplied: as NUMBERS, but an empty argument and a blank element of an array are passed over.
 export const FACTORS = walked(Families.Factors);
 

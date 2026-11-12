@@ -57,10 +57,15 @@ export function evaluate(formula: string, cells: Cells = {}, host = 'N1') {
     return valueAt(engine, host);
 }
 
-// The same, in a recalc whose functions are those of this build and `rows`: for what no function of it does yet.
-export function evaluateWith(rows: readonly Entry[], formula: string, cells: Cells = {}, host = 'N1') {
-    const workbook = new Workbook([source('s1', { ...cells, [host]: formula })]);
+// The values at `hosts` after a recalc of `cells` whose functions are those of this build and `rows`: for what
+// no function of this build does yet.
+export function valuesWith(rows: readonly Entry[], cells: Cells, hosts: readonly string[]) {
+    const workbook = new Workbook([source('s1', cells)]);
     const functions = new Map([...FUNCTIONS, ...rows.map((entry) => [entry.name, entry] as const)]);
     new Recalc(workbook, functions).pass(Number.POSITIVE_INFINITY);
-    return workbook.value(workbook.sheets[0].columns[at(host)[1]], at(host)[0]);
+    return hosts.map((host) => workbook.value(workbook.sheets[0].columns[at(host)[1]], at(host)[0]));
+}
+
+export function evaluateWith(rows: readonly Entry[], formula: string, cells: Cells = {}, host = 'N1') {
+    return valuesWith(rows, { ...cells, [host]: formula }, [host])[0];
 }
