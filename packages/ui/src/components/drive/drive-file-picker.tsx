@@ -6,6 +6,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { useDriveViewPreferences } from '@workspace/lib/drive';
 import type { DrivePath, DriveSort } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
@@ -17,6 +18,7 @@ import {
 } from '@workspace/ui/components/dialog';
 import { Upload } from 'lucide-react';
 import { useCallback, useState } from 'react';
+import type { DriveLocationValue } from './drive-browser';
 import { DriveBrowser } from './drive-browser';
 
 type DriveFilePickerProps = {
@@ -42,11 +44,14 @@ export function DriveFilePicker({
     // Seeded once from the view preference and kept here, so a sort picked in the dialog never writes it.
     const { sortKey, sortDir } = useDriveViewPreferences();
     const [sort, setSort] = useState<DriveSort>({ key: sortKey, dir: sortDir });
+    // Unset is the root of the viewer's own drive, where every opening starts.
+    const [location, setLocation] = useState<DriveLocationValue>();
     const [selected, setSelected] = useState<DrivePath | null>(null);
     // The table owns a multi pick, Shift and Ctrl clicks included; this mirror lets Select read it.
     const [multiSelected, setMultiSelected] = useState<DrivePath[]>([]);
 
     const reset = useCallback(() => {
+        setLocation(undefined);
         setSelected(null);
         setMultiSelected([]);
     }, []);
@@ -68,7 +73,6 @@ export function DriveFilePicker({
     );
 
     if (!user) return null;
-    const ownerId = user.id;
     const pickedFiles = multiSelected.filter((p) => !isFolderType(p.type));
 
     const handleSubmit = () => {
@@ -100,13 +104,13 @@ export function DriveFilePicker({
 
                 <div className="flex-1 overflow-hidden">
                     <DriveBrowser
-                        ownerId={ownerId}
+                        value={location ?? { ownerId: user.id, mountId: DEFAULT_MOUNT_ID, folderId: '' }}
+                        onChange={setLocation}
                         mode="file"
                         canPick={canPick}
                         selectedId={multiSelect ? undefined : selected?.id}
                         onSelect={handleSelect}
                         onConfirm={multiSelect ? undefined : handleConfirm}
-                        showNewFolder={false}
                         onSelectionChange={multiSelect ? setMultiSelected : undefined}
                         sort={{ value: sort, onChange: setSort }}
                         className="h-full"

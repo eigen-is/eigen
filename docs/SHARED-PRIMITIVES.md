@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2160 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2161 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -250,7 +250,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (308)
+## Hooks (309)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -524,6 +524,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useDocumentExport` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/use-document-export.tsx |
 | `useDriveSort` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
 | `useMountLabel` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-mount-list.tsx |
+| `useResolvedDriveLocation` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-browser.tsx |
 | `useDriveListRoute` | `@workspace/ui/components/drive/use-drive-list-route` | packages/ui/src/components/drive/use-drive-list-route.ts |
 | `useFileActionRunner` | `@workspace/ui/components/file-actions` | packages/ui/src/components/file-actions/use-file-action-runner.tsx |
 | `useOptionalPreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
@@ -980,7 +981,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MenuSectionsProps` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/menu-sections.tsx |
 | `DriveAccessListProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-access-list.tsx |
 | `DriveListDate` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
-| `DriveLocationValue` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-location-field.tsx |
+| `DriveLocationValue` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-browser.tsx |
 | `DriveSortControl` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
 | `DriveTableProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
 | `DriveViewProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |

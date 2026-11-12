@@ -2,7 +2,7 @@
 // keyboard reaches: Enter, Space and a click. Open, its crumbs pick a folder and New folder works, without closing it.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
-import type { DriveLocationValue } from '../../../components/drive/drive-location-field';
+import type { DriveLocationValue } from '../../../components/drive/drive-browser';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { pressKey } from '../../press-key';
@@ -27,8 +27,8 @@ mock.module('@workspace/lib/drive', () => ({
 let createFolderOpen = false;
 mock.module('../../../components/drive/drive-browser', () => ({
     ...realBrowser,
-    DriveBrowser: (props: { createFolderOpen: boolean }) => {
-        createFolderOpen = props.createFolderOpen;
+    DriveBrowser: (props: { newFolder: { open: boolean } }) => {
+        createFolderOpen = props.newFolder.open;
         return null;
     },
 }));

@@ -28,9 +28,15 @@ async function createFailingWith(status: number) {
     const failure = new AppError({ error: { status, value: 'No' }, status });
     // A real mutation hook toasts the error before it rejects, which is what lets the picker keep it to itself.
     onMutationError(failure);
-    const onConfirm = () => Promise.reject(failure);
+    const onConfirm = mock(() => Promise.reject(failure));
     ({ unmount } = await renderInDocument(
-        createElement(DriveLocationPicker, { open: true, onOpenChange, mode: 'create', onConfirm }),
+        createElement(DriveLocationPicker, {
+            open: true,
+            onOpenChange,
+            mode: 'create',
+            onConfirm,
+            defaultFolderId: 'folder',
+        }),
     ));
     const input = document.querySelector('#picker-name');
     if (!(input instanceof HTMLInputElement)) throw new Error('no name input');
@@ -44,13 +50,13 @@ async function createFailingWith(status: number) {
     await act(async () => {
         create.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    return { closes: onOpenChange.mock.calls, name: input.value };
+    return { tries: onConfirm.mock.calls.length, closes: onOpenChange.mock.calls, name: input.value };
 }
 
 test('a folder the server refuses keeps the picker open with the typed name', async () => {
-    expect(await createFailingWith(403)).toEqual({ closes: [], name: 'Plans' });
+    expect(await createFailingWith(403)).toEqual({ tries: 1, closes: [], name: 'Plans' });
 });
 
 test('a name the server refuses keeps the picker open with the typed name', async () => {
-    expect(await createFailingWith(422)).toEqual({ closes: [], name: 'Plans' });
+    expect(await createFailingWith(422)).toEqual({ tries: 1, closes: [], name: 'Plans' });
 });

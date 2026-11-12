@@ -5,7 +5,7 @@
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
-import type { DriveLocationValue } from '../../../components/drive/drive-location-field';
+import type { DriveLocationValue } from '../../../components/drive/drive-browser';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -31,10 +31,12 @@ let tree: DrivePath[] = [];
 // The mounts whose root has not loaded yet.
 const loadingRoots = new Set<string>();
 const created: unknown[] = [];
+const rootReads: string[] = [];
 beforeEach(() => {
     tree = [...TREE];
     loadingRoots.clear();
     created.length = 0;
+    rootReads.length = 0;
 });
 
 const inDrive = (ownerId: string, mountId: string) =>
@@ -56,9 +58,13 @@ mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
     useDriveViewPreferences: () => ({ sortKey: 'name', sortDir: 'asc' }),
     useSharedPaths: () => ({ data: [] }),
-    useRootFolder: (ownerId: string, mountId: string) => ({
-        data: loadingRoots.has(mountId) ? undefined : inDrive(ownerId, mountId).find((p) => p.parentId === null),
-    }),
+    useRootFolder: (ownerId: string, mountId: string) => {
+        // As the real hook, which reads nothing without an owner.
+        if (ownerId) rootReads.push(`${ownerId}/${mountId}`);
+        return {
+            data: loadingRoots.has(mountId) ? undefined : inDrive(ownerId, mountId).find((p) => p.parentId === null),
+        };
+    },
     useFolderContent: (ownerId: string, mountId: string, id: string) => ({
         data: id ? inDrive(ownerId, mountId).filter((p) => p.parentId === id) : undefined,
     }),
@@ -123,11 +129,11 @@ const activeMount = () => document.querySelector('button.text-primary')?.textCon
 type Defaults = { defaultOwnerId?: string; defaultMountId?: string; defaultFolderId?: string };
 const onConfirm = mock((_location: DriveLocationValue & { name?: string }) => {});
 let moveTo: (defaults: Defaults) => void = () => {};
-function FolderPickerHost({ defaults }: { defaults: Defaults }) {
+function FolderPickerHost({ defaults, open = true }: { defaults: Defaults; open?: boolean }) {
     const [current, setCurrent] = useState(defaults);
     moveTo = setCurrent;
     return createElement(DriveLocationPicker, {
-        open: true,
+        open,
         onOpenChange: () => {},
         mode: 'folder',
         onConfirm,
@@ -209,6 +215,41 @@ test('a host that names another folder or drive moves the browser there', async 
     expect(await confirmed()).toEqual([{ ownerId: TEAM, mountId: TEAM_MOUNT, folderId: 'design-root' }]);
 });
 
+test('a host that names another drive and a folder in it at once opens that folder', async () => {
+    await openFolderPicker({ defaultOwnerId: TEAM, defaultMountId: TEAM_MOUNT });
+    await act(async () => moveTo({ defaultOwnerId: ME, defaultMountId: 'default', defaultFolderId: 'docs' }));
+    expect(rowNames()).toEqual(['Plans']);
+    expect(activeMount()).toBe('Drive');
+    expect(await confirmed()).toEqual([{ ownerId: ME, mountId: 'default', folderId: 'docs' }]);
+});
+
+test('while a drive’s root loads the picker confirms nothing, then it confirms the root', async () => {
+    loadingRoots.add(TEAM_MOUNT);
+    await openFolderPicker({ defaultFolderId: 'docs' });
+    await click(buttonNamed('Design drive'));
+    expect(activeMount()).toBe('Design drive');
+    expect(rowNames()).toEqual([]);
+    expect(buttonNamed('Select').disabled).toBe(true);
+    expect(await confirmed()).toEqual([]);
+    loadingRoots.clear();
+    await act(async () => moveTo({ defaultFolderId: 'docs' }));
+    expect(rowNames()).toEqual(['Briefs']);
+    expect(buttonNamed('Select').disabled).toBe(false);
+    expect(await confirmed()).toEqual([{ ownerId: TEAM, mountId: TEAM_MOUNT, folderId: 'design-root' }]);
+});
+
+// Every editor mounts closed pickers, some for a drive the viewer cannot read.
+test('a closed folder picker reads no root', async () => {
+    ({ unmount } = await renderInDocument(
+        createElement(FolderPickerHost, {
+            defaults: { defaultOwnerId: TEAM, defaultMountId: TEAM_MOUNT },
+            open: false,
+        }),
+    ));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(rootReads).toEqual([]);
+});
+
 test('New folder creates in the folder shown, and the browser moves into the new folder', async () => {
     await openFolderPicker({ defaultFolderId: 'docs' });
     await click(buttonNamed('New folder'));
@@ -243,13 +284,27 @@ test('a folder click reports the owner, the mount and the folder, once', async (
     expect(onChange.mock.calls).toEqual([[{ ownerId: ME, mountId: 'default', folderId: 'plans' }]]);
 });
 
+test('the browser shows the folder its host holds, so it stays put under a host that does not move', async () => {
+    await openField({ ownerId: ME, mountId: 'default', folderId: 'docs' });
+    await clickRow('Plans');
+    expect(rowNames()).toEqual(['Plans']);
+    await click(buttonNamed('Drive'));
+    expect(onChange.mock.calls.at(-1)).toEqual([{ ownerId: ME, mountId: 'default', folderId: '' }]);
+    expect(rowNames()).toEqual(['Plans']);
+    expect(crumbs()).toEqual(['Drive', 'Docs']);
+});
+
 // The file picker, as File > Open and the imports open it.
 const onSelect = mock((_paths: DrivePath[]) => {});
+let reopen = () => {};
+function FilePickerHost() {
+    const [open, setOpen] = useState(true);
+    reopen = () => setOpen(true);
+    return createElement(DriveFilePicker, { open, onOpenChange: setOpen, onSelect });
+}
 async function openFilePicker() {
     onSelect.mockClear();
-    ({ unmount } = await renderInDocument(
-        createElement(DriveFilePicker, { open: true, onOpenChange: () => {}, onSelect }),
-    ));
+    ({ unmount } = await renderInDocument(createElement(FilePickerHost)));
 }
 
 test('the file picker opens at the root of the viewer’s drive, with no New folder', async () => {
@@ -274,4 +329,16 @@ test('the file picker walks folders, crumbs and mounts, and Select hands back th
     await clickRow('Notes.txt');
     await click(buttonNamed('Select'));
     expect(onSelect.mock.calls).toEqual([[[notes]]]);
+});
+
+test('the file picker opens at the root again after it was closed in another folder', async () => {
+    await openFilePicker();
+    await click(buttonNamed('Design drive'));
+    await clickRow('Briefs');
+    expect(crumbs()).toEqual(['Design drive', 'Briefs']);
+    await click(buttonNamed('Cancel'));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await act(async () => reopen());
+    expect(rowNames()).toEqual(['Docs', 'Notes.txt']);
+    expect(activeMount()).toBe('Drive');
 });
