@@ -3,7 +3,7 @@
 // a class undo cannot derive back is reported with the text it loses, and a class whose value can change is a seed
 // of the recompute. Everything is in the places before the edit, but the blocks reported to the host.
 
-import { sheetOf } from '../edit/leaves';
+import { mapLeaves, sheetOf } from '../edit/leaves';
 import { moveClasses } from '../edit/move';
 import { bindSheet } from '../edit/sheets';
 import { hostClasses } from '../edit/transform';
@@ -12,6 +12,7 @@ import type { Sheet } from '../store/sheet';
 import type { Change, Workbook } from '../store/workbook';
 import { ChangeKind } from '../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
+import { findSheetByName } from '../text/sheet-name';
 import type { Ends, FormulaNode } from '../text/tree';
 import { endsAt, RefKind, SheetKind } from '../text/tree';
 
@@ -144,10 +145,12 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
             }
         }
     }
-    // The formulas of a sheet that comes, typed with the name of a sheet that is there or with its own. The sheet
-    // is in no place yet and nothing reads it, so they get their new shape where they stand.
+    // The formulas of a sheet that comes, typed with the name of a sheet that is there or with its own, which each
+    // read as a typed name does, the new sheet first. The sheet is in no place yet and nothing reads it, so they
+    // get their new shape where they stand.
     if (change.kind === ChangeKind.AddSheet) {
         const { sheet } = change;
+        const candidates = [sheet, ...sheets];
         for (let c = 0; c < sheet.columns.length; c += 1) {
             const column = sheet.columns[c];
             for (let row = 0; row < column.length; ) {
@@ -158,8 +161,11 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
                 if (id === 0) continue;
                 const shape = shapes.shape(id);
                 if (shape.tree === null || !shape.namesSheet) continue;
-                let bound = bindSheet(shape.tree, sheet.name, sheet.id);
-                for (const other of sheets) bound = bindSheet(bound, other.name, other.id);
+                const bound = mapLeaves(shape.tree, (node) => {
+                    const named =
+                        node.sheetKind === SheetKind.Name ? findSheetByName(candidates, node.sheet) : undefined;
+                    return named === undefined ? node : bindSheet(node, node.sheet, named.id);
+                });
                 if (bound === shape.tree) continue;
                 const shaped = shapes.internTree(bound);
                 const bottom = row - 1;

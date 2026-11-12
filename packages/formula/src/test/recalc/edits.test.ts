@@ -522,6 +522,26 @@ describe('sheets', () => {
         engine.recalc(NO_CAP);
         expect(engine.valueOf('s3', 0, 0)).toBe(21);
     });
+    test('a sheet that comes beside one whose name differs only in case reads each as a typed name does', () => {
+        const engine = new Engine([{ id: 'a', name: 'data', cells: (cell) => cell(0, 0, 1, null) }]);
+        const added = engine.addSheet(
+            {
+                id: 'c',
+                name: 'Data',
+                cells: (cell) => {
+                    cell(0, 0, 3, null);
+                    cell(1, 0, null, "='data'!R1C1");
+                    cell(2, 0, null, "='Data'!R1C1");
+                    cell(3, 0, null, "='DATA'!R1C1");
+                },
+            },
+            0,
+        );
+        // The sheet of exactly that name, else the first in another case, the new sheet before the others.
+        expect(added.rewrites.map((rewrite) => rewrite.formula)).toEqual(['=[a]!R1C1', '=[c]!R1C1', '=[c]!R1C1']);
+        engine.recalc(NO_CAP);
+        expect([1, 2, 3].map((row) => engine.valueOf('c', row, 0))).toEqual([1, 3, 3]);
+    });
     test('a sheet whose cells cannot be read is not added, and nothing changes', () => {
         const engine = book();
         const broken = {
