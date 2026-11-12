@@ -1,8 +1,8 @@
 // Criteria, as COUNTIF, SUMIFS and their kin take them. A criterion is read once per call: an operator in front if
 // there is one, and an operand typed the way a cell entry is. A tally then walks the criteria ranges row by row
 // over the planes of their columns, stops at the first criterion a cell fails, and keeps the count of the cells
-// that met them all and the numbers beside those. An equality criterion on a column that has an index gives the
-// rows to walk, so the rest are never read.
+// that met them all and the numbers beside those. A row costs the columns that reach it, and the blank cells under
+// them are counted without a visit. An equality criterion on a column that has an index gives the rows to walk.
 
 import type { Column } from '../store/column';
 import { CellKind, KIND_MASK } from '../store/column';
@@ -19,6 +19,7 @@ import type { Pattern } from '../values/wildcard';
 import { patternMatches, patternOf } from '../values/wildcard';
 import type { Evaluator } from './evaluator';
 import type { Held } from './signature';
+import { Reach } from './walk';
 
 const Op = { Equal: 0, NotEqual: 1, Less: 2, LessEqual: 3, Greater: 4, GreaterEqual: 5 } as const;
 
@@ -163,11 +164,13 @@ export class Tally {
     // criterion that refuses a blank none matches from there on, and without one every cell does and holds no number.
     private readonly counted: (Column | undefined)[] = [];
     private readonly stops: number[] = [];
+    // The columns that are not past that row yet, at the row the walk is at.
+    private readonly reach = new Reach();
 
     // Walks the first `pairs` of the ranges, which are of one size and computed, each against its criterion.
     // `values` is the range of that size whose numbers are kept beside the cells that match, or null for none.
     public walk(ctx: Evaluator, pairs: number, values: Reference | null): void {
-        const { ranges, criteria, read, blanks, columns, used, counted, stops } = this;
+        const { ranges, criteria, read, blanks, columns, used, counted, stops, reach } = this;
         const { strings, sheets } = ctx.workbook;
         const rows = ranges[0].bottom - ranges[0].top + 1;
         const width = ranges[0].right - ranges[0].left + 1;
@@ -182,6 +185,7 @@ export class Tally {
         this.found = 0;
         this.error = null;
         let last = 0;
+        reach.clear(width);
         for (let across = 0; across < width; across += 1) {
             const value = values === null ? undefined : sheets[values.sheet].columns[values.left + across];
             counted[across] = value;
@@ -199,6 +203,7 @@ export class Tally {
                 else if (!blanks[i]) stop = Math.min(stop, held);
             }
             stops[across] = Math.max(stop, 0);
+            reach.add(across, stops[across]);
             last = Math.max(last, stops[across]);
             if (open) this.count += rows - stops[across];
         }
@@ -222,45 +227,67 @@ export class Tally {
         const top = values === null ? 0 : values.top;
         const end = listed === null ? last : listed.length;
         const band = width === 1 ? Math.max(end, 1) : 1;
+        const reaching = reach.columns;
         let { numbers } = this;
         let count = this.count;
         let found = 0;
-        for (let from = listed === null ? 0 : firstFrom(listed, first); from < end; from += band) {
-            const to = Math.min(from + band, end);
-            for (let across = 0, base = 0; across < width; across += 1, base += pairs) {
-                const stop = stops[across];
-                const value = counted[across];
-                for (let at = from; at < to; at += 1) {
-                    const offset = listed === null ? at : listed[at] - first;
-                    if (offset >= stop) break;
-                    let i = 0;
-                    for (; i < pairs; i += 1) {
-                        if (i === driver) continue;
-                        const column = columns[base + i];
-                        const row = ranges[i].top + offset;
-                        if (column === undefined || offset >= used[base + i]) {
-                            if (!blanks[i]) break;
-                        } else if (
-                            !meets(read[i], strings, column.kind[row] & KIND_MASK, column.num[row], column.ref[row])
-                        )
-                            break;
+        let live = reach.count;
+        let from = listed === null ? 0 : firstFrom(listed, first);
+        while (from < end) {
+            // Where a column ends, the ones that go on move up in the lists, so a row costs the columns it has.
+            // The rows up to the next such end are walked in a loop of their own, which calls nothing.
+            let until = end;
+            if (listed === null) {
+                live = reach.cut(from);
+                if (width > 1) until = Math.min(end, reach.shortest);
+                for (let across = 0; across < live; across += 1) {
+                    const was = reaching[across];
+                    reaching[across] = across;
+                    stops[across] = stops[was];
+                    counted[across] = counted[was];
+                    for (let i = 0; i < pairs; i += 1) {
+                        columns[across * pairs + i] = columns[was * pairs + i];
+                        used[across * pairs + i] = used[was * pairs + i];
                     }
-                    if (i < pairs) continue;
-                    count += 1;
-                    const row = top + offset;
-                    if (value === undefined || row >= value.length) continue;
-                    const kind = value.kind[row] & KIND_MASK;
-                    if (kind === CellKind.Error) {
-                        this.error = ctx.workbook.error(value.ref[row]);
-                        return;
+                }
+            }
+            for (; from < until; from += band) {
+                const to = Math.min(from + band, until);
+                for (let across = 0, base = 0; across < live; across += 1, base += pairs) {
+                    const stop = stops[across];
+                    const value = counted[across];
+                    for (let at = from; at < to; at += 1) {
+                        const offset = listed === null ? at : listed[at] - first;
+                        if (offset >= stop) break;
+                        let i = 0;
+                        for (; i < pairs; i += 1) {
+                            if (i === driver) continue;
+                            const column = columns[base + i];
+                            const row = ranges[i].top + offset;
+                            if (column === undefined || offset >= used[base + i]) {
+                                if (!blanks[i]) break;
+                            } else if (
+                                !meets(read[i], strings, column.kind[row] & KIND_MASK, column.num[row], column.ref[row])
+                            )
+                                break;
+                        }
+                        if (i < pairs) continue;
+                        count += 1;
+                        const row = top + offset;
+                        if (value === undefined || row >= value.length) continue;
+                        const kind = value.kind[row] & KIND_MASK;
+                        if (kind === CellKind.Error) {
+                            this.error = ctx.workbook.error(value.ref[row]);
+                            return;
+                        }
+                        if (kind !== CellKind.Number) continue;
+                        if (found === numbers.length) {
+                            numbers = new Float64Array(found * 2);
+                            numbers.set(this.numbers);
+                            this.numbers = numbers;
+                        }
+                        numbers[found++] = value.num[row];
                     }
-                    if (kind !== CellKind.Number) continue;
-                    if (found === numbers.length) {
-                        numbers = new Float64Array(found * 2);
-                        numbers.set(this.numbers);
-                        this.numbers = numbers;
-                    }
-                    numbers[found++] = value.num[row];
                 }
             }
         }

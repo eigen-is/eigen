@@ -6,15 +6,13 @@ import { toText } from '../values/coerce';
 import type { FormulaError } from '../values/errors';
 import { CALC, VALUE } from '../values/errors';
 import type { Value } from '../values/value';
-import { elementAt, isArray, isError, isReference } from '../values/value';
+import { elementAt, heightOf, isArray, isError, isReference, widthOf } from '../values/value';
 import { isLazy } from './call';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Errors, Families } from './families';
-import { productsOf } from './products';
 import type { Frame } from './readers';
 import { Table } from './readers';
-import { heightOf, widthOf } from './search';
 import type { Entry, Held, Param } from './signature';
 import { Prepare, Read } from './signature';
 import { firstError } from './views';
@@ -50,9 +48,9 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
             args[p] = frame.numbers(p).bind(at, to, family, true);
         } else if (param.read === Read.Matched) args[p] = frame.numbers(p).beside();
         else if (param.read === Read.Products) {
-            const error = multiply(ctx, held, at, to);
+            const error = sized(ctx, held, at, to);
             if (error !== null) return error;
-            args[p] = frame.numbers(p).bind(at, at + 1, Families.Numbers, false);
+            args[p] = frame.numbers(p).together(at, to);
         } else if (param.read === Read.Texts) {
             const texts = frame.texts(p);
             const error = spell(ctx, held, at, to, texts);
@@ -143,26 +141,19 @@ function spelled(texts: string[], value: Value): FormulaError | null {
     return null;
 }
 
-// The arguments `from` up to `to` as their products, left in the place of the first: any argument's first error
-// comes before a difference in size, which is #VALUE!.
-function multiply(ctx: Evaluator, held: Held[], from: number, to: number): FormulaError | null {
-    const factors: Value[] = [];
+// The error that keeps the arguments `from` up to `to` from being multiplied place by place: any argument's first
+// error comes before a difference in size, which is #VALUE!.
+function sized(ctx: Evaluator, held: readonly Held[], from: number, to: number): FormulaError | null {
+    for (let i = from; i < to; i += 1) settle(ctx, held[i], Families.Counted);
+    const first = held[from];
+    let alike = true;
     for (let i = from; i < to; i += 1) {
         const value = held[i];
-        if (!written(value)) continue;
-        settle(ctx, value, Families.Counted);
-        factors.push(value);
-    }
-    let sized = true;
-    for (const factor of factors) {
-        const error = errorIn(ctx, factor, Families.Counted, 0);
+        const error = errorIn(ctx, value, Families.Counted, 0);
         if (error !== null) return error;
-        sized &&= heightOf(factor) === heightOf(factors[0]) && widthOf(factor) === widthOf(factors[0]);
+        alike &&= heightOf(value) === heightOf(first) && widthOf(value) === widthOf(first);
     }
-    if (!sized) return VALUE;
-    const made = productsOf(ctx, factors);
-    held[from] = made;
-    return isError(made) ? made : null;
+    return alike ? null : VALUE;
 }
 
 // The criteria of a call, walked: the count for its Matches, and the numbers beside the matching cells for its

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { Entry } from '../../eval/signature';
 import { TOKENS } from '../../eval/signature';
 import { FUNCTIONS } from '../../functions/library';
+import type { Vector } from '../../functions/registry';
 import {
     ANYTHING,
     each,
@@ -12,6 +13,7 @@ import {
     NUMBER,
     NUMBERS,
     optional,
+    PAIRS,
     rest,
     TABLE,
     WHERE,
@@ -90,6 +92,14 @@ describe('what a body can do wrong is caught by the wrapper', () => {
     });
 });
 
+describe('a body reaches no cell, column or stored array', () => {
+    // Checked when the tests are compiled: a member of Vector that is not listed here is one a body could read.
+    test('of a row or a column of a table it gets the two searches and nothing else', () => {
+        const reachable: Record<keyof Vector, true> = { find: true, seek: true };
+        expect(Object.keys(reachable)).toEqual(['find', 'seek']);
+    });
+});
+
 describe('a row that is put together wrongly fails when it is made', () => {
     test.each([
         ['a parameter after the criteria', () => fn('WRONG', [WHERE, NUMBER], () => 0)],
@@ -103,6 +113,12 @@ describe('a row that is put together wrongly fails when it is made', () => {
         ['a parameter after a repeating', () => fn('WRONG', [rest(NUMBER), each(NUMBER)], () => 0)],
         ['a table that repeats', () => fn('WRONG', [rest(TABLE)], () => 0)],
         ['a table that repeats', () => fn('WRONG', [NUMBER, rest(ANYTHING)], () => 0)],
+        ['two ranges side by side that repeat or may be left out', () => fn('WRONG', [rest(PAIRS)], () => 0)],
+        ['two ranges side by side that repeat or may be left out', () => fn('WRONG', [optional(PAIRS)], () => 0)],
+        [
+            'two ranges side by side that repeat or may be left out',
+            () => fn('WRONG', [NUMBER, optional(PAIRS)], () => 0),
+        ],
         [
             'a fallback of another kind',
             () =>

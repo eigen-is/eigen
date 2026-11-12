@@ -6,13 +6,23 @@ import type { FormulaError } from '../values/errors';
 import { CALC, NA } from '../values/errors';
 import { snapSum } from '../values/precision';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
-import { arrayOf, elementAt, isArray, isError, isReference, partOf, ValueType } from '../values/value';
+import {
+    arrayOf,
+    elementAt,
+    heightOf,
+    isArray,
+    isError,
+    isReference,
+    partOf,
+    ValueType,
+    widthOf,
+} from '../values/value';
 import { Tally } from './criteria';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Families } from './families';
 import type { Vector } from './search';
-import { edge, heightOf, widthOf } from './search';
+import { edge } from './search';
 import type { Held } from './signature';
 import { add } from './sum';
 
@@ -73,6 +83,8 @@ export class Numbers {
     private snaps = true;
     // Whether the numbers are the ones the criteria of the call left beside their matches, and no argument's.
     private matched = false;
+    // Whether the numbers are the products of the arguments, place by place.
+    private multiplied = false;
 
     public constructor(ctx: Evaluator, frame: Frame) {
         this.ctx = ctx;
@@ -87,6 +99,15 @@ export class Numbers {
         this.family = family;
         this.counted = -1;
         this.matched = false;
+        this.multiplied = false;
+        return this;
+    }
+
+    // The arguments `from` up to `to` of the frame, which are of one size, multiplied place by place: what is no
+    // number is 0. Their sum is the plain one.
+    public together(from: number, to: number): this {
+        this.bind(from, to, Families.Numbers, false);
+        this.multiplied = true;
         return this;
     }
 
@@ -165,6 +186,7 @@ export class Numbers {
         const { walk } = this.ctx;
         walk.start(this.frame.held, this.from, this.to, this.family, this.frame.skips);
         if (this.matched) walk.hand(this.frame.tally.numbers, this.frame.tally.found);
+        if (this.multiplied) walk.multiply();
         return this.ctx;
     }
 

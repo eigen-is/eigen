@@ -23,19 +23,19 @@ type Key = number | string | boolean;
 
 // One row or one column of a table, ready to be searched.
 export class Vector {
-    public readonly workbook: Workbook;
+    private readonly workbook: Workbook;
     // The values are the cells of this column from row `start` down, or else `items` from `start` in steps of `step`.
-    public readonly column: Column | null;
-    public readonly items: ArrayLike<Scalar | Reference>;
-    public readonly start: number;
-    public readonly step: number;
+    private readonly column: Column | null;
+    private readonly items: ArrayLike<Scalar | Reference>;
+    private readonly start: number;
+    private readonly step: number;
     // How many values there are, and how many of them, counted from the first, can be other than blank.
-    public readonly length: number;
-    public readonly used: number;
+    private readonly length: number;
+    private readonly used: number;
     // How many of the values that can be other than blank are held, each for a run of equal values, and where each
     // run ends: null when each is one value. A search that visits every value looks at the held ones only.
-    public readonly stored: number;
-    public readonly ends: Int32Array | null;
+    private readonly stored: number;
+    private readonly ends: Int32Array | null;
 
     public constructor(
         workbook: Workbook,
@@ -61,8 +61,8 @@ export class Vector {
     // The place of the key itself, a text key as a pattern, or of the last value at most the key, or at least it,
     // among values taken to be sorted.
     public find(key: Key, mode: Find): number {
-        if (mode === Find.Exact) return exact(this, key, true, false);
-        return mode === Find.AtMost ? bisect(this, key, false, -1, true) : bisect(this, key, true, 1, false);
+        if (mode === Find.Exact) return this.exact(key, true, false);
+        return mode === Find.AtMost ? this.bisect(key, false, -1, true) : this.bisect(key, true, 1, false);
     }
 
     // `match` is 0 for the key itself, -1 for it or the next smaller value, 1 for it or the next larger one and 2
@@ -71,20 +71,163 @@ export class Vector {
     public seek(key: Key | null, match: number, search: number): number | FormulaError {
         if (match !== 0 && match !== -1 && match !== 1 && match !== 2) return VALUE;
         if (search === 1 || search === -1) {
-            if (match === 0 || match === 2) return exact(this, key, match === 2, search < 0);
-            return nearest(this, key ?? 0, match > 0, search < 0);
+            if (match === 0 || match === 2) return this.exact(key, match === 2, search < 0);
+            return this.nearest(key ?? 0, match > 0, search < 0);
         }
         if ((search !== 2 && search !== -2) || match === 2) return VALUE;
-        return bisect(this, key ?? 0, search < 0, match, false);
+        return this.bisect(key ?? 0, search < 0, match, false);
     }
-}
 
-export function heightOf(range: Value): number {
-    return isReference(range) ? range.bottom - range.top + 1 : isArray(range) ? range.rows : 1;
-}
+    // The value at a position.
+    private valueAt(at: number): Scalar | Reference {
+        const { column, start } = this;
+        if (column !== null) return this.workbook.value(column, start + at);
+        return this.items[start + bandOf(this.ends, at) * this.step];
+    }
 
-export function widthOf(range: Value): number {
-    return isReference(range) ? range.right - range.left + 1 : isArray(range) ? range.columns : 1;
+    // The held value `at`, counted from the first held one.
+    private heldAt(at: number): Scalar | Reference {
+        const { column, start } = this;
+        return column !== null ? this.workbook.value(column, start + at) : this.items[start + at * this.step];
+    }
+
+    // The position at which a search met a held value: the first of its run, or the last when it came from the end.
+    private placeOf(at: number, reverse: boolean): number {
+        const { ends } = this;
+        if (ends === null || at < 0) return at;
+        return reverse ? ends[at] - 1 : at === 0 ? 0 : ends[at - 1];
+    }
+
+    // The first value that equals the key, or the last one when `reverse`. With `wild` a text key is a pattern, and
+    // a blank key finds a blank.
+    private exact(key: Key | null, wild: boolean, reverse: boolean): number {
+        const { column, start } = this;
+        const used = this.stored;
+        const step = reverse ? -1 : 1;
+        const first = reverse ? used - 1 : 0;
+        const end = reverse ? -1 : used;
+        if (key === null) {
+            if (reverse && this.length > this.used) return this.length - 1;
+            for (let at = first; at !== end; at += step) {
+                if (this.heldAt(at) === null) return this.placeOf(at, reverse);
+            }
+            return this.length > this.used ? this.used : -1;
+        }
+        let sought = key;
+        if (typeof key === 'string') {
+            sought = textKey(key);
+            const pattern = wild ? patternOf(sought) : null;
+            if (pattern !== null && pattern.literal === null) {
+                for (let at = first; at !== end; at += step) {
+                    const value = this.heldAt(at);
+                    if (typeof value === 'string' && patternMatches(pattern, textKey(value))) {
+                        return this.placeOf(at, reverse);
+                    }
+                }
+                return -1;
+            }
+            sought = pattern?.literal ?? sought;
+        }
+        if (column === null) {
+            for (let at = first; at !== end; at += step) {
+                if (against(this.heldAt(at), sought) === 0) return this.placeOf(at, reverse);
+            }
+            return -1;
+        }
+        const { strings } = this.workbook;
+        const kind =
+            typeof sought === 'number'
+                ? CellKind.Number
+                : typeof sought === 'string'
+                  ? CellKind.Text
+                  : CellKind.Boolean;
+        const num = typeof sought === 'number' ? sought : 0;
+        const ref = typeof sought === 'string' ? strings.find(sought) : sought === true ? 1 : 0;
+        const rows = ColumnIndex.rows(column, strings, kind, num, ref);
+        if (rows !== null) {
+            // The rows of a number also list the text cells that read as it, which no lookup takes.
+            const from = reverse ? firstFrom(rows, start + used) - 1 : firstFrom(rows, start);
+            for (let i = from; i >= 0 && i < rows.length; i += step) {
+                const row = rows[i];
+                if (row < start || row >= start + used) break;
+                if ((column.kind[row] & KIND_MASK) === kind) return row - start;
+            }
+            return -1;
+        }
+        for (let row = start + first; row !== start + end; row += step) {
+            if ((column.kind[row] & KIND_MASK) !== kind) continue;
+            const same =
+                kind === CellKind.Number
+                    ? equal15(column.num[row], num)
+                    : kind === CellKind.Text
+                      ? strings.upper(column.ref[row]) === ref
+                      : column.ref[row] === ref;
+            if (same) return row - start;
+        }
+        return -1;
+    }
+
+    // The value that equals the key, or else the nearest smaller one, or the nearest larger one with `larger`. Every
+    // value is looked at, in order, or from the last one back when `reverse`, and of equal candidates the first met wins.
+    private nearest(key: Key, larger: boolean, reverse: boolean): number {
+        const used = this.stored;
+        const step = reverse ? -1 : 1;
+        const end = reverse ? -1 : used;
+        let best = -1;
+        let bestValue = key;
+        for (let at = reverse ? used - 1 : 0; at !== end; at += step) {
+            const value = this.heldAt(at);
+            if (typeof value === 'object' || typeof value !== typeof key) continue;
+            const order = compareValues(value, key);
+            if (order === 0) return this.placeOf(at, reverse);
+            if (order > 0 !== larger) continue;
+            const gain = compareValues(value, bestValue);
+            if (best < 0 || (larger ? gain < 0 : gain > 0)) {
+                best = at;
+                bestValue = value;
+            }
+        }
+        return this.placeOf(best, reverse);
+    }
+
+    // Bisection over values taken to be sorted, ascending or `descending`: whatever the halving lands on, as in Excel.
+    // A probe that meets a value of another kind moves to the nearest one of the key's kind. Of equal keys it lands on
+    // the last one with `last`, else on the first. With no equal value, `mode` picks the result: 0 none, -1 the next
+    // smaller value, 1 the next larger.
+    private bisect(key: Key, descending: boolean, mode: number, last: boolean): number {
+        let low = 0;
+        let high = this.used - 1;
+        // The last value met that sorts ahead of where the key belongs, and the first that sorts past it.
+        let before = -1;
+        let after = -1;
+        while (low <= high) {
+            const middle = (low + high) >> 1;
+            let at = middle;
+            let order = against(this.valueAt(at), key);
+            while (Number.isNaN(order) && at > low) {
+                at -= 1;
+                order = against(this.valueAt(at), key);
+            }
+            if (Number.isNaN(order)) at = middle;
+            while (Number.isNaN(order) && at < high) {
+                at += 1;
+                order = against(this.valueAt(at), key);
+            }
+            if (Number.isNaN(order)) break;
+            if (descending) order = -order;
+            if (order < 0 || (order === 0 && last)) {
+                before = at;
+                low = Math.max(at, middle) + 1;
+            } else {
+                after = at;
+                high = at > middle ? low - 1 : at - 1;
+            }
+        }
+        const hit = last ? before : after;
+        if (hit >= 0 && against(this.valueAt(hit), key) === 0) return hit;
+        if (mode === 0) return -1;
+        return mode < 0 === descending ? after : before;
+    }
 }
 
 // Column `index` of a range or an array when `down`, else row `index`. The formulas in it are computed first.
@@ -122,154 +265,7 @@ export function edge(ctx: Evaluator, range: Value, down: boolean, index: number)
     );
 }
 
-// The value at a position.
-function valueAt(vector: Vector, at: number): Scalar | Reference {
-    const { column, start } = vector;
-    if (column !== null) return vector.workbook.value(column, start + at);
-    return vector.items[start + bandOf(vector.ends, at) * vector.step];
-}
-
-// The held value `at`, counted from the first held one.
-function heldAt(vector: Vector, at: number): Scalar | Reference {
-    const { column, start } = vector;
-    return column !== null ? vector.workbook.value(column, start + at) : vector.items[start + at * vector.step];
-}
-
-// The position at which a search met a held value: the first of its run, or the last when it came from the end.
-function placeOf(vector: Vector, at: number, reverse: boolean): number {
-    const { ends } = vector;
-    if (ends === null || at < 0) return at;
-    return reverse ? ends[at] - 1 : at === 0 ? 0 : ends[at - 1];
-}
-
 // How a value sorts against the key, and NaN when it is of another kind.
 function against(value: Scalar | Reference, key: Key): number {
     return typeof value === 'object' || typeof value !== typeof key ? Number.NaN : compareValues(value, key);
-}
-
-// The first value that equals the key, or the last one when `reverse`. With `wild` a text key is a pattern, and
-// a blank key finds a blank.
-function exact(vector: Vector, key: Key | null, wild: boolean, reverse: boolean): number {
-    const { column, start } = vector;
-    const used = vector.stored;
-    const step = reverse ? -1 : 1;
-    const first = reverse ? used - 1 : 0;
-    const end = reverse ? -1 : used;
-    if (key === null) {
-        if (reverse && vector.length > vector.used) return vector.length - 1;
-        for (let at = first; at !== end; at += step) {
-            if (heldAt(vector, at) === null) return placeOf(vector, at, reverse);
-        }
-        return vector.length > vector.used ? vector.used : -1;
-    }
-    let sought = key;
-    if (typeof key === 'string') {
-        sought = textKey(key);
-        const pattern = wild ? patternOf(sought) : null;
-        if (pattern !== null && pattern.literal === null) {
-            for (let at = first; at !== end; at += step) {
-                const value = heldAt(vector, at);
-                if (typeof value === 'string' && patternMatches(pattern, textKey(value))) {
-                    return placeOf(vector, at, reverse);
-                }
-            }
-            return -1;
-        }
-        sought = pattern?.literal ?? sought;
-    }
-    if (column === null) {
-        for (let at = first; at !== end; at += step) {
-            if (against(heldAt(vector, at), sought) === 0) return placeOf(vector, at, reverse);
-        }
-        return -1;
-    }
-    const { strings } = vector.workbook;
-    const kind =
-        typeof sought === 'number' ? CellKind.Number : typeof sought === 'string' ? CellKind.Text : CellKind.Boolean;
-    const num = typeof sought === 'number' ? sought : 0;
-    const ref = typeof sought === 'string' ? strings.find(sought) : sought === true ? 1 : 0;
-    const rows = ColumnIndex.rows(column, strings, kind, num, ref);
-    if (rows !== null) {
-        // The rows of a number also list the text cells that read as it, which no lookup takes.
-        const from = reverse ? firstFrom(rows, start + used) - 1 : firstFrom(rows, start);
-        for (let i = from; i >= 0 && i < rows.length; i += step) {
-            const row = rows[i];
-            if (row < start || row >= start + used) break;
-            if ((column.kind[row] & KIND_MASK) === kind) return row - start;
-        }
-        return -1;
-    }
-    for (let row = start + first; row !== start + end; row += step) {
-        if ((column.kind[row] & KIND_MASK) !== kind) continue;
-        const same =
-            kind === CellKind.Number
-                ? equal15(column.num[row], num)
-                : kind === CellKind.Text
-                  ? strings.upper(column.ref[row]) === ref
-                  : column.ref[row] === ref;
-        if (same) return row - start;
-    }
-    return -1;
-}
-
-// The value that equals the key, or else the nearest smaller one, or the nearest larger one with `larger`. Every
-// value is looked at, in order, or from the last one back when `reverse`, and of equal candidates the first met wins.
-function nearest(vector: Vector, key: Key, larger: boolean, reverse: boolean): number {
-    const used = vector.stored;
-    const step = reverse ? -1 : 1;
-    const end = reverse ? -1 : used;
-    let best = -1;
-    let bestValue = key;
-    for (let at = reverse ? used - 1 : 0; at !== end; at += step) {
-        const value = heldAt(vector, at);
-        if (typeof value === 'object' || typeof value !== typeof key) continue;
-        const order = compareValues(value, key);
-        if (order === 0) return placeOf(vector, at, reverse);
-        if (order > 0 !== larger) continue;
-        const gain = compareValues(value, bestValue);
-        if (best < 0 || (larger ? gain < 0 : gain > 0)) {
-            best = at;
-            bestValue = value;
-        }
-    }
-    return placeOf(vector, best, reverse);
-}
-
-// Bisection over values taken to be sorted, ascending or `descending`: whatever the halving lands on, as in Excel.
-// A probe that meets a value of another kind moves to the nearest one of the key's kind. Of equal keys it lands on
-// the last one with `last`, else on the first. With no equal value, `mode` picks the result: 0 none, -1 the next
-// smaller value, 1 the next larger.
-function bisect(vector: Vector, key: Key, descending: boolean, mode: number, last: boolean): number {
-    let low = 0;
-    let high = vector.used - 1;
-    // The last value met that sorts ahead of where the key belongs, and the first that sorts past it.
-    let before = -1;
-    let after = -1;
-    while (low <= high) {
-        const middle = (low + high) >> 1;
-        let at = middle;
-        let order = against(valueAt(vector, at), key);
-        while (Number.isNaN(order) && at > low) {
-            at -= 1;
-            order = against(valueAt(vector, at), key);
-        }
-        if (Number.isNaN(order)) at = middle;
-        while (Number.isNaN(order) && at < high) {
-            at += 1;
-            order = against(valueAt(vector, at), key);
-        }
-        if (Number.isNaN(order)) break;
-        if (descending) order = -order;
-        if (order < 0 || (order === 0 && last)) {
-            before = at;
-            low = Math.max(at, middle) + 1;
-        } else {
-            after = at;
-            high = at > middle ? low - 1 : at - 1;
-        }
-    }
-    const hit = last ? before : after;
-    if (hit >= 0 && against(valueAt(vector, hit), key) === 0) return hit;
-    if (mode === 0) return -1;
-    return mode < 0 === descending ? after : before;
 }
