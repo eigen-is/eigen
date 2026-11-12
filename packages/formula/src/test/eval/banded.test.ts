@@ -47,6 +47,44 @@ describe('an array costs the cells that exist, wherever they lie', () => {
         expect(performance.now() - started).toBeLessThan(2000);
     });
 
+    test('a range is walked over the cells that exist: one at the last row and one at the last column', () => {
+        const engine = engineOf({
+            s1: { A1: '=SUM(Sheet2!A1:XFD1048576)', A2: '=COUNTA(Sheet2!A1:XFD1048576)' },
+            s2: { A1048576: 3, XFD1: 4 },
+        });
+        const started = performance.now();
+        engine.recalc(ALL);
+        expect(valueAt(engine, 'A1')).toBe(7);
+        expect(valueAt(engine, 'A2')).toBe(2);
+        expect(performance.now() - started).toBeLessThan(2000);
+    });
+
+    test('columns of different lengths are walked row by row, each as far as it goes', () => {
+        const lengths = [5, 0, 9, 2, 9, 1, 7, 3];
+        const cells: Record<string, Literal> = {};
+        const rows: number[][] = [];
+        for (let row = 0; row < 9; row += 1) {
+            rows.push([]);
+            for (let c = 0; c < lengths.length; c += 1) {
+                if (row >= lengths[c]) continue;
+                cells[label(row, c + 1)] = 0.1 * (row * 8 + c + 1);
+                rows[row].push(0.1 * (row * 8 + c + 1));
+            }
+        }
+        const sum = (from: number) => rows.slice(from).reduce((all, row) => row.reduce((a, b) => a + b, all), 0);
+        const count = (from: number) => rows.slice(from).reduce((all, row) => all + row.length, 0);
+        expect(evaluate('=SUM(B1:I9,0)', cells)).toBe(sum(0));
+        expect(evaluate('=SUM(B3:I1048576,0)', cells)).toBe(sum(2));
+        expect(evaluate('=SUM(B8:XFD9,0)', cells)).toBe(sum(7));
+        expect(evaluate('=COUNT(B1:I9)', cells)).toBe(count(0));
+        expect(evaluate('=COUNT(A6:I9)', cells)).toBe(count(5));
+        expect(evaluate('=MAX(C1:E9)', cells)).toBe(0.1 * (8 * 8 + 3));
+        expect(evaluate('=SUBTOTAL(9,B1:I9)+0', cells)).toBe(sum(0));
+        expect(evaluate('=SUM(B10:I20)', cells)).toBe(0);
+        // A wide array first, then a range as wide: the walk of the one leaves room for the other.
+        expect(evaluate('=SUM(A1:T2*2,A1:T2)', { A1: 1, T1: 2, K2: 4 }, 'Z1')).toBe(21);
+    });
+
     test('the whole sheet as an array, with nothing on it', () => {
         expect(evaluate('=SUM(--(Sheet2!A1:XFD1048576=""))')).toBe(2 ** 34 - 1);
         expect(evaluate('=SUM(0.5,--(Sheet2!A1:XFD1048576=""))')).toBe(2 ** 34 - 0.5);

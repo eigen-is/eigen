@@ -46,6 +46,10 @@ export class Walk {
     private right = 0;
     private row = 0;
     private end = 0;
+    // The columns of the reference that are long enough to hold that row, and the row at which the shortest ends.
+    private tall = new Int32Array(8);
+    private talls = 0;
+    private shortest = 0;
     private array: ArrayValue | null = null;
     private item = 0;
     // Whether a span that `hand` was given is still to be handed out.
@@ -182,17 +186,21 @@ export class Walk {
         this.right = Math.min(area.right, columns.length - 1);
         this.row = area.top;
         this.end = 0;
+        this.talls = Math.max(0, this.right - area.left + 1);
+        this.shortest = 0;
+        if (this.span.length < this.talls) this.span = new Float64Array(this.talls);
+        if (this.tall.length < this.talls) this.tall = new Int32Array(this.talls);
         for (let c = area.left; c <= this.right; c += 1) {
             this.end = Math.max(this.end, Math.min(area.bottom + 1, columns[c].length));
+            this.tall[c - area.left] = c;
         }
-        if (this.span.length <= this.right - area.left) this.span = new Float64Array(this.right - area.left + 1);
         return false;
     }
 
     // The cells of the area that count, row by row: of one column a stretch of its own plane, and of several the
     // cells of one row, gathered.
     private cells(area: Reference): boolean {
-        const { right, end, span } = this;
+        const { right, end, span, tall } = this;
         const { columns } = this.ctx.workbook.sheets[area.sheet];
         const { kinds } = this.family;
         if (this.row < end && area.left === right && this.skips === 0) {
@@ -218,10 +226,22 @@ export class Walk {
         }
         // Cell by cell for several columns, and for one column when cells may be passed over.
         for (let row = this.row; row < end && (area.left < right || this.skips !== 0); row += 1) {
+            // A column that ends above this row is left out from here on, so a row costs the columns that reach it.
+            if (row >= this.shortest) {
+                let kept = 0;
+                this.shortest = end;
+                for (let i = 0; i < this.talls; i += 1) {
+                    const { length } = columns[tall[i]];
+                    if (length <= row) continue;
+                    tall[kept++] = tall[i];
+                    this.shortest = Math.min(this.shortest, length);
+                }
+                this.talls = kept;
+            }
             let found = 0;
-            for (let c = area.left; c <= right; c += 1) {
-                const held = columns[c];
-                if (row >= held.length || this.skipped(held, row)) continue;
+            for (let i = 0; i < this.talls; i += 1) {
+                const held = columns[tall[i]];
+                if (this.skipped(held, row)) continue;
                 const at = held.kind[row] & KIND_MASK;
                 if ((kinds >> at) & 1) span[found++] = at === CellKind.Boolean ? held.ref[row] : held.num[row];
             }
