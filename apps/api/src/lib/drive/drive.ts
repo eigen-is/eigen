@@ -58,7 +58,7 @@ import { createMountConfig, DEFAULT_MOUNT_ID, Mount } from '../mount';
 import type { CopyTree } from '../mount/copy';
 import { copySize } from '../mount/copy';
 import { nameTakenError } from '../mount/helpers';
-import { validateName } from '../mount/names';
+import { cleanName, validateName } from '../mount/names';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
 import type { FileBytes, StorageFile } from '../storage';
@@ -347,18 +347,18 @@ export class Drive {
     }
 
     // Everything of one type in every mount, plus what other owners shared with this one.
-    public async getMimeTypeContents(mimeType: string): Promise<DrivePath[]> {
+    public async getMimeTypeContents(mimeTypePrefix: string): Promise<DrivePath[]> {
         const own: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
-            own.push(...(await mount.getPathsByMimeType(mimeType)));
+            own.push(...(await mount.getPathsByMimeType(mimeTypePrefix)));
         }
-        const shared = await listSharedWithMeByMimeType(this.sharedDb, mimeType);
+        const shared = await listSharedWithMeByMimeType(this.sharedDb, mimeTypePrefix);
         const seen = new Set(own.map((path) => path.id));
         return [...own, ...shared.filter((path) => !seen.has(path.id))];
     }
 
-    public async getMountMimeTypeContents(mountId: string, mimeType: string): Promise<DrivePath[]> {
-        return this.getMount(mountId).getPathsByMimeType(mimeType);
+    public async getMountMimeTypeContents(mountId: string, mimeTypePrefix: string): Promise<DrivePath[]> {
+        return this.getMount(mountId).getPathsByMimeType(mimeTypePrefix);
     }
 
     // The search route lets an owner search only their own drive, so SharedDrive has no wrapper for it.
@@ -752,9 +752,7 @@ export class Drive {
         const mount = this.getMount(mountId);
         return this.withHomeHeld(async () => {
             const tree = await this.checkedCopyTree(source, src, mount, destParentId);
-            // NFC first: the store keeps names NFC, so the free name is compared in the same form.
-            const name = (desiredName ?? src.name).replace(/[/\\]/g, '_').normalize('NFC');
-            return withFreeName(folderIn(mount, destParentId), name, (freeName) =>
+            return withFreeName(folderIn(mount, destParentId), cleanName(desiredName ?? src.name), (freeName) =>
                 this.writeCopy(mount, destParentId, freeName, tree, source, user),
             );
         });

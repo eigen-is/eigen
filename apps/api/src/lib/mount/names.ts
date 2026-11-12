@@ -50,6 +50,12 @@ export function validateName(name: string): string {
     return normalized;
 }
 
+// A name from outside, such as an upload's, with its slashes made underscores. NFC, as the store keeps it, so the
+// name is compared with its siblings in the same form.
+export function cleanName(name: string): string {
+    return name.replace(/[/\\]/g, '_').normalize('NFC');
+}
+
 export function buildStorageKey(id: string, name: string): string {
     const dotIdx = name.lastIndexOf('.');
     if (dotIdx > 0) {

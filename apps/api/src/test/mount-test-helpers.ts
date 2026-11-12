@@ -4,6 +4,7 @@ import { getS3Config } from '../lib/config/server-settings';
 import type { Drive } from '../lib/drive';
 import type { Mount } from '../lib/mount';
 import { writeTempWithHash } from '../lib/storage';
+import type { User } from '../lib/user';
 
 // A default mount under a per-test id and backend. Production's createDefaultMountConfig only ever
 // builds the real 'default' mount, so the id/storageType knobs the fixtures need live here.
@@ -54,4 +55,13 @@ export async function flushContentReindex(drive: Drive): Promise<void> {
 }
 
 // Mount.copyPath records who copied each path, so a copy straight on a mount needs someone to name.
-export const TEST_ACTOR = { id: 'test-actor', email: 'actor@test.eigen.is' };
+export const TEST_ACTOR: User = {
+    id: 'test-actor',
+    email: 'actor@test.eigen.is',
+    name: 'Test actor',
+    emailVerified: true,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+    banned: false,
+    twoFactorEnabled: false,
+};

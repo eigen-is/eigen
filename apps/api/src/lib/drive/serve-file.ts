@@ -20,13 +20,12 @@ export async function serveFile(
     path: DrivePath,
     disposition: 'attachment' | 'inline',
     range: string | null,
-    ifNoneMatch: string | null = null,
+    ifNoneMatch: string | null,
 ): Promise<Response> {
     if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
-    const mimeType = path.mimeType || 'application/octet-stream';
     const etag = computeEtag(path);
     const headers: Record<string, string> = {
-        'Content-Type': mimeType,
+        'Content-Type': path.mimeType,
         'Content-Disposition': contentDisposition(disposition, await downloadName(mount, path)),
         // The client asks again on every use, and the ETag makes that a cheap 304.
         'Cache-Control': 'private, no-cache',
@@ -37,7 +36,7 @@ export async function serveFile(
         'Accept-Ranges': 'bytes',
     };
     // An inline body comes from the API's own origin, so a scriptable upload gets a sandbox CSP.
-    if (disposition === 'inline') Object.assign(headers, scriptableInlineHeaders(mimeType));
+    if (disposition === 'inline') Object.assign(headers, scriptableInlineHeaders(path.mimeType));
 
     // RFC 7232 §6: a matching conditional GET returns 304 regardless of Range.
     if (ifNoneMatch && matchesIfNoneMatch(ifNoneMatch, etag)) {
@@ -64,6 +63,6 @@ export async function serveFile(
 // upload may have numbered, so an attachment there keeps the name it was uploaded with.
 export async function downloadName(mount: Mount, path: DrivePath): Promise<string> {
     const uploadedAs = path.details?.originalName;
-    if (!uploadedAs) return path.name;
+    if (!uploadedAs || uploadedAs === path.name) return path.name;
     return isInsideDocument(await mount.getBreadcrumb(path.id)) ? uploadedAs : path.name;
 }

@@ -204,12 +204,12 @@ describe('SharedDrive gating enumeration', () => {
         copyPath: {
             gate: 'denies',
             reason: 'read-gated on source, write-gated on target',
-            call: (sd) => sd.copyPath(mountId, fileId, { drive: sd, mountId, parentId: folderId }, 'copy.txt', charlie),
+            call: (sd) => sd.copyPath(mountId, fileId, { drive: sd, mountId, parentId: folderId }, 'copy.txt'),
         },
         copyPathOver: {
             gate: 'denies',
             reason: 'read-gated on source, write-gated on target',
-            call: (sd) => sd.copyPathOver(mountId, fileId, folderId, 'copy.txt', null, charlie),
+            call: (sd) => sd.copyPathOver(mountId, fileId, folderId, 'copy.txt', null),
         },
         writeFileContent: {
             gate: 'denies',
@@ -219,7 +219,7 @@ describe('SharedDrive gating enumeration', () => {
         createFolder: {
             gate: 'denies',
             reason: 'write-gated on the parent',
-            call: (sd) => sd.createFolder(mountId, folderId, 'intruder', charlie),
+            call: (sd) => sd.createFolder(mountId, folderId, 'intruder'),
         },
         uploadFiles: {
             gate: 'denies',
@@ -253,7 +253,7 @@ describe('SharedDrive gating enumeration', () => {
             call: async (sd) => {
                 const { drive } = await getHome(ctx.alice.user.id);
                 const { mount, path } = await drive.resolveFile(mountId, fileId);
-                return sd.receiveCopy(mountId, folderId, mount, path, 'intruder.txt', charlie);
+                return sd.receiveCopy(mountId, folderId, mount, path, 'intruder.txt');
             },
         },
         emailCollaborators: {
@@ -295,7 +295,7 @@ describe('SharedDrive gating enumeration', () => {
         movePathOver: {
             gate: 'denies',
             reason: 'write-gated on source and target',
-            call: (sd) => sd.movePathOver(mountId, fileId, folderId, 'moved.txt', null, charlie),
+            call: (sd) => sd.movePathOver(mountId, fileId, folderId, 'moved.txt', null),
         },
         saveVersion: { gate: 'denies', reason: 'write-gated', call: (sd) => sd.saveVersion(mountId, docId) },
         restoreContainer: {
@@ -401,10 +401,10 @@ describe('SharedDrive gating enumeration', () => {
         expect((await reader.resolveFile(mountId, file.id)).path.id).toBe(file.id);
 
         const to = { drive: reader, mountId, parentId: folder.id };
-        expect(await refusal(reader.copyPath(mountId, file.id, to, 'copy.txt', bob))).toBe(
+        expect(await refusal(reader.copyPath(mountId, file.id, to, 'copy.txt'))).toBe(
             '403 No write permission on target folder',
         );
-        expect(await refusal(reader.copyPathOver(mountId, file.id, folder.id, 'copy.txt', null, bob))).toBe(
+        expect(await refusal(reader.copyPathOver(mountId, file.id, folder.id, 'copy.txt', null))).toBe(
             '403 No write permission on target folder',
         );
         expect((await home.drive.getFolderContents(mountId, folder.id)).map((path) => path.name)).toEqual([
@@ -419,9 +419,7 @@ describe('SharedDrive gating enumeration', () => {
         if (!mount || !root) throw new Error('charlie has no drive');
 
         const to = { drive, mountId: mount.id, parentId: root.id };
-        expect(await refusal(sd.copyPath(mountId, fileId, to, 'stolen.txt', charlie))).toBe(
-            '403 No read permission on source',
-        );
+        expect(await refusal(sd.copyPath(mountId, fileId, to, 'stolen.txt'))).toBe('403 No read permission on source');
         expect(await drive.getChildByName(mount.id, root.id, 'stolen.txt')).toBeNull();
     });
 });

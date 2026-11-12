@@ -9,6 +9,7 @@ import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
 import { storageGone } from '../core';
 import { copyThumbnail } from '../shared/thumbnails';
 import { writeTempWithHash } from '../storage';
+import type { User } from '../user';
 import { isVersionsFolder } from '../versioning/versions-folder';
 import type { Mount } from './mount';
 
@@ -24,8 +25,6 @@ export type Copied = {
 
 // Removes the top folder of a copy that failed part way. createdIds holds every path the copy made.
 export type DiscardCopy = (pathId: string, createdIds: ReadonlySet<string>) => Promise<void>;
-
-type Actor = { id: string; email: string };
 
 // A copied Eigen document keeps its type but leaves its version history behind, so its versions/ is
 // not listed, and the copy starts with a clean history.
@@ -57,7 +56,7 @@ export async function copyPath(
     destParentId: string,
     name: string,
     discard: DiscardCopy,
-    actor: Actor,
+    actor: User,
 ): Promise<Copied> {
     // The walk creates the top folder before anything else, so it is the first one here.
     const createdIds = new Set<string>();
@@ -85,7 +84,7 @@ async function copyTree(
     tree: CopyTree,
     parentId: string,
     name: string,
-    actor: Actor,
+    actor: User,
     createdIds: Set<string>,
     // Null inside a document: a thread in it is one of its parts.
     documentIds: string[] | null,

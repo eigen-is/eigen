@@ -7,6 +7,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Mount } from '../mount';
+import { cleanName } from '../mount/names';
 import { saveThumbnail } from '../shared/thumbnails';
 import type { User } from '../user';
 import type { Drive } from './drive';
@@ -62,15 +63,14 @@ type StagedFile = {
 // The file keeps the name it came with beside the free one: inside a document nobody sees the stored name, so
 // an attachment shows and downloads under this one.
 export async function finalizeUpload(drive: Drive, mount: Mount, file: StagedFile): Promise<DrivePath> {
-    // The store keeps names in NFC, so the name is compared with its siblings in that form too.
-    const originalName = file.name.replace(/[/\\]/g, '_').normalize('NFC');
+    const originalName = cleanName(file.name);
     return withFreeName(folderIn(mount, file.parentId), originalName, (name) =>
         finalizeNamedUpload(drive, mount, { ...file, name }, originalName),
     );
 }
 
 // A WebDAV URL names one file, so its create never picks another name: on a taken one the mount's 409 stands.
-// The caller tells the watchers, so an upload of many files notifies them once.
+// It tells no watcher, so an upload of many files can notify them once.
 export async function finalizeNamedUpload(
     drive: Drive,
     mount: Mount,

@@ -181,19 +181,19 @@ export class SharedDrive {
         return this.drive.readRange(mountId, pathId, start, end);
     }
 
-    public async getMimeTypeContents(mimeType: string): Promise<DrivePath[]> {
+    public async getMimeTypeContents(mimeTypePrefix: string): Promise<DrivePath[]> {
         await this.requireDriveOwner('No read permission');
-        return this.drive.getMimeTypeContents(mimeType);
+        return this.drive.getMimeTypeContents(mimeTypePrefix);
     }
 
-    public async getMountMimeTypeContents(mountId: string, mimeType: string): Promise<DrivePath[]> {
+    public async getMountMimeTypeContents(mountId: string, mimeTypePrefix: string): Promise<DrivePath[]> {
         await this.requireDriveOwner('No read permission');
-        return this.drive.getMountMimeTypeContents(mountId, mimeType);
+        return this.drive.getMountMimeTypeContents(mountId, mimeTypePrefix);
     }
 
     // ---- Changing the tree ----
 
-    public async createFolder(mountId: string, parentId: string, folderName: string, _user: User): Promise<DrivePath> {
+    public async createFolder(mountId: string, parentId: string, folderName: string): Promise<DrivePath> {
         await this.requireWrite(mountId, parentId);
         return this.drive.createFolder(mountId, parentId, folderName, this.user);
     }
@@ -263,7 +263,6 @@ export class SharedDrive {
         destParentId: string,
         name: string,
         checkedId: string | null,
-        _user: User,
     ): Promise<DrivePath> {
         await this.requireMove(mountId, pathId, destParentId);
         return this.drive.movePathOver(mountId, pathId, destParentId, name, checkedId, this.user);
@@ -292,7 +291,6 @@ export class SharedDrive {
         srcPathId: string,
         to: CopyTarget,
         desiredName: string | undefined,
-        _user: User,
     ): Promise<DrivePath> {
         await this.requireRead(mountId, srcPathId, undefined, 'No read permission on source');
         return this.drive.copyPath(mountId, srcPathId, to, desiredName, this.user);
@@ -305,7 +303,6 @@ export class SharedDrive {
         destParentId: string,
         name: string,
         checkedId: string | null,
-        _user: User,
     ): Promise<DrivePath> {
         const memberships = await getMemberships(this.user.id);
         await this.requireRead(mountId, srcPathId, memberships, 'No read permission on source');
@@ -321,7 +318,6 @@ export class SharedDrive {
         source: Mount,
         src: DrivePath,
         desiredName: string | undefined,
-        _user: User,
     ): Promise<DrivePath> {
         const memberships = await getMemberships(this.user.id);
         await this.requireRead(mountId, destParentId, memberships);

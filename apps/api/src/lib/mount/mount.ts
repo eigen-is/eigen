@@ -24,6 +24,7 @@ import { FileHistory } from '../drive/history';
 import { deleteThumbnail } from '../shared/thumbnails';
 import type { StorageBackend, StorageFile } from '../storage';
 import { isMissingObjectCause, readStorageFile, writeTempWithHash } from '../storage';
+import type { User } from '../user';
 import type { RetentionPolicy } from '../versioning/retention';
 import * as snapshot from '../versioning/snapshot';
 import { CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB } from './container-dbs';
@@ -919,7 +920,7 @@ export class Mount {
         destParentId: string,
         name: string,
         discard: DiscardCopy,
-        actor: { id: string; email: string },
+        actor: User,
     ): Promise<Copied> {
         return copy.copyPath(this, source, tree, destParentId, name, discard, actor);
     }

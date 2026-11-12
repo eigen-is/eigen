@@ -4,6 +4,7 @@
 // "Save as" needs. The locks themselves, and the rule for who passes one, live in the Drive's LockManager.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_FILE } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import type { XmlElement } from '../core/xml';
 import { parseXmlRoot, serializeXmlChildren, xmlChild } from '../core/xml';
@@ -56,7 +57,8 @@ export async function handleLock(args: {
     const depth = depthHeader === '0' ? 0 : 'infinity';
     const lockOn = async (target: DrivePath, status: 200 | 201): Promise<Response> => {
         const ancestorPathIds = await drive.ancestorIds(mountId, target.id);
-        const descendantPathIds = depth === 0 ? [] : await drive.descendantIds(mountId, target.id);
+        const leaf = depth === 0 || target.type === DRIVE_TYPE_FILE;
+        const descendantPathIds = leaf ? [] : await drive.descendantIds(mountId, target.id);
         const lock = drive.lockManager.acquire({
             pathId: target.id,
             depth,

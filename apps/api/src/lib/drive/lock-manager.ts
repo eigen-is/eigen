@@ -25,7 +25,6 @@ const MAX_LOCKS_PER_PATH = 32;
 
 export class LockManager {
     private readonly locks = new Map<string, Lock>();
-    private readonly byPath = new Map<string, Set<string>>();
     private readonly hold: () => () => void;
     private releaseHold: (() => void) | undefined;
     private expiryTimer: Timer | undefined;
@@ -36,7 +35,6 @@ export class LockManager {
 
     public clear(): void {
         this.locks.clear();
-        this.byPath.clear();
         this.settle();
     }
 
@@ -59,7 +57,7 @@ export class LockManager {
         if ([...covering, ...below].some((lock) => conflicts(lock) && !owned(lock))) {
             throw new ApiError(423, 'Locked');
         }
-        if ((this.byPath.get(args.pathId)?.size ?? 0) >= MAX_LOCKS_PER_PATH) {
+        if (this.listForPath(args.pathId).length >= MAX_LOCKS_PER_PATH) {
             throw new ApiError(423, 'Too many locks');
         }
         // Every new lock asks for a hold, so a closing Home refuses it with its 503. One hold is enough.
@@ -77,9 +75,6 @@ export class LockManager {
             expiresAt: Date.now() + args.ttlMs,
         };
         this.locks.set(token, lock);
-        const pathTokens = this.byPath.get(args.pathId) ?? new Set<string>();
-        pathTokens.add(token);
-        this.byPath.set(args.pathId, pathTokens);
         this.settle();
         return lock;
     }
@@ -93,23 +88,20 @@ export class LockManager {
     }
 
     public release(token: string): void {
-        const lock = this.locks.get(token);
-        if (!lock) return;
-        this.drop(lock);
-        this.settle();
+        if (this.locks.delete(token)) this.settle();
     }
 
     public releaseAllForPaths(pathIds: readonly string[]): void {
-        for (const pathId of pathIds) {
-            for (const token of this.byPath.get(pathId) ?? []) this.locks.delete(token);
-            this.byPath.delete(pathId);
+        const gone = new Set(pathIds);
+        for (const lock of this.locks.values()) {
+            if (gone.has(lock.pathId)) this.locks.delete(lock.token);
         }
         this.settle();
     }
 
-    public listForPath(pathId: string): Lock[] {
+    public listForPath(pathId: string): readonly Lock[] {
         this.gc();
-        return [...(this.byPath.get(pathId) ?? [])].flatMap((token) => this.locks.get(token) ?? []);
+        return [...this.locks.values()].filter((lock) => lock.pathId === pathId);
     }
 
     // The locks covering one path are all shared or all one user's, so the token of one the caller owns passes them.
@@ -132,7 +124,7 @@ export class LockManager {
         pathId: string,
         ancestorPathIds: readonly string[],
         descendantPathIds: readonly string[],
-    ): { covering: Lock[]; below: Lock[] } {
+    ): { covering: readonly Lock[]; below: readonly Lock[] } {
         const own = this.listForPath(pathId);
         const ancestor = ancestorPathIds.flatMap((id) => this.listForPath(id).filter((l) => l.depth === 'infinity'));
         const under = new Set(descendantPathIds);
@@ -146,17 +138,10 @@ export class LockManager {
         let dropped = false;
         for (const lock of this.locks.values()) {
             if (lock.expiresAt > now) continue;
-            this.drop(lock);
+            this.locks.delete(lock.token);
             dropped = true;
         }
         if (dropped) this.settle();
-    }
-
-    private drop(lock: Lock): void {
-        this.locks.delete(lock.token);
-        const pathTokens = this.byPath.get(lock.pathId);
-        pathTokens?.delete(lock.token);
-        if (pathTokens?.size === 0) this.byPath.delete(lock.pathId);
     }
 
     // One timer, at the latest expiry: until then some lock lives, so the hold stays. With no lock
