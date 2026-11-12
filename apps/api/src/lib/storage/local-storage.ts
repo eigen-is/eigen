@@ -29,13 +29,7 @@ export class LocalStorage implements StorageBackend {
     public async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         const sidePath = path.join(PATHS.DRIVE.TMP_DIR, crypto.randomUUID());
         try {
-            const size = await this.mountDir.write(sidePath, data);
-            const handle = await fsPromises.open(this.mountDir.absolutePath(sidePath), 'r');
-            try {
-                await handle.sync();
-            } finally {
-                await handle.close();
-            }
+            const size = await this.mountDir.writeDurable(sidePath, data);
             await this.mountDir.renameDurable(sidePath, this.resolve(key));
             return size;
         } catch (error) {

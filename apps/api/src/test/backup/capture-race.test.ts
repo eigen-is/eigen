@@ -410,7 +410,7 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
-    test('a large file overwritten in place during its copy is archived whole', async () => {
+    test('a large file overwritten during its copy is archived whole', async () => {
         const user = await raceUser('local-fullnames');
         const { root } = await seed(user);
         const size = 8 * 1024 * 1024;
