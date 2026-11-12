@@ -18,7 +18,7 @@ import { auth, getAuthDrizzleDb } from './auth';
 import { setCredentialPassword } from './credential-password';
 import { checkOtpRateLimit, countOtpGuess, refundOtpRequests, resetOtpGuesses } from './otp-rate-limit';
 
-const OTP_EXPIRY_MS = 5 * 60 * 1000;
+const OTP_EXPIRY_MS = 15 * 60 * 1000;
 
 export async function requestOtp(email: string, ip: string): Promise<void> {
     checkOtpRateLimit(email, ip);

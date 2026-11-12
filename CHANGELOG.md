@@ -4,6 +4,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Changed
+
+- **Guest sign-in code** — the code mailed to a guest works for 15 minutes instead of 5, so a mail that arrives late still gets them in
+
 ## [0.4.3] - 2026-11-11
 
 Drive gets a Recent files page, and every document app can make a copy of a file and delete its old versions to free space. Comments open on hover, and assigning one to a guest emails them. Sheets is much faster on large workbooks and keeps formulas right when rows, columns and tabs change, also with several people editing at once. Calendar invitations and repeating events, and drafts in Mail, are far more reliable. Four changes break old data: links, rules and some chart settings in existing spreadsheets need setting up again, and the storage limit for mail, contacts and calendar goes back to its default.

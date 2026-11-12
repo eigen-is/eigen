@@ -29,7 +29,7 @@ A calendar invitation treats a guest like an external address: an iMIP mail and 
 
 ## Sign-in is a two-step code flow on custom endpoints
 
-Guests do not use better-auth's emailOTP plugin. `POST /guest-auth/request-otp` mails a 6-digit code, and `POST /guest-auth/verify-otp` checks it and signs the guest in (`apps/api/src/routes/guest-auth.ts`). The code expires after 5 minutes. A new request replaces the email's previous code, so only the newest one works.
+Guests do not use better-auth's emailOTP plugin. `POST /guest-auth/request-otp` mails a 6-digit code, and `POST /guest-auth/verify-otp` checks it and signs the guest in (`apps/api/src/routes/guest-auth.ts`). The code expires after 15 minutes. A new request replaces the email's previous code, so only the newest one works.
 
 `request-otp` refuses an address that belongs to a non-guest user ("use password login") and an address on the server's own mail domain. The second check is needed because a guest is created by a direct insert that skips the auth hook guarding that domain.
 

@@ -149,7 +149,7 @@ export function composeOtpEmail(
     const expiry =
         kind === '2fa'
             ? 'This code expires in 5 minutes.'
-            : 'This code expires in 5 minutes. If you asked for more than one, only the newest works.';
+            : 'This code expires in 15 minutes. If you asked for more than one, only the newest works.';
     const html = renderEigenEmail({
         title: subject,
         bodyHtml:
