@@ -13,17 +13,11 @@ const BASELINE_PATH = 'scripts/standards-baseline.json';
 
 const verbose = process.argv.includes('--verbose');
 
-// Non-test, non-generated source. The sheet grammar parser is jison output (biome skips it too).
+// Generated source, which no metric counts. The sheet grammar parser is jison output (biome skips it too).
 const GENERATED = ['routeTree.gen.ts', 'packages/sheet/src/engine/parser/grammar-parser/grammar-parser.ts'];
-function inScope(path: string): boolean {
-    if (!/\.tsx?$/.test(path)) return false;
-    if (path.includes('/src/test/')) return false;
-    return !(path.endsWith('.d.ts') || /\.test\.tsx?$/.test(path) || GENERATED.some((tail) => path.endsWith(tail)));
-}
 
-// `as` also renames in module statements, so drop those before counting casts.
-// stripNoise blanks a specifier's contents, so it reads as quotes around spaces; a module statement
-// holds no `;` or `=`.
+// `as` also renames in a module statement, so those go before casts are counted. stripNoise blanks a specifier to
+// quotes around spaces, and a module statement holds no `;` or `=`.
 const MODULE_STATEMENT =
     /(?:^|\n)[ \t]*(?:import|export)\b[^;=]*?from[ \t]*(?:'[^'\n]*'|"[^"\n]*")|(?:^|\n)[ \t]*import[ \t]*(?:'[^'\n]*'|"[^"\n]*")|(?:^|\n)[ \t]*export[ \t]*\{[^}=;]*\}/g;
 // A mapped type's `as` renames its keys, `{ [P in Parts as Key<P>]: … }`, so drop that clause too.
@@ -106,9 +100,8 @@ const FOCUS_REVEAL =
     /(?<![\w-])(?:group-)?focus(?:-within)?(?:\/[\w-]+)?:(?:opacity-\d+|visible|flex|grid|block|inline-flex|inline-block)(?![\w-])/;
 const POINTER_PASSES = /(?<![\w:-])pointer-events-none(?![\w-])/;
 
-// What biome cannot express of the formula engine's rules, where it bans the globals Date, Intl and performance: a
-// module-level binding that can be written or an empty collection to fill, any use of Math but a call of a function
-// other than random, and a method that reads the machine's locale.
+// What biome cannot ban by a global's name in the formula engine: a module-level binding that can be written or an
+// empty collection to fill, any use of Math but a call other than random, and a method that reads the locale.
 const ENGINE_STATE =
     /^(?:export )?(?:let|var) |^(?:export )?const \w+(?:: (?!readonly\b|Readonly)[^=\n]+)? = (?:new (?:Map|Set|WeakMap|WeakSet)\b[^(\n]*\(\)|\[\]|\{\});?$|\bMath\b(?!\.(?!random\b)\w)|\.(?:localeCompare|toLocale\w*)\b/gm;
 
@@ -198,11 +191,7 @@ function countMatches(source: string, pattern: RegExp): number {
     return source.match(pattern)?.length ?? 0;
 }
 
-function sum(values: number[]): number {
-    return values.reduce((total, value) => total + value, 0);
-}
-
-const METRICS: Metric[] = [
+const METRICS: readonly Metric[] = [
     {
         id: 'as-casts',
         label: '`as Type` casts',
@@ -396,7 +385,7 @@ const breakdown = new Map<string, Map<string, number>>(METRICS.map((metric) => [
 
 for (const file of sources) {
     const { path } = file;
-    if (!/^(?:apps|packages)\//.test(path) || !inScope(path)) continue;
+    if (!/^(?:apps|packages)\/.*\.tsx?$/.test(path) || /\/src\/test\/|\.d\.ts$|\.test\.tsx?$/.test(path)) continue;
     for (const metric of METRICS) {
         const hits = metric.count(file);
         if (hits === 0) continue;
@@ -411,15 +400,7 @@ for (const path of footers.stale) {
 
 type Allowance = number | Record<string, number>;
 
-const baselineFile = Bun.file(BASELINE_PATH);
-const baseline: Record<string, Allowance> = (await baselineFile.exists()) ? await baselineFile.json() : {};
-
-// What one file may hold of a metric: its own entry when the metric is per file, else the total.
-function allowedIn(metric: Metric, allowance: Allowance | undefined, path: string): number {
-    if (metric.hardZero) return 0;
-    if (typeof allowance === 'object') return allowance[path] ?? 0;
-    return allowance ?? 0;
-}
+const baseline: Record<string, Allowance> = await Bun.file(BASELINE_PATH).json();
 
 // A count that fell becomes the new baseline, and one that rose keeps the old one and fails below. A file over its
 // allowance keeps it so the failure still names it, and a file that holds none, or is gone, drops its entry.
@@ -471,11 +452,15 @@ for (const metric of METRICS) {
     const allowed = metric.hardZero
         ? 0
         : typeof allowance === 'object'
-          ? sum(Object.values(allowance))
+          ? Object.values(allowance).reduce((total, value) => total + value, 0)
           : (allowance ?? 0);
     const files = metric.perFile
         ? [...(breakdown.get(metric.id) ?? [])]
-              .map(([path, hits]): [string, number, number] => [path, hits, allowedIn(metric, allowance, path)])
+              .map(([path, hits]): [string, number, number] => [
+                  path,
+                  hits,
+                  typeof allowance === 'object' ? (allowance[path] ?? 0) : 0,
+              ])
               .filter(([, hits, fileAllowed]) => hits > fileAllowed)
         : [];
     if (files.length > 0) over.set(metric.id, files);
