@@ -1,7 +1,123 @@
-// The functions on dates and times. A date is a serial number, so each of them is arithmetic on whole days, and
-// the one that asks what time it is gets that from the pass, never from the machine it runs on.
+// The functions on dates and times. A date is a serial number, so each of them is arithmetic on whole days, done
+// by the date kernels, and the ones that ask what day or time it is get that from the pass, never from the
+// machine. The functions that came with Excel's add-in refuse a boolean, the older ones read it as 1 or 0.
 
-import { addMonths } from '../values/dates';
-import { fn, INTEGER, NOW, SERIAL, strict } from './registry';
+import { dateDif, days360, yearFraction } from '../values/date-spans';
+import {
+    dateOf,
+    FIRST_SERIAL,
+    isoWeek,
+    LAST_SERIAL,
+    SECONDS_IN_DAY,
+    serialDate,
+    shiftMonths,
+    timeOf,
+    weekdayNumber,
+    weekNumber,
+} from '../values/dates';
+import { NUM, VALUE } from '../values/errors';
+import { parseDateTime } from '../values/parse-number';
+import { addWorkdays, countWorkdays } from '../values/workdays';
+import {
+    BOOLEAN,
+    fn,
+    INTEGER,
+    NOW,
+    NUMBER,
+    NUMBERS,
+    optional,
+    PLAIN,
+    SERIAL,
+    skippable,
+    strict,
+    TEXT,
+} from './registry';
 
-export const DATE_TIME = [fn('EDATE', [strict(SERIAL), strict(INTEGER)], addMonths), fn('NOW', [NOW], (now) => now)];
+// What a date with its time is made of, to the nearest second as Excel reads one: the last half second of a day
+// is the next day. `part` gets the whole seconds since serial 0.
+function stamped(part: (seconds: number) => number) {
+    return (serial: number) => {
+        const seconds = Math.round(serial * SECONDS_IN_DAY);
+        return serial < FIRST_SERIAL || seconds >= (LAST_SERIAL + 1) * SECONDS_IN_DAY ? NUM : part(seconds);
+    };
+}
+
+function dayOf(seconds: number) {
+    return serialDate(Math.floor(seconds / SECONDS_IN_DAY));
+}
+
+// A text that is a date or a time, as its serial. A date without a year is of the year of the pass.
+function typed(text: string, now: number) {
+    return parseDateTime(text, serialDate(Math.floor(now)).year);
+}
+
+const DATE = strict(SERIAL);
+const HOLIDAYS = optional(NUMBERS);
+// Saturday and Sunday, as a weekend code of the INTL functions.
+const WEEKEND = 1;
+
+export const DATE_TIME = [
+    fn('DATE', [NUMBER, NUMBER, NUMBER], dateOf),
+    fn('TIME', [NUMBER, NUMBER, NUMBER], timeOf),
+    fn('NOW', [NOW], (now) => now),
+    fn('TODAY', [NOW], Math.floor),
+    fn('DATEVALUE', [TEXT, NOW], (text, now) => {
+        const serial = typed(text, now);
+        return serial === undefined ? VALUE : Math.floor(serial);
+    }),
+    fn('TIMEVALUE', [TEXT, NOW], (text, now) => {
+        const serial = typed(text, now);
+        return serial === undefined ? VALUE : serial - Math.floor(serial);
+    }),
+    fn(
+        'YEAR',
+        [NUMBER],
+        stamped((seconds) => dayOf(seconds).year),
+    ),
+    fn(
+        'MONTH',
+        [NUMBER],
+        stamped((seconds) => dayOf(seconds).month),
+    ),
+    fn(
+        'DAY',
+        [NUMBER],
+        stamped((seconds) => dayOf(seconds).day),
+    ),
+    fn(
+        'HOUR',
+        [NUMBER],
+        stamped((seconds) => Math.floor((seconds % SECONDS_IN_DAY) / 3600)),
+    ),
+    fn(
+        'MINUTE',
+        [NUMBER],
+        stamped((seconds) => Math.floor((seconds % 3600) / 60)),
+    ),
+    fn(
+        'SECOND',
+        [NUMBER],
+        stamped((seconds) => seconds % 60),
+    ),
+    fn('WEEKDAY', [SERIAL, optional(INTEGER, 1)], weekdayNumber),
+    fn('WEEKNUM', [DATE, skippable(strict(INTEGER), 1)], weekNumber),
+    fn('ISOWEEKNUM', [SERIAL], isoWeek),
+    fn('EDATE', [DATE, strict(INTEGER)], (serial, months) => shiftMonths(serial, months, false)),
+    fn('EOMONTH', [DATE, strict(INTEGER)], (serial, months) => shiftMonths(serial, months, true)),
+    fn('DATEDIF', [SERIAL, SERIAL, TEXT], dateDif),
+    fn('DAYS', [SERIAL, SERIAL], (end, start) => end - start),
+    fn('DAYS360', [SERIAL, SERIAL, optional(BOOLEAN, false)], days360),
+    fn('YEARFRAC', [DATE, DATE, optional(strict(INTEGER), 0)], yearFraction),
+    fn('NETWORKDAYS', [DATE, DATE, HOLIDAYS], (start, end, holidays) =>
+        countWorkdays(start, end, WEEKEND, holidays.list()),
+    ),
+    fn('NETWORKDAYS.INTL', [DATE, DATE, skippable(PLAIN, WEEKEND), HOLIDAYS], (start, end, weekend, holidays) =>
+        countWorkdays(start, end, weekend, holidays.list()),
+    ),
+    fn('WORKDAY', [DATE, strict(NUMBER), HOLIDAYS], (start, days, holidays) =>
+        addWorkdays(start, days, WEEKEND, holidays.list()),
+    ),
+    fn('WORKDAY.INTL', [DATE, strict(NUMBER), skippable(PLAIN, WEEKEND), HOLIDAYS], (start, days, weekend, holidays) =>
+        addWorkdays(start, days, weekend, holidays.list()),
+    ),
+];

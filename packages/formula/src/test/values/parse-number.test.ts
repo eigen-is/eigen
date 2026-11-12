@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseNumber } from '../../values/parse-number';
+import { parseDateTime, parseNumber } from '../../values/parse-number';
 
 const taken = (cases: [string, number][]) => {
     for (const [text, value] of cases) expect([text, parseNumber(text)]).toEqual([text, value]);
@@ -27,7 +27,8 @@ describe('plain numbers', () => {
             ['0.1', 0.1],
             ['2.675', 2.675],
             ['1.7976931348623157e308', 1.79769313486231e308],
-            ['1e-320', 1e-320],
+            ['1E-307', 1e-307],
+            ['1E-308', 1e-308],
             ['1.5e-30', 1.5e-30],
             ['1e25', 1e25],
         ]);
@@ -85,6 +86,8 @@ describe('plain numbers', () => {
             'abc',
             'TRUE',
             'true',
+            '1e-320',
+            '1E-400',
             '1.000,5',
             '0x1A',
             '1e',
@@ -137,12 +140,11 @@ describe('percent, currency and brackets', () => {
             ['$ 5', 5],
             ['-$5', -5],
             ['$-5', -5],
-            ['5$', 5],
             ['23€', 23],
             ['€12', 12],
             ['$5%', 0.05],
         ]);
-        refused(['$', '$$5', '$5$', '£5', '¥5', '5 $', '-$-5', 'USD 5', '$ ']);
+        refused(['5$', '$', '$$5', '$5$', '£5', '¥5', '5 $', '-$-5', 'USD 5', '$ ']);
     });
 
     test('brackets make a number negative', () => {
@@ -152,7 +154,10 @@ describe('percent, currency and brackets', () => {
             ['(5%)', -0.05],
             ['(1,000.5)', -1000.5],
             [' (5) ', -5],
+            ['(5)%', -0.05],
+            ['(5) %', -0.05],
         ]);
+        refused(['(5%)%', '(5)%%', '5%)']);
         refused(['(5', '5)', '-(5)', '(-5)', '(5)-', '()', '((5))', '( 5 )']);
     });
 });
@@ -216,7 +221,8 @@ describe('dates', () => {
             ['5-JANUARY-2026', 46027],
             ['Jan 5, 2026', 46027],
             ['January 5, 2026', 46027],
-            ['Jan 5 2026', 46027],
+            ['Jan 2026', 46023],
+            ['feb 2024', 45323],
             ['may 1, 2026', 46143],
             ['31-Dec-9999', 2958465],
             ['1 September 2026', 46266],
@@ -231,7 +237,8 @@ describe('dates', () => {
 
     test('a text that only looks like a date', () => {
         refused(['2026.01.01', '2026-01-01x', '-2026-01-01', '"2026-01-12"', '2026-01-05T13:30', '2026-01/05']);
-        refused(['1/5', '5-Jan', 'Jan-26', 'Jan 2026', 'Jan', 'Mon 5 Jan 2026', '5-Janu-2026', '5 Jan, 2026']);
+        refused(['1/5', '5-Jan', 'Jan-26', 'Jan 5', 'Jan', 'Mon 5 Jan 2026', '5-Janu-2026', '5 Jan, 2026']);
+        refused(['Jan 5 2026', 'March 15 2024', 'Jan 20266', 'Jan 026']);
         refused([
             '1 5 2026',
             '1/5/026',
@@ -271,6 +278,9 @@ describe('times', () => {
             ['25:30', 1.0625],
             ['24:00', 1],
             ['48:00:00', 2],
+            ['12:60', 13 / 24],
+            ['12:30:60', 751 / 1440],
+            ['23:59:60', 1],
         ]);
     });
 
@@ -304,7 +314,20 @@ describe('times', () => {
             '4:',
             '4:35:',
         ]);
-        refused(['0:75', '23:59:60', '1:30PM', 'PM', ' pm', '4:35:00.', '4:35.5', '12345:00', '4 xm', '4:35 M']);
+        refused([
+            '0:75',
+            '12:61',
+            '23:59:61',
+            '23:59:60.5',
+            '1:30PM',
+            'PM',
+            ' pm',
+            '4:35:00.',
+            '4:35.5',
+            '12345:00',
+            '4 xm',
+            '4:35 M',
+        ]);
     });
 
     test('a date and a time', () => {
@@ -330,7 +353,47 @@ describe('times', () => {
 
 describe('never the host', () => {
     test('nothing JavaScript would read as a number slips through', () => {
-        refused(['0b11', '0o17', '1n', '1e3n', '+', ' \n5', '5\n', '1,5e', '١٢٣', 'null', 'undefined', '[1]']);
+        refused(['0b11', '0o17', '1n', '1e3n', '+', ' \n5', '5\n', '1,5e', '５', 'null', 'undefined', '[1]']);
         taken([['1/1/2026 ', 46023]]);
+    });
+
+    test('Arabic-Indic digits are digits', () => {
+        taken([
+            ['٣', 3],
+            ['١٢٣', 123],
+            ['١.٥', 1.5],
+        ]);
+    });
+});
+
+describe('parseDateTime', () => {
+    test('a date, a time, and a date with a time', () => {
+        expect(parseDateTime('2024-03-15', 2026)).toBe(45366);
+        expect(parseDateTime(' 12:30 PM ', 2026)).toBe(0.5208333333333334);
+        expect(parseDateTime('1/5/24 10:00', 2026)).toBe(45296 + 10 / 24);
+        expect(parseDateTime('25:00', 2026)).toBe(25 / 24);
+    });
+
+    test('a plain number is neither', () => {
+        for (const text of ['45000', '0.5', '1 1/2', '50%', '$5', '', ' ', 'abc']) {
+            expect([text, parseDateTime(text, 2026)]).toEqual([text, undefined]);
+        }
+    });
+
+    test('a date without a year is of the year given', () => {
+        expect(parseDateTime('3/15', 2026)).toBe(46096);
+        expect(parseDateTime('15-Mar', 2026)).toBe(46096);
+        expect(parseDateTime('Mar-15', 2026)).toBe(46096);
+        expect(parseDateTime('mar 15', 2026)).toBe(46096);
+        expect(parseDateTime('1/2', 2026)).toBe(46024);
+        expect(parseDateTime('Jan 5', 2026)).toBe(46027);
+        expect(parseDateTime('2/29', 2024)).toBe(45351);
+        expect(parseDateTime('3/15 12:00', 2026)).toBe(46096.5);
+    });
+
+    test('a day the month of that year does not have is no date', () => {
+        for (const text of ['15/3', '2/29', '2/30', '0/5', '5-Janu', 'Mar 0']) {
+            expect([text, parseDateTime(text, 2026)]).toEqual([text, undefined]);
+        }
     });
 });

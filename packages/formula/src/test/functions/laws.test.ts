@@ -31,6 +31,10 @@ const ROWS = [...FUNCTIONS.values(), ...OWN];
 const BASES: Readonly<Record<string, readonly string[]>> = {
     XMATCH: ['20', 'A1:A5', '0', '1'],
     AVERAGEIFS: ['A1:A5', 'A1:A5', '">5"'],
+    DATEVALUE: ['"2024-03-15"'],
+    TIMEVALUE: ['"12:30"'],
+    DATEDIF: ['1', '2', '"D"'],
+    'NETWORKDAYS.INTL': ['1', '10', '1', 'A1:A5'],
 };
 // The one row whose answer is an error by definition.
 const ERRORS = new Set(['NA']);
