@@ -71,7 +71,7 @@ Drive's Trash page reads one list per drive the viewer owns or co-owns: each of 
 
 ## A part of a document goes to the trash only with the whole document
 
-A document's parts, such as its databases, its versions, its comment threads and the files in its `media/`, are trashed only with the whole document. A person's trash of one answers 423, the owner's request included, beside the refusal of the mount root ([STORAGE.md](STORAGE.md#a-person-never-trashes-renames-or-moves-a-part-of-a-document)), so no trash root ever sits inside a document. Server code that removes a part deletes it for good through the mount, such as `ChatRoom.deleteMessage` with a deleted message's attachments.
+A document's parts, such as its databases, its versions, its comment threads and the files in its `media/`, are trashed only with the whole document. A person's trash of one answers 423, the owner's request included, beside the refusal of the mount root ([STORAGE.md](STORAGE.md#a-person-only-adds-new-files-and-threads-inside-a-document)), so no trash root ever sits inside a document. Server code that removes a part deletes it for good through the mount, such as `ChatRoom.deleteMessage` with a deleted message's attachments.
 
 ## Expired trash is purged only when a Home loads
 

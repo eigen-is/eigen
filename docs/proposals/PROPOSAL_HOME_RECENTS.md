@@ -87,7 +87,7 @@ GET /drive/:ownerId/recent     requireSelf + requireNonGuest
 | Empty breadcrumb | The file was deleted for good |
 | `canReadFromAncestors` fails | You lost access. The owner, members of the owning team, a direct or parent folder ACL and a public visibility all pass |
 | `isTrashedChain` | It is in the trash. A trash already ends a sharee's access, but the owner and team members can still read it, so they need this check. A restore brings the file back, sharing included |
-| Any ancestor is a document type | It is inside a doc container. `FileHistory` and the comment tags already avoid these, and this is the one check that guarantees it. A breadcrumb ends with the file itself, so the check reads `slice(0, -1)`, as `refuseInsideDocument` does; otherwise every doc and chat would be dropped |
+| Any ancestor is a document type | It is inside a doc container. `FileHistory` and the comment tags already avoid these, and this is the one check that guarantees it. A breadcrumb ends with the file itself, so the check reads `slice(0, -1)`, as `isInsideDocument` does; otherwise every doc and chat would be dropped |
 | `parentId` is null | A mount root, such as Drive home, which would otherwise rank first |
 
 **A read never deletes a row.** A failed lookup looks the same as a missing file at this level, and a brief error must not wipe someone's history. A hidden row comes back when access or the file does, and otherwise falls off through the 200-row trim.
