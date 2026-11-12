@@ -63,11 +63,8 @@ export const driveKeys = {
 // Where an item is listed: its folder, and the lists of its type when it has one.
 type Listed = { ownerId: string; mountId: string; parentId?: string | null; mimeType?: string | null };
 
-export function invalidateAclSharedOrUnshared(queryClient: QueryClient, viewerId: string): void {
-    queryClient.invalidateQueries({ queryKey: driveKeys.shared(viewerId, 'with-me') });
-}
-
-// The viewer's own lists of items from several owners, which show each item by name wherever it lives.
+// The viewer's own lists of items from several owners, which show each item by name wherever it lives and only
+// while the viewer may read it.
 export function invalidateViewerLists(queryClient: QueryClient, viewerId: string): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.shared(viewerId, 'by-me') });
     queryClient.invalidateQueries({ queryKey: driveKeys.shared(viewerId, 'with-me') });

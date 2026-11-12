@@ -98,6 +98,19 @@ describe('handleDriveSSEvent — DRIVE_ACL_SHARED / DRIVE_ACL_UNSHARED', () => {
     });
 });
 
+// An unshare takes the path out of the sharee's reach, so their open Recent and Watched drop it now.
+test.each([SSEventType.DRIVE_ACL_SHARED, SSEventType.DRIVE_ACL_UNSHARED, SSEventType.DRIVE_ACL_UPDATED] as const)(
+    "%s refreshes the viewer's Recent and Watched",
+    (type) => {
+        const { queryClient, invalidated } = trackingClient();
+        handleDriveSSEvent(driveEvent(type), queryClient, VIEWER);
+        expect([driveKeys.recent(VIEWER), driveKeys.watchesAll()].map((key) => hasKey(invalidated, key))).toEqual([
+            true,
+            true,
+        ]);
+    },
+);
+
 // An open document reads its canRead/canWrite from its info query, so an owner who makes a writer a viewer, on the
 // document or on a folder above it, reaches the open tab now. A role change on an existing share is DRIVE_ACL_UPDATED.
 test('every ACL event refreshes the access of the open documents at and below the path', () => {
