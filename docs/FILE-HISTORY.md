@@ -60,7 +60,7 @@ A recorded event broadcasts `drive:file-history-updated` to the owner's home and
 
 ## Retention is a count per file, never an age
 
-`FileHistory.prune` runs off `Mount.init` without blocking it. Per path it keeps the newest 100 `'edited'` rows, then the newest 500 rows of any kind. There is no age cap: the Activity panel is the file's story, and a quiet file keeps its creation, sharing and assignment rows. The cap makes the log a feed, not an authoritative history. `path_watchers` is explicit user state and is never pruned.
+`FileHistory.record` trims the path it writes to, right after the insert: it keeps the newest 100 `'edited'` rows, then the newest 500 rows of any kind. The trim reads only that path's rows through the `(pathId, createdAt)` index, so no job scans the table and nothing runs when a mount opens. A path over the cap is trimmed by its next event. There is no age cap: the Activity panel is the file's story, and a quiet file keeps its creation, sharing and assignment rows. The cap makes the log a feed, not an authoritative history. `path_watchers` is explicit user state and is never pruned.
 
 Tests: `apps/api/src/test/drive/file-history.test.ts`, `file-watch.test.ts`, `drive-watch-fanout.test.ts`.
 

@@ -132,7 +132,7 @@ export async function pullRecentPaths(ownerId: string, user: User, memberships: 
 |---|---|
 | The list itself | One small query in your own home |
 | Each owner already open | One batched query per mount |
-| Each owner closed | A full open, which also runs what any open runs (history prune, trash purge, reindex kick), then the same queries. The home stays open for its idle time, so the next load is the row above |
+| Each owner closed | A full open, which also runs what any open runs (trash purge, reindex kick), then the same queries. The home stays open for its idle time, so the next load is the row above |
 
 ## The page
 
@@ -189,5 +189,5 @@ To decide then: whether an address typed into a draft that is never sent counts,
 - **Recording opens in `GET /collab/.../info`.** It refetches on focus and on someone else's rename, so a doc you aren't looking at would move up, and it misses chats and plain files.
 - **A `POST` from the client for each open.** A route and a hook in three apps, for opens the server already serves, and a body the server would have to bound because the ids aren't a path it has checked.
 - **A server-wide queue for reads that open homes.** A stuck open would stall other users' loads too.
-- **Closing a home straight after reading it, with `openHome` and `withHomeHeld`.** It would hold down how many homes stay open, but every load would rerun each closed owner's whole open and close: `history.prune`, the trash purge, the reindex kick, and a close that waits on them while that owner's own requests wait too.
+- **Closing a home straight after reading it, with `openHome` and `withHomeHeld`.** It would hold down how many homes stay open, but every load would rerun each closed owner's whole open and close: the trash purge, the reindex kick, and a close that waits on them while that owner's own requests wait too.
 - **A list that updates live.** Each notification, such as every message in a busy chat, would read every owner again.

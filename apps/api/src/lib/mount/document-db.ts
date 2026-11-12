@@ -376,26 +376,14 @@ export async function closeCachedDbsUnder(mount: Mount, rootId: string): Promise
 // Closes every document database of the mount and stops its queues, when a Home closes or a mount goes
 // away. Nothing on the mount opens again after this.
 export async function closeAllDatabases(mount: Mount): Promise<void> {
-    // The downloads stop first, so neither the reindex drain nor a close below waits for one. The mount
-    // is not used again after this, so the abort is for good.
+    // The downloads stop first, so nothing below waits for one. The mount is not used again after this,
+    // so the abort is for good.
     mount.downloads.abort();
-    // The abort stops the trash purge between items. The one in flight finishes before metadata.db closes.
-    await mount.trashPurge;
 
-    // The history prune that init scheduled is canceled, so a fast teardown doesn't run it against a
-    // metadata.db the Home is about to close.
-    if (mount.pruneTimer) {
-        clearTimeout(mount.pruneTimer);
-        mount.pruneTimer = null;
-    }
-
-    // The reindex closes before the databases: its extract in flight may hold a document database the sweep would wait
-    // for. The wait has a deadline, so an extract that hangs can't stop the teardown.
+    // Both end before a database closes: an extract in flight may hold a document database, and a
+    // background job writes to metadata.db. Only the reindex has a deadline, because an extract can hang.
     await mount.reindexQueue?.close();
-
-    // A thumbnail job ends with a write to metadata.db, so it finishes first. The sharp worker it holds
-    // has its own timeout, which bounds the wait.
-    await Promise.allSettled(mount.thumbnailJobs);
+    await mount.backgroundDone();
 
     mount.closing = true;
     // An open that lands after this gate is refused. The sweep walks the live map, not a copy, so it

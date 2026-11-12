@@ -90,6 +90,12 @@ Most reads also pass the mount's `downloads` signal. `closeAllDatabases` and `Dr
 
 A file served to a client (`/download`, `/embed`, WebDAV GET) is the exception. Its stream goes straight into the Response, so a stalled body there is bounded only by the server's 200 s `idleTimeout`. It holds no lock and no Home while it waits.
 
+## A mount's background jobs end before its databases close
+
+A mount runs some work that no request waits for: the thumbnail after an upload or an overwrite, and the purge of expired trash that `Mount.init` starts ([SOFT-DELETE.md](SOFT-DELETE.md#expired-trash-is-purged-only-when-a-home-loads)). Each one starts through `Mount.runInBackground`, which keeps it in one set and logs its failure. `closeAllDatabases` aborts the `downloads` signal, closes the reindex queue and then waits for that set (`Mount.backgroundDone`) before any database closes, so no job writes to a `metadata.db` its Home has closed. A job is not guarded one by one: whatever a mount starts in the background goes into the set, and `init` leaves no timer behind.
+
+A long job reads the `downloads` signal to stop early, as the purge does between two items. A short one, such as a thumbnail, is only waited for. The wait has no deadline of its own: the thumbnail worker's timeout bounds a thumbnail, and the storage deadline bounds each delete of a purge. The reindex queue keeps its own close with a deadline, because an extract can hang. `apps/api/src/test/mount/mount-background.test.ts` pins this.
+
 ## An S3 read tries three times before it answers 503
 
 Hetzner Object Storage sheds load with a 503 `SlowDown`, and the same request a second later succeeds. Bun's `S3Client` never retries a read (its `retry` covers only multipart parts), so one throttled HEAD failed a whole docx export. `retryStorageRead` (`apps/api/src/lib/storage/deadline.ts`) gives `exists`, `size`, `list` and every `streamStorageFile` GET three attempts, about 200 ms and then 800 ms apart, with jitter. It retries a throttle, a 5xx, a refused or closed connection, and Bun's `UnknownError`, which is all a HEAD reports for any status but 200 and 404, a 403 included. A missing key and a definite refusal (`NoSuchKey`, `AccessDenied` in a GET body) fail at once. Writes are not retried: a whole-object PUT could be replayed, but the upload queue has its own backoff and orphan accounting, and on a versioned bucket each replay adds a version. Retrying the direct PUTs is in [ROADMAP.md](ROADMAP.md).

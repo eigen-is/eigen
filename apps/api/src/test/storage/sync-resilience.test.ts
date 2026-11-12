@@ -902,30 +902,6 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         expect(documentDbs.size).toBe(0);
     });
 
-    // Finding 2: init schedules setTimeout(history.prune, 0) off the ready path; a fast teardown must
-    // cancel it, or it fires against a metadata.db the Home is about to close ("Cannot use a closed
-    // database" noise).
-    test('a fast open→teardown cancels the pending history prune', async () => {
-        const mount = new Mount(
-            OWNER_ID,
-            TEST_DIR,
-            createTestMountConfig(`prune-race-${Date.now()}`, 'local'),
-            createGetLocalDatabase(TEST_DIR),
-        );
-        await mount.init(); // schedules the setTimeout(prune, 0) — still pending (a macrotask)
-
-        let pruneRuns = 0;
-        const history = (mount as unknown as { history: { prune: () => void } }).history;
-        history.prune = () => {
-            pruneRuns++;
-        };
-
-        await mount.closeAllDatabases(); // must clearTimeout the pending prune
-        await new Promise((r) => setTimeout(r, 0)); // let any surviving macrotask fire
-
-        expect(pruneRuns).toBe(0);
-    });
-
     // Finding 3: a PUT that never resolves must hit the queue's client-side timeout and be treated as
     // a failure (back off, release the semaphore, advance the loop), not hang the drain forever.
     test('a hung PUT times out and backs off instead of stalling the queue', async () => {

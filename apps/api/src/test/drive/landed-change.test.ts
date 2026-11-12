@@ -31,7 +31,7 @@ describe('a change that has landed', () => {
     });
 
     async function settledTempFiles(): Promise<string[]> {
-        await Promise.allSettled(mount.thumbnailJobs);
+        await mount.backgroundDone();
         return readdirSync(mount.tmpDir).sort();
     }
 

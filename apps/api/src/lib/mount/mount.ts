@@ -83,16 +83,8 @@ export class Mount {
     // passed in so the document loaders stay out of this module's imports.
     public reindexQueue?: ContentReindexQueue;
 
-    // init schedules the history prune after it returns. The timer is kept so a fast teardown can
-    // cancel it before the Home closes metadata.db.
-    public pruneTimer: ReturnType<typeof setTimeout> | null = null;
-    // The purge of expired trash that init starts. closeAllDatabases stops it between items and waits
-    // for it, so no row delete runs against a closed metadata.db.
-    public trashPurge?: Promise<void>;
-    // Thumbnail jobs run in the background. closeAllDatabases waits for them, so no sharp worker or
-    // row update outlives metadata.db.
-    public readonly thumbnailJobs = new Set<Promise<void>>();
-    // Aborted at teardown, so no close or Home shutdown waits on a download or an extraction read.
+    // Aborted at teardown, so no close or Home shutdown waits on a download, an extraction read or the
+    // rest of a long background job.
     public readonly downloads = new AbortController();
 
     private readonly ownerId: string;
@@ -106,6 +98,7 @@ export class Mount {
     // UUIDs, so the kinds never collide.
     private readonly pathLocks: Map<string, Promise<void>>;
     private readonly treeLock: RWLock;
+    private readonly background = new Set<Promise<void>>();
 
     public constructor(
         ownerId: string,
@@ -223,19 +216,22 @@ export class Mount {
 
         const retentionDays = getServerSettings().quotas.trashRetentionDays;
         if (retentionDays > 0) {
-            this.trashPurge = trash
-                .purgeTrash(this, retentionDays)
-                .catch((e) => console.error(`[Mount] Failed to purge expired trash:`, e));
+            this.runInBackground('purge of expired trash', () => trash.purgeTrash(this, retentionDays));
         }
-        // The prune scans whole tables, so it runs after the mount is ready.
-        this.pruneTimer = setTimeout(() => {
-            this.pruneTimer = null;
-            try {
-                this.history.prune();
-            } catch (e) {
-                console.error('[Mount] Failed to prune file history:', e);
-            }
-        }, 0);
+    }
+
+    // For work no caller waits for, such as a thumbnail. closeAllDatabases waits for it, so it never
+    // outlives metadata.db.
+    public runInBackground(what: string, job: () => Promise<void>): void {
+        const running = job()
+            .catch((e) => console.error(`[Mount] ${what} failed:`, e))
+            .finally(() => this.background.delete(running));
+        this.background.add(running);
+    }
+
+    // A job that starts during the wait is waited for too.
+    public async backgroundDone(): Promise<void> {
+        while (this.background.size > 0) await Promise.all(this.background);
     }
 
     public async closeAllDatabases(): Promise<void> {

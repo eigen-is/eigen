@@ -64,7 +64,7 @@ export function regenerateThumbnailAsync(
     fileName: string,
     onCleanup?: () => Promise<void>,
 ): void {
-    const job = (async () => {
+    mount.runInBackground(`thumbnail of ${pathId}`, async () => {
         try {
             const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, source, mimeType, fileName);
             if (!thumbnail) return;
@@ -83,7 +83,5 @@ export function regenerateThumbnailAsync(
         } finally {
             await onCleanup?.();
         }
-    })().catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
-    mount.thumbnailJobs.add(job);
-    job.finally(() => mount.thumbnailJobs.delete(job));
+    });
 }
