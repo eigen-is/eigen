@@ -27,6 +27,7 @@ export async function findChatsByMembers(drive: Drive, user: User, emails: reado
     const ownCandidates: DrivePath[] = [];
     for (const path of candidates) {
         // A public link or a team entry lets in whoever follows or joins, so such a chat has no fixed set of members.
+        // A team entry on a folder above an own chat still expands into today's members in the walk, which is accepted.
         if (path.visibility !== 'private') continue;
         if (hasTeamEntry(path.acl)) continue;
 
