@@ -34,11 +34,11 @@ import {
 type Key = number | string | boolean | null;
 
 // VLOOKUP when `down`, else HLOOKUP: the key is searched in the first column or row, a blank key as the number 0.
-// A key that is not found is #N/A even when the table lacks the column or row asked for.
+// A key that is not found is #N/A whatever column or row was asked for, one below 1 or one the table lacks.
 function tableLookup(key: Key, table: Table, index: number, sorted: boolean, down: boolean) {
-    if (index < 1) return VALUE;
     const at = (down ? table.column(0) : table.row(0)).find(key ?? 0, sorted ? Find.AtMost : Find.Exact);
     if (at < 0) return NA;
+    if (index < 1) return VALUE;
     if (index > (down ? table.columns : table.rows)) return REF;
     return down ? table.at(at, index - 1) : table.at(index - 1, at);
 }
@@ -58,10 +58,10 @@ export const LOOKUP = [
         return count;
     }),
     // The kind says which of the row and the column is fixed: both, the row, the column, neither. A sheet name
-    // is quoted as a formula would spell it, and an empty one leaves the bare mark.
+    // is quoted as a formula would spell it, and an empty text for one leaves the bare mark.
     fn(
         'ADDRESS',
-        [INTEGER, INTEGER, skippable(INTEGER, 1), skippable(BOOLEAN, true), optional(TEXT)],
+        [INTEGER, INTEGER, skippable(INTEGER, 1), skippable(BOOLEAN, true), skippable(TEXT)],
         (row, column, kind, a1, sheet) => {
             if (row < 1 || row > GRID_ROWS || column < 1 || column > GRID_COLUMNS || kind < 1 || kind > 4) return VALUE;
             const fixedRow = kind < 3;
@@ -74,8 +74,9 @@ export const LOOKUP = [
     ),
     fn(
         'INDEX',
-        [areas(TABLE), INTEGER, optional(INTEGER), optional(INTEGER, 1)],
+        [areas(TABLE), NUMBER, optional(NUMBER), optional(INTEGER, 1)],
         (source, row, column, areaNumber) => {
+            // The sign of an index is taken before its fraction is cut off: -0.5 is no index, 0.5 is 0.
             if (row < 0 || (column ?? 0) < 0 || areaNumber < 1) return VALUE;
             const table = source.area(areaNumber - 1);
             if (table === undefined) return REF;
@@ -83,8 +84,8 @@ export const LOOKUP = [
             // rows and columns refuses it.
             if (column === undefined && source.reference && table.rows > 1 && table.columns > 1) return REF;
             const along = column === undefined && table.rows === 1;
-            const r = along ? 0 : row;
-            const c = along ? row : (column ?? 0);
+            const r = along ? 0 : Math.trunc(row);
+            const c = Math.trunc(along ? row : (column ?? 0));
             if (r > table.rows || c > table.columns) return REF;
             return table.part(
                 r === 0 ? 0 : r - 1,
@@ -125,12 +126,12 @@ export const LOOKUP = [
     }),
     fn(
         'XMATCH',
-        [PLAIN, refusing(TABLE, NA), optional(INTEGER, 0), skippable(NUMBER, 1)],
+        [PLAIN, refusing(TABLE, NA), optional(NUMBER, 0), skippable(NUMBER, 1)],
         (key, table, match, search) => {
             if (table.rows > 1 && table.columns > 1) return VALUE;
             const values = table.columns === 1 ? table.column(0) : table.row(0);
-            // A search mode is cut down, not toward zero: -2.5 is no mode.
-            const at = values.seek(key, match, Math.floor(search));
+            // Both modes are cut down, not toward zero: a match mode of -0.5 is -1, a search mode of -2.5 is none.
+            const at = values.seek(key, Math.floor(match), Math.floor(search));
             if (typeof at !== 'number') return at;
             return at < 0 ? NA : at + 1;
         },
@@ -161,23 +162,23 @@ export const LOOKUP = [
             refusing(TABLE, NA),
             refusing(TABLE, NA),
             skippable(LAZY, NA),
-            optional(INTEGER, 0),
+            optional(NUMBER, 0),
             skippable(NUMBER, 1),
         ],
         (key, lookup, result, missing, match, search) => {
             const down = lookup.columns === 1 && (lookup.rows > 1 || result.rows === 1);
             if (!down && lookup.rows > 1) return VALUE;
             if ((down ? lookup.rows : lookup.columns) !== (down ? result.rows : result.columns)) return VALUE;
-            const at = (down ? lookup.column(0) : lookup.row(0)).seek(key, match, Math.floor(search));
+            const at = (down ? lookup.column(0) : lookup.row(0)).seek(key, Math.floor(match), Math.floor(search));
             if (typeof at !== 'number') return at;
             if (at < 0) return missing;
             return down ? result.part(at, 0, 1, result.columns) : result.part(0, at, result.rows, 1);
         },
         PART,
     ),
-    // The cell shows the friendly name, a blank one as 0, or the link itself. A link alone is at most 255 long.
+    // The cell shows the friendly name, a blank one as 0, or the link itself. A link is at most 255 long.
     fn('HYPERLINK', [TEXT, optional(PLAIN)], (link, name) =>
-        name === undefined ? (link.length > 255 ? VALUE : link) : (name ?? 0),
+        link.length > 255 ? VALUE : name === undefined ? link : (name ?? 0),
     ),
     fn('FORMULATEXT', [apiece(areas(REFERENCE)), ENGINE], (_cell, book) => book.formula() ?? NA),
     // The text is read as A1, and as R1C1 when the second argument is FALSE.
