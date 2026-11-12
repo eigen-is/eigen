@@ -2,7 +2,8 @@
 // spans of numbers in argument order: a value typed as an argument, a stretch of a column's own plane for a
 // reference, and the stored rows of an array. What counts is the family's data. The call wrapper has computed every
 // cell and found every error before the walk starts, so it meets none. A stored row of an array can stand for a
-// million written ones, which the walk says beside the span.
+// million written ones, which the walk says beside the span. Arguments that are multiplied place by place are
+// walked side by side instead, and the spans are their products.
 
 import type { Column } from '../store/column';
 import { CellKind, KIND_MASK } from '../store/column';
@@ -13,6 +14,7 @@ import type { Evaluator } from './evaluator';
 import { Fact } from './facts';
 import type { Family } from './families';
 import { Families } from './families';
+import { Products } from './products';
 import type { Held } from './signature';
 
 export class Walk {
@@ -20,7 +22,7 @@ export class Walk {
     public num: Float64Array;
     public from = 0;
     public to = 0;
-    // How many cells were handed out so far.
+    // How many cells were handed out so far, or how many places the arguments have that are multiplied.
     public count = 0;
     // Set when adding what the walk hands out would take more than the formula may: the call is then #CALC!.
     public error: FormulaError | null = null;
@@ -31,8 +33,8 @@ export class Walk {
     public reps: Int32Array | null = null;
     public rows = 1;
     private readonly ctx: Evaluator;
-    // Where a value that lies in no plane is put to be handed out: one typed value, or the cells of one row.
-    private span = new Float64Array(8);
+    // Where what lies in no one plane is put to be handed out: a typed value, or the cells of several columns.
+    private span = new Float64Array(1024);
     private widths = new Int32Array(8);
     private args: readonly Held[] = [];
     private family: Family = Families.Numbers;
@@ -44,19 +46,21 @@ export class Walk {
     private right = 0;
     private row = 0;
     private end = 0;
-    // The columns of the reference that are long enough to hold that row, and the row at which the shortest ends.
-    private tall = new Int32Array(8);
-    private talls = 0;
-    private shortest = 0;
+    // The columns of that reference, or of the arguments that are multiplied, that reach the row in hand.
+    private readonly reach = new Reach();
     private array: ArrayValue | null = null;
     private item = 0;
     // Whether a span that `hand` was given is still to be handed out.
     private handed = false;
     private skips = 0;
+    // Whether the arguments are multiplied place by place, and what then makes the spans.
+    private multiplied = false;
+    private readonly products: Products;
 
     public constructor(ctx: Evaluator) {
         this.ctx = ctx;
         this.num = this.span;
+        this.products = new Products(ctx, this.reach);
     }
 
     // The arguments `from` up to `to`, as the wrapper read them: a number counts. `skips` says which cells are
@@ -74,6 +78,13 @@ export class Walk {
         this.count = 0;
         this.error = null;
         this.handed = false;
+        this.multiplied = false;
+    }
+
+    // The arguments of the walk, which are of one size, as their products place by place: every place counts.
+    public multiply(): void {
+        this.multiplied = true;
+        this.count = this.products.start(this, this.args, this.arg, this.last);
     }
 
     // The first `count` of `numbers` as the one span of a walk that has no arguments: numbers that lie in no
@@ -92,7 +103,8 @@ export class Walk {
                 if (this.cells(this.area)) return true;
             } else if (this.array !== null) {
                 if (this.elements(this.array)) return true;
-            } else if (this.arg === this.last) {
+            } else if (this.multiplied) return this.products.next(this);
+            else if (this.arg === this.last) {
                 if (!this.handed) return false;
                 this.handed = false;
                 this.count = this.to;
@@ -136,21 +148,22 @@ export class Walk {
         this.right = Math.min(area.right, columns.length - 1);
         this.row = area.top;
         this.end = 0;
-        this.talls = Math.max(0, this.right - area.left + 1);
-        this.shortest = 0;
-        if (this.span.length < this.talls) this.span = new Float64Array(this.talls);
-        if (this.tall.length < this.talls) this.tall = new Int32Array(this.talls);
+        const width = Math.max(0, this.right - area.left + 1);
+        this.reach.clear(width);
+        if (this.span.length < width) this.span = new Float64Array(width);
         for (let c = area.left; c <= this.right; c += 1) {
-            this.end = Math.max(this.end, Math.min(area.bottom + 1, columns[c].length));
-            this.tall[c - area.left] = c;
+            const end = Math.min(area.bottom + 1, columns[c].length);
+            this.reach.add(c, end);
+            this.end = Math.max(this.end, end);
         }
         return false;
     }
 
     // The cells of the area that count, row by row: of one column a stretch of its own plane, and of several the
-    // cells of one row, gathered.
+    // cells of as many rows as the span holds, gathered.
     private cells(area: Reference): boolean {
-        const { right, end, span, tall } = this;
+        const { right, end, span, reach } = this;
+        const tall = reach.columns;
         const { columns } = this.ctx.workbook.sheets[area.sheet];
         const { kinds } = this.family;
         if (this.row < end && area.left === right && this.skips === 0) {
@@ -175,35 +188,25 @@ export class Walk {
             }
         }
         // Cell by cell for several columns, and for one column when cells may be passed over.
-        for (let row = this.row; row < end && (area.left < right || this.skips !== 0); row += 1) {
-            // A column that ends above this row is left out from here on, so a row costs the columns that reach it.
-            if (row >= this.shortest) {
-                let kept = 0;
-                this.shortest = end;
-                for (let i = 0; i < this.talls; i += 1) {
-                    const { length } = columns[tall[i]];
-                    if (length <= row) continue;
-                    tall[kept++] = tall[i];
-                    this.shortest = Math.min(this.shortest, length);
-                }
-                this.talls = kept;
-            }
-            let found = 0;
-            for (let i = 0; i < this.talls; i += 1) {
+        let found = 0;
+        let row = this.row;
+        for (; row < end && (area.left < right || this.skips !== 0); row += 1) {
+            if (row >= reach.shortest) reach.cut(row);
+            if (found + reach.count > span.length) break;
+            for (let i = 0; i < reach.count; i += 1) {
                 const held = columns[tall[i]];
                 if (skipped(this.ctx, this.skips, held, row)) continue;
                 const at = held.kind[row] & KIND_MASK;
                 if ((kinds >> at) & 1) span[found++] = at === CellKind.Boolean ? held.ref[row] : held.num[row];
             }
-            if (found === 0) continue;
-            this.row = row + 1;
-            this.num = span;
-            this.from = 0;
-            this.to = found;
-            this.count += found;
-            return true;
         }
-        return this.enter(area.next);
+        this.row = row;
+        if (found === 0) return this.enter(area.next);
+        this.num = span;
+        this.from = 0;
+        this.to = found;
+        this.count += found;
+        return true;
     }
 
     // The stored rows of the array, each handed out with the numbers in it that count. Of an array of numbers, a
@@ -277,12 +280,56 @@ export class Walk {
 
     public fail(error: FormulaError): boolean {
         this.error = error;
+        this.multiplied = false;
         this.area = null;
         this.array = null;
         this.reps = null;
         this.rows = 1;
         this.arg = this.last;
         return false;
+    }
+}
+
+// The columns of a range that reach the row a walk is at. A column that ends above a row is left out from there
+// on, so a row costs the columns that hold a cell in it, however wide the range is.
+export class Reach {
+    // The columns that are left, the first `count` of the list, and the row at which the shortest of them ends.
+    public columns = new Int32Array(8);
+    public count = 0;
+    public shortest = 0;
+    private ends = new Int32Array(8);
+
+    // Starts over with no column, and room for `most`.
+    public clear(most: number): void {
+        if (this.columns.length < most) {
+            this.columns = new Int32Array(most);
+            this.ends = new Int32Array(most);
+        }
+        this.count = 0;
+        this.shortest = 0;
+    }
+
+    public add(column: number, end: number): void {
+        this.columns[this.count] = column;
+        this.ends[this.count] = end;
+        this.count += 1;
+    }
+
+    // Leaves out the columns that end at `row` or above it.
+    public cut(row: number): void {
+        const { columns, ends } = this;
+        let kept = 0;
+        let shortest = Number.POSITIVE_INFINITY;
+        for (let i = 0; i < this.count; i += 1) {
+            const end = ends[i];
+            if (end <= row) continue;
+            columns[kept] = columns[i];
+            ends[kept] = end;
+            kept += 1;
+            if (end < shortest) shortest = end;
+        }
+        this.count = kept;
+        this.shortest = shortest;
     }
 }
 

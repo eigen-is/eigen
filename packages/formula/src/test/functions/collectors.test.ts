@@ -90,3 +90,34 @@ test('the formulas in a range are computed before the range is added, counted or
     expect(evaluate('=SUM(P1:Q2)', cells, 'A1')).toBe(DIV0);
     expect(evaluate('=SUM(P1:P3,Q1)', cells, 'A1')).toBe(49);
 });
+
+describe('the cells of several columns are handed out many rows at a time', () => {
+    // Three columns of different lengths, with a text and a blank among the numbers: more cells than one span holds.
+    const cells: Record<string, number | string> = {};
+    const numbers: number[] = [];
+    for (let row = 1; row <= 1500; row += 1) {
+        for (const [column, length] of [
+            ['A', 1500],
+            ['B', 700],
+            ['C', 1100],
+        ] as const) {
+            if (row > length || (row + column.charCodeAt(0)) % 97 === 0) continue;
+            const text = (row * 7 + column.charCodeAt(0)) % 89 === 0;
+            cells[`${column}${row}`] = text ? 'x' : row + 0.1 * column.charCodeAt(0);
+            if (!text) numbers.push(row + 0.1 * column.charCodeAt(0));
+        }
+    }
+    const sum = numbers.reduce((total, number) => total + number, 0);
+    test.each([
+        ['=SUM(A:C)', sum],
+        ['=SUM(A1:C1500)', sum],
+        ['=COUNT(A:C)', numbers.length],
+        ['=COUNTA(A2:C1499)', Object.keys(cells).length - 4],
+        ['=MAX(A:C)', Math.max(...numbers)],
+        ['=MIN(B:C)', 1 + 0.1 * 66],
+        ['=AVERAGE(A:C)', sum / numbers.length],
+    ])('%s', (formula, expected) => {
+        expect(numbers.length).toBeGreaterThan(3000);
+        expect(evaluate(formula, cells)).toBe(expected);
+    });
+});
