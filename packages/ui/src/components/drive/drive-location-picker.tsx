@@ -15,10 +15,11 @@ import {
 } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import type { DialogAction } from '@workspace/ui/hooks/use-dialog-pending';
 import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { cn } from '@workspace/ui/lib/utils';
 import { Download } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { EigenLoader } from '../braket/eigen-loader';
 import type { DriveLocationValue } from './drive-browser';
 import { useResolvedDriveLocation } from './drive-browser';
@@ -39,9 +40,27 @@ type DriveLocationPickerProps = {
     confirmLabel?: string;
 };
 
-export function DriveLocationPicker({
-    open,
-    onOpenChange,
+export function DriveLocationPicker({ open, onOpenChange, ...body }: DriveLocationPickerProps) {
+    const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
+    // A host that names another place while the picker is open, such as once the viewer's teams have loaded, moves it.
+    const place = `${body.defaultOwnerId}/${body.defaultMountId}/${body.defaultFolderId}`;
+    return (
+        <Dialog open={open} onOpenChange={handleOpenChange}>
+            <DialogContent className="flex flex-col p-0 gap-0 sm:max-w-[688px] max-w-[90vw]">
+                <DriveLocationPickerBody
+                    key={place}
+                    {...body}
+                    pending={pending}
+                    run={run}
+                    onCancel={() => onOpenChange(false)}
+                />
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// Mounted with the dialog's content, so each opening starts from the host's name and place.
+function DriveLocationPickerBody({
     mode,
     onConfirm,
     onDownloadInstead,
@@ -49,29 +68,26 @@ export function DriveLocationPicker({
     defaultName = '',
     defaultOwnerId,
     defaultMountId = DEFAULT_MOUNT_ID,
-    defaultFolderId,
+    defaultFolderId = '',
     nameLabel,
     confirmLabel,
-}: DriveLocationPickerProps) {
+    pending,
+    run,
+    onCancel,
+}: Omit<DriveLocationPickerProps, 'open' | 'onOpenChange'> & {
+    pending: boolean;
+    run: (action: DialogAction) => Promise<void>;
+    onCancel: () => void;
+}) {
     const { user } = useAuth();
     const [name, setName] = useState(defaultName);
     const [expanded, setExpanded] = useState(mode !== 'create');
-    const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
     const [location, setLocation] = useState<DriveLocationValue>({
         ownerId: defaultOwnerId || user?.id || '',
         mountId: defaultMountId,
-        folderId: defaultFolderId ?? '',
+        folderId: defaultFolderId,
     });
-    const destination = useResolvedDriveLocation(location, open);
-
-    useEffect(() => {
-        if (!user) return;
-        setName(defaultName);
-        setExpanded(mode !== 'create');
-        setLocation({ ownerId: defaultOwnerId || user.id, mountId: defaultMountId, folderId: defaultFolderId ?? '' });
-    }, [open, defaultName, mode, defaultOwnerId, defaultMountId, defaultFolderId, user]);
-
-    if (!user) return null;
+    const destination = useResolvedDriveLocation(location);
 
     const hasName = mode === 'create' || mode === 'save-as';
     const canConfirm = !!destination.folderId && (!hasName || !!name.trim());
@@ -88,69 +104,67 @@ export function DriveLocationPicker({
     const resolvedNameLabel = nameLabel ?? (mode === 'save-as' ? 'Save as' : 'Name');
 
     return (
-        <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent
-                className={cn(
-                    'flex flex-col p-0 gap-0 sm:max-w-[688px] max-w-[90vw]',
-                    expanded && (hasName ? 'h-[600px] max-h-[85vh]' : 'h-[520px] max-h-[85vh]'),
+        <div
+            className={cn(
+                'flex flex-col min-h-0',
+                expanded && (hasName ? 'h-[600px] max-h-[85vh]' : 'h-[520px] max-h-[85vh]'),
+            )}
+        >
+            <DialogHeader className="px-6 py-4 border-b">
+                <DialogTitle>{resolvedTitle}</DialogTitle>
+                <DialogDescription className="sr-only">
+                    Pick the folder in your Drive where this goes.
+                </DialogDescription>
+            </DialogHeader>
+
+            {hasName && (
+                <div className="px-6 pt-4 pb-2">
+                    <Label htmlFor="picker-name" className="text-sm text-muted-foreground">
+                        {resolvedNameLabel}
+                    </Label>
+                    <Input
+                        id="picker-name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="mt-1.5"
+                        autoFocus
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && name.trim()) {
+                                e.preventDefault();
+                                handleSubmit();
+                            }
+                        }}
+                    />
+                </div>
+            )}
+
+            <DriveLocationField
+                value={location}
+                onChange={setLocation}
+                expanded={expanded}
+                onExpandedChange={setExpanded}
+                collapsible={mode !== 'save-as'}
+            />
+
+            <DialogFooter className="px-6 py-3 border-t flex-row justify-between sm:justify-between">
+                {onDownloadInstead ? (
+                    <Button variant="outline" onClick={onDownloadInstead} disabled={pending}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Download instead
+                    </Button>
+                ) : (
+                    <div />
                 )}
-            >
-                <DialogHeader className="px-6 py-4 border-b">
-                    <DialogTitle>{resolvedTitle}</DialogTitle>
-                    <DialogDescription className="sr-only">
-                        Pick the folder in your Drive where this goes.
-                    </DialogDescription>
-                </DialogHeader>
-
-                {hasName && (
-                    <div className="px-6 pt-4 pb-2">
-                        <Label htmlFor="picker-name" className="text-sm text-muted-foreground">
-                            {resolvedNameLabel}
-                        </Label>
-                        <Input
-                            id="picker-name"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            className="mt-1.5"
-                            autoFocus
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && name.trim()) {
-                                    e.preventDefault();
-                                    handleSubmit();
-                                }
-                            }}
-                        />
-                    </div>
-                )}
-
-                <DriveLocationField
-                    value={location}
-                    onChange={setLocation}
-                    expanded={expanded}
-                    onExpandedChange={setExpanded}
-                    collapsible={mode !== 'save-as'}
-                />
-
-                <DialogFooter className="px-6 py-3 border-t flex-row justify-between sm:justify-between">
-                    {onDownloadInstead ? (
-                        <Button variant="outline" onClick={onDownloadInstead} disabled={pending}>
-                            <Download className="h-4 w-4 mr-2" />
-                            Download instead
-                        </Button>
-                    ) : (
-                        <div />
-                    )}
-                    <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-                            Cancel
-                        </Button>
-                        <Button onClick={handleSubmit} disabled={pending || !canConfirm}>
-                            {pending && <EigenLoader className="text-current" />}
-                            {resolvedConfirmLabel}
-                        </Button>
-                    </div>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={onCancel} disabled={pending}>
+                        Cancel
+                    </Button>
+                    <Button onClick={handleSubmit} disabled={pending || !canConfirm}>
+                        {pending && <EigenLoader className="text-current" />}
+                        {resolvedConfirmLabel}
+                    </Button>
+                </div>
+            </DialogFooter>
+        </div>
     );
 }
