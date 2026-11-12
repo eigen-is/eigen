@@ -28,7 +28,7 @@ Paths are under `apps/api/src/` unless they say otherwise.
 | **Auth** | `lib/auth/auth.ts` | better-auth over `users3.db`, which has no migrations: a new column goes into `auth-schema.ts`, the `setup.ts` DDL and `ensureAuthSchemaColumns` together, or better-auth refuses to start ([DATABASE.md](DATABASE.md)) |
 | **Protocol auth** | `lib/auth/protocol-auth.ts` | `verifyProtocolAuth()`, the one IMAP, CalDAV, CardDAV and WebDAV login: an app password, else the primary one |
 | **Trusted networks** | `lib/auth/access.ts`, `trusted-networks.ts` | `requireLocalhost()` admits loopback or `TRUSTED_NETWORKS`, never a caller Caddy proxied ([MAIL.md](MAIL.md#mail-only-arrives-from-the-local-mta)) |
-| **ACL and sharing** | `lib/drive/acl.ts`, `acl-propagation.ts` | Per-path ACLs, additive down the tree ([ACL.md](ACL.md)) |
+| **ACL and sharing** | `lib/drive/acl.ts`, `acl-propagation.ts`, `sharing.ts` | Per-path ACLs, additive down the tree, and who a path reaches ([ACL.md](ACL.md)) |
 | **Guests** | `lib/auth/guest-auth.ts`, `lib/home/guest-home.ts` | Emailed-code sign-in into a Home with only drive and notifications ([GUEST-ACCESS.md](GUEST-ACCESS.md)) |
 | **Organization and teams** | `lib/org/`, `lib/team/` | One organization per server; teams are flat ACL groups that own a `TeamHome` ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md)) |
 | **WebDAV** | `lib/webdav/` | RFC 4918 over Drive mounts ([WEBDAV.md](WEBDAV.md)) |
