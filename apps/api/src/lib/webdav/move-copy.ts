@@ -29,9 +29,6 @@ export async function handleMove(args: MoveCopyArgs): Promise<Response> {
     const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy(args, 'MOVE');
 
     await drive.movePathOver(args.mountId, src.id, destParent.id, newName, args.user);
-    // RFC 4918 §7.7: a lock does not move with its resource. Left in place, it would hold the Home
-    // until it expires, because the client can't refresh it at the old URL.
-    await drive.releaseLocksUnder(args.mountId, src.id);
     return new Response(null, { status: destExisting ? 204 : 201 });
 }
 
@@ -68,9 +65,11 @@ async function resolveMoveCopy(args: MoveCopyArgs, verb: 'MOVE' | 'COPY'): Promi
     const src = await drive.resolvePath(mountId, pathStr);
     if (!src) throw new ApiError(404, 'Source not found');
 
-    // MOVE takes the source out of its folder, so the lock check applies to it. COPY leaves the source as it is and
-    // needs only the resolve above.
-    if (verb === 'MOVE') await assertWritable(drive, mountId, src.id, ifHeader, user.id);
+    // A MOVE takes the source and everything under it out of its folder, so their locks count. A COPY leaves the
+    // source as it is.
+    const withMembers = async (path: DrivePath) =>
+        assertWritable(drive, mountId, path.id, ifHeader, user.id, await drive.descendantIds(mountId, path.id));
+    if (verb === 'MOVE') await withMembers(src);
 
     const { parentStr: destParentStr, name: newName } = splitParentAndName(dest.pathStr);
     if (!newName) throw new ApiError(400, 'Destination name missing');
@@ -89,8 +88,8 @@ async function resolveMoveCopy(args: MoveCopyArgs, verb: 'MOVE' | 'COPY'): Promi
     const destParent = await drive.resolvePath(mountId, destParentStr);
     if (!destParent) throw new ApiError(409, 'Destination parent not found');
 
-    // An overwrite touches destExisting and replaces a child of destParent, so both must be unlocked.
-    if (destExisting) await assertWritable(drive, mountId, destExisting.id, ifHeader, user.id);
+    // An overwrite trashes destExisting with its members and replaces a child of destParent.
+    if (destExisting) await withMembers(destExisting);
     await assertWritable(drive, mountId, destParent.id, ifHeader, user.id);
 
     return { drive, src, destParent, destExisting, newName };

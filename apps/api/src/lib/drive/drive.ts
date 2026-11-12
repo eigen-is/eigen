@@ -650,6 +650,7 @@ export class Drive {
         const oldChain = newParentId ? await mount.getBreadcrumb(path.id) : [];
         const oldMembers = newParentId ? await this.getEffectiveMembers(mount.id, path.id) : [];
         const updated = await mount.updatePath(path.id, to);
+        this.releaseLocksUnder(mount, path.id);
         if (newParentId) {
             this.emit(SSEventType.DRIVE_PATH_MOVED, updated, {
                 oldParentId,
@@ -851,14 +852,13 @@ export class Drive {
             const item = await mount.getActivePath(pathId);
             if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
             await remove(mount, item);
-            await this.releaseLocksUnder(mountId, item.id);
+            this.releaseLocksUnder(mount, item.id);
         });
     }
 
-    // A path that leaves its place, such as by a trash or a WebDAV MOVE, takes its WebDAV locks and those under it
-    // along. The client can't refresh or unlock them at the old URL, so each would hold the home until it expires.
-    public async releaseLocksUnder(mountId: string, pathId: string): Promise<void> {
-        const mount = this.getMount(mountId);
+    // A path that leaves its URL, by a trash, a move or a rename, loses its WebDAV locks and those under it. The
+    // client can't refresh or unlock them at the old URL, so each would hold the home until it expires.
+    private releaseLocksUnder(mount: Mount, pathId: string): void {
         this.lockManager.releaseAllForPaths([pathId, ...mount.collectDescendantIds(pathId)]);
     }
 
@@ -868,7 +868,7 @@ export class Drive {
         return crumbs.slice(0, -1).map((crumb) => crumb.id);
     }
 
-    // A WebDAV LOCK on a folder reaches everything under it, so it checks these for the locks of others.
+    // A WebDAV LOCK on a folder, and a write that takes one along, reaches the locks on everything under it.
     public async descendantIds(mountId: string, pathId: string): Promise<string[]> {
         return this.getMount(mountId).collectDescendantIds(pathId);
     }

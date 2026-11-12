@@ -49,12 +49,6 @@ export class SharedDrive {
         return this.drive.lockManager;
     }
 
-    // Dropping the locks of other users needs write access, the same as the move that calls it.
-    public async releaseLocksUnder(mountId: string, pathId: string): Promise<void> {
-        await this.requireWrite(mountId, pathId);
-        return this.drive.releaseLocksUnder(mountId, pathId);
-    }
-
     // The whole chain, not only what the caller can read: a lock on a folder above a share holds for the sharee too.
     // Ids alone name nothing, and the WebDAV handlers only look up locks by them.
     public async ancestorIds(mountId: string, pathId: string): Promise<string[]> {

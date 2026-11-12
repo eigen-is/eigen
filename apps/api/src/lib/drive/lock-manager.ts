@@ -30,14 +30,10 @@ export class LockManager {
     private releaseHold: (() => void) | undefined;
     private expiryTimer: Timer | undefined;
 
-    // A WebDAV-only client, such as Word, sends nothing between its lock refreshes, longer than the
-    // Home's idle time. So the manager holds the Home while it has a live lock, or the idle close
-    // would drop the lock and anyone could overwrite the file.
     public constructor(hold: () => () => void) {
         this.hold = hold;
     }
 
-    // The Home calls this when it closes for another reason, such as a restore or the shutdown.
     public clear(): void {
         this.locks.clear();
         this.byPath.clear();
@@ -53,19 +49,14 @@ export class LockManager {
         ttlMs: number;
         ifHeader: string | null;
         ancestorPathIds: readonly string[];
-        // Everything under a folder that takes a depth-infinity lock: the lock reaches the locks there too.
         descendantPathIds: readonly string[];
     }): Lock {
-        this.gc();
         // RFC 4918 §6.2 and §7.5: two locks conflict when either is exclusive. Each lock in the new one's reach that
         // conflicts with it must be the caller's own, with its token in the If header, so no write meets two owners.
-        const below = new Set(args.descendantPathIds);
-        const inReach = [
-            ...this.coveringLocks(args.pathId, args.ancestorPathIds),
-            ...[...this.locks.values()].filter((lock) => below.has(lock.pathId)),
-        ];
+        const { covering, below } = this.inReach(args.pathId, args.ancestorPathIds, args.descendantPathIds);
         const owned = ownedWith(args.userId, args.ifHeader);
-        if (inReach.some((lock) => (args.scope === 'exclusive' || lock.scope === 'exclusive') && !owned(lock))) {
+        const conflicts = (lock: Lock) => args.scope === 'exclusive' || lock.scope === 'exclusive';
+        if ([...covering, ...below].some((lock) => conflicts(lock) && !owned(lock))) {
             throw new ApiError(423, 'Locked');
         }
         if ((this.byPath.get(args.pathId)?.size ?? 0) >= MAX_LOCKS_PER_PATH) {
@@ -108,8 +99,6 @@ export class LockManager {
         this.settle();
     }
 
-    // The Drive calls this when paths leave their place, such as by a trash or a WebDAV MOVE, with every
-    // path under them. Their locks would otherwise keep the Home held until they expire.
     public releaseAllForPaths(pathIds: readonly string[]): void {
         for (const pathId of pathIds) {
             for (const token of this.byPath.get(pathId) ?? []) this.locks.delete(token);
@@ -123,22 +112,32 @@ export class LockManager {
         return [...(this.byPath.get(pathId) ?? [])].flatMap((token) => this.locks.get(token) ?? []);
     }
 
+    // The locks covering one path are all shared or all one user's, so the token of one the caller owns passes them.
+    // The locks below are other paths' locks, so a write that takes those paths along needs the token of each.
     public isWriteAllowed(
         pathId: string,
         ifHeader: string | null,
         userId: string,
         ancestorPathIds: readonly string[],
+        descendantPathIds: readonly string[],
     ): boolean {
-        const covering = this.coveringLocks(pathId, ancestorPathIds);
-        return covering.length === 0 || covering.some(ownedWith(userId, ifHeader));
+        const { covering, below } = this.inReach(pathId, ancestorPathIds, descendantPathIds);
+        const owned = ownedWith(userId, ifHeader);
+        return (covering.length === 0 || covering.some(owned)) && below.every(owned);
     }
 
-    // The path's own locks, and the depth-infinity locks on its ancestors, which RFC 4918 §6.2 applies
-    // to every member.
-    private coveringLocks(pathId: string, ancestorPathIds: readonly string[]): Lock[] {
+    // RFC 4918 §6.2 applies a depth-infinity lock on a folder to every member, so those above the path cover it too.
+    // The descendants are empty unless the request reaches them, as a depth-infinity LOCK or a folder's DELETE does.
+    private inReach(
+        pathId: string,
+        ancestorPathIds: readonly string[],
+        descendantPathIds: readonly string[],
+    ): { covering: Lock[]; below: Lock[] } {
         const own = this.listForPath(pathId);
         const ancestor = ancestorPathIds.flatMap((id) => this.listForPath(id).filter((l) => l.depth === 'infinity'));
-        return [...own, ...ancestor];
+        const under = new Set(descendantPathIds);
+        const below = [...this.locks.values()].filter((lock) => under.has(lock.pathId));
+        return { covering: [...own, ...ancestor], below };
     }
 
     // Runs on every read, so it moves the timer only when a lock went.
