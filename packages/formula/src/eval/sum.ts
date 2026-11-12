@@ -56,7 +56,7 @@ function addRow(walk: Walk, recalc: Recalc, start: number): number {
 }
 
 // `start` after `value` was added to it `times` times, one addition at a time.
-export function repeated(start: number, value: number, times: number): number {
+function repeated(start: number, value: number, times: number): number {
     let sum = start;
     let left = times;
     while (left > 0) {
