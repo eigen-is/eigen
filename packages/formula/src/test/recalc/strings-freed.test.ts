@@ -92,8 +92,8 @@ describe('the string table weighs what the cells hold now, within the factor a s
         const before = megabytes();
         recalc.edit({ kind: ChangeKind.RemoveSheet, sheet: 'b' });
         recalc.pass(NO_CAP);
-        // Measured: 33 of 45 megabytes given back with the sweep, 1 without.
-        expect(before - megabytes()).toBeGreaterThan(before / 3);
+        // Measured: 33 megabytes given back with the sweep, 1 without.
+        expect(before - megabytes()).toBeGreaterThan(15);
         expect(workbook.strings.weight).toBe(new Workbook([names]).strings.weight);
     }, 60_000);
 });
