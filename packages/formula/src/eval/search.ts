@@ -1,8 +1,8 @@
 // Searching one row or one column of values for a key, as every lookup function does: for the key itself or a
 // pattern, for the nearest value, or by halving when the values are taken to be sorted, in the steps Excel takes.
+// MATCH type -1 alone halves where Excel reads every value: on values not sorted downward it differs, by choice.
 // A key matches only values of its own kind, text in any case, and a blank never matches; XMATCH's bisection alone
-// orders the kinds against each other. The values are the rows of a column, read in place, or the elements of an
-// array. A function gets them as a Vector and asks it for a position from 0, or -1.
+// orders the kinds. A function gets a column's cells or an array's elements as a Vector, and a position from 0 or -1.
 
 import type { Column } from '../store/column';
 import { CellKind, KIND_MASK } from '../store/column';
@@ -60,10 +60,9 @@ export class Vector {
     }
 
     // The place of the key itself, a text key as a pattern, or of the last value at most the key among values taken
-    // to be sorted upward, or of the last value at least the key among values taken to be sorted downward.
+    // to be sorted upward, or of the key or else the last value above it among values taken to be sorted downward.
     public find(key: Key, mode: Find): number {
-        if (mode === Find.Exact) return this.exact(key, true, false);
-        return mode === Find.AtMost ? this.atMost(key) : this.atLeast(key);
+        return mode === Find.Exact ? this.exact(key, true, false) : this.halve(key, mode === Find.AtLeast);
     }
 
     // XMATCH's own codes. `match`: 0 the key itself, -1 it or the next smaller value, 1 it or the next larger, 2 the
@@ -190,13 +189,15 @@ export class Vector {
         return this.placeOf(best, reverse);
     }
 
-    // The last value at most the key among values taken to be sorted upward, by Excel's own steps, which decide
-    // the answer when they are not: halving, where a probe at a value of another kind moves to the next of the
-    // key's kind after it, else before it, and a probe that equals the key ends at the last of its run of equals.
-    // The search goes on beside the value the probe moved to, not beside the middle it started from.
-    private atMost(key: Key): number {
+    // The last value at most the key among values taken to be sorted upward, or with `descending` the key, else the
+    // last value above it, among values taken to be sorted downward. A probe at a value of another kind moves to the
+    // next of the key's kind after it, else before it, and the search goes on beside the value it moved to. Upward a
+    // probe that equals the key ends at the last of its run of equals, as in Excel; downward the halving goes on to
+    // the first of the equal keys.
+    private halve(key: Key, descending: boolean): number {
         let low = 0;
         let high = this.used - 1;
+        let hit = -1;
         let before = -1;
         while (low <= high) {
             const middle = (low + high) >> 1;
@@ -212,31 +213,19 @@ export class Vector {
                 order = against(this.valueAt(at), key);
             }
             if (Number.isNaN(order)) break;
-            if (order === 0) {
+            if (order === 0 && !descending) {
                 while (at + 1 < this.used && against(this.valueAt(at + 1), key) === 0) at += 1;
                 return at;
             }
-            if (order < 0) {
+            if (order === 0) hit = at;
+            if (order !== 0 && order < 0 !== descending) {
                 before = at;
                 low = at + 1;
             } else {
                 high = at - 1;
             }
         }
-        return before;
-    }
-
-    // The key, or else the last value above it that comes before the first value below it: Excel halves nothing
-    // here and reads the values of the key's kind from the first one on.
-    private atLeast(key: Key): number {
-        let above = -1;
-        for (let at = 0; at < this.stored; at += 1) {
-            const order = against(this.heldAt(at), key);
-            if (order === 0) return this.placeOf(at, false);
-            if (order < 0) break;
-            if (order > 0) above = at;
-        }
-        return this.placeOf(above, true);
+        return hit >= 0 ? hit : before;
     }
 
     // Bisection over values taken to be sorted in the one order of values, kinds and all, with an error and a
