@@ -4,7 +4,7 @@
 
 import { numberAsText } from '../format/number-display';
 import { ansiCharacter, ansiCode } from '../values/ansi';
-import { countCharacters, cutCharacters, findCharacters, searchCharacters } from '../values/characters';
+import { countCharacters, cutCharacters, findCharacters, firstCode, searchCharacters } from '../values/characters';
 import { partBeside } from '../values/delimited';
 import { CALC, NA, VALUE } from '../values/errors';
 import { lowerCase, properCase, upperCase } from '../values/letter-case';
@@ -48,8 +48,8 @@ function beside(after: boolean) {
     ) => {
         if (instance === 0 || (mode !== 0 && mode !== 1) || (toEnd !== 0 && toEnd !== 1)) return VALUE;
         let shortest = LONGEST_TEXT;
-        for (const delimiter of delimiters) shortest = Math.min(shortest, delimiter.length);
-        if (instance !== undefined && Math.abs(instance) > text.length - shortest + 1) return VALUE;
+        for (const delimiter of delimiters) shortest = Math.min(shortest, countCharacters(delimiter));
+        if (instance !== undefined && Math.abs(instance) > countCharacters(text) - shortest + 1) return VALUE;
         const part =
             mode === 1
                 ? partBeside(text, upperCase(text), delimiters.map(upperCase), instance ?? 1, toEnd === 1, after)
@@ -60,11 +60,11 @@ function beside(after: boolean) {
 
 export const TEXT_FUNCTIONS = [
     // What is past the longest text is cut off, where CONCAT refuses.
-    fn('CONCATENATE', [rest(TEXT)], (texts) => texts.join('').slice(0, LONGEST_TEXT)),
+    fn('CONCATENATE', [rest(TEXT)], (texts) => cutCharacters(texts.join(''), 0, LONGEST_TEXT)),
     fn('CONCAT', [rest(TEXTS)], (texts) => {
         let joined = '';
         for (const text of texts) {
-            if (joined.length + text.length > LONGEST_TEXT) return CALC;
+            if (countCharacters(joined) + countCharacters(text) > LONGEST_TEXT) return CALC;
             joined += text;
         }
         return joined;
@@ -76,7 +76,8 @@ export const TEXT_FUNCTIONS = [
         let count = 0;
         for (const text of texts) {
             const delimiter = count === 0 ? '' : delimiters[(count - 1) % delimiters.length];
-            if (joined.length + delimiter.length + text.length > LONGEST_TEXT) return CALC;
+            const length = countCharacters(joined) + countCharacters(delimiter) + countCharacters(text);
+            if (length > LONGEST_TEXT) return CALC;
             if (skip && text === '') continue;
             joined += delimiter + text;
             count += 1;
@@ -106,19 +107,22 @@ export const TEXT_FUNCTIONS = [
     fn('SUBSTITUTE', [TEXT, TEXT, TEXT, optional(strict(NUMBER))], (text, old, put, instance) => {
         if (instance !== undefined && (instance < 1 || instance >= MOST)) return VALUE;
         if (old === '') return text;
-        const step = instance === undefined ? old.length : 1;
+        const width = countCharacters(old);
+        const step = instance === undefined ? width : 1;
         let result = '';
         let kept = 0;
         let seen = 0;
-        for (let at = text.indexOf(old); at >= 0; at = text.indexOf(old, at + step)) {
+        for (let at = findCharacters(old, text, 1); at > 0; at = findCharacters(old, text, at + step)) {
             seen += 1;
             if (instance !== undefined && seen < Math.trunc(instance)) continue;
-            if (result.length + at - kept + put.length > LONGEST_TEXT) return VALUE;
-            result += text.slice(kept, at) + put;
-            kept = at + old.length;
+            const between = at - 1 - kept;
+            // The longest text times itself is more than a string can hold on Node.
+            if (countCharacters(result) + between + countCharacters(put) > LONGEST_TEXT) return VALUE;
+            result += cutCharacters(text, kept, between) + put;
+            kept = at - 1 + width;
             if (instance !== undefined) break;
         }
-        return result + text.slice(kept);
+        return result + cutCharacters(text, kept, LONGEST_TEXT);
     }),
     // An empty text is found at every position up to the one after the last character.
     fn('FIND', [TEXT, TEXT, optional(NUMBER, 1)], (sought, text, start) =>
@@ -131,11 +135,12 @@ export const TEXT_FUNCTIONS = [
             ? VALUE
             : searchCharacters(sought, text, Math.trunc(start)) || VALUE,
     ),
-    fn('REPT', [TEXT, NUMBER], (text, count) =>
-        count < 0 || text.length > OLD_LONGEST_TEXT || text.length * Math.trunc(count) > LONGEST_TEXT
+    fn('REPT', [TEXT, NUMBER], (text, count) => {
+        const length = countCharacters(text);
+        return count < 0 || length > OLD_LONGEST_TEXT || length * Math.trunc(count) > LONGEST_TEXT
             ? VALUE
-            : text.repeat(Math.trunc(count)),
-    ),
+            : text.repeat(Math.trunc(count));
+    }),
     fn('EXACT', [TEXT, TEXT], (one, other) => one === other),
     fn('LEN', [TEXT], countCharacters),
     fn('LOWER', [TEXT], lowerCase),
@@ -145,21 +150,22 @@ export const TEXT_FUNCTIONS = [
     fn('TRIM', [TEXT], (text) => text.replace(/ {2,}/g, ' ').replace(/^ | $/g, '')),
     fn('CLEAN', [TEXT], (text) => text.replace(UNSEEN, '')),
     fn('CHAR', [INTEGER], (code) => (code < 1 || code > 255 ? VALUE : ansiCharacter(code))),
-    fn('CODE', [TEXT], (text) =>
-        text === '' || text.length > OLD_LONGEST_TEXT ? VALUE : ansiCode(text.charCodeAt(0)),
-    ),
+    fn('CODE', [TEXT], (text) => {
+        const code = firstCode(text);
+        return code === undefined || countCharacters(text) > OLD_LONGEST_TEXT ? VALUE : ansiCode(code);
+    }),
     // Half of a surrogate pair and the last two code points of a plane are no character.
     fn('UNICHAR', [INTEGER], (code) => {
         if (code < 1 || code > LAST_CODE_POINT) return VALUE;
         return (code >= 0xd800 && code <= 0xdfff) || (code & 0xfffe) === 0xfffe ? NA : String.fromCodePoint(code);
     }),
-    fn('UNICODE', [TEXT], (text) => (text.length > OLD_LONGEST_TEXT ? VALUE : (text.codePointAt(0) ?? VALUE))),
+    fn('UNICODE', [TEXT], (text) => (countCharacters(text) > OLD_LONGEST_TEXT ? VALUE : (firstCode(text) ?? VALUE))),
     // An empty text is 0, as it is wherever a number is read.
     fn('VALUE', [TEXT], (text) => (text === '' ? 0 : (parseNumber(text) ?? VALUE))),
     // The first character of each separator counts. Left out, the comma groups unless it is the decimal sign.
     fn('NUMBERVALUE', [TEXT, optional(TEXT, '.'), optional(TEXT)], (text, decimals, groups) => {
-        const decimal = decimals.charAt(0);
-        const group = groups === undefined ? (decimal === ',' ? '' : ',') : groups.charAt(0);
+        const decimal = cutCharacters(decimals, 0, 1);
+        const group = groups === undefined ? (decimal === ',' ? '' : ',') : cutCharacters(groups, 0, 1);
         if (decimal === '' || groups === '' || group === decimal) return VALUE;
         return separatedNumber(text, decimal, group) ?? VALUE;
     }),

@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { ansiCharacter, ansiCode } from '../../values/ansi';
-import { countCharacters, cutCharacters, findCharacters, searchCharacters } from '../../values/characters';
+import {
+    countCharacters,
+    cutCharacters,
+    findCharacters,
+    findLastCharacters,
+    firstCode,
+    searchCharacters,
+} from '../../values/characters';
 import { partBeside } from '../../values/delimited';
 import { lowerCase, properCase, upperCase } from '../../values/letter-case';
 import { separatedNumber } from '../../values/separated-number';
@@ -22,6 +29,19 @@ describe('characters', () => {
         expect(findCharacters('o', 'Hello World', 6)).toBe(8);
         expect(findCharacters('O', 'Hello World', 1)).toBe(0);
         expect(findCharacters('', 'abc', 4)).toBe(4);
+    });
+
+    test('a find from the end answers the last place at or before a position', () => {
+        expect(findLastCharacters('o', 'Hello World', 11)).toBe(8);
+        expect(findLastCharacters('o', 'Hello World', 7)).toBe(5);
+        expect(findLastCharacters('o', 'Hello World', 4)).toBe(0);
+        expect(findLastCharacters('H', 'Hello World', 1)).toBe(1);
+    });
+
+    test('the first code is a whole code point, though a pair counts as two characters', () => {
+        expect(firstCode(`${EMOJI}a`)).toBe(128512);
+        expect(firstCode('€')).toBe(8364);
+        expect(firstCode('')).toBeUndefined();
     });
 
     test('a search folds case without changing a length', () => {
