@@ -25,10 +25,14 @@ export type RecalcResult = {
     readonly stopped: boolean;
 };
 
-// How deep cells and tree nodes may nest, together, before the calls in progress are dropped. A cell counts CELL
-// on top of its nodes, since reading it takes more calls than a node does, and a worker's stack is small.
-const BUDGET = 400;
+// How much of the stack the cells in progress may take together before their calls are dropped, in the units of a
+// shape's depth: half of the smallest stack the engine runs on. Reading a cell takes CELL on top of its shape.
+const BUDGET = 640;
 const CELL = 6;
+
+// The most one formula makes: the elements its arrays store, the characters of the texts it made for them, and the
+// numbers it adds one by one for cells that no array stores. A formula that needs more is #CALC!, alone.
+const MOST_MADE = 2 ** 24;
 
 const UNWIND = Object.freeze({ reason: 'the evaluation nests too deep' });
 const STOP = Object.freeze({ reason: 'the recalc computed as many formulas as its cap' });
@@ -53,9 +57,8 @@ export class Recalc {
     private readonly rows: number[] = [];
     // The cell whose formula was reading when this one was entered, or -1.
     private readonly parents: number[] = [];
-    // A cell of the list this one is on a loop with, at or before it: itself while it is on none. Once two loops
-    // have joined it can lag behind the first cell of the loop. What is relied on is that `lows[i] < i` exactly
-    // when cell i waits on an earlier cell in progress.
+    // A cell of the list this one is on a loop with, at or before it, and itself while it is on none. It can lag
+    // behind the loop's first cell, but `lows[i] < i` exactly when cell i waits on an earlier cell in progress.
     private readonly lows: number[] = [];
     // Where in the list a cell that is on a loop sits, which the chain alone does not tell once its formula ran.
     private readonly looped = new Map<Column, Map<number, number>>();
@@ -68,7 +71,7 @@ export class Recalc {
     private cap = 0;
     // Whether the pass has stored a formula yet.
     private stored = false;
-    // The array elements each cell in progress has made since its formula last started.
+    // What each cell in progress has made since its formula last started.
     private readonly made: number[] = [];
 
     public constructor(workbook: Workbook, functions: Registry) {
@@ -94,8 +97,8 @@ export class Recalc {
         this.seed(this.workbook.sheets.indexOf(sheet), c, row);
     }
 
-    // Computes the formulas that the cells written since the last pass reach, those that read cells they do not
-    // name and what an earlier pass left, in sheet, column, row order where the reads do not ask for another.
+    // Computes the formulas that the cells written since the last pass reach, those that draw or read cells they
+    // do not name, and what an earlier pass left, in sheet, column, row order where the reads do not ask for another.
     public pass(cap: number, now = 0, seed = 0): RecalcResult {
         const { workbook } = this;
         this.evaluator.clock(now, seed);
@@ -116,6 +119,15 @@ export class Recalc {
             if (sameColumn && spans[last + 3] >= seeds[at + 2] - 1) {
                 spans[last + 3] = Math.max(spans[last + 3], seeds[at + 3]);
             } else spans.push(seeds[at], seeds[at + 1], seeds[at + 2], seeds[at + 3]);
+        }
+        // A pass after any write computes every formula that draws or reads the clock again, and so what reads it.
+        const { volatile } = this.index;
+        for (let i = 0; spans.length > 0 && i < volatile.length; i += 5) {
+            for (let c = volatile[i + 1]; c <= volatile[i + 2]; c += 1) {
+                const column = workbook.sheets[volatile[i]].columns[c];
+                for (let row = volatile[i + 3]; row <= volatile[i + 4]; row += 1) column.markDirty(row);
+                spans.push(volatile[i], c, volatile[i + 3], volatile[i + 4]);
+            }
         }
         this.index.mark(workbook, spans);
         seeds.length = 0;
@@ -197,10 +209,11 @@ export class Recalc {
     }
 
     // Asks for what the running formula is about to make, such as the elements of an array, before it makes them:
-    // false when that is more than `most`, and else it is added to what the pass costs.
-    public room(units: number, most: number): boolean {
-        if (units > most) return false;
-        this.made[this.current] += units;
+    // false when the formula would then have made more than it may, and else it is added to what the pass costs.
+    public room(units: number): boolean {
+        const made = this.made[this.current] + units;
+        if (made > MOST_MADE) return false;
+        this.made[this.current] = made;
         return true;
     }
 

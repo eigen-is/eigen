@@ -115,6 +115,22 @@ describe('the clock and the draw come from the pass', () => {
         expect(valueAt(engine, 'A2')).toBe(6);
     });
 
+    test('a recalc after any write computes what draws and what reads it, and a recalc after none computes nothing', () => {
+        const engine = engineOf({ s1: { A1: '=RAND()', A2: '=A1+1', A3: '=A2*2', A4: '=NOW()', C1: 1 } });
+        engine.recalc(Number.POSITIVE_INFINITY, 100, 1);
+        const first = Number(valueAt(engine, 'A1'));
+        expect(valueAt(engine, 'A3')).toBe((first + 1) * 2);
+        engine.recalc(Number.POSITIVE_INFINITY, 200, 2);
+        expect(valueAt(engine, 'A1')).toBe(first);
+        expect(valueAt(engine, 'A4')).toBe(100);
+        engine.setValue('s1', 0, 2, 2);
+        engine.recalc(Number.POSITIVE_INFINITY, 300, 3);
+        const second = Number(valueAt(engine, 'A1'));
+        expect(second).not.toBe(first);
+        expect(valueAt(engine, 'A3')).toBe((second + 1) * 2);
+        expect(valueAt(engine, 'A4')).toBe(300);
+    });
+
     // No function of this build draws and takes a value, so this test hands the recalc a row that does.
     test('a row that draws is called for every written element of an array, another row once per run', () => {
         let calls = 0;
@@ -131,5 +147,39 @@ describe('the clock and the draw come from the pass', () => {
         new Recalc(workbook, functions).pass(Number.POSITIVE_INFINITY);
         expect(calls).toBe(1000);
         expect(workbook.value(workbook.sheets[0].columns[0], 0)).toBe(500500);
+    });
+
+    // Excel batch 5, group 7: RANDBETWEEN over arrays is one call per written element, each on its own values.
+    test('a row that draws reads each element of an array that stores every element', () => {
+        const functions = new Map(FUNCTIONS);
+        functions.set(
+            'BETWEEN',
+            fn('BETWEEN', [NUMBER, NUMBER, RANDOM], (low, high, draw) => Math.floor(low + draw * (high - low + 1))),
+        );
+        const formulas = [
+            '=SUM(BETWEEN({5,6,7},{5,6,7}))',
+            '=SUM(BETWEEN({1,2;3,4},{1,2;3,4}))',
+            '=SUM(BETWEEN(C1:C3,C1:C3))',
+            '=INDEX(BETWEEN({1,2,"x y"},1),1,3)',
+            '=INDEX(BETWEEN(1,{1000000,1000000,1000000}),1,1)',
+            '=INDEX(BETWEEN(1,{1000000,1000000,1000000}),1,2)',
+            '=INDEX(BETWEEN(1,{1000000,1000000,1000000}),1,3)',
+        ];
+        const workbook = new Workbook([
+            {
+                id: 's1',
+                name: 'Sheet1',
+                cells: (cell) => {
+                    for (const [row, formula] of formulas.entries()) {
+                        cell(row, 0, null, stored(formula, `A${row + 1}`));
+                    }
+                    for (let row = 0; row < 3; row += 1) cell(row, 2, 10 * (row + 1), null);
+                },
+            },
+        ]);
+        new Recalc(workbook, functions).pass(Number.POSITIVE_INFINITY, 0, 7);
+        const values = formulas.map((_, row) => workbook.value(workbook.sheets[0].columns[0], row));
+        expect(values.slice(0, 4)).toEqual([18, 10, 60, VALUE]);
+        expect(new Set(values.slice(4)).size).toBe(3);
     });
 });

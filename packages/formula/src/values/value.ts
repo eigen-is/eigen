@@ -22,9 +22,6 @@ export type Reference = {
     readonly next: Reference | null;
 };
 
-// The most elements one array stores. An array that would store more is #CALC!.
-export const MOST_ELEMENTS = 2 ** 24;
-
 // An array has the size that was written, such as the 1,048,576 rows of A:A, and stores one row for every run of
 // written rows that are equal, such as a stretch of blank ones, and one column for every such run of columns.
 export type ArrayValue = {
@@ -75,14 +72,12 @@ export function arrayOf<T extends Scalar | Reference>(
     if (items instanceof Float64Array) nums = items;
     else {
         // Read from the last element back: the blank run that ends most ranges is met at once.
-        const typed = new Float64Array(items.length);
         let at = items.length - 1;
-        for (; at >= 0; at -= 1) {
-            const item = items[at];
-            if (typeof item !== 'number') break;
-            typed[at] = item;
+        while (at >= 0 && typeof items[at] === 'number') at -= 1;
+        if (at < 0) {
+            nums = new Float64Array(items.length);
+            for (let i = 0; i < nums.length; i += 1) nums[i] = Number(items[i]);
         }
-        if (at < 0) nums = typed;
     }
     const height = rowEnds?.length ?? rows;
     const width = columnEnds?.length ?? columns;

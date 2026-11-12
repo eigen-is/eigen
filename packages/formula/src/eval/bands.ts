@@ -19,8 +19,11 @@ export function align(arrays: readonly ArrayValue[], size: number, rows: boolean
     const first = rows ? arrays[0].rowEnds : arrays[0].columnEnds;
     let alike = true;
     for (const array of arrays) {
-        alike &&=
-            (rows ? array.rows : array.columns) === size && sameRuns(rows ? array.rowEnds : array.columnEnds, first);
+        const ends = rows ? array.rowEnds : array.columnEnds;
+        alike &&= (rows ? array.rows : array.columns) === size && ends?.length === first?.length;
+        for (let i = 0; alike && ends !== first && ends !== null && first !== null && i < ends.length; i += 1) {
+            alike = ends[i] === first[i];
+        }
     }
     if (alike) return { count: rows ? arrays[0].height : arrays[0].width, ends: first, from: arrays.map(() => null) };
     const lengths = arrays.map((array) => (rows ? array.rows : array.columns));
@@ -58,19 +61,13 @@ export function align(arrays: readonly ArrayValue[], size: number, rows: boolean
     };
 }
 
-function sameRuns(a: Int32Array | null, b: Int32Array | null): boolean {
-    if (a === b) return true;
-    if (a === null || b === null || a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
-    return true;
-}
-
 // The same axis with every run cut into single rows or columns, for an operation that must make each element.
 export function apart(axis: Axis, size: number): Axis {
     const from = axis.from.map((map) => {
         const each = new Int32Array(size);
         for (let at = 0, run = 0; at < size; at += 1) {
-            if (axis.ends !== null && at === axis.ends[run]) run += 1;
+            if (axis.ends === null) run = at;
+            else if (at === axis.ends[run]) run += 1;
             each[at] = map === null ? run : map[run];
         }
         return each;

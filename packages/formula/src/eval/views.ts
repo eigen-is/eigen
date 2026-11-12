@@ -7,7 +7,7 @@ import { GRID_ROWS } from '../text/a1';
 import type { FormulaError } from '../values/errors';
 import { CALC } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
-import { MOST_ELEMENTS, ValueType } from '../values/value';
+import { arrayOf } from '../values/value';
 import type { Evaluator } from './evaluator';
 
 // The first error of one area, row by row, once its cells are settled. A cell on a loop still carries its flags.
@@ -56,7 +56,7 @@ export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
     const columnEnds = runs(filledColumns, across, columns);
     const height = rowEnds?.length ?? rows;
     const width = columnEnds?.length ?? columns;
-    if (!ctx.recalc.room(height * width, MOST_ELEMENTS)) return CALC;
+    if (!ctx.recalc.room(height * width)) return CALC;
     // Filled with blanks one by one and never made at its size: an array made ten thousand long or longer throws
     // the engine that runs this out of its compiled code, for every reference read after it too.
     const items: Scalar[] = [];
@@ -70,20 +70,7 @@ export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
             items[i * width + j] = held ? ctx.workbook.value(column, top + r) : null;
         }
     }
-    if (rows * columns === 1) return items[0];
-    // Not looked through for an array of numbers: what reads a range as an array reads it element by element.
-    return {
-        type: ValueType.Array,
-        rows,
-        columns,
-        height,
-        width,
-        items,
-        nums: null,
-        rowEnds,
-        columnEnds,
-        references: false,
-    };
+    return arrayOf(rows, columns, items, rowEnds, columnEnds);
 }
 
 // Where the runs of an axis of `size` end: each of the first `length` marks that is set is a run of its own, and

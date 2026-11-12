@@ -227,4 +227,26 @@ describe('the work of a marking grows with the workbook, not with its square', (
             for (let row = seeds[i]; row <= seeds[i] + 20; row += 1) rows.add(row);
         expect(workbook.sheets[0].columns[1].pending).toBe(rows.size);
     });
+
+    test('a marking flags what reads cells it does not name, and never a formula for drawing or reading the clock', () => {
+        const workbook = new Workbook([
+            {
+                id: 's',
+                name: 's',
+                cells: (cell) => {
+                    cell(0, 0, 5, null);
+                    cell(0, 1, 6, '=RC[-1]+1');
+                    cell(0, 2, 5, '=OFFSET(RC[-2],0,0)');
+                    cell(0, 3, 0.5, '=RAND()');
+                    cell(0, 4, 1, '=NOW()');
+                    cell(0, 5, 0.5, '=RC[-2]+0');
+                    cell(0, 6, 0.5, '=RAND()+RC[-6]');
+                },
+            },
+        ]);
+        const index = new ReverseIndex();
+        index.rebuild(workbook, factsOf(workbook));
+        index.mark(workbook, [0, 0, 0, 0]);
+        expect(workbook.sheets[0].columns.map((column) => column.pending)).toEqual([0, 1, 1, 0, 0, 0, 1]);
+    });
 });

@@ -10,7 +10,7 @@ import { NodeKind } from '../text/tree';
 import type { FormulaError } from '../values/errors';
 import { CALC, NA, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
-import { arrayOf, isArray, isError, isReference, MOST_ELEMENTS } from '../values/value';
+import { arrayOf, isArray, isError, isReference } from '../values/value';
 import type { Axis } from './bands';
 import { align, apart } from './bands';
 import { ends, isLazy, picked, read, run, slotOf } from './call';
@@ -53,6 +53,8 @@ export function lift(
             const result = failed ?? run(ctx, entry, frame.held, count);
             // Of an element that answers an array, the first value: ROW of a range of three rows is its first row.
             const item = isLazy(result) ? null : isArray(result) ? result.items[0] : result;
+            // A text takes its length in memory, where another element takes one place.
+            if (typeof item === 'string' && !ctx.recalc.room(item.length)) return CALC;
             if (isLazy(result)) picks[items.length] = result;
             items.push(item);
             references ||= isReference(item);
@@ -62,10 +64,8 @@ export function lift(
     return picks.length === 0 || !isArray(made) ? made : fill(ctx, entry, made, picks, node, sheet, row, column);
 }
 
-// A call of a row whose arguments come in groups that are tried in turn, such as IFS and SWITCH. A group is
-// evaluated only while an element is still undecided, and the body says for one element and one group what the
-// element answers, which lazy argument it picks, or NEXT. So the first group that decides a call hides every later
-// one, its errors and its arrays included, and the shape of the answer grows with the groups that are reached.
+// A call of a row whose groups of arguments are tried in turn, such as IFS and SWITCH. A group is evaluated only
+// while an element is undecided, so the first group that decides a call hides every later one, errors included.
 export function step(
     ctx: Evaluator,
     entry: Entry,
@@ -171,8 +171,8 @@ type Lined = { readonly rows: number; readonly columns: number; readonly down: A
 
 const ONE: Axis = { count: 1, ends: null, from: [] };
 
-// The shape of an operation over these arrays and how each of them runs along it, or null when the result would
-// store more than an array may. `apiece` cuts every run into single elements.
+// The shape of an operation over these arrays and how each of them runs along it, or null when the formula has
+// no room to store the result. `apiece` cuts every run into single elements.
 function lineUp(ctx: Evaluator, arrays: readonly ArrayValue[], apiece: boolean): Lined | null {
     let rows = 1;
     let columns = 1;
@@ -185,12 +185,10 @@ function lineUp(ctx: Evaluator, arrays: readonly ArrayValue[], apiece: boolean):
     const down = align(arrays, rows, true);
     const across = align(arrays, columns, false);
     // A row that answers anew at every call makes each written element by a call of its own.
-    if (apiece && ctx.recalc.room(rows * columns, MOST_ELEMENTS)) {
+    if (apiece && ctx.recalc.room(rows * columns)) {
         return { rows, columns, down: apart(down, rows), across: apart(across, columns) };
     }
-    return !apiece && ctx.recalc.room(down.count * across.count, MOST_ELEMENTS)
-        ? { rows, columns, down, across }
-        : null;
+    return !apiece && ctx.recalc.room(down.count * across.count) ? { rows, columns, down, across } : null;
 }
 
 // Where array `k` stores its element for a run of rows and a run of columns, or -1 past its end.

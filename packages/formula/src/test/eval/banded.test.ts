@@ -47,6 +47,44 @@ describe('an array costs the cells that exist, wherever they lie', () => {
         expect(performance.now() - started).toBeLessThan(2000);
     });
 
+    test('a range is walked over the cells that exist: one at the last row and one at the last column', () => {
+        const engine = engineOf({
+            s1: { A1: '=SUM(Sheet2!A1:XFD1048576)', A2: '=COUNTA(Sheet2!A1:XFD1048576)' },
+            s2: { A1048576: 3, XFD1: 4 },
+        });
+        const started = performance.now();
+        engine.recalc(ALL);
+        expect(valueAt(engine, 'A1')).toBe(7);
+        expect(valueAt(engine, 'A2')).toBe(2);
+        expect(performance.now() - started).toBeLessThan(2000);
+    });
+
+    test('columns of different lengths are walked row by row, each as far as it goes', () => {
+        const lengths = [5, 0, 9, 2, 9, 1, 7, 3];
+        const cells: Record<string, Literal> = {};
+        const rows: number[][] = [];
+        for (let row = 0; row < 9; row += 1) {
+            rows.push([]);
+            for (let c = 0; c < lengths.length; c += 1) {
+                if (row >= lengths[c]) continue;
+                cells[label(row, c + 1)] = 0.1 * (row * 8 + c + 1);
+                rows[row].push(0.1 * (row * 8 + c + 1));
+            }
+        }
+        const sum = (from: number) => rows.slice(from).reduce((all, row) => row.reduce((a, b) => a + b, all), 0);
+        const count = (from: number) => rows.slice(from).reduce((all, row) => all + row.length, 0);
+        expect(evaluate('=SUM(B1:I9,0)', cells)).toBe(sum(0));
+        expect(evaluate('=SUM(B3:I1048576,0)', cells)).toBe(sum(2));
+        expect(evaluate('=SUM(B8:XFD9,0)', cells)).toBe(sum(7));
+        expect(evaluate('=COUNT(B1:I9)', cells)).toBe(count(0));
+        expect(evaluate('=COUNT(A6:I9)', cells)).toBe(count(5));
+        expect(evaluate('=MAX(C1:E9)', cells)).toBe(0.1 * (8 * 8 + 3));
+        expect(evaluate('=SUBTOTAL(9,B1:I9)+0', cells)).toBe(sum(0));
+        expect(evaluate('=SUM(B10:I20)', cells)).toBe(0);
+        // A wide array first, then a range as wide: the walk of the one leaves room for the other.
+        expect(evaluate('=SUM(A1:T2*2,A1:T2)', { A1: 1, T1: 2, K2: 4 }, 'Z1')).toBe(21);
+    });
+
     test('the whole sheet as an array, with nothing on it', () => {
         expect(evaluate('=SUM(--(Sheet2!A1:XFD1048576=""))')).toBe(2 ** 34 - 1);
         expect(evaluate('=SUM(0.5,--(Sheet2!A1:XFD1048576=""))')).toBe(2 ** 34 - 0.5);
@@ -286,22 +324,22 @@ describe('the bound on what one array stores', () => {
             cells[label(0, i + 1)] = 1;
         }
         const engine = engineOf({
-            s1: { A1: '=SUM(Sheet2!A:A+Sheet2!B1:XFD1)', A2: `=SUM(Sheet2!A1:A4096+Sheet2!B1:${label(0, 4096)})` },
+            s1: { A1: '=SUM(Sheet2!A:A+Sheet2!B1:XFD1)', A2: `=SUM(Sheet2!A1:A4000+Sheet2!B1:${label(0, 4000)})` },
             s2: cells,
         });
         engine.recalc(ALL);
         expect(valueAt(engine, 'A1')).toBe(CALC);
-        expect(valueAt(engine, 'A2')).toBe(2 * 4096 * 4096);
+        expect(valueAt(engine, 'A2')).toBe(2 * 4000 * 4000);
     });
 
-    test('a row of different numbers is added for at most 2^27 unstored cells', () => {
+    test('a row of different numbers is added for at most 2^24 cells that no array stores', () => {
         const row: Record<string, Literal> = {};
-        for (let i = 0; i < 200; i += 1) row[label(0, i + 1)] = i % 2 === 0 ? 0.1 : 0.7;
-        const few = Object.fromEntries(Object.entries(row).slice(0, 100));
+        for (let i = 0; i < 20; i += 1) row[label(0, i + 1)] = i % 2 === 0 ? 0.1 : 0.7;
+        const few = Object.fromEntries(Object.entries(row).slice(0, 10));
         const engine = engineOf({
             s1: {
-                A1: `=SUM((Sheet2!A:A="")*Sheet2!B1:${label(0, 200)})`,
-                A2: `=SUM((Data!A:A="")*Data!B1:${label(0, 100)})`,
+                A1: `=SUM((Sheet2!A:A="")*Sheet2!B1:${label(0, 20)})`,
+                A2: `=SUM((Data!A:A="")*Data!B1:${label(0, 10)})`,
                 A3: '=A2+A1',
             },
             s2: row,
@@ -311,8 +349,54 @@ describe('the bound on what one array stores', () => {
         expect(valueAt(engine, 'A1')).toBe(CALC);
         expect(valueAt(engine, 'A3')).toBe(CALC);
         let sum = 0;
-        for (let r = 0; r < 1048576; r += 1) for (let i = 0; i < 50; i += 1) sum = sum + 0.1 + 0.7;
+        for (let r = 0; r < 1048576; r += 1) for (let i = 0; i < 5; i += 1) sum = sum + 0.1 + 0.7;
         expect(valueAt(engine, 'A2')).toBe(sum);
+    });
+
+    // A million stored elements, and three million additions for cells that no array stores.
+    const stored = 'SUM(ROW(A1:A1048576))';
+    const added = 'SUM({1,2,3}*(B1:B1048576=""))';
+    const of = (count: number, part: string) => Array.from({ length: count }, () => part).join('+');
+
+    test('the bound is on all that one formula makes, and what another formula made does not count', () => {
+        const engine = engineOf({
+            s1: {
+                A1: `=${of(17, stored)}`,
+                A2: `=${of(15, stored)}`,
+                A3: `=${of(15, stored)}`,
+                A4: `=${of(6, added)}`,
+                A5: `=${of(5, added)}`,
+                A6: `=${of(3, added)}+${of(8, stored)}`,
+                A7: `=${of(3, added)}+${of(6, stored)}`,
+            },
+        });
+        expect(engine.recalc(ALL)).toEqual({ loops: [], stopped: false });
+        const million = (1048576 * 1048577) / 2;
+        expect(valueAt(engine, 'A1')).toBe(CALC);
+        expect(valueAt(engine, 'A2')).toBe(15 * million);
+        expect(valueAt(engine, 'A3')).toBe(15 * million);
+        expect(valueAt(engine, 'A4')).toBe(CALC);
+        expect(valueAt(engine, 'A5')).toBe(5 * 6 * 1048576);
+        expect(valueAt(engine, 'A6')).toBe(CALC);
+        expect(valueAt(engine, 'A7')).toBe(3 * 6 * 1048576 + 6 * million);
+    });
+
+    test('a text that a call made for an element counts by its characters', () => {
+        const engine = engineOf({
+            s1: {
+                A1: 'a'.repeat(20000),
+                A2: '=SUM(LEN(ROW(B1:B1000)&A1))',
+                A3: '=SUM(LEN(ROW(B1:B700)&A1))',
+                A4: '=SUM(LEN(UPPER(IF(ROW(B1:B1000),A1))))',
+                A5: '=SUM(LEN(IF(ROW(B1:B1000),A1)))',
+            },
+        });
+        expect(engine.recalc(ALL)).toEqual({ loops: [], stopped: false });
+        expect(valueAt(engine, 'A2')).toBe(CALC);
+        expect(valueAt(engine, 'A3')).toBe(700 * 20000 + 9 + 90 * 2 + 601 * 3);
+        expect(valueAt(engine, 'A4')).toBe(CALC);
+        // One text that every element picked is stored once.
+        expect(valueAt(engine, 'A5')).toBe(1000 * 20000);
     });
 });
 
