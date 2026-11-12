@@ -4,13 +4,14 @@
 
 import { useUploadFiles } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { ReactNode } from 'react';
 import { useRef } from 'react';
 import { useUpload } from '../upload-provider/upload-provider';
 
 export function useDriveUploadFiles(
     folder: DrivePath | null,
     onAfterAction?: (actionType: string, data: Record<string, unknown>) => void,
-) {
+): { pickFiles: () => void; upload: (files: File[]) => void; input: ReactNode } {
     const inputRef = useRef<HTMLInputElement>(null);
     const uploads = useUpload();
     const { mutateAsync: uploadFiles } = useUploadFiles();

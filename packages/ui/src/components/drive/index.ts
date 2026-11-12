@@ -21,3 +21,4 @@ export * from './file-presentation';
 export * from './progress-dialog';
 export * from './save-to-drive-picker';
 export * from './use-document-export';
+export * from './use-drive-upload-files';
