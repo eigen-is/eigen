@@ -757,7 +757,7 @@ export class Drive {
     }
 
     // Trashes what holds the name in the folder. A name is compared without case, so `path`, the one being moved or
-    // copied, can hold it itself, and then it stays.
+    // copied, can hold it itself, and then it stays. A folder `path` is in would take `path` to the trash with it.
     private async trashOccupant(
         mount: Mount,
         parentId: string,
@@ -766,7 +766,11 @@ export class Drive {
         user: User,
     ): Promise<void> {
         const occupant = await mount.getChildByName(parentId, name);
-        if (occupant && occupant.id !== path.id) await this.deletePath(mount.id, occupant.id, user);
+        if (!occupant || occupant.id === path.id) return;
+        if (await mount.isSelfOrDescendant(occupant.id, path.id)) {
+            throw new ApiError(409, 'Cannot replace a folder with a path inside it');
+        }
+        await this.deletePath(mount.id, occupant.id, user);
     }
 
     private async writeCopy(

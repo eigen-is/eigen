@@ -119,6 +119,46 @@ describe('WebDAV MOVE/COPY', () => {
         expect(await after.text()).toBe('keep');
     });
 
+    // A name is found without case, so the destination of such a rename resolves to the source itself.
+    test('MOVE that only changes the case of the name renames the file', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/case-only.txt`, { body: 'keep' });
+        const res = await webdavRequest(ctx.alice.user.email, 'MOVE', `${baseHref}/case-only.txt`, {
+            headers: { Destination: `http://localhost${baseHref}/Case-Only.txt` },
+        });
+        expect(res.status).toBe(201);
+        const { drive } = await getHome(ctx.alice.user.id);
+        expect((await drive.resolvePath(mountId, '/case-only.txt'))?.name).toBe('Case-Only.txt');
+        expect((await drive.listTrash(mountId)).map((path) => path.name.toLowerCase())).not.toContain('case-only.txt');
+        const after = await webdavRequest(ctx.alice.user.email, 'GET', `${baseHref}/Case-Only.txt`);
+        expect(await after.text()).toBe('keep');
+    });
+
+    test('COPY that only changes the case of the name → 409 and the file is untouched', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/case-copy.txt`, { body: 'keep' });
+        const res = await webdavRequest(ctx.alice.user.email, 'COPY', `${baseHref}/case-copy.txt`, {
+            headers: { Destination: `http://localhost${baseHref}/Case-Copy.txt` },
+        });
+        expect(res.status).toBe(409);
+        const { drive } = await getHome(ctx.alice.user.id);
+        expect((await drive.resolvePath(mountId, '/Case-Copy.txt'))?.name).toBe('case-copy.txt');
+    });
+
+    for (const verb of ['MOVE', 'COPY']) {
+        test(`${verb} over a folder the source is in → 409 and both stay`, async () => {
+            await webdavRequest(ctx.alice.user.email, 'MKCOL', `${baseHref}/Over${verb}/`);
+            await webdavRequest(ctx.alice.user.email, 'MKCOL', `${baseHref}/Over${verb}/b/`);
+            await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/Over${verb}/b/x.txt`, { body: 'keep' });
+            const res = await webdavRequest(ctx.alice.user.email, verb, `${baseHref}/Over${verb}/b/x.txt`, {
+                headers: { Destination: `http://localhost${baseHref}/Over${verb}/b`, Overwrite: 'T' },
+            });
+            expect(res.status).toBe(409);
+            const after = await webdavRequest(ctx.alice.user.email, 'GET', `${baseHref}/Over${verb}/b/x.txt`);
+            expect(`${after.status} ${await after.text()}`).toBe('200 keep');
+            const { drive } = await getHome(ctx.alice.user.id);
+            expect((await drive.listTrash(mountId)).map((path) => path.name)).not.toContain('b');
+        });
+    }
+
     test('COPY onto its own URL → 403 and the file is untouched', async () => {
         await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/copy-self.txt`, { body: 'keep' });
         const res = await webdavRequest(ctx.alice.user.email, 'COPY', `${baseHref}/copy-self.txt`, {

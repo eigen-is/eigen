@@ -14,7 +14,7 @@ import type { User } from '../user';
 import { assertWritable } from './locks';
 import { decodeHref, splitParentAndName } from './path';
 
-export async function handleMove(args: {
+type MoveCopyArgs = {
     user: User;
     ownerId: string;
     mountId: string;
@@ -23,11 +23,10 @@ export async function handleMove(args: {
     destinationHeader: string | null;
     overwrite: boolean;
     ifHeader: string | null;
-}): Promise<Response> {
-    const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy({
-        ...args,
-        verb: 'MOVE',
-    });
+};
+
+export async function handleMove(args: MoveCopyArgs): Promise<Response> {
+    const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy(args, 'MOVE');
 
     await drive.movePathOver(args.mountId, src.id, destParent.id, newName, args.user);
     // RFC 4918 §7.7: a lock does not move with its resource. Left in place, it would hold the Home
@@ -36,21 +35,8 @@ export async function handleMove(args: {
     return new Response(null, { status: destExisting ? 204 : 201 });
 }
 
-export async function handleCopy(args: {
-    user: User;
-    ownerId: string;
-    mountId: string;
-    pathStr: string;
-    requestUrl: string;
-    destinationHeader: string | null;
-    overwrite: boolean;
-    ifHeader: string | null;
-    depth: '0' | '1' | 'infinity';
-}): Promise<Response> {
-    const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy({
-        ...args,
-        verb: 'COPY',
-    });
+export async function handleCopy(args: MoveCopyArgs & { depth: '0' | '1' | 'infinity' }): Promise<Response> {
+    const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy(args, 'COPY');
 
     return await drive.withHomeHeld(async () => {
         // RFC 4918 §9.8.3: Depth: 0 on a folder copies the folder without its members. A file has none.
@@ -72,18 +58,8 @@ type Resolved = {
     newName: string;
 };
 
-async function resolveMoveCopy(args: {
-    user: User;
-    ownerId: string;
-    mountId: string;
-    pathStr: string;
-    requestUrl: string;
-    destinationHeader: string | null;
-    overwrite: boolean;
-    ifHeader: string | null;
-    verb: 'MOVE' | 'COPY';
-}): Promise<Resolved> {
-    const { user, ownerId, mountId, pathStr, requestUrl, destinationHeader, overwrite, ifHeader, verb } = args;
+async function resolveMoveCopy(args: MoveCopyArgs, verb: 'MOVE' | 'COPY'): Promise<Resolved> {
+    const { user, ownerId, mountId, pathStr, requestUrl, destinationHeader, overwrite, ifHeader } = args;
     if (!destinationHeader) throw new ApiError(400, 'Missing Destination');
     const dest = parseDestination(destinationHeader, requestUrl);
     if (dest.ownerId !== ownerId) throw new ApiError(502, `Cross-owner ${verb}s not supported`);
@@ -98,13 +74,19 @@ async function resolveMoveCopy(args: {
     // needs only the resolve above.
     if (verb === 'MOVE') assertWritable(drive.lockManager, await drive.breadCrumb(mountId, src.id), ifHeader, user.id);
 
-    const destExisting = await drive.resolvePath(mountId, dest.pathStr);
-    // RFC 4918 §9.8.5 and §9.9.4: the same source and destination is a 403.
-    if (destExisting?.id === src.id) throw new ApiError(403, 'Source and destination are the same');
-    if (destExisting && !overwrite) throw new ApiError(412, 'Destination exists, no overwrite');
-
     const { parentStr: destParentStr, name: newName } = splitParentAndName(dest.pathStr);
     if (!newName) throw new ApiError(400, 'Destination name missing');
+
+    // A name is found without case, so a destination that differs from the source only in case finds the source
+    // itself. That is a rename with nothing in its way, as Finder sends one.
+    const found = await drive.resolvePath(mountId, dest.pathStr);
+    const isSource = found?.id === src.id;
+    // RFC 4918 §9.8.5 and §9.9.4: the same source and destination is a 403.
+    if (isSource && newName.normalize('NFC') === src.name) {
+        throw new ApiError(403, 'Source and destination are the same');
+    }
+    const destExisting = isSource ? null : found;
+    if (destExisting && !overwrite) throw new ApiError(412, 'Destination exists, no overwrite');
 
     const destParent = await drive.resolvePath(mountId, destParentStr);
     if (!destParent) throw new ApiError(409, 'Destination parent not found');
