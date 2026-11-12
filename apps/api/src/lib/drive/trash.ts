@@ -6,7 +6,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isContainerType } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { ApiError } from '../core';
 import type { Mount } from '../mount';
 import type { User } from '../user';
 import type { Drive } from './drive';
@@ -41,9 +40,10 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
 
 export async function restorePath(drive: Drive, mount: Mount, pathId: string, user: User): Promise<void> {
     const restoredItem = await mount.restorePath(pathId);
-    drive.emit(SSEventType.DRIVE_PATH_RESTORED, restoredItem);
+    const members = drive.membersToTell(mount.id, pathId);
+    drive.emit(SSEventType.DRIVE_PATH_RESTORED, restoredItem, { members });
     // recordFileEvent reads the path again, so it walks the parent chain of the restored path.
-    await drive.recordFileEvent(mount.id, pathId, user, { eventType: 'restored' });
+    await drive.recordFileEvent(mount.id, pathId, user, { eventType: 'restored' }, { members });
 }
 
 // Returns false when the item is gone or no longer in trash by the time the delete holds its lock.
@@ -52,14 +52,10 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
     // the events and the notices of a delete of its own.
     const roots = isContainerType(item.type) ? [item, ...(await mount.listTrashRootsInside(item.id))] : [item];
     const notices = await Promise.all(roots.map((root) => readDeleteNotice(mount, root, user)));
-    // The delete takes the path that the members are read from. Everything here is in the trash, which
-    // only the owner, or a team's members, can see, so one read serves every root. The item can be gone
-    // already, taken by the delete of a folder around it, and then there is nobody to tell. Any other
-    // failed read costs only the members' events, so it is logged and the delete goes on.
-    const members = await drive.getEffectiveMembers(mount.id, item.id).catch((error: unknown) => {
-        if (!(error instanceof ApiError && error.status === 404)) {
-            console.error(`Failed to read the members of ${item.id} before its delete:`, error);
-        }
+    // The delete takes the path that the members are read from. Everything here is in the trash, which only the
+    // owner, or a team's members, can see, so one read serves every root. A failed read costs only their events.
+    const members = await drive.membersToTell(mount.id, item.id).catch((error: unknown) => {
+        console.error(`Failed to read the members of ${item.id} before its delete:`, error);
         return [];
     });
 
@@ -105,7 +101,7 @@ export async function deleteFailedCopy(
 
 // Deletes a live path without the trash, such as the source of a move whose bytes went into the file it replaced.
 export async function deleteForGood(drive: Drive, mount: Mount, item: DrivePath): Promise<void> {
-    const members = await drive.getEffectiveMembers(mount.id, item.id);
+    const members = await drive.membersToTell(mount.id, item.id);
     // A document opened under the path between this close and the delete loses its database under the editor,
     // which logs until its socket's read check closes it. The path goes for good either way.
     await closeOpenDocumentsUnder(drive, mount, item.id);

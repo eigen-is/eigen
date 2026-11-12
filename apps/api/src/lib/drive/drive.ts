@@ -324,8 +324,9 @@ export class Drive {
         const pathId = await mount.createFolder(parentId, folderName);
         const folder = await mount.getPath(pathId);
         if (!folder) throw new ApiError(500, 'Failed to create folder');
-        this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder);
-        await this.recordFileEvent(mountId, folder.id, user, { eventType: 'created' }, { burst: true });
+        const members = this.membersToTell(mountId, folder.id);
+        this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder, { members });
+        await this.recordFileEvent(mountId, folder.id, user, { eventType: 'created' }, { burst: true, members });
         return folder;
     }
 
@@ -361,9 +362,10 @@ export class Drive {
         }
         const created = await mount.getPath(pathId);
         if (!created) throw new ApiError(500, `Failed to create ${type}`);
-        this.emit(SSEventType.DRIVE_FILE_CREATED, created);
+        const members = this.membersToTell(mountId, created.id);
+        this.emit(SSEventType.DRIVE_FILE_CREATED, created, { members });
         // Not a burst: a single new document gets its own notification.
-        await this.recordFileEvent(mountId, created.id, user, { eventType: 'created' });
+        await this.recordFileEvent(mountId, created.id, user, { eventType: 'created' }, { members });
         return created;
     }
 
@@ -506,12 +508,14 @@ export class Drive {
 
         // The file can be deleted or trashed right after the write. That is a 404, the same as during it.
         const updated = await mount.getActivePath(pathId);
-        this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
+        const members = this.membersToTell(mountId, pathId);
+        this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated, { members });
         await this.recordFileEvent(
             mountId,
             pathId,
             user,
             event === 'edited' ? { eventType: 'edited' } : { eventType: 'uploaded', details: { size: updated.size } },
+            { members },
         );
         return { path: committed, etag: computeEtag(committed) };
     }
@@ -601,11 +605,11 @@ export class Drive {
             thumbnailInBackground(this, mount, updated, tempId, () => mount.downloadToTemp(path.id, tempId));
             mount.markContentDirty(path.id);
         }
-        const newMembers = newParentId ? this.membersToTell(mount.id, path.id) : undefined;
-        if (newMembers) {
+        const members = this.membersToTell(mount.id, path.id);
+        if (newParentId) {
             this.emit(SSEventType.DRIVE_PATH_MOVED, updated, {
                 oldParentId,
-                members: newMembers.then((members) => [...oldMembers, ...members]),
+                members: members.then((reached) => [...oldMembers, ...reached]),
             });
         }
         if (newParentId && oldParentId) {
@@ -620,12 +624,12 @@ export class Drive {
                 details,
                 verifyAncestors: [...oldChain, ...(await mount.getBreadcrumb(path.id))],
             });
-            this.broadcastHistoryUpdated(mount.id, updated, newMembers);
+            this.broadcastHistoryUpdated(mount.id, updated, members);
         }
         if (to.name !== undefined) {
-            this.emit(SSEventType.DRIVE_PATH_RENAMED, updated);
+            this.emit(SSEventType.DRIVE_PATH_RENAMED, updated, { members });
             const details = { oldName: path.name, newName: updated.name };
-            await this.recordFileEvent(mount.id, path.id, user, { eventType: 'renamed', details });
+            await this.recordFileEvent(mount.id, path.id, user, { eventType: 'renamed', details }, { members });
         }
         return updated;
     }
@@ -743,9 +747,11 @@ export class Drive {
         const copied = copy.path;
         // The copy shows once, when it is whole. Only its top fans out too: everything under it is new, so nobody
         // watches it yet.
+        const members = this.membersToTell(mount.id, copied.id);
         this.emit(
             isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,
             copied,
+            { members },
         );
         await mount.history.fanOut({
             eventType: 'copied',
@@ -755,7 +761,7 @@ export class Drive {
             burst: true,
             verifyAncestors: await mount.getBreadcrumb(copied.id),
         });
-        this.broadcastHistoryUpdated(mount.id, copied);
+        this.broadcastHistoryUpdated(mount.id, copied, members);
         return copied;
     }
 
@@ -878,14 +884,19 @@ export class Drive {
             if (sharingRestricted !== undefined) updates.sharingRestricted = sharingRestricted;
             const oldACL = item.acl;
             const updatedItem = await mount.updatePath(pathId, updates);
-            this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
+            const members = this.membersToTell(mountId, pathId);
+            this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem, { members });
             if (actor) {
                 const { added, removed } = diffACLPrincipals(oldACL, normalizedACL);
                 if (added.length || removed.length) {
-                    await this.recordFileEvent(mountId, pathId, actor, {
-                        eventType: 'acl-changed',
-                        details: { added, removed },
-                    });
+                    const details = { added, removed };
+                    await this.recordFileEvent(
+                        mountId,
+                        pathId,
+                        actor,
+                        { eventType: 'acl-changed', details },
+                        { members },
+                    );
                 }
             }
             // The homes of the people it is shared with hear last, as that reaches other homes.
@@ -1135,7 +1146,12 @@ export class Drive {
         pathId: string,
         actor: User,
         event: FileEventRecord,
-        opts?: { excludeEmails?: Set<string>; dedupeWindowMs?: number; burst?: boolean },
+        opts?: {
+            excludeEmails?: Set<string>;
+            dedupeWindowMs?: number;
+            burst?: boolean;
+            members?: Promise<EffectiveMember[]>;
+        },
     ): Promise<void> {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
@@ -1151,7 +1167,7 @@ export class Drive {
             details: event.details,
             verifyAncestors: () => mount.getBreadcrumb(pathId),
         });
-        this.broadcastHistoryUpdated(mountId, path);
+        this.broadcastHistoryUpdated(mountId, path, opts?.members);
     }
 
     public async recordClientFileEvent(

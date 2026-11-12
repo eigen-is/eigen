@@ -85,12 +85,11 @@ describe('emptyTrash', () => {
         expect(await mount.getPath(deleted)).toBeNull();
     });
 
-    // An item a folder delete took has no members to read, and that is expected. Any other failed read
-    // costs only the event, so the delete still goes, but it is logged.
-    test('a failed members read other than a gone item is logged, and the delete still goes', async () => {
+    // A failed read costs only the event, so the delete still goes, but it is logged.
+    test('a failed members read is logged, and the delete still goes', async () => {
         const file = await createFile(rootId, 'logged.txt');
         await home.drive.deletePath(mount.id, file, home.user);
-        const members = spyOn(home.drive, 'getEffectiveMembers').mockRejectedValue(new Error('auth db unavailable'));
+        const members = spyOn(home.drive, 'membersToTell').mockRejectedValue(new Error('auth db unavailable'));
         const errors = spyOn(console, 'error').mockImplementation(() => {});
         try {
             await home.drive.permanentlyDelete(mount.id, file, home.user);
