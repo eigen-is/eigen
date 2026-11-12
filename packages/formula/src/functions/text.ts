@@ -45,7 +45,7 @@ const UNSEEN = /[^\P{Cc}\x7f]/gu;
 function fixed(number: number, decimals: number, grouped: boolean) {
     if (decimals > MOST_DECIMALS) return VALUE;
     const text = fixedText(roundDecimal(number, decimals), decimals, grouped);
-    return countCharacters(text) > LONGEST_FIXED ? VALUE : text;
+    return text.length > LONGEST_FIXED ? VALUE : text;
 }
 
 // TEXTBEFORE and TEXTAFTER. An instance that was written is refused when the text has no room for that many
@@ -73,11 +73,11 @@ function beside(after: boolean) {
 
 export const TEXT_FUNCTIONS = [
     // What is past the longest text is cut off, where CONCAT refuses.
-    fn('CONCATENATE', [rest(TEXT)], (texts) => cutCharacters(texts.join(''), 0, LONGEST_TEXT)),
+    fn('CONCATENATE', [rest(TEXT)], (texts) => texts.join('').slice(0, LONGEST_TEXT)),
     fn('CONCAT', [rest(TEXTS)], (texts) => {
         let joined = '';
         for (const text of texts) {
-            if (countCharacters(joined) + countCharacters(text) > LONGEST_TEXT) return CALC;
+            if (joined.length + text.length > LONGEST_TEXT) return CALC;
             joined += text;
         }
         return joined;
@@ -89,8 +89,7 @@ export const TEXT_FUNCTIONS = [
         let count = 0;
         for (const text of texts) {
             const delimiter = count === 0 ? '' : delimiters[(count - 1) % delimiters.length];
-            const length = countCharacters(joined) + countCharacters(delimiter) + countCharacters(text);
-            if (length > LONGEST_TEXT) return CALC;
+            if (joined.length + delimiter.length + text.length > LONGEST_TEXT) return CALC;
             if (skip && text === '') continue;
             joined += delimiter + text;
             count += 1;
@@ -128,10 +127,10 @@ export const TEXT_FUNCTIONS = [
         for (let at = findCharacters(old, text, 1); at > 0; at = findCharacters(old, text, at + step)) {
             seen += 1;
             if (instance !== undefined && seen < Math.trunc(instance)) continue;
-            const between = at - 1 - kept;
+            const piece = cutCharacters(text, kept, at - 1 - kept) + put;
             // The longest text times itself is more than a string can hold on Node.
-            if (countCharacters(result) + between + countCharacters(put) > LONGEST_TEXT) return VALUE;
-            result += cutCharacters(text, kept, between) + put;
+            if (result.length + piece.length > LONGEST_TEXT) return VALUE;
+            result += piece;
             kept = at - 1 + width;
             if (instance !== undefined) break;
         }
@@ -149,7 +148,7 @@ export const TEXT_FUNCTIONS = [
             : searchCharacters(sought, text, Math.trunc(start)) || VALUE,
     ),
     fn('REPT', [TEXT, NUMBER], (text, count) =>
-        count < 0 || countCharacters(text) * Math.trunc(count) > LONGEST_TEXT ? VALUE : text.repeat(Math.trunc(count)),
+        count < 0 || text.length * Math.trunc(count) > LONGEST_TEXT ? VALUE : text.repeat(Math.trunc(count)),
     ),
     fn('EXACT', [TEXT, TEXT], (one, other) => one === other),
     fn('LEN', [TEXT], countCharacters),

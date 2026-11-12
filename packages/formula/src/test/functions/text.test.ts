@@ -272,6 +272,19 @@ describe('joining', () => {
     ]);
 });
 
+// Excel's own answers, batch 20 part C: the longest text counts UTF-16 units in Excel too, whatever LEN counts.
+describe('the longest text is 32,767 UTF-16 units', () => {
+    rows('an emoji takes two of them', [
+        ['=ISTEXT(REPT(UNICHAR(128512),16383))', true],
+        ['=REPT(UNICHAR(128512),16384)', VALUE],
+        ['=ISTEXT(CONCAT(REPT("a",32765),UNICHAR(128512)))', true],
+        ['=CONCAT(REPT("a",32766),UNICHAR(128512))', CALC],
+        ['=TEXTJOIN("",TRUE,REPT("a",32766),UNICHAR(128512))', CALC],
+        ['=ISTEXT(SUBSTITUTE(REPT("a",32766),"a",UNICHAR(128512),1))', true],
+        ['=SUBSTITUTE(REPT("a",32767),"a",UNICHAR(128512),1)', VALUE],
+    ]);
+});
+
 describe('characters and their codes', () => {
     rows('CHAR and CODE', [
         ['=CHAR(65.9)', 'A'],
