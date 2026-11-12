@@ -9,7 +9,8 @@ import { AppError } from '../api-error';
 
 export type UploadOptions = { onProgress?: (percent: number) => void; signal?: AbortSignal };
 
-const DATE_FIELDS = new Set(['createdAt', 'updatedAt', 'trashedAt']);
+// XHR has no Eden reviver, so the reply's timestamps come back as strings until this revives each, as Eden does.
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
 export function uploadFiles(
     ownerId: string,
@@ -30,12 +31,14 @@ export function uploadFiles(
         };
         xhr.onload = () => {
             if (xhr.status < 200 || xhr.status >= 300) {
-                reject(new AppError({ status: xhr.status, error: { status: xhr.status, value: bodyOf(xhr) } }));
+                // An ApiError answers plain text and a rejected schema answers JSON, and AppError reads either.
+                const isJson = xhr.getResponseHeader('content-type')?.includes('application/json');
+                const value: unknown = isJson ? JSON.parse(xhr.responseText) : xhr.responseText;
+                reject(new AppError({ status: xhr.status, error: { status: xhr.status, value } }));
                 return;
             }
-            // XHR has no Eden reviver, so the dates come back as strings until this one revives them.
-            const paths: DrivePath[] = JSON.parse(xhr.responseText, (key, value) =>
-                DATE_FIELDS.has(key) && typeof value === 'string' ? new Date(value) : value,
+            const paths: DrivePath[] = JSON.parse(xhr.responseText, (_key, value) =>
+                typeof value === 'string' && ISO_TIMESTAMP.test(value) ? new Date(value) : value,
             );
             resolve(paths);
         };
@@ -44,10 +47,4 @@ export function uploadFiles(
         signal?.addEventListener('abort', () => xhr.abort(), { once: true });
         xhr.send(formData);
     });
-}
-
-// An ApiError answers plain text and a rejected schema answers JSON, and AppError reads a message from either.
-function bodyOf(xhr: XMLHttpRequest): unknown {
-    const isJson = xhr.getResponseHeader('content-type')?.includes('application/json');
-    return isJson ? JSON.parse(xhr.responseText) : xhr.responseText;
 }
