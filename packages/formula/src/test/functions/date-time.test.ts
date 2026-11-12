@@ -66,10 +66,24 @@ describe('DATE', () => {
         ['=DATE(2024,2,32767)', 78089],
         ['=DATE(2024,2,32768)', 78089],
         ['=DATE(2024,3,D1)', 78118],
-        // More days than the calendar has reach no date, and a month is a 16-bit number short of both its ends.
-        ['=DATE(2024,1,A5)', NUM],
-        ['=DATE(2024,1,3652059)', 78058],
-        ['=DATE(2024,1,3652060)', NUM],
+        // Excel batch 13, part 2d: a day that is no 16-bit number is the largest of them, on either side, and a
+        // month is a 16-bit number short of both its ends.
+        ['=DATE(2024,1,32767)', 78058],
+        ['=DATE(2024,1,32768)', 78058],
+        ['=DATE(2024,1,45351)', 78058],
+        ['=DATE(2024,1,100000)', 78058],
+        ['=DATE(2024,1,3000000)', 78058],
+        ['=DATE(2024,1,1E+10)', 78058],
+        ['=DATE(2024,1,1E+300)', 78058],
+        ['=DATE(2024,1,A5)', 78058],
+        ['=DATE(2024,1,-32768)', 12523],
+        ['=DATE(2024,1,-32769)', 78058],
+        ['=DATE(2024,1,-100000)', 78058],
+        ['=DATE(2024,32767,1)', NUM],
+        ['=DATE(2024,32768,1)', NUM],
+        ['=DATE(2024,-32767,1)', NUM],
+        ['=DATE(2024,-32768,1)', NUM],
+        ['=DATE(9999,-32767,1)', 1960745],
         ['=DATE(2024,32766,15)', 1042569],
         ['=DATE(9999,-32768,1)', NUM],
         ['=DATE(9999,-32767.5,1)', NUM],
@@ -109,9 +123,14 @@ describe('TIME', () => {
         ['=TIME(0,0,-0.4)', NUM],
         ['=TIME(1.5,1.5,1.5)', 0.0423726851851852],
         ['=TIME(1E+300,0,0)', NUM],
-        // A part is a 16-bit number: below the smallest of them it comes round to the largest.
+        // Excel batch 13, part 2d: a part past the largest 16-bit number is refused, and one below the smallest
+        // comes round as a 16-bit number does, as often as it takes.
+        ['=TIME(65536,0,0)', NUM],
+        ['=TIME(0,-32768,0)', NUM],
         ['=TIME(0,32767,0)', 0.754861111111111],
         ['=TIME(24,-32769,0)', 0.754861111111111],
+        ['=TIME(24,-98305,0)', 0.754861111111111],
+        ['=TIME(600,-32768,0)', 0.244444444444444],
         ['=TIME(0,0,-32769.5)', 0.379236111111111],
         ['=TIME(24,-32768,0)', NUM],
     ]);
@@ -670,10 +689,10 @@ describe('DATEVALUE and TIMEVALUE', () => {
         ['=DATEVALUE("1/1/1899")', -363],
         ['=DATEVALUE("12/31/9999")', 2958465],
         ['=DATEVALUE("1/1/10000")', VALUE],
-        // A year has at most four digits, zeros in front counted, and the last day has no 24:00.
+        // A year has at most four digits, zeros in front counted. Excel carries 24:00 on the last day past it.
         ['=DATEVALUE("1/1/02024")', VALUE],
         ['=DATEVALUE("1/1/0024")', 45292],
-        ['=DATEVALUE("12/31/9999 24:00")', VALUE],
+        ['=DATEVALUE("12/31/9999 24:00")', 2958466],
         ['=DATEVALUE("12/31/9999 23:59")', 2958465],
         ['=DATEVALUE("12/30/9999 24:00")', 2958465],
         // A text is a number or none: digits without end make no infinite one.
@@ -685,6 +704,23 @@ describe('DATEVALUE and TIMEVALUE', () => {
         ['=DATEVALUE("29-1-1")', VALUE],
         ['=DATEVALUE("2024-03-15T12:30:00")', VALUE],
         ['=DATEVALUE("Monday")', VALUE],
+        // Excel batch 13: spaces around the / or - of a date, Sept, a month and a year in digits, a point after
+        // PM, and a space after the sign of a number.
+        ['=VALUE("1 / 2 / 2026")', 46024],
+        ['=VALUE("4 - Feb - 2026")', 46057],
+        ['=VALUE("Sept 5, 2026")', 46270],
+        ['=VALUE("2024-Mar-15")', VALUE],
+        ['=DATEVALUE("1/2024")', 45292],
+        ['=VALUE("2 PM.")', 0.583333333333333],
+        ['=VALUE("- 5")', -5],
+        // What follows from those, not recorded.
+        ['=VALUE("2 P.")', VALUE],
+        ['=VALUE("2.")', 2],
+        ['=VALUE("Septe 5, 2026")', VALUE],
+        ['=VALUE("5 Sept 2026")', 46270],
+        ['=VALUE("June 5, 2026")', 46178],
+        ['=VALUE("1 /2026")', 46023],
+        ['=VALUE("4 - Feb / 2026")', VALUE],
         // A text that is a number is no date, and neither is a number.
         ['=DATEVALUE("45000")', VALUE],
         ['=DATEVALUE("1.5")', VALUE],
@@ -708,9 +744,13 @@ describe('DATEVALUE and TIMEVALUE', () => {
         ['=TIMEVALUE("12:60")', 0.541666666666667],
         ['=TIMEVALUE("12:30:60")', 0.521527777777778],
         ['=TIMEVALUE("12:59:60")', 0.541666666666667],
-        // Minutes and seconds past 59 are carried, in at most two digits each.
+        // Minutes and seconds past 59 are carried, in at most two digits each, and only one part of a time may
+        // be past its range: Excel reads 0:99 and 25:00 and refuses 25:61.
         ['=TIMEVALUE("12:61")', 0.542361111111111],
-        ['=TIMEVALUE("0:99:99")', 6039 / 86400],
+        ['=VALUE("0:99")', 0.06875],
+        ['=VALUE("25:61")', VALUE],
+        ['=TIMEVALUE("0:99:99")', VALUE],
+        ['=TIMEVALUE("25:00:60")', VALUE],
         ['=TIMEVALUE("12:61 PM")', 0.542361111111111],
         ['=TIMEVALUE("1:005")', VALUE],
         ['=TIMEVALUE("1:05:005")', VALUE],
@@ -752,6 +792,12 @@ describe('the clock of the pass', () => {
         ['=DATEVALUE("15/3")', VALUE],
         // A day its month does not have this year is a year of two digits: February 2029, January 1932.
         ['=DATEVALUE("2/29")', 47150],
+        ['=DATEVALUE("2/30")', 10990],
+        ['=DATEVALUE("Feb 29")', 47150],
+        // Only with the month first: a day and a month by name stay a day and a month.
+        ['=DATEVALUE("29-Feb")', VALUE],
+        ['=DATEVALUE("28-Feb")', 46081],
+        ['=DATEVALUE("1 / 2")', 46024],
         ['=DATEVALUE("1/32")', 11689],
         ['=DATEVALUE("2/28")', 46081],
         ['=DATEVALUE("2/100")', VALUE],

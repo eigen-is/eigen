@@ -32,6 +32,10 @@ import {
 // COMBIN has no answer for this many things to choose from, or more.
 const MOST_THINGS = 2 ** 31 - 1;
 
+// FACT takes a number this close under a whole one, or closer, as that whole one. Excel's own reach lies between
+// 0.00001, where FACT(4.99999) is 24, and 0.000000001, where FACT(4.999999999) is 120.
+const WHOLE_REACH = 1e-7;
+
 // MOD has no answer from this many times the divisor on.
 const MOST_DIVIDED = 1125900000000;
 
@@ -114,9 +118,10 @@ export const MATH = [
     // The sign is tested before the fraction is cut off: FACT(-0.5) is #NUM!. Excel multiplies from the number
     // down, which decides the last digit of a large factorial.
     fn('FACT', [NUMBER], (n) => {
-        if (n < 0 || n >= 171) return NUM;
+        const whole = Math.floor(n + WHOLE_REACH);
+        if (n < 0 || whole >= 171) return NUM;
         let product = 1;
-        for (let factor = Math.floor(n); factor > 1; factor -= 1) product *= factor;
+        for (let factor = whole; factor > 1; factor -= 1) product *= factor;
         return product;
     }),
     // Multiplied and divided in turn, exactly while the product is a whole number a double holds.

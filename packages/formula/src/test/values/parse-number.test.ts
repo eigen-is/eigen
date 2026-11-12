@@ -102,7 +102,12 @@ describe('plain numbers', () => {
             'NaN',
         ]);
         refused(['1 2', '.', '-', '+', '--5', '+-5', '5--', '-5-', '1.5.5', '1_000', '1e3.5', '1e1e1', 'e3', '1 e3']);
-        refused(['- 23', '2 3', '5 -', '3 000', ' 5', '5\t', '１２', '1e999', '#N/A', '="1"', "'5"]);
+        // Excel batch 13: spaces may follow the sign.
+        taken([
+            ['- 23', -23],
+            ['-  $5', -5],
+        ]);
+        refused(['2 3', '5 -', '3 000', ' 5', '5\t', '１２', '1e999', '#N/A', '="1"', "'5"]);
     });
 });
 
@@ -285,7 +290,17 @@ describe('dates', () => {
         refused(['2026.01.01', '2026-01-01x', '-2026-01-01', '"2026-01-12"', '2026-01-05T13:30', '2026-01/05']);
         refused(['1/5', '5-Jan', 'Jan-26', 'Jan 5', 'Jan', 'Mon 5 Jan 2026', '5-Janu-2026', '5 Jan, 2026']);
         refused(['Jan 5 2026', 'March 15 2024', 'Jan 20266', 'Jan 026']);
-        refused(['1 5 2026', '1/5/20266', 'Jan5,2026', 'Jan 5,', 'Jan 5, 26', '1//2026', '2026-01-', 'Sept 5, 2026']);
+        refused(['1 5 2026', '1/5/20266', 'Jan5,2026', 'Jan 5,', 'Jan 5, 26', '1//2026', '2026-01-']);
+        // Excel batch 13: spaces around a / or a -, Sept, and a month and a year in digits.
+        taken([
+            ['Sept 5, 2026', 46270],
+            ['1 / 2 / 2026', 46024],
+            ['4 - Feb - 2026', 46057],
+            ['2026 - 1 - 5', 46027],
+            ['1/2024', 45292],
+            ['July 4, 2026', 46207],
+        ]);
+        refused(['2024-Mar-15', '1 / 2 - 2026', '1 /', '1 / 2 /', 'Sep t 5, 2026']);
     });
 });
 
@@ -434,7 +449,7 @@ describe('parseDateTime', () => {
         expect(parseDateTime('2/29', 2026)).toBe(47150);
         expect(parseDateTime('2/30', 2024)).toBe(10990);
         expect(parseDateTime('Feb 29', 2026)).toBe(47150);
-        expect(parseDateTime('29-Feb', 2026)).toBe(47150);
+        expect(parseDateTime('29-Feb', 2026)).toBe(undefined);
     });
 
     test('no text becomes a number that is none', () => {
@@ -445,8 +460,17 @@ describe('parseDateTime', () => {
     });
 
     test('a day the month of that year does not have is no date', () => {
-        for (const text of ['15/3', '2/100', '0/5', '5-Janu', 'Mar 0', '0/29', '12/31/9999 24:00']) {
+        for (const text of ['15/3', '2/100', '0/5', '5-Janu', 'Mar 0', '0/29']) {
             expect([text, parseDateTime(text, 2026)]).toEqual([text, undefined]);
+        }
+    });
+
+    test('without a year given, a date that says none is no date', () => {
+        expect(parseDateTime('2024-03-15')).toBe(45366);
+        expect(parseDateTime('1/2024')).toBe(45292);
+        expect(parseDateTime('12:30')).toBe(12.5 / 24);
+        for (const text of ['3/15', 'Mar 15', '15-Mar', '2/29', '2/30', '3/15 12:00']) {
+            expect([text, parseDateTime(text)]).toEqual([text, undefined]);
         }
     });
 });

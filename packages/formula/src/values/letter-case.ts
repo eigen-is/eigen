@@ -4,6 +4,11 @@
 
 const LETTER = /\p{L}/u;
 
+// An accent written as a character of its own belongs to the letter in front of it.
+const MARK = /\p{M}/u;
+
+const DOTTED_CAPITAL_I = /\u0130/g;
+
 export function upperCase(text: string): string {
     const upper = text.toUpperCase();
     if (upper.length === text.length) return upper;
@@ -15,12 +20,9 @@ export function upperCase(text: string): string {
     return mapped;
 }
 
+// The host lowers a capital sigma to its final form at the end of a word, as Excel does.
 export function lowerCase(text: string): string {
-    const lower = text.toLowerCase();
-    if (lower.length === text.length) return lower;
-    let mapped = '';
-    for (const letter of text) mapped += letter.toLowerCase().slice(0, letter.length);
-    return mapped;
+    return text.replace(DOTTED_CAPITAL_I, 'i').toLowerCase();
 }
 
 // A capital for every letter that follows something that is no letter, lower case for the rest.
@@ -30,7 +32,7 @@ export function properCase(text: string): string {
     for (const letter of lowerCase(text)) {
         const isLetter = LETTER.test(letter);
         proper += isLetter && !inWord ? upperCase(letter) : letter;
-        inWord = isLetter;
+        if (!MARK.test(letter)) inWord = isLetter;
     }
     return proper;
 }

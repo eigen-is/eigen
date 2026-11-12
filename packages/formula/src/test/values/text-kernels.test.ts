@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { ansiCharacter, ansiCode } from '../../values/ansi';
-import { countCharacters, cutCharacters, findCharacters, searchCharacters } from '../../values/characters';
+import {
+    countCharacters,
+    cutCharacters,
+    findCharacters,
+    findLastCharacters,
+    firstCode,
+    searchCharacters,
+} from '../../values/characters';
 import { partBeside } from '../../values/delimited';
 import { lowerCase, properCase, upperCase } from '../../values/letter-case';
 import { separatedNumber } from '../../values/separated-number';
@@ -22,6 +29,19 @@ describe('characters', () => {
         expect(findCharacters('o', 'Hello World', 6)).toBe(8);
         expect(findCharacters('O', 'Hello World', 1)).toBe(0);
         expect(findCharacters('', 'abc', 4)).toBe(4);
+    });
+
+    test('a find from the end answers the last place at or before a position', () => {
+        expect(findLastCharacters('o', 'Hello World', 11)).toBe(8);
+        expect(findLastCharacters('o', 'Hello World', 7)).toBe(5);
+        expect(findLastCharacters('o', 'Hello World', 4)).toBe(0);
+        expect(findLastCharacters('H', 'Hello World', 1)).toBe(1);
+    });
+
+    test('the first code is a whole code point, though a pair counts as two characters', () => {
+        expect(firstCode(`${EMOJI}a`)).toBe(128512);
+        expect(firstCode('€')).toBe(8364);
+        expect(firstCode('')).toBeUndefined();
     });
 
     test('a search folds case without changing a length', () => {
@@ -51,6 +71,7 @@ describe('patternStart', () => {
         ['~', 'A~C', 0, 0],
         ['A~', 'BA~', 0, 1],
         ['~~~', 'A~C', 0, 1],
+        ['~C', 'A~C', 0, 2],
         ['', 'ABC', 3, 3],
         ['?', 'ABC', 3, -1],
     ])('%p in %p from %i starts at %i', (sought, key, from, expected) => {
@@ -63,6 +84,26 @@ describe('letter case', () => {
         expect(upperCase('straße ŉ')).toBe('STRAßE ŉ');
         expect(lowerCase('İSTANBUL')).toBe('istanbul');
         expect(lowerCase('ΟΔΥΣΣΕΥΣ')).toBe('οδυσσευς');
+    });
+
+    test('no letter of Unicode changes the length of a text in lower case', () => {
+        for (let point = 0; point <= 0x10ffff; point += 1) {
+            if (point >= 0xd800 && point <= 0xdfff) continue;
+            const letter = String.fromCodePoint(point);
+            if (lowerCase(letter).length !== letter.length) throw new Error(`U+${point.toString(16)}`);
+        }
+    });
+
+    test('a final sigma does not depend on another letter of the text', () => {
+        expect(lowerCase('ΑΣ')).toBe('ας');
+        expect(lowerCase('ΑΣ İ')).toBe('ας i');
+        expect(lowerCase('ΣΑ İ')).toBe('σα i');
+    });
+
+    test('an accent written apart does not end a word', () => {
+        expect(properCase(`e${String.fromCharCode(769)}lise d${String.fromCharCode(769)}`)).toBe(
+            `E${String.fromCharCode(769)}lise D${String.fromCharCode(769)}`,
+        );
     });
 
     test('proper case starts a word after anything that is no letter', () => {
@@ -99,8 +140,13 @@ describe('separatedNumber', () => {
         [' 1 2\t3\n', '.', ',', 123],
         ['', '.', ',', 0],
         ['12%%', '.', ',', 0.0012],
-        ['%', '.', ',', undefined],
+        ['%', '.', ',', 0],
+        ['1.000,5', '.', ',', undefined],
+        ['1,000.5,0', '.', ',', undefined],
+        ['3\u00a0000', '.', ',', undefined],
         ['(5)', '.', ',', -5],
+        ['(-5)', '.', ',', undefined],
+        ['($5)', '.', ',', -5],
         ['(5)%', '.', ',', -0.05],
         ['(5', '.', ',', undefined],
         ['$5', '.', ',', 5],

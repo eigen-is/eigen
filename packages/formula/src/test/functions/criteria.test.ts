@@ -150,7 +150,7 @@ describe('a criterion names its rows', () => {
         ['a??', 2],
         ['*~?', 1],
         ['~~', 1],
-        ['a~bc', 0],
+        ['a~bc', 1],
         ['**a**', 4],
     ])('the wildcard pattern %s', (pattern, count) => {
         const cells = { A1: 'abcd1234ab12', A2: 'abc', A3: 'what?', A4: '~', A5: 'acc', A6: 12 };
