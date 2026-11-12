@@ -109,6 +109,9 @@ export type Param<T> = {
     readonly apiece: boolean;
     // What an argument that is no reference answers where only a reference is taken, unless it is an error itself.
     readonly stranger: FormulaError;
+    // Whether an Excel without dynamic arrays read this table as a reference, so an operator in it took one cell of
+    // a range. Nothing is evaluated by it: it says where the @ of a file's formula goes.
+    readonly placed: boolean;
     // Only in the type, never in a record: what the body gets.
     readonly [carries]?: () => T;
 };

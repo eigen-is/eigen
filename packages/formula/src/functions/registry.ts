@@ -35,6 +35,7 @@ const REQUIRED = {
     only: false,
     apiece: false,
     stranger: VALUE,
+    placed: false,
 };
 
 function scalar<T>(read: Read): Param<T> {
@@ -256,6 +257,12 @@ export function apiece(param: Param<Reference>): Param<Reference> {
 // SHEETS(1) is #N/A. An argument that is an error still answers itself.
 export function expecting(param: Param<Reference>, error: FormulaError): Param<Reference> {
     return Object.freeze({ ...param, stranger: error });
+}
+
+// The table is one that an Excel without dynamic arrays read as a reference, as MATCH and VLOOKUP read theirs: an
+// operator on a range in it took one cell, where in LOOKUP's table it made an array.
+export function placed<P extends Param<Table>>(param: P): P {
+    return Object.freeze({ ...param, placed: true });
 }
 
 type Args<P extends readonly Param<unknown>[]> = { [K in keyof P]: P[K] extends Param<infer T> ? T : never };

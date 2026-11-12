@@ -24,6 +24,7 @@ import {
     optional,
     PART,
     PLAIN,
+    placed,
     REFERENCE,
     ROOM,
     rectangle,
@@ -120,7 +121,7 @@ export const LOOKUP = [
         ANYWHERE,
     ),
     // A type of 0 is the key itself, a negative one takes the values for sorted downward.
-    fn('MATCH', [PLAIN, refusing(TABLE, NA), optional(NUMBER, 1)], (key, table, type) => {
+    fn('MATCH', [PLAIN, placed(refusing(TABLE, NA)), optional(NUMBER, 1)], (key, table, type) => {
         if (table.rows > 1 && table.columns > 1) return NA;
         const values = table.columns === 1 ? table.column(0) : table.row(0);
         const at = values.find(key ?? 0, type === 0 ? Find.Exact : type < 0 ? Find.AtLeast : Find.AtMost);
@@ -138,10 +139,12 @@ export const LOOKUP = [
             return at < 0 ? NA : at + 1;
         },
     ),
-    fn('VLOOKUP', [PLAIN, refusing(TABLE, NA), INTEGER, optional(BOOLEAN, true)], (key, table, column, sorted) =>
-        tableLookup(key, table, column, sorted, true),
+    fn(
+        'VLOOKUP',
+        [PLAIN, placed(refusing(TABLE, NA)), INTEGER, optional(BOOLEAN, true)],
+        (key, table, column, sorted) => tableLookup(key, table, column, sorted, true),
     ),
-    fn('HLOOKUP', [PLAIN, refusing(TABLE, NA), INTEGER, optional(BOOLEAN, true)], (key, table, row, sorted) =>
+    fn('HLOOKUP', [PLAIN, placed(refusing(TABLE, NA)), INTEGER, optional(BOOLEAN, true)], (key, table, row, sorted) =>
         tableLookup(key, table, row, sorted, false),
     ),
     // The values are searched down the first column when the table is at least as high as it is wide, else along
