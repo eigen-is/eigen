@@ -64,6 +64,16 @@ describe('numbers to multiply: PRODUCT', () => {
         ['=PRODUCT(A1:A3,B1:B2)', 12000000],
         ['=PRODUCT(A1:A2*1,0.5)', 100],
         ['=SUBTOTAL(6,A1:A3)', 6000],
+        // Batches 6 and 7: a blank cell is passed over, a blank element of an array is a factor 0, and the product
+        // of no number at all is 0.
+        ['=PRODUCT(C1:C4)', 0.1 * 0.2 * -0.3],
+        ['=PRODUCT(IF({1;1;1;1},C1:C4))', 0],
+        ['=PRODUCT(Z9)', 0],
+        ['=PRODUCT(Z9:Z10)', 0],
+        ['=PRODUCT(D1)', 0],
+        ['=PRODUCT(TRUE,5)', 5],
+        ['=PRODUCT(D1,5)', 5],
+        ['=PRODUCT(D2,5)', 5],
     ])('%s', (formula, expected) => {
         expect(evaluate(formula, F1)).toBe(expected);
     });

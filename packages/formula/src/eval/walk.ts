@@ -225,7 +225,7 @@ export class Walk {
     // stretch of rows that each stand for one written row is one span of the block itself.
     private elements(array: ArrayValue): boolean {
         const { items, nums, height, width, rowEnds, columnEnds } = array;
-        const { kinds, blanks } = this.family;
+        const { kinds } = this.family;
         if (this.span.length < width) this.span = new Float64Array(width);
         if (this.widths.length < width) this.widths = new Int32Array(width);
         const { span, widths } = this;
@@ -250,18 +250,18 @@ export class Walk {
             for (let c = 0; c < width; c += 1) {
                 const item = items[row * width + c];
                 let number = 0;
-                // A blank element is a 0 that counts for most families, which a blank cell never is.
+                // A blank element is a 0 that counts, for every family, which a blank cell never is.
                 if (typeof item === 'number') number = item;
                 else if (isReference(item)) {
                     const referred = this.referred(item, this.family);
                     if (typeof referred !== 'number' || Number.isNaN(referred)) continue;
                     number = referred;
-                } else if (item === null) {
-                    if (!blanks) continue;
                 } else if (typeof item === 'boolean') {
                     if (((kinds >> CellKind.Boolean) & 1) === 0) continue;
                     number = item ? 1 : 0;
-                } else if (((kinds >> (typeof item === 'string' ? CellKind.Text : CellKind.Error)) & 1) === 0) continue;
+                } else if (item !== null) {
+                    if (((kinds >> (typeof item === 'string' ? CellKind.Text : CellKind.Error)) & 1) === 0) continue;
+                }
                 span[found] = number;
                 widths[found] = columnEnds === null ? 1 : columnEnds[c] - (c === 0 ? 0 : columnEnds[c - 1]);
                 cells += widths[found];

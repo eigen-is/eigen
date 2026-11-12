@@ -210,7 +210,7 @@ function collected(family: Family, value: Value): Held {
             if (family.text === TypedText.Counted) return 0;
             return value.toUpperCase() === 'TRUE' ? 1 : value.toUpperCase() === 'FALSE' ? 0 : null;
         default:
-            if (value === null) return family.blanks ? 0 : null;
+            if (value === null) return family.empty ? 0 : null;
             if (!isError(value)) return value;
             return family.errors === Errors.Result ? value : family.errors === Errors.Counted ? 0 : null;
     }

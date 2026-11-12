@@ -278,8 +278,8 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         if (family === undefined || family === null) return;
         same('TRUE', '1');
         same('FALSE', '0');
-        same('', family.blanks ? '0' : null);
-        same('IF(TRUE,)', family.blanks ? '0' : null);
+        same('', family.empty ? '0' : null);
+        same('IF(TRUE,)', family.empty ? '0' : null);
         if (family.text === TypedText.Parsed) equals('"x y"', VALUE);
         if (family.text === TypedText.Parsed || family.text === TypedText.Numeric) same('"2"', '2');
         if (family.text === TypedText.Numeric || family.text === TypedText.Spelled) same('"x y"', null);
@@ -289,7 +289,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         else same('1/0', family.errors === Errors.Counted ? '1' : null);
     });
 
-    test('a cell counts by its kind, a blank cell never, a blank element of an array as the family says', () => {
+    test('a cell counts by its kind, a blank cell never, a blank element of an array as a 0', () => {
         if (family === undefined || family === null) return;
         const counts = (kind: number) => ((family.kinds >> kind) & 1) === 1;
         same('D1', counts(2) ? 'TRUE' : null);
@@ -297,7 +297,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         same('Z9', null);
         same('C1', '1');
         same('+D1', 'TRUE');
-        same('IF({1,1},Z9:AA9)', family.blanks ? '{0,0}' : null);
+        same('IF({1,1},Z9:AA9)', '{0,0}');
         same('A1:A40*1', `{10;20;30;40;50${';0'.repeat(35)}}`);
     });
 

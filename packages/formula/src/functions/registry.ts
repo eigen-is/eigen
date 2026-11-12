@@ -80,7 +80,7 @@ export const FILLED = walked(Families.Filled);
 export const TRUTHS = walked(Families.Truths);
 // The numbers, with a boolean in a cell as 1 or 0 and a text in a cell as 0, as AVERAGEA and MAXA take them.
 export const NUMBERS_A = walked(Families.NumbersA);
-// The numbers, to be multiplied: as NUMBERS, but an empty argument and a blank element of an array are passed over.
+// The numbers, to be multiplied: as NUMBERS, but an argument left empty is passed over.
 export const FACTORS = walked(Families.Factors);
 
 // A range, an array or one value, as it is: the body searches it, picks from it or measures it. A union is #VALUE!.

@@ -1,6 +1,7 @@
 // What a function that takes every value of its arguments counts, per family: one record of data that the walk and
 // the call wrapper read. A cell, an element of an array and a value typed as an argument are three different
 // things to Excel, and each family treats them its own way, so a family is added with the Excel answers that need it.
+// Two rules are every family's and so are no data: a blank cell never counts, a blank element of an array is a 0.
 
 import { CellKind } from '../store/column';
 import type { FormulaError } from '../values/errors';
@@ -24,8 +25,8 @@ export type Family = {
     // What an element that is a reference is, or the error the call then answers. It differs per function, so a
     // row may say it anew.
     readonly element: (typeof Element)[keyof typeof Element] | FormulaError;
-    // Whether a blank that is no cell counts, as a 0: an empty argument, a blank element of an array.
-    readonly blanks: boolean;
+    // Whether an argument left empty, or a blank value in its place, counts as a 0.
+    readonly empty: boolean;
 };
 
 const NUMBER = 1 << CellKind.Number;
@@ -34,22 +35,22 @@ const TEXT = 1 << CellKind.Text;
 const EVERY = NUMBER | BOOLEAN | TEXT | (1 << CellKind.Error);
 
 export const Families = {
-    Numbers: { kinds: NUMBER, text: TypedText.Parsed, errors: Errors.Result, element: Element.First, blanks: true },
-    Counted: { kinds: NUMBER, text: TypedText.Numeric, errors: Errors.Passed, element: Element.Passed, blanks: true },
-    Filled: { kinds: EVERY, text: TypedText.Counted, errors: Errors.Counted, element: Element.Counted, blanks: true },
+    Numbers: { kinds: NUMBER, text: TypedText.Parsed, errors: Errors.Result, element: Element.First, empty: true },
+    Counted: { kinds: NUMBER, text: TypedText.Numeric, errors: Errors.Passed, element: Element.Passed, empty: true },
+    Filled: { kinds: EVERY, text: TypedText.Counted, errors: Errors.Counted, element: Element.Counted, empty: true },
     Truths: {
         kinds: NUMBER | BOOLEAN,
         text: TypedText.Spelled,
         errors: Errors.Result,
         element: Element.First,
-        blanks: true,
+        empty: true,
     },
     NumbersA: {
         kinds: NUMBER | BOOLEAN | TEXT,
         text: TypedText.Parsed,
         errors: Errors.Result,
         element: Element.First,
-        blanks: true,
+        empty: true,
     },
-    Factors: { kinds: NUMBER, text: TypedText.Parsed, errors: Errors.Result, element: Element.First, blanks: false },
+    Factors: { kinds: NUMBER, text: TypedText.Parsed, errors: Errors.Result, element: Element.First, empty: false },
 } as const satisfies Record<string, Family>;
