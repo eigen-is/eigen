@@ -7,8 +7,10 @@
 import { cosine, sine, tangent } from '../values/angle';
 import { DIV0, NUM } from '../values/errors';
 import { cutDecimal, equal15, roundDecimal, snapWhole } from '../values/precision';
+import { greatestDivisor, leastMultiple, multinomial } from '../values/wholes';
 import {
     chosen,
+    ERRORS,
     FACTORS,
     fn,
     INTEGER,
@@ -23,6 +25,7 @@ import {
     skippable,
     strict,
     WHERE,
+    WHOLES,
 } from './registry';
 
 // The largest whole number Excel counts with: a larger exponent of a negative base, or more things to choose
@@ -160,7 +163,7 @@ export const MATH = [
     fn('ATANH', [NUMBER], Math.atanh),
     fn('RAND', [RANDOM], (random) => random),
     // A whole number from the bottom rounded up to the top rounded down, and the bottom when none lies between.
-    fn('RANDBETWEEN', [NUMBER, NUMBER, RANDOM], (low, high, random) => {
+    fn('RANDBETWEEN', [strict(NUMBER), strict(NUMBER), RANDOM], (low, high, random) => {
         if (low > high) return NUM;
         const bottom = Math.ceil(low);
         return bottom + Math.floor(random * (Math.max(bottom, Math.floor(high)) - bottom + 1));
@@ -182,5 +185,17 @@ export const MATH = [
     chosen(
         'SUBTOTAL',
         SUBTOTALS.flatMap((target, at) => [[at + 1, target, NESTED] as const, [at + 101, target, NESTED] as const]),
+    ),
+    fn('GCD', [rest(WHOLES)], greatestDivisor),
+    fn('LCM', [rest(WHOLES)], leastMultiple),
+    fn('MULTINOMIAL', [rest(WHOLES)], multinomial),
+    // The codes 1 to 19, and per option 0 to 7 what is passed over: a nested SUBTOTAL or AGGREGATE up to 3,
+    // errors for 2, 3, 6 and 7. The options that leave out hidden rows answer as the ones that keep them.
+    chosen(
+        'AGGREGATE',
+        [...SUBTOTALS, 'MEDIAN', 'MODE.SNGL', 'LARGE', 'SMALL', 'PERCENTILE.INC', 'QUARTILE.INC']
+            .concat(['PERCENTILE.EXC', 'QUARTILE.EXC'])
+            .map((target, at) => [at + 1, target, 0] as const),
+        [NESTED, NESTED, NESTED | ERRORS, NESTED | ERRORS, 0, 0, ERRORS, ERRORS],
     ),
 ];

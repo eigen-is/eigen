@@ -14,6 +14,7 @@ import {
     fn,
     INTEGER,
     MATCHED,
+    MODES,
     NUMBER,
     NUMBERS,
     NUMBERS_A,
@@ -23,6 +24,20 @@ import {
     rest,
     WHERE,
 } from './registry';
+
+// The value met most often, and of several met equally often the one that is written first. With no value met
+// twice there is none.
+function mode(numbers: Numbers) {
+    const list = numbers.list();
+    const met = new Map<number, number>();
+    let most = 1;
+    for (const number of list) {
+        const times = (met.get(number) ?? 0) + 1;
+        met.set(number, times);
+        if (times > most) most = times;
+    }
+    return most === 1 ? NA : (list.find((number) => met.get(number) === most) ?? NA);
+}
 
 export const STATISTICAL = [
     fn('AVERAGE', [rest(NUMBERS)], average),
@@ -39,23 +54,25 @@ export const STATISTICAL = [
     }),
     // LARGE rounds a place that is no whole number up and SMALL cuts it, so 1.5 is the second largest and the
     // smallest.
-    fn('LARGE', [NUMBERS, NUMBER], (numbers, k) => {
+    fn('LARGE', [referring(NUMBERS, VALUE), NUMBER], (numbers, k) => {
         const sorted = numbers.list().sort();
         return k < 1 || k > sorted.length ? NUM : sorted[sorted.length - Math.ceil(k)];
     }),
-    fn('SMALL', [NUMBERS, NUMBER], (numbers, k) => {
+    fn('SMALL', [referring(NUMBERS, VALUE), NUMBER], (numbers, k) => {
         const sorted = numbers.list().sort();
         return k < 1 || k > sorted.length ? NUM : sorted[Math.trunc(k) - 1];
     }),
     fn('RANK', [NUMBER, cells(NUMBERS), optional(NUMBER, 0)], rank),
     fn('RANK.EQ', [NUMBER, cells(NUMBERS), optional(NUMBER, 0)], rank),
     fn('RANK.AVG', [NUMBER, cells(NUMBERS), optional(NUMBER, 0)], sharedRank),
-    fn('PERCENTILE', [NUMBERS, NUMBER], percentile),
-    fn('PERCENTILE.INC', [NUMBERS, NUMBER], percentile),
-    fn('PERCENTILE.EXC', [NUMBERS, NUMBER], percentileBetween),
-    fn('QUARTILE', [NUMBERS, INTEGER], (numbers, quarter) => percentile(numbers, quarter / 4)),
-    fn('QUARTILE.INC', [NUMBERS, INTEGER], (numbers, quarter) => percentile(numbers, quarter / 4)),
-    fn('QUARTILE.EXC', [NUMBERS, INTEGER], (numbers, quarter) => percentileBetween(numbers, quarter / 4)),
+    fn('PERCENTILE', [referring(NUMBERS, VALUE), NUMBER], percentile),
+    fn('PERCENTILE.INC', [referring(NUMBERS, VALUE), NUMBER], percentile),
+    fn('PERCENTILE.EXC', [referring(NUMBERS, VALUE), NUMBER], percentileBetween),
+    fn('QUARTILE', [referring(NUMBERS, VALUE), INTEGER], (numbers, quarter) => percentile(numbers, quarter / 4)),
+    fn('QUARTILE.INC', [referring(NUMBERS, VALUE), INTEGER], (numbers, quarter) => percentile(numbers, quarter / 4)),
+    fn('QUARTILE.EXC', [referring(NUMBERS, VALUE), INTEGER], (numbers, quarter) =>
+        percentileBetween(numbers, quarter / 4),
+    ),
     fn('VAR', [rest(NUMBERS)], (numbers) => variance(numbers, 1)),
     fn('VAR.S', [rest(NUMBERS)], (numbers) => variance(numbers, 1)),
     fn('VARA', [rest(NUMBERS_A)], (numbers) => variance(numbers, 1)),
@@ -108,6 +125,8 @@ export const STATISTICAL = [
     fn('AVERAGEIFS', [MATCHED, rest(WHERE)], average),
     fn('MAXIFS', [MATCHED, rest(WHERE)], largest),
     fn('MINIFS', [MATCHED, rest(WHERE)], smallest),
+    fn('MODE', [rest(MODES)], mode),
+    fn('MODE.SNGL', [rest(MODES)], mode),
 ];
 
 function average(numbers: Numbers) {

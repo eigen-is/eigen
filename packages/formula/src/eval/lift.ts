@@ -168,7 +168,7 @@ function element(
 // cell too, and an array of references where only a reference is taken.
 export function lifts(param: Param<unknown>, array: ArrayValue): boolean {
     if (param.prepare === Prepare.Reference) return array.references;
-    return param.prepare === Prepare.Scalar || param.prepare === Prepare.Corner;
+    return param.prepare === Prepare.Scalar || param.prepare >= Prepare.Corner;
 }
 
 type Lined = { readonly rows: number; readonly columns: number; readonly down: Axis; readonly across: Axis };
@@ -205,7 +205,7 @@ function placeAt(array: ArrayValue, down: Axis, across: Axis, k: number, r: numb
 }
 
 // An element where one value is read: a reference to one cell is that cell, and one to several is #VALUE!.
-function single(ctx: Evaluator, item: Scalar | Reference): Scalar {
+export function single(ctx: Evaluator, item: Scalar | Reference): Scalar {
     if (!isReference(item)) return item;
     const value = item.next === null && item.top === item.bottom && item.left === item.right ? ctx.read(item) : VALUE;
     return isArray(value) ? VALUE : value;

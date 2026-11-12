@@ -32,17 +32,24 @@ const BASES: Readonly<Record<string, readonly string[]>> = {
     XMATCH: ['20', 'A1:A5', '0', '1'],
     LOOKUP: ['20', 'A1:A5', 'A1:A5'],
     AVERAGEIFS: ['A1:A5', 'A1:A5', '">5"'],
+    CELL: ['"row"', 'A2'],
+    FORMULATEXT: ['E2'],
+    INDIRECT: ['"A1"', 'TRUE'],
+    MODE: ['{5,5,1,0}'],
+    'MODE.SNGL': ['{5,5,1,0}'],
     'ERROR.TYPE': ['1/0'],
     DATEVALUE: ['"2024-03-15"'],
     TIMEVALUE: ['"12:30"'],
     DATEDIF: ['1', '2', '"D"'],
     'NETWORKDAYS.INTL': ['1', '10', '1', 'A1:A5'],
 };
-// The one row whose answer is an error by definition.
-const ERRORS = new Set(['NA']);
+// The rows whose answer is an error by definition.
+const ERRORS = new Set(['NA', 'INFO']);
 
 // What can be written for a parameter, by its reading: values every reading of that kind takes.
 function pool(param: Param<unknown>): readonly string[] {
+    // What follows the code of a row that picks another is read by the row that is picked: a range serves each.
+    if (param.prepare === Prepare.Reference && param.read === Read.Any) return ['A1:A5', 'C1:C3'];
     switch (param.read) {
         case Read.Number:
         case Read.Integer:
@@ -55,6 +62,8 @@ function pool(param: Param<unknown>): readonly string[] {
             return ['A1:A5', 'C1:C3', '1'];
         case Read.Texts:
             return ['A1:A5', '"abc"', 'B1:B5'];
+        case Read.Wholes:
+            return ['A1:A5', 'C1:C3', '4'];
         case Read.Pairs:
             return ['A1:A5', 'C1:C3'];
         case Read.Plain:
@@ -122,7 +131,9 @@ function withArg(args: readonly string[], at: number, put: string): string[] {
 describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, entry) => {
     const base = BASE.get(entry.name) ?? [];
     const params = entry.slots;
-    const scalars = params.map((param, at) => (param.prepare === Prepare.Scalar ? at : -1)).filter((at) => at >= 0);
+    // The parameters that read one value: a strict one among them, which refuses a range.
+    const reads = (param: Param<unknown>) => param.prepare === Prepare.Scalar || param.prepare === Prepare.Single;
+    const scalars = params.map((param, at) => (reads(param) ? at : -1)).filter((at) => at >= 0);
     // The parameters whose reading an error ends, and those read as a number or a truth value.
     const ends = (param: Param<unknown>) =>
         param.read < Read.Anything && (param.family === null || param.family.errors === Errors.Result);
@@ -147,7 +158,8 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             expect(evaluateAll([written(entry, [...base, base[entry.fixed]])])[0]).toBe(VALUE);
         }
         const fewest = evaluateAll([written(entry, base.slice(0, entry.min))])[0];
-        expect(fewest).not.toBe(VALUE);
+        // A row that answers #VALUE! whatever it is given cannot show that its count was accepted.
+        if (!ERRORS.has(entry.name)) expect(fewest).not.toBe(VALUE);
     });
 
     test('a text that is no value of the reading is #VALUE!, one that is reads as the value', () => {
@@ -159,6 +171,21 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             );
             expect(bad).toBe(VALUE);
             expect(text).toEqual(plain);
+        }
+    });
+
+    test('a strict number refuses a boolean and a range of several cells, and takes one cell and an array', () => {
+        for (const at of scalars.filter((slot) => params[slot].strict)) {
+            const put = (argument: string) => written(entry, withArg(base, at, argument));
+            const lifted = put('C1:C3*1').slice(1);
+            const [typed, cell, range, union, one, plain, element] = evaluateAll([
+                ...[put('TRUE'), put('D1'), put('C1:C3'), put('(C1,C2)'), put('C2:C2'), put('2')],
+                `=INDEX(${lifted},2,1)`,
+            ]);
+            expect([typed, cell, range, union]).toEqual([VALUE, VALUE, VALUE, VALUE]);
+            if (entry.volatile) continue;
+            expect(one).toEqual(plain);
+            expect(element).toEqual(plain);
         }
     });
 
@@ -232,6 +259,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             expect(cell).toEqual(blank);
             // An empty argument is a blank that is read, or left out where the parameter says so.
             if (param.skips && at === params.length - 1) expect(empty).toEqual(evaluateAll([written(entry, upTo)])[0]);
+            else if (param.strict && !param.optional && at > 0) expect(empty).toBe(NA);
             else if (!param.skips && at > 0) expect(empty).toEqual(blank);
             if (!param.optional || param.fallback === undefined || at !== params.length - 1) continue;
             const fallback =
@@ -284,11 +312,18 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         if (family === undefined || family === null) return;
         same('TRUE', '1');
         same('FALSE', '0');
-        same('', family.empty ? '0' : null);
-        same('IF(TRUE,)', family.empty ? '0' : null);
+        if (typeof family.empty === 'object') {
+            equals('', family.empty);
+            equals('IF(TRUE,)', family.empty);
+        } else {
+            same('', family.empty ? '0' : null);
+            same('IF(TRUE,)', family.empty ? '0' : null);
+        }
         if (family.text === TypedText.Parsed) equals('"x y"', VALUE);
         if (family.text === TypedText.Parsed || family.text === TypedText.Numeric) same('"2"', '2');
         if (family.text === TypedText.Numeric || family.text === TypedText.Spelled) same('"x y"', null);
+        if (family.text === TypedText.Passed) same('"1"', null);
+        if (family.text === TypedText.Passed) same('"x y"', null);
         if (family.text === TypedText.Counted) same('"x y"', '1');
         if (family.text === TypedText.Spelled) same('"true"', 'TRUE');
         if (family.errors === Errors.Result) equals('1/0', DIV0);
@@ -300,7 +335,10 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         const counts = (kind: number) => ((family.kinds >> kind) & 1) === 1;
         same('D1', counts(2) ? 'TRUE' : null);
         same('B1', counts(3) ? '0' : null);
-        same('Z9', null);
+        // One blank cell by itself is an argument left empty to a family that refuses one.
+        if (typeof family.empty === 'object') equals('Z9', family.empty);
+        else same('Z9', null);
+        same('Z9:Z10', null);
         same('C1', '1');
         same('+D1', 'TRUE');
         same('IF({1,1},Z9:AA9)', '{0,0}');
@@ -341,7 +379,8 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         if (family === undefined || family === null) return;
         const whole = written(entry, [...base, '{1,2,3}']).slice(1);
         expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);
-        same('(A1:A3,C1:C3)', 'A1:A3,C1:C3');
+        if (last?.union === null) same('(A1:A3,C1:C3)', 'A1:A3,C1:C3');
+        else if (last !== undefined) equals('(A1:A3,C1:C3)', last.union);
     });
 
     test('where every value is taken as a text, each is spelled, a range row by row, and nothing lifts', () => {
@@ -360,6 +399,29 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         equals('F1:F3,E1:E3', NA);
         equals('E1:E3,NA()', NA);
         // An element that is a reference is refused, where a family of numbers reads its first cell.
+        equals('INDEX(A1:A5,{2,4})', VALUE);
+        const whole = written(entry, [...base, '{1,2,3}']).slice(1);
+        expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);
+    });
+
+    test('where every value is a whole number, a text is read as one, a boolean is refused and a blank passed over', () => {
+        if (last?.rest !== true || last.read !== Read.Wholes) return;
+        same('"2"', '2');
+        same('', null);
+        same('IF(TRUE,)', null);
+        same('Z9', null);
+        same('Z9:Z10', null);
+        same('{"2",3}', '2,3');
+        same('A1:A2', '10,20');
+        equals('TRUE', VALUE);
+        equals('D1', VALUE);
+        equals('{1,TRUE}', VALUE);
+        equals('"x y"', VALUE);
+        equals('B1', VALUE);
+        equals('E1:E3', DIV0);
+        equals('F1:F3,E1:E3', NA);
+        equals('E1:E3,NA()', NA);
+        equals('(A1:A3,C1:C3)', VALUE);
         equals('INDEX(A1:A5,{2,4})', VALUE);
         const whole = written(entry, [...base, '{1,2,3}']).slice(1);
         expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);
@@ -419,6 +481,22 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             ]);
             expect([range, union, second]).toEqual([cell, cell, REF]);
             expect(lifted).toEqual([cell, other]);
+        }
+    });
+
+    test('where a range is taken cell by cell, it gives one answer per cell, and of a union the first area', () => {
+        for (const at of params.map((param, i) => (param.apiece ? i : -1))) {
+            if (at < 0) continue;
+            const put = (argument: string) => written(entry, withArg(base, at, argument));
+            const [cell, other, ...lifted] = evaluateAll([
+                put('E2'),
+                put('F1'),
+                `=INDEX(${put('E1:F2').slice(1)},2,1)`,
+                `=INDEX(${put('(E1:E2,A1:A5)').slice(1)},2,1)`,
+                `=INDEX(${put('E1:F2').slice(1)},1,2)`,
+                `=INDEX(${put('E1:E2').slice(1)},3,1)`,
+            ]);
+            expect(lifted).toEqual([cell, cell, other, REF]);
         }
     });
 

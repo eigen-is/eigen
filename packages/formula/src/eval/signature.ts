@@ -26,6 +26,9 @@ export const Prepare = {
     // Of a reference the first cell and no other, so a range never runs the call per cell. An array does, and
     // an element of it that is a reference gives its first cell.
     Corner: 6,
+    // Read to a value as the first, but a range of several cells is #VALUE! for the whole call: an array still
+    // runs the call once per element.
+    Single: 7,
 } as const;
 
 export type Prepare = (typeof Prepare)[keyof typeof Prepare];
@@ -51,21 +54,28 @@ export const Read = {
     Texts: 11,
     // Two ranges or arrays of one size, read side by side: the numbers at the places where both hold one.
     Pairs: 12,
+    // Every value of ranges, arrays and typed values as a whole number's source: a text is read as a number, in a
+    // cell too, and a boolean is refused.
+    Wholes: 13,
     // Whatever was written, as a table: an error is a value of it, and nothing fails.
-    Anything: 13,
-    Any: 14,
-    Lazy: 15,
+    Anything: 14,
+    Any: 15,
+    Lazy: 16,
+    // As Lazy, and the argument that is picked is read to a value: a reference does not come back as one.
+    Valued: 25,
     // The value of the first cell of a reference, or the value itself.
-    Corner: 16,
+    Corner: 17,
     // Readings of a whole parameter, whose arguments are read as Only and Any: a criteria range with its
     // criterion, the numbers beside the cells every criterion accepts, and the cells that show nothing.
-    Where: 17,
-    Matched: 18,
-    Blanks: 19,
-    // What takes no argument: room for an array, a draw in [0, 1), and the date and time as a serial.
-    Room: 20,
-    Random: 21,
-    Now: 22,
+    Where: 18,
+    Matched: 19,
+    Blanks: 20,
+    // What takes no argument: room for an array, a draw in [0, 1), the date and time as a serial, and what a
+    // body may ask of the workbook.
+    Room: 21,
+    Random: 22,
+    Now: 23,
+    Engine: 24,
 } as const;
 
 export type Read = (typeof Read)[keyof typeof Read];
@@ -75,7 +85,7 @@ declare const carries: unique symbol;
 export type Param<T> = {
     readonly prepare: Prepare;
     readonly read: Read;
-    // Whether a number reading refuses a boolean.
+    // Whether a number reading refuses a boolean, and an argument left empty with #N/A.
     readonly strict: boolean;
     // What a walked reading counts.
     readonly family: Family | null;
@@ -92,6 +102,8 @@ export type Param<T> = {
     readonly union: FormulaError | null;
     // Whether the parameter takes nothing but a reference, so an array of references runs the call once for each.
     readonly only: boolean;
+    // Whether a range of several cells runs the call once per cell, each a reference of its own.
+    readonly apiece: boolean;
     // Only in the type, never in a record: what the body gets.
     readonly [carries]?: () => T;
 };
@@ -128,8 +140,10 @@ export const ANYWHERE = 2;
 
 export type Returns = 0 | typeof PART | typeof ANYWHERE;
 
-// What the walk passes over for a row that another row picked: a cell whose formula holds a call of such a row.
+// What the walk passes over for a row that another row picked: a cell whose formula holds a call of such a row,
+// and a cell or an element that is an error.
 export const NESTED = 1;
+export const ERRORS = 2;
 
 // The row that a code picks, by its name, and what the walk then passes over.
 export type Choice = { readonly target: string; readonly skips: number };
@@ -160,6 +174,9 @@ export type Entry = {
     readonly volatile: boolean;
     // Of a row that picks another row by its first argument: the row each code picks. Null for any other row.
     readonly chosen: ReadonlyMap<number, Choice> | null;
+    // Of such a row that takes a second whole number, its options: what the walk passes over for each, on top of
+    // what the code says. Null for a row that takes none.
+    readonly options: readonly number[] | null;
     // A method on purpose: a body typed by its parameters is stored here without a cast, since TypeScript compares
     // the parameters of a method loosely. `fn` is the only writer.
     run(...args: readonly unknown[]): Result;

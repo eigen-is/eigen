@@ -15,6 +15,7 @@ import type { Family } from './families';
 import { Element, Errors, Families } from './families';
 import { Products } from './products';
 import type { Held } from './signature';
+import { ERRORS, NESTED } from './signature';
 
 export class Walk {
     // The span: `num` from `from` up to `to`. Of a cell or an element that is no number only the count means something.
@@ -139,7 +140,10 @@ export class Walk {
 
     private cell(at: Reference): boolean {
         const number = this.counted(at, this.family, this.skips);
-        return !Number.isNaN(number) && this.single(number);
+        if (!Number.isNaN(number)) return this.single(number);
+        // To a family that refuses an argument left empty, a cell that holds nothing is one.
+        const { empty } = this.family;
+        return typeof empty === 'object' && this.ctx.first(at) === null && this.fail(empty);
     }
 
     // What the first cell of a reference counts as, or NaN when it does not count.
@@ -346,9 +350,12 @@ export class Reach {
     }
 }
 
-// Whether a cell is passed over whatever it holds, an error too: with `skips`, one whose formula holds a call of a
-// row that picks another.
+// Whether a cell is passed over whatever it holds: as `skips` says, one that holds an error, and one whose formula
+// holds a call of a row that picks another, an error in it too.
 export function skipped(ctx: Evaluator, skips: number, held: Column, row: number): boolean {
-    if (skips === 0 || held.shape[row] === 0) return false;
-    return (ctx.recalc.factsOf(held.shape[row]) & Fact.Chosen) !== 0;
+    if (skips === 0) return false;
+    // Tested as one number first: most walks that pass over anything pass over nested calls and nothing else.
+    if (skips !== NESTED && (skips & ERRORS) !== 0 && (held.kind[row] & KIND_MASK) === CellKind.Error) return true;
+    if (held.shape[row] === 0) return false;
+    return (skips & NESTED) !== 0 && (ctx.recalc.factsOf(held.shape[row]) & Fact.Chosen) !== 0;
 }

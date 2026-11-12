@@ -9,19 +9,20 @@ import type { FormulaNode } from '../text/tree';
 import { NodeKind } from '../text/tree';
 import { toBoolean, toNumber, toText } from '../values/coerce';
 import { FIRST_SERIAL, LAST_SERIAL } from '../values/dates';
-import { NAME, NUM, VALUE } from '../values/errors';
+import { NA, NAME, NUM, VALUE } from '../values/errors';
 import { parseNumber } from '../values/parse-number';
 import type { Value } from '../values/value';
 import { isArray, isError, isReference, LONGEST_TEXT, ValueType } from '../values/value';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Errors, TypedText } from './families';
-import { lift, lifts, step } from './lift';
+import { lift, lifts, single, step } from './lift';
 import { look } from './look';
 import { real } from './operators';
 import { Frame, Table } from './readers';
-import type { Entry, Held, Lazy, Param, Result } from './signature';
+import type { Choice, Entry, Held, Lazy, Param, Result } from './signature';
 import { Prepare, Read, TOKENS } from './signature';
+import { cellsOf } from './views';
 
 export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
     const entry = ctx.functions.get(node.text);
@@ -56,16 +57,19 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
         // An argument left out is what the body gets for it, and so is one left empty where that means left out.
         // Any other empty argument is a blank, and is read as one.
         else if (i >= count) value = slot.read === Read.Here ? ctx.here(sheet, row, column) : slot.fallback;
-        else if (given[i].kind === NodeKind.Empty) value = slot.skips ? slot.fallback : null;
+        else if (given[i].kind === NodeKind.Empty)
+            value = slot.skips ? slot.fallback : slot.strict && !slot.optional ? NA : null;
         else if (slot.prepare === Prepare.Scalar) {
             value = ctx.operand(given[i], sheet, row, column);
             if (isArray(value)) lifted = true;
         } else {
             value = ctx.evaluate(given[i], sheet, row, column);
-            // The preparations that take a place or a first cell are the last two an argument can have.
+            // The preparations that take a place, a first cell or one cell only are the last an argument can have.
             if (slot.prepare >= Prepare.Reference) {
                 if (slot.prepare === Prepare.Corner && isReference(value)) value = ctx.first(value);
-                else if (isArray(value) && lifts(slot, value)) lifted = true;
+                else if (slot.prepare === Prepare.Single && isReference(value)) value = single(ctx, value);
+                else if (slot.apiece && isReference(value)) value = cellsOf(ctx, value);
+                if (isArray(value) && lifts(slot, value)) lifted = true;
             }
         }
         held[i] = value;
@@ -113,7 +117,11 @@ export function picked(
     if (param === null || param.prepare !== Prepare.Lazy) throw new Error(`${entry.name}: a foreign token`);
     const child = token.index < node.children.length ? node.children[token.index] : null;
     if (child === null || (child.kind === NodeKind.Empty && param.skips)) return param.fallback ?? null;
-    if (child.kind !== NodeKind.Empty) return ctx.evaluate(child, sheet, row, column);
+    if (child.kind !== NodeKind.Empty) {
+        return param.read === Read.Valued
+            ? ctx.operand(child, sheet, row, column)
+            : ctx.evaluate(child, sheet, row, column);
+    }
     // An empty argument that is picked is a blank, and the number 0 in a row whose groups are tried in turn.
     return entry.stepped ? 0 : null;
 }
@@ -161,6 +169,7 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
         case Read.Boolean:
             return toBoolean(value);
         case Read.Walked:
+            if (isReference(value) && value.next !== null && param.union !== null) return param.union;
             return param.family === null ? value : collected(param.family, value);
         case Read.Table:
             if (isError(value)) return value;
@@ -170,11 +179,16 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
             return Table.over(frame.table(at), value);
         case Read.Here:
         case Read.Only:
-            if (!isReference(value)) return isError(value) ? value : VALUE;
+            if (!isReference(value)) {
+                // What is no reference is refused with its own error, and an array with its first element's.
+                const first = isArray(value) ? value.items[0] : value;
+                return isError(first) ? first : VALUE;
+            }
             return value.next !== null && param.union !== null ? param.union : value;
         case Read.Plain:
         case Read.Any:
         case Read.Lazy:
+        case Read.Valued:
         case Read.Corner:
         case Read.Room:
         case Read.Where:
@@ -182,10 +196,12 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
         case Read.Blanks:
         case Read.Random:
         case Read.Now:
+        case Read.Engine:
             return value;
         case Read.Pairs:
         case Read.Products:
         case Read.Texts:
+        case Read.Wholes:
             // Of two ranges read side by side, neither may be left empty.
             if (value === null && param.read === Read.Pairs) return VALUE;
             return isReference(value) && value.next !== null && param.union !== null ? param.union : value;
@@ -208,9 +224,10 @@ function collected(family: Family, value: Value): Held {
             if (family.text === TypedText.Parsed) return toNumber(value);
             if (family.text === TypedText.Numeric) return parseNumber(value) === undefined ? null : 0;
             if (family.text === TypedText.Counted) return 0;
+            if (family.text === TypedText.Passed) return null;
             return value.toUpperCase() === 'TRUE' ? 1 : value.toUpperCase() === 'FALSE' ? 0 : null;
         default:
-            if (value === null) return family.empty ? 0 : null;
+            if (value === null) return typeof family.empty === 'object' ? family.empty : family.empty ? 0 : null;
             if (!isError(value)) return value;
             return family.errors === Errors.Result ? value : family.errors === Errors.Counted ? 0 : null;
     }
@@ -220,16 +237,8 @@ function collected(family: Family, value: Value): Held {
 // it: a number that is no number is #NUM!, and a text has at most 32,767 characters. `held` are the call's slots.
 export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number, skips: number): Value | Lazy {
     let args: readonly unknown[] = held;
+    if (entry.chosen !== null) return choose(ctx, entry, entry.chosen, held, count);
     const frame = entry.plain ? null : ctx.frames[ctx.calls - 1];
-    const choice = entry.chosen === null || typeof held[0] !== 'number' ? undefined : entry.chosen.get(held[0]);
-    // The row that the first argument picked runs on the arguments after it, with its walk told what to pass over.
-    if (choice !== undefined && frame !== null) {
-        const target = ctx.functions.get(choice.target);
-        if (target === undefined) return NAME;
-        held.copyWithin(0, 1, count);
-        held.length = count - 1;
-        return run(ctx, target, held, count - 1, choice.skips);
-    }
     if (frame !== null) {
         const error = look(ctx, entry, frame, count, skips);
         if (error !== null) return error;
@@ -259,4 +268,43 @@ export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number, s
     if (typeof result === 'number') return real(result);
     if (typeof result === 'string') return result.length > LONGEST_TEXT ? VALUE : result;
     return result instanceof Table ? Table.held(result) : result;
+}
+
+// A call of a row that picks another by its first argument, and what the walk passes over by its second when it
+// takes one: the row that is picked runs on the arguments after those, each read now by that row's own parameter.
+// A code or an option that does not exist is #VALUE! before any range is looked into.
+function choose(
+    ctx: Evaluator,
+    entry: Entry,
+    chosen: ReadonlyMap<number, Choice>,
+    held: Held[],
+    count: number,
+): Value | Lazy {
+    const { options } = entry;
+    const selectors = options === null ? 1 : 2;
+    const [code, option] = held;
+    const choice = typeof code === 'number' ? chosen.get(code) : undefined;
+    const passed = options === null ? 0 : typeof option === 'number' ? options[option] : undefined;
+    if (choice === undefined || passed === undefined) return VALUE;
+    const target = ctx.functions.get(choice.target);
+    if (target === undefined) return NAME;
+    const given = count - selectors;
+    if (given < target.min || given > target.max) return VALUE;
+    const frame = ctx.frames[ctx.calls - 1];
+    held.copyWithin(0, selectors, count);
+    held.length = given;
+    // A row that takes every value of its arguments takes them from references only when it is picked.
+    const only = target.params.length === 1 && target.params[0].rest;
+    for (let i = 0; i < given; i += 1) {
+        const written = held[i];
+        if (only && isReference(written)) continue;
+        if (only || written === undefined || isLazy(written) || written instanceof Table) {
+            return isError(written) ? written : VALUE;
+        }
+        const param = slotOf(target, i, given);
+        const value = read(param, param.prepare === Prepare.Scalar ? ctx.read(written) : written, frame, i);
+        if (isError(value) && ends(param)) return value;
+        held[i] = value;
+    }
+    return run(ctx, target, held, given, choice.skips | passed);
 }

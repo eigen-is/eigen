@@ -27,6 +27,7 @@ import {
     NUMBERS,
     optional,
     PLAIN,
+    refusing,
     SERIAL,
     skippable,
     strict,
@@ -49,7 +50,7 @@ function typed(text: string, now: number) {
 }
 
 const STRICT_DATE = strict(SERIAL);
-const HOLIDAYS = optional(NUMBERS);
+const HOLIDAYS = optional(refusing(NUMBERS, VALUE));
 // Saturday and Sunday, as a weekend code of the INTL functions.
 const WEEKEND = 1;
 

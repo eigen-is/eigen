@@ -4,6 +4,7 @@
 // read a cell or aim a reader. A row that picks another row by its first argument, such as SUBTOTAL, is made by
 // `chosen` and is all data. The constants and modifiers below are the whole vocabulary a family file is written in.
 
+import type { Book } from '../eval/book';
 import type { Family } from '../eval/families';
 import { Families } from '../eval/families';
 import type { Matches, Numbers, Pairs, Room, Table } from '../eval/readers';
@@ -14,9 +15,10 @@ import type { FormulaError } from '../values/errors';
 import { REF, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
 
+export type { Book } from '../eval/book';
 export type { Matches, Numbers, Pairs, Room, Table } from '../eval/readers';
 export type { Vector } from '../eval/search';
-export { ANYWHERE, Find, NESTED, NEXT, PART } from '../eval/signature';
+export { ANYWHERE, ERRORS, Find, NESTED, NEXT, PART } from '../eval/signature';
 export { rectangle } from '../values/rectangle';
 
 export type Registry = ReadonlyMap<string, Entry>;
@@ -31,6 +33,7 @@ const REQUIRED = {
     each: false,
     union: null,
     only: false,
+    apiece: false,
 };
 
 function scalar<T>(read: Read): Param<T> {
@@ -52,7 +55,7 @@ function walked(family: Family): Collector {
 export const NUMBER = scalar<number>(Read.Number);
 // A number cut toward zero, as a count or a position is.
 export const INTEGER = scalar<number>(Read.Integer);
-// A date: a number cut down to a whole day, and #NUM! below 0 or past the last date Excel has.
+// A date: a number cut down to a whole day, and #NUM! before 1 January of the year 1 or past 31 December 9999.
 export const SERIAL = scalar<number>(Read.Serial);
 // A number and a boolean are spelled out, a blank is empty text.
 export const TEXT = scalar<string>(Read.Text);
@@ -68,6 +71,9 @@ export const CORNER: Param<Scalar> = Object.freeze({ ...REQUIRED, prepare: Prepa
 export const PLAIN = scalar<number | string | boolean | null>(Read.Plain);
 // Not evaluated. The body may answer with it, and the wrapper then evaluates the argument: an empty one is a blank.
 export const LAZY: Param<Lazy> = Object.freeze({ ...REQUIRED, prepare: Prepare.Lazy, read: Read.Lazy });
+// As LAZY, and the argument the body answers with is read: one cell is its value, a range the array of its cells,
+// and a union #VALUE!. So the call never answers a reference, as IFERROR never does.
+export const LAZY_VALUE: Param<Lazy> = Object.freeze({ ...REQUIRED, prepare: Prepare.Lazy, read: Read.Valued });
 
 // Every number of a range or an array. Typed as an argument, a text is read as a number and a boolean is 1 or 0.
 export const NUMBERS = walked(Families.Numbers);
@@ -102,6 +108,9 @@ export const RANDOM = ambient<number>(Read.Random);
 export const NOW = ambient<number>(Read.Now);
 // Takes no argument: where a body that builds an array gets it.
 export const ROOM = ambient<Room>(Read.Room);
+// Takes no argument: what a body may ask of the workbook itself, about the one cell its row names. The row then
+// answers anew in every pass that has a write, since what it asks can change with no value changing.
+export const ENGINE = ambient<Book>(Read.Engine);
 
 // What the arguments of the three readings below are read as: a reference and nothing else, and any value.
 const ONLY: Param<Reference> = Object.freeze({
@@ -140,6 +149,18 @@ export const TEXTS: Walked<readonly string[]> = Object.freeze({
     ...{ prepare: Prepare.Walked, read: Read.Texts, union: VALUE },
 });
 
+// The value met most often is asked of these: the numbers, with a text passed over wherever it stands and a typed
+// boolean as 1 or 0. An argument left empty is #VALUE!, as are one blank cell by itself, a union and an element of
+// an array that is a reference.
+export const MODES: Collector = Object.freeze({ ...walked(Families.Modes), union: VALUE });
+// Every value as a whole number's source, in written order: a text is read as a number, in a cell too, or else
+// #VALUE!, a boolean is #VALUE! wherever it stands, and a blank is passed over. A union is #VALUE!, and so is an
+// element of an array that is a reference.
+export const WHOLES: Walked<readonly number[]> = Object.freeze({
+    ...REQUIRED,
+    ...{ prepare: Prepare.Walked, read: Read.Wholes, union: VALUE },
+});
+
 // Two arguments, ranges or arrays of one size, read side by side: the numbers at the places where both hold one.
 // Unequal sizes are #N/A, the earliest error in either is the result, and neither argument may be left out.
 export const PAIRS: Walked<Pairs> = Object.freeze({
@@ -165,18 +186,19 @@ export function skippable(param: Param<unknown>, fallback?: Scalar): Param<unkno
     return Object.freeze({ ...param, optional: true, skips: true, fallback });
 }
 
-// A number reading that refuses a boolean, typed or in a cell, with #VALUE!.
+// A number as Excel's add-in functions read one: a boolean, typed or in a cell, is #VALUE!, a range of several
+// cells is #VALUE! for the whole call where an array runs it once per element, and an argument left empty is #N/A.
 export function strict(param: Param<number>): Param<number> {
-    return Object.freeze({ ...param, strict: true });
+    return Object.freeze({ ...param, strict: true, prepare: Prepare.Single });
 }
 
 // A union is taken, every area of it.
-export function areas<T>(param: Param<T>): Param<T> {
+export function areas<P extends Param<unknown>>(param: P): P {
     return Object.freeze({ ...param, union: null });
 }
 
-// The error a union answers, in place of the reading's own.
-export function refusing<T>(param: Param<T>, error: FormulaError): Param<T> {
+// The error a union answers, in place of the reading's own. A family takes every area unless it is told so.
+export function refusing<P extends Param<unknown>>(param: P, error: FormulaError): P {
     return Object.freeze({ ...param, union: error });
 }
 
@@ -203,6 +225,12 @@ export function each<T>(param: Param<T>): Param<T> & { readonly each: true } {
 // references runs the call once per reference. RANK and SUBTOTAL take their ranges so.
 export function cells<T>(param: Walked<T>): Walked<T> {
     return Object.freeze({ ...param, only: true });
+}
+
+// A range of several cells runs the call once per cell, each handed over as a reference to that one cell, and of
+// a union the first area: ISFORMULA(B1:B7) is seven answers.
+export function apiece(param: Param<Reference>): Param<Reference> {
+    return Object.freeze({ ...param, apiece: true });
 }
 
 type Args<P extends readonly Param<unknown>[]> = { [K in keyof P]: P[K] extends Param<infer T> ? T : never };
@@ -310,16 +338,29 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
         matched,
         volatile: params.some((param) => param.read === Read.Random || param.read === Read.Now),
         chosen: null,
+        options: null,
         plain,
         run: body,
     });
 }
 
-// A row whose first argument, a whole number, picks another row, which then gets the references that follow:
+// What follows the code of a row that picks another: kept as it was written, a reference unread, and read by the
+// parameters of the row that is picked.
+const UNREAD: Param<Scalar> = Object.freeze({ ...REQUIRED, prepare: Prepare.Reference, read: Read.Any });
+
+// A row whose first argument, a whole number, picks another row, which then gets the arguments that follow:
 // `targets` lists the name each code picks and what its walk passes over. A code that is not listed is #VALUE!.
-export function chosen(name: string, targets: readonly (readonly [code: number, target: string, skips: number])[]) {
+// A row that is picked takes references only when it takes every value of its arguments, and else reads each
+// argument by its own parameter. With `options` the row takes a second whole number, and `options[n]` is what the
+// walk passes over for option n on top of what the code says: a number that is no option is #VALUE!.
+export function chosen(
+    name: string,
+    targets: readonly (readonly [code: number, target: string, skips: number])[],
+    options: readonly number[] | null = null,
+) {
     const picks = new Map(targets.map(([code, target, skips]) => [code, { target, skips }]));
-    return Object.freeze({ ...fn(name, [INTEGER, rest(cells(NUMBERS))], () => VALUE), chosen: picks });
+    const selectors = options === null ? [INTEGER] : [INTEGER, INTEGER];
+    return Object.freeze({ ...fn(name, [...selectors, rest(UNREAD)], () => VALUE), chosen: picks, options });
 }
 
 // What a reading makes of its fallback: the fallback itself when it is a value of that reading.

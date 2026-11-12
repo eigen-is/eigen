@@ -5,8 +5,10 @@
 import { toText } from '../values/coerce';
 import type { FormulaError } from '../values/errors';
 import { CALC, VALUE } from '../values/errors';
+import { parseNumber } from '../values/parse-number';
 import type { Value } from '../values/value';
 import { elementAt, heightOf, isArray, isError, isReference, widthOf } from '../values/value';
+import { Book } from './book';
 import { isLazy } from './call';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
@@ -14,7 +16,7 @@ import { Errors, Families } from './families';
 import type { Frame } from './readers';
 import { Numbers, Pairs, Table } from './readers';
 import type { Entry, Held, Param } from './signature';
-import { Prepare, Read } from './signature';
+import { ERRORS, Prepare, Read } from './signature';
 import { firstError } from './views';
 
 // The error that ends the call, or null with `frame.args` ready for the body. `count` arguments were written, and
@@ -34,7 +36,8 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
         const to = param.rest ? count : at + spanOf(param);
         const value = held[at];
         if (param.prepare === Prepare.Ambient) {
-            args[p] = param.read === Read.Room ? ctx.room : param.read === Read.Now ? ctx.now : ctx.draw();
+            if (param.read === Read.Engine) args[p] = Book.aim(ctx.book, entry, held);
+            else args[p] = param.read === Read.Room ? ctx.room : param.read === Read.Now ? ctx.now : ctx.draw();
         } else if (param.prepare !== Prepare.Walked) args[p] = param.rest ? held.slice(at, count) : value;
         else if (family !== null) {
             // Most often the one argument is one range: its cells are computed and looked at in one go.
@@ -56,9 +59,14 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
             args[p] = Numbers.together(frame.numbers(p), at, to);
         } else if (param.read === Read.Texts) {
             const texts = frame.texts(p);
-            const error = spell(ctx, held, at, to, texts);
+            const error = spell(ctx, held, at, to, texts, null);
             if (error !== null) return error;
             args[p] = texts;
+        } else if (param.read === Read.Wholes) {
+            const wholes = frame.wholes(p);
+            const error = spell(ctx, held, at, to, frame.texts(p), wholes);
+            if (error !== null) return error;
+            args[p] = wholes;
         } else if (param.read === Read.Pairs) {
             // Two ranges are paired or none: with one left out the call is #VALUE!.
             const second = held[at + 1];
@@ -98,16 +106,24 @@ function errorIn(ctx: Evaluator, value: Held, family: Family, skips: number): Fo
     for (let i = 0; i < value.items.length; i += 1) {
         const item = value.items[i];
         const found = isReference(item) ? ctx.walk.referred(item, family) : item;
-        if (isError(found)) return found;
+        if (isError(found) && (skips & ERRORS) === 0) return found;
     }
     return null;
 }
 
 // Every value of the arguments `from` up to `to` as a text, in written order and a range row by row: the first
-// error among them, or null with `texts` filled.
-function spell(ctx: Evaluator, held: readonly Held[], from: number, to: number, texts: string[]): FormulaError | null {
+// error among them, or null with `texts` filled. With `wholes` each is read as a number into that list instead.
+function spell(
+    ctx: Evaluator,
+    held: readonly Held[],
+    from: number,
+    to: number,
+    texts: string[],
+    wholes: number[] | null,
+): FormulaError | null {
     const { workbook, recalc } = ctx;
     texts.length = 0;
+    if (wholes !== null) wholes.length = 0;
     for (let i = from; i < to; i += 1) {
         const value = held[i];
         if (!written(value)) continue;
@@ -118,7 +134,8 @@ function spell(ctx: Evaluator, held: readonly Held[], from: number, to: number, 
             const { columns } = workbook.sheets[area.sheet];
             for (let row = area.top; row <= area.bottom && error === null; row += 1) {
                 for (let c = area.left; c <= area.right && error === null; c += 1) {
-                    error = spelled(texts, c < columns.length ? workbook.value(columns[c], row) : null);
+                    const value = c < columns.length ? workbook.value(columns[c], row) : null;
+                    error = wholes === null ? spelled(texts, value) : whole(wholes, value);
                 }
             }
         }
@@ -126,10 +143,11 @@ function spell(ctx: Evaluator, held: readonly Held[], from: number, to: number, 
             if (!recalc.room(value.rows * value.columns)) return CALC;
             for (let row = 0; row < value.rows && error === null; row += 1) {
                 for (let c = 0; c < value.columns && error === null; c += 1) {
-                    error = spelled(texts, elementAt(value, row, c));
+                    const item = elementAt(value, row, c);
+                    error = wholes === null ? spelled(texts, item) : whole(wholes, item);
                 }
             }
-        } else if (!isReference(value)) error = spelled(texts, value);
+        } else if (!isReference(value)) error = wholes === null ? spelled(texts, value) : whole(wholes, value);
         if (error !== null) return error;
     }
     return null;
@@ -141,6 +159,17 @@ function spelled(texts: string[], value: Value): FormulaError | null {
     const text = toText(value);
     if (typeof text !== 'string') return text;
     texts.push(text);
+    return null;
+}
+
+// One value added to `wholes` as the number it is, or as the number its text reads as. A blank is passed over;
+// an error is the answer, and so is #VALUE! for a boolean, a text that is no number and an element that is a
+// reference.
+function whole(wholes: number[], value: Value): FormulaError | null {
+    if (value === null) return null;
+    const number = typeof value === 'string' ? parseNumber(value) : value;
+    if (typeof number !== 'number') return isError(number) ? number : VALUE;
+    wholes.push(number);
     return null;
 }
 

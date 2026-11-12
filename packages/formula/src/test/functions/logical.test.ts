@@ -66,8 +66,8 @@ describe('XOR', () => {
         ['=XOR(B4,NA())', NA],
         ['=XOR(1/0,NA())', DIV0],
         ['=XOR()', VALUE],
-        // Excel check: each reference of the array gives its first cell, 1.5, -2.5 and 0.
-        ['=XOR(OFFSET(A1,{0,1,2},0,2))', false],
+        // Excel batch 10: an element of an array that is a reference is #N/A, as for AND and OR.
+        ['=XOR(OFFSET(A1,{0,1,2},0,2))', NA],
     ])('%s is %p', (formula, expected) => {
         expect(evaluate(formula, SHEET)).toBe(expected);
     });

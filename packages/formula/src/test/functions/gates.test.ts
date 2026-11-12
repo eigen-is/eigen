@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'bun:test';
+import { Fact, shapeFacts } from '../../eval/facts';
 import { Families } from '../../eval/families';
 import type { Entry } from '../../eval/signature';
-import { TOKENS } from '../../eval/signature';
+import { Read, TOKENS } from '../../eval/signature';
 import { FUNCTIONS } from '../../functions/library';
-import type { Matches, Numbers, Pairs, Room, Table, Vector } from '../../functions/registry';
+import type { Book, Matches, Numbers, Pairs, Room, Table, Vector } from '../../functions/registry';
 import {
     ANYTHING,
+    ENGINE,
     each,
     Find,
     fn,
@@ -18,12 +20,15 @@ import {
     optional,
     PAIRS,
     rectangle,
+    refusing,
     rest,
     TABLE,
+    TEXT,
     WHERE,
 } from '../../functions/registry';
 import { Recalc } from '../../recalc/recalc';
 import { Workbook } from '../../store/workbook';
+import { parseA1 } from '../../text';
 import { NA } from '../../values/errors';
 import { ValueType } from '../../values/value';
 import { at, stored } from '../recalc/support';
@@ -97,6 +102,16 @@ describe('what a body can do wrong is caught by the wrapper', () => {
     });
 });
 
+describe('a union is refused where the row says so, by a family too', () => {
+    test('a family that may be left out refuses a union with the error it is given', () => {
+        const row = fn('DAYS2', [NUMBER, optional(refusing(NUMBERS, NA))], (first, rest) => first + rest.count());
+        const cells = { A1: 1, A2: 2, N1: '=DAYS2(1,(A1,A2))', N2: '=DAYS2(1,A1:A2)', N3: '=DAYS2(1)' };
+        const { recalc, value } = passOf(row, cells);
+        recalc.pass(Number.POSITIVE_INFINITY);
+        expect(['N1', 'N2', 'N3'].map(value)).toEqual([NA, 3, 1]);
+    });
+});
+
 describe('a body reaches no cell, column or stored array', () => {
     // Checked when the tests are compiled: a member of Vector that is not listed here is one a body could read.
     test('of a row or a column of a table it gets the two searches and nothing else', () => {
@@ -116,9 +131,43 @@ describe('a body reaches no cell, column or stored array', () => {
         const pairs: Record<keyof Pairs, true> = { xs: true, ys: true };
         const matches: Record<keyof Matches, true> = { count: true };
         const room: Record<keyof Room, true> = { series: true };
-        expect([table, numbers, pairs, matches, room].map((members) => Object.keys(members).length)).toEqual([
-            10, 6, 2, 1, 1,
+        const book: Record<keyof Book, true> = {
+            ...{ formula: true, value: true, elsewhere: true, sheets: true, refer: true },
+        };
+        expect([table, numbers, pairs, matches, room, book].map((members) => Object.keys(members).length)).toEqual([
+            10, 6, 2, 1, 1, 5,
         ]);
+    });
+
+    // Checked when the tests are compiled: a book is asked about the cell its row names, and about no other.
+    test('a body that asks the book about a cell of its choice, or keeps a reference it read, does not compile', () => {
+        const rows = [
+            // @ts-expect-error a book has no member that takes a place
+            fn('PEEK', [INTEGER, ENGINE], (row, book) => book.value(rectangle(0, row, 0, row, 0))),
+            // @ts-expect-error nor one that takes a place for a formula
+            fn('PEEK', [INTEGER, ENGINE], (row, book) => book.formula(rectangle(0, row, 0, row, 0)) ?? 0),
+            // @ts-expect-error the evaluator behind it is not a body's to reach
+            fn('PEEK', [ENGINE], (book) => book.ctx.recalc.valueOf(book.ctx.workbook.sheets[0], 9, 9)),
+            // @ts-expect-error a reference read from a text is handed back only by a row that is marked for it
+            fn('PEEK', [TEXT, ENGINE], (text, book) => book.refer(text, true)),
+        ];
+        expect(rows.length).toBe(4);
+    });
+
+    // A row on this list can answer anew with no value changed, so each is computed in every pass that has a write.
+    test('the rows that ask the workbook are these six, and a formula that calls one reads cells it does not name', () => {
+        const asking = [...FUNCTIONS.values()].filter((entry) =>
+            entry.params.some((param) => param.read === Read.Engine),
+        );
+        expect(asking.map((entry) => entry.name).sort()).toEqual([
+            ...['CELL', 'FORMULATEXT', 'INDIRECT', 'ISFORMULA', 'SHEET', 'SHEETS'],
+        ]);
+        for (const entry of asking) {
+            const tree = parseA1(`=1+${entry.name}(A1)`, 0, 0, () => undefined);
+            expect('reason' in tree ? 0 : shapeFacts(tree, FUNCTIONS) & Fact.ReadsUnnamed).toBe(Fact.ReadsUnnamed);
+        }
+        const plain = parseA1('=1+ISREF(A1)', 0, 0, () => undefined);
+        expect('reason' in plain ? -1 : shapeFacts(plain, FUNCTIONS) & Fact.ReadsUnnamed).toBe(0);
     });
 
     // Checked when the tests are compiled: each of these bodies would read a cell its row does not name.
