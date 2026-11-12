@@ -371,6 +371,28 @@ export class Drive {
         return created;
     }
 
+    // The folder a person's write adds a new child of type `adding` to, such as an upload or a copy.
+    private async personParent(mount: Mount, parentId: string, adding: DrivePathType): Promise<void> {
+        refuseDocumentWrite(await this.folderChain(mount, parentId), adding);
+    }
+
+    // The chain down to a live folder that a write puts a path in. A file holds nothing, so it is not found either.
+    private async folderChain(mount: Mount, folderId: string): Promise<DrivePath[]> {
+        const crumbs = await mount.getBreadcrumb(folderId);
+        const folder = crumbs.at(-1);
+        if (!folder || folder.trashedAt || !isContainerType(folder.type)) {
+            throw new ApiError(404, 'Parent folder not found');
+        }
+        return crumbs;
+    }
+
+    // The path a person's write changes, such as by a rename, a trash or new bytes.
+    private async personPath(mount: Mount, pathId: string): Promise<DrivePath> {
+        const path = await mount.getActivePath(pathId);
+        refuseDocumentWrite(await mount.getBreadcrumb(pathId));
+        return path;
+    }
+
     public async uploadFiles(
         mountId: string,
         parentId: string,
@@ -496,28 +518,6 @@ export class Drive {
             event === 'edited' ? { eventType: 'edited' } : { eventType: 'uploaded', details: { size: updated.size } },
         );
         return { path: committed, etag: computeEtag(committed) };
-    }
-
-    // The folder a person's write adds a new child of type `adding` to, such as an upload or a copy.
-    private async personParent(mount: Mount, parentId: string, adding: DrivePathType): Promise<void> {
-        refuseDocumentWrite(await this.folderChain(mount, parentId), adding);
-    }
-
-    // The chain down to a live folder that a write puts a path in. A file holds nothing, so it is not found either.
-    private async folderChain(mount: Mount, folderId: string): Promise<DrivePath[]> {
-        const crumbs = await mount.getBreadcrumb(folderId);
-        const folder = crumbs.at(-1);
-        if (!folder || folder.trashedAt || !isContainerType(folder.type)) {
-            throw new ApiError(404, 'Parent folder not found');
-        }
-        return crumbs;
-    }
-
-    // The path a person's write changes, such as by a rename, a trash or new bytes.
-    private async personPath(mount: Mount, pathId: string): Promise<DrivePath> {
-        const path = await mount.getActivePath(pathId);
-        refuseDocumentWrite(await mount.getBreadcrumb(pathId));
-        return path;
     }
 
     public async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {
@@ -764,16 +764,6 @@ export class Drive {
         return copied;
     }
 
-    // Writes a document's open databases to storage, so a byte copy of the container gets its latest state.
-    public async flushContainerDb(mountId: string, containerId: string): Promise<void> {
-        await this.getMount(mountId).flushContainerDb(containerId);
-    }
-
-    // The route checks ownership, so SharedDrive has no wrapper.
-    public async ensureChatsFolder(mountId: string, user: User): Promise<string> {
-        return ensureChatsFolder(this, this.getMount(mountId), user);
-    }
-
     // ---- Trash ----
 
     // The trash runs in the path's ACL chain. An ACL change that started first lands first, and the
@@ -804,17 +794,6 @@ export class Drive {
         this.lockManager.releaseAllForPaths([pathId, ...mount.collectDescendantIds(pathId)]);
     }
 
-    // A depth-infinity WebDAV lock on any folder above a path covers it, so every lock check reads these.
-    public async ancestorIds(mountId: string, pathId: string): Promise<string[]> {
-        const crumbs = await this.getMount(mountId).getBreadcrumb(pathId);
-        return crumbs.slice(0, -1).map((crumb) => crumb.id);
-    }
-
-    // A WebDAV LOCK on a folder, and a write that takes one along, reaches the locks on everything under it.
-    public async descendantIds(mountId: string, pathId: string): Promise<string[]> {
-        return this.getMount(mountId).collectDescendantIds(pathId);
-    }
-
     public async restorePath(mountId: string, pathId: string, user: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
@@ -841,6 +820,19 @@ export class Drive {
         for (const item of await mount.listTrash()) {
             await permanentlyDelete(this, mount, item, user);
         }
+    }
+
+    // ---- WebDAV locks ----
+
+    // A depth-infinity WebDAV lock on any folder above a path covers it, so every lock check reads these.
+    public async ancestorIds(mountId: string, pathId: string): Promise<string[]> {
+        const crumbs = await this.getMount(mountId).getBreadcrumb(pathId);
+        return crumbs.slice(0, -1).map((crumb) => crumb.id);
+    }
+
+    // A WebDAV LOCK on a folder, and a write that takes one along, reaches the locks on everything under it.
+    public async descendantIds(mountId: string, pathId: string): Promise<string[]> {
+        return this.getMount(mountId).collectDescendantIds(pathId);
     }
 
     // ---- Access and sharing ----
@@ -1046,6 +1038,11 @@ export class Drive {
         return ChatRoom.open(this, this.home, path);
     }
 
+    // The route checks ownership, so SharedDrive has no wrapper.
+    public async ensureChatsFolder(mountId: string, user: User): Promise<string> {
+        return ensureChatsFolder(this, this.getMount(mountId), user);
+    }
+
     public async assignComment(
         mountId: string,
         pathId: string,
@@ -1198,6 +1195,11 @@ export class Drive {
     }
 
     // ---- Document databases ----
+
+    // Writes a document's open databases to storage, so a byte copy of the container gets its latest state.
+    public async flushContainerDb(mountId: string, containerId: string): Promise<void> {
+        await this.getMount(mountId).flushContainerDb(containerId);
+    }
 
     // Runs fn with the database open, such as a chat room's data.db for one request. It closes after
     // a few idle minutes.
