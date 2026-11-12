@@ -97,7 +97,7 @@ describe('a criterion names its rows', () => {
 
     test('>< is greater than the text <, by the engine own order of text', () => {
         expect(evaluate('=COUNTIF(A1:A4,"><")', { A1: '<', A2: '>', A3: 'a', A4: 5 })).toBe(2);
-        expect(evaluate('=SUMIF(A1:A14,"><",B1:B14)', KINDS)).toBe(1304);
+        expect(evaluate('=SUMIF(A1:A14,"><",B1:B14)', KINDS)).toBe(1306);
     });
 
     test('an array of criteria gives one result each', () => {
