@@ -1,6 +1,7 @@
 // The Location row of the Drive details panel: the drive and the folders down to the item's parent, read from the
-// parent's breadcrumb, as a link to that folder. A sharee who can't read the folders above sees the owner as the
-// drive, as plain text.
+// item's own breadcrumb, the one its sharing list reads, as a link to that folder. A plain click opens the folder
+// the way a row does, and a modified click is the browser's. A sharee who can't read the folders above sees the
+// owner as the drive, as plain text.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { teamOwnerId } from '@workspace/lib/types';
@@ -20,11 +21,22 @@ const projects = folder('projects', 'Projects', 'root');
 const year = folder('year', '2026', 'projects');
 const teamRoot = folder('team-root', 'Shared files', null, teamOwnerId('t1'), 'm1');
 
-// The breadcrumb each parent reads, as the server trims it for this viewer, and the ids the panel asked for.
+const plan = drivePath({ id: 'plan', name: 'plan.txt', mimeType: 'text/plain', parentId: 'year' });
+const brief = drivePath({
+    id: 'brief',
+    name: 'brief.txt',
+    mimeType: 'text/plain',
+    parentId: 'team-root',
+    ownerId: teamOwnerId('t1'),
+    mountId: 'm1',
+});
+const memo = drivePath({ id: 'memo', name: 'memo.txt', mimeType: 'text/plain', parentId: 'hidden', ownerId: 'alice' });
+
+// The breadcrumb of each item, as the server trims it for this viewer, and the ids the panel asked for.
 const chains = new Map<string, DrivePath[]>([
-    ['year', [root, projects, year]],
-    ['team-root', [teamRoot]],
-    ['hidden', []],
+    ['plan', [root, projects, year, plan]],
+    ['brief', [teamRoot, brief]],
+    ['memo', [memo]],
 ]);
 const breadcrumbReads: (string | undefined)[] = [];
 
@@ -80,12 +92,17 @@ let unmount = async () => {};
 afterEach(async () => {
     await unmount();
     breadcrumbReads.length = 0;
+    runs.length = 0;
 });
 
+// The actions the panel ran, by id and the items' ids.
+const runs: string[] = [];
 const actions = {
     capabilities: DRIVE_CAPABILITIES.readOnly,
     actionsFor: () => [],
-    run: () => {},
+    run: (id: string, items: readonly DrivePath[]) => {
+        runs.push(`${id} ${items.map((item) => item.id).join(',')}`);
+    },
     onCreateEigenDoc: {},
     dialogs: null,
 };
@@ -98,31 +115,31 @@ async function location(path: DrivePath): Promise<Element> {
 }
 
 test('a file two folders deep shows the drive and both folders, as a link to its parent', async () => {
-    const value = await location(drivePath({ id: 'plan', name: 'plan.txt', mimeType: 'text/plain', parentId: 'year' }));
-    expect(breadcrumbReads).toContain('year');
+    const value = await location(plan);
+    expect(new Set(breadcrumbReads)).toEqual(new Set(['plan']));
     expect(value.textContent).toBe('Drive › Projects › 2026');
     expect(value.querySelector('a')?.getAttribute('href')).toBe(getDriveItemUrl(year) ?? null);
 });
 
+test('a plain click on the location opens the folder in the view, and a cmd-click leaves it to the browser', async () => {
+    const link = (await location(plan)).querySelector('a');
+    if (!link) throw new Error('no link');
+    const plain = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link.dispatchEvent(plain);
+    const withCommand = new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: true });
+    link.dispatchEvent(withCommand);
+    expect(runs).toEqual(['open year']);
+    expect([plain.defaultPrevented, withCommand.defaultPrevented]).toEqual([true, false]);
+});
+
 test('a file at the root of a team drive shows the drive by its sidebar name', async () => {
-    const value = await location(
-        drivePath({
-            id: 'brief',
-            name: 'brief.txt',
-            mimeType: 'text/plain',
-            parentId: 'team-root',
-            ownerId: teamOwnerId('t1'),
-            mountId: 'm1',
-        }),
-    );
+    const value = await location(brief);
     expect(value.textContent).toBe('Design files');
     expect(value.querySelector('a')?.getAttribute('href')).toBe(getDriveItemUrl(teamRoot) ?? null);
 });
 
 test('a file shared without its folders shows its owner as the drive, and no link', async () => {
-    const value = await location(
-        drivePath({ id: 'memo', name: 'memo.txt', mimeType: 'text/plain', parentId: 'hidden', ownerId: 'alice' }),
-    );
+    const value = await location(memo);
     expect(value.textContent).toBe('Alice Example');
     expect(value.querySelector('a')).toBeNull();
 });

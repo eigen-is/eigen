@@ -108,7 +108,7 @@ export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
                         </DropdownMenu>
                     </div>
                 </div>
-                <DetailsSection path={path} />
+                <DetailsSection path={path} actions={actions} />
                 <h3 className="eigen-section-label mt-6 mb-2">Shared with</h3>
                 <DriveAccessList path={path} onShareClick={share && (() => actions.run(share.id, [path]))} />
                 <RecentActivity path={path} />
@@ -120,18 +120,15 @@ export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
 
 const EXTRA_DETAIL_HIDDEN_KEYS = new Set(['width', 'height', 'duration', 'pageCount', 'webdavProps', 'originalName']);
 
-function DetailsSection({ path }: { path: DrivePath }) {
+function DetailsSection({ path, actions }: { path: DrivePath; actions: DriveActionRunner }) {
     const presentation = getFilePresentation(path.mimeType, path.type, path.name);
     const details = path.details;
     const extraEntries = details ? Object.entries(details).filter(([key]) => !EXTRA_DETAIL_HIDDEN_KEYS.has(key)) : [];
 
-    // The parent's chain, the one the folder view reads. Cut short above the viewer's reach, it no longer starts at
-    // the drive, so the owner stands in for it.
-    const {
-        data: chain = [],
-        isPending,
-        isError,
-    } = useBreadcrumb(path.ownerId, path.mountId, path.parentId ?? undefined);
+    // The item's own chain, which its sharing list reads too, less the item. Cut short above the viewer's reach, it
+    // no longer starts at the drive, so the owner stands in for it.
+    const { data: itemChain = [], isPending, isError } = useBreadcrumb(path.ownerId, path.mountId, path.id);
+    const chain = itemChain.slice(0, -1);
     const mountLabel = useMountLabel(path.ownerId, path.mountId);
     const { displayName: ownerName } = useResolvedUser({ userId: path.ownerId });
     const fromRoot = chain.length > 0 && !sharedChainHead(chain);
@@ -156,7 +153,16 @@ function DetailsSection({ path }: { path: DrivePath }) {
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         {parentHref ? (
-                                            <a href={parentHref} className="hover:underline">
+                                            <a
+                                                href={parentHref}
+                                                className="hover:underline"
+                                                onClick={(event) => {
+                                                    // A modified click keeps the link's own, such as a new tab.
+                                                    if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+                                                    event.preventDefault();
+                                                    actions.run('open', [parent]);
+                                                }}
+                                            >
                                                 {location}
                                             </a>
                                         ) : (
@@ -170,7 +176,7 @@ function DetailsSection({ path }: { path: DrivePath }) {
                     />
                 )}
                 <Row label="Size" value={formatFileSize(path.size)} />
-                {path.createdAt && <Row label="Created" value={formatDateTime(path.createdAt)} />}
+                <Row label="Created" value={formatDateTime(path.createdAt)} />
                 {details?.width && details?.height && (
                     <Row label="Dimensions" value={`${details.width} × ${details.height}`} />
                 )}
