@@ -131,8 +131,8 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
                 let bound = tree;
                 let named = '';
                 if (change.kind === ChangeKind.AddSheet) {
-                    named = change.source.id;
-                    if (shape.namesSheet) bound = bindSheet(tree, change.source.name, named);
+                    named = change.sheet.id;
+                    if (shape.namesSheet) bound = bindSheet(tree, change.sheet.name, named);
                 } else if (change.kind === ChangeKind.RenameSheet) {
                     if (shape.namesSheet) bound = bindSheet(tree, change.name, change.sheet);
                 } else if (change.kind === ChangeKind.RemoveSheet) named = change.sheet;
@@ -143,6 +143,30 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
                 outcome(bound, bound !== tree, reads || bound !== tree, [top, left, bottom, right], host.id, 0, 0);
             }
         }
+    }
+    // The formulas of a sheet that comes, typed with the name of a sheet that is there or with its own. The sheet
+    // is in no place yet and nothing reads it, so they get their new shape where they stand.
+    if (change.kind === ChangeKind.AddSheet) {
+        const { sheet } = change;
+        sheet.columns.forEach((column, c) => {
+            for (let row = 0; row < column.length; ) {
+                const id = column.shape[row];
+                const top = row;
+                do row += 1;
+                while (row < column.length && column.shape[row] === id);
+                if (id === 0) continue;
+                const shape = shapes.shape(id);
+                if (shape.tree === null || !shape.namesSheet) continue;
+                let bound = bindSheet(shape.tree, sheet.name, sheet.id);
+                for (const other of sheets) bound = bindSheet(bound, other.name, other.id);
+                if (bound === shape.tree) continue;
+                const shaped = shapes.internTree(bound);
+                const bottom = row - 1;
+                column.fillShape(top, bottom, shaped);
+                const formula = shapes.shape(shaped).text;
+                plan.rewrites.push({ sheet: sheet.id, top, left: c, bottom, right: c, formula, lost: shape.text });
+            }
+        });
     }
     return plan;
 }

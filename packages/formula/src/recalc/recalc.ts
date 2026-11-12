@@ -10,7 +10,8 @@ import type { Registry } from '../functions/registry';
 import type { Column } from '../store/column';
 import { DIRTY, KIND_MASK, LOOP, RUNNING, SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
-import type { Change, Literal, Workbook } from '../store/workbook';
+import type { Change, Literal, SheetSource, Workbook } from '../store/workbook';
+import { ChangeKind } from '../store/workbook';
 import { ERROR, REF } from '../values/errors';
 import type { Reference, Scalar } from '../values/value';
 import type { Rewrite } from './edit-plan';
@@ -121,6 +122,13 @@ export class Recalc {
         this.stale = true;
         for (let c = left; c <= right; c += 1) this.seeds.push(sheet.place, c, top, bottom);
         this.workbook.fillFormula(sheet, top, left, bottom, right, text);
+    }
+
+    // Adds a sheet from its description. The index is brought up to date before the sheet is loaded, as that
+    // forgets the shapes no cell of the workbook holds, and the cells of the new sheet are not the workbook's yet.
+    public addSheet(source: SheetSource, place: number): EditResult {
+        this.reach();
+        return this.edit({ kind: ChangeKind.AddSheet, sheet: this.workbook.load(source), place });
     }
 
     // Performs a structural edit. The formulas whose value it can change are flagged with everything that reads

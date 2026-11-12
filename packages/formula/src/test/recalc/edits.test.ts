@@ -466,6 +466,62 @@ describe('sheets', () => {
         other.recalc(NO_CAP);
         expect([valueAt(other, 'C1'), other.sheetAt(2)]).toEqual([8, 's7']);
     });
+    test('a sheet that comes with formulas typed with the name of a sheet that is there reads that sheet', () => {
+        const engine = book();
+        // As a sheet comes back that was removed before the others got their names: nothing bound its texts.
+        const added = engine.addSheet(
+            {
+                id: 's3',
+                name: 'Third',
+                cells: (cell) => {
+                    cell(0, 0, 77, "='sheet2'!R1C2+1");
+                    cell(1, 0, 77, "='sheet2'!R1C2+1");
+                    cell(2, 0, null, '=[s1]!R1C1');
+                    cell(0, 1, null, "='Third'!R[1]C+'Sheet1'!R1C1");
+                    cell(1, 1, 3, null);
+                    cell(0, 2, null, "='Nowhere'!R1C1");
+                },
+            },
+            1,
+        );
+        expect(added.rewrites).toEqual([
+            { sheet: 's3', top: 0, left: 0, bottom: 1, right: 0, formula: '=[s2]!R1C2+1', lost: "='sheet2'!R1C2+1" },
+            {
+                sheet: 's3',
+                top: 0,
+                left: 1,
+                bottom: 0,
+                right: 1,
+                formula: '=[s3]!R[1]C+[s1]!R1C1',
+                lost: "='Third'!R[1]C+'Sheet1'!R1C1",
+            },
+        ]);
+        expect(engine.formulaOf('s3', 1, 0)).toBe('=[s2]!R1C2+1');
+        engine.recalc(NO_CAP);
+        expect([0, 1, 2].map((row) => engine.valueOf('s3', row, 0))).toEqual([10, 10, 1]);
+        expect([engine.valueOf('s3', 0, 1), engine.valueOf('s3', 0, 2)]).toEqual([4, REF]);
+        // What was bound stays bound when the name goes to another sheet.
+        engine.renameSheet('s2', 'Other');
+        engine.setValue('s2', 0, 1, 20);
+        engine.recalc(NO_CAP);
+        expect(engine.valueOf('s3', 0, 0)).toBe(21);
+    });
+    test('a sheet whose cells cannot be read is not added, and nothing changes', () => {
+        const engine = book();
+        const broken = {
+            id: 's7',
+            name: 'Later',
+            cells: () => {
+                throw new Error('no cells');
+            },
+        };
+        expect(() => engine.addSheet(broken, 0)).toThrow('no cells');
+        expect([text(engine, 'C1'), engine.sheetAt(0)]).toEqual(["='Later'!RC[-2]", 's1']);
+        expect(() => engine.valueOf('s7', 0, 0)).toThrow('No sheet s7');
+        engine.setValue('s1', 0, 0, 3);
+        expect(engine.recalc(NO_CAP).stopped).toBe(false);
+        expect([valueAt(engine, 'C1'), engine.valueOf('s2', 0, 0)]).toEqual([REF, 7]);
+    });
     test('a loop through a sheet that goes is no loop any more, and is one again when the sheet returns', () => {
         const engine = computed({ s1: { A1: '=Sheet2!A1' }, s2: { A1: '=Sheet1!A1' } });
         expect(engine.recalc(NO_CAP).loops).toHaveLength(2);

@@ -83,10 +83,11 @@ export class Engine {
     }
 
     // Adds a sheet at a place among the tabs, from 0. Its formulas are computed by the next recalc whatever
-    // values they came with. A formula typed with its name while no sheet had it now reads it.
+    // values they came with. A formula typed with its name while no sheet had it now reads it, and a formula of
+    // its own typed with the name of a sheet that is there reads that one: the result lists both.
     public addSheet(source: SheetSource, place: number): EditResult {
         if (this.workbook.sheet(source.id) !== undefined) throw new Error(`Sheet ${source.id} exists`);
-        return this.calc.edit({ kind: ChangeKind.AddSheet, source, place });
+        return this.calc.addSheet(source, place);
     }
 
     // A formula that names the sheet keeps naming it, reads #REF!, and reads it again when the id comes back.

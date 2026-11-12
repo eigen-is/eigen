@@ -192,7 +192,7 @@ describe('the sheets of a workbook', () => {
         expect(places()).toBe('b0 c1 a2');
         workbook.apply({ kind: ChangeKind.RemoveSheet, sheet: 'b' }, []);
         expect([places(), workbook.sheet('b')]).toEqual(['c0 a1', undefined]);
-        workbook.apply({ kind: ChangeKind.AddSheet, source: source('d'), place: 1 }, []);
+        workbook.apply({ kind: ChangeKind.AddSheet, sheet: workbook.load(source('d')), place: 1 }, []);
         workbook.apply({ kind: ChangeKind.RenameSheet, sheet: 'd', name: 'Dee' }, []);
         expect([places(), workbook.known('d').name]).toEqual(['c0 d1 a2', 'Dee']);
         expect(() => workbook.known('b')).toThrow('No sheet b');

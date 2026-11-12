@@ -22,7 +22,6 @@ import {
     keyOf,
     RANGE,
     ROWS,
-    rebound,
     rowOf,
     sourcesOf,
     textOf,
@@ -445,12 +444,9 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
         const sheetEdit = (): Op => {
             const drawn = pick(5);
             if (drawn === 0 && model.length > 1) return { kind: 'remove', id: present() };
+            // A sheet comes back as it went: what it holds typed with a name is the engine's to bind.
             if (drawn === 1 && removed.length > 0) {
-                // The host binds what the sheet holds to the sheets there are before it hands the sheet over.
-                const later = model.find((sheet) => sheet.name === 'Later');
-                const back = one(removed);
-                const sheet = later === undefined ? back : rebound(back, 'Later', later.id);
-                return { kind: 'add', sheet, place: pick(model.length + 1) };
+                return { kind: 'add', sheet: one(removed), place: pick(model.length + 1) };
             }
             if (
                 drawn === 2 &&
@@ -584,7 +580,8 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
                 else if (cell.value !== null) engine.setValue(sheet, row, column, cell.value);
             }
             for (const rewrite of rewrites) {
-                if (rewrite.lost === null) continue;
+                // The texts a sheet lost when it was added went with the sheet.
+                if (rewrite.lost === null || (op.kind === 'add' && rewrite.sheet === op.sheet.id)) continue;
                 const { sheet, top, left, bottom, right } = back(rewrite);
                 engine.fillFormula(sheet, top, left, bottom, right, rewrite.lost);
             }
