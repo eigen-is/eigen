@@ -281,6 +281,29 @@ test('Delete permanently on a team drive’s item deletes it from that team’s 
     expect(writes).toEqual(['DELETE /drive/team_design/shared/trash/team.txt']);
 });
 
+test('Delete permanently names a trashed document without its extension, as Move to trash does', async () => {
+    trash.items = [{ ...trashed('Plan.eigendoc', 1, 2), type: 'doc' }];
+    const container = await open();
+    await openRowMenu(container, 'Plan');
+    await clickRow('Delete permanently');
+    expect(dialog()?.textContent).toContain('Plan');
+    expect(dialog()?.textContent).not.toContain('.eigendoc');
+});
+
+test('Restore on a selection restores every item, the refused one included', async () => {
+    trash.items = [trashed('a.txt', 1, 3), trashed('b.txt', 1, 2), trashed('c.txt', 1, 1)];
+    const container = await open();
+    const rows = [...container.querySelectorAll('[role="grid"] [data-index] > *')];
+    await click(rows[0]);
+    await act(async () => {
+        rows[2]?.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+    });
+    await act(async () => palette.actions?.find(({ action }) => action.id === 'restore')?.run());
+    expect(writes).toEqual(
+        ['a.txt', 'b.txt', 'c.txt'].map((id) => `POST /drive/trash-owner/default/trash/${id}/restore`),
+    );
+});
+
 test('the palette offers a trashed item only Restore and Delete permanently', async () => {
     trash.items = [trashed('a.txt', 1, 2)];
     const container = await open();

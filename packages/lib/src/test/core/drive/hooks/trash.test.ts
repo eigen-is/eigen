@@ -1,7 +1,8 @@
 // The Trash lists what was deleted from every drive the viewer owns or co-owns: each of their own mounts and
 // each mount of their teams. Its length is the sidebar's count. A drive whose trash fails to load is left out
 // and named, and the others still list. A teammate's trash or restore refetches the team drive's list. Restore and Delete
-// permanently go to the item's own drive, and Empty trash empties the viewer's own mounts only.
+// permanently go to the item's own drive, a selection refetches each drive's list once, and Empty trash empties the
+// viewer's own mounts only.
 import { beforeEach, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import type { DrivePath } from '../../../../types/drive';
@@ -78,7 +79,7 @@ beforeEach(() => {
 
 type Trash = ReturnType<typeof import('../../../../core/drive/hooks/trash').useTrash>;
 type Writes = {
-    restore: (item: DrivePath) => Promise<unknown>;
+    restore: (items: readonly DrivePath[]) => Promise<unknown>;
     destroy: (items: readonly DrivePath[]) => Promise<unknown>;
     empty: () => Promise<unknown>;
 };
@@ -86,7 +87,7 @@ type Writes = {
 // Mounts the Trash with its writes, as the page does, and waits for its lists.
 async function openTrash(viewerId: string = OWNER) {
     const { act } = await import('react');
-    const { useEmptyTrash, usePermanentlyDelete, useRestorePath, useTrash } = await import(
+    const { useEmptyTrash, usePermanentlyDelete, useRestorePaths, useTrash } = await import(
         '../../../../core/drive/hooks/trash'
     );
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -100,7 +101,7 @@ async function openTrash(viewerId: string = OWNER) {
     };
     const { unmount } = await renderHook(() => {
         seen.trash = useTrash(viewerId);
-        const restore = useRestorePath();
+        const restore = useRestorePaths();
         const destroy = usePermanentlyDelete();
         const empty = useEmptyTrash(viewerId);
         seen.writes = { restore: restore.mutateAsync, destroy: destroy.mutateAsync, empty: () => empty.mutateAsync() };
@@ -147,6 +148,24 @@ test('a team drive whose trash fails to load is named by its mount, as the sideb
     const { trash, unmount } = await openTrash();
     expect(ids(trash())).toEqual(['archived', 'own']);
     expect(trash().failedDrives).toEqual(['Design files']);
+    await unmount();
+});
+
+test('when the teams fail to load, the team drives are named as failed and the own drives still list', async () => {
+    server.failing.add(`/home/${OWNER}/my-teams`);
+    const { trash, unmount } = await openTrash();
+    expect(ids(trash())).toEqual(['archived', 'own']);
+    expect(trash().failedDrives).toEqual(['your team drives']);
+    expect(trash().error).toBeNull();
+    await unmount();
+});
+
+test('when the teams and every own drive fail to load, the trash is an error', async () => {
+    server.failing.add(`/home/${OWNER}/my-teams`);
+    server.failing.add(`/drive/${OWNER}/default/trash`);
+    server.failing.add(`/drive/${OWNER}/archive/trash`);
+    const { trash, unmount } = await openTrash();
+    expect(trash().error).toBeInstanceOf(Error);
     await unmount();
 });
 
@@ -200,7 +219,7 @@ test.each([SSEventType.DRIVE_PATH_TRASHED, SSEventType.DRIVE_PATH_RESTORED] as c
 test('Restore and Delete permanently go to the item’s own owner and mount', async () => {
     const { write, unmount } = await openTrash();
     server.requests = [];
-    await write(({ restore }) => restore(TEAMS));
+    await write(({ restore }) => restore([TEAMS]));
     await write(({ destroy }) => destroy([TEAMS, ARCHIVED]));
     expect(server.requests.filter((request) => !request.startsWith('GET'))).toEqual([
         `POST /drive/${TEAM}/shared/trash/teams/restore`,
@@ -213,13 +232,35 @@ test('Restore and Delete permanently go to the item’s own owner and mount', as
 test('a restore or a permanent delete refetches the trash of the item’s drive', async () => {
     const { trash, write, flush, unmount } = await openTrash();
     server.trash[`/drive/${TEAM}/shared/trash`] = [];
-    await write(({ restore }) => restore(TEAMS));
+    await write(({ restore }) => restore([TEAMS]));
     await flush();
     expect(ids(trash())).toEqual(['archived', 'own']);
     server.trash[`/drive/${OWNER}/archive/trash`] = [];
     await write(({ destroy }) => destroy([ARCHIVED]));
     await flush();
     expect(ids(trash())).toEqual(['own']);
+    await unmount();
+});
+
+// Every invalidation of a list on screen starts its fetch, so 300 items of one drive sent 300 requests for its trash.
+const ONE_DRIVE = ['a', 'b', 'c'].map((id) => trashed(id, OWNER, 'default'));
+test.each([
+    ['restore', ({ restore }: Writes) => restore(ONE_DRIVE)],
+    ['permanent delete', ({ destroy }: Writes) => destroy(ONE_DRIVE)],
+] as const)('a %s of several items of one drive refetches its trash once', async (_, run) => {
+    const { write, flush, unmount } = await openTrash();
+    server.requests = [];
+    await write(run);
+    await flush();
+    expect(server.requests.filter((request) => request === `GET /drive/${OWNER}/default/trash`)).toHaveLength(1);
+    await unmount();
+});
+
+test('restoring several items where one is refused says so in one message', async () => {
+    const { write, unmount } = await openTrash();
+    server.failing.add(`/drive/${OWNER}/default/trash/b/restore`);
+    await write(({ restore }) => restore(ONE_DRIVE));
+    expect(toasts).toEqual(['error: Failed to restore 1 of 3 items: Storage is gone (500)']);
     await unmount();
 });
 

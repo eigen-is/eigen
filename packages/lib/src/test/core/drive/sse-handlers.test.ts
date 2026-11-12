@@ -270,14 +270,37 @@ describe('handleDriveSSEvent — DRIVE_FILE_HISTORY_UPDATED', () => {
     });
 });
 
-// A delete is always a delete from the trash, so a Trash view open in another tab must drop the row.
-describe('handleDriveSSEvent — DRIVE_FILE_DELETED / DRIVE_FOLDER_DELETED', () => {
-    test("refreshes the owner's trash lists", () => {
-        for (const type of [SSEventType.DRIVE_FILE_DELETED, SSEventType.DRIVE_FOLDER_DELETED] as const) {
-            const invalidated = invalidatedBy((queryClient) =>
-                handleDriveSSEvent(driveEvent(type), queryClient, VIEWER),
-            );
-            expect(hasKey(invalidated, driveKeys.trash(OWNER))).toBe(true);
-        }
-    });
+// A delete is always a delete from the trash, so a Trash view open in another tab must drop the row. The sidebar
+// keeps every drive's trash list open, so the events that cannot change a trash leave it alone.
+test.each([
+    [SSEventType.DRIVE_PATH_TRASHED, true],
+    [SSEventType.DRIVE_PATH_RESTORED, true],
+    [SSEventType.DRIVE_FILE_DELETED, true],
+    [SSEventType.DRIVE_FOLDER_DELETED, true],
+    [SSEventType.DRIVE_FILE_CREATED, false],
+    [SSEventType.DRIVE_FILE_UPLOADED, false],
+    [SSEventType.DRIVE_FOLDER_CREATED, false],
+    [SSEventType.DRIVE_PATH_RENAMED, false],
+    [SSEventType.DRIVE_PATH_MOVED, false],
+] as const)("%s refreshes the owner's trash lists: %p", (type, refreshes) => {
+    const invalidated = invalidatedBy((queryClient) => handleDriveSSEvent(driveEvent(type), queryClient, VIEWER));
+    expect(hasKey(invalidated, driveKeys.trash(OWNER))).toBe(refreshes);
+});
+
+// Shared by me, Shared with me, Recent and Watched list items of several owners by name, and they are the viewer's.
+test.each([
+    SSEventType.DRIVE_PATH_RENAMED,
+    SSEventType.DRIVE_PATH_MOVED,
+    SSEventType.DRIVE_PATH_TRASHED,
+    SSEventType.DRIVE_FILE_DELETED,
+] as const)("%s refreshes the viewer's lists of other owners' items", (type) => {
+    const invalidated = invalidatedBy((queryClient) => handleDriveSSEvent(driveEvent(type), queryClient, VIEWER));
+    expect(
+        [
+            driveKeys.shared(VIEWER, 'by-me'),
+            driveKeys.shared(VIEWER, 'with-me'),
+            driveKeys.recent(VIEWER),
+            driveKeys.watchesAll(),
+        ].map((key) => hasKey(invalidated, key)),
+    ).toEqual([true, true, true, true]);
 });

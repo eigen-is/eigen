@@ -1,3 +1,7 @@
+// The hooks behind sharing a Drive item: changing its ACL, mailing its collaborators, asking for access, and
+// reading who may open it, such as the viewer's own permissions, its effective members and the shared lists.
+// The Share dialog and the details pane call them; checkPathAccess is the mail composer's one-off probe at send.
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
@@ -7,7 +11,6 @@ import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys, invalidateAclSharedOrUnshared, invalidateAclUpdated } from './keys';
 
-// UPDATE ACL
 export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID, currentUserId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
@@ -34,15 +37,8 @@ export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
             return response.data;
         },
         onSuccess: (_data, variables) => {
-            invalidateAclUpdated(
-                queryClient,
-                ownerId,
-                variables.path.mountId,
-                variables.path.id,
-                variables.path.parentId,
-                variables.path.mimeType,
-            );
-            // Invalidate the current user's shared-with-me (ownerId is the document owner, not the current user)
+            invalidateAclUpdated(queryClient, variables.path);
+            // A sharer other than the owner, such as an editor, has a Shared with me list of their own.
             if (currentUserId && currentUserId !== ownerId) {
                 invalidateAclSharedOrUnshared(queryClient, currentUserId);
             }
@@ -52,7 +48,6 @@ export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
     });
 }
 
-// EMAIL COLLABORATORS
 export function useEmailCollaborators(ownerId: string, mountId: string) {
     return useMutation({
         mutationFn: async ({
@@ -79,7 +74,6 @@ export function useEmailCollaborators(ownerId: string, mountId: string) {
     });
 }
 
-// CHECK PERMISSIONS (read + write in a single request)
 export function useCheckPermissions(ownerId: string, mountId: string, pathId: string | undefined) {
     return useQuery({
         queryKey: driveKeys.permissions(ownerId, mountId, pathId || ''),
@@ -94,7 +88,7 @@ export function useCheckPermissions(ownerId: string, mountId: string, pathId: st
     });
 }
 
-// EFFECTIVE MEMBERS (teams expanded, ancestors walked, deduplicated)
+// Teams expanded into their members and the folders above walked, each person once.
 export function useEffectiveMembers(ownerId: string, mountId: string, pathId: string | undefined) {
     return useQuery({
         queryKey: driveKeys.effectiveMembers(ownerId, mountId, pathId || ''),
@@ -125,7 +119,6 @@ export function useSharedPaths(ownerId: string, to: 'by-me' | 'with-me') {
     });
 }
 
-// REQUEST ACCESS
 export function useRequestAccess(ownerId: string, mountId: string, pathId: string) {
     return useMutation({
         mutationFn: async (body: { message?: string }) => {
@@ -137,8 +130,7 @@ export function useRequestAccess(ownerId: string, mountId: string, pathId: strin
     });
 }
 
-// CHECK ACCESS FOR EMAILS — imperative, time-of-send probe for the mail share-and-send dialog. Not a
-// query hook: the answer is only good at the moment of send and must never be cached or reused.
+// Not a query hook: the answer holds only at the moment of send, so it is never cached.
 export async function checkPathAccess(
     ownerId: string,
     mountId: string,
