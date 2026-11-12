@@ -62,20 +62,20 @@ export const Read = {
     Any: 15,
     Lazy: 16,
     // As Lazy, and the argument that is picked is read to a value: a reference does not come back as one.
-    Valued: 25,
+    Valued: 17,
     // The value of the first cell of a reference, or the value itself.
-    Corner: 17,
+    Corner: 18,
     // Readings of a whole parameter, whose arguments are read as Only and Any: a criteria range with its
     // criterion, the numbers beside the cells every criterion accepts, and the cells that show nothing.
-    Where: 18,
-    Matched: 19,
-    Blanks: 20,
+    Where: 19,
+    Matched: 20,
+    Blanks: 21,
     // What takes no argument: room for an array, a draw in [0, 1), the date and time as a serial, and what a
     // body may ask of the workbook.
-    Room: 21,
-    Random: 22,
-    Now: 23,
-    Engine: 24,
+    Room: 22,
+    Random: 23,
+    Now: 24,
+    Engine: 25,
 } as const;
 
 export type Read = (typeof Read)[keyof typeof Read];
