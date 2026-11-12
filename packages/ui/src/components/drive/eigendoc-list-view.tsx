@@ -54,7 +54,7 @@ export function EigenDocListView({
     const { isMobile } = useLayout();
     const capabilities = {
         ...DRIVE_CAPABILITIES.listing,
-        // Move to works inside the layout's one owner and mount, so only a list of one mount offers it.
+        // The other lists also hold items shared with the viewer, whose drive the move picker can't open.
         canMove: isMountScoped,
         createTypes: new Set([config.type]),
     };

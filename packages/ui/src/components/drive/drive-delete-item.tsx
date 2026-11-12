@@ -1,6 +1,6 @@
 // The dialog that confirms a Drive delete of one item or a set. It says what the server will do: leave a
 // direct share, trash an item in someone else's drive into its owner's trash, or move the viewer's own items
-// to their trash. The Drive action runner and an open document's File menu open it when a delete asks first.
+// to their trash. Whoever runs the delete, such as the Drive action runner, opens it when a delete asks first.
 
 import { PartialBatchError, useDeletePaths, useIsEffectiveOwnerOf, useIsSharedWithMe } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';

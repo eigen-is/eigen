@@ -8,7 +8,7 @@ import { subjectInfo } from '@workspace/lib/file-subject';
 import { useSaveMailAttachmentsToDrive } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { DriveLocationPicker } from './drive-location-picker';
 
 type SaveToDrivePickerProps = {
@@ -17,24 +17,29 @@ type SaveToDrivePickerProps = {
     onClose: () => void;
     // What the save created: the runner converts what it just saved for a subject with no Drive path.
     onSaved?: (paths: DrivePath[]) => void;
+    // The picker stays open after a partial failure, and its owner narrows subjects to the failed ones for a retry.
+    onPartialFailure: (failed: FileSubject[]) => void;
     // For a caller whose save is a step in something larger (a convert).
     title?: string;
     confirmLabel?: string;
 };
 
-export function SaveToDrivePicker({ subjects, open, onClose, onSaved, title, confirmLabel }: SaveToDrivePickerProps) {
+export function SaveToDrivePicker({
+    subjects,
+    open,
+    onClose,
+    onSaved,
+    onPartialFailure,
+    title,
+    confirmLabel,
+}: SaveToDrivePickerProps) {
     // Siblings come from one surface, so a batch is all Drive items or all mail parts: the first picks the branch.
     const source = subjects[0]?.drive;
     const mail = subjects[0]?.mail;
     const { mutateAsync: copyToFolder } = useCopyToFolder();
     const saveMailAttachments = useSaveMailAttachmentsToDrive();
-    // After a partial failure a retry sends only the files that failed, until the picker closes.
-    const [failed, setFailed] = useState<readonly DrivePath[] | null>(null);
-    useEffect(() => {
-        if (!open) setFailed(null);
-    }, [open]);
-    const items = failed ?? subjects.flatMap((subject) => (subject.drive ? [subject.drive] : []));
-    const count = mail ? subjects.length : items.length;
+    const items = subjects.flatMap((subject) => (subject.drive ? [subject.drive] : []));
+    const count = subjects.length;
     const downloadTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
     useEffect(
         () => () => {
@@ -79,7 +84,11 @@ export function SaveToDrivePicker({ subjects, open, onClose, onSaved, title, con
                           ...target,
                       })
                     : await copyToFolder({ items, ...target }).catch((error: unknown) => {
-                          if (error instanceof PartialBatchError) setFailed(error.failed);
+                          if (error instanceof PartialBatchError) {
+                              onPartialFailure(
+                                  subjects.filter((subject) => subject.drive && error.failed.includes(subject.drive)),
+                              );
+                          }
                           throw error;
                       });
                 onSaved?.(saved);
