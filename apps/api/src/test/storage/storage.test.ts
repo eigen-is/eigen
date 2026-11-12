@@ -1,6 +1,7 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import * as fsPromises from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { S3Storage } from '../../lib/storage/s3-storage';
 
@@ -114,6 +115,121 @@ describe('LocalStorage', () => {
     test('size returns null for missing file', async () => {
         const size = await storage.size('no-such-file');
         expect(size).toBeNull();
+    });
+});
+
+describe('LocalStorage.write lands a file whole', () => {
+    const SIZE = 8 * 1024 * 1024;
+    const base = join(TEST_DIR, 'local-write');
+    const sourceDir = join(TEST_DIR, 'local-write-source');
+    const old = Buffer.alloc(SIZE, 1);
+    let storage: LocalStorage;
+
+    beforeAll(() => {
+        storage = new LocalStorage(base);
+        mkdirSync(sourceDir, { recursive: true });
+    });
+
+    const tmpEntries = () => (existsSync(join(base, 'tmp')) ? readdirSync(join(base, 'tmp')) : []);
+    const dataEntries = () => readdirSync(join(base, 'data'), { recursive: true }).map(String).sort();
+
+    // A shorter and a longer new file, from memory and from a file on disk as an upload hands it over.
+    const overwrites = [
+        { name: 'shorter bytes', next: Buffer.alloc(SIZE / 2, 2), asFile: false },
+        { name: 'longer bytes', next: Buffer.alloc(SIZE * 1.5, 2), asFile: false },
+        { name: 'a shorter file', next: Buffer.alloc(SIZE / 2, 2), asFile: true },
+        { name: 'a longer file', next: Buffer.alloc(SIZE * 1.5, 2), asFile: true },
+    ];
+
+    async function sourceOf(next: Buffer, asFile: boolean) {
+        if (!asFile) return next;
+        const sourcePath = join(sourceDir, crypto.randomUUID());
+        writeFileSync(sourcePath, next);
+        return Bun.file(sourcePath);
+    }
+
+    for (const { name, next, asFile } of overwrites) {
+        test(`a reader that opened the key before an overwrite with ${name} reads the old file`, async () => {
+            const key = `opened-${crypto.randomUUID()}.bin`;
+            await storage.write(key, old);
+            const reader = storage.read(key).stream().getReader();
+            const chunks: Uint8Array[] = [];
+            const first = await reader.read();
+            if (first.value) chunks.push(first.value);
+            expect(Buffer.concat(chunks).byteLength).toBeLessThan(SIZE);
+
+            expect(await storage.write(key, await sourceOf(next, asFile))).toBe(next.byteLength);
+
+            for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) chunks.push(chunk.value);
+            expect(Buffer.concat(chunks).equals(old)).toBe(true);
+            expect(Buffer.from(await storage.read(key).arrayBuffer()).equals(next)).toBe(true);
+        });
+
+        test(`a read beside an overwrite with ${name} gets the old file or the new one`, async () => {
+            const key = `beside-${crypto.randomUUID()}.bin`;
+            await storage.write(key, old);
+            const source = await sourceOf(next, asFile);
+            for (let round = 0; round < 5; round++) {
+                const write = storage.write(key, round % 2 === 0 ? source : old);
+                const reads = await Promise.all(
+                    [0, 1, 2, 3].map(async (turns) => {
+                        for (let i = 0; i < turns; i++) await new Promise((resolve) => setImmediate(resolve));
+                        return Buffer.from(await storage.read(key).arrayBuffer());
+                    }),
+                );
+                await write;
+                for (const read of reads) expect(read.equals(old) || read.equals(next)).toBe(true);
+            }
+        });
+    }
+
+    test('the bytes go to a side file in tmp/, so a killed write leaves no half file at the key', async () => {
+        const key = 'side.bin';
+        await storage.write(key, old);
+        const next = Buffer.alloc(SIZE / 2, 2);
+        // What is on disk once every byte is written, right before the one step that changes the key.
+        const seen: { from: string; side: Buffer; atKey: Buffer }[] = [];
+        const rename = fsPromises.rename;
+        const spy = spyOn(fsPromises, 'rename').mockImplementation(async (from, to) => {
+            seen.push({
+                from: String(from),
+                side: readFileSync(join(base, 'tmp', tmpEntries()[0] ?? '')),
+                atKey: readFileSync(join(base, 'data', key)),
+            });
+            return rename(from, to);
+        });
+        try {
+            await storage.write(key, next);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(seen.length).toBe(1);
+        expect(dirname(seen[0]?.from ?? '')).toBe(join(base, 'tmp'));
+        expect(seen[0]?.side.equals(next)).toBe(true);
+        expect(seen[0]?.atKey.equals(old)).toBe(true);
+    });
+
+    test('a missing parent folder is created', async () => {
+        await storage.write('not/there/yet.txt', Buffer.from('made'));
+        expect(readFileSync(join(base, 'data/not/there/yet.txt'), 'utf8')).toBe('made');
+    });
+
+    test('a failed write leaves the old file, and no side file in data/ or tmp/', async () => {
+        const key = 'kept.bin';
+        await storage.write(key, old);
+        const before = dataEntries();
+        await expect(storage.write(key, Bun.file(join(sourceDir, 'no-such-source')))).rejects.toThrow();
+        // A key whose parent is a file can take no rename.
+        await expect(storage.write(`${key}/below.bin`, Buffer.from('never'))).rejects.toThrow();
+        expect(readFileSync(join(base, 'data', key)).equals(old)).toBe(true);
+        expect(dataEntries()).toEqual(before);
+        expect(tmpEntries()).toEqual([]);
+    });
+
+    test('nothing stays in tmp/ after a write', async () => {
+        await storage.write('tidy.txt', Buffer.from('tidy'));
+        expect(existsSync(join(base, 'tmp'))).toBe(true);
+        expect(tmpEntries()).toEqual([]);
     });
 });
 

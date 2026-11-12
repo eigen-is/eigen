@@ -81,7 +81,7 @@ export async function snapshotMountData(
     let stored = 0;
     const lost: string[] = [];
     let databases = 0;
-    // The plain files taken, with the date of the live row, which the path lock kept in step with the bytes read.
+    // The plain files taken, with the date of the live row read right before the bytes.
     const files: { id: string; captured: BackupEntry; updatedAt: Date }[] = [];
     for (const [index, row] of fileRows.entries()) {
         await eventLoopTurn();
@@ -129,37 +129,33 @@ export async function snapshotMountData(
                 }
             }
         } else {
-            // The path lock covers the whole copy because an overwrite rewrites in place. The shared tree lock
-            // covers only the open, so no rename moves the bytes between the key and the open.
-            const entry = await mount.withPathLock(row.id, async () => {
-                const opened = await mount.withTreeShared(async () => {
-                    const live = await mount.getPath(row.id);
-                    const storageKey = await mount.findStorageKey(row.id);
-                    if (!live || storageKey === null) return null;
-                    const fail = (error: unknown) => rethrowStorageFailure(mount.id, storageKey, error);
-                    // Freshest first: the pending staged copy, then the stored object.
-                    const fromStorage = !mount.pendingStagedCopy(storageKey);
-                    const file = await mount.readKey(storageKey).catch(fail);
-                    if (!file) {
-                        if (live.size && !(await isGone())) recordLost(live.size, storageKey);
-                        return null;
-                    }
-                    const copy = captureFile(file, destPath, entryPath, true).catch(async (error: unknown) => {
-                        if (!isMissingObjectCause(error) || !(await isGone())) fail(error);
-                        fs.rmSync(destPath, { force: true });
-                        return null;
-                    });
-                    return { copy, fromStorage, updatedAt: live.updatedAt };
+            // The shared tree lock covers only the open, so no rename moves the bytes between the key and the open.
+            // No path lock: an overwrite lands by a rename, so the open file stays whole.
+            const opened = await mount.withTreeShared(async () => {
+                const live = await mount.getPath(row.id);
+                const storageKey = await mount.findStorageKey(row.id);
+                if (!live || storageKey === null) return null;
+                const fail = (error: unknown) => rethrowStorageFailure(mount.id, storageKey, error);
+                // Freshest first: the pending staged copy, then the stored object.
+                const fromStorage = !mount.pendingStagedCopy(storageKey);
+                const file = await mount.readKey(storageKey).catch(fail);
+                if (!file) {
+                    if (live.size && !(await isGone())) recordLost(live.size, storageKey);
+                    return null;
+                }
+                const copy = captureFile(file, destPath, entryPath, true).catch(async (error: unknown) => {
+                    if (!isMissingObjectCause(error) || !(await isGone())) fail(error);
+                    fs.rmSync(destPath, { force: true });
+                    return null;
                 });
-                if (!opened) return null;
-                const captured = await opened.copy;
-                if (captured && opened.fromStorage) stored++;
-                return captured && { captured, updatedAt: opened.updatedAt };
+                return { copy, fromStorage, updatedAt: live.updatedAt };
             });
-            if (entry) {
-                entries.push(entry.captured);
+            const captured = await opened?.copy;
+            if (opened && captured) {
+                if (opened.fromStorage) stored++;
+                entries.push(captured);
                 held.add(row.id);
-                files.push({ id: row.id, ...entry });
+                files.push({ id: row.id, captured, updatedAt: opened.updatedAt });
             }
         }
         onProgress?.('mount files', index + 1, fileRows.length);

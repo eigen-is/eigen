@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
 import { encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { CommentCard } from '@workspace/lib/types/comments';
@@ -111,7 +111,8 @@ describe('a local-key chat restored after an unclean shutdown', () => {
         await chatPost(t, owner.id, M, `${chat.id}/messages`, { content: 'tail' });
         const { mount } = await home.resolveFile(M, chat.id);
         const dataDb = (await mount.getChildByName(chat.id, 'data.db'))!;
-        const file = mount.storage.getPath!(await mount.getStorageKey(dataDb.id));
+        const key = await mount.getStorageKey(dataDb.id);
+        const file = mount.storage.getPath!(key);
         const main = fs.readFileSync(file);
         const wal = fs.readFileSync(`${file}-wal`);
         await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
@@ -123,7 +124,7 @@ describe('a local-key chat restored after an unclean shutdown', () => {
             authedRequest(t, `/drive/${owner.id}/${M}/file/${chat.id}/versions/${name}/restore`, { method: 'POST' });
         const messages = async () =>
             (await chatGet<Message[]>(t, owner.id, M, `${chat.id}/messages`)).map((m) => m.content);
-        return { owner, chat, saved, mount, file, restore, messages };
+        return { owner, chat, saved, mount, key, file, restore, messages };
     }
 
     test('the pre-restore version keeps the -wal tail and the restored bytes stay intact', async () => {
@@ -148,6 +149,22 @@ describe('a local-key chat restored after an unclean shutdown', () => {
         expect((await restore(saved.name)).status).toBe(200);
         expect(fs.existsSync(`${file}-wal`)).toBe(false);
         expect(await messages()).toEqual(['saved']);
+    });
+
+    test('a restore whose write fails leaves the previous data.db at its key', async () => {
+        const { saved, mount, key: dataDbKey, file, restore, messages } = await chatWithTailInWal();
+        const write = mount.storage.write.bind(mount.storage);
+        const spy = spyOn(mount.storage, 'write').mockImplementation(async (key, data) => {
+            if (key === dataDbKey) throw new Error('disk full');
+            return write(key, data);
+        });
+        try {
+            expect((await restore(saved.name)).status).toBe(500);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(fs.existsSync(file)).toBe(true);
+        expect(await messages()).toEqual(['saved', 'tail']);
     });
 });
 

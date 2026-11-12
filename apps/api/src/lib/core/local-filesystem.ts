@@ -8,6 +8,8 @@ import * as path from 'node:path';
 import type { BunFile } from 'bun';
 import { resolveWithinBase } from './path-utils';
 
+type FileData = Buffer | Uint8Array | ArrayBuffer | BunFile | string;
+
 // Once per process: the mount is the same for every home, so a line per message would be the whole log.
 let warnedDirSyncUnsupported = false;
 
@@ -22,21 +24,16 @@ export function isEnoent(e: unknown): boolean {
 }
 
 export class LocalFilesystem {
-    private baseDir: string;
+    private readonly baseDir: string;
 
     public constructor(baseDir: string) {
         this.baseDir = path.resolve(baseDir);
         fs.mkdirSync(this.baseDir, { recursive: true });
     }
 
-    private getFilePath(filePath: string): string {
-        return resolveWithinBase(this.baseDir, filePath);
-    }
-
-    public async write(filePath: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile | string): Promise<number> {
+    public async write(filePath: string, data: FileData): Promise<number> {
         const fullPath = this.getFilePath(filePath);
-        const dir = path.dirname(fullPath);
-        fs.mkdirSync(dir, { recursive: true });
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
         return await Bun.write(fullPath, data);
     }
 
@@ -45,12 +42,7 @@ export class LocalFilesystem {
     // so a power loss can still lose a write there.
     public async syncDir(dirPath: string): Promise<void> {
         try {
-            const handle = await fsPromises.open(this.getFilePath(dirPath), 'r');
-            try {
-                await handle.sync();
-            } finally {
-                await handle.close();
-            }
+            await this.sync(dirPath);
         } catch (error) {
             if (!warnedDirSyncUnsupported) {
                 warnedDirSyncUnsupported = true;
@@ -60,20 +52,14 @@ export class LocalFilesystem {
     }
 
     // The bytes must be on the platter before any name points at them.
-    public async writeDurable(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
-        const fullPath = this.getFilePath(filePath);
-        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    public async writeDurable(filePath: string, data: FileData): Promise<number> {
         try {
-            const handle = await fsPromises.open(fullPath, 'w');
-            try {
-                await handle.writeFile(data);
-                await handle.sync();
-            } finally {
-                await handle.close();
-            }
+            const size = await this.write(filePath, data);
+            await this.sync(filePath);
+            return size;
         } catch (error) {
-            // Nothing sweeps a partial staged file: no name outside the staging directory points at it.
-            await fsPromises.unlink(fullPath).catch(() => {});
+            // No name points at a partial staged file yet, so it goes here.
+            await fsPromises.unlink(this.getFilePath(filePath)).catch(() => {});
             throw error;
         }
     }
@@ -245,6 +231,20 @@ export class LocalFilesystem {
 
     public watch(relativePath: string, callback: fs.WatchListener<string>): fs.FSWatcher {
         return fs.watch(this.getFilePath(relativePath), callback);
+    }
+
+    private getFilePath(filePath: string): string {
+        return resolveWithinBase(this.baseDir, filePath);
+    }
+
+    // An fsync through a handle of its own, which flushes what any handle wrote to the file or folder.
+    private async sync(filePath: string): Promise<void> {
+        const handle = await fsPromises.open(this.getFilePath(filePath), 'r');
+        try {
+            await handle.sync();
+        } finally {
+            await handle.close();
+        }
     }
 
     private async cleanupEmptyDirs(dirPath: string): Promise<void> {
