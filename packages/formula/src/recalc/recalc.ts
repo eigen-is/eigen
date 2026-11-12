@@ -30,9 +30,11 @@ export type RecalcResult = {
 const BUDGET = 640;
 const CELL = 6;
 
-// The most one formula makes: the elements its arrays store, the characters of the texts it made for them, and the
-// numbers it adds one by one for cells that no array stores. A formula that needs more is #CALC!, alone.
-const MOST_MADE = 2 ** 24;
+// The most elements one array stores, which bounds memory, and the most work one formula does, which bounds time: the
+// elements of its arrays, the characters of the texts it made for them, and the numbers it adds one by one for
+// cells that no array stores. A formula that needs more of either is #CALC!, alone.
+const MOST_STORED = 2 ** 24;
+const MOST_WORK = 2 ** 27;
 
 const UNWIND = Object.freeze({ reason: 'the evaluation nests too deep' });
 const STOP = Object.freeze({ reason: 'the recalc computed as many formulas as its cap' });
@@ -208,11 +210,17 @@ export class Recalc {
         }
     }
 
-    // Asks for what the running formula is about to make, such as the elements of an array, before it makes them:
-    // false when the formula would then have made more than it may, and else it is added to what the pass costs.
-    public room(units: number): boolean {
+    // Asks for an array of so many stored elements before the running formula makes it: false when one array may
+    // not store that many, or the formula may not do the work.
+    public room(elements: number): boolean {
+        return elements <= MOST_STORED && this.spend(elements);
+    }
+
+    // Asks for work the running formula is about to do, such as the characters of a text, before it does it: false
+    // when the formula would then have done more than it may, and else it is added to what the pass costs.
+    public spend(units: number): boolean {
         const made = this.made[this.current] + units;
-        if (made > MOST_MADE) return false;
+        if (made > MOST_WORK) return false;
         this.made[this.current] = made;
         return true;
     }

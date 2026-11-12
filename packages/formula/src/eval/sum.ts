@@ -42,7 +42,7 @@ function addRow(walk: Walk, recalc: Recalc, start: number): number {
         return walk.before + num[from];
     }
     // A row of different numbers that stands for many written rows is added that many times over.
-    if (!recalc.room((rows - 1) * (to - from))) {
+    if (!recalc.spend((rows - 1) * (to - from))) {
         walk.fail(CALC);
         return sum;
     }
