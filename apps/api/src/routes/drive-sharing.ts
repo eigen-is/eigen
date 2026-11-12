@@ -4,7 +4,7 @@
 // from someone who has none yet. Guests can't share, so the sharing routes refuse them.
 
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
-import type { DriveAccessCheckResult, EffectiveMember } from '@workspace/lib/types/drive';
+import type { DriveAccessCheckResult, DrivePathPermissions, EffectiveMember } from '@workspace/lib/types/drive';
 import type { ClientFileEventInput, FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
@@ -146,7 +146,7 @@ export const driveSharingRouter = new Elysia({ name: 'drive-sharing' })
     )
     .get(
         '/drive/:ownerId/:mountId/path/:pathId/permissions',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<DrivePathPermissions> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const [canRead, canWrite] = await Promise.all([
                 drive.canRead(params.mountId, params.pathId, user),

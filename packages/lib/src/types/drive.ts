@@ -550,6 +550,9 @@ export type EditorSaveResult = { conflict: true; currentEtag: string } | { confl
 
 export type EffectiveMember = { email: string; read: boolean; write: boolean };
 
+// What the caller may do with one path.
+export type DrivePathPermissions = { canRead: boolean; canWrite: boolean };
+
 // One row of the share dialog's access list. A direct entry is the path's own ACL plus the owner
 // row the dialog synthesizes; an inherited one comes from an ancestor folder and names it.
 export type DirectAccessItem = DriveACL & { owner: boolean };
