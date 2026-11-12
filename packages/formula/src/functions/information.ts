@@ -14,8 +14,10 @@ export const INFORMATION = [
     // A number is itself and TRUE is 1. A text and a blank are 0, and an error stays the error it is.
     fn('N', [CORNER], (value) => (typeof value === 'number' || isError(value) ? value : value === true ? 1 : 0)),
     fn('NA', [], () => NA),
-    // 1 for a number or a blank, 2 for a text, 4 for a boolean, 16 for an error and 64 for more than one value.
+    // 1 for a number or a blank, 2 for a text, 4 for a boolean, 16 for an error, as a union is one, and 64 for
+    // more than one value.
     fn('TYPE', [ANYTHING], (whole) => {
+        if (whole.areas > 1) return 16;
         if (whole.rows > 1 || whole.columns > 1) return 64;
         const value = whole.at(0, 0);
         if (isError(value)) return 16;

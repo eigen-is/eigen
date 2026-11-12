@@ -1,6 +1,8 @@
 // What a function's body gets in place of a range: a reader the call wrapper has prepared, so no body touches a
 // cell, a column or an array's storage. One frame per level of nested calls holds the slots of the call in
-// progress and its readers, reused from call to call: a reader is good until the body returns.
+// progress and its readers, reused from call to call: a reader is good until the body returns. What aims a reader
+// at its arguments is static, as `Table.over` is: the wrapper has the class, and a body only an instance, whose
+// type has no member that reaches a cell the call does not name.
 
 import type { FormulaError } from '../values/errors';
 import { CALC, NA } from '../values/errors';
@@ -38,14 +40,13 @@ export class Frame {
     // What the criteria of the call in progress matched, and what its two ranges read side by side hold.
     public readonly matches = new Matches();
     public readonly tally = new Tally();
-    public readonly pairs: Pairs;
+    public readonly pairs = new Pairs();
     private readonly readers: Numbers[] = [];
     private readonly tables: Table[] = [];
     private readonly lists: string[][] = [];
 
     public constructor(ctx: Evaluator) {
         this.ctx = ctx;
-        this.pairs = new Pairs(ctx);
     }
 
     // The table of the argument at a place.
@@ -91,31 +92,29 @@ export class Numbers {
         this.frame = frame;
     }
 
-    // The arguments `from` up to `to` of the frame.
-    public bind(from: number, to: number, family: Family, snaps: boolean): this {
-        this.snaps = snaps;
-        this.from = from;
-        this.to = to;
-        this.family = family;
-        this.counted = -1;
-        this.matched = false;
-        this.multiplied = false;
-        return this;
+    // The arguments `from` up to `to` of the frame, as a family counts them.
+    public static bind(numbers: Numbers, from: number, to: number, family: Family, snaps: boolean): Numbers {
+        numbers.snaps = snaps;
+        numbers.from = from;
+        numbers.to = to;
+        numbers.family = family;
+        numbers.counted = -1;
+        numbers.matched = false;
+        numbers.multiplied = false;
+        return numbers;
     }
 
     // The arguments `from` up to `to` of the frame, which are of one size, multiplied place by place: what is no
     // number is 0. Their sum is the plain one.
-    public together(from: number, to: number): this {
-        this.bind(from, to, Families.Numbers, false);
-        this.multiplied = true;
-        return this;
+    public static together(numbers: Numbers, from: number, to: number): Numbers {
+        Numbers.bind(numbers, from, to, Families.Numbers, false).multiplied = true;
+        return numbers;
     }
 
     // The numbers beside the cells that the criteria of the call accepted. Their sum is the plain one.
-    public beside(): this {
-        this.bind(0, 0, Families.Numbers, false);
-        this.matched = true;
-        return this;
+    public static beside(numbers: Numbers): Numbers {
+        Numbers.bind(numbers, 0, 0, Families.Numbers, false).matched = true;
+        return numbers;
     }
 
     // Added number by number in written order. Of a family's numbers the sum is 0 when the last addition leaves
@@ -203,27 +202,22 @@ export class Numbers {
 export class Pairs {
     public xs = new Float64Array(0);
     public ys = new Float64Array(0);
-    private readonly ctx: Evaluator;
     private first = new Float64Array(0);
     private second = new Float64Array(0);
 
-    public constructor(ctx: Evaluator) {
-        this.ctx = ctx;
-    }
-
     // Arguments of unequal size are #N/A, and else the first error at the earliest place is the answer.
-    public over(first: Value, second: Value): FormulaError | null {
-        const { ctx } = this;
+    public static over(ctx: Evaluator, pairs: Pairs, first: Value, second: Value): FormulaError | null {
         const size = heightOf(first) * widthOf(first);
         if (heightOf(second) * widthOf(second) !== size) return NA;
         if (isReference(first)) ctx.recalc.settleArea(first);
         if (isReference(second)) ctx.recalc.settleArea(second);
         // Past the last cell of both ranges every place is a blank, which pairs with nothing.
         const used = Math.max(reach(ctx, first), reach(ctx, second));
-        if (!ctx.recalc.room(2 * used)) return CALC;
-        if (this.first.length < used) {
-            this.first = new Float64Array(used);
-            this.second = new Float64Array(used);
+        // Two lists are made, and each may be as long as an array is.
+        if (!ctx.recalc.room(used) || !ctx.recalc.spend(used)) return CALC;
+        if (pairs.first.length < used) {
+            pairs.first = new Float64Array(used);
+            pairs.second = new Float64Array(used);
         }
         let count = 0;
         for (let place = 0; place < used; place += 1) {
@@ -232,12 +226,12 @@ export class Pairs {
             if (isError(x)) return x;
             if (isError(y)) return y;
             if (typeof x !== 'number' || typeof y !== 'number') continue;
-            this.first[count] = x;
-            this.second[count] = y;
+            pairs.first[count] = x;
+            pairs.second[count] = y;
             count += 1;
         }
-        this.xs = this.first.subarray(0, count);
-        this.ys = this.second.subarray(0, count);
+        pairs.xs = pairs.first.subarray(0, count);
+        pairs.ys = pairs.second.subarray(0, count);
         return null;
     }
 }
@@ -287,7 +281,63 @@ export class Table {
         return table.value;
     }
 
-    public over(value: Value): this {
+    // Makes `table` the table of what an argument was evaluated to.
+    public static over(table: Table, value: Value): Table {
+        return table.aim(value);
+    }
+
+    // One area of a range that a union made, from 0, as a table of its own.
+    public area(index: number): Table | undefined {
+        if (index === 0 && this.areas === 1) return this;
+        let area = isReference(this.value) ? this.value : null;
+        for (let skip = index; skip > 0 && area !== null; skip -= 1) area = area.next;
+        return area === null ? undefined : this.spare().aim(area.next === null ? area : { ...area, next: null });
+    }
+
+    public column(index: number): Vector {
+        return edge(this.ctx, this.value, true, index);
+    }
+
+    public row(index: number): Vector {
+        return edge(this.ctx, this.value, false, index);
+    }
+
+    // One value, by its row and column from 0: #N/A outside the table, which is as large as what it stands for.
+    public at(row: number, column: number): Scalar {
+        const { ctx, value } = this;
+        if (row < 0 || column < 0 || row >= heightOf(value) || column >= widthOf(value)) return NA;
+        if (isReference(value)) {
+            return ctx.recalc.valueOf(ctx.workbook.sheets[value.sheet], value.top + row, value.left + column);
+        }
+        if (isArray(value)) return ctx.first(elementAt(value, row, column));
+        return value;
+    }
+
+    // A rectangle of the table, for a row that may answer with one: a table of #N/A when it does not lie inside the
+    // table. It is good until `part` is asked again.
+    public part(top: number, left: number, rows: number, columns: number): Table {
+        const { value } = this;
+        const piece = this.spare();
+        const inside = top >= 0 && left >= 0 && rows > 0 && columns > 0;
+        if (!inside || top + rows > heightOf(value) || left + columns > widthOf(value)) return piece.aim(NA);
+        if (isReference(value)) {
+            const first = value.top + top;
+            const start = value.left + left;
+            const { type, sheet } = value;
+            return piece.aim({
+                type,
+                sheet,
+                top: first,
+                left: start,
+                bottom: first + rows - 1,
+                right: start + columns - 1,
+                next: null,
+            });
+        }
+        return piece.aim(isArray(value) ? partOf(value, top, left, rows, columns) : value);
+    }
+
+    private aim(value: Value): this {
         this.value = value;
         this.areas = 1;
         this.reference = false;
@@ -301,54 +351,6 @@ export class Table {
             this.columns = isArray(value) ? value.columns : 1;
         }
         return this;
-    }
-
-    // One area of a range that a union made, from 0, as a table of its own.
-    public area(index: number): Table | undefined {
-        if (index === 0 && this.areas === 1) return this;
-        let area = isReference(this.value) ? this.value : null;
-        for (let skip = index; skip > 0 && area !== null; skip -= 1) area = area.next;
-        return area === null ? undefined : this.spare().over(area.next === null ? area : { ...area, next: null });
-    }
-
-    public column(index: number): Vector {
-        return edge(this.ctx, this.value, true, index);
-    }
-
-    public row(index: number): Vector {
-        return edge(this.ctx, this.value, false, index);
-    }
-
-    // One value, by its row and column from 0: #N/A outside the table.
-    public at(row: number, column: number): Scalar {
-        const { ctx, value } = this;
-        if (row < 0 || column < 0 || row >= this.rows || column >= this.columns) return NA;
-        if (isReference(value)) {
-            return ctx.recalc.valueOf(ctx.workbook.sheets[value.sheet], value.top + row, value.left + column);
-        }
-        if (isArray(value)) return ctx.first(elementAt(value, row, column));
-        return value;
-    }
-
-    // A rectangle of the table, for a row that may answer with one. It is good until `part` is asked again.
-    public part(top: number, left: number, rows: number, columns: number): Table {
-        const { value } = this;
-        const piece = this.spare();
-        if (isReference(value)) {
-            const first = value.top + top;
-            const start = value.left + left;
-            const { type, sheet } = value;
-            return piece.over({
-                type,
-                sheet,
-                top: first,
-                left: start,
-                bottom: first + rows - 1,
-                right: start + columns - 1,
-                next: null,
-            });
-        }
-        return piece.over(isArray(value) ? partOf(value, top, left, rows, columns) : value);
     }
 
     private spare(): Table {

@@ -344,15 +344,19 @@ describe('the small ones', () => {
 });
 
 describe('VALUE reads a text the way a cell entry is read', () => {
-    // The fact documents' rows for Excel: no text is no number, and a decorated number is the number.
+    // The fact documents' rows for Excel: a decorated number is the number. Ours by ruling: an empty text reads
+    // as 0 here as it does everywhere, where Excel answers #VALUE!. A blank cell is 0 in Excel too (batch 7).
     test.each([
-        ['=VALUE("")', VALUE],
+        ['=VALUE("")', 0],
+        ['=VALUE(Z9)', 0],
+        ['=VALUE("x")', VALUE],
         ['=VALUE(" 1,000 ")', 1000],
         ['=VALUE("10%")', 0.1],
         ['=VALUE("(5)")', -5],
         ['=VALUE(1/0)', DIV0],
         ['=SUM(VALUE({" 1,000 ","10%","(5)"}))', 1000 + 0.1 - 5],
-        ['=SUM(VALUE({"10%",""}))', VALUE],
+        ['=SUM(VALUE({"10%",""}))', 0.1],
+        ['=SUM(VALUE({"10%","x"}))', VALUE],
     ])('%s is %p', (formula, expected) => {
         expect(evaluate(formula)).toBe(expected);
     });

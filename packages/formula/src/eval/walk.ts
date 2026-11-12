@@ -8,11 +8,11 @@ import type { Column } from '../store/column';
 import { CellKind, KIND_MASK } from '../store/column';
 import type { FormulaError } from '../values/errors';
 import type { ArrayValue, Reference } from '../values/value';
-import { isArray, isReference } from '../values/value';
+import { isArray, isError, isReference } from '../values/value';
 import type { Evaluator } from './evaluator';
 import { Fact } from './facts';
 import type { Family } from './families';
-import { Families } from './families';
+import { Element, Errors, Families } from './families';
 import { Products } from './products';
 import type { Held } from './signature';
 
@@ -126,17 +126,28 @@ export class Walk {
         return typeof value === 'number' && this.single(value);
     }
 
+    // What an element of an array that is a reference is to a family: the number it counts as, NaN when it is
+    // passed over, or the error the call answers, which is asked for before the body runs.
+    public referred(at: Reference, family: Family): number | FormulaError {
+        const { element } = family;
+        if (element === Element.Passed) return Number.NaN;
+        if (element === Element.Counted) return 0;
+        if (element !== Element.First) return element;
+        const first = this.ctx.first(at);
+        return isError(first) && family.errors === Errors.Result ? first : this.counted(at, family, 0);
+    }
+
     private cell(at: Reference): boolean {
-        const number = this.counted(at);
+        const number = this.counted(at, this.family, this.skips);
         return !Number.isNaN(number) && this.single(number);
     }
 
     // What the first cell of a reference counts as, or NaN when it does not count.
-    private counted(at: Reference): number {
+    private counted(at: Reference, family: Family, skips: number): number {
         const held = this.ctx.workbook.sheets[at.sheet].columns[at.left];
         if (held === undefined || at.top >= held.length) return Number.NaN;
         const kind = held.kind[at.top] & KIND_MASK;
-        if (((this.family.kinds >> kind) & 1) === 0 || skipped(this.ctx, this.skips, held, at.top)) return Number.NaN;
+        if (((family.kinds >> kind) & 1) === 0 || skipped(this.ctx, skips, held, at.top)) return Number.NaN;
         return kind === CellKind.Boolean ? held.ref[at.top] : held.num[at.top];
     }
 
@@ -213,7 +224,7 @@ export class Walk {
     // stretch of rows that each stand for one written row is one span of the block itself.
     private elements(array: ArrayValue): boolean {
         const { items, nums, height, width, rowEnds, columnEnds } = array;
-        const { kinds, first, blanks } = this.family;
+        const { kinds } = this.family;
         if (this.span.length < width) this.span = new Float64Array(width);
         if (this.widths.length < width) this.widths = new Int32Array(width);
         const { span, widths } = this;
@@ -238,17 +249,18 @@ export class Walk {
             for (let c = 0; c < width; c += 1) {
                 const item = items[row * width + c];
                 let number = 0;
-                // A blank element is a 0 that counts for most families, which a blank cell never is.
+                // A blank element is a 0 that counts, for every family, which a blank cell never is.
                 if (typeof item === 'number') number = item;
                 else if (isReference(item)) {
-                    number = first ? this.counted(item) : Number.NaN;
-                    if (Number.isNaN(number)) continue;
-                } else if (item === null) {
-                    if (!blanks) continue;
+                    const referred = this.referred(item, this.family);
+                    if (typeof referred !== 'number' || Number.isNaN(referred)) continue;
+                    number = referred;
                 } else if (typeof item === 'boolean') {
                     if (((kinds >> CellKind.Boolean) & 1) === 0) continue;
                     number = item ? 1 : 0;
-                } else if (((kinds >> (typeof item === 'string' ? CellKind.Text : CellKind.Error)) & 1) === 0) continue;
+                } else if (item !== null) {
+                    if (((kinds >> (typeof item === 'string' ? CellKind.Text : CellKind.Error)) & 1) === 0) continue;
+                }
                 span[found] = number;
                 widths[found] = columnEnds === null ? 1 : columnEnds[c] - (c === 0 ? 0 : columnEnds[c - 1]);
                 cells += widths[found];

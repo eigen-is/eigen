@@ -3,15 +3,17 @@ import type { FormulaError } from '../../index';
 import { DIV0, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
 import { engineOf, valueAt } from '../recalc/support';
-import type { Book, Grid, Held } from './ragged';
+import type { Book, Filled, Grid, Held } from './ragged';
 import {
     book,
     computed,
+    filledOf,
     GRID_COLUMNS,
     GRID_ROWS,
     generator,
     isError,
     letters,
+    live,
     rangeText,
     SMALLEST_NORMAL,
     spell,
@@ -57,22 +59,31 @@ function textOf(call: Call): string {
     return `=${call.name}(${[...(call.after ? [] : values), ...pairs, ...(call.after ? values : [])].join(',')})`;
 }
 
-function model(call: Call, grid: Grid, last: number): number | FormulaError {
+// Only the rows and the columns of the grid that hold a cell are looked up: every other place of every range is
+// blank, and is counted when a blank meets every criterion.
+function model(call: Call, grid: Grid, filled: Filled): number | FormulaError {
     const { rows, columns } = call.ranges[0];
     if (call.ranges.some((range) => range.rows !== rows || range.columns !== columns)) return VALUE;
     // Written after its criteria, the range of the numbers takes its size from the first criteria range.
     const sized = call.values !== null && (call.values.rows !== rows || call.values.columns !== columns);
     if (sized && !call.after) return VALUE;
-    let dense = 0;
-    for (const range of [...call.ranges, ...(call.values === null ? [] : [call.values])]) {
-        dense = Math.max(dense, Math.min(rows, last - range.top));
-    }
+    const areas = [...call.ranges, ...(call.values === null ? [] : [call.values])];
+    const down = live(
+        filled.rows,
+        areas.map((area) => area.top),
+        rows,
+    );
+    const across = live(
+        filled.columns,
+        areas.map((area) => area.left),
+        columns,
+    );
     // With no range of numbers a sum or an average takes the numbers of the criteria range itself.
     const values = call.values ?? (call.name.startsWith('COUNT') ? null : call.ranges[0]);
     const numbers: number[] = [];
     let count = 0;
-    for (let row = 0; row < dense; row += 1) {
-        for (let column = 0; column < columns; column += 1) {
+    for (const row of down) {
+        for (const column of across) {
             const met = call.ranges.every((range, at) =>
                 call.criteria[at].meets(grid[range.left + column]?.[range.top + row] ?? null),
             );
@@ -83,7 +94,8 @@ function model(call: Call, grid: Grid, last: number): number | FormulaError {
             if (typeof beside === 'number') numbers.push(beside);
         }
     }
-    if (call.criteria.every((criterion) => criterion.meets(null))) count += (rows - dense) * columns;
+    if (call.criteria.every((criterion) => criterion.meets(null)))
+        count += rows * columns - down.length * across.length;
     let sum = 0;
     for (const number of numbers) sum += number;
     let result = sum;
@@ -129,10 +141,11 @@ function callOf(draw: () => number, name: string, reach: number, across: number)
 function differences(made: Book, calls: readonly Call[], kinds: Map<string, number>): string[] {
     const texts = calls.map(textOf);
     const engine = computed(made, texts);
+    const filled = filledOf(made.grid);
     const wrong: string[] = [];
     calls.forEach((call, row) => {
         const got = engine.valueOf('s1', row, 0);
-        const want = model(call, made.grid, made.last);
+        const want = model(call, made.grid, filled);
         const kind = isError(want) ? want.text : want === 0 ? 'zero' : 'number';
         kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
         if (!Object.is(got, want)) wrong.push(`${texts[row]}: ${spell(got)}, and the model ${spell(want)}`);
@@ -165,7 +178,6 @@ describe('a criteria function answers what a cell by cell model answers', () => 
         made.grid[2][GRID_ROWS - 1] = 0.3;
         made.grid[4][GRID_ROWS - 2] = 'x';
         made.grid[GRID_COLUMNS - 1] = [null, null, 0.7];
-        made.last = GRID_ROWS;
         const calls: Call[] = [];
         for (const name of NAMES) {
             for (let at = 0; at < 2; at += 1) {

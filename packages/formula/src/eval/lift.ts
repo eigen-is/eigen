@@ -53,7 +53,7 @@ export function lift(
     for (let r = 0; r < down.count; r += 1) {
         for (let c = 0; c < across.count; c += 1) {
             const failed = element(ctx, params, frame, prepared, lifting, arrays, lined, r, c);
-            const result = failed ?? run(ctx, entry, frame.held, count);
+            const result = failed ?? run(ctx, entry, frame.held, count, 0);
             // Of an element that answers an array, the first value: ROW of a range of three rows is its first row.
             const item = isLazy(result) ? null : isArray(result) ? result.items[0] : result;
             if (makes && typeof item === 'string' && !ctx.recalc.spend(item.length)) return CALC;
@@ -120,7 +120,7 @@ export function step(
                 if (result === NEXT && g === groups) result = last ?? NA;
                 else if (result === NEXT) {
                     const failed = element(ctx, params, frame, prepared, lifting, arrays, lined, r, c);
-                    result = failed ?? run(ctx, entry, held, given.length);
+                    result = failed ?? run(ctx, entry, held, given.length, 0);
                 }
                 undecided ||= result === NEXT;
                 next.push(isLazy(result) ? result : undefined);

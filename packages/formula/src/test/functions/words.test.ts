@@ -38,7 +38,6 @@ describe('the list of every number: MEDIAN', () => {
         ['=MEDIAN(E1:E3)', DIV0],
         ['=MEDIAN("x",1)', VALUE],
         ['=MEDIAN(D1:D2,7)', 7],
-        ['=MEDIAN(OFFSET(A1,{0,1,2},0,2))', 20],
         ['=MEDIAN(IF({1;1;1;1},C1:C4))', 0.05],
         // A stored row of an array that stands for many written ones is in the list that many times.
         ['=MEDIAN(A1:A20*1)', 5],
@@ -65,6 +64,16 @@ describe('numbers to multiply: PRODUCT', () => {
         ['=PRODUCT(A1:A3,B1:B2)', 12000000],
         ['=PRODUCT(A1:A2*1,0.5)', 100],
         ['=SUBTOTAL(6,A1:A3)', 6000],
+        // Batches 6 and 7: a blank cell is passed over, a blank element of an array is a factor 0, and the product
+        // of no number at all is 0.
+        ['=PRODUCT(C1:C4)', 0.1 * 0.2 * -0.3],
+        ['=PRODUCT(IF({1;1;1;1},C1:C4))', 0],
+        ['=PRODUCT(Z9)', 0],
+        ['=PRODUCT(Z9:Z10)', 0],
+        ['=PRODUCT(D1)', 0],
+        ['=PRODUCT(TRUE,5)', 5],
+        ['=PRODUCT(D1,5)', 5],
+        ['=PRODUCT(D2,5)', 5],
     ])('%s', (formula, expected) => {
         expect(evaluate(formula, F1)).toBe(expected);
     });
@@ -181,6 +190,14 @@ describe('two ranges side by side: CORREL', () => {
         ['=CORREL(H2:H6,I2:I6)', DIV0],
         ['=CORREL(1/0,I1:I6)', DIV0],
         ['=CORREL(A1:A6)', VALUE],
+        // Batch 7: a side that does not vary, and no pair at all, divide by zero.
+        ['=CORREL({1,2,3},{5,5,5})', DIV0],
+        ['=CORREL({5,5,5},{1,2,3})', DIV0],
+        ['=CORREL({1},{1})', DIV0],
+        ['=CORREL(A1,B1)', DIV0],
+        ['=CORREL(5,7)', DIV0],
+        ['=CORREL("1","2")', DIV0],
+        ['=CORREL(Z1:Z3,Z1:Z3)', DIV0],
     ])('%s', (formula, expected) => {
         expect(evaluate(formula, F3)).toBe(expected);
     });

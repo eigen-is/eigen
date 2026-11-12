@@ -2,6 +2,7 @@
 // and PRODUCT on every number of their arguments, SUMPRODUCT on its arguments multiplied place by place, SUMIF on
 // the numbers beside the cells its criteria accept. SUBTOTAL is all data: a code that picks one of the others.
 
+import { NUM } from '../values/errors';
 import { roundDecimal } from '../values/precision';
 import {
     chosen,
@@ -39,9 +40,17 @@ export const MATH = [
     fn('ABS', [NUMBER], Math.abs),
     fn('ROUND', [NUMBER, INTEGER], roundDecimal),
     fn('RAND', [RANDOM], (random) => random),
-    fn('RANDBETWEEN', [NUMBER, NUMBER, RANDOM], (low, high, random) => Math.floor(low + random * (high - low + 1))),
+    // A whole number from the bottom rounded up to the top rounded down, and the bottom when none lies between.
+    fn('RANDBETWEEN', [NUMBER, NUMBER, RANDOM], (low, high, random) => {
+        if (low > high) return NUM;
+        const bottom = Math.ceil(low);
+        return bottom + Math.floor(random * (Math.max(bottom, Math.floor(high)) - bottom + 1));
+    }),
     fn('SUM', [rest(NUMBERS)], (numbers) => numbers.sum()),
-    fn('PRODUCT', [rest(FACTORS)], (factors) => factors.list().reduce((product, factor) => product * factor, 1)),
+    // Of no number at all the product is 0.
+    fn('PRODUCT', [rest(FACTORS)], (factors) =>
+        factors.count() === 0 ? 0 : factors.list().reduce((product, factor) => product * factor, 1),
+    ),
     fn('SUMPRODUCT', [rest(PRODUCTS)], (products) => products.sum()),
     fn('SUMIF', [WHERE, optional(MATCHED)], (_where, numbers) => numbers.sum()),
     fn('SUMIFS', [MATCHED, rest(WHERE)], (numbers) => numbers.sum()),

@@ -1,12 +1,15 @@
 import { describe, expect, test } from 'bun:test';
+import { Families } from '../../eval/families';
 import type { Entry } from '../../eval/signature';
 import { TOKENS } from '../../eval/signature';
 import { FUNCTIONS } from '../../functions/library';
-import type { Vector } from '../../functions/registry';
+import type { Matches, Numbers, Pairs, Room, Table, Vector } from '../../functions/registry';
 import {
     ANYTHING,
     each,
+    Find,
     fn,
+    INTEGER,
     LAZY,
     MATCHED,
     NEXT,
@@ -14,12 +17,14 @@ import {
     NUMBERS,
     optional,
     PAIRS,
+    rectangle,
     rest,
     TABLE,
     WHERE,
 } from '../../functions/registry';
 import { Recalc } from '../../recalc/recalc';
 import { Workbook } from '../../store/workbook';
+import { NA } from '../../values/errors';
 import { ValueType } from '../../values/value';
 import { at, stored } from '../recalc/support';
 
@@ -97,6 +102,56 @@ describe('a body reaches no cell, column or stored array', () => {
     test('of a row or a column of a table it gets the two searches and nothing else', () => {
         const reachable: Record<keyof Vector, true> = { find: true, seek: true };
         expect(Object.keys(reachable)).toEqual(['find', 'seek']);
+    });
+
+    // Checked when the tests are compiled, as above: each list is every member a body can name on a reader.
+    test('of each reader it gets what the reader hands out, and nothing that aims it', () => {
+        const table: Record<keyof Table, true> = {
+            ...{ type: true, rows: true, columns: true, areas: true, reference: true },
+            ...{ area: true, column: true, row: true, at: true, part: true },
+        };
+        const numbers: Record<keyof Numbers, true> = {
+            ...{ sum: true, count: true, min: true, max: true, list: true, holds: true },
+        };
+        const pairs: Record<keyof Pairs, true> = { xs: true, ys: true };
+        const matches: Record<keyof Matches, true> = { count: true };
+        const room: Record<keyof Room, true> = { series: true };
+        expect([table, numbers, pairs, matches, room].map((members) => Object.keys(members).length)).toEqual([
+            10, 6, 2, 1, 1,
+        ]);
+    });
+
+    // Checked when the tests are compiled: each of these bodies would read a cell its row does not name.
+    test('a body that aims a reader at a cell of its choice does not compile', () => {
+        const rows = [
+            fn('PEEK', [TABLE, INTEGER, INTEGER], (table, row, column) =>
+                // @ts-expect-error a table has no member that takes a place
+                table.over(rectangle(0, row, column, row, column)).at(0, 0),
+            ),
+            // @ts-expect-error a reader of numbers has no member that takes arguments
+            fn('GRAB', [rest(NUMBERS)], (numbers) => numbers.together(0, 2).sum()),
+            // @ts-expect-error nor one that takes a family
+            fn('GRAB', [rest(NUMBERS)], (numbers) => numbers.bind(0, 2, Families.Counted, true).sum()),
+            // @ts-expect-error nor one that takes what the criteria of another call left
+            fn('GRAB', [rest(NUMBERS)], (numbers) => numbers.beside().sum()),
+            // @ts-expect-error two ranges side by side have no member that takes other ranges
+            fn('GRAB', [PAIRS], (pairs) => pairs.over(rectangle(0, 0, 0, 9, 0), rectangle(0, 0, 1, 9, 1)) ?? 0),
+        ];
+        expect(rows.length).toBe(5);
+    });
+
+    // J10 is named by no argument: a place outside the table is #N/A, and a row or column outside it holds nothing.
+    test('a table hands out no cell outside it, whatever a body asks it for', () => {
+        const peek = fn('PEEK', [TABLE, INTEGER, INTEGER], (table, row, column) => {
+            table.rows = 100;
+            table.columns = 100;
+            const found = [table.column(column).find(777, Find.Exact), table.row(row).find(777, Find.Exact)];
+            return found[0] >= 0 || found[1] >= 0 ? 'found' : table.at(row, column);
+        });
+        const cells = { A1: 1, J10: 777, A10: 777, J1: 777, N1: '=PEEK(A1,9,9)', N2: '=PEEK(A1:B2,9,9)' };
+        const { recalc, value } = passOf(peek, { ...cells, N3: '=PEEK({1,2;3,4},9,9)', N4: '=PEEK(A1:B2,-1,-1)' });
+        recalc.pass(Number.POSITIVE_INFINITY);
+        expect(['N1', 'N2', 'N3', 'N4'].map(value)).toEqual([NA, NA, NA, NA]);
     });
 });
 

@@ -61,7 +61,9 @@ describe('a date, any value, a place and a reference a body worked out', () => {
         ['=OFFSET(A1,-1,0)', REF],
         ['=SUM(OFFSET(A3,0,0,-2))', 50],
         ['=OFFSET(5,1,0)', VALUE],
-        ['=OFFSET((A1,B1),1,0)', REF],
+        // Batch 6: a union is #VALUE! to OFFSET, and an error to TYPE.
+        ['=OFFSET((A1,B1),1,0)', VALUE],
+        ['=TYPE((A1,B1))', 16],
         ['=OFFSET(A1,1/0,0)', DIV0],
         // Batch 5: an array of references is read by each collector's own rule.
         ['=SUM(OFFSET(A1,{0,1,2},0,2))', 60],
@@ -183,5 +185,23 @@ describe('the clock and the draw come from the pass', () => {
         const three = (formula: string) => [1, 2, 3].map((at) => drawn({ A1: `=INDEX(${formula},1,${at})` }, 7)[0]);
         expect(new Set(three('RANDBETWEEN(1,{1000000,1000000,1000000})')).size).toBe(3);
         expect(new Set(three('RANDBETWEEN(1,1000000)*{1,1,1}')).size).toBe(1);
+    });
+
+    // Excel batch 7: the bottom is rounded up and the top down, and a bottom above the top is #NUM!.
+    test('RANDBETWEEN draws a whole number from the bottom rounded up to the top rounded down', () => {
+        const forty = Array.from({ length: 40 }, () => 0).join(',');
+        const formulas = {
+            A1: '=RANDBETWEEN(2,1)',
+            A2: `=SUM(RANDBETWEEN(1.5+{${forty}},2.5))`,
+            A3: `=SUM(RANDBETWEEN(-1.5+{${forty}},-1.4))`,
+            A4: `=SUM(RANDBETWEEN(1.4+{${forty}},1.5))`,
+            A5: `=SUM(RANDBETWEEN(1.1+{${forty}},1.2))`,
+            A6: '=INDEX(RANDBETWEEN({1,2,"x"},1),1,1)',
+            A7: '=INDEX(RANDBETWEEN({1,2,"x"},1),1,2)',
+            A8: '=INDEX(RANDBETWEEN({1,2,"x"},1),1,3)',
+            A9: `=MIN(RANDBETWEEN(3+{${forty}},5.9))`,
+            A10: `=MAX(RANDBETWEEN(3+{${forty}},5.9))`,
+        };
+        expect(drawn(formulas, 7)).toEqual([NUM, 80, -40, 80, 80, 1, NUM, VALUE, 3, 5]);
     });
 });

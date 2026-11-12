@@ -12,16 +12,19 @@ import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Errors, Families } from './families';
 import type { Frame } from './readers';
-import { Table } from './readers';
+import { Numbers, Pairs, Table } from './readers';
 import type { Entry, Held, Param } from './signature';
 import { Prepare, Read } from './signature';
 import { firstError } from './views';
 
-// The error that ends the call, or null with `frame.args` ready for the body. `count` arguments were written.
-export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number): FormulaError | null {
+// The error that ends the call, or null with `frame.args` ready for the body. `count` arguments were written, and
+// `skips` says what the walk of the call passes over.
+export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, skips: number): FormulaError | null {
     const { params } = entry;
     const { held, args } = frame;
+    // A frame is used again after a call that was cut off, so what a call leaves in it is written here, at its start.
     frame.failed = null;
+    frame.skips = skips;
     const unmatched = entry.where >= 0 ? weigh(ctx, entry, frame, count) : null;
     if (unmatched !== null) return unmatched;
     let at = 0;
@@ -37,7 +40,7 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
             // Most often the one argument is one range: its cells are computed and looked at in one go.
             const one = to === at + 1 && isReference(value) && value.next === null ? value : null;
             if (one !== null) ctx.recalc.settleArea(one);
-            else for (let i = at; i < to; i += 1) settle(ctx, held[i], family);
+            else for (let i = at; i < to; i += 1) settle(ctx, held[i]);
             const found =
                 family.errors !== Errors.Result ? null : one !== null ? firstError(ctx, one, frame.skips) : null;
             if (found !== null) return found;
@@ -45,12 +48,12 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
                 const error = errorIn(ctx, held[i], family, frame.skips);
                 if (error !== null) return error;
             }
-            args[p] = frame.numbers(p).bind(at, to, family, true);
-        } else if (param.read === Read.Matched) args[p] = frame.numbers(p).beside();
+            args[p] = Numbers.bind(frame.numbers(p), at, to, family, true);
+        } else if (param.read === Read.Matched) args[p] = Numbers.beside(frame.numbers(p));
         else if (param.read === Read.Products) {
             const error = sized(ctx, held, at, to);
             if (error !== null) return error;
-            args[p] = frame.numbers(p).together(at, to);
+            args[p] = Numbers.together(frame.numbers(p), at, to);
         } else if (param.read === Read.Texts) {
             const texts = frame.texts(p);
             const error = spell(ctx, held, at, to, texts);
@@ -59,7 +62,7 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
         } else if (param.read === Read.Pairs) {
             // Two ranges are paired or none: with one left out the call is #VALUE!.
             const second = held[at + 1];
-            const error = written(value) && written(second) ? frame.pairs.over(value, second) : VALUE;
+            const error = written(value) && written(second) ? Pairs.over(ctx, frame.pairs, value, second) : VALUE;
             if (error !== null) return error;
             args[p] = frame.pairs;
         } else args[p] = frame.matches;
@@ -80,13 +83,12 @@ function written(value: Held): value is Value {
     return value !== undefined && !isLazy(value) && !(value instanceof Table);
 }
 
-function settle(ctx: Evaluator, value: Held, family: Family): void {
+function settle(ctx: Evaluator, value: Held): void {
     for (let area = isReference(value) ? value : null; area !== null; area = area.next) ctx.recalc.settleArea(area);
-    if (!isArray(value) || !value.references || !family.first) return;
-    for (let i = 0; i < value.items.length; i += 1) ctx.first(value.items[i]);
 }
 
-// The first error among the values of one argument, row by row, but for the cells that `skips` passes over.
+// The first error among the values of one argument, row by row, but for the cells that `skips` passes over. Of an
+// element that is a reference it is what the family says, which can be an error of the family's own.
 function errorIn(ctx: Evaluator, value: Held, family: Family, skips: number): FormulaError | null {
     for (let area = isReference(value) ? value : null; area !== null; area = area.next) {
         const error = firstError(ctx, area, skips);
@@ -94,8 +96,9 @@ function errorIn(ctx: Evaluator, value: Held, family: Family, skips: number): Fo
     }
     if (!isArray(value) || value.nums !== null) return null;
     for (let i = 0; i < value.items.length; i += 1) {
-        const item = family.first ? ctx.first(value.items[i]) : value.items[i];
-        if (isError(item)) return item;
+        const item = value.items[i];
+        const found = isReference(item) ? ctx.walk.referred(item, family) : item;
+        if (isError(found)) return found;
     }
     return null;
 }
@@ -144,11 +147,12 @@ function spelled(texts: string[], value: Value): FormulaError | null {
 // The error that keeps the arguments `from` up to `to` from being multiplied place by place: any argument's first
 // error comes before a difference in size, which is #VALUE!.
 function sized(ctx: Evaluator, held: readonly Held[], from: number, to: number): FormulaError | null {
-    for (let i = from; i < to; i += 1) settle(ctx, held[i], Families.Counted);
+    for (let i = from; i < to; i += 1) settle(ctx, held[i]);
     const first = held[from];
     let alike = true;
     for (let i = from; i < to; i += 1) {
         const value = held[i];
+        // An element that is a reference is no number here, so no cell of it is read: as the family that counts.
         const error = errorIn(ctx, value, Families.Counted, 0);
         if (error !== null) return error;
         alike &&= heightOf(value) === heightOf(first) && widthOf(value) === widthOf(first);
