@@ -2,9 +2,9 @@
 // found for it: every number of its arguments, the cells that meet its criteria, the numbers beside those, or two
 // ranges paired place by place.
 
-import { DIV0 } from '../values/errors';
+import { DIV0, VALUE } from '../values/errors';
 import type { Numbers } from './registry';
-import { BLANKS, COUNTED, FILLED, fn, MATCHED, NUMBERS, optional, PAIRS, rest, WHERE } from './registry';
+import { BLANKS, COUNTED, FILLED, fn, MATCHED, NUMBERS, optional, PAIRS, referring, rest, WHERE } from './registry';
 
 function average(numbers: Numbers) {
     return numbers.count() === 0 ? DIV0 : numbers.sum() / numbers.count();
@@ -15,7 +15,7 @@ export const STATISTICAL = [
     fn('MAX', [rest(NUMBERS)], (numbers) => (numbers.count() === 0 ? 0 : numbers.max())),
     fn('MIN', [rest(NUMBERS)], (numbers) => (numbers.count() === 0 ? 0 : numbers.min())),
     // With no number at all the middle is no number, which is #NUM!.
-    fn('MEDIAN', [rest(NUMBERS)], (numbers) => {
+    fn('MEDIAN', [rest(referring(NUMBERS, VALUE))], (numbers) => {
         const sorted = numbers.list().sort();
         const half = sorted.length >> 1;
         return sorted.length % 2 === 1 ? sorted[half] : (sorted[half - 1] + sorted[half]) / 2;
@@ -32,7 +32,8 @@ export const STATISTICAL = [
             squaresX += (xs[i] - meanX) ** 2;
             squaresY += (ys[i] - meanY) ** 2;
         }
-        return both / Math.sqrt(squaresX * squaresY);
+        // A side that does not vary, and no pair at all, leave nothing to divide by.
+        return squaresX * squaresY === 0 ? DIV0 : both / Math.sqrt(squaresX * squaresY);
     }),
     fn('COUNT', [rest(COUNTED)], (numbers) => numbers.count()),
     fn('COUNTA', [rest(FILLED)], (values) => values.count()),

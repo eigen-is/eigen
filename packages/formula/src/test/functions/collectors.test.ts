@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { DIV0, VALUE } from '../../index';
+import { fn, NUMBERS_A, rest } from '../../functions/registry';
+import { DIV0, NA, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
-import { evaluate } from '../recalc/support';
+import { evaluate, evaluateWith } from '../recalc/support';
 
 // The fixture of Excel batches 3 to 5: A1:A10 = 10..100, B1:B3 = 40, 50, 60, C1:C3 = 0.1, 0.2, -0.3 with C4
 // blank, D1 = TRUE, D2 = the text TRUE, D3 blank, E1:E3 = 1, #DIV/0!, 3.
@@ -78,6 +79,38 @@ describe('a collector reads a typed argument, a cell and an array element each b
         ['=MAX((A1:A3,B1:B3))', 60],
     ])('%s', (formula, expected) => {
         expect(evaluate(formula, F1)).toBe(expected);
+    });
+});
+
+// Excel batches 5 to 7: OFFSET(A1,{0,1,2},0,2) is an array of three references, of two cells each.
+describe('an element of an array that is a reference is read as the row of each function says', () => {
+    const maxa = fn('MAXA', [rest(NUMBERS_A)], (numbers) => (numbers.count() === 0 ? 0 : numbers.max()));
+    test.each([
+        // Its first cell, as a cell.
+        ['=SUM(OFFSET(A1,{0,1,2},0,2))', 60],
+        ['=AVERAGE(OFFSET(A1,{0,1,2},0,2))', 20],
+        ['=MAX(OFFSET(A1,{0,1,2},0,2))', 30],
+        ['=MIN(OFFSET(A1,{0,1,2},0,2))', 10],
+        ['=PRODUCT(OFFSET(A1,{0,1,2},0,2))', 6000],
+        ['=MAXA(OFFSET(A1,{0,1,2},0,2))', 30],
+        ['=SUM(1,OFFSET(A1,{0,1},0,2))', 31],
+        // Passed over, and counted as one value.
+        ['=COUNT(OFFSET(A1,{0,1,2},0,2))', 0],
+        ['=COUNTA(OFFSET(A1,{0,1,2},0,2))', 3],
+        // An error of the function's own.
+        ['=AND(OFFSET(A1,{0,1,2},0,2))', NA],
+        ['=MEDIAN(OFFSET(A1,{0,1,2},0,2))', VALUE],
+        // What is no family: no number, so a 0, and no text.
+        ['=SUMPRODUCT(OFFSET(A1,{0,1,2},0,2))', 0],
+        ['=TEXTJOIN(",",TRUE,OFFSET(A1,{0,1,2},0,2))', VALUE],
+        ['=CONCAT(OFFSET(B1,{0,1},0,2))', VALUE],
+        // Ours: the error of a first cell that is read is the result, and one that is not read is none.
+        ['=SUM(OFFSET(E1,{0,1},0,2))', DIV0],
+        ['=COUNT(OFFSET(E1,{0,1},0,2))', 0],
+        ['=COUNTA(OFFSET(E1,{0,1},0,2),1)', 3],
+        ['=COUNTA(OFFSET(Z1,{0,1},0,2))', 2],
+    ])('%s', (formula, expected) => {
+        expect(evaluateWith([maxa], formula, F1)).toBe(expected);
     });
 });
 

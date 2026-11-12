@@ -84,12 +84,14 @@ export function arrayOf<T extends Scalar | Reference>(
     if (items instanceof Float64Array) nums = items;
     else {
         // Read from the last element back: the blank run that ends most ranges is met at once.
+        const typed = new Float64Array(items.length);
         let at = items.length - 1;
-        while (at >= 0 && typeof items[at] === 'number') at -= 1;
-        if (at < 0) {
-            nums = new Float64Array(items.length);
-            for (let i = 0; i < nums.length; i += 1) nums[i] = Number(items[i]);
+        for (; at >= 0; at -= 1) {
+            const item = items[at];
+            if (typeof item !== 'number') break;
+            typed[at] = item;
         }
+        if (at < 0) nums = typed;
     }
     const height = rowEnds?.length ?? rows;
     const width = columnEnds?.length ?? columns;

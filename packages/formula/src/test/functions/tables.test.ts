@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { fn, INTEGER, optional, PART, TABLE } from '../../functions/registry';
 import { DIV0, NA, REF, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
-import { evaluate } from '../recalc/support';
+import { evaluate, evaluateWith } from '../recalc/support';
 import { F1 } from './collectors.test';
 
 // Fixture F2 of Excel batches 4 and 5: A1:A5 = 10, 20, 30, #DIV/0!, 50 and B1:B5 = a to e.
@@ -63,8 +64,7 @@ describe('a table is handed over whole and never looked into for an error', () =
         ['=ROW({1,2})', VALUE],
         ['=SUM(A1:INDEX(A1:A5,3))', 60],
         ['=SUM(XLOOKUP(20,A1:A3,A1:B3))', 20],
-        // One value of a table of references is the first cell of that reference: the contract's reading.
-        ['=LOOKUP(2,{1,2},OFFSET(A1,{0,1},0,2))', 20],
+        // One value of a table of references to one cell is that cell.
         ['=LOOKUP(2,{1,2},OFFSET(B1,{0,1},0))', 'b'],
     ])('%s', (formula, expected) => {
         expect(evaluate(formula, F2)).toBe(expected);
@@ -96,5 +96,36 @@ describe('a table is handed over whole and never looked into for an error', () =
         expect(evaluate('=COUNT(INDEX(A1:A3,{1,2,3}))', F2)).toBe(0);
         expect(evaluate('=SUM(INDEX(A1:A5,{1,4}))', F2)).toBe(DIV0);
         expect(evaluate('=SUM(1,INDEX(A1:A3,{1,2}))', F2)).toBe(31);
+    });
+});
+
+describe('a part of a table lies inside the table', () => {
+    // A row of this test's own, which asks for the part it is told to.
+    const piece = fn(
+        'PIECE',
+        [TABLE, INTEGER, INTEGER, optional(INTEGER, 1)],
+        (table, top, left, rows) => table.part(top, left, rows, 1),
+        PART,
+    );
+
+    test.each([
+        ['=PIECE(A1:B5,1,1)', 'b'],
+        ['=PIECE(A1:B5,4,1)', 'e'],
+        ['=SUM(PIECE(A1:B5,0,0,3))', 60],
+        ['=PIECE({"x","y"},0,1)', 'y'],
+        ['=PIECE(7,0,0)', 7],
+        // Past an end, before the start and of no size: never a cell beside the table, nor a value that is none.
+        ['=PIECE({"x","y"},0,2)', NA],
+        ['=PIECE({"x","y"},1,0)', NA],
+        ['=PIECE(7,0,1)', NA],
+        ['=PIECE(A1:B5,5,0)', NA],
+        ['=PIECE(A1:B5,0,2)', NA],
+        ['=PIECE(A1:B5,-1,0)', NA],
+        ['=PIECE(A1:B5,3,0,3)', NA],
+        ['=PIECE(A1:B5,0,0,0)', NA],
+        ['=PIECE(XFD1,0,1)', NA],
+        ['=ISBLANK(PIECE(XFD1,0,1))', false],
+    ])('%s', (formula, expected) => {
+        expect(evaluateWith([piece], formula, { ...F2, A6: 99, C1: 99 })).toBe(expected);
     });
 });

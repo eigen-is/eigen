@@ -13,7 +13,7 @@ import { VALUE } from '../values/errors';
 import { equal15 } from '../values/precision';
 import { textKey } from '../values/text-order';
 import type { Reference, Scalar, Value } from '../values/value';
-import { bandOf, isArray, isReference } from '../values/value';
+import { bandOf, heightOf, isArray, isReference, widthOf } from '../values/value';
 import { patternMatches, patternOf } from '../values/wildcard';
 import type { Evaluator } from './evaluator';
 import { Find } from './signature';
@@ -65,9 +65,8 @@ export class Vector {
         return mode === Find.AtMost ? this.bisect(key, false, -1, true) : this.bisect(key, true, 1, false);
     }
 
-    // `match` is 0 for the key itself, -1 for it or the next smaller value, 1 for it or the next larger one and 2
-    // for the key as a pattern. `search` is 1 from the first value on, -1 from the last one back, and 2 or -2 for a
-    // bisection of ascending or descending values. A blank key finds a blank.
+    // XMATCH's own codes. `match`: 0 the key itself, -1 it or the next smaller value, 1 it or the next larger, 2 the
+    // key as a pattern. `search`: 1 from the first value on, -1 from the last back, 2 or -2 a bisection up or down.
     public seek(key: Key | null, match: number, search: number): number | FormulaError {
         if (match !== 0 && match !== -1 && match !== 1 && match !== 2) return VALUE;
         if (search === 1 || search === -1) {
@@ -168,7 +167,7 @@ export class Vector {
     }
 
     // The value that equals the key, or else the nearest smaller one, or the nearest larger one with `larger`. Every
-    // value is looked at, in order, or from the last one back when `reverse`, and of equal candidates the first met wins.
+    // value is looked at, in order or from the last one back with `reverse`, and of equal candidates the first wins.
     private nearest(key: Key, larger: boolean, reverse: boolean): number {
         const used = this.stored;
         const step = reverse ? -1 : 1;
@@ -190,10 +189,8 @@ export class Vector {
         return this.placeOf(best, reverse);
     }
 
-    // Bisection over values taken to be sorted, ascending or `descending`: whatever the halving lands on, as in Excel.
-    // A probe that meets a value of another kind moves to the nearest one of the key's kind. Of equal keys it lands on
-    // the last one with `last`, else on the first. With no equal value, `mode` picks the result: 0 none, -1 the next
-    // smaller value, 1 the next larger.
+    // Bisection over values taken to be sorted, whatever the halving lands on, as in Excel: a probe at a value of
+    // another kind moves to the nearest of the key's. `last` takes the last of equal keys; `mode` is seek's `match`.
     private bisect(key: Key, descending: boolean, mode: number, last: boolean): number {
         let low = 0;
         let high = this.used - 1;
@@ -233,6 +230,10 @@ export class Vector {
 // Column `index` of a range or an array when `down`, else row `index`. The formulas in it are computed first.
 export function edge(ctx: Evaluator, range: Value, down: boolean, index: number): Vector {
     const { workbook } = ctx;
+    // Outside the range there is nothing to search: a row or a column of it holds no cell that it does not name.
+    if (index < 0 || index >= (down ? widthOf(range) : heightOf(range))) {
+        return new Vector(workbook, null, [], 0, 1, 0, 0, null);
+    }
     if (isReference(range) && down) {
         const left = range.left + index;
         ctx.recalc.settleArea({ ...range, left, right: left, next: null });

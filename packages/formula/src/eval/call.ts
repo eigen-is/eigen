@@ -86,7 +86,7 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
             if (isError(value) && ends(param)) result = value;
             held[i] = value;
         }
-        result ??= run(ctx, entry, held, count);
+        result ??= run(ctx, entry, held, count, 0);
         if (isLazy(result)) result = picked(ctx, entry, result, node, sheet, row, column);
     }
     ctx.calls = level;
@@ -165,9 +165,9 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
         case Read.Table:
             if (isError(value)) return value;
             if (isReference(value) && value.next !== null && param.union !== null) return param.union;
-            return frame.table(at).over(value);
+            return Table.over(frame.table(at), value);
         case Read.Anything:
-            return frame.table(at).over(value);
+            return Table.over(frame.table(at), value);
         case Read.Here:
         case Read.Only:
             if (!isReference(value)) return isError(value) ? value : VALUE;
@@ -210,15 +210,15 @@ function collected(family: Family, value: Value): Held {
             if (family.text === TypedText.Counted) return 0;
             return value.toUpperCase() === 'TRUE' ? 1 : value.toUpperCase() === 'FALSE' ? 0 : null;
         default:
-            if (value === null) return family.blanks ? 0 : null;
+            if (value === null) return family.empty ? 0 : null;
             if (!isError(value)) return value;
             return family.errors === Errors.Result ? value : family.errors === Errors.Counted ? 0 : null;
     }
 }
 
-// The body on arguments that are read, and its answer as a cell can hold it: a number that is no number is #NUM!,
-// and a text has at most 32,767 characters. `held` are the slots of the call in progress.
-export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number): Value | Lazy {
+// The body on arguments that are read, with what its walk passes over in `skips`, and its answer as a cell can hold
+// it: a number that is no number is #NUM!, and a text has at most 32,767 characters. `held` are the call's slots.
+export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number, skips: number): Value | Lazy {
     let args: readonly unknown[] = held;
     const frame = entry.plain ? null : ctx.frames[ctx.calls - 1];
     const choice = entry.chosen === null || typeof held[0] !== 'number' ? undefined : entry.chosen.get(held[0]);
@@ -228,13 +228,10 @@ export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number): 
         if (target === undefined) return NAME;
         held.copyWithin(0, 1, count);
         held.length = count - 1;
-        frame.skips = choice.skips;
-        const result = run(ctx, target, held, count - 1);
-        frame.skips = 0;
-        return result;
+        return run(ctx, target, held, count - 1, choice.skips);
     }
     if (frame !== null) {
-        const error = look(ctx, entry, frame, count);
+        const error = look(ctx, entry, frame, count, skips);
         if (error !== null) return error;
         args = frame.args;
     }

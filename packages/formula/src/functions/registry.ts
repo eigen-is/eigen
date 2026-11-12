@@ -1,8 +1,8 @@
 // What a function is to the engine: one row, made by `fn(name, parameters, body)`. A parameter says how its
 // argument is prepared, read, defaulted and repeated, and the call wrapper does all of that before the body runs.
-// So a body gets one plain, typed value per parameter and only computes: it does not coerce, evaluate or read a
-// cell. A row that picks another row by its first argument, such as SUBTOTAL, is made by `chosen` and is all data.
-// The constants and modifiers below are the whole vocabulary a family file is written in.
+// So a body gets one plain, typed value or reader per parameter and only computes: it does not coerce, evaluate,
+// read a cell or aim a reader. A row that picks another row by its first argument, such as SUBTOTAL, is made by
+// `chosen` and is all data. The constants and modifiers below are the whole vocabulary a family file is written in.
 
 import type { Family } from '../eval/families';
 import { Families } from '../eval/families';
@@ -41,7 +41,10 @@ function ambient<T>(read: Read): Param<T> {
     return Object.freeze({ ...REQUIRED, prepare: Prepare.Ambient, read, optional: true });
 }
 
-function walked(family: Family): Walked<Numbers> {
+// A reading that takes every value as a family counts it.
+type Collector = Walked<Numbers> & { readonly family: Family };
+
+function walked(family: Family): Collector {
     return Object.freeze({ ...REQUIRED, prepare: Prepare.Walked, read: Read.Walked, family });
 }
 
@@ -77,7 +80,7 @@ export const FILLED = walked(Families.Filled);
 export const TRUTHS = walked(Families.Truths);
 // The numbers, with a boolean in a cell as 1 or 0 and a text in a cell as 0, as AVERAGEA and MAXA take them.
 export const NUMBERS_A = walked(Families.NumbersA);
-// The numbers, to be multiplied: as NUMBERS, but an empty argument and a blank element of an array are passed over.
+// The numbers, to be multiplied: as NUMBERS, but an argument left empty is passed over.
 export const FACTORS = walked(Families.Factors);
 
 // A range, an array or one value, as it is: the body searches it, picks from it or measures it. A union is #VALUE!.
@@ -125,12 +128,13 @@ export const BLANKS: Param<Matches> = Object.freeze({
 });
 
 // Ranges or arrays of one size, as the product at each place: what is no number counts as 0. A union is #VALUE!.
+// Only sum() and count() of them mean something, and count() is the places of one argument.
 export const PRODUCTS: Walked<Numbers> = Object.freeze({
     ...REQUIRED,
     ...{ prepare: Prepare.Walked, read: Read.Products, union: VALUE },
 });
-// Every value as a text, in written order and a range row by row: a number and a boolean spelled out, a blank
-// as empty text. An error among them is the result, an element that is a reference is #VALUE!, and so is a union.
+// Every value as a text, in written order and a range row by row, a blank as empty text. An error typed as an
+// argument is the result before one inside a range; an element that is a reference is #VALUE!, and so is a union.
 export const TEXTS: Walked<readonly string[]> = Object.freeze({
     ...REQUIRED,
     ...{ prepare: Prepare.Walked, read: Read.Texts, union: VALUE },
@@ -143,9 +147,8 @@ export const PAIRS: Walked<Pairs> = Object.freeze({
     ...{ prepare: Prepare.Walked, read: Read.Pairs, union: VALUE },
 });
 
-// The argument may be left out at the end, and the body then gets `fallback`. An empty argument is still a blank.
-// Of a lazy argument the fallback is what the call answers when its token comes back.
-// With no fallback the body gets undefined, or a reader of nothing where a reader is what it gets.
+// The argument may be left out at the end, and the body then gets `fallback`, or with none undefined or a reader
+// of nothing. An empty argument is still a blank. A lazy argument's fallback is what the call answers for its token.
 export function optional<T>(param: Walked<T>): Param<T>;
 export function optional(param: Param<Lazy>, fallback: Scalar): Param<Lazy>;
 export function optional<T>(param: Param<T>, fallback: NoInfer<T> & Scalar): Param<T>;
@@ -175,6 +178,12 @@ export function areas<T>(param: Param<T>): Param<T> {
 // The error a union answers, in place of the reading's own.
 export function refusing<T>(param: Param<T>, error: FormulaError): Param<T> {
     return Object.freeze({ ...param, union: error });
+}
+
+// The error a function answers for an element of an array that is a reference, as OFFSET(A1,{0,1,2},0,2) makes
+// three, in place of what its family makes of one: MEDIAN answers #VALUE! where SUM reads the first cell.
+export function referring(param: Collector, error: FormulaError): Collector {
+    return Object.freeze({ ...param, family: { ...param.family, element: error } });
 }
 
 // The parameter takes every argument from its own to the last: as one reader over all of them, or as a list.
