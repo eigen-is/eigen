@@ -8,7 +8,9 @@ import * as path from 'node:path';
 import type { BunFile } from 'bun';
 import { resolveWithinBase } from './path-utils';
 
-type FileData = Buffer | Uint8Array | ArrayBuffer | BunFile | string;
+// The bytes a storage write takes. A file under a base folder may also be written from a string.
+export type WriteData = Buffer | Uint8Array | ArrayBuffer | BunFile;
+type FileData = WriteData | string;
 
 // Once per process: the mount is the same for every home, so a line per message would be the whole log.
 let warnedDirSyncUnsupported = false;
@@ -92,18 +94,21 @@ export class LocalFilesystem {
     // A reader only ever sees the whole old file or the whole new one. The temp name starts with a `.`, so a sweep finds
     // it.
     public async writeAtomic(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
-        const tempPath = path.join(
-            path.dirname(filePath),
-            `.${path.basename(filePath)}${ATOMIC_TEMP_INFIX}${crypto.randomUUID()}`,
-        );
+        const name = `.${path.basename(filePath)}${ATOMIC_TEMP_INFIX}${crypto.randomUUID()}`;
+        await this.replaceThrough(path.join(path.dirname(filePath), name), filePath, data);
+    }
+
+    // The bytes go to the side file and are fsynced, and one rename puts them at the path. A process death before the
+    // unlink leaves the side file for a sweep.
+    public async replaceThrough(sidePath: string, filePath: string, data: FileData): Promise<number> {
+        const size = await this.writeDurable(sidePath, data);
         try {
-            await this.writeDurable(tempPath, data);
-            await this.renameDurable(tempPath, filePath);
+            await this.renameDurable(sidePath, filePath);
         } catch (error) {
-            // A process death before this unlink is what sweepAtomicTemps reclaims.
-            await fsPromises.unlink(this.getFilePath(tempPath)).catch(() => {});
+            await fsPromises.unlink(this.getFilePath(sidePath)).catch(() => {});
             throw error;
         }
+        return size;
     }
 
     // Only an old temp goes, because a young one may be a live write about to rename. It goes through unlink, because

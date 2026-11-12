@@ -8,6 +8,7 @@ import * as fsPromises from 'node:fs/promises';
 import * as path from 'node:path';
 import type { BunFile } from 'bun';
 import { PATHS } from '../config/paths';
+import type { WriteData } from '../core';
 import { ApiError, LocalFilesystem, resolveWithinBase } from '../core';
 import type { StorageBackend } from './types';
 
@@ -26,16 +27,12 @@ export class LocalStorage implements StorageBackend {
     }
 
     // The side file is fsynced before the rename, so after a power loss the key never names bytes the disk lacks.
-    public async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
-        const sidePath = path.join(PATHS.DRIVE.TMP_DIR, crypto.randomUUID());
-        try {
-            const size = await this.mountDir.writeDurable(sidePath, data);
-            await this.mountDir.renameDurable(sidePath, this.resolve(key));
-            return size;
-        } catch (error) {
-            await this.mountDir.unlink(sidePath).catch(() => {});
-            throw error;
-        }
+    public async write(key: string, data: WriteData): Promise<number> {
+        return this.mountDir.replaceThrough(
+            path.join(PATHS.DRIVE.TMP_DIR, crypto.randomUUID()),
+            this.resolve(key),
+            data,
+        );
     }
 
     public async delete(key: string): Promise<boolean> {
