@@ -240,6 +240,19 @@ describe('WebDAV LOCK/UNLOCK', () => {
         expect((await webdavRequest(ctx.alice.user.email, 'GET', `${folderHref}/bob.txt`)).status).toBe(404);
     });
 
+    test("a reader's refresh of a lock → 403", async () => {
+        const folderHref = `${baseHref}/lock-refresh-reader`;
+        expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', folderHref)).status).toBe(201);
+        const folder = await (await getHome(ctx.alice.user.id)).drive.resolvePath(mountId, '/lock-refresh-reader');
+        if (!folder) throw new Error('expected the folder');
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${folder.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: false }],
+        });
+        const { token, url } = await lockFile('lock-refresh-reader/alice.txt');
+        const refresh = await webdavRequest(ctx.bob.user.email, 'LOCK', url, { headers: { If: `(<${token}>)` } });
+        expect(refresh.status).toBe(403);
+    });
+
     describe('in a folder Alice shares with Bob to write', () => {
         let folderHref: string;
 
@@ -315,6 +328,60 @@ describe('WebDAV LOCK/UNLOCK', () => {
                 headers: { If: `(<${bobToken}>)` },
             });
             expect(put.status).toBe(204);
+        });
+
+        test("Alice's own token does not pass Bob's shared lock for an exclusive one, and his lock stays", async () => {
+            const url = `${folderHref}/shared-then-exclusive.txt`;
+            await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'start' });
+            const aliceToken = lockTokenOf(await lockRequest(url, { scope: 'shared' }));
+            const bobToken = lockTokenOf(await lockRequest(url, { scope: 'shared', email: ctx.bob.user.email }));
+            expect((await lockRequest(url, { headers: { If: `(<${aliceToken}>)` } })).status).toBe(423);
+            const put = await webdavRequest(ctx.bob.user.email, 'PUT', url, {
+                body: 'bob',
+                headers: { If: `(<${bobToken}>)` },
+            });
+            expect(put.status).toBe(204);
+        });
+
+        test("a LOCK on a folder is refused over another user's lock on a file inside it", async () => {
+            const inner = `${folderHref}/locked-inside`;
+            expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', inner)).status).toBe(201);
+            const url = `${inner}/report.docx`;
+            await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'alice' });
+            const token = lockTokenOf(await lockRequest(url));
+            expect((await lockRequest(inner, { email: ctx.bob.user.email })).status).toBe(423);
+            expect((await lockRequest(inner, { email: ctx.bob.user.email, headers: { Depth: '0' } })).status).toBe(200);
+            const put = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
+                body: 'saved',
+                headers: { If: `(<${token}>)` },
+            });
+            expect(put.status).toBe(204);
+        });
+
+        test('a refresh by another user with the token, or at another URL, is a 412 and extends nothing', async () => {
+            const url = `${folderHref}/refresh-own-only.txt`;
+            const otherUrl = `${folderHref}/refresh-other.txt`;
+            await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'alice' });
+            await webdavRequest(ctx.alice.user.email, 'PUT', otherUrl, { body: 'other' });
+            const token = lockTokenOf(await lockRequest(url, { timeout: 'Second-60' }));
+            const refresh = (email: string, at: string) =>
+                webdavRequest(email, 'LOCK', at, { headers: { If: `(<${token}>)`, Timeout: 'Second-3600' } });
+            expect((await refresh(ctx.bob.user.email, url)).status).toBe(412);
+            expect((await refresh(ctx.alice.user.email, otherUrl)).status).toBe(412);
+            const find = await webdavRequest(ctx.alice.user.email, 'PROPFIND', url, { headers: { Depth: '0' } });
+            const seconds = (await find.text()).match(/<D:timeout>Second-(\d+)<\/D:timeout>/)?.[1];
+            expect(Number(seconds)).toBeLessThanOrEqual(60);
+            expect((await refresh(ctx.alice.user.email, url)).status).toBe(200);
+        });
+
+        test('a LOCK on a new name in a folder another user locked is a 423, as a PUT is, and creates nothing', async () => {
+            const inner = `${folderHref}/bob-locked-folder`;
+            expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', inner)).status).toBe(201);
+            lockTokenOf(await lockRequest(inner, { email: ctx.bob.user.email, headers: { Depth: '0' } }));
+            const put = await webdavRequest(ctx.alice.user.email, 'PUT', `${inner}/put.docx`, { body: 'x' });
+            expect(put.status).toBe(423);
+            expect((await lockRequest(`${inner}/new.docx`)).status).toBe(423);
+            expect((await webdavRequest(ctx.alice.user.email, 'GET', `${inner}/new.docx`)).status).toBe(404);
         });
     });
 

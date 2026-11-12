@@ -279,6 +279,11 @@ describe('SharedDrive gating enumeration', () => {
             reason: 'write-gated: it drops the locks of other users',
             call: (sd) => sd.releaseLocksUnder(mountId, fileId),
         },
+        descendantIds: {
+            gate: 'denies',
+            reason: 'read-gated: it names every path under a folder',
+            call: (sd) => sd.descendantIds(mountId, folderId),
+        },
         renamePath: {
             gate: 'denies',
             reason: 'write-gated on the parent',

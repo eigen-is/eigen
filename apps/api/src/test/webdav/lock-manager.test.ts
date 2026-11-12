@@ -9,6 +9,7 @@ const exclusive = (overrides: Partial<Parameters<LockManager['acquire']>[0]> = {
     ttlMs: LOCK_DEFAULT_TTL_MS,
     ifHeader: null,
     ancestorPathIds: [],
+    descendantPathIds: [],
     ...overrides,
 });
 
@@ -53,16 +54,24 @@ describe('LockManager', () => {
         const m = new LockManager(noHold);
         const lock = m.acquire(exclusive({ ttlMs: 1_000 }));
         const before = lock.expiresAt;
-        const refreshed = m.refresh(lock.token, 60_000);
-        expect(refreshed).not.toBeNull();
-        expect(refreshed!.expiresAt).toBeGreaterThan(before);
+        const refreshed = m.refresh('p1', 'u1', `<${lock.token}>`, 60_000);
+        expect(refreshed?.expiresAt).toBeGreaterThan(before);
+    });
+
+    test('refresh: another user with the token, or the owner on another path, extends nothing', () => {
+        const m = new LockManager(noHold);
+        const lock = m.acquire(exclusive({ ttlMs: 1_000 }));
+        const before = lock.expiresAt;
+        expect(m.refresh('p1', 'u2', `<${lock.token}>`, 60_000)).toBeUndefined();
+        expect(m.refresh('p2', 'u1', `<${lock.token}>`, 60_000)).toBeUndefined();
+        expect(lock.expiresAt).toBe(before);
     });
 
     test('refresh returns null for expired lock', async () => {
         const m = new LockManager(noHold);
         const lock = m.acquire(exclusive({ ttlMs: 1 }));
         await new Promise((r) => setTimeout(r, 5));
-        expect(m.refresh(lock.token, LOCK_DEFAULT_TTL_MS)).toBeNull();
+        expect(m.refresh('p1', 'u1', `<${lock.token}>`, LOCK_DEFAULT_TTL_MS)).toBeUndefined();
     });
 
     test('release removes the lock', () => {
@@ -142,13 +151,31 @@ describe('LockManager', () => {
         expect(m.isWriteAllowed('p1', `<${other.token}>`, 'u2', [])).toBe(false);
     });
 
-    // A folder lock is taken without looking at the locks below it, so an exclusive lock on a file can sit under
-    // another user's folder lock. That user's own token must not pass the file's.
-    test("isWriteAllowed: an own folder token does not pass another user's exclusive lock on the file", () => {
+    test("acquire: an own token does not pass another user's shared lock for an exclusive one", () => {
+        const m = new LockManager(noHold);
+        const own = m.acquire(exclusive({ scope: 'shared' }));
+        m.acquire(exclusive({ scope: 'shared', userId: 'u2' }));
+        expect(() => m.acquire(exclusive({ ifHeader: `<${own.token}>` }))).toThrow(/Locked/);
+        expect(m.listForPath('p1')).toHaveLength(2);
+    });
+
+    test("acquire: a depth-infinity lock on a folder is refused over another user's lock below it", () => {
         const m = new LockManager(noHold);
         m.acquire(exclusive({ pathId: 'child' }));
-        const folder = m.acquire(exclusive({ pathId: 'parent', depth: 'infinity', userId: 'u2' }));
-        expect(m.isWriteAllowed('child', `<${folder.token}>`, 'u2', ['parent'])).toBe(false);
+        const folder = exclusive({ pathId: 'parent', depth: 'infinity', userId: 'u2', descendantPathIds: ['child'] });
+        expect(() => m.acquire(folder)).toThrow(/Locked/);
+        expect(() => m.acquire({ ...folder, scope: 'shared' })).toThrow(/Locked/);
+    });
+
+    test('acquire: a depth-infinity lock on a folder passes an own lock below it with its token, and shared ones', () => {
+        const m = new LockManager(noHold);
+        const own = m.acquire(exclusive({ pathId: 'child' }));
+        m.acquire(exclusive({ pathId: 'other', scope: 'shared', userId: 'u2' }));
+        const folder = exclusive({ pathId: 'parent', depth: 'infinity', descendantPathIds: ['child', 'other'] });
+        expect(() => m.acquire(folder)).toThrow(/Locked/);
+        expect(() => m.acquire({ ...folder, ifHeader: `<${own.token}>` })).toThrow(/Locked/);
+        const shared = m.acquire({ ...folder, scope: 'shared', ifHeader: `<${own.token}>` });
+        expect(shared.token).toMatch(/^urn:uuid:/);
     });
 
     test('parseIfHeaderTokens extracts angle-bracketed tokens', () => {

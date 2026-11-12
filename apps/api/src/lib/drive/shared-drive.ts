@@ -56,6 +56,11 @@ export class SharedDrive {
         return this.drive.releaseLocksUnder(mountId, pathId);
     }
 
+    public async descendantIds(mountId: string, pathId: string): Promise<string[]> {
+        await this.requireRead(mountId, pathId);
+        return this.drive.descendantIds(mountId, pathId);
+    }
+
     // Holding the owner's home has no access check of its own: the caller checks access before it holds.
     public holdHome(onClosing?: () => void): () => void {
         return this.drive.holdHome(onClosing);

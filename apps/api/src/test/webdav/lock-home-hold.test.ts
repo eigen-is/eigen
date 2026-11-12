@@ -143,6 +143,7 @@ describe('a WebDAV lock holds its Home', () => {
                 ttlMs: LOCK_DEFAULT_TTL_MS,
                 ifHeader: null,
                 ancestorPathIds: [],
+                descendantPathIds: [],
             }),
         ).toThrow('Home is closing');
         await closing;
