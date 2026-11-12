@@ -18,7 +18,7 @@ import type { Rewrite } from './edit-plan';
 import { planEdit } from './edit-plan';
 import { ReverseIndex } from './reverse-index';
 
-export type CellAddress = { readonly sheet: string; readonly row: number; readonly column: number };
+type CellAddress = { readonly sheet: string; readonly row: number; readonly column: number };
 
 export type RecalcResult = {
     // Every cell of the workbook that is on a circular reference, in sheet, column, row order. Final only when
