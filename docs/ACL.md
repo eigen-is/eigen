@@ -161,7 +161,7 @@ A row of `shared_paths` in the recipient's `shared.db` holds only the owner, the
 
 `listSharedWithMe` (`apps/api/src/lib/drive/shared-with-me.ts`) reads the rows and asks every owner at once through `pullVisiblePaths` in `home-relay.ts`, the read Recent uses ([STORAGE.md](STORAGE.md#a-load-asks-each-owner-whether-the-user-may-still-see-the-path)). Each owner answers with its paths as they are now, so the list shows the current name, folder, size and thumbnail, oldest share first. The owner's side decides what shows: `Drive.getVisiblePaths` leaves out a path that is deleted, in the trash or inside a document, and one the user may no longer read through its chain of folders. The row grants nothing. The listings of one type (`Drive.getMimeTypeContents`) and the chat finder read the same list, passing the type prefix along so each owner answers only the paths of that type. A load costs one read per distinct owner, and the table has no cap.
 
-So a trash and a restore push nothing and send the recipient no notice: the row stays, the path leaves the list while it is in the trash and returns after the restore with its `sharedAt`. Open tabs still hear both, because the path's own events reach everyone who can read it, and a folder's events also reach everyone who can read a path below it ([SSE.md](SSE.md#a-drive-event-reaches-everyone-who-can-read-the-path)).
+So a trash and a restore push nothing and send the recipient no "shared with you" or "removed your access" notice: the row stays, the path leaves the list while it is in the trash and returns after the restore with its `sharedAt`. Open tabs still hear both, because the path's own events reach everyone who can read it, and a folder's events also reach everyone who can read a path below it ([SSE.md](SSE.md#a-drive-event-reaches-everyone-who-can-read-the-path)). Whoever watches the path or a folder above it still gets the trash and restore notices (`notifyWatchers`).
 
 A read never deletes a row. The row of a path deleted for good, or of a deleted user or team, stays and lists nothing: deleting an owner reaches into no other home, and `pullFromEach` skips an owner `getOwnerExists` says is gone. An owner whose lookup or home fails is logged and left out of that one listing, which still answers 200. A restored owner's paths show again at the next load. The Watched view asks the owners in `listSharedOwnerIds` the same way.
 
@@ -177,7 +177,7 @@ A deletion leaves the entries naming that person on other owners' paths on purpo
 
 ### Pull Routes
 
-Reconciliation reads through the home-relay pull functions. The same reads answer two routes, each returning only the caller's own shares on that owner:
+Reconciliation reads through the home-relay pull functions. Two routes answer from the same reads, each returning only the caller's own shares on that owner, the drive one without the paths in the trash (`Drive.getSharedWith`):
 
 ```
 GET /calendar/:ownerId/shared-with-me
