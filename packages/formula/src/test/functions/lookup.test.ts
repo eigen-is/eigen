@@ -231,7 +231,8 @@ describe('XLOOKUP and XMATCH', () => {
         ['=XLOOKUP(6,A1:A6,B1:B6,,1,2)', 'e'],
         ['=XLOOKUP(4,{11,9,5,5,3,1},{"a","b","c","d","e","f"},,1,-2)', 'd'],
         ['=XLOOKUP(4,{11,9,5,5,3,1},{"a","b","c","d","e","f"},,-1,-2)', 'e'],
-        ['=XLOOKUP(5,{11,9,5,5,3,1},{"a","b","c","d","e","f"},,0,-2)', 'c'],
+        // Of equal keys a search down the values takes the last one (Excel: XMATCH(2,{3,2,2,2,1},0,-2) is 4).
+        ['=XLOOKUP(5,{11,9,5,5,3,1},{"a","b","c","d","e","f"},,0,-2)', 'd'],
         ['=XLOOKUP(5,A1:A6,B1:C6)', 'c'],
         ['=INDEX(XLOOKUP(5,A1:A6,B1:C6),1,2)', 0],
         ['=XLOOKUP(5,A1:B6,B1:B6)', VALUE],
@@ -468,6 +469,9 @@ describe('what Excel records for the lookups on its own cells', () => {
         ['=LOOKUP(4,C1:C3,D1:E4)', NA],
         ['=LOOKUP(4,C1:C3,(A1:A2,C1:C2))', NA],
         ['=LOOKUP(4,C1:C3,E1:E3)', 20],
+        // A mark sorts before a digit, so "k?" is below every key of the list.
+        ['=LOOKUP("k?",D1:D4,E1:E4)', NA],
+        ['=MATCH("k?",D1:D4)', NA],
         // A search mode is cut down, so -2.5 is no mode.
         ['=XMATCH(2,C1:C3,0,-2.5)', VALUE],
         ['=XMATCH(4,C1:C3,0,1.9)', 2],
