@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import {
     EXCEL_2007_FUNCTIONS,
     EXCEL_ARRAY_FUNCTIONS,
@@ -15,8 +15,10 @@ import {
     printA1,
     printStored,
     printXlsx,
+    typedText,
     xlsxTree,
 } from '../../text';
+import * as parser from '../../text/parser';
 import { ShapeTable } from '../../text/shapes';
 import { at, findSheet, sheetName, treeA1 } from './support';
 import { bar, fileOf, read } from './xlsx-support';
@@ -70,6 +72,7 @@ const TYPED: readonly {
         typed: 'MATCH(TRUE,INDEX(A1:A3>1,0),0)',
         excel: 'array',
         file: 'MATCH(TRUE,INDEX(A1:A3>1,0),0)',
+        ours: 'plain',
     },
     {
         row: 'T7',
@@ -77,6 +80,7 @@ const TYPED: readonly {
         typed: 'LOOKUP(2,1/(A1:A3<>""),B1:B3)',
         excel: 'array',
         file: 'LOOKUP(2,1/(A1:A3<>""),B1:B3)',
+        ours: 'plain',
     },
     {
         row: 'T8',
@@ -146,7 +150,6 @@ const LEGACY: readonly { row: string; host: string; file: string; excel: string;
         host: 'D5',
         file: 'INDEX(B1:B3,MATCH(1,(A1:A3=2)*(B1:B3=20),0))',
         excel: '=INDEX(B1:B3,MATCH(1,(@A1:A3=2)*(@B1:B3=20),0))',
-        ours: '=INDEX(B1:B3,MATCH(1,(A1:A3=2)*(B1:B3=20),0))',
     },
     { row: 'L6', host: 'D6', file: 'LOOKUP(2,1/(A1:A3<>""),B1:B3)', excel: '=LOOKUP(2,1/(A1:A3<>""),B1:B3)' },
     {
@@ -154,7 +157,6 @@ const LEGACY: readonly { row: string; host: string; file: string; excel: string;
         host: 'D7',
         file: 'VLOOKUP(2,A1:B3*1,2,FALSE)',
         excel: '=VLOOKUP(2,@A1:B3*1,2,FALSE)',
-        ours: '=VLOOKUP(2,A1:B3*1,2,FALSE)',
     },
     { row: 'L8', host: 'D8', file: 'IF(A1>0,B1:B3,0)', excel: '=@IF(A1>0,B1:B3,0)' },
     { row: 'L9', host: 'D9', file: '_xlfn.XLOOKUP(A2,A:A,B:B)', excel: '=XLOOKUP(A2,A:A,B:B)' },
@@ -185,9 +187,12 @@ describe("text/xlsx: Excel's own mark for a typed formula (oracle batch 15, part
         });
     }
 
-    test("the rows where our mark is not Excel's are the three whose value is the same either way", () => {
-        // T2 and T3 are L2 and L3, where Excel's plain reading gives the same 50 and 3; T12 holds single cells only.
-        expect(TYPED.filter(({ ours }) => ours !== undefined).map(({ row }) => row)).toEqual(['T2', 'T3', 'T12']);
+    test("the rows where our mark is not Excel's are plain here, with the same value either way", () => {
+        // An operator in an array parameter: T2, T3 and T7 are L2, L3 and L6, where Excel's plain reading gives the
+        // same 50, 3 and 30, and T6 is the same INDEX in MATCH that plain files hold. T12 holds single cells only.
+        const ours = TYPED.filter((row) => row.ours !== undefined);
+        expect(ours.map(({ row }) => row)).toEqual(['T2', 'T3', 'T6', 'T7', 'T12']);
+        for (const row of ours) expect([row.excel, row.ours]).toEqual(['array', 'plain']);
         expect(TYPED.filter(({ oursFile }) => oursFile !== undefined).map(({ row }) => row)).toEqual(['T20', 'T21']);
     });
 
@@ -208,8 +213,6 @@ describe('text/xlsx: where Excel puts the @ in a plain <f> (oracle batch 15, par
 
     test("the rows where our formula bar is not Excel's are the named ones", () => {
         expect(LEGACY.filter(({ ours }) => ours !== undefined).map(({ row }) => row)).toEqual([
-            'L5',
-            'L7',
             'L11b',
             'L12b',
             'L12c',
@@ -217,12 +220,12 @@ describe('text/xlsx: where Excel puts the @ in a plain <f> (oracle batch 15, par
         ]);
     });
 
-    test('a plain <f> is written back as it was, and plain but for the three whose table argument holds an operator', () => {
+    test('a plain <f> is written back as it was, and plain', () => {
         for (const { row, host, file } of LEGACY) {
             const out = fileOf(intersect(read(file, host), FUNCTIONS), host);
             if (row === 'L12b') expect(out).toEqual({ legacy: true, text: '_xlfn.NORM.S.DIST(0,TRUE)' });
             else if (row === 'L12c') expect(out).toEqual({ legacy: true, text: '_xludf.FOO(1)' });
-            else expect(out).toEqual({ legacy: row !== 'L5' && row !== 'L7' && row !== 'L6', text: file });
+            else expect(out).toEqual({ legacy: true, text: file });
         }
     });
 
@@ -281,6 +284,34 @@ describe('text/xlsx: the three contexts', () => {
         expect(bar('ABS(INDEX(A1:C10,2,3))')).toBe('=ABS(INDEX(A1:C10,2,3))');
     });
 
+    test('an array constant under a value parameter stays, and so does an argument past the last parameter', () => {
+        expect(bar('ABS({1,2,3})+SUM(ABS({1,2,3}))')).toBe('=ABS({1,2,3})+SUM(ABS({1,2,3}))');
+        expect(bar('ABS(A1:A3,B1:B3)+PI(A1:A3)')).toBe('=ABS(@A1:A3,B1:B3)+PI(A1:A3)');
+    });
+
+    test('INDEX is one cell when each index is a number but 0 or a call of one value, XLOOKUP along one line', () => {
+        expect(bar('INDEX(A:A,MATCH(B1,C:C,0))+INDEX(A1:C3,2,3)+INDEX(A1:C3,ROW(),2)')).toBe(
+            '=INDEX(A:A,MATCH(B1,C:C,0))+INDEX(A1:C3,2,3)+INDEX(A1:C3,ROW(),2)',
+        );
+        expect(bar('INDEX(A:A,B1)')).toBe('=@INDEX(A:A,B1)');
+        expect(bar('INDEX(A1:C3,,2)+INDEX(A1:C3,2,0)+INDEX(A:A,Rate)+INDEX(A:A,B1+1)')).toBe(
+            '=@INDEX(A1:C3,,2)+@INDEX(A1:C3,2,0)+@INDEX(A:A,Rate)+@INDEX(A:A,B1+1)',
+        );
+        expect(bar('INDEX(A:A,INDEX(B:B,C1))+INDEX(A:A,ROW(B1:B3))')).toBe(
+            '=@INDEX(A:A,@INDEX(B:B,C1))+@INDEX(A:A,@ROW(B1:B3))',
+        );
+        expect(bar('SUM(INDEX(A1:C10,0,2))&INDEX(A1:A3>1,2)')).toBe('=SUM(INDEX(A1:C10,0,2))&INDEX(A1:A3>1,2)');
+        expect(bar('_xlfn.XLOOKUP(A1,B:B,C:C)+_xlfn.XLOOKUP(A1,$B$1:$B$9,C1:C9)+_xlfn.XLOOKUP(A1,B1:J1,B2:J2)')).toBe(
+            '=XLOOKUP(A1,B:B,C:C)+XLOOKUP(A1,$B$1:$B$9,C1:C9)+XLOOKUP(A1,B1:J1,B2:J2)',
+        );
+        expect(bar('_xlfn.XLOOKUP(A1,B:B,C:D)+_xlfn.XLOOKUP(A1,B1,C1:D1)+_xlfn.XLOOKUP(A1,B:B,Rate)')).toBe(
+            '=@XLOOKUP(A1,B:B,C:D)+@XLOOKUP(A1,B1,C1:D1)+@XLOOKUP(A1,B:B,Rate)',
+        );
+        expect(bar('_xlfn.XLOOKUP(A1,B:B,$C1:C$9)+_xlfn.XLOOKUP(A1,B:B,C:C,D1:D3)')).toBe(
+            '=@XLOOKUP(A1,B:B,$C1:C$9)+@XLOOKUP(A1,B:B,C:C,D1:D3)',
+        );
+    });
+
     test('a user function gets the @ and takes its arguments as they are; a name and a single cell get none', () => {
         expect(bar('MyUdf(A1:A3)+1')).toBe('=@MYUDF(A1:A3)+1');
         expect(bar('[1]!Func(A1:A3)')).toBe('=@[1]!Func(A1:A3)');
@@ -332,11 +363,13 @@ describe('text/xlsx: which mark a typed formula is written with', () => {
     });
 
     test('where the rule cannot tell, the formula is an array formula: the named set', () => {
-        // An operator on a range under a table parameter, which is an array for LOOKUP and INDEX and not for MATCH.
-        expect(mark('MATCH(1,(A1:A10="x")*(B1:B10="y"),0)')).toBe('array');
-        expect(mark('LOOKUP(2,1/(A1:A3<>""),B1:B3)')).toBe('array');
-        expect(mark('INDEX(A1:A3>1,0)')).toBe('array');
+        // A range, or an operator on one, under a parameter whose records do not say how old Excel read it.
+        expect(mark('TYPE(A1:A10)')).toBe('array');
+        expect(mark('ISREF(A1:A10)')).toBe('array');
+        expect(mark('TYPE(A1)+N(A1:A10)&T(A1:A10)')).toBe('plain');
         expect(mark('SUMXMY2(A1:A3*2,B1:B3)')).toBe('array');
+        expect(mark('N(A1:A3*2)')).toBe('array');
+        expect(bar('TYPE(A1:A10)+SUMXMY2(A1:A3*2,B1:B3)')).toBe('=TYPE(A1:A10)+SUMXMY2(A1:A3*2,B1:B3)');
         // A function of Excel's that the engine lacks and that answers an array.
         for (const typed of [
             'TRANSPOSE(A1:C1)',
@@ -421,9 +454,10 @@ describe('text/xlsx: the file spellings', () => {
         expect(shown('_xlfn.NEWTHING(1)')).toBe('=_XLFN.NEWTHING(1)');
     });
 
-    test('a prefix with no name after it is refused', () => {
+    test('a prefix with no name after it is a function no one has, and comes back as it was', () => {
         for (const text of ['_xlfn.(1)', '1+_xlfn._xlws.(1)', 'SUM(_xlpm.(1))', '_xludf.()']) {
-            expect(parseXlsx(text, 4, 4, findSheet)).toEqual({ reason: 'syntax', at: 0 });
+            expect(round(text)).toBe(text);
+            expect(parseStored(printStored(read(text, 'E5')))).toEqual(read(text, 'E5'));
         }
     });
 
@@ -453,7 +487,56 @@ describe('text/xlsx: the file spellings', () => {
         expect(round('_xlfn.LAMBDA(_xlpm.a,_xlop.b,_xlpm.a+_xlpm.b)(1,2)')).toBe(
             '_xlfn.LAMBDA(_xlpm.a,_xlop.b,_xlpm.a+_xlpm.b)(1,2)',
         );
-        expect(round('LET(Rate,1,rate*2)+Rate')).toBe('_xlfn.LET(_xlpm.Rate,1,_xlpm.rate*2)+Rate');
+        expect(round('LET(Rate,1,rate*2)+Rate')).toBe('_xlfn.LET(_xlpm.Rate,1,_xlpm.Rate*2)+Rate');
+    });
+
+    // Batch 18 of the oracle: what Excel wrote for a typed LET or LAMBDA. Row 9 is read from the file only: typed
+    // here, a:b is the columns A to B. Rows 10, 16 and 17 (the names a1, true and x.y) Excel kept as text.
+    const BOUND: readonly (readonly [row: number, typed: string, file: string])[] = [
+        [1, 'LET(x,1,x+1)', '_xlfn.LET(_xlpm.x,1,_xlpm.x+1)'],
+        [2, 'LET(sum,1,sum+1)', '_xlfn.LET(_xlpm.sum,1,_xlpm.sum+1)'],
+        [3, 'LET(sum,SUM(A1:A3),sum*2)', '_xlfn.LET(_xlpm.sum,SUM(A1:A3),_xlpm.sum*2)'],
+        [4, 'LET(sum,SUM(A1:A3),SUM(B1:B3)/sum)', '_xlfn.LET(_xlpm.sum,SUM(A1:A3),SUM(B1:B3)/_xlpm.sum)'],
+        [5, 'LET(f,LAMBDA(x,x+1),f(2))', '_xlfn.LET(_xlpm.f,_xlfn.LAMBDA(_xlpm.x,_xlpm.x+1),_xlpm.f(2))'],
+        [6, 'LET(sum,LAMBDA(x,x+1),sum(2))', '_xlfn.LET(_xlpm.sum,_xlfn.LAMBDA(_xlpm.x,_xlpm.x+1),SUM(2))'],
+        [7, 'LET(max,5,max)', '_xlfn.LET(_xlpm.max,5,_xlpm.max)'],
+        [8, 'LET(index,2,INDEX(A1:A3,index))', '_xlfn.LET(_xlpm.index,2,INDEX(A1:A3,_xlpm.index))'],
+        [9, '', '_xlfn.LET(_xlpm.a,A1,_xlpm.b,B3,SUM(_xlpm.a:_xlpm.b))'],
+        [11, 'LET(r,2,c,3,r*c)', '_xlfn.LET(_xlpm.r,2,_xlpm.c,3,_xlpm.r*_xlpm.c)'],
+        [12, 'LET(rate,2,rate*A1)', '_xlfn.LET(_xlpm.rate,2,_xlpm.rate*A1)'],
+        [13, 'LET(x,A1:A3,x x)', '_xlfn.LET(_xlpm.x,A1:A3,_xlpm.x _xlpm.x)'],
+        [14, 'LAMBDA(sum,sum+1)(2)', '_xlfn.LAMBDA(_xlpm.sum,_xlpm.sum+1)(2)'],
+        [15, 'LAMBDA(x,SUM(x))(A1:A3)', '_xlfn.LAMBDA(_xlpm.x,SUM(_xlpm.x))(A1:A3)'],
+        [18, 'LET(_x,1,_x+1)', '_xlfn.LET(_xlpm._x,1,_xlpm._x+1)'],
+        [19, 'LET(Sum,1,SUM(A1:A3)+Sum)', '_xlfn.LET(_xlpm.Sum,1,SUM(A1:A3)+_xlpm.Sum)'],
+        [20, 'LET(x,1,X+1)', '_xlfn.LET(_xlpm.x,1,_xlpm.x+1)'],
+    ];
+
+    test("a typed LET or LAMBDA is written as Excel writes it, and Excel's text comes back as it was (batch 18)", () => {
+        for (const [row, typed, file] of BOUND) {
+            if (typed !== '') expect([row, fileOf(treeA1(`=${typed}`, 'D1'), 'D1').text]).toEqual([row, file]);
+            const tree = read(file, 'D1');
+            expect([row, round(file, false, 'D1')]).toEqual([row, file]);
+            expect(parseStored(printStored(tree))).toEqual(tree);
+            expect(isLegacy(tree, FUNCTIONS)).toBe(false);
+        }
+    });
+
+    test('a called name spelled like a function is the function, bound or not, and a prefixed one stays apart', () => {
+        const called = read('_xlfn.LET(_xlpm.sum,_xlfn.LAMBDA(_xlpm.x,_xlpm.x),_xlpm.sum(2))', 'D1');
+        const summed = read('_xlfn.LET(_xlpm.sum,_xlfn.LAMBDA(_xlpm.x,_xlpm.x),SUM(2))', 'D1');
+        expect(printStored(called)).not.toBe(printStored(summed));
+        expect(round('_xlfn.LET(_xlpm.sum,_xlfn.LAMBDA(_xlpm.x,_xlpm.x),_xlpm.sum(2))')).toBe(
+            '_xlfn.LET(_xlpm.sum,_xlfn.LAMBDA(_xlpm.x,_xlpm.x),_xlpm.SUM(2))',
+        );
+        const reviewers =
+            '_xlfn.LET(_xlpm.sum,SUM(A1:A3),_xlpm.max,MAX(B1:B3),SUM(B1:B3)/_xlpm.sum+MAX(A1:A3)-_xlpm.max)';
+        expect(round(reviewers)).toBe(reviewers);
+        expect(fileOf(treeA1('=LET(count,COUNT(A:A),total,SUM(A:A),total/count+COUNT(B:B))'), 'N1').text).toBe(
+            '_xlfn.LET(_xlpm.count,COUNT(A:A),_xlpm.total,SUM(A:A),_xlpm.total/_xlpm.count+COUNT(B:B))',
+        );
+        const spaced = read('_xlpm.A1 (B1,B2)+_xlpm.f (1)', 'D1');
+        expect(parseStored(printStored(spaced))).toEqual(spaced);
     });
 
     test('a parameter whose bare name would read as a cell or a boolean keeps its prefix', () => {
@@ -536,6 +619,40 @@ describe('text/xlsx: a stored key reads back as the tree it was printed from', (
         });
     }
 
+    // The reviewer's strings: a parameter beside a colon read as a column, and a name before the brackets of an @
+    // after an intersection read as a call.
+    for (const text of [
+        '_xlfn.LET(_xlpm.a,A1,_xlpm.b,B3,SUM(_xlpm.a:_xlpm.b))',
+        '_xlfn.LAMBDA(_xlpm.x,_xlpm.y,_xlpm.x:_xlpm.y)(A1,B3)',
+        '_xlfn.LET(_xlpm.x,A1,_xlpm.x:B3)',
+        '_xlfn.LET(_xlpm.x,A1,B3:_xlpm.x)',
+        '_xlfn.LET(_xlpm.rng,A1,_xlpm.rng:B3)',
+        '_xlpm.x:B:B',
+        'Rate _xlfn.SINGLE(B1:B3)',
+        'SUM(MyRange _xlfn.SINGLE(B:B))',
+        '_xlfn.LET(_xlpm.x,A1,_xlpm.x _xlfn.SINGLE(B:B))',
+        'name _xlfn.ANCHORARRAY((B1,B2))',
+        'A1:Rate _xlfn.SINGLE(B1:B3)',
+        'Sheet2!Rate _xlfn.SINGLE(B1:B3)',
+    ]) {
+        test(text, () => {
+            for (const tree of [read(text, 'E5'), intersect(read(text, 'E5'), FUNCTIONS)]) {
+                expect(parseStored(printStored(tree))).toEqual(tree);
+                expect(treeA1(printA1(tree, ...at('E5'), sheetName), 'E5')).toEqual(tree);
+                const { legacy, text: written } = fileOf(tree, 'E5');
+                const again = read(written, 'E5');
+                expect(printStored(legacy ? intersect(again, FUNCTIONS) : again)).toBe(printStored(tree));
+            }
+        });
+    }
+
+    test('a parameter beside a colon and a name before a bracketed @ get brackets of their own', () => {
+        expect(
+            printA1(read('_xlfn.LET(_xlpm.a,A1,_xlpm.b,B3,SUM(_xlpm.a:_xlpm.b))', 'E5'), ...at('E5'), sheetName),
+        ).toBe('=LET(a,A1,b,B3,SUM(a:(b)))');
+        expect(printA1(read('Rate _xlfn.SINGLE(B1:B3)', 'E5'), ...at('E5'), sheetName)).toBe('=(Rate) (@B1:B3)');
+    });
+
     test('the brackets the reader adds around an @ under a range operator go again on writing', () => {
         const tree = read('SUM((A1,_xlfn.SINGLE(B1:B3)),_xlfn.SINGLE(A1:A3):B5)', 'E5');
         expect(printA1(tree, ...at('E5'), sheetName)).toBe('=SUM((A1,(@B1:B3)),(@A1:A3):B5)');
@@ -561,12 +678,13 @@ describe('text/xlsx: a shared formula', () => {
         ['_xlfn.ANCHORARRAY(A1)', 'B1', 'B2', '=@A2#'],
         ['B1+1', 'A1', 'A4', '=B4+1'],
     ];
-    // Where Excel wraps a follower's reference past the edge of the grid to the other edge, and we show #REF!.
-    const WRAPPED: readonly (readonly [string, string, string, string, string])[] = [
-        ['B1048576', 'A1048575', 'A1048576', '=B1', '=#REF!'],
-        ['XFD1', 'A1', 'B1', '=A1', '=#REF!'],
-        ['SUM(XFD:XFD)', 'A1', 'B1', '=SUM(A:A)', '=SUM(#REF!)'],
-        ['A1', 'A2', 'A1', '=A1048576', '=#REF!'],
+    // A follower whose reference runs past the edge of the grid. Excel wraps to the other edge: batch 15, part S
+    // recorded that for the first row, the bar of A1048576 showing =B1. The other three were not recorded in Excel.
+    const PAST_THE_EDGE: readonly (readonly [string, string, string, string])[] = [
+        ['B1048576', 'A1048575', 'A1048576', '=#REF!'],
+        ['XFD1', 'A1', 'B1', '=#REF!'],
+        ['SUM(XFD:XFD)', 'A1', 'B1', '=SUM(#REF!)'],
+        ['A1', 'A2', 'A1', '=#REF!'],
     ];
 
     test("a follower is its master's shape at another cell, as Excel reads it", () => {
@@ -574,15 +692,14 @@ describe('text/xlsx: a shared formula', () => {
             const tree = intersect(read(text, master), FUNCTIONS);
             expect(printA1(tree, ...at(follower), sheetName)).toBe(excel);
         }
-        expect(FOLLOWERS.length + WRAPPED.length).toBe(18);
+        expect(FOLLOWERS.length + PAST_THE_EDGE.length).toBe(18);
     });
 
     test('a follower past the edge of the grid is #REF! where Excel wraps to the other edge: a known difference', () => {
-        for (const [text, master, follower, excel, ours] of WRAPPED) {
-            const shown = printA1(intersect(read(text, master), FUNCTIONS), ...at(follower), sheetName);
-            expect(shown).toBe(ours);
-            expect(shown).not.toBe(excel);
+        for (const [text, master, follower, ours] of PAST_THE_EDGE) {
+            expect(printA1(intersect(read(text, master), FUNCTIONS), ...at(follower), sheetName)).toBe(ours);
         }
+        expect(PAST_THE_EDGE[0][3]).not.toBe('=B1');
     });
 
     test('a follower costs no text and no parse, and one with a text of its own takes its master', () => {
@@ -593,21 +710,18 @@ describe('text/xlsx: a shared formula', () => {
             ['A3', null],
             ['A4', null],
         ];
+        const typed = spyOn(parser, 'parseA1');
+        const stored = spyOn(parser, 'parseStored');
         const shapes = new ShapeTable();
-        let parses = 0;
         let master = 0;
-        const ids = cells.map(([cell, text]) => {
-            if (master === 0 && text !== null) {
-                parses += 1;
-                master = shapes.internTree(intersect(read(text, cell), FUNCTIONS));
-            }
-            return master;
+        const shown = cells.map(([cell, text]) => {
+            if (master === 0 && text !== null) master = shapes.internTree(intersect(read(text, cell), FUNCTIONS));
+            return typedText(shapes.shape(master), ...at(cell), sheetName);
         });
-        expect(parses).toBe(1);
-        expect(shapes.size).toBe(1);
-        expect(
-            cells.map(([cell], i) => printA1(shapes.shape(ids[i]).tree ?? read('0', cell), ...at(cell), sheetName)),
-        ).toEqual(['=B1+1', '=B2+1', '=B3+1', '=B4+1']);
+        expect(shown).toEqual(['=B1+1', '=B2+1', '=B3+1', '=B4+1']);
+        expect([typed.mock.calls.length, stored.mock.calls.length, shapes.size]).toEqual([1, 0, 1]);
+        typed.mockRestore();
+        stored.mockRestore();
     });
 });
 

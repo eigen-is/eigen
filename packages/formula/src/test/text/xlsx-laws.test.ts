@@ -83,7 +83,7 @@ describe('text/xlsx laws, over generated file text', () => {
             const written = printXlsx(xlsxTree(legacy, FUNCTIONS, true), row, column, sheetName);
             if (written !== plain) throw new Error(`${text}: ${written} is not ${plain}`);
         }
-        expect(read).toBeGreaterThan(3500);
+        expect(read).toBeGreaterThan(3000);
         expect(cut).toBeGreaterThan(1000);
         expect(array).toBeLessThan(read / 2);
     });

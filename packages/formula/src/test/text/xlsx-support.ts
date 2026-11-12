@@ -23,7 +23,8 @@ export function fileOf(tree: FormulaNode, host = 'D2'): { legacy: boolean; text:
 
 // A seeded generator of formula text as a file spells it, written from the grammar: every prefix, SINGLE and
 // ANCHORARRAY around anything, LET and LAMBDA with their parameters, functions the engine has, lacks and never heard
-// of, and every kind of reference. With `marked` false it writes no SINGLE, as a file from before dynamic arrays.
+// of, every kind of reference, and a colon, an intersection or a call between any two of these, parameters and
+// names included. Not every text it makes reads. With `marked` false it writes no SINGLE, as a file from before dynamic arrays.
 export function fileFormulas(seed: number, marked: boolean): () => string {
     const { random, chance, pick } = dice(seed);
     const space = () => (chance(0.85) ? '' : pick([' ', '  ', '\n']));
@@ -37,14 +38,18 @@ export function fileFormulas(seed: number, marked: boolean): () => string {
         (chance(0.7) ? '' : sheet()) +
         pick([cell, cell, () => `${cell()}:${cell()}`, () => `${column()}:${column()}`, () => `${row()}:${row()}`])();
     const constant = () =>
-        pick(['0', '1', '2.5', '"a"', '""', 'TRUE', 'FALSE', '#N/A', '#REF!', '{1,2,3}', '{1;"a"}', 'Rate', 'x.y']);
+        pick([
+            ...['0', '1', '2.5', '"a"', '""', 'TRUE', 'FALSE', '#N/A', '#REF!', '{1,2,3}', '{1;"a"}', 'Rate', 'x.y'],
+            ...['x', 'MyRange', '_xlpm.x', '_xlpm.b', '_xlpm.A1', '_xlpm.TRUE', '_xlop.b', '_xleta.SUM'],
+        ]);
     const names = [
         ...['SUM', 'SUM', 'IF', 'IF', 'INDEX', 'INDEX', 'MATCH', 'VLOOKUP', 'LOOKUP', 'SUMPRODUCT', 'ABS', 'LEN'],
         ...['ROW', 'N', 'CHOOSE', 'IFERROR', 'OFFSET', 'INDIRECT', 'COUNTIF', 'SUMIF', 'AND', 'ROWS', 'SUBTOTAL'],
         ...['_xlfn.XLOOKUP', '_xlfn.IFS', '_xlfn.IFNA', '_xlfn.CONCAT', '_xlfn.NORM.S.DIST', '_xlfn._xlws.FILTER'],
         ...['_xlfn._xlws.SORT', '_xlfn.UNIQUE', '_xlfn.SEQUENCE', 'TRANSPOSE', 'GETPIVOTDATA', 'NPV', 'MMULT'],
         ...['MYUDF', '_xludf.FOO', '_xll.ADDIN', '_xlfn.NEWTHING', '__xludf.DUMMYFUNCTION', 'TRUE'],
-        ...['_xlfn.ANCHORARRAY', marked ? '_xlfn.SINGLE' : 'T'],
+        ...['_xlfn.ANCHORARRAY', marked ? '_xlfn.SINGLE' : 'T', '_xlfn.', '_xlfn.SUM', '_xlws.FILTER', 'ANCHORARRAY'],
+        ...['_xlpm.f', 'TYPE', 'HLOOKUP', '_xlfn.XMATCH', '_xlfn.TEXTJOIN'],
     ];
     const list = (depth: number, bound: readonly string[]) => {
         const count = Math.floor(random() * 4);
@@ -84,6 +89,9 @@ export function fileFormulas(seed: number, marked: boolean): () => string {
                 () => `(${region(depth, bound)},${region(depth, bound)})`,
                 () => `${region(depth, bound)} ${region(depth, bound)}`,
                 () => `${cell()}:${pick(names)}${list(depth, bound)}`,
+                () => `${primary(depth - 1, bound)}:${primary(depth - 1, bound)}`,
+                () => `${primary(depth - 1, bound)} ${primary(depth - 1, bound)}`,
+                () => `${primary(depth - 1, bound)}(${expression(depth - 1, bound)})`,
             ])()
         );
     };
