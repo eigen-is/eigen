@@ -4,8 +4,8 @@ import type { TestContext } from '../setup';
 import { driveGet, driveGetList, drivePost, getTestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
-// WebDAV follows the drive's rule for a document: a client may PUT a new file into its media/, and every other write
-// inside it is the drive's one 423.
+// WebDAV follows the drive's rule for a document: a client may PUT or COPY a new file into its media/, and every other
+// write inside it is the drive's one 423.
 describe('WebDAV writes inside a document', () => {
     let ctx: TestContext;
     let mountId: string;
@@ -40,6 +40,37 @@ describe('WebDAV writes inside a document', () => {
         expect(res.status).toBe(201);
         const got = await webdavRequest(email(), 'GET', `${docPath}/media/new.txt`);
         expect(await got.text()).toBe('hello');
+    });
+
+    test('COPY of a new file into media/ succeeds', async () => {
+        const res = await webdavRequest(
+            email(),
+            'COPY',
+            `${baseHref}/outside.txt`,
+            dest(`${docPath}/media/copied.txt`),
+        );
+        expect(res.status).toBe(201);
+        const got = await webdavRequest(email(), 'GET', `${docPath}/media/copied.txt`);
+        expect(await got.text()).toBe('out');
+    });
+
+    // An existing file is never moved in: it would be trapped there, and nothing in the document names it.
+    test('MOVE of a file into media/ is a 423 and leaves the source where it was', async () => {
+        expect((await webdavRequest(email(), 'PUT', `${baseHref}/into-media.txt`, { body: 'mine' })).status).toBe(201);
+        const outcomes: string[] = [];
+        for (const name of ['into-media.txt', 'renamed.txt']) {
+            const res = await webdavRequest(
+                email(),
+                'MOVE',
+                `${baseHref}/into-media.txt`,
+                dest(`${docPath}/media/${name}`),
+            );
+            outcomes.push(`${res.status} ${await res.text()}`);
+            expect((await webdavRequest(email(), 'GET', `${docPath}/media/${name}`)).status).toBe(404);
+        }
+        expect(outcomes).toEqual(Array(2).fill('423 Cannot change the inside of a document'));
+        const source = await webdavRequest(email(), 'GET', `${baseHref}/into-media.txt`);
+        expect(await source.text()).toBe('mine');
     });
 
     test('every other write inside the document is one 423', async () => {

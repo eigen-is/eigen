@@ -255,6 +255,37 @@ describe('Container write guard', () => {
             expect(await listVersions(alice(), aliceId(), mountId, doc.id)).toHaveLength(1);
         });
 
+        // Only something new is added to media/ or chat/. A moved path would be trapped there, and nothing in the
+        // document names it, so the next sweep would delete it.
+        test('an existing file or thread is never moved into media/ or chat/', async () => {
+            const looseThread = await drivePost<DrivePath>(
+                alice(),
+                aliceId(),
+                mountId,
+                `folder/${folder.id}/create/chat`,
+                { fileName: 'loose-thread' },
+            );
+            const moves: [string, DrivePath, DrivePath][] = [
+                ['file into media/', plainFile, media],
+                ["file into a thread's media/", plainFile, threadMedia],
+                ['thread into chat/', looseThread, chat],
+            ];
+            const refusals: string[] = [];
+            for (const token of [ctx.bob.user.sessionToken, alice()]) {
+                for (const [move, path, target] of moves) {
+                    const res = await request(token, aliceId(), 'PUT', `path/${path.id}/move`, {
+                        targetParentId: target.id,
+                    });
+                    refusals.push(`${move}: ${res.status} ${await res.text()}`);
+                }
+            }
+            expect(refusals.filter((refusal) => !refusal.endsWith(`: ${REFUSED}`))).toEqual([]);
+            for (const path of [plainFile, looseThread]) {
+                const after = await driveGet<DrivePath>(alice(), aliceId(), mountId, `path/${path.id}`);
+                expect(`${after.name} in ${after.parentId}`).toBe(`${path.name} in ${folder.id}`);
+            }
+        });
+
         test('nothing inside the document is renamed, moved, trashed or overwritten, with the same 423', async () => {
             const refusals: string[] = [];
             for (const visitor of [ctx.bob.user, ctx.alice.user]) {
@@ -322,6 +353,58 @@ describe('Container write guard', () => {
             expect(trashed.status).toBe(200);
             const trash = await driveGetList(alice(), aliceId(), mountId, 'trash');
             expect(trash.map((item) => item.id)).toContain(other.id);
+        });
+    });
+
+    // Pasting content with images from one document into another copies each image into the target's media/.
+    describe("a copy of a media file into another document's media/", () => {
+        async function docAndMedia(owner: typeof ctx.alice.user, parentId: string, name: string): Promise<DrivePath> {
+            const doc = await drivePost<DrivePath>(
+                owner.sessionToken,
+                owner.id,
+                mountId,
+                `folder/${parentId}/create/doc`,
+                { fileName: name },
+            );
+            return findOrFail(await children(owner.sessionToken, owner.id, doc.id), (c) => c.name === 'media');
+        }
+
+        // Alice copies an image out of her own document's media/ into the target's, twice.
+        async function copyTwiceInto(target: DrivePath, name: string): Promise<string[]> {
+            const from = await docAndMedia(ctx.alice.user, rootId, name);
+            const res = await upload(ctx.alice.user.sessionToken, aliceId(), from.id, 'img.png');
+            const [image]: DrivePath[] = await res.json();
+            const outcomes: string[] = [];
+            for (let i = 0; i < 2; i++) {
+                const copy = await request(ctx.alice.user.sessionToken, aliceId(), 'POST', `path/${image.id}/copy`, {
+                    targetOwnerId: target.ownerId,
+                    targetMountId: mountId,
+                    targetParentId: target.id,
+                });
+                const copied: DrivePath = await copy.json();
+                outcomes.push(`${copy.status} ${copied.name} in ${copied.parentId}`);
+            }
+            return outcomes;
+        }
+
+        test('lands in a document of the same mount, the second copy under a free name', async () => {
+            const target = await docAndMedia(ctx.alice.user, rootId, 'media-copy-to');
+            expect(await copyTwiceInto(target, 'media-copy-from')).toEqual([
+                `200 img.png in ${target.id}`,
+                `200 img (2).png in ${target.id}`,
+            ]);
+        });
+
+        test("lands in another owner's document the copier may write, the second copy under a free name", async () => {
+            const bob = ctx.bob.user;
+            const bobsFolder = await sharedFolder('media-copy-shared', bob, ctx.alice.user);
+            const target = await docAndMedia(bob, bobsFolder.id, 'media-copy-shared');
+            expect(await copyTwiceInto(target, 'media-copy-across')).toEqual([
+                `200 img.png in ${target.id}`,
+                `200 img (2).png in ${target.id}`,
+            ]);
+            const names = (await children(bob.sessionToken, bob.id, target.id)).map((c) => c.name).sort();
+            expect(names).toEqual(['img (2).png', 'img.png']);
         });
     });
 

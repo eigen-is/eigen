@@ -14,6 +14,7 @@ const STATUS_MESSAGES: Record<number, string> = {
     409: 'Conflict',
     413: 'Too large',
     422: 'Invalid request',
+    423: 'Locked',
     429: 'Too many requests',
     500: 'Server error',
     503: 'Service unavailable',
@@ -60,7 +61,7 @@ export function retryWhenTransformBusy(failureCount: number, error: unknown): bo
 
 // The statuses of the server's settled no, such as a team it won't delete: asking again gets the same answer. A conflict
 // (409), a busy server or a lost connection may go through on another try.
-const REFUSAL_STATUSES = new Set([400, 403, 404, 422]);
+const REFUSAL_STATUSES = new Set([400, 403, 404, 422, 423]);
 
 export function isRefusal(error: unknown): boolean {
     return error instanceof AppError && REFUSAL_STATUSES.has(error.status);

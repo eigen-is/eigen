@@ -591,15 +591,19 @@ export class Drive {
         return { path: committed, etag: computeEtag(committed) };
     }
 
-    // The folder a person's write adds a child of type `adding` to, such as an upload or a move. A file holds nothing,
-    // so it is not found either.
+    // The folder a person's write adds a new child of type `adding` to, such as an upload or a copy.
     private async personParent(mount: Mount, parentId: string, adding: DrivePathType): Promise<void> {
-        const crumbs = await mount.getBreadcrumb(parentId);
-        const parent = crumbs.at(-1);
-        if (!parent || parent.trashedAt || !isContainerType(parent.type)) {
+        refuseDocumentWrite(await this.folderChain(mount, parentId), adding);
+    }
+
+    // The chain down to a live folder that a write puts a path in. A file holds nothing, so it is not found either.
+    private async folderChain(mount: Mount, folderId: string): Promise<DrivePath[]> {
+        const crumbs = await mount.getBreadcrumb(folderId);
+        const folder = crumbs.at(-1);
+        if (!folder || folder.trashedAt || !isContainerType(folder.type)) {
             throw new ApiError(404, 'Parent folder not found');
         }
-        refuseDocumentWrite(crumbs, adding);
+        return crumbs;
     }
 
     // The path a person's write changes, such as by a rename, a trash or new bytes.
@@ -623,7 +627,8 @@ export class Drive {
         const mount = this.getMount(mountId);
         const path = await this.personPath(mount, pathId);
         const oldParentId = path.parentId;
-        await this.personParent(mount, targetParentId, path.type);
+        // A move adds nothing new, so the path is checked as it would sit in its new folder: never inside a document.
+        refuseDocumentWrite([...(await this.folderChain(mount, targetParentId)), path]);
 
         // Read before the move: a watcher who could see the path through its old folders hears about it too.
         const oldChain = await mount.getBreadcrumb(pathId);
