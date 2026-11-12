@@ -53,7 +53,7 @@ function pool(param: Param<unknown>): readonly string[] {
 }
 
 // Evaluates formulas side by side on one sheet, each in its own cell of column N on.
-function evaluateAll(formulas: readonly string[]) {
+function together(formulas: readonly string[]) {
     const cells: Record<string, string> = {};
     formulas.forEach((formula, at) => {
         cells[`N${at + 1}`] = formula;
@@ -61,6 +61,20 @@ function evaluateAll(formulas: readonly string[]) {
     const engine = engineOf({ s1: { ...SHEET, ...cells } });
     engine.recalc(Number.POSITIVE_INFINITY);
     return formulas.map((_, at) => valueAt(engine, `N${at + 1}`));
+}
+
+// Each formula in a pass of its own, so every one of them starts from the same draw.
+function apart(formulas: readonly string[]) {
+    return formulas.map((formula) => together([formula])[0]);
+}
+
+// The formulas computed one after the other in one pass: each reads the one before it, then makes its own call.
+function inTurn(formulas: readonly string[]) {
+    return together(
+        formulas.map((formula, at) =>
+            at === 0 ? formula : `=IF(ISERROR(N${at}),${formula.slice(1)},${formula.slice(1)})`,
+        ),
+    );
 }
 
 function written(entry: Entry, args: readonly string[]): string {
@@ -79,7 +93,7 @@ function baseOf(entry: Entry): readonly string[] | undefined {
     for (let k = 0; k < 4; k += 1) {
         tries.push(taken.map((param, at) => pool(param)[(k + at * k) % pool(param).length]));
     }
-    const values = evaluateAll(tries.map((args) => written(entry, args)));
+    const values = together(tries.map((args) => written(entry, args)));
     return tries[values.findIndex((value) => !isFailure(value) || ERRORS.has(entry.name))];
 }
 
@@ -98,6 +112,8 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         param.read < Read.Anything && (param.family === null || param.family.errors === Errors.Result);
     const failing = params.map((param, at) => (ends(param) ? at : -1)).filter((at) => at >= 0);
     const coerced = scalars.filter((at) => params[at].read <= Read.Boolean && params[at].read !== Read.Text);
+    // Two calls of a row that draws answer alike only when each is the first call of its pass.
+    const evaluateAll = entry.volatile ? apart : together;
 
     test('has a call that answers a value', () => {
         expect(BASE.get(entry.name)).toBeDefined();
@@ -152,15 +168,24 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         for (const value of evaluateAll(formulas)) expect(value).toBe(DIV0);
     });
 
+    // Of a row that draws, the calls are made one after the other, in the order the elements are written.
     test('an array where one value is read gives the answers of one call per element', () => {
         for (const at of scalars) {
             const [a, b] = [pool(params[at])[0], pool(params[at])[1]];
             const lifted = written(entry, withArg(base, at, `{${a},${b},"x y"}`)).slice(1);
-            const formulas = [1, 2, 3].map((column) => `=INDEX(${lifted},1,${column})`);
-            for (const put of [a, b, '"x y"']) formulas.push(written(entry, withArg(base, at, put)));
-            const values = evaluateAll(formulas);
-            expect(values.slice(0, 3)).toEqual(values.slice(3));
+            const elements = [1, 2, 3].map((column) => `=INDEX(${lifted},1,${column})`);
+            const calls = [a, b, '"x y"'].map((put) => written(entry, withArg(base, at, put)));
+            expect(evaluateAll(elements)).toEqual(entry.volatile ? inTurn(calls) : evaluateAll(calls));
         }
+    });
+
+    test('a call that is an argument is made once, however often its answer is repeated', () => {
+        const repeated = `IF({1,1,1},${written(entry, base).slice(1)})`;
+        const [once, ...elements] = apart([
+            written(entry, base),
+            ...[1, 2, 3].map((at) => `=INDEX(${repeated},1,${at})`),
+        ]);
+        expect(elements).toEqual([once, once, once]);
     });
 
     test('arrays of unequal length leave #N/A past the end of the shorter', () => {
@@ -214,7 +239,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
     });
 
     test('equal arguments give equal answers', () => {
-        const [first, second, third] = evaluateAll([written(entry, base), written(entry, base), written(entry, base)]);
+        const [first, second, third] = together([written(entry, base), written(entry, base), written(entry, base)]);
         // A row that draws answers anew at each call, with a value of one kind.
         if (entry.volatile && entry.params.some((param) => param.read === Read.Random)) {
             expect(typeof second).toBe(typeof first);

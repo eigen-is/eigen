@@ -38,6 +38,7 @@ export const MATH = [
     fn('ABS', [NUMBER], Math.abs),
     fn('ROUND', [NUMBER, INTEGER], roundDecimal),
     fn('RAND', [RANDOM], (random) => random),
+    fn('RANDBETWEEN', [NUMBER, NUMBER, RANDOM], (low, high, random) => Math.floor(low + random * (high - low + 1))),
     fn('SUM', [rest(NUMBERS)], (numbers) => numbers.sum()),
     fn('SUMPRODUCT', [rest(PRODUCTS)], (products) => products.sum()),
     fn('SUMIF', [WHERE, optional(MATCHED)], (_where, numbers) => numbers.sum()),
