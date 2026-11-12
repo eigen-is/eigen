@@ -116,7 +116,11 @@ export function picked(
     if (param === null || param.prepare !== Prepare.Lazy) throw new Error(`${entry.name}: a foreign token`);
     const child = token.index < node.children.length ? node.children[token.index] : null;
     if (child === null || (child.kind === NodeKind.Empty && param.skips)) return param.fallback ?? null;
-    if (child.kind !== NodeKind.Empty) return ctx.evaluate(child, sheet, row, column);
+    if (child.kind !== NodeKind.Empty) {
+        return param.read === Read.Valued
+            ? ctx.operand(child, sheet, row, column)
+            : ctx.evaluate(child, sheet, row, column);
+    }
     // An empty argument that is picked is a blank, and the number 0 in a row whose groups are tried in turn.
     return entry.stepped ? 0 : null;
 }
@@ -183,6 +187,7 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
         case Read.Plain:
         case Read.Any:
         case Read.Lazy:
+        case Read.Valued:
         case Read.Corner:
         case Read.Room:
         case Read.Where:

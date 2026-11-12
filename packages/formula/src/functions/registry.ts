@@ -71,6 +71,9 @@ export const CORNER: Param<Scalar> = Object.freeze({ ...REQUIRED, prepare: Prepa
 export const PLAIN = scalar<number | string | boolean | null>(Read.Plain);
 // Not evaluated. The body may answer with it, and the wrapper then evaluates the argument: an empty one is a blank.
 export const LAZY: Param<Lazy> = Object.freeze({ ...REQUIRED, prepare: Prepare.Lazy, read: Read.Lazy });
+// As LAZY, and the argument the body answers with is read: one cell is its value, a range the array of its cells,
+// and a union #VALUE!. So the call never answers a reference, as IFERROR never does.
+export const LAZY_VALUE: Param<Lazy> = Object.freeze({ ...REQUIRED, prepare: Prepare.Lazy, read: Read.Valued });
 
 // Every number of a range or an array. Typed as an argument, a text is read as a number and a boolean is 1 or 0.
 export const NUMBERS = walked(Families.Numbers);

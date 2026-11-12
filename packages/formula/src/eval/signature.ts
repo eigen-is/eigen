@@ -61,6 +61,8 @@ export const Read = {
     Anything: 14,
     Any: 15,
     Lazy: 16,
+    // As Lazy, and the argument that is picked is read to a value: a reference does not come back as one.
+    Valued: 25,
     // The value of the first cell of a reference, or the value itself.
     Corner: 17,
     // Readings of a whole parameter, whose arguments are read as Only and Any: a criteria range with its
