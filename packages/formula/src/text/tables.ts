@@ -39,8 +39,7 @@ const ITEMS: ReadonlyMap<string, number> = new Map([
 
 const ESCAPED = /'([\s\S])/g;
 
-// The rows a reference picks, as the bits above, and its first and last column in lower case, both empty for
-// every column. Null for brackets that say nothing Excel would read.
+// The rows as the bits above, and the first and last column in lower case, both empty for every column.
 type Picked = { readonly rows: number; readonly first: string; readonly last: string };
 
 // The tree with every table reference that `findTable` knows replaced by its range, for a formula at a cell of
@@ -105,9 +104,8 @@ export function isTableCell(node: FormulaNode): boolean {
     return picked !== null && picked.rows === THIS_ROW && picked.first !== '' && picked.first === picked.last;
 }
 
-// Reads the brackets: an @, then one item or column bare, or bracketed parts with commas between and a colon
-// between the two columns of a range. Whitespace may stand after the first bracket, before the last and around a
-// comma or colon, as Excel allows.
+// What the brackets of a table reference pick: an @, then one item or column bare, or bracketed parts with commas
+// between and a colon between two columns. Null for brackets that say nothing Excel would read.
 function pick(text: string): Picked | null {
     const end = text.length - 1;
     let at = text.indexOf('[') + 1;

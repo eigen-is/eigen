@@ -38,7 +38,7 @@ export type ParseFailure = {
     readonly at: number;
 };
 
-export type A1Range = {
+type A1Range = {
     readonly sheet?: string;
     readonly start: { readonly column: number; readonly row: number };
     readonly end: { readonly column: number; readonly row: number };
@@ -187,7 +187,6 @@ class Parser {
     public formula(): FormulaNode | ParseFailure {
         if (this.text.length > MAX_STORED_LENGTH) return { reason: 'too-long', at: MAX_STORED_LENGTH };
         if (isUnparsed(this.text)) return { reason: 'syntax', at: 1 };
-        // A formula in a file has no = of its own, and reads from its first character.
         if (this.text.charCodeAt(0) === EQUALS) this.end = 1;
         this.next();
         const tree = this.expression(0, false);
@@ -431,9 +430,8 @@ class Parser {
         return branch(NodeKind.Call, 0, name, args, space, spaceOpen, spaceEnd);
     }
 
-    // A name, or a table reference: a name, which may be none, and the brackets right after it. A name must not
-    // read as a reference in the other grammar, or it would come back as one: typed, it is stored in lower case,
-    // which the stored grammar never reads as R1C1; stored, it is refused. Before a bracket a cell label is too.
+    // A name, or a table reference: a name and the brackets right after it. A name that reads as a reference in
+    // the other grammar would come back as one, so typed it is stored in lower case, and stored it is refused.
     private name(space: string, sheetKind: FormulaNode['sheetKind'], sheet: string): FormulaNode {
         const { text, pos } = this;
         // A word runs on through a bracket of digits, so the name of Sales[2019] ends inside its token.

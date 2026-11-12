@@ -7,7 +7,8 @@ import { readsAsReference } from './parser';
 
 const NEVER_BARE = /[?\\]|^(?:TRUE|FALSE)$/i;
 
-export function quotedSheetName(name: string): string {
+// The name between quotes, whether it needs them or not.
+export function inQuotes(name: string): string {
     return `'${name.replaceAll("'", "''")}'`;
 }
 
@@ -15,7 +16,7 @@ export function quotedSheetName(name: string): string {
 // word that the grammar reads as no reference in either notation and as no boolean.
 export function quoteSheetName(name: string): string {
     const bare = isWord(name) && !readsAsReference(name) && !NEVER_BARE.test(name);
-    return bare ? name : quotedSheetName(name);
+    return bare ? name : inQuotes(name);
 }
 
 // What two sheet names are compared by. Each character folds to its uppercase on its own, so the Greek final ς

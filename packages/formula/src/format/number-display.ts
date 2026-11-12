@@ -1,8 +1,7 @@
-// A value as an Excel number format shows it, such as 25% for 0.25 under 0%. The sheet writes every cell's display
-// string through it, a chart draws its value ticks through it when its axis carries a format, and TEXT answers with
-// it. A number is shown as the 15 digit decimal Excel holds and not as the double under it. It is the package's one
-// use of numfmt, behind an entry of its own that holds no engine, so a document or a slide formats a tick as the
-// sheet does.
+// A value as an Excel number format shows it, such as 25% for 0.25 under 0%. Whatever shows a number goes through
+// it, such as a cell's display string, a chart's value ticks and the TEXT function. A number is shown as the 15 digit
+// decimal Excel holds and not as the double under it. It is the package's one use of numfmt, behind an entry of its
+// own that holds no engine, so a document or a slide formats a tick as the sheet does.
 
 import { format } from 'numfmt';
 

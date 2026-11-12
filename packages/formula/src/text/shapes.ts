@@ -2,8 +2,7 @@
 // holds in place of the text. A shape is the text, its tree, and the facts that need only the tree, computed once
 // when it is interned. Equal text is one shape, so a formula filled down ten thousand rows is parsed once. A shape
 // no cell holds any more is forgotten when the holder of the cells says which are held, and its id is given out
-// again: so an id means one shape only for as long as a cell holds it. The table stays as long as the most shapes
-// it ever held: a freed slot is used again, and the list never shrinks.
+// again: so an id means one shape only for as long as a cell holds it.
 
 import { parseStored } from './parser';
 import { printStored } from './printer';
