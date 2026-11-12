@@ -1,3 +1,7 @@
+// The shared shapes of a drive's mounts, the storage roots of an owner's drive: the storage types, the S3 settings, a
+// mount's saved config and what a mount listing says about it. The API stores and checks them, and the settings and
+// admin pages edit them.
+
 export const DEFAULT_MOUNT_ID = 'default';
 
 export const MOUNT_STORAGE_TYPES = ['local', 'local-key', 's3'] as const;
@@ -36,9 +40,8 @@ export type MountConfig = {
     updatedAt?: Date;
 };
 
-// The one list of fields that define a mount's storage destination. TeamHome.updateMount compares it to tell new
-// storage, which reloads the team's home, from a rename, so growing S3Config must grow this too. The array keeps the
-// comparison immune to JSON key order.
+// The fields that decide where a mount keeps its bytes, so a new S3Config field belongs here too. An array, so the
+// comparison ignores key order.
 export function mountStorageIdentity(config: Pick<MountConfig, 'storageType' | 's3Config'>): string {
     const s3 = config.s3Config;
     return JSON.stringify([

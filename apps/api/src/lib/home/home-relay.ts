@@ -445,9 +445,8 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
     return userHomeSize(homeDir, settings, contacts + mail + calendars, teamIds);
 }
 
-// A backup opens the home without counting as a request and holds it while the capture runs, so a nightly backup leaves
-// open only the homes somebody uses. The backup never closes the home: a user may have opened it during the capture. A
-// home that closes meanwhile, such as for a team drive switched on, fails the capture, which read parts of it closed.
+// Opened without counting as a request, so a nightly backup keeps open only the homes somebody uses. It never closes
+// the home, which a user may have opened during the capture, and a home that closed meanwhile fails the capture.
 export async function pullHomeSnapshot(
     ownerId: string,
     targetDir: string,

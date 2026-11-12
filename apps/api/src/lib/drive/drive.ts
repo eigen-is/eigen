@@ -203,8 +203,8 @@ export class Drive {
         if (config.isDefault) this.defaultMountId = config.id;
     }
 
-    // Gives the live mount a saved name or quota. A switched-off mount has nothing live to change. New storage or an
-    // on/off switch closes the home instead (TeamHome.updateMount).
+    // Gives the live mount a saved name or quota. New storage or an on/off switch needs a fresh home, because a mount
+    // binds its storage when it opens.
     public updateMount(config: MountConfig): void {
         this.mounts.get(config.id)?.applyConfig(config);
     }
