@@ -184,9 +184,7 @@ export const LOOKUP = [
         },
         PART,
     ),
-    fn('HYPERLINK', [TEXT, optional(PLAIN)], (link, name) =>
-        link.length > 255 ? VALUE : name === undefined ? link : (name ?? 0),
-    ),
+    fn('HYPERLINK', [TEXT, optional(PLAIN)], (link, name) => (name === undefined ? link : (name ?? 0))),
     fn('FORMULATEXT', [apiece(areas(REFERENCE)), ENGINE], (_cell, book) => book.formula() ?? NA),
     fn('INDIRECT', [TEXT, optional(BOOLEAN, true), ENGINE], (text, a1, book) => book.refer(text, a1), ANYWHERE),
 ];
