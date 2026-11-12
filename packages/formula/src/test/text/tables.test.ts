@@ -383,7 +383,6 @@ const UNRESOLVED: readonly (readonly [string, string, string])[] = [
     ['One[[#This Row],[Qty]]', 'E2', 'ours: the header row is no row of the data (LO reads C2)'],
     ['One[[#This Row],[Qty]]', 'E7', 'ours: nor is the totals row (LO reads C7)'],
     ['One[@Qty]', 'E1', 'M'],
-    ['Odd[@2019]', 'E3', 'ours: this row is a row of the table on its own sheet (LO reads Sheet2!I3)'],
     ['[Qty]', 'E20', 'ours: the cell is in no table'],
     ['[@Qty]', 'P4', 'ours'],
     ['Sheet2!Odd[2019]', 'E4', 'M: a table has no sheet prefix'],
@@ -415,6 +414,9 @@ describe('text/tables: the range a table reference stands for', () => {
     test('a table on another sheet is named with its sheet, and on its own sheet without', () => {
         expect(resolved('SUM(One[Qty])', 'A1', 's2')).toBe('SUM(Sheet1!$C$3:$C$6)');
         expect(resolved('Odd[2019]', 'K9', 's2')).toBe('$I$2:$I$4');
+        // Excel reads this row by the row's number alone: `=T[@Qty]` on another sheet's row 4 is the table's row 4.
+        expect(resolved('One[@Qty]', 'E4', 's2')).toBe('Sheet1!$C4');
+        expect(resolved('Odd[@2019]', 'E3')).toBe('Sheet2!$I3');
         expect(stored('=X', 'A1')).toBe('=X');
         const tree = resolveTables(treeA1('=One[Qty]', 'A1'), 's2', 0, 0, findTable);
         expect(printStored(tree)).toBe('=[s1]!R3C3:R6C3');
@@ -555,10 +557,7 @@ describe('text/tables: against a model, over generated tables and references', (
             if (rows === 'DT') band = totalsRows ? [dataTop, table.bottom] : null;
             if (rows === 'HT') band = null;
             if (rows === '#This Row') {
-                band =
-                    hostSheet === table.sheet && hostRow >= dataTop && hostRow <= dataBottom
-                        ? [hostRow, hostRow]
-                        : null;
+                band = hostRow >= dataTop && hostRow <= dataBottom ? [hostRow, hostRow] : null;
             }
             if (band !== null && band[0] > band[1]) band = null;
             let span: [number, number] | null = [left, table.right];

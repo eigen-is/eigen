@@ -66,8 +66,9 @@ export function resolveTables(
         let bottom = rows & TOTALS ? table.bottom : rows & DATA ? dataBottom : table.top;
         let flags = RefFlag.ColumnAbsolute | RefFlag.Column2Absolute;
         if (rows === THIS_ROW) {
-            // Outside the table's data rows Excel answers #VALUE!, and so the reference is left as it is.
-            if (table.sheet !== sheet || row < dataTop || row > dataBottom) return node;
+            // Excel reads this row by the row's number, on any sheet. Outside the table's data rows it answers
+            // #VALUE!, and so the reference is left as it is.
+            if (row < dataTop || row > dataBottom) return node;
             top = 0;
             bottom = 0;
         } else {
