@@ -4,8 +4,8 @@
 // here. The function library calls these once per cell.
 
 // How far Excel's angle falls behind per radian. Its pi is the one an x87 processor loads, pi rounded to 64 bits,
-// which is 5.01655761266833E-20 too long: SIN(PI()) is that much above the true sine.
-const LAG = 5.01655761266833e-20 / Math.PI;
+// which is 5.016557612668332E-20 too long: SIN(PI()) is that much above the true sine.
+const LAG = 5.016557612668332e-20 / Math.PI;
 
 const LIMIT = 2 ** 27;
 

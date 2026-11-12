@@ -110,8 +110,8 @@ function onLine(x: number, pairs: Pairs) {
     return isError(rise) ? rise : mean(pairs.xs) - rise * mean(pairs.ys) + rise * x;
 }
 
-// The covariance of the two sides over the root of their variances. Dividing each by the count first is what
-// gives Excel's last digit: RSQ(B1:B5,A1:A5) of batch 11 is 0.972908577479704.
+// The covariance of the two sides over the root of their variances. Each is divided by the count first, the
+// order that gives the last digit Excel shows for RSQ.
 function correlation({ xs, ys }: Pairs) {
     const spreadX = squaredDeviations(xs);
     const spreadY = squaredDeviations(ys);
@@ -203,10 +203,10 @@ export const STATISTICAL = [
     fn('INTERCEPT', [PAIRS], (pairs) => onLine(0, pairs)),
     fn('FORECAST', [NUMBER, PAIRS], onLine),
     fn('FORECAST.LINEAR', [NUMBER, PAIRS], onLine),
-    // How far the y values, the first argument, lie from the line through the pairs: of three pairs or more.
+    // How far the y values, the first argument, lie from the line through the pairs.
     fn('STEYX', [PAIRS], ({ xs, ys }) => {
         const spread = squaredDeviations(ys);
-        if (xs.length < 3 || spread === 0) return DIV0;
+        if (spread === 0) return DIV0;
         return Math.sqrt((squaredDeviations(xs) - coDeviations(xs, ys) ** 2 / spread) / (xs.length - 2));
     }),
     fn('SUMXMY2', [PAIRS], ({ xs, ys }) => {
