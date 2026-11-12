@@ -262,10 +262,11 @@ export class SharedDrive {
         pathId: string,
         destParentId: string,
         name: string,
+        checkedId: string | null,
         _user: User,
     ): Promise<DrivePath> {
         await this.requireMove(mountId, pathId, destParentId);
-        return this.drive.movePathOver(mountId, pathId, destParentId, name, this.user);
+        return this.drive.movePathOver(mountId, pathId, destParentId, name, checkedId, this.user);
     }
 
     // A move takes the item out of its folder, so it needs write on that folder too, as a rename does.
@@ -303,12 +304,13 @@ export class SharedDrive {
         srcPathId: string,
         destParentId: string,
         name: string,
+        checkedId: string | null,
         _user: User,
     ): Promise<DrivePath> {
         const memberships = await getMemberships(this.user.id);
         await this.requireRead(mountId, srcPathId, memberships, 'No read permission on source');
         await this.requireWrite(mountId, destParentId, memberships, 'No write permission on target folder');
-        return this.drive.copyPathOver(mountId, srcPathId, destParentId, name, this.user);
+        return this.drive.copyPathOver(mountId, srcPathId, destParentId, name, checkedId, this.user);
     }
 
     // The source can be in another owner's drive, which checked the read access on it. A copy needs read on its

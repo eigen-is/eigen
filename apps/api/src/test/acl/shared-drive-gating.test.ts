@@ -209,7 +209,7 @@ describe('SharedDrive gating enumeration', () => {
         copyPathOver: {
             gate: 'denies',
             reason: 'read-gated on source, write-gated on target',
-            call: (sd) => sd.copyPathOver(mountId, fileId, folderId, 'copy.txt', charlie),
+            call: (sd) => sd.copyPathOver(mountId, fileId, folderId, 'copy.txt', null, charlie),
         },
         writeFileContent: {
             gate: 'denies',
@@ -295,7 +295,7 @@ describe('SharedDrive gating enumeration', () => {
         movePathOver: {
             gate: 'denies',
             reason: 'write-gated on source and target',
-            call: (sd) => sd.movePathOver(mountId, fileId, folderId, 'moved.txt', charlie),
+            call: (sd) => sd.movePathOver(mountId, fileId, folderId, 'moved.txt', null, charlie),
         },
         saveVersion: { gate: 'denies', reason: 'write-gated', call: (sd) => sd.saveVersion(mountId, docId) },
         restoreContainer: {
@@ -404,7 +404,7 @@ describe('SharedDrive gating enumeration', () => {
         expect(await refusal(reader.copyPath(mountId, file.id, to, 'copy.txt', bob))).toBe(
             '403 No write permission on target folder',
         );
-        expect(await refusal(reader.copyPathOver(mountId, file.id, folder.id, 'copy.txt', bob))).toBe(
+        expect(await refusal(reader.copyPathOver(mountId, file.id, folder.id, 'copy.txt', null, bob))).toBe(
             '403 No write permission on target folder',
         );
         expect((await home.drive.getFolderContents(mountId, folder.id)).map((path) => path.name)).toEqual([

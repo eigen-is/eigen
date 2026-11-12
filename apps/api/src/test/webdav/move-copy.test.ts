@@ -1,9 +1,17 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { getServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
 import type { TestUser } from '../setup';
-import { capUserDrive, createTestUser, driveGet, drivePost, getTestContext, setMaxUploadSizeMB } from '../setup';
+import {
+    capUserDrive,
+    createTestUser,
+    driveGet,
+    drivePost,
+    drivePut,
+    getTestContext,
+    setMaxUploadSizeMB,
+} from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
 describe('WebDAV MOVE/COPY', () => {
@@ -462,5 +470,91 @@ describe('WebDAV MOVE/COPY', () => {
             expect(await kept.text()).toBe('old');
             expect(await trashNames()).not.toContain('kept-423.txt');
         });
+    });
+
+    // The handler checks Overwrite and the locks on what holds the name. The drive writes many awaits later.
+    describe('a destination that appears after the request checked the name', () => {
+        const lockBody = `<?xml version="1.0" encoding="utf-8" ?>
+<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`;
+
+        beforeAll(async () => {
+            expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', `${baseHref}/Appears`)).status).toBe(201);
+            const folder = await (await getHome(ctx.alice.user.id)).drive.resolvePath(mountId, '/Appears');
+            if (!folder) throw new Error('expected the folder');
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${folder.id}/acl`, {
+                add: [{ id: ctx.bob.user.email, read: true, write: true }],
+            });
+        });
+
+        for (const verb of ['MOVE', 'COPY']) {
+            test(`${verb} with Overwrite: F is a 409 and leaves the file and its lock`, async () => {
+                const src = `${baseHref}/Appears/${verb}-src.txt`;
+                const dest = `${baseHref}/Appears/${verb}-dest.docx`;
+                expect((await webdavRequest(ctx.bob.user.email, 'PUT', src, { body: 'bob' })).status).toBe(201);
+                const { drive } = await getHome(ctx.alice.user.id);
+                const source = await drive.resolvePath(mountId, `/Appears/${verb}-src.txt`);
+                if (!source) throw new Error('expected the source');
+                const { mount } = await drive.resolveFile(mountId, source.id);
+
+                // The drive reads the source as its first step, so Alice's Save as lands right after the handler's checks.
+                const getActivePath = mount.getActivePath.bind(mount);
+                const saved: number[] = [];
+                let started = false;
+                const gate = spyOn(mount, 'getActivePath').mockImplementation(async (pathId: string) => {
+                    if (pathId === source.id && !started) {
+                        started = true;
+                        const lock = await webdavRequest(ctx.alice.user.email, 'LOCK', dest, {
+                            body: lockBody,
+                            headers: { 'Content-Type': 'application/xml' },
+                        });
+                        const token = (lock.headers.get('Lock-Token') ?? '').replace(/^<|>$/g, '');
+                        const put = await webdavRequest(ctx.alice.user.email, 'PUT', dest, {
+                            body: 'alice',
+                            headers: { If: `(<${token}>)` },
+                        });
+                        saved.push(lock.status, put.status);
+                    }
+                    return getActivePath(pathId);
+                });
+                let res: Response;
+                try {
+                    res = await webdavRequest(ctx.bob.user.email, verb, src, {
+                        headers: { Destination: `http://localhost${dest}`, Overwrite: 'F' },
+                    });
+                } finally {
+                    gate.mockRestore();
+                }
+
+                expect(saved).toEqual([201, 204]);
+                expect(res.status).toBe(409);
+                expect(await (await webdavRequest(ctx.alice.user.email, 'GET', dest)).text()).toBe('alice');
+                expect((await drive.listTrash(mountId)).map((path) => path.name)).not.toContain(`${verb}-dest.docx`);
+                expect((await webdavRequest(ctx.bob.user.email, 'PUT', dest, { body: 'bob' })).status).toBe(423);
+                expect(await (await webdavRequest(ctx.bob.user.email, 'GET', src)).text()).toBe('bob');
+            });
+        }
+    });
+
+    test('MOVE of a folder past 256 levels → 400 and leaves the folder it would overwrite', async () => {
+        const home = await getHome(ctx.alice.user.id);
+        let parentId = (await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root')).id;
+        const names: string[] = [];
+        for (let depth = 1; depth <= 255; depth++) {
+            const name = depth === 1 ? 'MvDeep' : `d${depth}`;
+            names.push(name);
+            parentId = (await home.drive.createFolder(mountId, parentId, name, home.user)).id;
+        }
+        const kept = `${baseHref}/${names.join('/')}/kept`;
+        expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', kept)).status).toBe(201);
+        expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', `${baseHref}/MvTwoLevels`)).status).toBe(201);
+        expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', `${baseHref}/MvTwoLevels/inner`)).status).toBe(201);
+
+        const res = await webdavRequest(ctx.alice.user.email, 'MOVE', `${baseHref}/MvTwoLevels`, {
+            headers: { Destination: `http://localhost${kept}`, Overwrite: 'T' },
+        });
+        expect(`${res.status} ${await res.text()}`).toBe('400 Folders can be nested at most 256 levels deep');
+        expect((await webdavRequest(ctx.alice.user.email, 'PROPFIND', kept, { headers: { Depth: '0' } })).status).toBe(
+            207,
+        );
     });
 });

@@ -57,6 +57,7 @@ import type { DatabaseHold } from '../mount';
 import { createMountConfig, DEFAULT_MOUNT_ID, Mount } from '../mount';
 import type { CopyTree } from '../mount/copy';
 import { copySize } from '../mount/copy';
+import { nameTakenError } from '../mount/helpers';
 import { validateName } from '../mount/names';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
@@ -608,23 +609,26 @@ export class Drive {
     }
 
     // Puts a path in a folder under exactly this name, as a WebDAV MOVE asks: a move, a rename or both, in one write.
-    // What holds the name goes to the trash, and only once nothing can refuse the move any more.
+    // What holds the name goes to the trash, and only once nothing can refuse the move any more. `checkedId` is the
+    // path the caller found there and checked, or null for a free name.
     public async movePathOver(
         mountId: string,
         pathId: string,
         destParentId: string,
         name: string,
+        checkedId: string | null,
         user: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const path = await this.personPath(mount, pathId);
         await this.personMoveTarget(mount, path, destParentId);
         const safeName = validateName(name);
-        // The row write checks this too, but only after the trash below.
+        // The row write checks both too, but only after the trash below.
         if (await mount.isSelfOrDescendant(pathId, destParentId)) {
             throw new ApiError(409, 'Cannot move a folder into itself or its own descendant');
         }
-        await this.trashOccupant(mount, destParentId, safeName, path, user);
+        mount.assertLiveFolder(pathId, destParentId);
+        await this.trashOccupant(mount, destParentId, safeName, path, checkedId, user);
         const to = {
             ...(destParentId !== path.parentId && { parentId: destParentId }),
             ...(safeName !== path.name && { name: safeName }),
@@ -697,19 +701,21 @@ export class Drive {
     }
 
     // Copies a path into a folder of its own mount under exactly this name, as a WebDAV COPY with Overwrite: T asks.
-    // What holds the name goes to the trash, and only once nothing can refuse the copy any more.
+    // What holds the name goes to the trash, and only once nothing can refuse the copy any more. `checkedId` is as
+    // for movePathOver.
     public async copyPathOver(
         mountId: string,
         srcPathId: string,
         destParentId: string,
         name: string,
+        checkedId: string | null,
         user: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const safeName = validateName(name);
         const src = await mount.getActivePath(srcPathId);
         const tree = await this.checkedCopyTree(mount, src, mount, destParentId);
-        await this.trashOccupant(mount, destParentId, safeName, src, user);
+        await this.trashOccupant(mount, destParentId, safeName, src, checkedId, user);
         return this.writeCopy(mount, destParentId, safeName, tree, mount, user);
     }
 
@@ -752,15 +758,18 @@ export class Drive {
 
     // Trashes what holds the name in the folder. A name is compared without case, so `path`, the one being moved or
     // copied, can hold it itself, and then it stays. A folder `path` is in would take `path` to the trash with it.
+    // The caller checked Overwrite and the locks on `checkedId` alone, so a path that took the name since is refused.
     private async trashOccupant(
         mount: Mount,
         parentId: string,
         name: string,
         path: DrivePath,
+        checkedId: string | null,
         user: User,
     ): Promise<void> {
         const occupant = await mount.getChildByName(parentId, name);
         if (!occupant || occupant.id === path.id) return;
+        if (occupant.id !== checkedId) throw nameTakenError(occupant.name);
         if (await mount.isSelfOrDescendant(occupant.id, path.id)) {
             throw new ApiError(409, 'Cannot replace a folder with a path inside it');
         }

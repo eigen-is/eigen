@@ -28,7 +28,7 @@ type MoveCopyArgs = {
 export async function handleMove(args: MoveCopyArgs): Promise<Response> {
     const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy(args, 'MOVE');
 
-    await drive.movePathOver(args.mountId, src.id, destParent.id, newName, args.user);
+    await drive.movePathOver(args.mountId, src.id, destParent.id, newName, destExisting?.id ?? null, args.user);
     return new Response(null, { status: destExisting ? 204 : 201 });
 }
 
@@ -41,7 +41,9 @@ export async function handleCopy(args: MoveCopyArgs & { depth: '0' | '1' | 'infi
         await drive.createFolder(args.mountId, destParent.id, newName, args.user);
         return new Response(null, { status: 201 });
     }
-    await drive.withHomeHeld(() => drive.copyPathOver(args.mountId, src.id, destParent.id, newName, args.user));
+    await drive.withHomeHeld(() =>
+        drive.copyPathOver(args.mountId, src.id, destParent.id, newName, destExisting?.id ?? null, args.user),
+    );
     return new Response(null, { status: destExisting ? 204 : 201 });
 }
 

@@ -604,7 +604,7 @@ export class Mount {
     }
 
     // Checked before any byte is written, so a create into a folder trashed while it waited is a 404.
-    private assertLiveFolder(id: string, parentId: string): void {
+    public assertLiveFolder(id: string, parentId: string): void {
         const error = this.db.transaction((tx) => this.targetFolderErrorInTx(tx, id, parentId));
         if (error) throw error;
     }
