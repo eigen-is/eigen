@@ -108,6 +108,25 @@ describe('a table is handed over whole and never looked into for an error', () =
     });
 });
 
+// Excel's rows of the reference family: an argument left empty where a table is taken is #VALUE!, before the body.
+describe('an empty argument is no table', () => {
+    test.each([
+        ['=INDEX(,2,2,1)', VALUE],
+        ['=LOOKUP(4,,A1:A3)', VALUE],
+        ['=LOOKUP(4,A1:A3,)', VALUE],
+        ['=XMATCH(2,,0,1)', VALUE],
+        ['=XLOOKUP("k2",,A1:A3,"nf",0,1)', VALUE],
+        ['=XLOOKUP("k2",B1:B3,,"nf",0,1)', VALUE],
+        ['=MATCH(2,,0)', VALUE],
+        ['=VLOOKUP(2,,1)', VALUE],
+        ['=ROWS(IF(TRUE,))', 1],
+        ['=ISREF(,)', VALUE],
+        ['=TYPE(IF(TRUE,))', 1],
+    ])('%s', (formula, expected) => {
+        expect(evaluate(formula, F2)).toBe(expected);
+    });
+});
+
 describe('a part of a table lies inside the table', () => {
     // A row of this test's own, which asks for the part it is told to.
     const piece = fn(
