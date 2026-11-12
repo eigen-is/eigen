@@ -245,7 +245,6 @@ Still to do:
   - `webdav/propfind.ts` answers allprop to every request (no prop selection, no 404 propstat, `Brief` ignored). Adopting the shared `lib/dav/propfind.ts` also brings in the dav multistatus builders and `encodePathSegment` (WebDAV hrefs return `%40` for `@`), so it needs a client round (Finder, Explorer, rclone, Mountain Duck).
   - DELETE, MOVE, COPY and PROPPATCH ignore `If-Match` and `If-None-Match` (RFC 7232 § 3.1: 412).
   - A PUT whose `If` names a bogus lock token answers 204, not 412 (`fail_cond_put`, `fail_complex_cond_put`).
-  - `LockManager.isWriteAllowed` requires every covering lock to be the writer's own, so two shared-lock holders can never write.
   - A LOCK refresh does not check the token's owner; a LOCK on an unmapped URL is a 404 (`unmapped_lock`).
   - A PROPPATCH response lists a prop once per operation.
   - `app.ts` advertises `DAV: 1, 2, 3, calendar-access, addressbook` and an `Allow` with `MOVE, COPY, LOCK, UNLOCK` on `/dav`, none of which that router implements.

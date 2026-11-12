@@ -6,7 +6,7 @@
 
 import { ApiError } from '../core/errors';
 
-export type LockScope = 'exclusive' | 'shared';
+type LockScope = 'exclusive' | 'shared';
 
 export type Lock = {
     token: string;
@@ -37,28 +37,32 @@ export class LockManager {
         this.hold = hold;
     }
 
+    // The Home calls this when it closes for another reason, such as a restore or the shutdown.
+    public clear(): void {
+        this.locks.clear();
+        this.byPath.clear();
+        this.settle();
+    }
+
     public acquire(args: {
         pathId: string;
         depth: 0 | 'infinity';
         scope: LockScope;
         userId: string;
         owner?: string;
-        ttlMs?: number;
-        ifHeader?: string | null;
-        ancestorPathIds?: string[];
+        ttlMs: number;
+        ifHeader: string | null;
+        ancestorPathIds: readonly string[];
     }): Lock {
         this.gc();
         // RFC 4918 §6.2 and §7.5: shared locks may coexist, and an exclusive lock excludes every other
-        // lock. A request that conflicts must name a current token in its If header. The covering locks
-        // include a depth-infinity lock on an ancestor, so a child of a locked folder needs that token too.
-        const heldLocks = this.coveringLocks(args.pathId, args.ancestorPathIds ?? []);
-        if (heldLocks.length > 0) {
-            const ifTokens = parseIfHeaderTokens(args.ifHeader ?? null);
-            const hasAuthorizingToken = heldLocks.some((l) => ifTokens.includes(l.token));
-            const conflicts = args.scope === 'exclusive' || heldLocks.some((l) => l.scope === 'exclusive');
-            if (conflicts && !hasAuthorizingToken) {
-                throw new ApiError(423, 'Locked');
-            }
+        // lock. A request that conflicts must name one of its own current tokens in its If header. The covering
+        // locks include a depth-infinity lock on an ancestor, so a child of a locked folder needs that token too.
+        const heldLocks = this.coveringLocks(args.pathId, args.ancestorPathIds);
+        const conflicts =
+            heldLocks.length > 0 && (args.scope === 'exclusive' || heldLocks.some((l) => l.scope === 'exclusive'));
+        if (conflicts && !heldLocks.some(ownedWith(args.userId, args.ifHeader))) {
+            throw new ApiError(423, 'Locked');
         }
         if ((this.byPath.get(args.pathId)?.size ?? 0) >= MAX_LOCKS_PER_PATH) {
             throw new ApiError(423, 'Too many locks');
@@ -75,7 +79,7 @@ export class LockManager {
             depth: args.depth,
             scope: args.scope,
             userId: args.userId,
-            expiresAt: Date.now() + (args.ttlMs ?? LOCK_DEFAULT_TTL_MS),
+            expiresAt: Date.now() + args.ttlMs,
         };
         this.locks.set(token, lock);
         const pathTokens = this.byPath.get(args.pathId) ?? new Set<string>();
@@ -85,7 +89,7 @@ export class LockManager {
         return lock;
     }
 
-    public refresh(token: string, ttlMs = LOCK_DEFAULT_TTL_MS): Lock | null {
+    public refresh(token: string, ttlMs: number): Lock | null {
         const lock = this.locks.get(token);
         if (!lock || lock.expiresAt <= Date.now()) return null;
         lock.expiresAt = Date.now() + ttlMs;
@@ -93,12 +97,11 @@ export class LockManager {
         return lock;
     }
 
-    public release(token: string): boolean {
+    public release(token: string): void {
         const lock = this.locks.get(token);
-        if (!lock) return false;
+        if (!lock) return;
         this.drop(lock);
         this.settle();
-        return true;
     }
 
     // The Drive calls this when paths leave their place, such as by a trash or a WebDAV MOVE, with every
@@ -123,31 +126,26 @@ export class LockManager {
         return out;
     }
 
-    // The path's own locks, and the depth-infinity locks on its ancestors, which RFC 4918 §6.2 applies
-    // to every member. The caller passes the ancestors root first, usually a breadcrumb without the path.
-    private coveringLocks(pathId: string, ancestorPathIds: string[] = []): Lock[] {
-        const own = this.listForPath(pathId);
-        const ancestor = ancestorPathIds.flatMap((id) => this.listForPath(id).filter((l) => l.depth === 'infinity'));
-        return [...own, ...ancestor];
-    }
-
     public isWriteAllowed(
         pathId: string,
         ifHeader: string | null,
         userId: string,
-        ancestorPathIds: string[] = [],
+        ancestorPathIds: readonly string[],
     ): boolean {
         const active = this.coveringLocks(pathId, ancestorPathIds);
         if (active.length === 0) return true;
-        const tokens = parseIfHeaderTokens(ifHeader);
-        return active.every((lock) => lock.userId === userId && tokens.includes(lock.token));
+        const owned = ownedWith(userId, ifHeader);
+        // One own token passes the shared locks. A folder lock is taken without looking below it, so another
+        // user's exclusive lock can sit under it, and an exclusive lock passes only with its own token.
+        return active.some(owned) && active.every((lock) => lock.scope === 'shared' || owned(lock));
     }
 
-    // The Home calls this when it closes for another reason, such as a restore or the shutdown.
-    public clear(): void {
-        this.locks.clear();
-        this.byPath.clear();
-        this.settle();
+    // The path's own locks, and the depth-infinity locks on its ancestors, which RFC 4918 §6.2 applies
+    // to every member. The caller passes the ancestors root first, usually a breadcrumb without the path.
+    private coveringLocks(pathId: string, ancestorPathIds: readonly string[]): Lock[] {
+        const own = this.listForPath(pathId);
+        const ancestor = ancestorPathIds.flatMap((id) => this.listForPath(id).filter((l) => l.depth === 'infinity'));
+        return [...own, ...ancestor];
     }
 
     // Runs on every read, so it moves the timer only when a lock went.
@@ -196,4 +194,10 @@ export class LockManager {
 export function parseIfHeaderTokens(header: string | null): string[] {
     if (!header) return [];
     return [...header.matchAll(/<([^>]+)>/g)].map((m) => m[1]);
+}
+
+// A token counts only for the user who took its lock, so one user can't pass a lock with another's token.
+function ownedWith(userId: string, ifHeader: string | null): (lock: Lock) => boolean {
+    const tokens = parseIfHeaderTokens(ifHeader);
+    return (lock) => lock.userId === userId && tokens.includes(lock.token);
 }

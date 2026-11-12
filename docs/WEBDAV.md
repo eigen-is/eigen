@@ -51,7 +51,7 @@ An overwrite trashes the target first. So a request whose source and destination
 
 `LockManager` (`apps/api/src/lib/drive/lock-manager.ts`) keeps one table per `Drive`, keyed by path id. Memory is enough: collab editing never relies on WebDAV locks, Office refreshes its locks about every 10 minutes whatever `Timeout` the server answers, and a restart that drops every lock is correct. A second node would need a shared store ([SCALABILITY.md](SCALABILITY.md)).
 
-- A lock belongs to the user who took it. A write with another user's token is a 423. Their UNLOCK is a 403.
+- A lock belongs to the user who took it, and its token counts for nobody else: a LOCK or a write with another user's token is a 423, and their UNLOCK is a 403. Under shared locks one own token is enough to write. An exclusive lock always needs its own token, because a folder lock is taken without looking at the locks below it, so another user's exclusive lock on a file can sit under it.
 - A depth-infinity lock on a folder gates writes on everything below it. Each write walks its breadcrumb for covering locks (`coveringLocks`).
 - A live lock holds its Home, so the Home's idle close never drops a lock a WebDAV-only client such as Word still counts on: Word sends nothing between its refreshes, longer than the 5-minute idle. `LockManager` takes one hold while it has any lock and arms one timer at the latest expiry; the last lock going, by UNLOCK, a release or expiry, releases the hold. A close for another reason, such as a restore, a deletion or the shutdown, drops every lock (`clear`), and a LOCK on a closing Home is a 503.
 - The TTL is 600 s unless the client asks, and never over 24 h, so a client can't pin lock state, or the Home it holds, for years.

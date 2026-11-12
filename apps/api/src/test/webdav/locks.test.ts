@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { parseXml, xmlChild } from '../../lib/core/xml';
+import { getHome } from '../../lib/home';
 import type { TestContext } from '../setup';
-import { getTestContext } from '../setup';
+import { drivePut, getTestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
 describe('WebDAV LOCK/UNLOCK', () => {
@@ -15,21 +16,38 @@ describe('WebDAV LOCK/UNLOCK', () => {
         baseHref = `/webdav/${ctx.alice.user.id}/${mountId}`;
     });
 
-    // A LOCK on `url` in `scope`, naming `owner` if given.
+    // A LOCK on `url` in `scope` by Alice unless `email` names another user, naming `owner` if given.
     function lockRequest(
         url: string,
         {
             scope = 'exclusive',
             owner,
             timeout,
-        }: { scope?: 'exclusive' | 'shared'; owner?: string; timeout?: string } = {},
+            email = ctx.alice.user.email,
+            headers = {},
+        }: {
+            scope?: 'exclusive' | 'shared';
+            owner?: string;
+            timeout?: string;
+            email?: string;
+            headers?: Record<string, string>;
+        } = {},
     ): Promise<Response> {
         const ownerXml = owner ? `<D:owner><D:href>mailto:${owner}@example.com</D:href></D:owner>` : '';
-        return webdavRequest(ctx.alice.user.email, 'LOCK', url, {
+        return webdavRequest(email, 'LOCK', url, {
             body: `<?xml version="1.0" encoding="utf-8" ?>
 <D:lockinfo xmlns:D="DAV:"><D:lockscope><D:${scope}/></D:lockscope><D:locktype><D:write/></D:locktype>${ownerXml}</D:lockinfo>`,
-            headers: { 'Content-Type': 'application/xml; charset=utf-8', ...(timeout && { Timeout: timeout }) },
+            headers: {
+                'Content-Type': 'application/xml; charset=utf-8',
+                ...(timeout && { Timeout: timeout }),
+                ...headers,
+            },
         });
+    }
+
+    function lockTokenOf(res: Response): string {
+        expect(res.status).toBeLessThan(300);
+        return (res.headers.get('Lock-Token') ?? '').replace(/^</, '').replace(/>$/, '');
     }
 
     async function lockFile(name: string, ownerName = 'Alice'): Promise<{ token: string; url: string }> {
@@ -167,10 +185,6 @@ describe('WebDAV LOCK/UNLOCK', () => {
     });
 
     test('DELETE releases the source lock from LockManager', async () => {
-        // Dynamic import: get-home transitively loads server-config, whose top-level
-        // ensureLoaded() captures EIGEN_DATA_ROOT at import time. Importing it before
-        // ../setup runs would freeze the wrong data dir and break setup-complete.
-        const { getHome } = await import('../../lib/home/get-home');
         const { token, url } = await lockFile('lock-delete-release.txt');
         const home = await getHome(ctx.alice.user.id);
         const path = await home.drive.resolvePath(mountId, '/lock-delete-release.txt');
@@ -188,6 +202,44 @@ describe('WebDAV LOCK/UNLOCK', () => {
         const url = `${baseHref}/lock-new-name.docx`;
         expect((await lockRequest(url)).status).toBe(404);
         expect((await webdavRequest(ctx.alice.user.email, 'GET', url)).status).toBe(404);
+    });
+
+    describe('in a folder Alice shares with Bob to write', () => {
+        let folderHref: string;
+
+        beforeAll(async () => {
+            folderHref = `${baseHref}/lock-shared-with-bob`;
+            expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', folderHref)).status).toBe(201);
+            const folder = await (await getHome(ctx.alice.user.id)).drive.resolvePath(mountId, '/lock-shared-with-bob');
+            if (!folder) throw new Error('expected the folder');
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${folder.id}/acl`, {
+                add: [{ id: ctx.bob.user.email, read: true, write: true }],
+            });
+        });
+
+        test("Bob with Alice's token can neither lock nor write under her exclusive lock", async () => {
+            const url = `${folderHref}/alice-exclusive.txt`;
+            await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'alice' });
+            const token = lockTokenOf(await lockRequest(url));
+            const headers = { If: `(<${token}>)` };
+            expect((await lockRequest(url, { email: ctx.bob.user.email, headers })).status).toBe(423);
+            const put = await webdavRequest(ctx.bob.user.email, 'PUT', url, { body: 'bob', headers });
+            expect(put.status).toBe(423);
+            expect(await (await webdavRequest(ctx.alice.user.email, 'GET', url)).text()).toBe('alice');
+        });
+
+        test('of two shared locks, each holder writes with their own token, and nobody without one', async () => {
+            const url = `${folderHref}/both-shared.txt`;
+            await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'start' });
+            expect((await lockRequest(url, { scope: 'shared' })).status).toBe(200);
+            const bobToken = lockTokenOf(await lockRequest(url, { scope: 'shared', email: ctx.bob.user.email }));
+            expect((await webdavRequest(ctx.bob.user.email, 'PUT', url, { body: 'bob' })).status).toBe(423);
+            const put = await webdavRequest(ctx.bob.user.email, 'PUT', url, {
+                body: 'bob',
+                headers: { If: `(<${bobToken}>)` },
+            });
+            expect(put.status).toBe(204);
+        });
     });
 
     // 33 requests, each paying a password hash (ROADMAP: DAV auth per request).
