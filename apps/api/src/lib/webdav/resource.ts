@@ -95,11 +95,8 @@ export async function handlePut(args: {
     const parent = await drive.resolvePath(mountId, parentStr);
     if (!parent) throw new ApiError(409, 'Parent not found');
 
-    // The RFC 4918 §6.2 lock check: the parent counts on create, the ancestors on overwrite.
-    const breadcrumb = existing
-        ? await drive.breadCrumb(mountId, existing.id)
-        : await drive.breadCrumb(mountId, parent.id);
-    assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
+    // RFC 4918 §7.4: a create changes its folder, so the folder's locks count for it.
+    await assertWritable(drive, mountId, existing?.id ?? parent.id, ifHeader, user.id);
     if (!(await drive.canWrite(mountId, existing?.id ?? parent.id, user))) {
         throw new ApiError(403, 'No write permission');
     }
@@ -175,7 +172,7 @@ export async function handleMkcol(args: {
     const parent = await drive.resolvePath(mountId, parentStr);
     if (!parent) throw new ApiError(409, 'Parent not found');
 
-    assertWritable(drive.lockManager, await drive.breadCrumb(mountId, parent.id), ifHeader, user.id);
+    await assertWritable(drive, mountId, parent.id, ifHeader, user.id);
     await drive.createFolder(mountId, parent.id, name, user);
     return new Response(null, { status: 201 });
 }
@@ -192,7 +189,7 @@ export async function handleDelete(args: {
     const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
 
-    assertWritable(drive.lockManager, await drive.breadCrumb(mountId, path.id), ifHeader, user.id);
+    await assertWritable(drive, mountId, path.id, ifHeader, user.id);
     await drive.deletePath(mountId, path.id, user);
     return new Response(null, { status: 204 });
 }

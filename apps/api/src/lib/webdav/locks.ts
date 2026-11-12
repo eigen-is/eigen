@@ -3,13 +3,13 @@
 // decides access. A LOCK on a name with nothing there yet creates the empty file, as Office's
 // "Save as" needs. The locks themselves, and the rule for who passes one, live in the Drive's LockManager.
 
-import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import type { XmlElement } from '../core/xml';
 import { parseXmlRoot, serializeXmlChildren, xmlChild } from '../core/xml';
 import { DAV_NAMESPACES, XML_CONTENT_TYPE, XML_DECLARATION } from '../dav/xml';
+import type { DriveLike } from '../drive/get-drive';
 import { getSharedDrive } from '../drive/get-drive';
-import type { Lock, LockManager } from '../drive/lock-manager';
+import type { Lock } from '../drive/lock-manager';
 import { LOCK_DEFAULT_TTL_MS } from '../drive/lock-manager';
 import { foldName } from '../mount/names';
 import type { User } from '../user';
@@ -73,7 +73,7 @@ export async function handleLock(args: {
         });
 
     if (path) {
-        const ancestorIds = (await drive.breadCrumb(mountId, path.id)).slice(0, -1).map((p) => p.id);
+        const ancestorIds = await drive.ancestorIds(mountId, path.id);
         const descendantIds = depth === 0 ? [] : await drive.descendantIds(mountId, path.id);
         return buildLockResponse(lockOn(path.id, scope, ancestorIds, descendantIds), 200);
     }
@@ -83,9 +83,8 @@ export async function handleLock(args: {
     const parent = await drive.resolvePath(mountId, parentStr);
     if (!parent) throw new ApiError(409, 'Parent not found');
     if (!(await drive.canWrite(mountId, parent.id, user))) throw new ApiError(403, 'No write permission');
-    const parentCrumb = await drive.breadCrumb(mountId, parent.id);
-    assertWritable(drive.lockManager, parentCrumb, ifHeader, user.id);
-    const ancestorPathIds = parentCrumb.map((p) => p.id);
+    await assertWritable(drive, mountId, parent.id, ifHeader, user.id);
+    const ancestorPathIds = [...(await drive.ancestorIds(mountId, parent.id)), parent.id];
     // The name itself is locked, exclusively, until the create lands: a second LOCK on it is a 423, not a second file.
     const nameLock = lockOn(`${parent.id}/${foldName(name)}`, 'exclusive', ancestorPathIds, []);
     const mimeType = Bun.file(name).type || 'application/octet-stream';
@@ -118,16 +117,16 @@ export async function handleUnlock(args: {
 }
 
 // RFC 4918 §6.2: a depth-infinity lock on a folder covers everything below it, so a write must also
-// pass the locks of its ancestors. The breadcrumb runs from the root to the path itself.
-export function assertWritable(
-    lockManager: LockManager,
-    breadcrumb: readonly DrivePath[],
+// pass the locks of every folder above the path, those the caller can't read included.
+export async function assertWritable(
+    drive: DriveLike,
+    mountId: string,
+    pathId: string,
     ifHeader: string | null,
     userId: string,
-): void {
-    const pathId = breadcrumb[breadcrumb.length - 1].id;
-    const ancestorIds = breadcrumb.slice(0, -1).map((p) => p.id);
-    if (!lockManager.isWriteAllowed(pathId, ifHeader, userId, ancestorIds)) {
+): Promise<void> {
+    const ancestorIds = await drive.ancestorIds(mountId, pathId);
+    if (!drive.lockManager.isWriteAllowed(pathId, ifHeader, userId, ancestorIds)) {
         throw new ApiError(423, 'Locked');
     }
 }

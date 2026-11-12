@@ -838,6 +838,12 @@ export class Drive {
         this.lockManager.releaseAllForPaths([pathId, ...mount.collectDescendantIds(pathId)]);
     }
 
+    // A depth-infinity WebDAV lock on any folder above a path covers it, so every lock check reads these.
+    public async ancestorIds(mountId: string, pathId: string): Promise<string[]> {
+        const crumbs = await this.getMount(mountId).getBreadcrumb(pathId);
+        return crumbs.slice(0, -1).map((crumb) => crumb.id);
+    }
+
     // A WebDAV LOCK on a folder reaches everything under it, so it checks these for the locks of others.
     public async descendantIds(mountId: string, pathId: string): Promise<string[]> {
         return this.getMount(mountId).collectDescendantIds(pathId);

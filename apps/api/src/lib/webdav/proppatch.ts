@@ -47,7 +47,7 @@ export async function handleProppatch(args: {
     const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
 
-    assertWritable(drive.lockManager, await drive.breadCrumb(mountId, path.id), ifHeader, user.id);
+    await assertWritable(drive, mountId, path.id, ifHeader, user.id);
 
     const ops = extractPropOps(body);
     // Only a set is refused in the xml namespace (reserved) or on a no-namespace live name (read as the live one); a remove runs, so a stored row can go.

@@ -70,7 +70,7 @@ async function resolveMoveCopy(args: MoveCopyArgs, verb: 'MOVE' | 'COPY'): Promi
 
     // MOVE takes the source out of its folder, so the lock check applies to it. COPY leaves the source as it is and
     // needs only the resolve above.
-    if (verb === 'MOVE') assertWritable(drive.lockManager, await drive.breadCrumb(mountId, src.id), ifHeader, user.id);
+    if (verb === 'MOVE') await assertWritable(drive, mountId, src.id, ifHeader, user.id);
 
     const { parentStr: destParentStr, name: newName } = splitParentAndName(dest.pathStr);
     if (!newName) throw new ApiError(400, 'Destination name missing');
@@ -89,13 +89,9 @@ async function resolveMoveCopy(args: MoveCopyArgs, verb: 'MOVE' | 'COPY'): Promi
     const destParent = await drive.resolvePath(mountId, destParentStr);
     if (!destParent) throw new ApiError(409, 'Destination parent not found');
 
-    // One destination-side breadcrumb: destExisting's chain minus its last entry is destParent's.
     // An overwrite touches destExisting and replaces a child of destParent, so both must be unlocked.
-    const destBreadcrumb = destExisting
-        ? await drive.breadCrumb(mountId, destExisting.id)
-        : await drive.breadCrumb(mountId, destParent.id);
-    assertWritable(drive.lockManager, destBreadcrumb, ifHeader, user.id);
-    if (destExisting) assertWritable(drive.lockManager, destBreadcrumb.slice(0, -1), ifHeader, user.id);
+    if (destExisting) await assertWritable(drive, mountId, destExisting.id, ifHeader, user.id);
+    await assertWritable(drive, mountId, destParent.id, ifHeader, user.id);
 
     return { drive, src, destParent, destExisting, newName };
 }

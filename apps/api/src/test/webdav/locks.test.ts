@@ -385,6 +385,92 @@ describe('WebDAV LOCK/UNLOCK', () => {
         });
     });
 
+    // Bob reads from `inner` down, so the folder Alice locks is above everything he can see.
+    describe('in a folder Alice shares with Bob, under a folder she does not share', () => {
+        let outerHref: string;
+        let innerHref: string;
+
+        beforeAll(async () => {
+            outerHref = `${baseHref}/lock-above-share`;
+            innerHref = `${outerHref}/inner`;
+            for (const href of [outerHref, innerHref]) {
+                expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', href)).status).toBe(201);
+            }
+            const inner = await (await getHome(ctx.alice.user.id)).drive.resolvePath(
+                mountId,
+                '/lock-above-share/inner',
+            );
+            if (!inner) throw new Error('expected the folder');
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${inner.id}/acl`, {
+                add: [{ id: ctx.bob.user.email, read: true, write: true }],
+            });
+            await webdavRequest(ctx.alice.user.email, 'PUT', `${innerHref}/report.txt`, { body: 'alice' });
+        });
+
+        test('with no lock above, Bob writes and locks', async () => {
+            const url = `${innerHref}/bob-free.txt`;
+            expect((await webdavRequest(ctx.bob.user.email, 'PUT', url, { body: 'bob' })).status).toBe(201);
+            const token = lockTokenOf(await lockRequest(url, { email: ctx.bob.user.email }));
+            const unlock = await webdavRequest(ctx.bob.user.email, 'UNLOCK', url, {
+                headers: { 'Lock-Token': `<${token}>` },
+            });
+            expect(unlock.status).toBe(204);
+        });
+
+        describe('while Alice holds a depth-infinity lock on the folder above', () => {
+            let aliceToken: string;
+
+            beforeAll(async () => {
+                aliceToken = lockTokenOf(await lockRequest(outerHref));
+            });
+
+            test('every write of Bob is the 423 Alice gets without her token, and changes nothing', async () => {
+                const report = `${innerHref}/report.txt`;
+                const proppatch = {
+                    body: '<D:propertyupdate xmlns:D="DAV:" xmlns:Z="urn:z"><D:set><D:prop><Z:tag>x</Z:tag></D:prop></D:set></D:propertyupdate>',
+                };
+                const move = { headers: { Destination: `http://localhost${innerHref}/moved.txt` } };
+                const writes: [string, string, { body?: string; headers?: Record<string, string> }][] = [
+                    ['PUT', report, { body: 'bob' }],
+                    ['PUT', report, { body: 'bob', headers: { If: `(<${aliceToken}>)` } }],
+                    ['PUT', `${innerHref}/bob-new.txt`, { body: 'bob' }],
+                    ['MKCOL', `${innerHref}/bob-dir`, {}],
+                    ['DELETE', report, {}],
+                    ['PROPPATCH', report, proppatch],
+                    ['MOVE', report, move],
+                ];
+                const asAlice = await webdavRequest(ctx.alice.user.email, 'PUT', report, { body: 'no token' });
+                const locked = `423 ${await asAlice.text()}`;
+                for (const [method, url, options] of writes) {
+                    const res = await webdavRequest(ctx.bob.user.email, method, url, options);
+                    expect(`${method} ${res.status} ${await res.text()}`).toBe(`${method} ${locked}`);
+                }
+                expect(await (await webdavRequest(ctx.alice.user.email, 'GET', report)).text()).toBe('alice');
+                for (const name of ['bob-new.txt', 'bob-dir', 'moved.txt']) {
+                    expect((await webdavRequest(ctx.alice.user.email, 'GET', `${innerHref}/${name}`)).status).toBe(404);
+                }
+            });
+
+            test("Bob's LOCK on a file or a new name is a 423, so her token never passes a lock of his", async () => {
+                const report = `${innerHref}/report.txt`;
+                for (const scope of ['exclusive', 'shared'] as const) {
+                    expect((await lockRequest(report, { scope, email: ctx.bob.user.email })).status).toBe(423);
+                }
+                const created = `${innerHref}/bob-locked-new.docx`;
+                expect((await lockRequest(created, { email: ctx.bob.user.email })).status).toBe(423);
+                expect((await webdavRequest(ctx.alice.user.email, 'GET', created)).status).toBe(404);
+            });
+
+            test('Alice with her token writes below her lock', async () => {
+                const headers = { If: `(<${aliceToken}>)` };
+                const put = (name: string) =>
+                    webdavRequest(ctx.alice.user.email, 'PUT', `${innerHref}/${name}`, { body: 'saved', headers });
+                expect((await put('report.txt')).status).toBe(204);
+                expect((await put('alice-new.txt')).status).toBe(201);
+            });
+        });
+    });
+
     // 33 requests, each paying a password hash (ROADMAP: DAV auth per request).
     test('a 33rd shared lock on one path → 423', async () => {
         const url = `${baseHref}/lock-shared-cap.txt`;
