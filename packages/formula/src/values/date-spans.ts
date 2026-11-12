@@ -3,7 +3,7 @@
 // takes two serials that are dates and reads their days through serialDate, so the calendar is said in one place.
 
 import type { CalendarDay } from './dates';
-import { dateSerial, daysInMonth, serialDate } from './dates';
+import { dateSerial, daysInMonth, isLeapYear, serialDate } from './dates';
 import type { FormulaError } from './errors';
 import { NUM } from './errors';
 
@@ -48,11 +48,12 @@ export function days360(start: number, end: number, european: boolean): number {
 }
 
 // `basis` 0 is 30 days a month the American way, 1 the days of the years themselves, 2 the days over 360, 3 the
-// days over 365 and 4 30 days a month the European way. The two dates may come in either order.
+// days over 365 and 4 30 days a month the European way, each cut down to a whole number, so -0.5 is none of them.
+// The two dates may come in either order.
 export function yearFraction(one: number, other: number, basis: number): number | FormulaError {
     const start = Math.min(one, other);
     const end = Math.max(one, other);
-    switch (basis) {
+    switch (Math.floor(basis)) {
         case 0: {
             // Not DAYS360: two last days of February are whole months apart, and an end on a 31st is a 30th only
             // when the start was on a 30th or 31st as written.
@@ -64,7 +65,7 @@ export function yearFraction(one: number, other: number, basis: number): number 
             return thirties(from, to, closes || from.day === 31 ? 30 : from.day, last) / 360;
         }
         case 1:
-            return start === end ? 0 : (end - start) / yearLength(start, end);
+            return (end - start) / yearLength(start, end);
         case 2:
             return (end - start) / 360;
         case 3:
@@ -90,10 +91,8 @@ function yearLength(start: number, end: number): number {
         (to.year === from.year + 1 && (to.month < from.month || (to.month === from.month && to.day <= from.day)));
     if (!within) return (dateSerial(to.year + 1, 1, 1) - dateSerial(from.year, 1, 1)) / (to.year - from.year + 1);
     if (to.year === from.year) return dateSerial(from.year + 1, 1, 1) - dateSerial(from.year, 1, 1);
-    const leapDay = dateSerial(from.year, 2, 29);
-    const nextLeapDay = dateSerial(to.year, 2, 29);
     const reached =
-        (serialDate(leapDay).month === 2 && start <= leapDay) ||
-        (serialDate(nextLeapDay).month === 2 && end >= nextLeapDay);
+        (isLeapYear(from.year) && start <= dateSerial(from.year, 2, 29)) ||
+        (isLeapYear(to.year) && end >= dateSerial(to.year, 2, 29));
     return reached ? 366 : 365;
 }

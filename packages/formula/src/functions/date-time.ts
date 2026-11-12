@@ -5,9 +5,8 @@
 import { dateDif, days360, yearFraction } from '../values/date-spans';
 import {
     dateOf,
-    FIRST_SERIAL,
+    isDate,
     isoWeek,
-    LAST_SERIAL,
     SECONDS_IN_DAY,
     serialDate,
     shiftMonths,
@@ -40,7 +39,7 @@ function stamped(part: (day: number, second: number) => number) {
     return (serial: number) => {
         const seconds = Math.round(serial * SECONDS_IN_DAY);
         const day = Math.floor(seconds / SECONDS_IN_DAY);
-        return day < FIRST_SERIAL || day > LAST_SERIAL ? NUM : part(day, seconds - day * SECONDS_IN_DAY);
+        return isDate(day) ? part(day, seconds - day * SECONDS_IN_DAY) : NUM;
     };
 }
 
@@ -105,7 +104,7 @@ export const DATE_TIME = [
     fn('DATEDIF', [SERIAL, SERIAL, TEXT], dateDif),
     fn('DAYS', [SERIAL, SERIAL], (end, start) => end - start),
     fn('DAYS360', [SERIAL, SERIAL, optional(BOOLEAN, false)], days360),
-    fn('YEARFRAC', [STRICT_DATE, STRICT_DATE, optional(strict(INTEGER), 0)], yearFraction),
+    fn('YEARFRAC', [STRICT_DATE, STRICT_DATE, optional(strict(NUMBER), 0)], yearFraction),
     fn('NETWORKDAYS', [STRICT_DATE, STRICT_DATE, HOLIDAYS], (start, end, holidays) =>
         countWorkdays(start, end, WEEKEND, holidays.list()),
     ),

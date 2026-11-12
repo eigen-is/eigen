@@ -1,8 +1,8 @@
 // Dates as numbers: a serial is the days since 30 December 1899 in the one real calendar, negative before it,
 // which is Google's count and from 1 March 1900 on Excel's too. The time of day is the part above the whole day,
 // so -0.25 is 18:00 on the day before. Which serials are dates, and which day a serial is, is said here once:
-// FIRST_SERIAL, LAST_SERIAL, dateSerial and serialDate. Whoever reads a date, such as a date function or the
-// reading of a typed one, goes through those, without the host's Date.
+// FIRST_SERIAL, LAST_SERIAL and isDate, dateSerial and serialDate. Whoever reads a date, such as a date function or
+// the reading of a typed one, goes through those, without the host's Date.
 
 import type { FormulaError } from './errors';
 import { NUM } from './errors';
@@ -18,15 +18,21 @@ export type CalendarDay = { readonly year: number; readonly month: number; reado
 // Days of the year before each month, in a year without a leap day.
 const DAYS_BEFORE_MONTH = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365];
 
-// The largest hour, minute, second and day TIME and DATE take; a month must stay under it.
-const MOST = 32767;
+// A part of TIME and DATE is a 16-bit number to Excel, this the largest: an hour, a minute, a second and a day
+// go up to it, and a month stays under it and above the smallest.
+const LARGEST_PART = 32767;
+
+// Whether a whole day is a date. A day that is no number is none.
+export function isDate(day: number): boolean {
+    return day >= FIRST_SERIAL && day <= LAST_SERIAL;
+}
 
 // The serial of a year, month and day: a month outside 1 to 12 moves the year, and a day outside the month counts
 // on from its first day. The result is below FIRST_SERIAL or past LAST_SERIAL for a date outside the calendar.
 export function dateSerial(year: number, month: number, day: number): number {
     const monthIndex = (((month - 1) % 12) + 12) % 12;
     const inYear = year + Math.floor((month - 1) / 12);
-    const leapDay = monthIndex > 1 && daysInMonth(inYear, 2) === 29 ? 1 : 0;
+    const leapDay = monthIndex > 1 && isLeapYear(inYear) ? 1 : 0;
     return firstSerial(inYear) + DAYS_BEFORE_MONTH[monthIndex] + leapDay + day - 1;
 }
 
@@ -34,34 +40,42 @@ export function dateSerial(year: number, month: number, day: number): number {
 export function serialDate(serial: number): CalendarDay {
     const guess = 1 + Math.floor((serial - FIRST_SERIAL) / 365.2425);
     const year = firstSerial(guess + 1) > serial ? guess : guess + 1;
-    const leap = daysInMonth(year, 2) === 29;
+    const leap = isLeapYear(year);
     const dayOfYear = serial - firstSerial(year);
     let month = 1;
     while (month < 12 && dayOfYear >= DAYS_BEFORE_MONTH[month] + (leap && month > 1 ? 1 : 0)) month += 1;
     return { year, month, day: dayOfYear - DAYS_BEFORE_MONTH[month - 1] - (leap && month > 2 ? 1 : 0) + 1 };
 }
 
+export function isLeapYear(year: number): boolean {
+    return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
 // `month` is 1 to 12.
 export function daysInMonth(year: number, month: number): number {
-    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-    return month === 2 && leap ? 29 : DAYS_BEFORE_MONTH[month] - DAYS_BEFORE_MONTH[month - 1];
+    return month === 2 && isLeapYear(year) ? 29 : DAYS_BEFORE_MONTH[month] - DAYS_BEFORE_MONTH[month - 1];
 }
 
-// DATE: each part is cut down to a whole number, and a year under 1000 counts from 1900.
+// DATE: each part is cut down to a whole number, and a year under 1000 counts from 1900. A day past the largest
+// part counts as the largest, as Excel has it, until it is more days than the calendar has.
 export function dateOf(year: number, month: number, day: number): number | FormulaError {
     const whole = Math.floor(year);
-    if (whole < 0 || month >= MOST) return NUM;
-    const serial = dateSerial(whole < 1000 ? whole + 1900 : whole, Math.floor(month), Math.min(Math.floor(day), MOST));
-    return serial < FIRST_SERIAL || serial > LAST_SERIAL ? NUM : serial;
+    const months = Math.floor(month);
+    if (whole < 0 || months >= LARGEST_PART || months < -LARGEST_PART) return NUM;
+    if (day > LAST_SERIAL - FIRST_SERIAL + 1) return NUM;
+    const serial = dateSerial(whole < 1000 ? whole + 1900 : whole, months, Math.min(Math.floor(day), LARGEST_PART));
+    return isDate(serial) ? serial : NUM;
 }
 
-// TIME: each part is cut down to a whole number, and what the whole days leave is the time.
+// TIME: each part is cut down to a whole number, and what the whole days leave is the time. A part below the
+// smallest 16-bit number comes round to the largest, as Excel has it: -32769 minutes are 32767.
 export function timeOf(hours: number, minutes: number, seconds: number): number | FormulaError {
-    const hour = Math.floor(hours);
-    const minute = Math.floor(minutes);
-    const second = Math.floor(seconds);
+    const hour = timePart(hours);
+    const minute = timePart(minutes);
+    const second = timePart(seconds);
     const days = (hour * 3600 + minute * 60 + second) / SECONDS_IN_DAY;
-    return hour > MOST || minute > MOST || second > MOST || days < 0 ? NUM : days - Math.floor(days);
+    if (hour > LARGEST_PART || minute > LARGEST_PART || second > LARGEST_PART || days < 0) return NUM;
+    return days - Math.floor(days);
 }
 
 // The same day `months` months on, or with `toEnd` the last day of that month. A day past the end of the month
@@ -74,7 +88,7 @@ export function shiftMonths(serial: number, months: number, toEnd: boolean): num
     const first = dateSerial(year, month, 1);
     const length = daysInMonth(year, month);
     const result = first + (toEnd ? length : Math.min(date.day, length)) - 1;
-    return result < FIRST_SERIAL || result > LAST_SERIAL ? NUM : result;
+    return isDate(result) ? result : NUM;
 }
 
 // 0 for Monday to 6 for Sunday.
@@ -106,6 +120,11 @@ export function isoWeek(serial: number): number {
 // The day a week starts on, 0 for Monday, by the type WEEKDAY and WEEKNUM share, or -1 for a type that is none.
 function weekStart(type: number): number {
     return type === 1 ? 6 : type === 2 ? 0 : type >= 11 && type <= 17 ? type - 11 : -1;
+}
+
+function timePart(part: number): number {
+    const whole = Math.floor(part);
+    return whole < -LARGEST_PART - 1 ? whole + 2 * (LARGEST_PART + 1) : whole;
 }
 
 // The serial of 1 January: 365 days for each year before it, and their leap days.
