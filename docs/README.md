@@ -8,7 +8,7 @@ How each part of Eigen works and why, one doc per domain. Where each concept liv
 - Collab documents (Yjs, offline, restore): [COLLAB.md](COLLAB.md)
 - Canvas engine (vector + slides): [CANVAS.md](CANVAS.md), [SLIDES.md](SLIDES.md); charts: [CHARTS.md](CHARTS.md), and the research behind their look: [CHART-DRAWING-RESEARCH.md](CHART-DRAWING-RESEARCH.md); clipboard: [CLIPBOARD.md](CLIPBOARD.md)
 - Docs app, the eigendoc schema and figures: [DOCS.md](DOCS.md); equations, the math tree and its OMML, MathML and LaTeX: [MATH.md](MATH.md)
-- Sheets: [SHEETS.md](SHEETS.md), and how its grid scrolls at 120 fps: [SHEETS-AT-120fps.md](SHEETS-AT-120fps.md); stickies: [STICKIES.md](STICKIES.md); how the server reads and writes document content: [DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md); editing a text file in Drive: [INLINE-EDITING.md](INLINE-EDITING.md); the files a document embeds: [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)
+- Sheets: [SHEETS.md](SHEETS.md), and how its grid scrolls at 120 fps: [SHEETS-AT-120fps.md](SHEETS-AT-120fps.md); the new formula engine, `packages/formula`: [FORMULA.md](FORMULA.md); stickies: [STICKIES.md](STICKIES.md); how the server reads and writes document content: [DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md); editing a text file in Drive: [INLINE-EDITING.md](INLINE-EDITING.md); the files a document embeds: [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)
 - Comments: [COMMENTS.md](COMMENTS.md)
 - Mail: [MAIL.md](MAIL.md), [IMAP.md](IMAP.md)
 - Chat: [CHAT.md](CHAT.md)
