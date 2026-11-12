@@ -398,7 +398,8 @@ describe('literals and names (parsing.md 2.3)', () => {
         "='Sheet2!A1",
         '=A1\u00a0+B1',
         '=1E999',
-        '=Table1[Amount]',
+        '=Table1[Amount',
+        '=Table1[[Amount]',
         '=A1:Sheet2!B2',
         '=Sheet2!',
         '=Sheet2! A1',
@@ -775,7 +776,7 @@ describe('references and sheets (parsing.md 2.4)', () => {
 
     test.each([
         ...["=Sheet2!'x'", '=Sheet2!Func(1)', "='No Such'!Func(1)", '=Jan:Dec!Func(1)', "=Jan:Dec!'x'"],
-        ...["=[1]!'x'!A1", "=[1]! 'x'", "=[1]!'x", '=[1]!(1)', '=[1]:B!A1', '=[1]A:!A1', '=[1]!5(1)'],
+        ...["=[1]!'x'!A1", "=[1]! 'x'", "=[1]!'x", '=[1]!(1)', '=[1]A:!A1', '=[1]!5(1)'],
     ])('only another workbook has them: %s does not parse', (text) => {
         expect(failure(text)).toBe('syntax');
     });

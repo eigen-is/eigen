@@ -17,6 +17,7 @@ import { columnIndex } from './a1';
 import { REF_ERROR, Token } from './lexer';
 import type { ParseFailure, SheetFinder } from './parser';
 import { parseA1, readsAsReference } from './parser';
+import { isTableCell } from './tables';
 import type { FormulaNode } from './tree';
 import { branch, leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from './tree';
 
@@ -407,6 +408,8 @@ function many(node: FormulaNode, functions: Registry, top: boolean): boolean {
     switch (node.kind) {
         case NodeKind.Ref:
             return node.op !== RefKind.Cell;
+        case NodeKind.Table:
+            return !isTableCell(node);
         case NodeKind.Array:
             return top;
         case NodeKind.Paren:
@@ -496,7 +499,7 @@ function indent(node: FormulaNode, space: string): FormulaNode {
         const { op, sheetKind, sheet, row, column, row2, column2, flags } = node;
         return referenceNode(op, space, sheetKind, sheet, row, column, row2, column2, flags);
     }
-    if (node.kind <= NodeKind.Error || node.kind === NodeKind.Name) {
+    if (node.kind <= NodeKind.Error || node.kind === NodeKind.Name || node.kind === NodeKind.Table) {
         return leaf(node.kind, node.value, node.text, space, node.sheetKind, node.sheet);
     }
     return branch(node.kind, node.op, node.text, node.children, space, node.spaceOpen, node.spaceEnd);

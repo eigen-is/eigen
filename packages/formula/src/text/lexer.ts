@@ -165,8 +165,15 @@ export function lexAt(text: string, pos: number): number {
         case QUOTE:
             return quotedEnd(text, pos, "'", Token.Quote);
         case BRACKET_OPEN: {
-            const close = text.indexOf(']', end);
-            return close === -1 ? (length << 6) | Token.Bad : ((close + 1) << 6) | Token.Bracket;
+            // Excel's rule for a table reference: brackets nest, and a ' takes the next character with it.
+            let depth = 1;
+            for (; depth > 0 && end < length; end += 1) {
+                const inner = text.charCodeAt(end);
+                if (inner === QUOTE) end += 1;
+                else if (inner === BRACKET_OPEN) depth += 1;
+                else if (inner === BRACKET_CLOSE) depth -= 1;
+            }
+            return depth > 0 ? (length << 6) | Token.Bad : (end << 6) | Token.Bracket;
         }
         case HASH: {
             // A # that starts no error literal is the spill operator, so A1#/Sheet2!B1 divides.

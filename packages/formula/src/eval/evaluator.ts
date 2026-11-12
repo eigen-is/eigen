@@ -82,6 +82,9 @@ export class Evaluator {
                 return this.reference(node, sheet, row, column);
             case NodeKind.Name:
                 return NAME;
+            case NodeKind.Table:
+                // An importer puts a range in its place, so one that is still here names a table that is not.
+                return REF;
             case NodeKind.Call:
                 return call(this, node, sheet, row, column);
             case NodeKind.Invoke: {

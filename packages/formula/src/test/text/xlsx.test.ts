@@ -743,9 +743,9 @@ describe('text/xlsx: the names of the functions that answer an array', () => {
 
 describe('text/xlsx: what the A1 reader makes of a file', () => {
     test('a text that fails gives the reason of the A1 reader', () => {
-        expect(parseXlsx('Sales[Amount]', 0, 0, findSheet)).toEqual({ reason: 'syntax', at: 5 });
-        expect(parseA1('=Sales[Amount]', 0, 0, findSheet)).toEqual({ reason: 'syntax', at: 6 });
-        expect('reason' in parseXlsx('Sales[Amount]', 0, 0, findSheet)).toBe(true);
-        expect('reason' in parseXlsx('SUM(Table1[[#This Row],[Qty]])', 0, 0, findSheet)).toBe(true);
+        expect(parseXlsx('L6-(-4,3)', 0, 0, findSheet)).toEqual({ reason: 'syntax', at: 8 });
+        expect(parseA1('=L6-(-4,3)', 0, 0, findSheet)).toEqual({ reason: 'syntax', at: 9 });
+        expect('reason' in parseXlsx('Sales[Amount', 0, 0, findSheet)).toBe(true);
+        expect('reason' in parseXlsx('SUM(Table1[[#This Row],[Qty])', 0, 0, findSheet)).toBe(true);
     });
 });

@@ -196,12 +196,18 @@ export function formulas(seed: number, ordered: boolean): () => string {
         const row = () => Array.from({ length: columns }, element).join(',');
         return `{${Array.from({ length: small() }, row).join(';')}${space()}}`;
     };
+    // A table reference: a name or none, and brackets that nest and escape, on this sheet, another or in a workbook.
+    const table = () =>
+        pick(['', '', '', '[s2]!', "'Missing'!", "'[1]'!"]) +
+        pick(['Sales', 't_1', 'x.y', 'rc', 'Таблица1']) +
+        pick(TABLE_BRACKETS);
     const region = (depth: number) =>
-        space() + pick([reference, reference, () => 'Rate', () => '#REF!', () => call(depth)])();
+        space() + pick([reference, reference, table, () => 'Rate', () => '#REF!', () => call(depth)])();
     const primary = (depth: number): string => {
         const leaves = [
             () => space() + constant(),
             () => space() + reference(),
+            () => space() + pick([table, table, () => pick(TABLE_BRACKETS)])(),
             () => space() + reference() + (chance(0.2) ? `${space()}#` : ''),
             () => space() + pick(['Rate', 'total_2', 'rc', 'x.y', '[s2]!Scoped', "'Missing'!Scoped", '[pl]!#REF!']),
             () => space() + pick(["'[1]'!Rate", "'[1]'!'SGJ212,LA'", "'[1]'!'A1'", "'[1]x'!'it''s'", "'[1]'!'RC'"]),
@@ -320,11 +326,16 @@ export function typedFormulas(seed: number): () => string {
         const line = () => Array.from({ length: columns }, element).join(',');
         return `{${Array.from({ length: Math.floor(random() * 3) + 1 }, line).join(';')}${space()}}`;
     };
-    const region = (depth: number) => pick([reference, reference, () => '#REF!', () => call(depth)])();
+    const table = () =>
+        pick(['', '', '', 'Sheet2!', 'NoSuch!', '[1]!', "'[1]x y'!"]) +
+        pick(['Sales', 't_1', 'x.y', 'RC', 'R', 'c', 'R5C', 'XFE1', 'Таблица1']) +
+        pick(TABLE_BRACKETS);
+    const region = (depth: number) => pick([reference, reference, table, () => '#REF!', () => call(depth)])();
     const primary = (depth: number): string => {
         const leaves = [
             constant,
             reference,
+            () => pick([table, table, () => pick(TABLE_BRACKETS)])(),
             () => reference() + (chance(0.2) ? '#' : ''),
             name,
             () => `Sheet2!${name()}`,
@@ -369,6 +380,15 @@ export function typedFormulas(seed: number): () => string {
 
 const OPERATORS = ['+', '-', '*', '/', '^', '&', '=', '<>', '<', '<=', '>', '>='];
 
+// The brackets of a table reference: every form a file holds, the ones Excel shows, and what only the lexer's rule
+// for where a bracket ends tells apart from the text around it.
+const TABLE_BRACKETS = [
+    ...['[Qty]', '[Net price]', '[[#This Row],[Qty]]', '[#Data]', '[#Headers]', '[#All]', '[[#Totals],[Qty]]'],
+    ...['[[#This Row],[Qty]:[Net price]]', '[[Decimal ]]', '[@Qty]', '[@[Net price]]', '[@]', '[]', '[2019]', '[-1]'],
+    ...['[[#Headers], [#Data], [Qty]]', '[ [a]:[b] ]', "[It''s]", "[a']b]", "[[a'[1']]]", "['#x]", '[A1:B2]', '[,]'],
+    ...['[x\r\ny]', '["]', '[(]', '[1+2]', '[ ]', '[\u6570\u636e]', "[a'']"],
+];
+
 const TYPED_WORDS = [
     ...['A1', '$A$1', 'B$2', '$C3', 'A:A', '$A:C', '1:1', '$1:3', 'A1:B2', 'B2:A1', 'B$2:B1', 'XFD1048576', 'XFE1'],
     ...['A', 'B', 'R', 'C', 'RC', 'R1C1', 'rc', 'R1', 'C1', 'R[1]C[1]', 'RC[1]', 'C[-1]', 'A[1]', 'Rate', 'x.y', '_a'],
@@ -399,6 +419,7 @@ const TYPED_WORDS = [
         '\ud83d',
     ],
     ...['\u0394x', '\u6570\u636e', '\u6570\u636e!', '\ud840\udc00', 'x\u0663', '\\a', 'a?'],
+    ...['T[a]', '[@x]', 'T[[#All],[a]]', '[a]:[b]', '[a', "x']", 'T[', '[[', ']]', '[', ']', "[a']", 'R[x]'],
 ];
 
 const STORED_WORDS = [
@@ -427,6 +448,7 @@ const STORED_WORDS = [
         '\u0394x',
         '\u6570\u636e',
     ],
+    ...['T[a]', '[@x]', 'T[[#All],[a]]', '[a]:[b]', '[a', "x']", 'T[', '[[', ']]', "[a']", 'R[x]', 'r[1]', 'A1[x]'],
 ];
 
 // A seeded token soup: a few words of one grammar's vocabulary in any order, most of which do not parse.
