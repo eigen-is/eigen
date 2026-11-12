@@ -8,8 +8,9 @@ import type { FormulaError } from './errors';
 import { DIV0, NUM } from './errors';
 import { equal15 } from './precision';
 
-// A negative base has no power from this whole exponent on: (-1)^(2^31) is 1 and (-1)^1E+15 is #NUM!.
-const MOST_TIMES = 1e15;
+// A negative base has no power from this whole exponent on. Excel's own limit lies above 2^31, where (-1)^(2^31)
+// is 1, and at or under 2^49, where it is #NUM!.
+const MOST_TIMES = 2 ** 49;
 
 // A wide value outside these two is moved by STEP binary places.
 const STEP = 600;
