@@ -3,8 +3,9 @@
 // Each resolves the file through getSharedDrive, which checks the access. The long jobs among them switch
 // off the server's idle timeout, because they send nothing while they wait and run.
 
-import type { DocumentImportOptions, DriveImportSource, DrivePath, ImportResult } from '@workspace/lib/types/drive';
-import { EXPORT_SUMMARY_HEADER, isConvertTarget } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DocumentImportOptions, DriveImportSource, ImportResult } from '@workspace/lib/types/drive-convert';
+import { EXPORT_SUMMARY_HEADER, isConvertTarget } from '@workspace/lib/types/drive-convert';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import type { BunFile } from 'bun';
 import type { ElysiaCustomStatusResponse, Static } from 'elysia';

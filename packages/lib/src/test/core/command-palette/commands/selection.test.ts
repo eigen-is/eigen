@@ -7,8 +7,9 @@ import type {
     PaletteSelectionAction,
     PaletteSelectionActions,
 } from '../../../../types/command-palette';
-import type { DriveCapabilities, DrivePath, DrivePathType } from '../../../../types/drive';
+import type { DrivePath, DrivePathType } from '../../../../types/drive';
 import type { DriveActionId } from '../../../../types/drive-actions';
+import type { DriveCapabilities } from '../../../../types/drive-view';
 
 function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): DrivePath {
     return {

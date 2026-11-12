@@ -5,8 +5,9 @@
 // one leaves it open for another try. A canceled one keeps naming the file while it fades out.
 import { expect, mock, test } from 'bun:test';
 import { PPTX_MIME } from '@workspace/lib/constants/mime';
-import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
+import type { ConvertTarget } from '@workspace/lib/types/drive-convert';
 import { holdClosingDialogs } from '../../closing-dialog';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';

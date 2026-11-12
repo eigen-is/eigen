@@ -22,7 +22,6 @@ export type DriveCapabilities = {
     canRename: boolean;
     canMove: boolean;
     canShare: boolean;
-    // The fs browser shows the folder breadcrumb; filtered views show a title instead.
     showBreadcrumb: boolean;
     // Omit to allow creating every EigenDocType; an empty set disables create entirely.
     createTypes?: ReadonlySet<EigenDocType>;

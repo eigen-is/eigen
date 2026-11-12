@@ -2,7 +2,8 @@
 // label, icon and menu group, and the facts its gate reads. DRIVE_ACTIONS lists the rows themselves.
 
 import type { LucideIcon } from 'lucide-react';
-import type { DriveCapabilities, DrivePath } from './drive';
+import type { DrivePath } from './drive';
+import type { DriveCapabilities } from './drive-view';
 
 export type DriveActionId =
     | 'open'

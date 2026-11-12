@@ -5,18 +5,7 @@
 // public methods serve server code, such as chat, collab and the home relay.
 
 import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
-import type {
-    DriveACL,
-    DriveACLDelta,
-    DriveAccessCheckResult,
-    DrivePath,
-    DrivePathDetails,
-    DrivePathType,
-    DriveVisibility,
-    EffectiveMember,
-    EigenDocType,
-    InviteResult,
-} from '@workspace/lib/types/drive';
+import type { DrivePath, DrivePathDetails, DrivePathType, EigenDocType } from '@workspace/lib/types/drive';
 import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_FILE,
@@ -25,6 +14,14 @@ import {
     isDocumentType,
     withEigenExtension,
 } from '@workspace/lib/types/drive';
+import type {
+    DriveACL,
+    DriveACLDelta,
+    DriveAccessCheckResult,
+    DriveVisibility,
+    EffectiveMember,
+    InviteResult,
+} from '@workspace/lib/types/drive-access';
 import type {
     ClientFileEventRecord,
     FileEvent,

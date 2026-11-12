@@ -1,8 +1,8 @@
 // A user's Drive view, list or grid and its sort, kept in their settings so it follows them to every device. A copy in
 // this browser draws the folder before the settings load.
 
-import type { DriveSortDir, DriveSortKey, DriveViewMode, DriveViewPreferences } from '@workspace/lib/types/drive';
-import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive';
+import type { DriveSortDir, DriveSortKey, DriveViewMode, DriveViewPreferences } from '@workspace/lib/types/drive-view';
+import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive-view';
 import type { SettingWithCopy } from '../../space/hooks/use-setting-with-copy';
 import { useSettingWithCopy } from '../../space/hooks/use-setting-with-copy';
 

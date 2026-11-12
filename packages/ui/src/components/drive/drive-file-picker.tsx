@@ -4,8 +4,9 @@
 
 import { useAuth } from '@workspace/lib/auth';
 import { useDriveViewPreferences } from '@workspace/lib/drive';
-import type { DrivePath, DriveSort } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
+import type { DriveSort } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { Button } from '@workspace/ui/components/button';
 import {

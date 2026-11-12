@@ -2,7 +2,7 @@
 // comment menu draws it.
 
 import { usePublicUsers } from '@workspace/lib/public';
-import type { EffectiveMember } from '@workspace/lib/types/drive';
+import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import { CircleSlash, UserPlus } from 'lucide-react';
 import { ChoiceMenuSub } from '../dropdown-menu';
 import { MemberAvatar } from './member-avatar';

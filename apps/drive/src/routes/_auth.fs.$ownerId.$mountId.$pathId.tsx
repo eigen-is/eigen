@@ -14,7 +14,8 @@ import {
     usePathInfo,
     validateDriveSearch,
 } from '@workspace/lib/drive';
-import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveSearchParams } from '@workspace/lib/types/drive-view';
 import { LoadingState, RequestAccessView } from '@workspace/ui';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { browseCapabilities } from '@workspace/ui/components/drive/drive-capabilities';

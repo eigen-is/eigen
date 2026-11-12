@@ -4,8 +4,9 @@
 // takes it: Drive stores the type its upload claimed, which for an Office file can be application/octet-stream.
 
 import { useImportDocument, useImportFromDrive } from '@workspace/lib/drive';
-import type { ConvertTarget, DrivePath, ImportMode } from '@workspace/lib/types/drive';
-import { CONVERT_SOURCES, isConvertSource } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { ConvertTarget, ImportMode } from '@workspace/lib/types/drive-convert';
+import { CONVERT_SOURCES, isConvertSource } from '@workspace/lib/types/drive-convert';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Label } from '@workspace/ui/components/label';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';

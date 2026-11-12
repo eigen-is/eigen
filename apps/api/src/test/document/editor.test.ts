@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import type { DrivePath, EditorSaveResult, FileEditorContent } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
+import type { EditorSaveResult, FileEditorContent } from '@workspace/lib/types/file-kinds';
 import { MAX_INLINE_EDIT_SIZE } from '../../lib/drive/inline-edit';
 import { getHome } from '../../lib/home';
 import { overwriteFile } from '../mount-test-helpers';

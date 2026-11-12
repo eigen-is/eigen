@@ -2,7 +2,8 @@
 // read-only feed. A view picks one, spreads in its own overrides and hands the value to DriveLayout,
 // whose action runner gates every Drive action on it.
 
-import type { DriveCapabilities, EigenDocType } from '@workspace/lib/types/drive';
+import type { EigenDocType } from '@workspace/lib/types/drive';
+import type { DriveCapabilities } from '@workspace/lib/types/drive-view';
 
 export const DRIVE_CAPABILITIES = {
     // The full folder browser (the fs route): create, upload, rearrange.

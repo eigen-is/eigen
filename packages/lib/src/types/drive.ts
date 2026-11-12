@@ -1,17 +1,12 @@
 // The Drive types the API serves and every app reads: a path, the kinds of path and their MIME types, and
 // the Eigen document types with their extensions, export formats and Y.Doc roots. The API and the apps
-// import them alike, so a new kind of path or document is added here once. It also re-exports its siblings,
-// such as access and file kinds, so Drive code imports every Drive name from this one module.
+// import them alike, so a new kind of path or document is added here once. Sibling modules hold the other
+// Drive names, such as access, file kinds and views.
 
 import { BAND_ROOTS } from '../docs/eigendoc/bands';
 import { STYLE_ROOT } from '../docs/eigendoc/normal-style';
 import { PAGE_ROOT } from '../docs/eigendoc/page';
 import type { DriveACL, DriveVisibility } from './drive-access';
-
-export * from './drive-access';
-export * from './drive-convert';
-export * from './drive-view';
-export * from './file-kinds';
 
 export const DRIVE_TYPE_DOC = 'doc' as const;
 export const DRIVE_TYPE_STICKIES = 'stickies' as const;

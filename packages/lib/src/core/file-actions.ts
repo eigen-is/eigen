@@ -16,8 +16,10 @@ import { ICS_MAX_BYTES } from '../constants/calendar';
 import { VCARD_MAX_BYTES } from '../constants/contact';
 import { QUICK_LOOK_HOTKEY } from '../constants/hotkeys';
 import { EML_MAX_BYTES } from '../constants/mail';
-import type { ConvertTarget } from '../types/drive';
-import { isConvertSource, isEmlFile, isFolderType, isIcsFile, isVCardFile } from '../types/drive';
+import { isFolderType } from '../types/drive';
+import type { ConvertTarget } from '../types/drive-convert';
+import { isConvertSource } from '../types/drive-convert';
+import { isEmlFile, isIcsFile, isVCardFile } from '../types/file-kinds';
 import type { FileAction, FileActionId, FileSubject, SubjectInfo } from '../types/file-subject';
 import { subjectInfo } from './file-subject';
 

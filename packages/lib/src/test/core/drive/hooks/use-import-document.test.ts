@@ -1,7 +1,7 @@
 // What a pptx left out reaches the user as one toast from the import hook, whichever way the file came in; an import
 // that lost nothing says nothing.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import type { DocumentImportOptions, ImportResult } from '@workspace/lib/types/drive';
+import type { DocumentImportOptions, ImportResult } from '@workspace/lib/types/drive-convert';
 import { renderHook } from '../../../render-hook';
 import {
     fetchCalls,

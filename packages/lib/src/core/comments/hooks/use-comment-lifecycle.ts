@@ -9,7 +9,7 @@ import { useCallback, useState } from 'react';
 import type * as Y from 'yjs';
 import type { CommentEntry } from '../../../types/chat';
 import type { CommentCard, CommentMapName } from '../../../types/comments';
-import type { EffectiveMember } from '../../../types/drive';
+import type { EffectiveMember } from '../../../types/drive-access';
 import { useAssignComment, useComments, useResolveComment } from '../../chat';
 import { useEffectiveMembers } from '../../drive';
 import { findCardIdByChatName } from '../find-card-id-by-chat-name';

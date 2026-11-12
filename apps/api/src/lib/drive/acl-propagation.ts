@@ -2,7 +2,8 @@
 // ACL names, hands the push to the relay, and sends the share emails. Drive calls it after an ACL
 // change.
 
-import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveACL, EffectiveMember } from '@workspace/lib/types/drive-access';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import { getServerSettings } from '../config/server-settings';
 import { sendToUserHomes } from '../home/home-relay';

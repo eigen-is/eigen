@@ -5,8 +5,10 @@
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
 import { subjectFromPath } from '@workspace/lib/file-subject';
-import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
-import { isDocumentType, isFolderType, isInlineEditable } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { isDocumentType, isFolderType } from '@workspace/lib/types/drive';
+import type { DriveCapabilities } from '@workspace/lib/types/drive-view';
+import { isInlineEditable } from '@workspace/lib/types/file-kinds';
 import { useLayout } from '../layout/app/layout-context';
 import { usePreview } from '../preview-provider';
 import { useDriveQuickLook } from './use-drive-quick-look';

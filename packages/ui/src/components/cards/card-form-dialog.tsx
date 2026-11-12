@@ -1,6 +1,6 @@
 import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
-import type { EffectiveMember } from '@workspace/lib/types/drive';
+import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import { Dialog, DialogContent } from '@workspace/ui/components/dialog';
 import { CardForm } from './card-form';
 

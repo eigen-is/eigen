@@ -3,13 +3,13 @@
 // team too. Drive methods such as getEffectiveMembers and inviteToChat call these, and the routes reach those
 // through SharedDrive.
 
+import type { DrivePath } from '@workspace/lib/types/drive';
 import type {
     DriveAccessCheckResult,
     DriveAccessRecipient,
-    DrivePath,
     EffectiveMember,
     InviteResult,
-} from '@workspace/lib/types/drive';
+} from '@workspace/lib/types/drive-access';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { getServerSettings } from '../config/server-settings';

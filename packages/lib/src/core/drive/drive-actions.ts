@@ -18,8 +18,9 @@ import {
     UserRoundPlus,
 } from 'lucide-react';
 import { DELETE_HOTKEY } from '../../constants/hotkeys';
-import { exportFormatsFor, isOpenable } from '../../types/drive';
+import { exportFormatsFor } from '../../types/drive';
 import type { DriveAction, DriveActionSubject } from '../../types/drive-actions';
+import { isOpenable } from '../../types/file-kinds';
 import { getDriveItemUrl } from '../api';
 
 const one = ({ items }: DriveActionSubject) => items.length === 1;

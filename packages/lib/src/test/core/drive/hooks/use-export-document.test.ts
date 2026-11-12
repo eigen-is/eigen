@@ -1,7 +1,7 @@
 // A download from the export route saves the file, then says what the file left out, which the route sends in a header
 // beside the bytes; a file that lost nothing says nothing, and a failed download toasts only its error.
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { EXPORT_SUMMARY_HEADER } from '../../../../types/drive';
+import { EXPORT_SUMMARY_HEADER } from '../../../../types/drive-convert';
 import { installHappyDom } from '../../../happy-dom';
 
 installHappyDom();

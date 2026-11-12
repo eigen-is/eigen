@@ -6,8 +6,9 @@
 import { useBreadcrumb, useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
-import type { DrivePath, DriveViewMode } from '@workspace/lib/types/drive';
-import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveViewMode } from '@workspace/lib/types/drive-view';
+import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive-view';
 import { Button } from '@workspace/ui/components/button';
 import {
     ChoiceMenuItems,

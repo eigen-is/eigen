@@ -9,7 +9,7 @@ import type {
     DrivePathPermissions,
     DriveVisibility,
     EffectiveMember,
-} from '@workspace/lib/types/drive';
+} from '@workspace/lib/types/drive-access';
 import type { ClientFileEventInput, FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';

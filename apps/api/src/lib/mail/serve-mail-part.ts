@@ -2,7 +2,7 @@
 // the download and embed routes, or the preview a route renders from them. It decides whether the browser
 // may keep the answer. The mail routes that serve messages, parts and their previews call it on every request.
 
-import { EML_MIME } from '@workspace/lib/types/drive';
+import { EML_MIME } from '@workspace/lib/types/file-kinds';
 import type { Attachment, EmailSummary } from '@workspace/lib/types/mail';
 import { mailAttachmentName } from '@workspace/lib/types/mail';
 import type { ElysiaCustomStatusResponse } from 'elysia';

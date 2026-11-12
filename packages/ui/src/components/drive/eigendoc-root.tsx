@@ -5,7 +5,7 @@
 import { Outlet } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useRootFolder } from '@workspace/lib/drive';
-import type { DriveContextType } from '@workspace/lib/types/drive';
+import type { DriveContextType } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { createContext } from 'react';

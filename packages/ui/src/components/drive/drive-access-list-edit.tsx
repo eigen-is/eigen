@@ -9,7 +9,8 @@ import { copyToClipboard } from '@workspace/lib/clipboard';
 import { useDriveAccess, useIsEffectiveOwner, useUpdateACL } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
-import type { DirectAccessItem, DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DirectAccessItem, DriveACL, DriveVisibility } from '@workspace/lib/types/drive-access';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import {

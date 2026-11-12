@@ -6,8 +6,9 @@
 import type { QueryClient, UseMutationResult } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { driveApi, getDriveAppUrl, openDocument } from '@workspace/lib/api';
-import type { DriveCopyDestination, DrivePath, EigenDocType } from '@workspace/lib/types/drive';
+import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPE_INFO, withEigenExtension } from '@workspace/lib/types/drive';
+import type { DriveCopyDestination } from '@workspace/lib/types/drive-convert';
 import { toast } from 'sonner';
 import { AppError, getErrorMessage, onMutationError } from '../../api-error';
 import { useAuth } from '../../auth';

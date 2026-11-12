@@ -22,7 +22,7 @@ import { useEmlPreview, useIcsPreview, useTextPreview, useVCardPreview } from '@
 import { NO_SUBJECT } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
+import { isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/file-kinds';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';

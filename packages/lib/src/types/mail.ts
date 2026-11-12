@@ -2,8 +2,8 @@
 // a send answer. The routes return them and the mail hooks read them.
 
 import type { ImipMethod } from './calendar';
-import { isIcsMime } from './drive';
 import type { AttachmentReference } from './drive-reference';
+import { isIcsMime } from './file-kinds';
 
 export type EmailAddress = {
     address?: string | undefined;

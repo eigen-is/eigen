@@ -3,8 +3,8 @@
 // assignComment call these. A change to the index writes the history and reaches every open tab of the document.
 
 import { CHATS_FOLDER_NAME } from '@workspace/lib/types/chat';
-import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER } from '@workspace/lib/types/drive';
+import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import { withCommentIndex } from '../chat';
 import { broadcastCommentIndexUpdated } from '../chat/sse-events';

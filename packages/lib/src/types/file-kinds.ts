@@ -30,7 +30,6 @@ const INLINE_EDITABLE_MIMES = new Set([
     'application/toml',
 ]);
 
-// The extensions that mark a code file. isInlineEditable reads them, and so does the 'code' preview mode.
 export const CODE_EXTENSIONS = new Set([
     '.json',
     '.yaml',
@@ -143,7 +142,8 @@ export const ICS_MIME = 'text/calendar';
 // The `accept` list for a file input that takes a calendar file, the twin of VCARD_ACCEPT.
 export const ICS_ACCEPT = `.ics,${ICS_MIME}`;
 
-// The media type an iCalendar byte stream is served under (CalDAV GET, PROPFIND getcontenttype, export).
+// The media type an iCalendar byte stream is served under. It names the charset, so a client that reads it
+// never has to guess the encoding of the text.
 export const ICS_CONTENT_TYPE = `${ICS_MIME}; charset=utf-8`;
 
 // A calendar body names its purpose in parameters, such as `text/calendar; method=REQUEST`, but a type that only

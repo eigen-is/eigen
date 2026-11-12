@@ -2,7 +2,7 @@
 // events itself. This file also sends the event for a document's changed comment index, for example
 // after a comment in the document is resolved.
 
-import type { EffectiveMember } from '@workspace/lib/types/drive';
+import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { SSEventChat } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { DriveLike } from '../drive/get-drive';

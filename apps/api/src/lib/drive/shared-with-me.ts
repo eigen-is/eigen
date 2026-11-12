@@ -4,8 +4,9 @@
 // file is the only one that reads or writes that table. Drive calls it with its shared database.
 
 import { shareTag } from '@workspace/lib/notification/tags';
-import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByType, isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { DriveACL } from '@workspace/lib/types/drive-access';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { and, eq } from 'drizzle-orm';

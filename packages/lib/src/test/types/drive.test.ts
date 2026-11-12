@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { DrivePath, YjsRootKind } from '../../types/drive';
-import { EIGEN_DOC_TYPE_INFO, isIcsFile, isInlineEditable, isVCardFile, sharedChainHead } from '../../types/drive';
+import { EIGEN_DOC_TYPE_INFO, sharedChainHead } from '../../types/drive';
+import { isIcsFile, isInlineEditable, isVCardFile } from '../../types/file-kinds';
 
 // Scans each collab app's source for Y.Doc root-type access and asserts the
 // referenced names are declared in EIGEN_DOC_TYPE_INFO[type].yjsRoots. Catches

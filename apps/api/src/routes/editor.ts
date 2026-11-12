@@ -3,7 +3,7 @@
 // because access goes through getSharedDrive. A save is guarded by the etag the read gave, and answers a conflict when
 // the file changed since.
 
-import type { EditorSaveResult, FileEditorContent } from '@workspace/lib/types/drive';
+import type { EditorSaveResult, FileEditorContent } from '@workspace/lib/types/file-kinds';
 import { Elysia, t } from 'elysia';
 import { getSharedDrive } from '../lib/drive';
 import { getEditableContent, saveEditableContent } from '../lib/drive/inline-edit';
