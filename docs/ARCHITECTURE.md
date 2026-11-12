@@ -73,10 +73,10 @@ A Drive feature usually touches all four layers:
 Route (thin handler)  →  SharedDrive (ACL wrapper)  →  Drive (business logic)  →  Mount (storage + DB)
 ```
 
-- **Mount** (`lib/mount/mount.ts`): storage and `metadata.db` of one mount over one of three backends; trash, copy, search and versioning are sibling modules ([STORAGE.md](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)).
+- **Mount** (`lib/mount/mount.ts`): storage and `metadata.db` of one mount over one of three backends; trash, copy, search, sizes, temp files and versioning are sibling modules ([STORAGE.md](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)).
 - **Drive** (`lib/drive/drive.ts`): the API over a Home's mounts, with ACL propagation, the collab document lifecycle, SSE and sharing.
 - **SharedDrive** (`lib/drive/shared-drive.ts`): the ACL-checking wrapper, by composition. `getSharedDrive()` returns the raw `Drive` for the caller's own drive and a `SharedDrive` for another owner's, so a `Drive` method without a wrapper is a type error at the route.
-- **Routes** (`routes/drive.ts`): thin handlers through `getSharedDrive`.
+- **Routes** (`routes/drive.ts` for the tree, with `drive-listings.ts`, `drive-sharing.ts` and `drive-content.ts` beside it): thin handlers through `getSharedDrive`.
 
 A few owner-only routes, such as `/shared/by-me`, call `requireSelf` and then `getDrive(user)`; other unwrapped Drive methods serve server code (collab, chat, the relay). A new route that needs one gets a `SharedDrive` wrapper, not this escape hatch.
 

@@ -22,6 +22,9 @@ import { collabRouter } from './routes/collab';
 import { contactsRouter } from './routes/contacts';
 import { demoRouter } from './routes/demo';
 import { driveRouter } from './routes/drive';
+import { driveContentRouter } from './routes/drive-content';
+import { driveListingsRouter } from './routes/drive-listings';
+import { driveSharingRouter } from './routes/drive-sharing';
 import { editorRouter } from './routes/editor';
 import { guestAuthRouter } from './routes/guest-auth';
 import { homeRouter } from './routes/home';
@@ -136,6 +139,9 @@ export const app = new Elysia({
     .use(publicRouter)
     .use(demoRouter)
     .use(driveRouter)
+    .use(driveListingsRouter)
+    .use(driveSharingRouter)
+    .use(driveContentRouter)
     .use(homeRouter)
     .use(collabRouter)
     .use(chatRouter)

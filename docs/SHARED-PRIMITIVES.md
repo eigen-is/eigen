@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2159 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2160 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -563,7 +563,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (449)
+## Types (450)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -693,6 +693,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveItemRef` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePath` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePathDetails` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DrivePathPermissions` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePathType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveSearchParams` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveSort` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
