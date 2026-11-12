@@ -974,7 +974,7 @@ export class Drive {
 
             let normalizedACL = normalizeACL(acl);
             if (normalizedACL) {
-                const { filtered } = filterRedundantACL(normalizedACL, item, ancestors);
+                const filtered = filterRedundantACL(normalizedACL, item, ancestors);
                 normalizedACL = filtered.length > 0 ? filtered : null;
             }
 
@@ -993,7 +993,7 @@ export class Drive {
                     });
                 }
             }
-            // The copies in the homes of the people it is shared with go last, the same as in renamePath.
+            // The copies in the homes of the people it is shared with go last, as they reach other homes.
             await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
         });
     }
@@ -1032,8 +1032,8 @@ export class Drive {
         return shared ? this.membersFromCrumbs(crumbs) : [];
     }
 
-    // Takes the breadcrumb of the path, so checkAccessForEmails can use the one it already has. A path
-    // in the trash is its owner's alone, so the ACLs of its chain let nobody else in until the restore.
+    // Takes the breadcrumb, so a caller that read one already reads no second. A path in the trash is its owner's
+    // alone, so the ACLs of its chain let nobody else in until the restore.
     private async membersFromCrumbs(crumbs: DrivePath[]): Promise<EffectiveMember[]> {
         const allACL = isTrashedChain(crumbs) ? [] : crumbs.flatMap((crumb) => crumb.acl ?? []);
 
@@ -1117,7 +1117,7 @@ export class Drive {
     }
 
     // Gives someone access to a chat: a chat inside a document shares the document, whose ACL is the one that counts.
-    // SharedDrive passes the path it checked, so a move in between can't share a document nobody checked.
+    // A checked target is shared as it is, so a move in between can't share a document nobody checked.
     public async inviteToChat(
         mountId: string,
         chatId: string,
@@ -1419,8 +1419,8 @@ export class Drive {
         return (await this.getWatchedBreadcrumbs(user)).flatMap((crumbs) => crumbs.slice(-1));
     }
 
-    // The breadcrumb of every path the user watches, with the path itself last. A path that no longer
-    // exists has an empty breadcrumb. SharedDrive needs the whole breadcrumb to check read access.
+    // The breadcrumb of every path the user watches, with the path itself last, so read access can be checked on it.
+    // A path that no longer exists has an empty breadcrumb.
     public async getWatchedBreadcrumbs(user: User): Promise<DrivePath[][]> {
         const crumbs: DrivePath[][] = [];
         for (const mount of this.mounts.values()) {
@@ -1451,8 +1451,8 @@ export class Drive {
         return this.getMount(mountId).holdDatabase(config, pathId);
     }
 
-    // Creates the database files of a new document, such as its data.db and comments.db. When one
-    // fails, the rows created so far are removed again, for the same reason Drive.create removes its row.
+    // Creates the database files of a new document, such as its data.db and comments.db. When one fails, the rows
+    // created so far are removed again, or they would take their names and fail every open.
     public async provisionManagedDbs(
         mountId: string,
         parentId: string,

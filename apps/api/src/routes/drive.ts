@@ -268,7 +268,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/convert/:targetType',
         async ({ params, request, user, server }): Promise<DrivePath> => {
-            // The same as the export route: it sends nothing while the job waits and runs.
+            // It sends nothing while the job waits and runs, which can outlast the idle timeout.
             server?.timeout(request, 0);
             const { targetType } = params;
             if (!isConvertTarget(targetType)) {
@@ -288,7 +288,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/import',
         async ({ params, query, request, user, server }): Promise<ImportResult> => {
-            // The same as the export route: it sends nothing while the job waits and runs.
+            // It sends nothing while the job waits and runs, which can outlast the idle timeout.
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { path } = await drive.resolveFile(params.mountId, params.pathId);
@@ -317,7 +317,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/import-from-drive',
         async ({ params, body, request, user, server }): Promise<ImportResult> => {
-            // The same as the export route: it sends nothing while the job waits and runs.
+            // It sends nothing while the job waits and runs, which can outlast the idle timeout.
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { path } = await drive.resolveFile(params.mountId, params.pathId);
@@ -604,8 +604,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/request-access',
         async ({ params, user, body }) => {
-            // A guest can't be given a share, so there is nothing to request, the same as on the other
-            // share routes.
+            // A guest can't be given a share, so there is nothing to request.
             requireNonGuest(user);
             // This skips SharedDrive on purpose, since the caller has no access yet. propagateAccessRequest only
             // notifies the owner through the home relay and never reads the path for the requester.

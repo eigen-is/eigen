@@ -1,10 +1,8 @@
 // Who may read or write a Drive path, decided from the chain of folders above it, and what else that chain says,
-// such as whether the path is in the trash or inside a document. SharedDrive asks this before every call it passes
-// on, Drive before each write a person makes, and the watcher fan-out before each notification. The helpers that
-// merge, normalize and trim an ACL before Drive saves it live here too.
+// such as whether the path is in the trash or inside a document. Every access check reads it, such as SharedDrive's
+// before a call it passes on. The helpers that merge, normalize and trim an ACL before Drive saves it live here too.
 
 import { CONTAINER_CHAT_FOLDER, CONTAINER_MEDIA_FOLDER } from '@workspace/lib/constants/container';
-import { parseOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DriveACLDelta, DrivePath, DrivePathType, DriveVisibility } from '@workspace/lib/types/drive';
 import {
     DRIVE_TYPE_CHAT,
@@ -13,6 +11,7 @@ import {
     isCollabType,
     isDocumentType,
 } from '@workspace/lib/types/drive';
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { ApiError } from '../core';
 import type { Memberships, User } from '../user';
@@ -147,13 +146,12 @@ export function findContainerFromAncestors(ancestors: readonly DrivePath[]): Dri
     return ancestors.findLast((path) => isCollabType(path.type)) ?? null;
 }
 
-// Splits an ACL into the entries worth storing and the ones an ancestor's ACL (or team
-// ownership of the drive) already grants.
+// The entries of an ACL worth storing: those neither an ancestor's ACL nor the team that owns the drive grants.
 export function filterRedundantACL(
     acl: readonly DriveACL[],
     path: DrivePath,
     ancestors: readonly DrivePath[],
-): { filtered: DriveACL[]; removed: DriveACL[] } {
+): DriveACL[] {
     const inherited = new Map<string, { read: boolean; write: boolean }>();
 
     // Breadcrumbs include the path itself; without the skip every entry would cover itself.
@@ -166,17 +164,11 @@ export function filterRedundantACL(
     }
 
     const ownerParsed = parseOwnerId(path.ownerId);
-
-    const filtered: DriveACL[] = [];
-    const removed: DriveACL[] = [];
-
-    for (const entry of acl) {
+    return acl.filter((entry) => {
         const entryParsed = parseOwnerId(entry.id);
         const ownTeam = ownerParsed.type === 'team' && entryParsed.type === 'team' && entryParsed.id === ownerParsed.id;
         const granted = inherited.get(canonicalACLId(entry.id));
         const covered = granted !== undefined && (!entry.read || granted.read) && (!entry.write || granted.write);
-        (ownTeam || covered ? removed : filtered).push(entry);
-    }
-
-    return { filtered, removed };
+        return !ownTeam && !covered;
+    });
 }

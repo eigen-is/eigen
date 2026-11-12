@@ -1,6 +1,6 @@
 // The WebDAV handlers' URL paths: what a request names and what an answer's hrefs name. A request path is
-// decoded and split here before it is resolved in the drive, and PROPFIND and PROPPATCH build the hrefs they
-// answer with mountHref, under the base path the public proxy serves the API at.
+// decoded and split here before it is resolved in the drive, and a multistatus answer, such as PROPFIND's, builds
+// its hrefs with mountHref, under the base path the public proxy serves the API at.
 
 import { getApiBasePath } from '../config/env';
 import { ApiError } from '../core/errors';

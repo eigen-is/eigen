@@ -80,8 +80,8 @@ export class Mount {
     // Only an s3 mount has an upload queue. It takes staged copies, such as document databases, to the
     // bucket in the background.
     public uploadQueue?: UploadQueue;
-    // init builds the reindex queue only when Drive passes a content extractor. The extractor is
-    // passed in so the document loaders stay out of this module's imports.
+    // Built by init only when a content extractor is passed in, which keeps the document loaders out of this
+    // module's imports.
     public reindexQueue?: ContentReindexQueue;
 
     // Aborted at teardown, so no close or Home shutdown waits on a download, an extraction read or the
@@ -210,8 +210,8 @@ export class Mount {
             this.reindexQueue.kick();
         }
 
-        // A temp file older than an hour is left over from an interrupted upload or a crash. An open
-        // document's crash-recovery copy stays (see cleanupStaleFiles).
+        // A temp file older than an hour is left over from an interrupted upload or a crash. A document's
+        // crash-recovery copy stays.
         this.cleanupStaleFiles(this.tmpDir, 60 * 60 * 1000, true);
         this.cleanupStaleFiles(this.previewsDir, 7 * 24 * 60 * 60 * 1000);
 
@@ -264,8 +264,7 @@ export class Mount {
             updatedAt: new Date(),
         });
 
-        // Only a user's default drive starts with a chats folder. Other mounts get one when they first
-        // need it (Drive.ensureChatsFolder).
+        // Only a user's default drive starts with a chats folder. Other mounts get one when a first chat needs it.
         if (this.config.isDefault && parseOwnerId(this.ownerId).type === 'user') {
             await this.createFolder(rootId, CHATS_FOLDER_NAME);
         }
@@ -337,8 +336,7 @@ export class Mount {
         return row ? this.toDrivePath(row) : null;
     }
 
-    // These two read synchronously, so withFreeName can check a name and reserve it with no await in
-    // between.
+    // These two read synchronously, so a create can check a name and reserve it with no await in between.
     public hasLiveChild(parentId: string, name: string): boolean {
         return this.findLiveChild(parentId, name.normalize('NFC')) !== null;
     }
@@ -370,8 +368,7 @@ export class Mount {
         return current;
     }
 
-    // A copy into its own subtree is refused with this check. A move checks inside the transaction of
-    // its row write (assertMovableInTx).
+    // A copy into its own subtree is refused with this check. A move checks inside the transaction of its row write.
     public async isSelfOrDescendant(ancestorId: string, candidateId: string): Promise<boolean> {
         if (ancestorId === candidateId) return true;
         let current = await this.getPath(candidateId);
@@ -992,8 +989,8 @@ export class Mount {
 
     // ---- Overwriting ----
 
-    // Overwrites from a temp file whose size and hash are known already (writeTempWithHash), so nothing hashes
-    // the bytes twice. Answers the row it committed under the lock, never a later write's etag or updatedAt.
+    // Overwrites from a temp file whose size and hash are known already, so nothing hashes the bytes twice. Answers
+    // the row it committed under the lock, never a later write's etag or updatedAt.
     public async writeFileFromTemp(
         pathId: string,
         tempId: string,
@@ -1075,7 +1072,7 @@ export class Mount {
         });
     }
 
-    // The plain download, with no look at the staged copy. Its callers look at that first.
+    // The plain download, with no look at the staged copy, which a caller looks at first.
     public async downloadKeyToTemp(storageKey: string, tempId: string): Promise<string> {
         const start = Bun.nanoseconds();
         const tempPath = this.getTempPath(tempId);
@@ -1355,10 +1352,7 @@ export class Mount {
 }
 
 function locksFor(folder: string): FolderLocks {
-    let locks = folderLocks.get(folder);
-    if (!locks) {
-        locks = { paths: new Map(), tree: new RWLock() };
-        folderLocks.set(folder, locks);
-    }
+    const locks = folderLocks.get(folder) ?? { paths: new Map(), tree: new RWLock() };
+    folderLocks.set(folder, locks);
     return locks;
 }

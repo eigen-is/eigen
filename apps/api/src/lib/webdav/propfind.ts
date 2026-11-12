@@ -88,7 +88,8 @@ function deadPropsXml(path: DrivePath): string[] {
         if (dp.ns === DAV_NAMESPACES.D) return `<D:${safeName}>${safeValue}</D:${safeName}>`;
         // The xml prefix is bound already and its namespace may be declared on no other name.
         if (dp.ns === XML_NAMESPACE) return `<xml:${safeName}>${safeValue}</xml:${safeName}>`;
-        // The prop's namespace is its default: no prefix to pick, and XML content declares its own bindings, xmlns="" too.
+        // The prop's namespace is its default, so there is no prefix to pick. XML content declares its own bindings,
+        // xmlns="" too.
         return `<${safeName} xmlns="${escapeXml(dp.ns)}">${safeValue}</${safeName}>`;
     });
 }

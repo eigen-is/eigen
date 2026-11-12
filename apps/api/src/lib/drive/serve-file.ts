@@ -1,6 +1,6 @@
 // Answers a request for the bytes of one Drive file: the headers, a conditional 304, a byte range or the
-// whole body. The download and embed routes call serveFile once SharedDrive has checked access. It also
-// owns the name a file leaves Drive under, which a mail attachment taken from Drive uses too.
+// whole body. A route, such as a download, calls serveFile once SharedDrive has checked access. It also
+// owns the name a file leaves Drive under, such as an attachment's when mail takes a file from Drive.
 
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';

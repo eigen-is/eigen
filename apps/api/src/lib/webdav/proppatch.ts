@@ -50,7 +50,8 @@ export async function handleProppatch(args: {
     await assertWritable(drive, mountId, path.id, ifHeader, user.id);
 
     const ops = extractPropOps(body);
-    // Only a set is refused in the xml namespace (reserved) or on a no-namespace live name (read as the live one); a remove runs, so a stored row can go.
+    // A live DAV name is refused either way. A set in the reserved xml namespace, or of a live name in no namespace,
+    // which reads as the live one, is refused too, but its remove runs, so a stored row can go.
     const isProtected = ({ op, prop }: PropOp) =>
         (PROTECTED_PROPS.has(prop.name) && prop.ns === DAV) ||
         (op === 'set' && (prop.ns === XML_NAMESPACE || (prop.ns === '' && PROTECTED_PROPS.has(prop.name))));
@@ -79,7 +80,7 @@ export async function handleProppatch(args: {
         }
         if (mutated) {
             await drive.updatePathDetails(mountId, path.id, {
-                ...(path.details ?? {}),
+                ...path.details,
                 webdavProps: webdavProps.length === 0 ? undefined : webdavProps,
             });
         }

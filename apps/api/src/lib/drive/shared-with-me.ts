@@ -102,8 +102,8 @@ export async function listSharedWithMe(sharedDb: SharedDb): Promise<DrivePath[]>
     return (await dropRowsOfDeletedOwners(sharedDb, rows)).map(sharedRowToDrivePath);
 }
 
-// The owners who shared at least one path with this home. The Watched view asks each of them for
-// the user's watched paths, so it doesn't have to load every shared path first.
+// The owners who shared at least one path with this home, so a view across owners, such as Watched, asks only
+// them instead of loading every shared path first.
 export function listSharedOwnerIds(sharedDb: SharedDb): string[] {
     const rows = sharedDb
         .selectDistinct({ ownerId: sharedSchema.sharedPaths.ownerId })

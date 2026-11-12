@@ -50,7 +50,7 @@ export class SharedDrive {
     }
 
     // The whole chain, not only what the caller can read: a lock on a folder above a share holds for the sharee too.
-    // Ids alone name nothing, and the WebDAV handlers only look up locks by them.
+    // Ids alone name nothing, and only a lock lookup uses them.
     public async ancestorIds(mountId: string, pathId: string): Promise<string[]> {
         await this.requireRead(mountId, pathId);
         return this.drive.ancestorIds(mountId, pathId);

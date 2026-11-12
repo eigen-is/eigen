@@ -1,8 +1,7 @@
 // Deletes the parts of a document that its current state does not name, such as an image deleted from a doc or the
-// thread of a deleted comment. Nothing runs it on its own: Delete history runs it once the versions are gone, and a
-// copy runs it on each document it copied. Inside each thread it keeps, a file no message names goes too. A part
-// younger than the grace stays, a file by its upload and a thread by its last write, because an upload lands before
-// the edit that names it. A copy deletes only parts it wrote itself. A failure is logged and deletes nothing more.
+// thread of a deleted comment. It runs only when a change asks for it, such as Delete history or a copy. Inside each
+// thread it keeps, a file no message names goes too. A part younger than the grace stays, because an upload lands
+// before the edit that names it. A copy deletes only parts it wrote itself. A failure is logged and deletes no more.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_CHAT, DRIVE_TYPE_FILE, isCollabType } from '@workspace/lib/types/drive';
@@ -82,15 +81,16 @@ async function sweepParts(
     }
 
     const unnamedFiles = files.filter((file) => isOld(file) && !keptFiles.has(foldName(file.name)));
+    const gone = [...unnamedFiles, ...idleThreads];
     // One at a time, so a failure deletes nothing more after it.
-    for (const path of [...unnamedFiles, ...idleThreads]) await mount.deletePath(path.id);
+    for (const path of gone) await mount.deletePath(path.id);
     // A row goes once its thread is gone, as one still there would lose its status and its assignee.
     if (chat) {
         await withCommentIndex(drive, document.mountId, document.id, async (index) =>
             index.deleteRowsWithoutThread(new Set(mount.liveChildNames(chat.id).map(foldName))),
         );
     }
-    const freed = [...unnamedFiles, ...idleThreads].reduce((sum, path) => sum + path.size, 0);
+    const freed = gone.reduce((sum, path) => sum + path.size, 0);
     if (freed > 0) {
         console.log(
             `[sweep] ${document.id}: deleted ${unnamedFiles.length} files, ${idleThreads.length} threads, ${freed} bytes`,

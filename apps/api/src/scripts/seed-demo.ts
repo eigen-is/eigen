@@ -33,6 +33,7 @@ import MailComposer from 'nodemailer/lib/mail-composer';
 import * as Y from 'yjs';
 import type { Drive } from '../lib/drive';
 import { textToHtml } from '../lib/mail/mail-parser/html';
+import { CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB } from '../lib/mount/container-dbs';
 import { writeTempWithHash } from '../lib/storage';
 import type { User } from '../lib/user';
 import type { LeadRole, MailAttachment, SeededInvite, SeededMail, VCardSpec } from './demo/content';
@@ -485,8 +486,8 @@ async function main(): Promise<void> {
         teamDocs.set('crew roster', docPath);
     }
 
-    // Fixture files into a container's media/ folder (CollabDocument.create makes it), where a doc's figures and a
-    // canvas's images find them by name, so the document stays whole.
+    // Fixture files into a container's media/ folder, where a doc's figures and a canvas's images find them by name,
+    // so the document stays whole.
     const uploadMedia = async (
         drive: Drive,
         mountId: string,
@@ -604,14 +605,13 @@ async function main(): Promise<void> {
         await seedBuiltContainer(BUDGET, 'sheets', [], (doc) => buildWorkbookDoc(doc, BUDGET.sheets)),
     );
 
-    // --- Stickies: a byte copy of the committed fixture container, its data.db and comments.db. A container finds
-    // its parts by name, never by path id, so the copy works. No person writes inside a document, so the parts go in
-    // through the mount. The board's creators and colors are patched below. ---
+    // --- Stickies: a byte copy of the fixture's databases. A container finds its parts by name, so the copy works,
+    // and they go in through the mount, as no person writes inside a document. ---
     const boardAuthor = userForRole('production');
     const boardFolderId = lookup(folderId, KANBAN.folder);
     const { mount: teamMount } = await teamDrive.resolveFile(teamMountId, boardFolderId);
     const boardId = await teamMount.createFolder(boardFolderId, `${KANBAN.name}.eigenstickies`, 'stickies');
-    for (const dbName of ['data.db', 'comments.db']) {
+    for (const dbName of [CONTAINER_DATA_DB, CONTAINER_COMMENTS_DB]) {
         const tempId = crypto.randomUUID();
         const bytes = readFileSync(join(FIXTURES_DIR, 'festival-kanban.eigenstickies', dbName));
         const { size, hash } = await writeTempWithHash(teamMount.getTempPath(tempId), bytes);

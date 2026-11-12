@@ -36,13 +36,11 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
         chainRootIds: [item.parentId],
         verifyAncestors: preTrashChain,
     });
-    // Nobody waits for it, the same as in Drive.recordFileEvent.
+    // Nobody waits for it, so a failed broadcast never fails the trash.
     broadcastFileHistoryUpdated(item.ownerId, item, members).catch(() => {});
 
-    // The sharing goes last, the same as in Drive.renamePath. It goes only once the trash is in, so a
-    // trash that fails leaves it as it was. The rows keep their ACL in the trash, so the walk below
-    // still finds every entry. Drive.deletePath holds the item's ACL chain, so the item's own push
-    // goes out directly.
+    // The sharing goes last, as it reaches other homes, and only once the trash is in. The rows keep their ACL in
+    // the trash, so the walk below finds every entry, and the item's ACL chain is held, so its own push goes directly.
     if (trashedItem.acl) await propagateSharedPathChange(trashedItem, trashedItem.acl, null, user);
     if (isContainerType(item.type)) await pushSharingBelow(drive, mount, item.id, 'trashed', user);
 }
@@ -53,7 +51,7 @@ export async function restorePath(drive: Drive, mount: Mount, pathId: string, us
     // recordFileEvent reads the path again, so it walks the parent chain of the restored path.
     await drive.recordFileEvent(mount.id, pathId, user, { eventType: 'restored' });
 
-    // The sharing comes back last, the same as in Drive.renamePath, and nobody gets an email again.
+    // The sharing comes back last, as it reaches other homes, and nobody gets an email again.
     await drive.pushSharing(mount.id, pathId, 'live', user);
     if (isContainerType(restoredItem.type)) await pushSharingBelow(drive, mount, restoredItem.id, 'live', user);
 }
