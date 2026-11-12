@@ -146,7 +146,7 @@ single-process path.
 
 ### Modified: `../../apps/api/src/lib/home/home-relay.ts`
 
-With the [outbox](PROPOSAL_HOME_RELAY_OUTBOX.md#one-function-decides-where-a-push-goes) built, the wrapper below is its `deliver` function, `sendToHome()` only writes the row, and the `fetch` must throw on a non-2xx answer so the row retries, unless the answer says the target is gone, which `deliver` reports by returning false.
+With the [outbox](PROPOSAL_HOME_RELAY.md#7-sharding-later) built, the wrapper below is its `deliver` function, `sendToHome()` only writes the row, and the `fetch` must throw on a non-2xx answer so the row retries, unless the answer says the target is gone, which `deliver` reports by returning false.
 
 The existing `sendToHome()` switch statement is extracted into `dispatchToLocalHome()` (exported,
 used by internal endpoints). `sendToHome()` wraps it with the cluster routing:
