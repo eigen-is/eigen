@@ -152,7 +152,9 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
             const number = typeof value === 'number' ? value : toNumber(value);
             if (typeof number !== 'number') return number;
             if (param.read === Read.Integer) return Math.trunc(number);
-            return number < 0 || number > LAST_SERIAL ? NUM : Math.floor(number);
+            // Cut before the bound is tested: a time on the last day is still a date.
+            const day = Math.floor(number);
+            return day < 0 || day > LAST_SERIAL ? NUM : day;
         }
         case Read.Text:
             return toText(value);
