@@ -6,6 +6,7 @@
 // focus ring if a pointer opened it.
 
 import { useIsMobile } from '@workspace/lib/media';
+import { handFocusReturnTo } from '@workspace/ui/hooks/use-focus-return';
 import { cn } from '@workspace/ui/lib/utils';
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, MinusIcon } from 'lucide-react';
 import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui';
@@ -22,7 +23,6 @@ import {
     useRef,
     useState,
 } from 'react';
-import { returnFocusTo } from '../hooks/use-focus-return';
 
 // After a drill-in transition, which row takes focus: the opened page's back row
 // ('back', on push) or the sub-trigger a pop returned to ('trigger', on pop).
@@ -229,7 +229,10 @@ function DropdownMenuContent({
                     triggerFocus.state.current = { ...NO_TRIGGER_FOCUS };
                     if (event.defaultPrevented || !trigger?.isConnected || keepsFocusOutside) return;
                     event.preventDefault();
-                    returnFocusTo(trigger, !byPointer);
+                    // Only a dialog keeps the focus from the trigger. A list that took it from the page body as the
+                    // menu left the page, as Drive's does, gives it up.
+                    if (handFocusReturnTo(trigger, !byPointer)) return;
+                    trigger.focus(byPointer ? { focusVisible: false } : undefined);
                 }}
                 className={cn(
                     'bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md',
