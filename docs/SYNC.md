@@ -69,7 +69,7 @@ Which failure answers 410 and which 503 is in [STORAGE.md](STORAGE.md#a-gone-obj
 
 ## Reads serve the staged copy first
 
-A pending staged copy holds bytes newer than the stored object, so every read on the mount serves it first: `readKey`, `readRange` and `downloadToTemp` (`apps/api/src/lib/mount/mount.ts`). `downloadKeyToTemp` is the raw GET that skips it, and both its callers look at the staged copy before they call it: `downloadToTemp`, and a document open, which looks at the crash temp, then the staged copy, then the object. So a reopen, a copy, a copy across mounts and a backup read the newest bytes during an outage, never a stale or missing object.
+A pending staged copy holds bytes newer than the stored object, so every read on the mount serves it first: `readKey` and `readRange` (`apps/api/src/lib/mount/mount.ts`) and `downloadToTemp` (`apps/api/src/lib/mount/temp-files.ts`). `downloadKeyToTemp` is the raw GET that skips it, and both its callers look at the staged copy before they call it: `downloadToTemp`, and a document open, which looks at the crash temp, then the staged copy, then the object. So a reopen, a copy, a copy across mounts and a backup read the newest bytes during an outage, never a stale or missing object.
 
 ## Version snapshots are queued too
 
