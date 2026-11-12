@@ -25,9 +25,10 @@ export type RecalcResult = {
     readonly stopped: boolean;
 };
 
-// How deep cells and tree nodes may nest, together, before the calls in progress are dropped. A cell counts CELL
-// on top of its nodes, since reading it takes more calls than a node does, and a worker's stack is small.
-const BUDGET = 400;
+// How much of the stack the cells in progress may take together, in the units a shape's depth is counted in, before
+// the calls in progress are dropped: half of the smallest stack the engine is run on. A cell counts CELL on top of
+// its shape, for the calls that reading it takes.
+const BUDGET = 640;
 const CELL = 6;
 
 const UNWIND = Object.freeze({ reason: 'the evaluation nests too deep' });
