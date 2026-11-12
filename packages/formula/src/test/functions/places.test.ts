@@ -115,6 +115,22 @@ describe('the clock and the draw come from the pass', () => {
         expect(valueAt(engine, 'A2')).toBe(6);
     });
 
+    test('a recalc after any write computes what draws and what reads it, and a recalc after none computes nothing', () => {
+        const engine = engineOf({ s1: { A1: '=RAND()', A2: '=A1+1', A3: '=A2*2', A4: '=NOW()', C1: 1 } });
+        engine.recalc(Number.POSITIVE_INFINITY, 100, 1);
+        const first = Number(valueAt(engine, 'A1'));
+        expect(valueAt(engine, 'A3')).toBe((first + 1) * 2);
+        engine.recalc(Number.POSITIVE_INFINITY, 200, 2);
+        expect(valueAt(engine, 'A1')).toBe(first);
+        expect(valueAt(engine, 'A4')).toBe(100);
+        engine.setValue('s1', 0, 2, 2);
+        engine.recalc(Number.POSITIVE_INFINITY, 300, 3);
+        const second = Number(valueAt(engine, 'A1'));
+        expect(second).not.toBe(first);
+        expect(valueAt(engine, 'A3')).toBe((second + 1) * 2);
+        expect(valueAt(engine, 'A4')).toBe(300);
+    });
+
     // No function of this build draws and takes a value, so this test hands the recalc a row that does.
     test('a row that draws is called for every written element of an array, another row once per run', () => {
         let calls = 0;

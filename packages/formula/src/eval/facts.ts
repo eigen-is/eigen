@@ -1,6 +1,6 @@
 // What a shape's tree says about every cell that holds it, worked out from the tree and the function list alone,
-// without evaluating: whether this build can evaluate it at all, whether it reads cells it does not name, and how
-// much of the stack its evaluation can take. They are packed into one number, the depth above the flags.
+// without evaluating: whether this build can evaluate it at all, whether it reads cells it does not name or draws,
+// and how much of the stack its evaluation can take. They are packed into one number, the depth above the flags.
 
 import type { Registry } from '../functions/registry';
 import { Token } from '../text/lexer';
@@ -13,7 +13,10 @@ export const Fact = {
     Kept: 1,
     // A call of a row that picks another row, such as SUBTOTAL: an outer such call passes the cell over.
     Chosen: 2,
+    // Cells that the tree does not name may be read, so a write anywhere can change the answer.
     ReadsUnnamed: 4,
+    // The answer differs from one recalc to the next with nothing written: a draw, or the clock.
+    Volatile: 8,
 } as const;
 
 export const FACT_BITS = 8;
@@ -53,8 +56,8 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
     }
     const entry = node.kind === NodeKind.Call ? functions.get(node.text) : undefined;
     if (entry !== undefined && entry.chosen !== null) flags |= Fact.Chosen;
-    // An answer that differs from pass to pass, or cells that no argument names, must be computed in every pass.
-    if (entry !== undefined && (entry.volatile || entry.returns === ANYWHERE)) flags |= Fact.ReadsUnnamed;
+    if (entry?.volatile) flags |= Fact.Volatile;
+    if (entry?.returns === ANYWHERE) flags |= Fact.ReadsUnnamed;
     // A range that takes its size from another names cells of its own only when the two are of one size.
     if (entry !== undefined && entry.matched > entry.where && entry.matched < node.children.length) {
         if (!sameSize(node.children[entry.where], node.children[entry.matched])) flags |= Fact.ReadsUnnamed;

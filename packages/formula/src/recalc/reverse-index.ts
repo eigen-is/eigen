@@ -48,6 +48,8 @@ export class ReverseIndex {
     private levels: number[][] = [];
     // The rectangles whose shape reads cells its references do not name: sheet, first and last column and row.
     private unnamed: number[] = [];
+    // The rectangles whose shape draws or reads the clock, as the ones above. No marking flags them.
+    public volatile: readonly number[] = [];
     // The spans a marking has still to follow: sheet, column, first and last row.
     private work: number[] = [];
     // What a marking wrote here and puts back before it returns: the sheet, place and old value of each `REACH`
@@ -98,11 +100,14 @@ export class ReverseIndex {
         // Per sheet, what each entry reads of it: first and last row, first and last column, and the entry.
         const areas: number[][] = sheets.map(() => []);
         this.unnamed = [];
+        const volatile: number[] = [];
+        this.volatile = volatile;
         for (let r = 0; r < rectangles.length; r += 6) {
             const s = rectangles[r];
             const id = rectangles[r + 5];
             if (facts[id] & Fact.Kept) continue;
             if (facts[id] & Fact.ReadsUnnamed) this.unnamed.push(...rectangles.slice(r, r + 5));
+            if (facts[id] & Fact.Volatile) volatile.push(...rectangles.slice(r, r + 5));
             for (const ref of shapes.shape(id).refs) {
                 const { op, sheetKind, flags } = ref;
                 const target =
