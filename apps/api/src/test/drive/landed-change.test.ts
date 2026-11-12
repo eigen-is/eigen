@@ -209,18 +209,6 @@ describe('a change that has landed', () => {
         return (await home.drive.getFileHistory(mount.id, pathId)).map((event) => event.eventType);
     }
 
-    test('a rename of a shared path reaches the open tabs and the history when the share copies fail', async () => {
-        const file = await sharedFile('landed-rename.txt');
-
-        const { events, error } = await failingPropagation(() =>
-            home.drive.renamePath(mount.id, file.id, 'landed-renamed.txt', alice),
-        );
-
-        expect(error).toBeInstanceOf(Error);
-        expect(events).toContain(SSEventType.DRIVE_PATH_RENAMED);
-        expect(await historyOf(file.id)).toContain('renamed');
-    });
-
     test('a rename that changes the type answers, reaches the open tabs and the history when the bytes cannot be read', async () => {
         const file = await home.drive.createFileFromData(
             mount.id,
@@ -249,7 +237,7 @@ describe('a change that has landed', () => {
         }
     });
 
-    test('a sharing change reaches the open tabs and the history when the share copies fail', async () => {
+    test('a sharing change reaches the open tabs and the history when the push to the sharees fails', async () => {
         const file = await sharedFile('landed-share.txt');
 
         const { events, error } = await failingPropagation(() =>
@@ -266,17 +254,6 @@ describe('a change that has landed', () => {
         expect(error).toBeInstanceOf(Error);
         expect(events).toContain(SSEventType.DRIVE_ACL_UPDATED);
         expect(await historyOf(file.id)).toContain('acl-changed');
-    });
-
-    test('a restore of a shared path reaches the open tabs and the history when the share copies fail', async () => {
-        const file = await sharedFile('landed-restore.txt');
-        await home.drive.deletePath(mount.id, file.id, alice);
-
-        const { events, error } = await failingPropagation(() => home.drive.restorePath(mount.id, file.id, alice));
-
-        expect(error).toBeInstanceOf(Error);
-        expect(events).toContain(SSEventType.DRIVE_PATH_RESTORED);
-        expect(await historyOf(file.id)).toContain('restored');
     });
 
     test('a failed fan-out leaves the new file its temp file until the thumbnail job is done', async () => {

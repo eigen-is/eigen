@@ -95,7 +95,7 @@ The Users page (`GET /settings/users`) lists org members **and** orphans, non-gu
 3. Cleans the share registry: the entries the user created always, the entries addressed to the user only for a non-guest, so a guest who signs in again gets the same shares back ([GUEST-ACCESS.md](GUEST-ACCESS.md#the-share-registry-is-a-durable-record-not-a-queue))
 4. Removes the auth rows that reference the user (org and team memberships, 2FA, API keys) through `authDeleteUserReferences`. The deletion is explicit because SQLite's CASCADE does nothing with `PRAGMA foreign_keys` off, and a leftover member row 500s `listMembers` org-wide.
 
-The teardown reaches into no other home. A recipient's **Shared with me** rows go at their next listing ([ACL.md](ACL.md#a-deleted-owners-rows-leave-at-the-recipients-next-listing)), and ACL entries naming the user stay on other owners' paths ([ACL.md](ACL.md#an-acl-entry-naming-a-deleted-person-stays)).
+The teardown reaches into no other home. A recipient's **Shared with me** rows stay and list nothing ([ACL.md](ACL.md#shared-with-me-reads-each-path-from-its-owner)), and ACL entries naming the user stay on other owners' paths ([ACL.md](ACL.md#an-acl-entry-naming-a-deleted-person-stays)).
 
 Every entry point funnels through better-auth's `deleteUser` (sessions and accounts, then the user row, with the hook firing before the user row goes):
 
@@ -111,7 +111,7 @@ The guards hold on both routes. The Eigen route has `requireAdmin`, a 400 for yo
 
 `teardownTeamData` (`apps/api/src/lib/team/delete-team.ts`) runs from the `organizationHooks.beforeDeleteTeam` hook in `auth.ts`, while the team row still exists. The hook first refuses the default team (`defaultTeamId`) with a 403: its drive is the org-wide one every member joins, and the teardown can't be undone. The admin team detail hides its bin and says why, by comparing the team with the public config's `defaultTeamId`, so the 403 only meets a caller outside the app. It runs `deleteHomeData` on the team's home (`data/team/{teamId}/`), so the team's folder, its safety copies and every object its `s3` drives name go as a user's do, and a busy job slot answers 409 and keeps the team. It then drops the share-registry rows from and to `team_{teamId}`, since nobody can reach a share with a team that is gone. better-auth's `removeTeam` deletes nothing before this hook, so a refusal needs no early check, unlike a user's deletion. The hook turns the slot's `ApiError` 409 into a `CONFLICT` through `busyHomeAsConflict`, as the user hook does. `afterDeleteTeam` then drops the team avatar. The admin's confirmation and the help center both say the team's files are deleted.
 
-A team's teardown reaches into no other home either, so recipients' **Shared with me** rows of the team go at their next listing ([ACL.md](ACL.md#a-deleted-owners-rows-leave-at-the-recipients-next-listing)).
+A team's teardown reaches into no other home either, so recipients' **Shared with me** rows of the team stay and list nothing ([ACL.md](ACL.md#shared-with-me-reads-each-path-from-its-owner)).
 
 ## See also
 

@@ -221,9 +221,9 @@ What else reaches the list follows from these two writers, and is accepted:
 
 ## A load asks each owner whether the user may still see the path
 
-`GET /drive/:ownerId/recent` (`requireSelf`, `requireNonGuest`) runs `aggregateRecents` (`apps/api/src/lib/drive/aggregate.ts`). It takes the newest 100 rows, groups them by owner, reads the user's team memberships once, and asks every owner at once through `pullFromEach` and `pullRecentPaths` ([SCALABILITY.md § Reads across many homes go through pullFromEach](SCALABILITY.md#reads-across-many-homes-go-through-pullfromeach)). The user's own home is asked the same way. When fewer than 100 rows come back visible, it asks again for the next 100. It merges, sorts by `lastActivityAt` and returns at most 100, each a current `DrivePath` with its `lastActivityAt`.
+`GET /drive/:ownerId/recent` (`requireSelf`, `requireNonGuest`) runs `aggregateRecents` (`apps/api/src/lib/drive/aggregate.ts`). It takes the newest 100 rows, groups them by owner, reads the user's team memberships once, and asks every owner at once through `pullVisiblePaths`, which runs on `pullFromEach` ([SCALABILITY.md § Reads across many homes go through pullFromEach](SCALABILITY.md#reads-across-many-homes-go-through-pullfromeach)). The user's own home is asked the same way. When fewer than 100 rows come back visible, it asks again for the next 100. It merges, sorts by `lastActivityAt` and returns at most 100, each a current `DrivePath` with its `lastActivityAt`.
 
-`Drive.getRecentPathsFor` answers on the owner's side, with one batched `getBreadcrumbs` per mount. It does its own access check and only the relay calls it, so it has no `SharedDrive` wrapper ([ARCHITECTURE.md § Drive Architecture](ARCHITECTURE.md#drive-architecture)). It leaves a row out when:
+`Drive.getVisiblePaths` answers on the owner's side, with one batched `getBreadcrumbs` per mount. **Shared with me** asks through the same two functions ([ACL.md](ACL.md#shared-with-me-reads-each-path-from-its-owner)). It does its own access check and only the relay calls it, so it has no `SharedDrive` wrapper ([ARCHITECTURE.md § Drive Architecture](ARCHITECTURE.md#drive-architecture)). It leaves a row out when:
 
 | Left out | Why |
 |---|---|
@@ -240,7 +240,7 @@ What else reaches the list follows from these two writers, and is accepted:
 
 ## A read never deletes a Recent row
 
-A row the load leaves out stays in the table. At this level a failed lookup looks the same as a missing file, and a brief error must not wipe someone's history. So a hidden row comes back when the access or the file does, after a new share or a restore, and otherwise falls off through the trim. **Shared with me** is the opposite: it deletes a row on a clean not-found ([ACL.md](ACL.md#a-deleted-owners-rows-leave-at-the-recipients-next-listing)), because its row is the user's only way to find the path.
+A row the load leaves out stays in the table. At this level a failed lookup looks the same as a missing file, and a brief error must not wipe someone's history. So a hidden row comes back when the access or the file does, after a new share or a restore, and otherwise falls off through the trim. **Shared with me** keeps its rows the same way, and only a revoke deletes one ([ACL.md](ACL.md#shared-with-me-reads-each-path-from-its-owner)).
 
 ## The Recent files page reads at most once a minute
 

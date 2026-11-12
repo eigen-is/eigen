@@ -6,7 +6,7 @@
 
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath, RecentPath } from '@workspace/lib/types/drive';
-import { pullDriveSearch, pullFromEach, pullMimeContents, pullRecentPaths } from '../home/home-relay';
+import { pullDriveSearch, pullFromEach, pullMimeContents, pullVisiblePaths } from '../home/home-relay';
 import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
 import { getDrive, getSharedDrive } from './get-drive';
@@ -62,19 +62,10 @@ export async function aggregateRecents(user: User): Promise<RecentPath[]> {
 }
 
 async function pullRecents(user: User, memberships: Memberships, rows: readonly RecentRow[]): Promise<RecentPath[]> {
-    const owners = [...new Set(rows.map((row) => row.ownerId))];
-    const lists = await pullFromEach(owners, (ownerId) =>
-        pullRecentPaths(
-            ownerId,
-            user,
-            memberships,
-            rows.filter((row) => row.ownerId === ownerId),
-        ),
-    );
-    return lists.flat();
+    const visible = await pullVisiblePaths(user, memberships, rows);
+    return visible.map(({ row, path }) => ({ ...path, lastActivityAt: row.lastActivityAt }));
 }
 
-// Later lists win, so with the personal list first a team's own copy overwrites its shared_paths mirror.
 function mergeById(lists: readonly (readonly DrivePath[])[]): DrivePath[] {
     const byId = new Map<string, DrivePath>();
     for (const list of lists) for (const path of list) byId.set(path.id, path);

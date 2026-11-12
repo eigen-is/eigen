@@ -313,7 +313,7 @@ describe('Sharing Restricted', () => {
         });
     });
 
-    describe('sharingRestricted propagates to shared_paths', () => {
+    describe('sharingRestricted shows in Shared with me', () => {
         let folderId: string;
 
         beforeAll(async () => {
@@ -339,7 +339,7 @@ describe('Sharing Restricted', () => {
             expect(shared.sharingRestricted).toBe(true);
         });
 
-        test('sharingRestricted updates propagate', async () => {
+        test('a change of sharingRestricted shows too', async () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folderId}/acl`, {
                 sharingRestricted: false,
             });

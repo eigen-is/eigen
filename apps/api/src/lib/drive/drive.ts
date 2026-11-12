@@ -18,7 +18,6 @@ import type {
     EffectiveMember,
     EigenDocType,
     InviteResult,
-    RecentPath,
 } from '@workspace/lib/types/drive';
 import {
     DRIVE_TYPE_CHAT,
@@ -99,12 +98,7 @@ import type { RecentRow } from './recent';
 import { listRecent, touchRecent } from './recent';
 import type { SharedDb } from './shared';
 import { getSharedDatabase } from './shared';
-import {
-    listSharedOwnerIds,
-    listSharedWithMe,
-    listSharedWithMeByMimeType,
-    receiveSharedPathChange,
-} from './shared-with-me';
+import { listSharedOwnerIds, listSharedWithMe, receiveSharedPathChange } from './shared-with-me';
 import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp } from './streaming';
 import { sweepCopy, sweepDocument } from './sweep';
@@ -352,9 +346,11 @@ export class Drive {
         for (const mount of this.mounts.values()) {
             own.push(...(await mount.getPathsByMimeType(mimeTypePrefix)));
         }
-        const shared = await listSharedWithMeByMimeType(this.sharedDb, mimeTypePrefix);
         const seen = new Set(own.map((path) => path.id));
-        return [...own, ...shared.filter((path) => !seen.has(path.id))];
+        const shared = (await this.getSharedPathsWithMe()).filter(
+            (path) => path.mimeType.startsWith(mimeTypePrefix) && !seen.has(path.id),
+        );
+        return [...own, ...shared];
     }
 
     public async getMountMimeTypeContents(mountId: string, mimeTypePrefix: string): Promise<DrivePath[]> {
@@ -634,7 +630,7 @@ export class Drive {
         const kept = await this.replaceOccupant(mount, destParentId, safeName, path, checkedId, user);
         if (kept) {
             // The bytes live on in the kept file, so the source goes for good, not to the trash.
-            await this.removePath(mountId, pathId, (_, source) => deleteForGood(this, mount, source, user));
+            await this.removePath(mountId, pathId, (_, source) => deleteForGood(this, mount, source));
             return kept;
         }
         const to = {
@@ -698,9 +694,6 @@ export class Drive {
             this.emit(SSEventType.DRIVE_PATH_RENAMED, updated);
             const details = { oldName: path.name, newName: updated.name };
             await this.recordFileEvent(mount.id, path.id, user, { eventType: 'renamed', details });
-            // The people the path is shared with keep a copy of it, and this gives them the new name. It reaches other
-            // homes, so it goes last. The actor stays null, because a rename must not email them.
-            await this.pushSharing(mount.id, path.id, 'live', null);
         }
         return updated;
     }
@@ -991,23 +984,8 @@ export class Drive {
                     });
                 }
             }
-            // The copies in the homes of the people it is shared with go last, as they reach other homes.
+            // The homes of the people it is shared with hear last, as that reaches other homes.
             await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
-        });
-    }
-
-    // Sends a path's sharing to its homes after a change that keeps its ACL, such as a rename. It runs in the path's
-    // ACL chain, so it can't overtake an ACL change and bring back a removed sharee.
-    public async pushSharing(
-        mountId: string,
-        pathId: string,
-        state: 'live' | 'trashed',
-        actor: User | null,
-    ): Promise<void> {
-        return this.runInOrder(`acl:${mountId}:${pathId}`, async () => {
-            const path = await this.getMount(mountId).getPath(pathId);
-            if (!path?.acl || (path.trashedAt !== null) !== (state === 'trashed')) return;
-            await propagateSharedPathChange(path, path.acl, state === 'live' ? path.acl : null, actor);
         });
     }
 
@@ -1167,17 +1145,17 @@ export class Drive {
         return shared;
     }
 
-    // What other owners shared with this one. The list is this owner's own state, so SharedDrive has
-    // no wrapper for it.
+    // What other owners shared with this one, each path read from its owner. The list is this owner's own state, so
+    // SharedDrive has no wrapper for it.
     public async getSharedPathsWithMe(): Promise<DrivePath[]> {
-        return listSharedWithMe(this.sharedDb);
+        return listSharedWithMe(this.sharedDb, this.owner);
     }
 
     public async getSharedOwnerIds(): Promise<string[]> {
         return listSharedOwnerIds(this.sharedDb);
     }
 
-    // Another owner changed the sharing of one of their paths, and this home keeps its copy up to date.
+    // Another owner changed the sharing of one of their paths, and this home adds or removes its row for it.
     public async receiveSharedPathChange(
         path: DrivePath,
         newACL: DriveACL[] | null,
@@ -1198,14 +1176,14 @@ export class Drive {
         return listRecent(this.sharedDb);
     }
 
-    // The paths of this owner that another home's rows name and the user may still read. It deletes no row, as a
-    // failed read looks like a deleted file.
-    public async getRecentPathsFor(
+    // The paths of this owner that another home's rows name and the user may still read, each with its row. It
+    // deletes no row, as a failed read looks like a deleted file.
+    public async getVisiblePaths<Row extends { mountId: string; pathId: string }>(
         user: User,
         memberships: Memberships,
-        rows: readonly RecentRow[],
-    ): Promise<RecentPath[]> {
-        const found: RecentPath[] = [];
+        rows: readonly Row[],
+    ): Promise<{ row: Row; path: DrivePath }[]> {
+        const found: { row: Row; path: DrivePath }[] = [];
         for (const [mountId, mountRows] of Map.groupBy(rows, (row) => row.mountId)) {
             const mount = this.mounts.get(mountId);
             if (!mount) continue;
@@ -1214,7 +1192,7 @@ export class Drive {
                 const path = chain.at(-1);
                 if (!path || path.parentId === null || isTrashedChain(chain) || isInsideDocument(chain)) continue;
                 if (!canReadFromAncestors(chain, user, memberships)) continue;
-                found.push({ ...path, lastActivityAt: mountRows[i].lastActivityAt });
+                found.push({ row: mountRows[i], path });
             }
         }
         return found;

@@ -134,17 +134,15 @@ describe('Aggregate mime endpoint with team fan-out', () => {
         expect(aggregated.status).toBe(403);
     });
 
-    test('dedupe by path.id: authoritative team copy wins over a shared_paths mirror', async () => {
-        // Share a team1 doc individually with bob → creates a shared_paths mirror in bob's personal
-        // home (same path.id, hash null). Bob's ?teams=1 must return it exactly once, and the surviving
-        // copy must be the authoritative team copy (non-null hash), not the mirror.
+    test('a team doc also shared with a member by name is listed once', async () => {
+        // Bob reaches the doc through his team and through his own Shared with me row for it.
         const dedupeDoc = await uploadFanout(ctx.alice.user.sessionToken, team1Owner, team1MountId, 'dedupe-doc.bin');
         await drivePut(ctx.alice.user.sessionToken, team1Owner, team1MountId, `path/${dedupeDoc.id}/acl`, {
             add: [{ id: ctx.bob.user.email, read: true, write: false }],
             visibility: 'private',
         });
 
-        // Precondition: the mirror is now visible in bob's personal (no-teams) view.
+        // Bob's own list, without his teams, shows it as a shared item.
         const personal = await assertJson<DrivePath[]>(
             await mimeList(ctx.bob.user.sessionToken, ctx.bob.user.id, false),
         );

@@ -106,11 +106,11 @@ A chat's members are its effective member emails: path ACL, ancestor ACLs, expan
 - a direct `team_*` ACL entry, since team membership changes
 - a chat on a team drive, since every team member is implicitly in it
 
-Own chats pass a cheap direct-ACL subset screen before the costly `getEffectiveMembers` walk. The walks run concurrently and stop at the `MAX_MEMBER_WALKS` most recently updated candidates, so a match past the cap is missed and the wizard offers create instead. A shared-with-me chat skips the walk: its mirror row has only the direct ACL and the owner, so its set is the owner's email plus the direct entries.
+Own chats pass a cheap direct-ACL subset screen before the costly `getEffectiveMembers` walk. The walks run concurrently and stop at the `MAX_MEMBER_WALKS` most recently updated candidates, so a match past the cap is missed and the wizard offers create instead. A shared-with-me chat skips the walk: only its own row is read from its owner, so its set is the owner's email plus the direct entries.
 
 The panel suggests; it never guards. Two point-in-time misses are accepted:
 
-- A foreign chat that gains members through a shared parent folder can match falsely, since the mirror row doesn't see the parent.
+- A foreign chat that gains members through a shared parent folder can match falsely, since the parent is not read.
 - A `team_*` entry inherited from an ancestor folder is not excluded. The walk expands it to the team's current members, so an own chat in a team-shared folder matches whenever that expansion equals the picked set.
 
 ### Create and share are one server-side step

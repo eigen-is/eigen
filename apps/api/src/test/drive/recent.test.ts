@@ -694,7 +694,7 @@ describe('Recent lists', () => {
             folders.push(folder);
         }
 
-        const asked = spyOn(Drive.prototype, 'getRecentPathsFor');
+        const asked = spyOn(Drive.prototype, 'getVisiblePaths');
         const ids = await listedIds(viewer);
         expect(ids).toEqual(folders.map((folder) => folder.id).reverse());
         const askedIds = asked.mock.calls.flatMap(([, , rows]) => rows.map((row) => row.pathId));

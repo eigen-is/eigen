@@ -13,7 +13,7 @@ import type {
     CalendarItem,
     CalendarShare,
 } from '@workspace/lib/types/calendar';
-import type { DriveACL, DrivePath, EffectiveMember, RecentPath } from '@workspace/lib/types/drive';
+import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import type { HomeSizeResponse, MyTeam, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
@@ -34,7 +34,6 @@ import {
 } from '../config/paths';
 import { readContactsTotalSize } from '../contacts/card-store';
 import { LocalFilesystem } from '../core';
-import type { RecentRow } from '../drive/recent';
 import type { EventPatch } from '../ical/ical-component';
 import { readMailTotalSize } from '../mail/maildir-store';
 import type { Memberships, User } from '../user';
@@ -262,14 +261,22 @@ export async function pullDrivePath(ownerId: string, mountId: string, pathId: st
     return home.drive.getPath(mountId, pathId);
 }
 
-export async function pullRecentPaths(
-    ownerId: string,
+// The paths a user's own rows name, such as those of Recent, as far as the user may still see them: one read per
+// owner, who answers from the path as it is now.
+export async function pullVisiblePaths<Row extends { ownerId: string; mountId: string; pathId: string }>(
     user: User,
     memberships: Memberships,
-    rows: readonly RecentRow[],
-): Promise<RecentPath[]> {
-    const home = await getHome(ownerId);
-    return home.drive.getRecentPathsFor(user, memberships, rows);
+    rows: readonly Row[],
+): Promise<{ row: Row; path: DrivePath }[]> {
+    const lists = await pullFromEach([...new Set(rows.map((row) => row.ownerId))], async (ownerId) => {
+        const home = await getHome(ownerId);
+        return home.drive.getVisiblePaths(
+            user,
+            memberships,
+            rows.filter((row) => row.ownerId === ownerId),
+        );
+    });
+    return lists.flat();
 }
 
 // --- Calendar ---

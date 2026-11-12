@@ -10,9 +10,9 @@ type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
 const MOUNT = 'default';
 
-// A trash, a restore and a rename send the path's sharing to the homes it is shared with. What Bob's
-// Shared with me lists must match what Alice's ACL says, whatever runs at the same time.
-describe('sharing pushed by a trash, a restore or a rename', () => {
+// A trash sends nothing to the homes a path is shared with. What Bob's Shared with me lists must still match
+// what Alice's ACL and trash say, whatever runs at the same time.
+describe('Shared with me around a trash', () => {
     let ctx: TestCtx;
     let alice: Home;
     let bob: Home;
@@ -24,19 +24,6 @@ describe('sharing pushed by a trash, a restore or a rename', () => {
         bob = await getHome(ctx.bob.user.id);
         rootId = (await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, MOUNT, 'root')).id;
     });
-
-    async function sharedWithBob(name: string): Promise<DrivePath> {
-        const file = await alice.drive.createFileFromData(
-            MOUNT,
-            rootId,
-            name,
-            'text/plain',
-            Buffer.from('x'),
-            alice.user,
-        );
-        await shareWithBob(file.id);
-        return file;
-    }
 
     async function shareWithBob(pathId: string): Promise<void> {
         await alice.drive.updateACLDelta(
@@ -70,58 +57,6 @@ describe('sharing pushed by a trash, a restore or a rename', () => {
         expect(result instanceof ApiError && result.status).toBe(503);
         expect((await mount.getPath(folder.id))?.trashedAt).toBeNull();
         expect(await inBobsList(folder.id)).toBe(true);
-    });
-
-    test('a revoke while a restore records its history keeps Bob out of Shared with me', async () => {
-        const file = await sharedWithBob(`restore-revoke-${Date.now()}.txt`);
-        await alice.drive.deletePath(MOUNT, file.id, alice.user);
-        expect(await inBobsList(file.id)).toBe(false);
-
-        const record = alice.drive.recordFileEvent.bind(alice.drive);
-        const spy = spyOn(alice.drive, 'recordFileEvent').mockImplementationOnce(async (...args) => {
-            await alice.drive.updateACLDelta(
-                MOUNT,
-                file.id,
-                { remove: [ctx.bob.user.email] },
-                undefined,
-                undefined,
-                alice.user,
-            );
-            return record(...args);
-        });
-        try {
-            await alice.drive.restorePath(MOUNT, file.id, alice.user);
-        } finally {
-            spy.mockRestore();
-        }
-
-        expect((await alice.drive.getPath(MOUNT, file.id))?.acl).toBeNull();
-        expect(await inBobsList(file.id)).toBe(false);
-    });
-
-    test('a revoke while a rename records its history keeps Bob out of Shared with me', async () => {
-        const file = await sharedWithBob(`rename-revoke-${Date.now()}.txt`);
-        expect(await inBobsList(file.id)).toBe(true);
-
-        const record = alice.drive.recordFileEvent.bind(alice.drive);
-        const spy = spyOn(alice.drive, 'recordFileEvent').mockImplementationOnce(async (...args) => {
-            await alice.drive.updateACLDelta(
-                MOUNT,
-                file.id,
-                { remove: [ctx.bob.user.email] },
-                undefined,
-                undefined,
-                alice.user,
-            );
-            return record(...args);
-        });
-        try {
-            await alice.drive.renamePath(MOUNT, file.id, `renamed-${file.name}`, alice.user);
-        } finally {
-            spy.mockRestore();
-        }
-
-        expect(await inBobsList(file.id)).toBe(false);
     });
 
     test('a share that lands while a folder goes to the trash never reaches Bob', async () => {
