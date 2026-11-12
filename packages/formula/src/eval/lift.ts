@@ -1,7 +1,8 @@
 // A call whose arguments hold an array where one value is read: the body runs once per element of the arrays lined
 // up, and the answers are an array of that shape. An array stores one element for a run of equal ones, so the body
 // runs once per stored element and its answer stands for the whole run. An operator on an array is lifted here too.
-// A lazy argument is evaluated after the elements, once, and only when an element picked it.
+// A lazy argument is evaluated after the elements, once, and only when an element picked it. A row whose arguments
+// come in groups that are tried in turn, such as IFS, is stepped through here too, array or not.
 
 import type { Sheet } from '../store/sheet';
 import type { FormulaNode } from '../text/tree';

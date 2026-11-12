@@ -1,7 +1,8 @@
 // What a function is to the engine: one row, made by `fn(name, parameters, body)`. A parameter says how its
 // argument is prepared, read, defaulted and repeated, and the call wrapper does all of that before the body runs.
 // So a body gets one plain, typed value per parameter and only computes: it does not coerce, evaluate or read a
-// cell. The constants and modifiers below are the whole vocabulary a family file is written in.
+// cell. A row that picks another row by its first argument, such as SUBTOTAL, is made by `chosen` and is all data.
+// The constants and modifiers below are the whole vocabulary a family file is written in.
 
 import type { Family } from '../eval/families';
 import { Families } from '../eval/families';
