@@ -268,11 +268,12 @@ export async function pullVisiblePaths<Row extends { ownerId: string; mountId: s
     user: User,
     memberships: Memberships,
     rows: readonly Row[],
+    mimeTypePrefix = '',
 ): Promise<VisiblePath<Row>[]> {
     const byOwner = Map.groupBy(rows, (row) => row.ownerId);
     const lists = await pullFromEach([...byOwner.keys()], async (ownerId) => {
         const home = await getHome(ownerId);
-        return home.drive.getVisiblePaths(user, memberships, byOwner.get(ownerId) ?? []);
+        return home.drive.getVisiblePaths(user, memberships, byOwner.get(ownerId) ?? [], mimeTypePrefix);
     });
     return lists.flat();
 }

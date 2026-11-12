@@ -297,11 +297,7 @@ export class Drive {
         for (const mount of this.mounts.values()) {
             own.push(...(await mount.getPathsByMimeType(mimeTypePrefix)));
         }
-        const seen = new Set(own.map((path) => path.id));
-        const shared = (await this.getSharedPathsWithMe()).filter(
-            (path) => path.mimeType.startsWith(mimeTypePrefix) && !seen.has(path.id),
-        );
-        return [...own, ...shared];
+        return [...own, ...(await listSharedWithMe(this.sharedDb, this.owner, mimeTypePrefix))];
     }
 
     public async getMountMimeTypeContents(mountId: string, mimeTypePrefix: string): Promise<DrivePath[]> {
@@ -1018,6 +1014,7 @@ export class Drive {
         user: User,
         memberships: Memberships,
         rows: readonly Row[],
+        mimeTypePrefix = '',
     ): Promise<VisiblePath<Row>[]> {
         const found: VisiblePath<Row>[] = [];
         for (const [mountId, mountRows] of Map.groupBy(rows, (row) => row.mountId)) {
@@ -1026,7 +1023,8 @@ export class Drive {
             const chains = await mount.getBreadcrumbs(mountRows.map((row) => row.pathId));
             for (const [i, chain] of chains.entries()) {
                 const path = chain.at(-1);
-                if (!path || path.parentId === null || isTrashedChain(chain) || isInsideDocument(chain)) continue;
+                if (!path || path.parentId === null || !path.mimeType.startsWith(mimeTypePrefix)) continue;
+                if (isTrashedChain(chain) || isInsideDocument(chain)) continue;
                 if (!canReadFromAncestors(chain, user, memberships)) continue;
                 found.push({ row: mountRows[i], path });
             }
