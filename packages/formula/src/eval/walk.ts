@@ -15,6 +15,7 @@ import type { Family } from './families';
 import { Element, Errors, Families } from './families';
 import { Products } from './products';
 import type { Held } from './signature';
+import { ERRORS, NESTED } from './signature';
 
 export class Walk {
     // The span: `num` from `from` up to `to`. Of a cell or an element that is no number only the count means something.
@@ -349,9 +350,11 @@ export class Reach {
     }
 }
 
-// Whether a cell is passed over whatever it holds, an error too: with `skips`, one whose formula holds a call of a
-// row that picks another.
+// Whether a cell is passed over whatever it holds: as `skips` says, one that holds an error, and one whose formula
+// holds a call of a row that picks another, an error in it too.
 export function skipped(ctx: Evaluator, skips: number, held: Column, row: number): boolean {
-    if (skips === 0 || held.shape[row] === 0) return false;
+    if (skips === 0) return false;
+    if ((skips & ERRORS) !== 0 && (held.kind[row] & KIND_MASK) === CellKind.Error) return true;
+    if ((skips & NESTED) === 0 || held.shape[row] === 0) return false;
     return (ctx.recalc.factsOf(held.shape[row]) & Fact.Chosen) !== 0;
 }

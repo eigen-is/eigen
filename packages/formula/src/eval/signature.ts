@@ -135,8 +135,10 @@ export const ANYWHERE = 2;
 
 export type Returns = 0 | typeof PART | typeof ANYWHERE;
 
-// What the walk passes over for a row that another row picked: a cell whose formula holds a call of such a row.
+// What the walk passes over for a row that another row picked: a cell whose formula holds a call of such a row,
+// and a cell or an element that is an error.
 export const NESTED = 1;
+export const ERRORS = 2;
 
 // The row that a code picks, by its name, and what the walk then passes over.
 export type Choice = { readonly target: string; readonly skips: number };
@@ -167,6 +169,9 @@ export type Entry = {
     readonly volatile: boolean;
     // Of a row that picks another row by its first argument: the row each code picks. Null for any other row.
     readonly chosen: ReadonlyMap<number, Choice> | null;
+    // Of such a row that takes a second whole number, its options: what the walk passes over for each, on top of
+    // what the code says. Null for a row that takes none.
+    readonly options: readonly number[] | null;
     // A method on purpose: a body typed by its parameters is stored here without a cast, since TypeScript compares
     // the parameters of a method loosely. `fn` is the only writer.
     run(...args: readonly unknown[]): Result;

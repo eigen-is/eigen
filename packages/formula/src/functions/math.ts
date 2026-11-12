@@ -7,6 +7,7 @@ import { roundDecimal } from '../values/precision';
 import { greatestDivisor, leastMultiple, multinomial } from '../values/wholes';
 import {
     chosen,
+    ERRORS,
     FACTORS,
     fn,
     INTEGER,
@@ -63,4 +64,13 @@ export const MATH = [
     fn('GCD', [rest(WHOLES)], greatestDivisor),
     fn('LCM', [rest(WHOLES)], leastMultiple),
     fn('MULTINOMIAL', [rest(WHOLES)], multinomial),
+    // The codes 1 to 19, and per option 0 to 7 what is passed over: a nested SUBTOTAL or AGGREGATE up to 3,
+    // errors for 2, 3, 6 and 7. The options that leave out hidden rows answer as the ones that keep them.
+    chosen(
+        'AGGREGATE',
+        [...SUBTOTALS, 'MEDIAN', 'MODE.SNGL', 'LARGE', 'SMALL', 'PERCENTILE.INC', 'QUARTILE.INC']
+            .concat(['PERCENTILE.EXC', 'QUARTILE.EXC'])
+            .map((target, at) => [at + 1, target, 0] as const),
+        [NESTED, NESTED, NESTED | ERRORS, NESTED | ERRORS, 0, 0, ERRORS, ERRORS],
+    ),
 ];

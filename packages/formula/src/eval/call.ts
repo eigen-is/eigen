@@ -20,7 +20,7 @@ import { lift, lifts, step } from './lift';
 import { look } from './look';
 import { real } from './operators';
 import { Frame, Table } from './readers';
-import type { Entry, Held, Lazy, Param, Result } from './signature';
+import type { Choice, Entry, Held, Lazy, Param, Result } from './signature';
 import { Prepare, Read, TOKENS } from './signature';
 import { cellsOf } from './views';
 
@@ -222,20 +222,51 @@ function collected(family: Family, value: Value): Held {
     }
 }
 
+// A call of a row that picks another by its first argument, and what the walk passes over by its second when it
+// takes one: the row that is picked runs on the arguments after those, each read now by that row's own parameter.
+// A code or an option that does not exist is #VALUE! before any range is looked into.
+function choose(
+    ctx: Evaluator,
+    entry: Entry,
+    chosen: ReadonlyMap<number, Choice>,
+    held: Held[],
+    count: number,
+): Value | Lazy {
+    const { options } = entry;
+    const selectors = options === null ? 1 : 2;
+    const [code, option] = held;
+    const choice = typeof code === 'number' ? chosen.get(code) : undefined;
+    const passed = options === null ? 0 : typeof option === 'number' ? options[option] : undefined;
+    if (choice === undefined || passed === undefined) return VALUE;
+    const target = ctx.functions.get(choice.target);
+    if (target === undefined) return NAME;
+    const given = count - selectors;
+    if (given < target.min || given > target.max) return VALUE;
+    const frame = ctx.frames[ctx.calls - 1];
+    held.copyWithin(0, selectors, count);
+    held.length = given;
+    // A row that takes every value of its arguments takes them from references only when it is picked.
+    const only = target.params.length === 1 && target.params[0].rest;
+    for (let i = 0; i < given; i += 1) {
+        const written = held[i];
+        if (only && isReference(written)) continue;
+        if (only || written === undefined || isLazy(written) || written instanceof Table) {
+            return isError(written) ? written : VALUE;
+        }
+        const param = slotOf(target, i, given);
+        const value = read(param, param.prepare === Prepare.Scalar ? ctx.read(written) : written, frame, i);
+        if (isError(value) && ends(param)) return value;
+        held[i] = value;
+    }
+    return run(ctx, target, held, given, choice.skips | passed);
+}
+
 // The body on arguments that are read, with what its walk passes over in `skips`, and its answer as a cell can hold
 // it: a number that is no number is #NUM!, and a text has at most 32,767 characters. `held` are the call's slots.
 export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number, skips: number): Value | Lazy {
     let args: readonly unknown[] = held;
+    if (entry.chosen !== null) return choose(ctx, entry, entry.chosen, held, count);
     const frame = entry.plain ? null : ctx.frames[ctx.calls - 1];
-    const choice = entry.chosen === null || typeof held[0] !== 'number' ? undefined : entry.chosen.get(held[0]);
-    // The row that the first argument picked runs on the arguments after it, with its walk told what to pass over.
-    if (choice !== undefined && frame !== null) {
-        const target = ctx.functions.get(choice.target);
-        if (target === undefined) return NAME;
-        held.copyWithin(0, 1, count);
-        held.length = count - 1;
-        return run(ctx, target, held, count - 1, choice.skips);
-    }
     if (frame !== null) {
         const error = look(ctx, entry, frame, count, skips);
         if (error !== null) return error;

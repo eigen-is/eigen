@@ -18,7 +18,7 @@ import type { ArrayValue, Reference, Scalar } from '../values/value';
 export type { Book } from '../eval/book';
 export type { Matches, Numbers, Pairs, Room, Table } from '../eval/readers';
 export type { Vector } from '../eval/search';
-export { ANYWHERE, Find, NESTED, NEXT, PART } from '../eval/signature';
+export { ANYWHERE, ERRORS, Find, NESTED, NEXT, PART } from '../eval/signature';
 export { rectangle } from '../values/rectangle';
 
 export type Registry = ReadonlyMap<string, Entry>;
@@ -334,16 +334,29 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
         matched,
         volatile: params.some((param) => param.read === Read.Random || param.read === Read.Now),
         chosen: null,
+        options: null,
         plain,
         run: body,
     });
 }
 
-// A row whose first argument, a whole number, picks another row, which then gets the references that follow:
+// What follows the code of a row that picks another: kept as it was written, a reference unread, and read by the
+// parameters of the row that is picked.
+const UNREAD: Param<Scalar> = Object.freeze({ ...REQUIRED, prepare: Prepare.Reference, read: Read.Any });
+
+// A row whose first argument, a whole number, picks another row, which then gets the arguments that follow:
 // `targets` lists the name each code picks and what its walk passes over. A code that is not listed is #VALUE!.
-export function chosen(name: string, targets: readonly (readonly [code: number, target: string, skips: number])[]) {
+// A row that is picked takes references only when it takes every value of its arguments, and else reads each
+// argument by its own parameter. With `options` the row takes a second whole number, and `options[n]` is what the
+// walk passes over for option n on top of what the code says: a number that is no option is #VALUE!.
+export function chosen(
+    name: string,
+    targets: readonly (readonly [code: number, target: string, skips: number])[],
+    options: readonly number[] | null = null,
+) {
     const picks = new Map(targets.map(([code, target, skips]) => [code, { target, skips }]));
-    return Object.freeze({ ...fn(name, [INTEGER, rest(cells(NUMBERS))], () => VALUE), chosen: picks });
+    const selectors = options === null ? [INTEGER] : [INTEGER, INTEGER];
+    return Object.freeze({ ...fn(name, [...selectors, rest(UNREAD)], () => VALUE), chosen: picks, options });
 }
 
 // What a reading makes of its fallback: the fallback itself when it is a value of that reading.

@@ -16,7 +16,7 @@ import { Errors, Families } from './families';
 import type { Frame } from './readers';
 import { Numbers, Pairs, Table } from './readers';
 import type { Entry, Held, Param } from './signature';
-import { Prepare, Read } from './signature';
+import { ERRORS, Prepare, Read } from './signature';
 import { firstError } from './views';
 
 // The error that ends the call, or null with `frame.args` ready for the body. `count` arguments were written, and
@@ -106,7 +106,7 @@ function errorIn(ctx: Evaluator, value: Held, family: Family, skips: number): Fo
     for (let i = 0; i < value.items.length; i += 1) {
         const item = value.items[i];
         const found = isReference(item) ? ctx.walk.referred(item, family) : item;
-        if (isError(found)) return found;
+        if (isError(found) && (skips & ERRORS) === 0) return found;
     }
     return null;
 }

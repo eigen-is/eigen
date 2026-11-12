@@ -42,6 +42,8 @@ const ERRORS = new Set(['NA', 'INFO']);
 
 // What can be written for a parameter, by its reading: values every reading of that kind takes.
 function pool(param: Param<unknown>): readonly string[] {
+    // What follows the code of a row that picks another is read by the row that is picked: a range serves each.
+    if (param.prepare === Prepare.Reference && param.read === Read.Any) return ['A1:A5', 'C1:C3'];
     switch (param.read) {
         case Read.Number:
         case Read.Integer:
