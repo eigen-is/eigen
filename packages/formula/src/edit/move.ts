@@ -24,15 +24,8 @@ export type Move = {
 
 export type Moved = Omit<Transformed, 'resized' | 'slid'>;
 
-// What moves is the part of a block that is on the grid before and after, and the rest of it is gone. This is the
-// move of the part that is on the grid where it is: the cells the block leaves.
-function onGrid(move: Move): Move {
-    const rows = Math.min(move.rows, GRID_ROWS - move.row);
-    const columns = Math.min(move.columns, GRID_COLUMNS - move.column);
-    return rows === move.rows && columns === move.columns ? move : { ...move, rows, columns };
-}
-
-// The move of the part of it that is on the grid where it goes too: the cells that move.
+// What moves is the part of a block that is on the grid where it is and where it goes, and the rest of it is gone.
+// This is the move of that part.
 export function fitted(move: Move): Move {
     const rows = Math.min(move.rows, GRID_ROWS - move.row, GRID_ROWS - move.toRow);
     const columns = Math.min(move.columns, GRID_COLUMNS - move.column, GRID_COLUMNS - move.toColumn);
@@ -205,6 +198,13 @@ export function transformMove(
         return referenceNode(op, node.space, nextKind, nextSheet, nextRow, nextColumn, nextRow2, nextColumn2, flags);
     });
     return { tree: mapped, lossy, recompute };
+}
+
+// The move of the part of a block that is on the grid where it is: the cells the block leaves, moved or gone.
+function onGrid(move: Move): Move {
+    const rows = Math.min(move.rows, GRID_ROWS - move.row);
+    const columns = Math.min(move.columns, GRID_COLUMNS - move.column);
+    return rows === move.rows && columns === move.columns ? move : { ...move, rows, columns };
 }
 
 // Whether the block of the move's size at `row`, `column` holds the whole rectangle.
