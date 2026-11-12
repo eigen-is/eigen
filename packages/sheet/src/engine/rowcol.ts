@@ -93,7 +93,7 @@ export function shiftMerges(
 
 // Re-keys an "r_c" map, an entry on a line the op deletes dropped.
 export function shiftCellKeyed<T>(
-    map: Record<string, T> | undefined,
+    map: Readonly<Record<string, T>> | undefined,
     axis: 'row' | 'column',
     edit: Edit,
 ): Record<string, T> {
@@ -142,7 +142,7 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
 // A chart ref names its sheet by id, so an op moves the refs to its sheet on every sheet's charts. Only a chart whose
 // refs moved is rewritten.
 function shiftChartsAcrossSheets<S extends Sheet>(
-    sheets: S[],
+    sheets: readonly S[],
     sheetId: string,
     type: 'row' | 'column',
     edit: Edit,
@@ -167,7 +167,7 @@ export const LINE_MAPS = {
     column: ['colhidden', 'columnlen', 'customWidth'],
 } as const;
 
-export function shiftKeyedMap(map: Record<string, number>, edit: Edit): Record<string, number> {
+export function shiftKeyedMap(map: Readonly<Record<string, number>>, edit: Edit): Record<string, number> {
     const shifted: Record<string, number> = {};
     for (const [key, v] of Object.entries(map)) {
         const line = mapIndex(edit, Number.parseInt(key, 10));

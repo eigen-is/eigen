@@ -1,5 +1,5 @@
 // The fill handle: dragging the selection's corner extends its cells over the dragged range, and fill down and fill
-// right repeat one edge of a range the same way. Along each line of a dragged fill, neighbouring cells of one kind
+// right repeat one edge of a range the same way. Along each line of a dragged fill, neighboring cells of one kind
 // count on, such as numbers along their trend, dates by days or months and text by its last number, and a lone text
 // ending in a number counts by one. Anything else repeats. The canvas overlay's mouse handlers and the keyboard
 // handler call in.
@@ -248,9 +248,8 @@ function fillTouchesMerge(ctx: Context, copyRange: SingleRange, applyRange: Sing
     );
 }
 
-// Takes one source line in fill order and returns `count` cells. Each run of one kind keeps its places in the source
-// on every round, and its series counts on over those places alone. loneStep is how a line of one cell counts, 0 to
-// copy.
+// Each run of one kind keeps its places in the source on every round, and its series counts on over those places
+// alone. loneStep is how a line of one cell counts, 0 to copy.
 function fillLine(line: readonly (Cell | null | undefined)[], count: number, loneStep: number) {
     const filled = new Array<Cell | null>(count).fill(null);
     let start = 0;

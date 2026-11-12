@@ -1072,9 +1072,9 @@ export function calcSelectionInfo(ctx: Context) {
             }
         }
     }
-    const average: string = numberDisplay(sum / numberC, '0.00');
-    const sumStr: string = numberDisplay(sum, '0.00');
-    const maxStr: string = numberDisplay(max, '0.00');
-    const minStr: string = numberDisplay(min, '0.00');
+    const average = numberDisplay(sum / numberC, '0.00');
+    const sumStr = numberDisplay(sum, '0.00');
+    const maxStr = numberDisplay(max, '0.00');
+    const minStr = numberDisplay(min, '0.00');
     return { numberC, count, sum: sumStr, max: maxStr, min: minStr, average };
 }
