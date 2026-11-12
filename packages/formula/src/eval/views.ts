@@ -9,7 +9,6 @@ import { CALC } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
 import { arrayOf, ValueType } from '../values/value';
 import type { Evaluator } from './evaluator';
-import { ERRORS } from './signature';
 import { skipped } from './walk';
 
 // The first error of one area, row by row, once its cells are settled. A cell on a loop still carries its flags.
@@ -22,7 +21,6 @@ export function firstError(ctx: Evaluator, area: Reference, skips: number): Form
     for (let c = area.left; c <= right; c += 1) {
         const column = columns[c];
         if (column.errors === 0) continue;
-        if ((skips & ERRORS) !== 0) return null;
         const end = Math.min(area.bottom + 1, column.length, foundRow);
         for (let row = area.top; row < end; row += 1) {
             if ((column.kind[row] & KIND_MASK) !== CellKind.Error || skipped(ctx, skips, column, row)) continue;
