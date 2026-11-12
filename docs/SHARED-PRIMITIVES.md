@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2162 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2161 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -250,7 +250,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (309)
+## Hooks (308)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -414,7 +414,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useIsSharedWithMe` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useMakeCopy` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useMediaResolver` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
-| `useMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useMountMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useMounts` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useMovePaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |

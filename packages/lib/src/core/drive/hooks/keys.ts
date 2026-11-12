@@ -22,7 +22,6 @@ export const driveKeys = {
     folder: (ownerId: string, mountId: string, pathId: string) =>
         [...driveKeys.folders(ownerId), mountId, pathId] as const,
     mimeTypes: (ownerId: string) => [...driveKeys.owner(ownerId), 'mime'] as const,
-    mime: (ownerId: string, mimeType: string) => [...driveKeys.mimeTypes(ownerId), mimeType] as const,
     // The user's own and their teams' files of one type, so the key has no owner.
     mimeAllTypes: () => [...driveKeys.all, 'mimeAll'] as const,
     mimeAll: (mimeType: string) => [...driveKeys.mimeAllTypes(), mimeType] as const,

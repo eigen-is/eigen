@@ -5,13 +5,7 @@
 
 import { openDocument } from '@workspace/lib/api';
 import type { validateDriveSearch } from '@workspace/lib/drive';
-import {
-    DEFAULT_MOUNT_ID,
-    useAggregateMimeContent,
-    useMimeContent,
-    useMountMimeContent,
-    usePathInfo,
-} from '@workspace/lib/drive';
+import { DEFAULT_MOUNT_ID, useAggregateMimeContent, useMountMimeContent, usePathInfo } from '@workspace/lib/drive';
 import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
 import { isDocumentType } from '@workspace/lib/types/drive';
 import { useContext } from 'react';
@@ -35,7 +29,8 @@ export type EigenDocListRoute<TParams> = {
 
 type EigenDocListViewProps = {
     config: EigenDocAppConfig;
-    route: EigenDocListRoute<{ ownerId?: string; mountId?: string }>;
+    // The index names no drive, and a team drive's route names both its owner and its mount.
+    route: EigenDocListRoute<{ ownerId?: undefined; mountId?: undefined } | { ownerId: string; mountId: string }>;
 };
 
 export function EigenDocListView({ config, route }: EigenDocListViewProps) {
@@ -61,17 +56,10 @@ export function EigenDocListView({ config, route }: EigenDocListViewProps) {
     };
     const onQuickLook = useDriveQuickLook(capabilities.canWrite);
 
-    // The viewer's own index gathers their personal drive and all their team drives. Another owner without
-    // a mount gets a plain listing of that owner, and a view with a mount lists only that mount.
-    const isOwnAggregate = !isMountScoped && effectiveOwnerId === viewerId;
-    const aggregate = useAggregateMimeContent(isOwnAggregate ? config.mimeType : '');
-    const ownerScoped = useMimeContent(isMountScoped || isOwnAggregate ? '' : effectiveOwnerId, config.mimeType);
-    const mountScoped = useMountMimeContent(isMountScoped ? effectiveOwnerId : '', mountId ?? '', config.mimeType);
-    const {
-        data: folderContents = [],
-        isLoading,
-        error,
-    } = isMountScoped ? mountScoped : isOwnAggregate ? aggregate : ownerScoped;
+    // The index gathers the viewer's personal drive and all their team drives; a team drive lists only its mount.
+    const aggregate = useAggregateMimeContent(isMountScoped ? '' : config.mimeType);
+    const mountScoped = useMountMimeContent(ownerId ?? '', mountId ?? '', config.mimeType);
+    const { data: folderContents = [], isLoading, error } = isMountScoped ? mountScoped : aggregate;
 
     const onRowSelect = (path: DrivePath) => {
         if (isMobile && isDocumentType(path.type)) {

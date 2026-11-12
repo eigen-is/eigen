@@ -35,7 +35,6 @@ mock.module('@workspace/lib/drive', () => ({
         if (mimeType) asked.aggregate.push(mimeType);
         return listing;
     },
-    useMimeContent: () => listing,
     useMountMimeContent: (ownerId: string, mountId: string) => {
         if (ownerId) asked.mount.push(`${ownerId}/${mountId}`);
         return listing;

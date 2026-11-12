@@ -40,10 +40,6 @@ mock.module('@workspace/lib/drive', () => ({
         if (ownerId) asked.push(`${ownerId}/${mountId} ${mimeType}`);
         return ownerId && mimeType === VECTOR_SLUG ? teamVectors : none;
     },
-    useMimeContent: (ownerId: string, mimeType: string) => {
-        if (ownerId) asked.push(`${ownerId} ${mimeType}`);
-        return none;
-    },
     usePathInfo: () => noPath,
 }));
 afterAll(() => {
