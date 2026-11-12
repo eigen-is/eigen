@@ -73,6 +73,25 @@ const TEMPLATES = [
     '=SUMIF(#r,">0",#r)',
     '=#r',
     '=IF(#c>2,#c,SUM(#r))',
+    // The families that pass over empty cells, each over whole columns and over whole rows.
+    '=AND(#C)',
+    '=AND(#W)',
+    '=OR(#C)',
+    '=OR(#W)',
+    '=SUM(#C,#W)',
+    '=PRODUCT(#C)',
+    '=PRODUCT(#W)',
+    '=AVERAGE(#C)',
+    '=AVERAGE(#W)',
+    '=MAX(#C)',
+    '=MAX(#W)',
+    '=MIN(#C)',
+    '=MIN(#W)',
+    '=MEDIAN(#C)',
+    '=MEDIAN(#W)',
+    '=COUNT(#W)',
+    '=COUNTA(#C)',
+    '=COUNTA(#W)',
 ];
 
 // Stored text that is kept as it is: text that does not parse, a span of sheets and another workbook.

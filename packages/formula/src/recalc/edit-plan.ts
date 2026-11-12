@@ -6,12 +6,12 @@
 import { sheetOf } from '../edit/leaves';
 import { moveClasses } from '../edit/move';
 import { bindSheet } from '../edit/sheets';
-import type { LineEdit } from '../edit/transform';
 import { hostClasses } from '../edit/transform';
 import { Fact } from '../eval/facts';
 import type { Sheet } from '../store/sheet';
 import type { Change, Workbook } from '../store/workbook';
 import { ChangeKind } from '../store/workbook';
+import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { Ends, FormulaNode } from '../text/tree';
 import { endsAt, RefKind, SheetKind } from '../text/tree';
 
@@ -90,15 +90,23 @@ export function planEdit(
         switch (change.kind) {
             case ChangeKind.Lines: {
                 const { edit } = change;
-                const { rows, index } = edit;
+                const { rows, index, insert, count } = edit;
                 const sized = (facts[id] & Fact.Sized) !== 0;
                 const edited = workbook.known(edit.sheet);
-                const distance = edit.insert ? edit.count : -edit.count;
+                const distance = insert ? count : -count;
+                // The first line whose cells an insert pushes off the grid.
+                const lost = Math.max(index, (rows ? GRID_ROWS : GRID_COLUMNS) - count);
+                const first = rows ? left : top;
+                const last = rows ? right : top;
                 for (const found of hostClasses(tree, refs, edit, host.id, rows ? top : left, rows ? bottom : right)) {
                     const { start, end } = found;
                     const shift = host === edited && start >= index ? distance : 0;
+                    // The cells an insert moves keep their order and lose none, so a formula that only passes
+                    // over the empty ones answers as before: unless the insert pushed a cell off the grid.
                     const slides =
-                        found.slid && slid(edited, refs, host.id, edit, rows ? left : top, rows ? right : top);
+                        found.slid &&
+                        holds(edited, refs, host.id, rows, index, first, last) &&
+                        (!insert || sized || holds(edited, refs, host.id, rows, lost, first, last));
                     const seed = found.recompute || (found.resized && sized) || slides;
                     if (rows) outcome(found.tree, found.lossy, seed, [start, left, end, right], host.id, shift, 0);
                     else outcome(found.tree, found.lossy, seed, [top, start, bottom, end], host.id, 0, shift);
@@ -144,19 +152,20 @@ export function planEdit(
     return plan;
 }
 
-// Whether a whole column or row that a formula names on the edited sheet holds a cell at or past the edit, for
-// some host of a block: the hosts on the columns `first` to `last` when rows are edited, the hosts from the row
-// `first` down when columns are. Only then did a cell it reads change place.
-function slid(
+// Whether a whole column or row that a formula names on the edited sheet holds a cell at or past `line`, a row
+// when `rows` and else a column, for some host of a block: the hosts on the columns `first` to `last` when rows
+// are edited, the hosts from the row `first` down when columns are. From the line of an edit on, those are the
+// cells it reads that change place.
+function holds(
     edited: Sheet,
     refs: readonly FormulaNode[],
     hostSheet: string,
-    edit: LineEdit,
+    rows: boolean,
+    line: number,
     first: number,
     last: number,
 ): boolean {
     const { columns } = edited;
-    const { rows, index } = edit;
     const ends: Ends = { first: 0, second: 0 };
     for (const ref of refs) {
         if (ref.op !== (rows ? RefKind.Columns : RefKind.Rows) || sheetOf(ref, hostSheet) !== edited.id) continue;
@@ -165,10 +174,10 @@ function slid(
         const low = Math.max(0, Math.min(ends.first, ends.second));
         endsAt(ref, !rows, last, 0, ends);
         const high = Math.max(ends.first, ends.second);
-        const from = rows ? low : index;
+        const from = rows ? low : line;
         const to = Math.min(rows ? high : columns.length - 1, columns.length - 1);
         for (let c = from; c <= to; c += 1) {
-            if (columns[c].length > (rows ? index : low)) return true;
+            if (columns[c].length > (rows ? line : low)) return true;
         }
     }
     return false;
