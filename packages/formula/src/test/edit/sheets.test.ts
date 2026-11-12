@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { bindSheet, offGrid, printA1, printStored, remapSheets, ShapeTable } from '../../text';
+import { bindSheet, offGrid, printA1, printStored, remapSheets } from '../../text';
+import { ShapeTable } from '../../text/shapes';
 import { treeStored } from '../text/support';
 import { sheetName, tree } from './support';
 

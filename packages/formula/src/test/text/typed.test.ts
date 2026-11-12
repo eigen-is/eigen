@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { parseA1, parseStored, ShapeTable, storedText, typedText } from '../../text';
+import { parseA1, parseStored, storedText, typedText } from '../../text';
+import { ShapeTable } from '../../text/shapes';
 import { at, findSheet, sheetName } from './support';
 
 function crossed(typed: string, host = 'B2'): { stored: string; shown: string; parsed: boolean } {

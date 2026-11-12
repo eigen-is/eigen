@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { FormulaNode } from '../../text';
-import { NodeKind, parseA1, parseStored, printA1, printStored, RefFlag, ShapeTable } from '../../text';
+import { NodeKind, parseA1, parseStored, printA1, printStored, RefFlag } from '../../text';
+import { ShapeTable } from '../../text/shapes';
 import { failure, findSheet, formulas, keepsLaws, sheetName, soup, treeStored, typedFormulas } from './support';
 
 const RUNS = 3000;
