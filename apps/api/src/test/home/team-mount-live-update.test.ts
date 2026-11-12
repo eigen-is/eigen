@@ -1,413 +1,227 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { rmSync } from 'node:fs';
-import * as path from 'node:path';
-import { teamOwnerId } from '@workspace/lib/types';
-import { PATHS } from '../../lib/config/paths';
-import { getSyntheticTeamUser, TeamHome } from '../../lib/home/team-home';
-import { createMountConfig, Mount, newMountSettings } from '../../lib/mount';
-import { SETTLE_BOUND_MS } from '../fault-storage-helpers';
-import { getTestContext } from '../setup';
+import { readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { S3Config } from '@workspace/lib/types/mount';
+import { teamOwnerId } from '@workspace/lib/types/owner';
+import type { MountSettings } from '@workspace/lib/types/settings';
+import { getPublicConfig } from '../../lib/config/server-config';
+import { evictHome, getTeamHome } from '../../lib/home/get-home';
+import type { TeamHome } from '../../lib/home/team-home';
+import { LocalStorage } from '../../lib/storage/local-storage';
+import { FakeS3Server } from '../fake-s3-server';
+import {
+    addMember,
+    assertJson,
+    authedRequest,
+    createTeam,
+    driveUpload,
+    eventually,
+    getTestContext,
+    TEST_DATA_DIR,
+    TEST_PNG_BYTES,
+} from '../setup';
 
-// AUDIT 11: TeamHome.updateMount only persisted the change to settings.json; the already-built Drive
-// kept a stale MountConfig (quota/name) — or a disabled mount stayed live — until the Home was evicted
-// and reloaded. These tests build a TeamHome directly and assert the LIVE Drive reflects an update
-// without any evict/reload.
-describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
-    const homeDirs: string[] = [];
+// A team mount's storage change or on/off switch saves the settings and unloads the team's home, so the next request
+// opens it on the new settings. A name or quota change reaches the live mount and keeps the home.
+describe('Changing a team mount', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let orgId: string;
+    const backings = ['team-mount-a', 'team-mount-b'].map((name) => join(TEST_DATA_DIR, name));
+    const buckets = backings.map((backing) => new FakeS3Server(new LocalStorage(backing)));
+    let bucketA: S3Config;
+    let bucketB: S3Config;
+    const owners: string[] = [];
 
     beforeAll(async () => {
-        await getTestContext(); // boots the app: server settings + EIGEN_DATA_ROOT
+        ctx = await getTestContext();
+        orgId = getPublicConfig().orgId;
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+        [bucketA, bucketB] = await Promise.all(buckets.map((bucket) => bucket.start()));
     });
 
-    // The data root is the whole suite's: a later server backup would find these homes and their s3 mount.
-    afterAll(() => {
-        for (const dir of homeDirs) rmSync(dir, { recursive: true, force: true });
+    // The homes close before their buckets stop, so their last syncs find a bucket.
+    afterAll(async () => {
+        await Promise.all(owners.map((ownerId) => evictHome(ownerId)));
+        await Promise.all(buckets.map((bucket) => bucket.stop()));
+        for (const backing of backings) rmSync(backing, { recursive: true, force: true });
     });
 
-    async function freshTeamHome(): Promise<TeamHome> {
-        const owner = teamOwnerId(crypto.randomUUID().replace(/-/g, '')); // parseOwnerId wants 32 alnum chars
-        const home = new TeamHome(getSyntheticTeamUser(owner, 'Live Update Team'));
-        homeDirs.push(home.homeDir);
-        await home.init();
-        return home;
+    async function newTeam(): Promise<{ ownerId: string; home: TeamHome }> {
+        const teamId = await createTeam(ctx, orgId, `Mount Team ${crypto.randomUUID().slice(0, 6)}`);
+        await addMember(ctx, teamId, ctx.alice.user.id);
+        const ownerId = teamOwnerId(teamId);
+        owners.push(ownerId);
+        return { ownerId, home: await getTeamHome(ownerId) };
     }
 
-    // A gate that never opens fails the test before bun's own timeout, so its finally still restores the spies.
-    function within<T>(promise: Promise<T>, ms = SETTLE_BOUND_MS): Promise<T> {
-        return Promise.race([
-            promise,
-            Bun.sleep(ms).then(() => {
-                throw new Error(`Timed out after ${ms} ms`);
+    async function upload(ownerId: string, mountId: string, name: string): Promise<DrivePath> {
+        const root = await assertJson<DrivePath>(
+            await authedRequest(ctx.alice.user.sessionToken, `/drive/${ownerId}/${mountId}/root`),
+        );
+        return driveUpload(ctx.alice.user.sessionToken, ownerId, mountId, root.id, new File([TEST_PNG_BYTES], name));
+    }
+
+    async function names(home: TeamHome, mountId: string): Promise<string[]> {
+        const root = await home.drive.getRootFolder(mountId);
+        return (await home.drive.getFolderContents(mountId, root!.id)).map((path) => path.name);
+    }
+
+    function objectCount(backing: string): number {
+        return readdirSync(backing, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).length;
+    }
+
+    function okS3Check() {
+        return import('../../lib/storage/s3-storage').then((s3Storage) =>
+            spyOn(s3Storage, 'checkS3Connection').mockResolvedValue({
+                ok: true,
+                message: 'Connection successful',
+                versioning: 'enabled',
             }),
-        ]);
+        );
     }
 
-    test('maxSizeMB + name update reaches the live Drive without a reload', async () => {
-        const home = await freshTeamHome();
+    test('a new bucket unloads the home, and the next home writes to the new bucket', async () => {
+        const check = await okS3Check();
         try {
-            const mount = await home.addMount({ name: 'Shared', maxSizeMB: 200 });
-            expect(home.drive.getMountConfig(mount.id).maxSizeMB).toBe(200);
+            const { ownerId, home } = await newTeam();
+            const mount = await home.addMount({ name: 'Bucket', storageType: 's3', s3Config: bucketA });
+            await upload(ownerId, mount.id, 'before.png');
+            const inA = await eventually(async () => objectCount(backings[0]) || undefined, 'the first upload');
 
-            await home.updateMount(mount.id, { maxSizeMB: 750, name: 'Shared (Big)' });
+            const updated = await home.updateMount(mount.id, { s3Config: bucketB });
 
-            // Same Home instance, no evict — the live mount config carries the new quota + name.
-            expect(home.drive.getMountConfig(mount.id).maxSizeMB).toBe(750);
-            const listed = await home.drive.listMounts();
-            expect(listed.find((m) => m.id === mount.id)?.name).toBe('Shared (Big)');
+            expect(updated.s3Config).toEqual(bucketB);
+            expect(home.closing).toBe(true);
+            const next = await getTeamHome(ownerId);
+            expect(next).not.toBe(home);
+            expect(next.drive.getMountConfig(mount.id).s3Config).toEqual(bucketB);
+            // The rows stay with the mount, the bytes written before stay in the old bucket.
+            expect(await names(next, mount.id)).toEqual(['before.png']);
+            expect(objectCount(backings[0])).toBeGreaterThanOrEqual(inA);
+            const inB = objectCount(backings[1]);
+            await upload(ownerId, mount.id, 'after.png');
+            await eventually(async () => (objectCount(backings[1]) > inB ? true : undefined), 'the upload to B');
         } finally {
-            await home.close();
+            check.mockRestore();
         }
     });
 
-    test('adding a second mount keeps the first', async () => {
-        const home = await freshTeamHome();
-        try {
-            const first = await home.addMount({ name: 'First', maxSizeMB: 100 });
-            const second = await home.addMount({ name: 'Second', maxSizeMB: 200 });
+    test('off then on through the route unloads the home each time, and the files are back', async () => {
+        const { ownerId, home } = await newTeam();
+        const mount = await home.addMount({ name: 'Toggled', storageType: 'local' });
+        await upload(ownerId, mount.id, 'kept.png');
+        const toggle = async (enabled: boolean): Promise<MountSettings> =>
+            assertJson<MountSettings>(
+                await authedRequest(ctx.alice.user.sessionToken, `/team/${ownerId}/mount/${mount.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled }),
+                }),
+            );
 
-            expect(home.settings.get().mounts?.[first.id]?.name).toBe('First');
-            expect(home.settings.get().mounts?.[second.id]?.name).toBe('Second');
-            const listed = await home.drive.listMounts();
-            expect(listed.map((m) => m.id).sort()).toEqual([first.id, second.id].sort());
-        } finally {
-            await home.close();
-        }
+        // The request that unloads the home answers from the saved settings, not with the closing home's 503.
+        expect((await toggle(false)).enabled).toBe(false);
+        expect(home.closing).toBe(true);
+        const off = await getTeamHome(ownerId);
+        expect(() => off.drive.getMountConfig(mount.id)).toThrow('Mount not found');
+
+        expect((await toggle(true)).enabled).toBe(true);
+        expect(off.closing).toBe(true);
+        expect(await names(await getTeamHome(ownerId), mount.id)).toEqual(['kept.png']);
     });
 
-    test('s3Config update rebuilds the live mount around the new storage config', async () => {
-        const home = await freshTeamHome();
-        try {
-            const mount = await home.addMount({ name: 'Repointed', maxSizeMB: 100 });
-            const rootBefore = await home.drive.getRootFolder(mount.id);
-            expect(rootBefore).not.toBeNull();
-
-            const s3Config = {
-                endpoint: 'https://s3.example.com',
-                bucket: 'team-bucket',
-                prefix: 'eigen/',
-                accessKeyId: 'AK',
-                secretAccessKey: 'SK',
-            };
-            await home.updateMount(mount.id, { s3Config });
-
-            // Same Home instance, no evict — the storage config reached the live Drive.
-            expect(home.drive.getMountConfig(mount.id).s3Config).toEqual(s3Config);
-            // Rebuilt, not dropped: the mount still serves reads from its metadata.db.
-            const rootAfter = await home.drive.getRootFolder(mount.id);
-            expect(rootAfter?.id).toBe(rootBefore!.id);
-            const listed = await home.drive.listMounts();
-            expect(listed.find((m) => m.id === mount.id)?.name).toBe('Repointed');
-        } finally {
-            await home.close();
-        }
-    });
-
-    test('updateMount rejects an s3Config that fails the connection check, leaving the live mount untouched', async () => {
-        // Mirror settings.test.ts's checkS3Connection spy: ok for addMount, then a failed check for
-        // the update — deterministic, no network. Pre-fix updateMount never calls the check at all.
+    test('a bucket that fails its check changes nothing and keeps the home', async () => {
         const s3Storage = await import('../../lib/storage/s3-storage');
-        const spy = spyOn(s3Storage, 'checkS3Connection')
+        const check = spyOn(s3Storage, 'checkS3Connection')
             .mockResolvedValueOnce({ ok: true, message: 'Connection successful', versioning: 'enabled' })
             .mockResolvedValueOnce({ ok: false, message: 'invalid credentials' });
-
-        const home = await freshTeamHome();
         try {
-            const s3Config = {
-                endpoint: 'http://127.0.0.1:1',
-                bucket: 'team-bucket',
-                prefix: '',
-                accessKeyId: 'AK',
-                secretAccessKey: 'SK',
-            };
-            const mount = await home.addMount({ name: 'S3 Live', storageType: 's3', s3Config });
+            const { ownerId, home } = await newTeam();
+            const mount = await home.addMount({ name: 'Checked', storageType: 's3', s3Config: bucketA });
 
             await expect(
-                home.updateMount(mount.id, { s3Config: { ...s3Config, secretAccessKey: 'typo' } }),
+                home.updateMount(mount.id, { s3Config: { ...bucketA, secretAccessKey: 'typo' } }),
             ).rejects.toThrow('S3 connection failed');
 
-            // Rejected before persist + push: the live mount still runs on the original config.
-            expect(home.drive.getMountConfig(mount.id).s3Config).toEqual(s3Config);
-            expect(home.settings.get().mounts?.[mount.id]?.s3Config).toEqual(s3Config);
+            expect(home.closing).toBe(false);
+            expect(await getTeamHome(ownerId)).toBe(home);
+            expect(home.settings.get().mounts?.[mount.id]?.s3Config).toEqual(bucketA);
+            expect(home.drive.getMountConfig(mount.id).s3Config).toEqual(bucketA);
         } finally {
-            spy.mockRestore();
-            await home.close();
+            check.mockRestore();
         }
     });
 
-    test('a rename made while a storage change waits on its S3 check is kept', async () => {
-        const s3Storage = await import('../../lib/storage/s3-storage');
-        const { promise: checked, resolve: passCheck } = Promise.withResolvers<void>();
-        const spy = spyOn(s3Storage, 'checkS3Connection')
-            .mockResolvedValueOnce({ ok: true, message: 'Connection successful', versioning: 'enabled' })
-            .mockImplementationOnce(async () => {
-                await checked;
-                return { ok: true, message: 'Connection successful', versioning: 'enabled' };
-            });
-
-        const home = await freshTeamHome();
+    test('a name or quota change keeps the home and its open document', async () => {
+        const check = await okS3Check();
         try {
-            const s3Config = {
-                endpoint: 'http://127.0.0.1:1',
-                bucket: 'team-bucket',
-                prefix: '',
-                accessKeyId: 'AK',
-                secretAccessKey: 'SK',
-            };
-            const mount = await home.addMount({ name: 'Before', storageType: 's3', s3Config });
+            const { ownerId, home } = await newTeam();
+            const mount = await home.addMount({ name: 'Before', storageType: 's3', s3Config: bucketA });
+            const root = await home.drive.getRootFolder(mount.id);
+            const doc = await home.drive.create(mount.id, root!.id, 'open', 'doc', home.user);
+            await home.drive.getCollabDocument(mount.id, doc.id);
 
-            const repointed = { ...s3Config, bucket: 'other-bucket' };
-            const storageChange = home.updateMount(mount.id, { s3Config: repointed });
-            await home.updateMount(mount.id, { name: 'After' });
-            passCheck();
-            await storageChange;
-
-            expect(home.settings.get().mounts?.[mount.id]).toMatchObject({ name: 'After', s3Config: repointed });
-            const listed = await home.drive.listMounts();
-            expect(listed.find((m) => m.id === mount.id)?.name).toBe('After');
-        } finally {
-            spy.mockRestore();
-            await home.close();
-        }
-    });
-
-    test('two changes to one mount at once both land', async () => {
-        const home = await freshTeamHome();
-        try {
-            const mount = await home.addMount({ name: 'Before', maxSizeMB: 100 });
-
+            // The edit dialog sends the saved bucket along with every rename.
             await Promise.all([
-                home.updateMount(mount.id, { name: 'After' }),
-                home.updateMount(mount.id, { maxSizeMB: 300 }),
+                home.updateMount(mount.id, { name: 'After', s3Config: bucketA }),
+                home.updateMount(mount.id, { maxSizeMB: 750 }),
             ]);
 
-            expect(home.settings.get().mounts?.[mount.id]).toMatchObject({ name: 'After', maxSizeMB: 300 });
-            expect(home.drive.getMountConfig(mount.id).maxSizeMB).toBe(300);
-            const listed = await home.drive.listMounts();
-            expect(listed.find((m) => m.id === mount.id)?.name).toBe('After');
+            expect(home.closing).toBe(false);
+            expect(await getTeamHome(ownerId)).toBe(home);
+            expect(home.drive.hasCollabDocument(mount.id, doc.id)).toBe(true);
+            expect(home.drive.getMountConfig(mount.id).maxSizeMB).toBe(750);
+            expect((await home.drive.listMounts()).find((listed) => listed.id === mount.id)?.name).toBe('After');
         } finally {
-            await home.close();
+            check.mockRestore();
         }
     });
 
-    test('disabling a mount whose databases fail to close still drops it', async () => {
-        const home = await freshTeamHome();
-        const errors = spyOn(console, 'error').mockImplementation(() => {});
-        try {
-            const mount = await home.addMount({ name: 'Stuck', maxSizeMB: 100 });
-            const [live] = home.drive.getMounts();
-            spyOn(live, 'closeAllDatabases').mockRejectedValueOnce(new Error('disk gone'));
+    test('a document open during a storage change closes with its edits saved', async () => {
+        const { ownerId, home } = await newTeam();
+        const mount = await home.addMount({ name: 'Docs', storageType: 'local' });
+        const root = await home.drive.getRootFolder(mount.id);
+        const created = await home.drive.create(mount.id, root!.id, 'edited', 'doc', home.user);
+        const doc = await home.drive.getCollabDocument(mount.id, created.id);
+        doc.doc.getText('body').insert(0, 'kept');
 
-            await home.updateMount(mount.id, { enabled: false });
+        // A local mount given an s3Config has new storage too.
+        await home.updateMount(mount.id, { s3Config: bucketB });
 
-            expect(() => home.drive.getMountConfig(mount.id)).toThrow('Mount not found');
-            expect(errors.mock.calls.some((call) => call.some((arg) => String(arg).includes('disk gone')))).toBe(true);
-        } finally {
-            errors.mockRestore();
-            await home.close();
-        }
+        expect(home.closing).toBe(true);
+        expect(home.drive.hasCollabDocument(mount.id, created.id)).toBe(false);
+        const reopened = await (await getTeamHome(ownerId)).drive.getCollabDocument(mount.id, created.id);
+        expect(reopened.doc.getText('body').toString()).toBe('kept');
     });
 
-    test('disabling a mount drops it from the live Drive', async () => {
-        const home = await freshTeamHome();
-        try {
-            const mount = await home.addMount({ name: 'Temp', maxSizeMB: 100 });
-            expect(home.drive.getMountConfig(mount.id).maxSizeMB).toBe(100);
+    // Pushed onto the live mount, the switch failed at its add here and left the mount enabled with nothing live.
+    test('a switch on a home that is already closing lands on the next home', async () => {
+        const { ownerId, home } = await newTeam();
+        const mount = await home.addMount({ name: 'Late', storageType: 'local' });
+        await home.updateMount(mount.id, { enabled: false });
+        const off = await getTeamHome(ownerId);
+        const closing = off.close();
 
-            await home.updateMount(mount.id, { enabled: false });
-
-            expect(() => home.drive.getMountConfig(mount.id)).toThrow('Mount not found');
-            const listed = await home.drive.listMounts();
-            expect(listed.find((m) => m.id === mount.id)).toBeUndefined();
-        } finally {
-            await home.close();
-        }
+        expect((await off.updateMount(mount.id, { enabled: true })).enabled).toBe(true);
+        await closing;
+        expect(await names(await getTeamHome(ownerId), mount.id)).toEqual([]);
     });
 
-    // The Drive is called directly, so both changes reach it at the same moment.
-    test('two storage changes at once leave one open mount, on the change made last', async () => {
-        const home = await freshTeamHome();
-        const built: Mount[] = [];
-        const init = Mount.prototype.init;
-        const spy = spyOn(Mount.prototype, 'init').mockImplementation(function (this: Mount) {
-            built.push(this);
-            return init.call(this);
+    // Saved first, the mount stayed in the settings behind the 503, and the admin's retry added a second one.
+    test('a new mount the closing home refuses is not saved', async () => {
+        const { home } = await newTeam();
+        const closing = home.close();
+
+        await expect(home.addMount({ name: 'Refused', storageType: 'local' })).rejects.toMatchObject({
+            status: 503,
+            message: 'Home is closing',
         });
-        try {
-            const settings = await home.addMount({ name: 'Raced', maxSizeMB: 100 });
-            built.length = 0;
-            const repointed = (bucket: string) =>
-                createMountConfig(settings.id, {
-                    ...settings,
-                    s3Config: {
-                        endpoint: 'https://s3.example.com',
-                        bucket,
-                        prefix: '',
-                        accessKeyId: 'AK',
-                        secretAccessKey: 'SK',
-                    },
-                });
-
-            await Promise.all([
-                home.drive.updateMount(repointed('first'), true),
-                home.drive.updateMount(repointed('second'), true),
-            ]);
-
-            expect(built).toHaveLength(2);
-            expect(built.filter((m) => !m.closing)).toEqual(home.drive.getMounts());
-            expect(home.drive.getMountConfig(settings.id).s3Config?.bucket).toBe('second');
-        } finally {
-            spy.mockRestore();
-            await home.close();
-        }
-    });
-
-    // The close only closes the mounts the Drive knows, and the new mount is not one of them yet.
-    test('a storage change the home starts closing under leaves no mount open', async () => {
-        const home = await freshTeamHome();
-        const drive = home.drive;
-        const settings = await home.addMount({ name: 'Closing', maxSizeMB: 100 });
-        const built: Mount[] = [];
-        const { promise: opened, resolve: open } = Promise.withResolvers<void>();
-        const { promise: held, resolve: release } = Promise.withResolvers<void>();
-        const init = Mount.prototype.init;
-        const spy = spyOn(Mount.prototype, 'init').mockImplementation(async function (this: Mount) {
-            built.push(this);
-            await init.call(this);
-            open();
-            await held;
-        });
-        try {
-            const repointed = createMountConfig(settings.id, {
-                ...settings,
-                s3Config: {
-                    endpoint: 'https://s3.example.com',
-                    bucket: 'closing',
-                    prefix: '',
-                    accessKeyId: 'AK',
-                    secretAccessKey: 'SK',
-                },
-            });
-            const repointing = drive.updateMount(repointed, true);
-            await opened;
-            const closing = home.close();
-            release();
-
-            await expect(repointing).rejects.toMatchObject({ status: 503, message: 'Home is closing' });
-            await closing;
-            expect(built).toHaveLength(1);
-            expect(built[0].closing).toBe(true);
-            expect(drive.getMounts()).toEqual([]);
-        } finally {
-            spy.mockRestore();
-            await home.close();
-        }
-    });
-
-    test('a closing home builds no new mount', async () => {
-        const home = await freshTeamHome();
-        const drive = home.drive;
-        const spy = spyOn(Mount.prototype, 'init');
-        try {
-            const closing = home.close();
-            await expect(
-                drive.addMount(createMountConfig('late', { ...newMountSettings(), name: 'Late' })),
-            ).rejects.toMatchObject({ status: 503, message: 'Home is closing' });
-            await closing;
-            expect(spy).not.toHaveBeenCalled();
-        } finally {
-            spy.mockRestore();
-        }
-    });
-
-    test('the home close waits for the mount that addMount closes', async () => {
-        const home = await freshTeamHome();
-        const drive = home.drive;
-        const { promise: started, resolve: start } = Promise.withResolvers<Mount>();
-        const { promise: held, resolve: release } = Promise.withResolvers<void>();
-        const { promise: tearingDown, resolve: tearDown } = Promise.withResolvers<void>();
-        const { promise: torn, resolve: finishTeardown } = Promise.withResolvers<void>();
-        const init = Mount.prototype.init;
-        const initSpy = spyOn(Mount.prototype, 'init').mockImplementation(async function (this: Mount) {
-            await init.call(this);
-            start(this);
-            await held;
-        });
-        const closeAllDatabases = Mount.prototype.closeAllDatabases;
-        const closeSpy = spyOn(Mount.prototype, 'closeAllDatabases').mockImplementation(async function (this: Mount) {
-            if (this.id === 'orphan') {
-                tearDown();
-                await torn;
-            }
-            return closeAllDatabases.call(this);
-        });
-        try {
-            const adding = drive.addMount(createMountConfig('orphan', { ...newMountSettings(), name: 'Orphan' }));
-            // A failed check below must not leave this rejection unhandled in the next test.
-            adding.catch(() => {});
-            const mount = await within(started);
-            const closing = home.close();
-            release();
-            await within(tearingDown);
-
-            const first = await Promise.race([closing.then(() => 'closed'), Bun.sleep(200).then(() => 'waiting')]);
-            expect(first).toBe('waiting');
-
-            finishTeardown();
-            await expect(within(adding)).rejects.toMatchObject({ status: 503, message: 'Home is closing' });
-            await within(closing);
-            expect(mount.closing).toBe(true);
-            expect(drive.getMounts()).toEqual([]);
-        } finally {
-            release();
-            finishTeardown();
-            initSpy.mockRestore();
-            closeSpy.mockRestore();
-            await within(home.close());
-        }
-    });
-
-    // The close begins after the open passed its closing check, so the open itself goes through.
-    test('a close that begins while metadata.db opens answers 503', async () => {
-        const home = await freshTeamHome();
-        const drive = home.drive;
-        const built: Mount[] = [];
-        const { promise: opened, resolve: open } = Promise.withResolvers<void>();
-        const { promise: held, resolve: release } = Promise.withResolvers<void>();
-        const metadataDb = path.join(PATHS.DRIVE.ROOT, 'opening', PATHS.DRIVE.METADATA_DB);
-        const getLocalDatabase = home.getLocalDatabase.bind(home);
-        const openSpy = spyOn(home, 'getLocalDatabase').mockImplementation(async (config, relativePath) => {
-            const db = await getLocalDatabase(config, relativePath);
-            if (relativePath === metadataDb) {
-                open();
-                await held;
-            }
-            return db;
-        });
-        const init = Mount.prototype.init;
-        const initSpy = spyOn(Mount.prototype, 'init').mockImplementation(function (this: Mount) {
-            built.push(this);
-            return init.call(this);
-        });
-        try {
-            const adding = drive.addMount(createMountConfig('opening', { ...newMountSettings(), name: 'Opening' }));
-            // A failed check below must not leave this rejection unhandled in the next test.
-            adding.catch(() => {});
-            await within(opened);
-            const closing = home.close();
-            // Time for a close that does not wait to close metadata.db under the mount.
-            await Bun.sleep(100);
-            release();
-
-            await expect(within(adding)).rejects.toMatchObject({ status: 503, message: 'Home is closing' });
-            await within(closing);
-            expect(built).toHaveLength(1);
-            expect(built[0].closing).toBe(true);
-            expect(drive.getMounts()).toEqual([]);
-        } finally {
-            release();
-            openSpy.mockRestore();
-            initSpy.mockRestore();
-            await within(home.close());
-        }
+        await closing;
+        expect(home.settings.get().mounts ?? {}).toEqual({});
     });
 });

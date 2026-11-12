@@ -46,7 +46,7 @@ Team routes take `:ownerId` in its `team_{teamId}` form, not the bare team id. E
 
 ## A team drive starts empty and its calendar starts off
 
-`TeamHome` (`apps/api/src/lib/home/team-home.ts`) runs as a synthetic user with id `team_{teamId}` and holds a Drive and a Calendar, with no mail, contacts or notifications. Its folder and idle window are in [STORAGE.md](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle). It starts with zero mounts: an admin adds each drive from the Admin app (`TeamHome.addMount`). The calendar is off until an admin turns it on (`settings.calendar.enabled`), and while off the calendar getter answers 404. Team settings live in the team's `settings.json` (`JsonStore<TeamSettings>`).
+`TeamHome` (`apps/api/src/lib/home/team-home.ts`) runs as a synthetic user with id `team_{teamId}` and holds a Drive and a Calendar, with no mail, contacts or notifications. Its folder and idle window are in [STORAGE.md](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle). It starts with zero mounts: an admin adds each drive from the Admin app (`TeamHome.addMount`), which opens the mount before it saves it, so a closing home that refuses the mount keeps no record of it. A drive's new storage or on/off switch closes the whole team home ([STORAGE.md](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)). The calendar is off until an admin turns it on (`settings.calendar.enabled`), and while off the calendar getter answers 404. Team settings live in the team's `settings.json` (`JsonStore<TeamSettings>`).
 
 No team user ever logs in, so team members always reach team data through `SharedDrive`, where they count as co-owners ([ACL.md § Design Decisions](ACL.md#design-decisions)).
 

@@ -386,12 +386,12 @@ describe('Backup capture modes', () => {
 describe('Backup of a disabled mount enabled while it is captured', () => {
     const MOUNT_ID = 'modes-enabled-mid-capture';
 
-    // The capture reads a disabled mount through a Mount of its own. Enabling the mount gives writers the drive's new
-    // Mount, another object over the same folder, so an overwrite and the capture's copy must still take turns.
+    // The capture reads a disabled mount through a Mount of its own. Enabling the mount gives writers a new Mount, such
+    // as the next home's, another object over the same folder, so an overwrite and the capture's copy must take turns.
     test('an overwrite through the enabled mount waits for the copy of its file', async () => {
         await getTestContext();
         const owner = await createTestUser('backup-modes-enabled@test.eigen.is', 'testpassword123', 'Modes Enabled');
-        const ownerHome = await getHome(owner.id);
+        let ownerHome = await getHome(owner.id);
         const on = await ownerHome.settings.set({
             mounts: { [MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Toggled' } },
         });
@@ -407,10 +407,11 @@ describe('Backup of a disabled mount enabled while it is captured', () => {
             root!.id,
             new File(['before the backup'], 'toggled.txt'),
         );
-        const off = await ownerHome.settings.set({
+        await ownerHome.settings.set({
             mounts: { [MOUNT_ID]: { ...on.mounts![MOUNT_ID], enabled: false } },
         });
-        await ownerHome.drive.updateMount(createMountConfig(MOUNT_ID, off.mounts![MOUNT_ID]), false);
+        await evictHome(owner.id);
+        ownerHome = await getHome(owner.id);
 
         let overwrite: Promise<DrivePath> | undefined;
         let overwroteDuringCopy = false;
@@ -423,7 +424,7 @@ describe('Backup of a disabled mount enabled while it is captured', () => {
             if (pathId !== file.id || overwrite) return withPathLock.bind(this)(pathId, fn);
             return withPathLock.bind(this)(pathId, async () => {
                 const enabled = await ownerHome.settings.set({ mounts: { [MOUNT_ID]: on.mounts![MOUNT_ID] } });
-                await ownerHome.drive.updateMount(createMountConfig(MOUNT_ID, enabled.mounts![MOUNT_ID]), true);
+                await ownerHome.drive.addMount(createMountConfig(MOUNT_ID, enabled.mounts![MOUNT_ID]));
                 const live = ownerHome.drive.getMounts().find((mount) => mount.id === MOUNT_ID)!;
                 overwrite = overwriteFile(live, file.id, Buffer.from('written during the backup'));
                 overwroteDuringCopy = await Promise.race([

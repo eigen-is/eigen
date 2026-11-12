@@ -1,6 +1,6 @@
 // The collab documents that are open in one Drive, such as docs that someone edits right now. It opens
 // each document once, however many people connect, and closes it again. Drive holds one and passes every
-// open and close through it, and it refuses an open once the drive or the document's mount is closing.
+// open and close through it, and it refuses an open once the drive is closing.
 
 import { isCollabType } from '@workspace/lib/types/drive';
 import type { AsyncSingleton } from '../../utils/singleton';
@@ -15,9 +15,6 @@ export class CollabRegistry {
     // Set by destructAll. A document opened after it would never be destructed, and closing the mount
     // next would close its database under it.
     private destructed = false;
-    // The mounts destructMount swept, for the same reason. A mount that comes back is a new Mount, so
-    // its documents open again.
-    private readonly closedMounts = new WeakSet<Mount>();
 
     public constructor(private readonly ownerId: string) {}
 
@@ -27,7 +24,6 @@ export class CollabRegistry {
 
     public async get(drive: Drive, mount: Mount, pathId: string): Promise<CollabDocument> {
         if (this.destructed) throw new ApiError(503, 'Drive is shutting down');
-        if (this.closedMounts.has(mount)) throw new ApiError(503, 'Mount is closing');
         const key = this.key(mount.id, pathId);
         let getter = this.documents.get(key);
         if (!getter) {
@@ -71,20 +67,7 @@ export class CollabRegistry {
     // document may still write its last changes while it is destructed.
     public async destructAll(): Promise<void> {
         this.destructed = true;
-        await this.destructWhere(() => true);
-    }
-
-    // Destructs the open documents of one mount, such as before the mount gets new storage or is
-    // turned off. The caller closes the mount databases afterwards, the same as after destructAll.
-    public async destructMount(mount: Mount): Promise<void> {
-        this.closedMounts.add(mount);
-        const prefix = this.key(mount.id, '');
-        await this.destructWhere((key) => key.startsWith(prefix));
-    }
-
-    private async destructWhere(matches: (key: string) => boolean): Promise<void> {
         for (const [key, getter] of [...this.documents]) {
-            if (!matches(key)) continue;
             this.documents.delete(key);
             // A load that failed, or that this teardown stopped, opened nothing. Its caller has the error.
             const doc = await getter().catch(() => null);

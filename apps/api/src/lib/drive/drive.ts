@@ -35,7 +35,6 @@ import type {
 } from '@workspace/lib/types/file-history';
 import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import type { MountConfig, MountInfo } from '@workspace/lib/types/mount';
-import { mountStorageIdentity } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -130,7 +129,7 @@ export class Drive {
     private defaultMountId: string = DEFAULT_MOUNT_ID;
     private sharedDb!: SharedDb;
     private readonly documents: CollabRegistry;
-    // The last change queued for each key, such as the ACL of one path or the settings of one mount.
+    // The last change queued for each key, such as the ACL of one path.
     private readonly chains = new Map<string, Promise<void>>();
 
     public constructor(home: Home) {
@@ -215,47 +214,10 @@ export class Drive {
         if (config.isDefault) this.defaultMountId = config.id;
     }
 
-    // Applies saved mount settings to the live mount. Two changes to one mount run in turn, or both could build a new
-    // mount and the one that lands last would leave the other open.
-    public async updateMount(config: MountConfig, enabled: boolean): Promise<void> {
-        return this.runInOrder(`mount:${config.id}`, async () => {
-            const live = this.mounts.get(config.id);
-            if (!enabled) {
-                if (live) await this.removeMount(config.id);
-                return;
-            }
-            if (!live) {
-                await this.addMount(config);
-                return;
-            }
-            // A mount binds its storage backend when built, so new storage needs a new mount. Closing the old one syncs
-            // its databases to the old storage, and the new one replays pending uploads when it starts.
-            if (mountStorageIdentity(live.config) !== mountStorageIdentity(config)) {
-                await this.removeMount(config.id);
-                await this.addMount(config);
-                return;
-            }
-            live.applyConfig(config);
-        });
-    }
-
-    private async removeMount(mountId: string): Promise<void> {
-        if (mountId === this.defaultMountId) {
-            throw new ApiError(400, 'Cannot remove default mount');
-        }
-        const mount = this.mounts.get(mountId);
-        if (!mount) return;
-        // The same order as destruct, for one mount: downloads stop, so no loading document keeps destructMount
-        // waiting, and documents close before the databases, so each saves its last edits.
-        mount.downloads.abort();
-        await this.documents.destructMount(mount);
-        // The mount can't serve anything by now, so it goes even when its databases fail to close.
-        try {
-            await mount.closeAllDatabases();
-        } catch (error) {
-            console.error(`Failed to close mount databases:`, error);
-        }
-        this.mounts.delete(mountId);
+    // Gives the live mount a saved name or quota. A switched-off mount has nothing live to change. New storage or an
+    // on/off switch closes the home instead (TeamHome.updateMount).
+    public updateMount(config: MountConfig): void {
+        this.mounts.get(config.id)?.applyConfig(config);
     }
 
     public getMounts(): Mount[] {

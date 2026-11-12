@@ -1,8 +1,10 @@
 // A team home holds what a team shares, such as its drives and its calendar. Nobody signs in as a
 // team: members reach it through their own access, and a notification to the team goes to them.
-// The team's admins add and change its drives here.
+// The team's admins add and change its drives here. A drive's new storage or on/off switch closes the
+// whole home, which opens again on the next request.
 
 import type { S3Config } from '@workspace/lib/types/mount';
+import { mountStorageIdentity } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
 import { Calendar } from '../calendar/calendar';
@@ -73,17 +75,13 @@ export class TeamHome extends Home {
             s3Config: input.s3Config,
         };
 
-        if (mountSettings.storageType === 's3' && input.s3Config) {
-            const s3Result = await checkS3Connection(input.s3Config);
-            if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
-        }
+        if (mountSettings.storageType === 's3' && input.s3Config) await refuseDeadBucket(input.s3Config);
 
+        // Added before it is saved, so a closing home that refuses the mount keeps no record of it, and a retry adds
+        // one mount, not two.
         const mountId = crypto.randomUUID().slice(0, 8);
+        await this.drive.addMount(createMountConfig(mountId, mountSettings));
         await this.settings.set({ mounts: { [mountId]: mountSettings } });
-
-        const config = createMountConfig(mountId, mountSettings);
-        await this.drive.addMount(config);
-
         return { id: mountId, ...mountSettings };
     }
 
@@ -94,21 +92,27 @@ export class TeamHome extends Home {
         const existing = this.settings.get().mounts?.[mountId];
         if (!existing) throw new ApiError(404, 'Mount not found');
 
-        // The same check as addMount. A mistyped s3Config would replace the working storage with a
-        // dead one, and every write would then pile up in the upload queue.
-        if (existing.storageType === 's3' && update.s3Config) {
-            const s3Result = await checkS3Connection(update.s3Config);
-            if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
-        }
+        // A mistyped s3Config would replace the working storage with a dead one, and every write would then pile up
+        // in the upload queue.
+        if (existing.storageType === 's3' && update.s3Config) await refuseDeadBucket(update.s3Config);
 
         // Only the changed fields are saved. The store merges them into what it holds at that moment,
         // so a change saved by someone else during the check stays.
         const saved = await this.settings.set({ mounts: { [mountId]: update } });
         const updated = saved.mounts?.[mountId];
         if (!updated) throw new ApiError(404, 'Mount not found');
-        // The Drive built its mounts from the settings it read at start, so the change goes to the
-        // live mount too. Otherwise a new quota, name or on/off would wait until the home reloads.
-        await this.drive.updateMount(createMountConfig(mountId, updated), updated.enabled);
+        // A mount binds its storage when it opens, so new storage or an on/off switch closes the home, and the next
+        // request opens it on the saved settings.
+        if (updated.enabled !== existing.enabled || mountStorageIdentity(updated) !== mountStorageIdentity(existing)) {
+            await this.close();
+        } else {
+            this.drive.updateMount(createMountConfig(mountId, updated));
+        }
         return updated;
     }
+}
+
+async function refuseDeadBucket(config: S3Config): Promise<void> {
+    const s3Result = await checkS3Connection(config);
+    if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
 }
