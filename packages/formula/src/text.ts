@@ -16,7 +16,7 @@ export {
     parseA1Range,
     parseStored,
 } from './text/parser';
-export { printA1, printStored, printXlsx } from './text/printer';
+export { printA1, printStored, printXlsx, storedKey } from './text/printer';
 export { findSheetByName, quoteSheetName, sheetFinder, sheetNameKey } from './text/sheet-name';
 export type { Table, TableFinder } from './text/tables';
 export { resolveTables } from './text/tables';

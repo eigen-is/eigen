@@ -9,16 +9,7 @@ import * as zlib from 'node:zlib';
 import type { Literal, SheetSource } from '../src/index';
 import { errorOf, FUNCTIONS } from '../src/index';
 import type { FormulaNode, Table } from '../src/text';
-import {
-    intersect,
-    parseA1Range,
-    parseXlsx,
-    printStored,
-    resolveTables,
-    sheetFinder,
-    Token,
-    tokens,
-} from '../src/text';
+import { intersect, parseA1Range, parseXlsx, resolveTables, sheetFinder, storedKey, Token, tokens } from '../src/text';
 
 export type BookFormula = {
     // The tree the engine loads and its stored text, or null with the reason the file's text could not be loaded.
@@ -152,10 +143,11 @@ export function readBook(path: string): Book {
                     const read = parseXlsx(named, row, column, findSheet);
                     const resolved = 'reason' in read ? read : resolveTables(read, sheet.id, row, column, findTable);
                     const tree = plain && !('reason' in resolved) ? intersect(resolved, FUNCTIONS) : resolved;
+                    const stored = 'reason' in tree ? tree : storedKey(tree);
                     formula =
-                        'reason' in tree
-                            ? refused(`the parser refuses it (${tree.reason})`)
-                            : { tree, stored: printStored(tree), refused: '', named: named !== text };
+                        'reason' in tree || typeof stored !== 'string'
+                            ? refused(`the parser refuses it (${'reason' in tree ? tree.reason : 'too-long'})`)
+                            : { tree, stored, refused: '', named: named !== text };
                     if (shared !== '') masters.set(shared, formula);
                 }
                 cells.push({ row, column, value, formula });

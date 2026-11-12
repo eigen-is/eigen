@@ -5,7 +5,8 @@
 
 import { columnLabel, GRID_COLUMNS, GRID_ROWS } from './a1';
 import { ERROR_LITERALS, isWord, SYMBOLS, Token } from './lexer';
-import { noSheet, readsAsReference, referenceAt } from './parser';
+import type { ParseFailure } from './parser';
+import { MAX_STORED_LENGTH, noSheet, readsAsReference, referenceAt } from './parser';
 import { inQuotes, quoteSheetName } from './sheet-name';
 import type { Ends, FormulaNode } from './tree';
 import { endsAt, NodeKind, RefFlag, RefKind, SheetKind } from './tree';
@@ -17,6 +18,13 @@ export type SheetNames = (id: string) => string | undefined;
 
 export function printStored(tree: FormulaNode): string {
     return `=${print(tree, true, 0, 0, noSheet)}`;
+}
+
+// The stored text of a formula as it is entered or read from a file, or the failure of one whose stored text would
+// not read back: it can be many times as long as the text it was read from, as a!A1 is far down the grid.
+export function storedKey(tree: FormulaNode): string | ParseFailure {
+    const key = printStored(tree);
+    return key.length > MAX_STORED_LENGTH ? { reason: 'too-long', at: 0 } : key;
 }
 
 // The formula as it reads at a cell, row and column from 0. `sheetName` gives a sheet's name by its id.
