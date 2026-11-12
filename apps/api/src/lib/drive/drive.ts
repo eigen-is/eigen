@@ -605,10 +605,11 @@ export class Drive {
             thumbnailInBackground(this, mount, updated, tempId, () => mount.downloadToTemp(path.id, tempId));
             mount.markContentDirty(path.id);
         }
-        if (newParentId) {
+        const newMembers = newParentId ? this.membersToTell(mount.id, path.id) : undefined;
+        if (newMembers) {
             this.emit(SSEventType.DRIVE_PATH_MOVED, updated, {
                 oldParentId,
-                members: this.membersToTell(mount.id, path.id).then((members) => [...oldMembers, ...members]),
+                members: newMembers.then((members) => [...oldMembers, ...members]),
             });
         }
         if (newParentId && oldParentId) {
@@ -623,7 +624,7 @@ export class Drive {
                 details,
                 verifyAncestors: [...oldChain, ...(await mount.getBreadcrumb(path.id))],
             });
-            this.broadcastHistoryUpdated(mount.id, updated);
+            this.broadcastHistoryUpdated(mount.id, updated, newMembers);
         }
         if (to.name !== undefined) {
             this.emit(SSEventType.DRIVE_PATH_RENAMED, updated);
@@ -911,8 +912,7 @@ export class Drive {
         const mount = this.getMount(mountId);
         const crumbs = await mount.getBreadcrumb(pathId);
         const path = crumbs.at(-1);
-        const below = new Set(path?.type === DRIVE_TYPE_FOLDER ? mount.collectDescendantIds(path.id) : []);
-        const sharedBelow = below.size ? (await mount.getPathsWithACL()).filter((shared) => below.has(shared.id)) : [];
+        const sharedBelow = path?.type === DRIVE_TYPE_FOLDER ? await mount.getPathsWithACL(path.id) : [];
         const reached = [...crumbs, ...sharedBelow];
         const shared =
             parseOwnerId(this.owner.id).type === 'team' ||
@@ -1157,8 +1157,12 @@ export class Drive {
 
     // Refreshes the open Activity panels of the owner and of everyone the path is shared with. Nobody
     // waits for it, so a failed broadcast never fails or slows the change itself.
-    private broadcastHistoryUpdated(mountId: string, path: DrivePath): void {
-        broadcastFileHistoryUpdated(this.owner.id, path, this.membersToTell(mountId, path.id)).catch(() => {});
+    private broadcastHistoryUpdated(
+        mountId: string,
+        path: DrivePath,
+        members = this.membersToTell(mountId, path.id),
+    ): void {
+        broadcastFileHistoryUpdated(this.owner.id, path, members).catch(() => {});
     }
 
     public async watchPath(mountId: string, pathId: string, user: User): Promise<void> {

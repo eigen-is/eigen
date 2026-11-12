@@ -924,6 +924,26 @@ describe('Trash query filtering', () => {
         await expect(mount.deletePath(rootId)).rejects.toThrow('Cannot delete root folder');
     });
 
+    test('getPathsWithACL under a folder returns the live shared paths below it, at any depth', async () => {
+        const acl = [{ id: 'user-1', read: true, write: false }];
+        const folderId = await mount.createFolder(rootId, 'SharedBelow');
+        const innerId = await mount.createFolder(folderId, 'Inner');
+        const data = Buffer.from('shared');
+        const childId = await seedFile(mount, folderId, 'child.txt', 'text/plain', data.length, data);
+        const deepId = await seedFile(mount, innerId, 'deep.txt', 'text/plain', data.length, data);
+        const trashedId = await seedFile(mount, innerId, 'trashed.txt', 'text/plain', data.length, data);
+        const emptyId = await seedFile(mount, innerId, 'empty-acl.txt', 'text/plain', data.length, data);
+        const outsideId = await seedFile(mount, rootId, 'outside.txt', 'text/plain', data.length, data);
+        for (const id of [folderId, childId, deepId, trashedId, outsideId]) await mount.updatePath(id, { acl });
+        await mount.updatePath(emptyId, { acl: [] });
+        await mount.updatePath(trashedId, { trashedAt: new Date() });
+
+        const ids = (await mount.getPathsWithACL(folderId)).map((path) => path.id);
+
+        expect(ids.sort()).toEqual([childId, deepId].sort());
+        expect((await mount.getPathsWithACL()).map((path) => path.id)).toContain(outsideId);
+    });
+
     test('assertUniqueName allows creating file with same name as trashed file', async () => {
         const data = Buffer.from('original');
         const fileId = await seedFile(mount, rootId, 'reusable-name.txt', 'text/plain', data.length, data);

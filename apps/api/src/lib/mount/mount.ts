@@ -402,11 +402,18 @@ export class Mount {
         return results.map((r) => this.toDrivePath(r));
     }
 
-    public async getPathsWithACL(): Promise<DrivePath[]> {
+    // Given a folder, only the paths below it, and not the folder itself.
+    public async getPathsWithACL(underFolderId?: string): Promise<DrivePath[]> {
         const results = await this.db
             .select()
             .from(paths)
-            .where(and(sql`${paths.acl} IS NOT NULL AND json_array_length(${paths.acl}) > 0`, isNull(paths.trashedAt)))
+            .where(
+                and(
+                    sql`${paths.acl} IS NOT NULL AND json_array_length(${paths.acl}) > 0`,
+                    isNull(paths.trashedAt),
+                    underFolderId ? sql`${paths.id} IN (${descendantIds(underFolderId)})` : undefined,
+                ),
+            )
             .all();
         return results.map((r) => this.toDrivePath(r));
     }
