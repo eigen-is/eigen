@@ -193,6 +193,7 @@ export class Vector {
     // The last value at most the key among values taken to be sorted upward, by Excel's own steps, which decide
     // the answer when they are not: halving, where a probe at a value of another kind moves to the next of the
     // key's kind after it, else before it, and a probe that equals the key ends at the last of its run of equals.
+    // The search goes on beside the value the probe moved to, not beside the middle it started from.
     private atMost(key: Key): number {
         let low = 0;
         let high = this.used - 1;
@@ -219,7 +220,7 @@ export class Vector {
                 before = at;
                 low = at + 1;
             } else {
-                high = Math.min(at, middle) - 1;
+                high = at - 1;
             }
         }
         return before;
@@ -238,9 +239,9 @@ export class Vector {
         return this.placeOf(above, true);
     }
 
-    // Bisection over values taken to be sorted in the one order of values, kinds and all, with a blank ahead of
-    // every value and an error past them. Of equal keys it finds the first when the values go up and the last when
-    // they go down. `mode` is seek's `match`.
+    // Bisection over values taken to be sorted in the one order of values, kinds and all, with an error and a
+    // blank past every value. Of equal keys it finds the first when the values go up and the last when they go
+    // down. `mode` is seek's `match`.
     private bisect(key: Key, descending: boolean, mode: number): number {
         let low = 0;
         let high = this.used - 1;
@@ -251,7 +252,7 @@ export class Vector {
         while (low <= high) {
             const middle = (low + high) >> 1;
             const value = this.valueAt(middle);
-            const order = value === null ? -1 : typeof value === 'object' ? 1 : compareValues(value, key);
+            const order = typeof value === 'object' ? 1 : compareValues(value, key);
             if (order === 0) hit = middle;
             else if (order < 0 !== descending) before = middle;
             else after = middle;

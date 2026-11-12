@@ -277,11 +277,14 @@ describe('XLOOKUP and XMATCH', () => {
         expect(evaluate('=XLOOKUP(,B1:D1,B2:D2)', { B1: 1, D1: 3, B2: 'x', C2: 'y', D2: 'z' })).toBe('y');
     });
 
-    test('a sorted column with a blank in it is searched as if the blank were not there', () => {
-        const cells = { A1: 1, A2: 2, A4: 3 };
-        expect(evaluate('=XLOOKUP(3,A1:A4,A1:A4,"NF",0,2)', cells)).toBe(3);
-        expect(evaluate('=MATCH(3,A1:A4,1)', cells)).toBe(4);
-        expect(evaluate('=MATCH(2.5,A1:A9,1)', cells)).toBe(2);
+    // Excel batch 13, part 2e.
+    test('a blank inside a sorted column is past every value to a bisection, and of no kind to MATCH', () => {
+        const cells = { G1: 1, G2: 2, G4: 3, G5: 4 };
+        expect(evaluate('=XLOOKUP(3,G1:G5,G1:G5,"nf",0,2)', cells)).toBe('nf');
+        expect(evaluate('=XMATCH(2.5,G1:G5,1,2)', cells)).toBe(3);
+        expect(evaluate('=XMATCH(3,G1:G5,0,-2)', cells)).toBe(4);
+        expect(evaluate('=MATCH(3,G1:G5,1)', cells)).toBe(4);
+        expect(evaluate('=MATCH(2.5,G1:G9,1)', cells)).toBe(2);
     });
 });
 

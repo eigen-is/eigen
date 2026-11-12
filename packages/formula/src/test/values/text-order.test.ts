@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { NA } from '../../index';
 import { compareText, textKey } from '../../values/text-order';
+import { evaluate } from '../recalc/support';
 
 const order = (a: string, b: string) => compareText(textKey(a), textKey(b));
 const sorted = (words: string[]) => [...words].sort(order);
@@ -73,8 +75,9 @@ describe('compareText', () => {
     test('a mark sorts before the digits, whatever its character code', () => {
         expect(order('k?', 'k1')).toBe(-1);
         expect(order('k1', 'k?')).toBe(1);
-        expect(sorted(['a', '~', '0', '_', '?', '9', '/', ' ', '@', 'Z', '['])).toEqual([
+        expect(sorted(['a', '~', '0', '_', '?', '9', '/', ' ', '@', 'Z', '[', '!'])).toEqual([
             ' ',
+            '!',
             '/',
             '?',
             '@',
@@ -86,6 +89,25 @@ describe('compareText', () => {
             'a',
             'Z',
         ]);
+    });
+
+    test('a hyphen and an apostrophe take no part, and order only texts that are equal without them', () => {
+        expect(sorted(['coop', 'co-op', 'cooq', 'con', "co'op", 'co-', 'co'])).toEqual([
+            'co',
+            'co-',
+            'con',
+            'coop',
+            "co'op",
+            'co-op',
+            'cooq',
+        ]);
+        expect(sorted(['-', ' ', "'", '', '!'])).toEqual(['', "'", '-', ' ', '!']);
+        expect(order('a-b', 'ab')).toBe(1);
+        expect(order('ab-', 'a-b')).toBe(-1);
+        expect(order('-a', 'A')).toBe(1);
+        expect(order('a-b', 'ac')).toBe(-1);
+        expect(order('a-c', 'ab')).toBe(1);
+        expect(textKey('co-op')).not.toBe(textKey('coop'));
     });
 
     test('everything else goes by its character code', () => {
@@ -100,7 +122,7 @@ describe('compareText', () => {
             state = (Math.imul(state, 1103515245) + 12345) | 0;
             return (state >>> 8) / 16777216;
         };
-        const letters = 'aAbBeEéÉèêëfFoOöØœsSßšzZžàÀçÇñÑ 019-_.中яα😀';
+        const letters = "aAbBeEéÉèêëfFoOöØœsSßšzZžàÀçÇñÑ 019-'-'_.!中яα😀";
         const words: string[] = [];
         for (let i = 0; i < 300; i++) {
             let word = '';
@@ -125,5 +147,36 @@ describe('compareText', () => {
         expect([...keys].reverse().sort(compareText)).toEqual(once);
         for (let i = 1; i < once.length; i++)
             expect(compareText(once[i - 1] ?? '', once[i] ?? '')).toBeLessThanOrEqual(0);
+    });
+});
+
+// Excel batch 13, part 2a: every mark of the keyboard against a digit, a letter and a space, alone and after a
+// letter, and in a sorted search; then the eight rows on letters, accents and the two marks that take no part.
+describe("Excel's order of text, through the engine", () => {
+    const MARKS = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~';
+    const UNWEIGHED = "'-";
+
+    test.each([...MARKS])('the mark %s', (mark) => {
+        const typed = mark === '"' ? '""' : mark;
+        const light = UNWEIGHED.includes(mark);
+        expect(evaluate(`=("k"&"${typed}")<"k1"`)).toBe(true);
+        expect(evaluate(`=("k"&"${typed}")<"ka"`)).toBe(true);
+        expect(evaluate(`="${typed}"<"1"`)).toBe(true);
+        expect(evaluate(`="${typed}"<"a"`)).toBe(true);
+        expect(evaluate(`="${typed}"<" "`)).toBe(light);
+        expect(evaluate(`=MATCH("k"&"${typed}",{"k!","k1","ka"},1)`)).toBe(light ? NA : 1);
+    });
+
+    test.each([
+        ['="a"<"B"', true],
+        ['="Z"<"a"', false],
+        ['="é"<"f"', true],
+        ['="ä"<"z"', true],
+        ['="-a"<"a"', false],
+        ['="a-b"<"ab"', false],
+        ['="co-op"<"coop"', false],
+        ['="\'a"<"a"', false],
+    ])('%s is %p', (formula, expected) => {
+        expect(evaluate(formula)).toBe(expected);
     });
 });

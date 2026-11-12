@@ -110,20 +110,23 @@ function onLine(x: number, pairs: Pairs) {
     return isError(rise) ? rise : mean(pairs.xs) - rise * mean(pairs.ys) + rise * x;
 }
 
-// The covariance of the two sides over the root of their variances. Each is divided by the count first, the
-// order that gives the last digit Excel shows for RSQ.
-function correlation({ xs, ys }: Pairs) {
+// The covariance of the two sides over the product of their deviations, each of a sample when `less` is 1 and of
+// a whole population when 0. The order is Excel's to the last of its 15 digits: the covariance and both variances
+// are divided by the count first, and each variance has its own root.
+function correlation({ xs, ys }: Pairs, less: number) {
     const spreadX = squaredDeviations(xs);
     const spreadY = squaredDeviations(ys);
     // A side that does not vary, and no pair at all, leave nothing to divide by.
     if (spreadX * spreadY === 0) return DIV0;
     if (!Number.isFinite(spreadX * spreadY)) return NUM;
-    const count = xs.length;
-    return coDeviations(xs, ys) / count / Math.sqrt((spreadX / count) * (spreadY / count));
+    const count = xs.length - less;
+    return coDeviations(xs, ys) / count / (Math.sqrt(spreadX / count) * Math.sqrt(spreadY / count));
 }
 
-// The squares of the first side, plus or minus those of the second, added pair by pair.
+// The squares of the first side, plus or minus those of the second, added pair by pair. No pair at all is
+// #DIV/0!, as Excel has it for SUMXMY2.
 function squares({ xs, ys }: Pairs, sign: number) {
+    if (xs.length === 0) return DIV0;
     let sum = 0;
     for (let i = 0; i < xs.length; i += 1) sum += xs[i] ** 2 + sign * ys[i] ** 2;
     return sum;
@@ -190,10 +193,11 @@ export const STATISTICAL = [
         if (numbers.count() === 0) return NA;
         return numbers.min() <= 0 ? NUM : numbers.count() / numbers.list().reduce((sum, value) => sum + 1 / value, 0);
     }),
-    fn('CORREL', [PAIRS], correlation),
-    fn('PEARSON', [PAIRS], correlation),
+    fn('CORREL', [PAIRS], (pairs) => correlation(pairs, 0)),
+    fn('PEARSON', [PAIRS], (pairs) => correlation(pairs, 0)),
+    // Of a sample, where CORREL is of a population: its square differs from CORREL's in the last digit.
     fn('RSQ', [PAIRS], (pairs) => {
-        const together = correlation(pairs);
+        const together = correlation(pairs, 1);
         return isError(together) ? together : together * together;
     }),
     fn('COVAR', [PAIRS], (pairs) => covariance(pairs, 0)),
@@ -206,10 +210,12 @@ export const STATISTICAL = [
     // How far the y values, the first argument, lie from the line through the pairs.
     fn('STEYX', [PAIRS], ({ xs, ys }) => {
         const spread = squaredDeviations(ys);
-        if (spread === 0) return DIV0;
+        // Two pairs lie on their line and leave nothing to divide by.
+        if (spread === 0 || xs.length < 3) return DIV0;
         return Math.sqrt((squaredDeviations(xs) - coDeviations(xs, ys) ** 2 / spread) / (xs.length - 2));
     }),
     fn('SUMXMY2', [PAIRS], ({ xs, ys }) => {
+        if (xs.length === 0) return DIV0;
         let sum = 0;
         for (let i = 0; i < xs.length; i += 1) sum += (xs[i] - ys[i]) ** 2;
         return sum;

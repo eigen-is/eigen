@@ -625,6 +625,69 @@ describe('RSQ, PEARSON, STEYX, FORECAST and the sums of squares', () => {
     );
 });
 
+// Excel batch 13, part 2c: three uneven sets, one a million off zero, each answer in all 15 digits. RSQ of the
+// third set is one digit under the square of its CORREL, which says in what order Excel divides.
+describe('the order of operations on uneven data', () => {
+    recorded(
+        'batch 13',
+        [
+            ['=RSQ(B1:B6,A1:A6)', 0.966945888579307],
+            ['=CORREL(A1:A6,B1:B6)', 0.983334067638922],
+            ['=PEARSON(A1:A6,B1:B6)', 0.983334067638922],
+            ['=CORREL(A1:A6,B1:B6)^2', 0.966945888579307],
+            ['=SLOPE(B1:B6,A1:A6)', 1.89682471388004],
+            ['=INTERCEPT(B1:B6,A1:A6)', 0.0668014800791683],
+            ['=STEYX(B1:B6,A1:A6)', 0.771711526398245],
+            ['=COVARIANCE.P(A1:A6,B1:B6)', 6.12305555555556],
+            ['=COVARIANCE.S(A1:A6,B1:B6)', 7.34766666666667],
+            ['=VAR.P(A1:A6)', 3.22805555555556],
+            ['=VAR.S(A1:A6)', 3.87366666666667],
+            ['=STDEV.P(B1:B6)', 3.46574506980662],
+            ['=FORECAST(7,B1:B6,A1:A6)', 13.3445744772395],
+            ['=RSQ(B1:B6,C1:C6)', 0.809764368353611],
+            ['=CORREL(C1:C6,B1:B6)', 0.899869084008119],
+            ['=PEARSON(C1:C6,B1:B6)', 0.899869084008119],
+            ['=CORREL(C1:C6,B1:B6)^2', 0.809764368353611],
+            ['=SLOPE(B1:B6,C1:C6)', 11.0842105259408],
+            ['=INTERCEPT(B1:B6,C1:C6)', -11084208.3971688],
+            ['=STEYX(B1:B6,C1:C6)', 1.85134848916737],
+            ['=COVARIANCE.P(C1:C6,B1:B6)', 0.877500000013323],
+            ['=COVARIANCE.S(C1:C6,B1:B6)', 1.05300000001599],
+            ['=VAR.P(C1:C6)', 0.0791666666705472],
+            ['=VAR.S(C1:C6)', 0.0950000000046566],
+            ['=STDEV.P(B1:B6)', 3.46574506980662],
+            ['=FORECAST(7,B1:B6,C1:C6)', -11084130.8076952],
+            ['=RSQ(E1:E4,D1:D4)', 0.821229050279329],
+            ['=CORREL(D1:D4,E1:E4)', -0.906216889204416],
+            ['=PEARSON(D1:D4,E1:E4)', -0.906216889204416],
+            ['=CORREL(D1:D4,E1:E4)^2', 0.82122905027933],
+            ['=SLOPE(E1:E4,D1:D4)', -3.5195530726257],
+            ['=INTERCEPT(E1:E4,D1:D4)', 3.92178770949721],
+            ['=STEYX(E1:E4,D1:D4)', 0.776757333603786],
+            ['=COVARIANCE.P(D1:D4,E1:E4)', -0.39375],
+            ['=COVARIANCE.S(D1:D4,E1:E4)', -0.525],
+            ['=VAR.P(D1:D4)', 0.111875],
+            ['=VAR.S(D1:D4)', 0.149166666666667],
+            ['=STDEV.P(E1:E4)', 1.29903810567666],
+            ['=FORECAST(7,E1:E4,D1:D4)', -20.7150837988827],
+        ],
+        {
+            ...{ A1: 1.1, A2: 2.3, A3: 2.9, A4: 4.2, A5: 5.7, A6: 6.1 },
+            ...{ B1: 2.2, B2: 3.9, B3: 6.1, B4: 8.3, B5: 9.8, B6: 12.4 },
+            ...{ C1: 1000000.1, C2: 1000000.3, C3: 1000000.2, C4: 1000000.7, C5: 1000000.5, C6: 1000000.9 },
+            ...{ D1: 0.1, D2: 0.7, D3: 0.2, D4: 0.9, E1: 3, E2: 1, E3: 4, E4: 1 },
+        },
+    );
+});
+
+// Excel batch 13, part 1.
+describe('too few pairs to divide by', () => {
+    recorded('batch 13', [
+        ['=STEYX({1,2},{3,5})', DIV0],
+        ['=SUMXMY2(Z1:Z3,Z1:Z3)', DIV0],
+    ]);
+});
+
 describe('SUBTOTAL picks the deviation and the variance by 7, 8, 10 and 11', () => {
     recorded('SUBTOTAL', [
         ['=SUBTOTAL(7,D1:D8)', 2.74837614393871],

@@ -171,7 +171,7 @@ export const TEXT_FUNCTIONS = [
         const decimal = cutCharacters(decimals, 0, 1);
         const group = groups === undefined ? (decimal === ',' ? '' : ',') : cutCharacters(groups, 0, 1);
         if (decimal === '' || groups === '' || group === decimal) return VALUE;
-        return separatedNumber(text, decimal, group) ?? parseDateTime(text, Number.NaN) ?? VALUE;
+        return separatedNumber(text, decimal, group) ?? parseDateTime(text) ?? VALUE;
     }),
     // A text that reads as a number is shown as that number. Any other text goes through the text section of the
     // format and stays as it is under a format that does not parse, and a boolean is its name.

@@ -18,9 +18,10 @@ export type CalendarDay = { readonly year: number; readonly month: number; reado
 // Days of the year before each month, in a year without a leap day.
 const DAYS_BEFORE_MONTH = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365];
 
-// A part of TIME and DATE is a 16-bit number to Excel, this the largest: an hour, a minute, a second and a day
-// go up to it, and a month stays under it and above the smallest.
+// A part of TIME and DATE is a 16-bit number to Excel, this the largest of them and how many there are: an hour,
+// a minute, a second and a day go up to it, and a month stays under it and above the smallest.
 const LARGEST_PART = 32767;
+const PARTS = 65536;
 
 // Whether a whole day is a date. A day that is no number is none.
 export function isDate(day: number): boolean {
@@ -56,26 +57,31 @@ export function daysInMonth(year: number, month: number): number {
     return month === 2 && isLeapYear(year) ? 29 : DAYS_BEFORE_MONTH[month] - DAYS_BEFORE_MONTH[month - 1];
 }
 
-// DATE: each part is cut down to a whole number, and a year under 1000 counts from 1900. A day past the largest
-// part counts as the largest, as Excel has it, until it is more days than the calendar has.
+// DATE: each part is cut down to a whole number, and a year under 1000 counts from 1900. A day that is no 16-bit
+// number counts as the largest of them, as Excel has it on either side: a day of -100000 is one of 32767.
 export function dateOf(year: number, month: number, day: number): number | FormulaError {
     const whole = Math.floor(year);
     const months = Math.floor(month);
+    const days = Math.floor(day);
     if (whole < 0 || months >= LARGEST_PART || months < -LARGEST_PART) return NUM;
-    if (day > LAST_SERIAL - FIRST_SERIAL + 1) return NUM;
-    const serial = dateSerial(whole < 1000 ? whole + 1900 : whole, months, Math.min(Math.floor(day), LARGEST_PART));
+    const serial = dateSerial(
+        whole < 1000 ? whole + 1900 : whole,
+        months,
+        days > LARGEST_PART || days < -LARGEST_PART - 1 ? LARGEST_PART : days,
+    );
     return isDate(serial) ? serial : NUM;
 }
 
-// TIME: each part is cut down to a whole number, and what the whole days leave is the time. A part below the
-// smallest 16-bit number comes round to the largest, as Excel has it: -32769 minutes are 32767.
+// TIME: each part is cut down to a whole number, and what the whole days leave is the time. A part past the
+// largest 16-bit number is refused, and one below the smallest comes round as such a number does, as Excel has
+// it: -32769 minutes are 32767, and so are -98305.
 export function timeOf(hours: number, minutes: number, seconds: number): number | FormulaError {
-    const hour = timePart(hours);
-    const minute = timePart(minutes);
-    const second = timePart(seconds);
-    const days = (hour * 3600 + minute * 60 + second) / SECONDS_IN_DAY;
-    if (hour > LARGEST_PART || minute > LARGEST_PART || second > LARGEST_PART || days < 0) return NUM;
-    return days - Math.floor(days);
+    const hour = Math.floor(hours);
+    const minute = Math.floor(minutes);
+    const second = Math.floor(seconds);
+    if (hour > LARGEST_PART || minute > LARGEST_PART || second > LARGEST_PART) return NUM;
+    const days = (comeRound(hour) * 3600 + comeRound(minute) * 60 + comeRound(second)) / SECONDS_IN_DAY;
+    return days < 0 ? NUM : days - Math.floor(days);
 }
 
 // The same day `months` months on, or with `toEnd` the last day of that month. A day past the end of the month
@@ -122,9 +128,9 @@ function weekStart(type: number): number {
     return type === 1 ? 6 : type === 2 ? 0 : type >= 11 && type <= 17 ? type - 11 : -1;
 }
 
-function timePart(part: number): number {
-    const whole = Math.floor(part);
-    return whole < -LARGEST_PART - 1 ? whole + 2 * (LARGEST_PART + 1) : whole;
+// A whole number as the 16-bit number its last 16 bits are: itself from -32768 to 32767.
+function comeRound(whole: number): number {
+    return whole - PARTS * Math.floor((whole + PARTS / 2) / PARTS);
 }
 
 // The serial of 1 January: 365 days for each year before it, and their leap days.

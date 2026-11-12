@@ -409,6 +409,8 @@ describe('POWER, SQRT and the logarithms', () => {
         ['=POWER(1E-200,2)', 0],
         ['=POWER(1E-200,-2)', DIV0],
         ['=POWER(1,1E+300)', 1],
+        ['=POWER(-1,2^31)', 1],
+        ['=POWER(-1,2^49)', NUM],
         ['=POWER(-1,1E+15)', NUM],
         ['=POWER(-1,1E+300)', NUM],
         ['=POWER("3",3)', 27],
@@ -584,6 +586,39 @@ describe('FACT and COMBIN', () => {
         ['=COMBIN(2^31,2)', NUM],
         ['=COMBIN(5,-0.5)', NUM],
         ['=COMBIN(-0.5,0)', NUM],
+    ]);
+});
+
+// Excel batch 13, part 2b: which functions take a number next to a whole one as that whole one. FACT does, from
+// somewhere between 0.00001 and 0.000000001 under it; INT, TRUNC and ROUNDDOWN go by the 15 digits; QUOTIENT, MOD
+// and MROUND by the number as it is. Excel keeps 15 digits of a typed number, so these are written in 15.
+describe('a number next to a whole one', () => {
+    exact([
+        ['=FACT(4.99999)', 24],
+        ['=FACT(4.999999999)', 120],
+        ['=FACT(4.99999999999999)', 120],
+        ['=FACT(170.999999999999)', NUM],
+        ['=COMBIN(5,2.9999999)', 10],
+        ['=COMBIN(5,2.99999999999999)', 10],
+        ['=INT(2.99999999999999)', 2],
+        ['=TRUNC(2.99999999999999)', 2],
+        ['=INT(-4.1*100)', -410],
+        ['=INT(4.1*100)', 410],
+        ['=TRUNC(4.1*100)', 410],
+        ['=ROUNDDOWN(4.1*100,0)', 410],
+        ['=QUOTIENT(4.1*100,1)', 409],
+        ['=QUOTIENT(CEILING(2.5,0.3)*10,1)', 26],
+        ['=TRUNC(CEILING(2.5,0.3)*10)', 27],
+        ['=MOD(-1125899999999.5,1)', 0.5],
+        ['=MOD(1125899999999.5,1)', 0.5],
+        ['=MOD(1125899999999.5,-1)', -0.5],
+        ['=MROUND(6.05,0.1)', 6],
+        ['=MROUND(2.5,5)', 5],
+        ['=MROUND(7.5,5)', 10],
+    ]);
+    close([
+        ['=FACT(170.9999)', 7.257415615308e306],
+        ['=MROUND(1.05,0.1)', 1.1],
     ]);
 });
 
