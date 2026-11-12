@@ -19,7 +19,7 @@ import type { Evaluator } from './evaluator';
 import { Find } from './signature';
 import { toArray } from './views';
 
-export type Key = number | string | boolean;
+type Key = number | string | boolean;
 
 // One row or one column of a table, ready to be searched.
 export class Vector {
