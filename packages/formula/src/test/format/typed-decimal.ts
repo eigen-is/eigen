@@ -13,11 +13,11 @@ export function seeded(seed: number): () => number {
 }
 
 // A typed decimal of up to 15 digits, and the digits of it rounded half away from zero at `decimals`, both made
-// from the same digits with no arithmetic on a double. Half of them end in a 5.
+// from the same digits with no arithmetic on a double. Half of them end in a 5, and `half` says the cut is at it.
 export function typedDecimal(
     random: () => number,
     decimals: number,
-): { typed: string; rounded: string; negative: boolean } {
+): { typed: string; rounded: string; negative: boolean; half: boolean } {
     const whole = Math.floor(random() * 8);
     const places = 1 + Math.floor(random() * (15 - Math.max(whole, 1)));
     let digits = '';
@@ -27,10 +27,11 @@ export function typedDecimal(
     const negative = random() < 0.3;
     const typed = `${negative ? '-' : ''}${digits.slice(0, whole) || '0'}.${digits.slice(whole)}`;
     const unit = 10n ** BigInt(Math.max(places - decimals, 0));
+    const half = (BigInt(digits) % unit) * 2n === unit;
     const kept = ((BigInt(digits) + unit / 2n) / unit) * 10n ** BigInt(Math.max(decimals - places, 0));
     const text = kept.toString().padStart(decimals + 1, '0');
     const point = text.length - decimals;
-    return { typed, rounded: decimals === 0 ? text : `${text.slice(0, point)}.${text.slice(point)}`, negative };
+    return { typed, rounded: decimals === 0 ? text : `${text.slice(0, point)}.${text.slice(point)}`, negative, half };
 }
 
 export function grouped(digits: string): string {

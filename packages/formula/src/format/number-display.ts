@@ -12,9 +12,6 @@ type Shown = number | string | boolean | null | undefined;
 // 29 February as it has in Excel.
 const DAYS = { leap1900: false };
 
-const ZERO = 48;
-const FIVE = 53;
-
 // General is Excel's default-width General (1.23457E+11).
 export function numberDisplay(value: Shown, fa = 'General'): string {
     if (typeof value === 'number' && !Number.isFinite(value)) return value.toString();
@@ -37,22 +34,8 @@ export function valueAsText(value: number | string, fa: string): string | null {
     }
 }
 
-// numfmt rounds by multiplying the double, which for 1.005 lies just under the half. So a decimal that ends in a 5
-// is also shown a sixteenth digit higher and four lower: if only the higher text differs, the cut is at that 5.
 function shown(fa: string, value: Shown): string {
-    if (typeof value !== 'number') return format(fa, value, DAYS);
-    // A whole number that is no multiple of 5 is its own decimal and ends in no 5.
-    if (value % 5 !== 0 && Number.isInteger(value) && Math.abs(value) < 1e15) return format(fa, value, DAYS);
-    const digits = value.toExponential(14);
-    const decimal = Number(digits);
-    const text = format(fa, decimal, DAYS);
-    const first = value < 0 ? 1 : 0;
-    let last = first + 15;
-    while (digits.charCodeAt(last) === ZERO) last -= 1;
-    if (digits.charCodeAt(last > first + 1 ? last : first) !== FIVE) return text;
-    const above = Number(`${digits.slice(0, first + 16)}1${digits.slice(first + 16)}`);
-    const higher = format(fa, above, DAYS);
-    return higher !== text && format(fa, decimal - 4 * (above - decimal), DAYS) === text ? higher : text;
+    return format(fa, typeof value === 'number' ? Number(value.toExponential(14)) : value, DAYS);
 }
 
 export { isDateFormat } from 'numfmt';

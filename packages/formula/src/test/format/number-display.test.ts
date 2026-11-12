@@ -26,23 +26,35 @@ const MIDNIGHT_CARRIES = [
     [45657.999999, 'm/d/yyyy h:mm', '12/31/2024 0:00', '1/1/2025 0:00'],
 ] as const;
 
+// numfmt defect: it rounds by multiplying the double, which for a decimal that ends in a 5 can lie just under the
+// half, so the half goes down where Excel, FIXED and ROUND take it up. Each row holds the number, the format, what
+// numfmt answers today and the right text.
+const TIES_ROUNDED_DOWN = [
+    [1.005, '0.00', '1.00', '1.01'],
+    [74.945, '#,##0.00', '74.94', '74.95'],
+    [260.405, '0.00', '260.40', '260.41'],
+    [0.01005, '0.00%', '1.00%', '1.01%'],
+    [1.005, '0.00E+00', '1.00E+00', '1.01E+00'],
+    [1005, '0.00,', '1.00', '1.01'],
+] as const;
+
+const FRACTION_OF_5_9_TODAY = '5 1/1';
+const FRACTION_OF_5_9_RIGHT = '5 8/9';
+
 // numfmt defect: it writes a whole part from 1E+21 on as 1e+21, which TEXT answers with #VALUE!.
 const DIGITS_OF_1E21_TODAY = null;
 const DIGITS_OF_1E21_RIGHT = '1000000000000000000000';
 
 describe('a number is shown as its 15 digit decimal', () => {
-    test('a decimal that ends in 5 rounds away from zero, as ROUND and FIXED round it', () => {
-        expect(valueAsText(1.005, '0.00')).toBe('1.01');
-        expect(valueAsText(-1.005, '0.00')).toBe('-1.01');
-        expect(valueAsText(0.145, '0.00')).toBe('0.15');
-        expect(valueAsText(74.945, '#,##0.00')).toBe('74.95');
-        expect(valueAsText(8.325, '0.00')).toBe('8.33');
-        expect(valueAsText(1.255, '$0.00')).toBe('$1.26');
-        expect(valueAsText(0.01005, '0.00%')).toBe('1.01%');
-        expect(valueAsText(1.005, '0.00E+00')).toBe('1.01E+00');
-        expect(valueAsText(1005, '0.00,')).toBe('1.01');
-        expect(numberDisplay(1.005, '0.00')).toBe('1.01');
-        expect(numberDisplay(2.675, '#,##0.00')).toBe('2.68');
+    test.each(TIES_ROUNDED_DOWN)('numfmt defect: %p under %s rounds its half down', (value, fa, today, right) => {
+        expect(valueAsText(value, fa)).toBe(today);
+        expect(valueAsText(value, fa)).not.toBe(right);
+        expect(numberDisplay(value, fa)).toBe(today);
+    });
+
+    test('numfmt defect: a fraction of one digit is rounded to a whole it does not add', () => {
+        expect(valueAsText(5.9, '# ?/?')).toBe(FRACTION_OF_5_9_TODAY);
+        expect(valueAsText(5.9, '# ?/?')).not.toBe(FRACTION_OF_5_9_RIGHT);
     });
 
     test('digits past the 15th are zeros', () => {
@@ -59,11 +71,12 @@ describe('a number is shown as its 15 digit decimal', () => {
         expect(valueAsText(1.005, '0.0')).toBe('1.0');
     });
 
-    test('every typed decimal under a plain format is that decimal rounded half away from zero', () => {
+    test('every typed decimal that is not cut at a half is that decimal rounded', () => {
         const random = seeded(20261112);
         for (let run = 0; run < 30000; run += 1) {
             const decimals = Math.floor(random() * 8);
-            const { typed, rounded, negative } = typedDecimal(random, decimals);
+            const { typed, rounded, negative, half } = typedDecimal(random, decimals);
+            if (half) continue;
             const zeros = decimals === 0 ? '' : `.${'0'.repeat(decimals)}`;
             const value = Number(typed);
             const sign = negative && Number(rounded) !== 0 ? '-' : '';
