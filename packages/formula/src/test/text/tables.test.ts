@@ -13,6 +13,7 @@ import {
     printStored,
     printXlsx,
     resolveTables,
+    SheetKind,
     tokens,
     xlsxTree,
 } from '../../text';
@@ -150,6 +151,13 @@ describe('text/tables: a table reference is one leaf that keeps what was written
         expect(printXlsx(xlsxTree(made, FUNCTIONS, isLegacy(made, FUNCTIONS)), 4, 4, sheetName)).toBe(text);
     });
 
+    test('a $ in the name of a table is refused, as it is in a name', () => {
+        for (const text of ['=Sales$[a]', '=T$x[a]', '=$Sales[a]']) {
+            expect(failure(text)).toBe('syntax');
+            expect(parseStored(text)).toMatchObject({ reason: 'syntax' });
+        }
+    });
+
     test('the editor cuts one into a name and its bracket, or the bracket alone', () => {
         expect(tokens('=Sales[[#This Row],[Qty]]*2').map((token) => token.end)).toEqual([1, 6, 25, 26, 27]);
     });
@@ -236,7 +244,8 @@ describe('text/tables: a table reference that reaches the engine was not resolve
 });
 
 // Three tables on Sheet1 and one on Sheet2. One is B2:D7 with a header and a totals row, so its data is rows 3 to 6;
-// Two is F2:H6 with a header only; Raw is J3:K6 with neither; Odd is on Sheet2 with names that need an escape.
+// Two is F2:H6 with a header only; Raw is J3:K6 with neither; Odd is on Sheet2 with names that need an escape; Head is
+// M2:N2, a header row and no data row, as a third-party writer may leave one.
 const TABLES: Readonly<Record<string, Table>> = {
     one: {
         sheet: 's1',
@@ -269,6 +278,7 @@ const TABLES: Readonly<Record<string, Table>> = {
         totalsRows: 0,
         columns: ['Q]', "It's", "x'", '#N', 'Unit\nPrice', ' Sum ', '@a', 'a,b', '2019'],
     },
+    head: { sheet: 's1', top: 1, left: 12, bottom: 1, right: 13, headerRows: 1, totalsRows: 0, columns: ['A', 'B'] },
 };
 
 const findTable: TableFinder = (name, sheet, row, column) =>
@@ -325,6 +335,9 @@ const MEANINGS: readonly (readonly [string, string, string])[] = [
     ['Raw[A]', '$J$3:$J$6', 'LO, IC'],
     ['Raw[]', '$J$3:$K$6', 'LO, IC'],
     ['Raw[#All]', '$J$3:$K$6', 'LO'],
+    ['Head[#All]', '$M$2:$N$2', 'ours: the rows the table has'],
+    ['Head[#Headers]', '$M$2:$N$2', 'ours'],
+    ['Head[[#Headers],[B]]', '$N$2', 'ours'],
     ['One[ [#This Row], [Qty] ]', '$C4', 'M: whitespace after [, before ] and after a comma'],
     ['One[ [Region] : [Qty] ]', '$B$3:$C$6', 'ours: whitespace around the colon too'],
     ['One[[#All],[#Data],[Qty]]', '$C$2:$C$7', 'ours: #All holds the data rows'],
@@ -351,12 +364,17 @@ const UNRESOLVED: readonly (readonly [string, string, string])[] = [
     ['Raw[[#Headers],[#Data]]', 'E4', 'ours'],
     ['One[Nope]', 'E4', 'LO answers #NAME?, Excel is not known: ours is #REF!'],
     ['One[[Qty]:[Nope]]', 'E4', 'ours'],
+    ['One[[Nope]:[Qty]]', 'E4', 'ours: an unknown first column is no column either'],
+    ['Head[A]', 'E4', 'ours: a table with no data row has no data of a column'],
+    ['Head[#Data]', 'E4', 'ours'],
+    ['Head[]', 'E4', 'ours'],
     ['Nope[Qty]', 'E4', 'Excel: #REF! for a table that is gone'],
     ['One[[#Headers],[#Totals]]', 'E4', 'M: no such combination'],
     ['One[[#This Row],[#Data],[Qty]]', 'E4', 'M: no such combination'],
     ['One[[Region],[Qty]]', 'E4', 'M: two columns are a range, never a list'],
     ['One[[Region]:[Qty]:[Unit Price]]', 'E4', 'M'],
     ['One[[Qty]:[#Data]]', 'E4', 'M'],
+    ['One[[#Data]:[Qty]]', 'E4', 'M: a colon stands between two columns, never an item'],
     ['One[#Nothing]', 'E4', 'M: no such item'],
     ['One[[]]', 'E4', 'M'],
     ['One[[Qty],]', 'E4', 'M'],
@@ -375,6 +393,9 @@ const UNRESOLVED: readonly (readonly [string, string, string])[] = [
 describe('text/tables: the range a table reference stands for', () => {
     test.each(MEANINGS)('%s is %s (%s)', (text, range) => {
         expect(resolved(text)).toBe(range);
+        // One cell is a cell, with no second corner, so the stored text reads back as the same tree.
+        const tree = resolveTables(treeA1(`=${text}`, 'E4'), 's1', ...at('E4'), findTable);
+        expect(parseStored(printStored(tree))).toEqual(tree);
     });
 
     test.each(UNRESOLVED)('%s at %s stays as it was read (%s)', (text, host) => {
@@ -397,6 +418,12 @@ describe('text/tables: the range a table reference stands for', () => {
         expect(stored('=X', 'A1')).toBe('=X');
         const tree = resolveTables(treeA1('=One[Qty]', 'A1'), 's2', 0, 0, findTable);
         expect(printStored(tree)).toBe('=[s1]!R3C3:R6C3');
+        expect(tree).toMatchObject({ kind: NodeKind.Ref, sheetKind: SheetKind.Id, sheet: 's1' });
+        expect(parseStored(printStored(tree))).toEqual(tree);
+        const own = resolveTables(treeA1('=One[Qty]', 'A1'), 's1', 0, 0, findTable);
+        expect(printA1(own, 0, 0, sheetName)).toBe('=$C$3:$C$6');
+        expect(own).toMatchObject({ kind: NodeKind.Ref, sheetKind: SheetKind.Host, sheet: '' });
+        expect(parseStored(printStored(own))).toEqual(own);
     });
 
     test('the range does not move with the formula, but for the row of this row', () => {
@@ -449,7 +476,7 @@ describe('text/tables: against a model, over generated tables and references', (
     // A column name as a formula writes it: a quote before each of the four characters that need one.
     const escaped = (name: string) => name.replace(/['[\]#]/g, "'$&");
 
-    test('every cell the resolved range names is the cell the model names', () => {
+    test('every cell the resolved range names is the cell the model names, and its stored text reads back as it', () => {
         const { random, chance, pick } = dice(31);
         const whole = (limit: number) => Math.floor(random() * limit);
         let ranges = 0;
@@ -562,6 +589,8 @@ describe('text/tables: against a model, over generated tables and references', (
             const got = [range.sheet, range.start.row, range.end.row, range.start.column, range.end.column];
             const sheet = table.sheet === hostSheet ? undefined : sheetName(table.sheet);
             expect(`${run} ${text} ${got}`).toBe(`${run} ${text} ${[sheet, band[0], band[1], span[0], span[1]]}`);
+            // The tree law holds for a resolved tree: its stored text reads back as itself.
+            expect(parseStored(printStored(tree))).toEqual(tree);
             // Read from another cell the columns are the same, and the rows too unless they are this row.
             const moved = parseA1Range(printA1(tree, hostRow + 3, hostColumn + 2, sheetName).slice(5, -1));
             const shift = rows === '#This Row' ? 3 : 0;
