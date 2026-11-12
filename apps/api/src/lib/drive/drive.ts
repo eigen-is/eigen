@@ -122,6 +122,8 @@ export type ContentWriteResult = { path: DrivePath; etag: string };
 // The folder a copy lands in, reached as the copying user reaches it.
 export type CopyTarget = { drive: DriveLike; mountId: string; parentId: string };
 
+const UNKNOWN_TYPE = 'application/octet-stream';
+
 export class Drive {
     // A live WebDAV lock holds the home, so only a close for another reason, such as a restore, drops it.
     public readonly lockManager = new LockManager(() => this.home.hold());
@@ -658,8 +660,21 @@ export class Drive {
         // Read before the move: whoever could see the path through its old folders, or watches one, hears that it left.
         const oldChain = newParentId ? await mount.getBreadcrumb(path.id) : [];
         const oldMembers = newParentId ? await this.getEffectiveMembers(mount.id, path.id) : [];
-        const updated = await mount.updatePath(path.id, to);
+        // A file's type follows its name: a new extension with a known type gives the file that type. Bun answers
+        // octet-stream for a name it doesn't know, and then the type stays.
+        const named = to.name !== undefined && path.type === DRIVE_TYPE_FILE ? Bun.file(to.name).type : UNKNOWN_TYPE;
+        const retyped = named !== UNKNOWN_TYPE && named !== Bun.file(path.name).type;
+        const updated = await mount.updatePath(path.id, { ...to, ...(retyped && { mimeType: named }) });
         this.releaseLocksUnder(mount, path.id);
+        if (retyped) {
+            // The thumbnail and the search text depend on the type, so both are made again, as after an overwrite.
+            const tempId = crypto.randomUUID();
+            await commitFromTemp(this, mount, tempId, async () => {
+                await mount.downloadToTemp(path.id, tempId);
+                return updated;
+            });
+            mount.markContentDirty(path.id);
+        }
         if (newParentId) {
             this.emit(SSEventType.DRIVE_PATH_MOVED, updated, {
                 oldParentId,

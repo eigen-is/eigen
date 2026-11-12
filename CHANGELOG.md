@@ -25,6 +25,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Locks over WebDAV** — a file someone locked stays locked to everyone else, and only they can renew the lock. A lock on a folder also holds for people who only have a subfolder shared with them
 - **Folders with a locked file over WebDAV** — deleting, moving or replacing a folder is refused while someone else has a file inside it locked
 - **Download names in Drive** — a file downloads and attaches to mail under the name you see in Drive, also after a rename or a save from Word or Excel over WebDAV. Attachments in a chat or document keep the name they were uploaded with
+- **Renamed files in Drive** — a file renamed to another extension, such as `photo.bin` to `photo.png`, gets the icon, preview and thumbnail of its new type and shows under **All images**. A file renamed earlier keeps its old type until its extension changes again
 - **Dialogs in Drive that close** — a dialog keeps its text while it fades out, where **Move to trash** flashed "Remove 0 shared items". **Email collaborators** now fades out like the others
 - **Move to in Drive** — for an item of another drive, such as a team's file in a document app's list, the **Move to** dialog starts in that item's drive
 

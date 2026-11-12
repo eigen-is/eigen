@@ -12,8 +12,8 @@ import type { User } from '../user';
 import type { Drive } from './drive';
 import { folderIn, withFreeName } from './naming';
 
-// `commit` writes the temp file when its caller has not yet, and puts the bytes in the tree. No caller
-// removes the temp file: a failed commit does here, and after a commit the thumbnail job does.
+// `commit` writes the temp file when its caller has not yet and puts the bytes in the tree, or only fetches them for
+// a file whose type changed. No caller removes the temp file: a failed commit does here, then the thumbnail job.
 export async function commitFromTemp(
     drive: Drive,
     mount: Mount,

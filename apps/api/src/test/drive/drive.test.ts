@@ -24,8 +24,10 @@ import {
     drivePost,
     drivePut,
     driveUpload,
+    eventually,
     findOrFail,
     getTestContext,
+    TEST_PNG_BYTES,
 } from '../setup';
 import { webdavRequest } from '../webdav/setup';
 
@@ -2808,6 +2810,79 @@ describe('Drive', () => {
             for (const file of [first, second]) {
                 expect(await downloadName(file.id)).toBe('attachment; filename="photo.png"');
             }
+        });
+    });
+
+    describe('The type of a renamed file', () => {
+        let folder: DrivePath;
+        const token = () => ctx.alice.user.sessionToken;
+        const ownerId = () => ctx.alice.user.id;
+
+        beforeAll(async () => {
+            folder = await drivePost(token(), ownerId(), aliceMountId, `folder/${aliceRootId}`, {
+                folderName: 'RenamedTypes',
+            });
+        });
+
+        const upload = (name: string, type: string, bytes: BlobPart = 'x') =>
+            driveUpload(token(), ownerId(), aliceMountId, folder.id, new File([bytes], name, { type }));
+        const rename = (pathId: string, newName: string) =>
+            drivePut(token(), ownerId(), aliceMountId, `path/${pathId}/rename`, { newName });
+        const read = (pathId: string) => driveGet<DrivePath>(token(), ownerId(), aliceMountId, `path/${pathId}`);
+        const imageIds = async (): Promise<string[]> => {
+            const res = await authedRequest(token(), `/drive/${ownerId()}/${aliceMountId}/mime/image-png`);
+            return (await assertJson<DrivePath[]>(res)).map((path) => path.id);
+        };
+
+        test('a rename to an extension with a known type takes the type, a thumbnail and a place among the images', async () => {
+            const file = await upload('photo.bin', 'application/octet-stream', TEST_PNG_BYTES);
+            expect(file.mimeType).toBe('application/octet-stream');
+            expect(await imageIds()).not.toContain(file.id);
+
+            await rename(file.id, 'photo.png');
+            expect((await read(file.id)).mimeType).toBe('image/png');
+            expect(await imageIds()).toContain(file.id);
+            await eventually(async () => (await read(file.id)).thumbnail ?? undefined, 'the thumbnail');
+        });
+
+        test('a WebDAV MOVE that renames takes the type too', async () => {
+            const base = `/webdav/${ownerId()}/${aliceMountId}/RenamedTypes`;
+            const email = ctx.alice.user.email;
+            expect((await webdavRequest(email, 'PUT', `${base}/scan.bin`, { body: TEST_PNG_BYTES })).status).toBe(201);
+            const move = await webdavRequest(email, 'MOVE', `${base}/scan.bin`, {
+                headers: { Destination: `http://localhost${base}/scan.png` },
+            });
+            expect(move.status).toBe(201);
+            const moved = await (await getHome(ownerId())).drive.resolvePath(aliceMountId, '/RenamedTypes/scan.png');
+            if (!moved) throw new Error('expected the moved file');
+            expect(moved.mimeType).toBe('image/png');
+            expect(await imageIds()).toContain(moved.id);
+        });
+
+        test('a rename to an unknown or missing extension, or within one type, keeps the type', async () => {
+            const file = await upload('keeps.png', 'image/x-uploaded');
+            for (const newName of ['kept.png', 'kept.xyzq', 'kept']) {
+                await rename(file.id, newName);
+                expect((await read(file.id)).mimeType).toBe('image/x-uploaded');
+            }
+        });
+
+        test('a file renamed to a text type is found by its text', async () => {
+            const file = await upload('notes.bin', 'application/octet-stream', 'quokkaword in a note');
+            const { drive } = await getHome(ownerId());
+            const found = () => drive.search({ q: 'quokkaword', limit: 10 }).some((path) => path.id === file.id);
+            await rename(file.id, 'notes.txt');
+            await eventually(async () => found() || undefined, 'the text in the search index');
+        });
+
+        test('a renamed document keeps its type', async () => {
+            const doc = await drivePost(token(), ownerId(), aliceMountId, `folder/${folder.id}/create/doc`, {
+                fileName: 'TypeDoc',
+            });
+            await rename(doc.id, 'TypeDoc.png');
+            const renamed = await read(doc.id);
+            expect(renamed.name).toBe('TypeDoc.png');
+            expect(renamed.mimeType).toBe(doc.mimeType);
         });
     });
 
