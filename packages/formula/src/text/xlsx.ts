@@ -14,6 +14,7 @@ import {
 } from '../functions/excel-names';
 import type { Registry } from '../functions/registry';
 import { columnIndex } from './a1';
+import { UNDERSCORE } from './chars';
 import { REF_ERROR, Token } from './lexer';
 import type { ParseFailure, SheetFinder } from './parser';
 import { parseA1, readsAsReference } from './parser';
@@ -29,7 +30,6 @@ const ARRAY = 4;
 const TOP = 8;
 const CLASS = ONE | PLACE | ARRAY;
 
-const UNDERSCORE = 95;
 const PARAMETER = '_xlpm.';
 const OPTIONAL = '_xlop.';
 // The marks of a function that is no one's built-in, such as _XLUDF. and _XLL., as a stored call spells them.

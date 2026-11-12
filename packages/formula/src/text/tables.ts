@@ -55,8 +55,8 @@ export function resolveTables(
     return mapLeaves(tree, (node) => {
         if (node.kind !== NodeKind.Table || node.sheetKind !== SheetKind.Host) return node;
         const picked = pick(node.text);
-        const table = findTable(node.text.slice(0, node.text.indexOf('[')), sheet, row, column);
-        if (picked === null || table === undefined) return node;
+        const table = picked && findTable(node.text.slice(0, node.text.indexOf('[')), sheet, row, column);
+        if (!picked || !table) return node;
         const { rows } = picked;
         const first = picked.first === '' ? 0 : columnOf(table, picked.first);
         const last = picked.first === '' ? table.right - table.left : columnOf(table, picked.last);

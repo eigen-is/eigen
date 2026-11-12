@@ -24,6 +24,7 @@ export const UPPER_C = 67;
 export const UPPER_R = 82;
 export const BRACKET_OPEN = 91;
 export const BRACKET_CLOSE = 93;
+export const UNDERSCORE = 95;
 export const LOWER_A = 97;
 export const LOWER_E = 101;
 export const LOWER_Z = 122;
