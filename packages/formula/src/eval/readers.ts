@@ -14,6 +14,7 @@ import { Families } from './families';
 import type { Vector } from './search';
 import { edge } from './search';
 import type { Held } from './signature';
+import { add } from './sum';
 
 export class Frame {
     // The arguments as prepared and then as read, and what the body gets, one per parameter.
@@ -91,8 +92,8 @@ export class Numbers {
     // Added number by number in written order. Of a family's numbers the sum is 0 when the last addition leaves
     // next to nothing.
     public sum(): number {
-        const { walk } = this.start();
-        const sum = walk.add();
+        const { walk, recalc } = this.start();
+        const sum = add(walk, recalc);
         this.done();
         return this.snaps ? snapSum(sum, walk.before) : sum;
     }

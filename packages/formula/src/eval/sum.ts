@@ -1,6 +1,47 @@
-// Adding one number to a sum many times over, as an aggregate must for a stretch of equal elements of an array,
-// such as the million blank rows under a column's cells. The answer is the one a loop of single additions gives,
-// bit for bit, in a few steps: while the sum stays between two powers of two, every addition rounds the same way.
+// The one adder: the sum of what a walk hands out, as adding number by number in written order gives it. A stretch
+// of equal elements of an array, such as the million blank rows under a column's cells, is added in a few steps
+// that give the answer of a loop of single additions bit for bit: while the sum stays between two powers of two,
+// every addition rounds the same way.
+
+import type { Recalc } from '../recalc/recalc';
+import { CALC } from '../values/errors';
+import type { Walk } from './walk';
+
+// The sum of everything the walk still hands out, with the sum before the last addition left in `walk.before`.
+export function add(walk: Walk, recalc: Recalc): number {
+    let sum = 0;
+    let before = 0;
+    while (walk.next()) {
+        const { num, from, to, reps, rows } = walk;
+        if (reps === null && rows === 1) {
+            for (let i = from; i < to - 1; i += 1) sum += num[i];
+            before = sum;
+            sum += num[to - 1];
+            continue;
+        }
+        let cells = 0;
+        let equal = true;
+        for (let i = from; i < to; i += 1) {
+            cells += reps === null ? 1 : reps[i];
+            equal &&= num[i] === num[from];
+        }
+        if (equal) {
+            before = repeated(sum, num[from], cells * rows - 1);
+            sum = before + num[from];
+        } else if (!recalc.room((rows - 1) * (to - from))) walk.fail(CALC);
+        else {
+            // A row of different numbers that stands for many written rows is added that many times over.
+            for (let row = 0; row < rows; row += 1) {
+                for (let i = from; i < to; i += 1) {
+                    before = reps === null ? sum : repeated(sum, num[i], reps[i] - 1);
+                    sum = before + num[i];
+                }
+            }
+        }
+    }
+    walk.before = before;
+    return sum;
+}
 
 // `start` after `value` was added to it `times` times, one addition at a time.
 export function repeated(start: number, value: number, times: number): number {

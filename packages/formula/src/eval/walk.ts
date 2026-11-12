@@ -1,13 +1,12 @@
 // The one walk over the arguments of a function that takes every value, such as SUM, MAX or AND. It hands out
 // spans of numbers in argument order: a value typed as an argument, a stretch of a column's own plane for a
 // reference, and the stored rows of an array. What counts is the family's data. The call wrapper has computed every
-// cell and found every error before the walk starts, so it meets none. It also adds what it hands out, since a
-// stored row of an array can stand for a million written ones.
+// cell and found every error before the walk starts, so it meets none. A stored row of an array can stand for a
+// million written ones, which the walk says beside the span.
 
 import type { Column } from '../store/column';
 import { CellKind, KIND_MASK } from '../store/column';
 import type { FormulaError } from '../values/errors';
-import { CALC } from '../values/errors';
 import type { ArrayValue, Reference } from '../values/value';
 import { isArray, isReference } from '../values/value';
 import type { Evaluator } from './evaluator';
@@ -15,7 +14,6 @@ import { Fact } from './facts';
 import type { Family } from './families';
 import { Families } from './families';
 import type { Held } from './signature';
-import { repeated } from './sum';
 
 export class Walk {
     // The span: `num` from `from` up to `to`. Of a cell or an element that is no number only the count means something.
@@ -24,14 +22,14 @@ export class Walk {
     public to = 0;
     // How many cells were handed out so far.
     public count = 0;
-    // Set when the walk would add more than it may: the call is then #CALC!.
+    // Set when adding what the walk hands out would take more than the formula may: the call is then #CALC!.
     public error: FormulaError | null = null;
-    // After `add`, the sum before its last addition.
+    // After the walk was added, the sum before its last addition.
     public before = 0;
-    // Of a stored row of an array: how many equal elements each number stands for, null when each stands for one,
-    // and how many written rows the row stands for. In written order each number comes `reps` times, all of it `rows`.
-    private reps: Int32Array | null = null;
-    private rows = 1;
+    // Of a stored row of an array, how often each number of the span comes in a written row, null for once, and
+    // how many written rows the row stands for.
+    public reps: Int32Array | null = null;
+    public rows = 1;
     private readonly ctx: Evaluator;
     // Where a value that lies in no plane is put to be handed out: one typed value, or the cells of one row.
     private span = new Float64Array(8);
@@ -102,54 +100,6 @@ export class Walk {
             } else if (this.argument(this.args[this.arg++])) return true;
             if (this.error !== null) return false;
         }
-    }
-
-    // The sum of everything the walk still hands out, as adding the numbers one by one in written order gives it.
-    public add(): number {
-        let sum = 0;
-        let before = 0;
-        while (this.next()) {
-            if (this.reps !== null || this.rows !== 1) {
-                sum = this.addRow(sum);
-                before = this.before;
-                continue;
-            }
-            const { num, to } = this;
-            for (let i = this.from; i < to - 1; i += 1) sum += num[i];
-            before = sum;
-            sum += num[to - 1];
-        }
-        this.before = before;
-        return sum;
-    }
-
-    // `start` and a stored row of an array that stands for more than its own numbers, with the sum before the
-    // last addition left in `before`. Only a row of different numbers that stands for many rows is a loop.
-    private addRow(start: number): number {
-        const { num, from, to, reps, rows } = this;
-        let sum = start;
-        let cells = 0;
-        let equal = true;
-        for (let i = from; i < to; i += 1) {
-            cells += reps === null ? 1 : reps[i];
-            equal &&= num[i] === num[from];
-        }
-        if (equal) {
-            this.before = repeated(sum, num[from], cells * rows - 1);
-            return this.before + num[from];
-        }
-        const more = (rows - 1) * (to - from);
-        if (!this.ctx.recalc.room(more)) {
-            this.fail(CALC);
-            return sum;
-        }
-        for (let row = 0; row < rows; row += 1) {
-            for (let i = from; i < to; i += 1) {
-                this.before = reps === null ? sum : repeated(sum, num[i], reps[i] - 1);
-                sum = this.before + num[i];
-            }
-        }
-        return sum;
     }
 
     private argument(value: Held): boolean {
@@ -331,7 +281,7 @@ export class Walk {
         return true;
     }
 
-    private fail(error: FormulaError): boolean {
+    public fail(error: FormulaError): boolean {
         this.error = error;
         this.area = null;
         this.array = null;
