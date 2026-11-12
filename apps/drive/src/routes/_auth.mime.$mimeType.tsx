@@ -29,7 +29,11 @@ function MimeRoute() {
     const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
         items: folderContents,
         capabilities: DRIVE_CAPABILITIES.listing,
-        onOpenFolder: () => navigate({ to: Route.fullPath, params: { mimeType }, search: { pid: undefined } }),
+        onOpenFolder: (path: DrivePath) =>
+            navigate({
+                to: '/fs/$ownerId/$mountId/$pathId',
+                params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
+            }),
         onSelectItem: (path: DrivePath) =>
             navigate({
                 to: Route.fullPath,
