@@ -342,6 +342,24 @@ describe('the bound on what one array stores', () => {
         expect(valueAt(engine, 'A6')).toBe(CALC);
         expect(valueAt(engine, 'A7')).toBe(3 * 6 * 1048576 + 6 * million);
     });
+
+    test('a text that a call made for an element counts by its characters', () => {
+        const engine = engineOf({
+            s1: {
+                A1: 'a'.repeat(20000),
+                A2: '=SUM(LEN(ROW(B1:B1000)&A1))',
+                A3: '=SUM(LEN(ROW(B1:B700)&A1))',
+                A4: '=SUM(LEN(UPPER(IF(ROW(B1:B1000),A1))))',
+                A5: '=SUM(LEN(IF(ROW(B1:B1000),A1)))',
+            },
+        });
+        expect(engine.recalc(ALL)).toEqual({ loops: [], stopped: false });
+        expect(valueAt(engine, 'A2')).toBe(CALC);
+        expect(valueAt(engine, 'A3')).toBe(700 * 20000 + 9 + 90 * 2 + 601 * 3);
+        expect(valueAt(engine, 'A4')).toBe(CALC);
+        // One text that every element picked is stored once.
+        expect(valueAt(engine, 'A5')).toBe(1000 * 20000);
+    });
 });
 
 describe('a value is the same on a fresh load as after any history', () => {

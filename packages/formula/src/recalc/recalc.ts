@@ -31,8 +31,8 @@ export type RecalcResult = {
 const BUDGET = 640;
 const CELL = 6;
 
-// The most one formula makes: the elements its arrays store, and the numbers it adds one by one for cells that no
-// array stores. A formula that needs more is #CALC!, whatever the other formulas made.
+// The most one formula makes: the elements its arrays store, the characters of the texts it made for them, and the
+// numbers it adds one by one for cells that no array stores. A formula that needs more is #CALC!, alone.
 const MOST_MADE = 2 ** 24;
 
 const UNWIND = Object.freeze({ reason: 'the evaluation nests too deep' });

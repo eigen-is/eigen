@@ -53,6 +53,8 @@ export function lift(
             const result = failed ?? run(ctx, entry, frame.held, count);
             // Of an element that answers an array, the first value: ROW of a range of three rows is its first row.
             const item = isLazy(result) ? null : isArray(result) ? result.items[0] : result;
+            // A text takes its length in memory, where another element takes one place.
+            if (typeof item === 'string' && !ctx.recalc.room(item.length)) return CALC;
             if (isLazy(result)) picks[items.length] = result;
             items.push(item);
             references ||= isReference(item);
