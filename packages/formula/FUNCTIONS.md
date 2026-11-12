@@ -10,7 +10,7 @@ These are decided, and each is said once. A row repeats a choice only where it i
 
 **The day line.** Day 0 is 30 December 1899 and the calendar is the real one: there is no 29 February 1900, and a negative number is a day before day 0. Dates run from 1 January 0001 to 31 December 9999, and every date function works on all of them. Excel counts 1 January 1900 as day 1 and has a 29 February 1900, so its dates in January and February 1900 are one day off from ours, and it has no dates before 1900. `DATE` reads a year from 1000 to 9999 as written, where Excel adds 1900 to any year under 1900. From 1 March 1900 on, the serials are Excel's. Example: `=YEAR(0)` is 1900 in Excel and 1899 in this engine.
 
-**An empty text in arithmetic is 0.** An empty text, such as a cell holding `=""`, counts as 0 where a number is needed and as FALSE where a truth value is. Example: `=""+1` is `#VALUE!` in Excel and 1 in this engine.
+**An empty text in arithmetic is 0.** An empty text, such as a cell holding `=""`, counts as 0 where a number is needed and as FALSE where a truth value is. Example: `=""+1` is `#VALUE!` in Excel and 1 in this engine, and so are `IF("",1,2)` and `NOT("")`, 2 and TRUE here.
 
 **A date typed without a year is no number.** A text such as `"1/2"` or `"15 March"` is read as a date only by `DATEVALUE` and `TIMEVALUE`, which take the year of the recalc. Everywhere else, in arithmetic and as a date argument, it is `#VALUE!`, because reading it would make the cell depend on the clock. Example: `=VALUE("1/2")` is 2 January of this year in Excel and `#VALUE!` in this engine; `=DATEVALUE("1/2")` agrees.
 
@@ -33,7 +33,7 @@ These are decided, and each is said once. A row repeats a choice only where it i
 | `ABS` | as Excel | |
 | `ACOS` | as Excel | |
 | `ACOSH` | as Excel | |
-| `AGGREGATE` | partial | A `k` given as an array or a range (`AGGREGATE(14,6,D1:D8,{1,2})`) is `#VALUE!`; Excel answers one value per `k`. The options that leave out hidden rows count them, as the engine is told of no hidden row. |
+| `AGGREGATE` | partial | A `k` given as an array or a range (`AGGREGATE(14,6,D1:D8,{1,2})`) is `#VALUE!`; Excel answers one value per `k`. An error cell as `k` answers that error: over `#DIV/0!` in B4, `AGGREGATE(14,6,D1:D8,B4)` is `#DIV/0!`, Excel `#VALUE!`. The options that leave out hidden rows count them, as the engine is told of no hidden row. |
 | `ASIN` | as Excel | |
 | `ASINH` | as Excel | |
 | `ATAN` | as Excel | |
@@ -70,7 +70,7 @@ These are decided, and each is said once. A row repeats a choice only where it i
 | `RADIANS` | as Excel | |
 | `RAND` | as Excel | Volatile: see the choices. A draw is not compared with Excel's. |
 | `RANDBETWEEN` | as Excel | Volatile: see the choices. A draw is not compared with Excel's. |
-| `ROUND` | as Excel | |
+| `ROUND` | differs | On a true tie in the 16th digit it gives the exact answer: `ROUND(73938790243119/4,1)&""` is `18484697560779.8`, Excel `18484697560779.7`. |
 | `ROUNDDOWN` | as Excel | |
 | `ROUNDUP` | as Excel | |
 | `SIGN` | as Excel | |
@@ -98,7 +98,7 @@ These are decided, and each is said once. A row repeats a choice only where it i
 | `AVERAGEIFS` | differs | No 255-character limit on a criterion. No Excel row is recorded for this function; it runs on `COUNTIF`'s criteria code. |
 | `CORREL` | as Excel | |
 | `COUNT` | as Excel | |
-| `COUNTA` | as Excel | |
+| `COUNTA` | differs | A blank cell in the reference array of a lifted `INDEX` or an `XLOOKUP` is not counted: `COUNTA(INDEX(C1:C4,{1;2;3;4}))` over a blank C4 is 3, Excel 4, though Excel's other readers of that array see the blank. |
 | `COUNTBLANK` | differs | Given a computed array where a range is needed (`COUNTBLANK(IF({1;1},B1:B2))`), one `#VALUE!` where Excel answers one per element. |
 | `COUNTIF` | differs | No 255-character limit on the criterion. |
 | `COUNTIFS` | differs | No 255-character limit on a criterion. |
@@ -113,7 +113,7 @@ These are decided, and each is said once. A row repeats a choice only where it i
 | `INTERCEPT` | as Excel | |
 | `LARGE` | as Excel | |
 | `MAX` | as Excel | |
-| `MAXA` | differs | Reads a text and TRUE inside an array constant as `AVERAGEA` does, which differs from Excel there. No row is recorded for `MAXA` itself. |
+| `MAXA` | differs | Reads a text and TRUE inside an array constant as 0 and 1, as `AVERAGEA` does, where Excel skips them. The one recorded row on such an array, `MAXA({3,"x",TRUE,5})`, is 5 in both, since neither value changes the maximum. |
 | `MAXIFS` | differs | No 255-character limit on a criterion. No Excel row is recorded for this function; it runs on `COUNTIF`'s criteria code. |
 | `MEDIAN` | as Excel | |
 | `MIN` | as Excel | |
@@ -139,7 +139,7 @@ These are decided, and each is said once. A row repeats a choice only where it i
 | `STDEV.S` | as Excel | |
 | `STDEVA` | differs | A text or TRUE inside an array: `STDEVA({3,"x",TRUE,5})` is 2.21735578260835, Excel 1.4142135623731. |
 | `STDEVP` | as Excel | |
-| `STDEVPA` | differs | Reads a text and TRUE inside an array constant as `STDEVA` does. No row is recorded for `STDEVPA` itself. |
+| `STDEVPA` | differs | A text or TRUE inside an array constant counts as 0 or 1, where Excel skips them: `STDEVPA({1,"x",TRUE,5})` is 1.92028643696715, Excel 2. |
 | `STEYX` | as Excel | |
 | `SUMX2MY2` | as Excel | |
 | `SUMX2PY2` | as Excel | |
@@ -147,9 +147,9 @@ These are decided, and each is said once. A row repeats a choice only where it i
 | `VAR` | as Excel | |
 | `VAR.P` | as Excel | |
 | `VAR.S` | as Excel | |
-| `VARA` | differs | Reads a text and TRUE inside an array constant as `STDEVA` does. No row is recorded for `VARA` itself. |
+| `VARA` | differs | A text or TRUE inside an array constant counts as 0 or 1, where Excel skips them: `VARA({1,"x",TRUE,5})` is 4.91666666666667, Excel 8. |
 | `VARP` | as Excel | |
-| `VARPA` | differs | Reads a text and TRUE inside an array constant as `STDEVA` does. No row is recorded for `VARPA` itself. |
+| `VARPA` | differs | A text or TRUE inside an array constant counts as 0 or 1, where Excel skips them: `VARPA({1,"x",TRUE,5})` is 3.6875, Excel 4. |
 
 ## Text
 
@@ -163,7 +163,7 @@ These are decided, and each is said once. A row repeats a choice only where it i
 | `DOLLAR` | as Excel | |
 | `EXACT` | as Excel | |
 | `FIND` | differs | Positions count UTF-16 units: in `"😀a"` the `a` is at 3, Excel 2. |
-| `FIXED` | as Excel | |
+| `FIXED` | differs | On a true tie in the 16th digit it gives the exact answer: `FIXED(73938790243119/4,1)` is `18,484,697,560,779.8`, Excel `18,484,697,560,779.7`. |
 | `LEFT` | differs | Counts UTF-16 units: `LEFT("😀a",1)` is half the emoji, Excel the whole one. |
 | `LEN` | differs | Counts UTF-16 units: `LEN(UNICHAR(128512))` is 2, Excel 1. |
 | `LOWER` | as Excel | |
@@ -175,7 +175,7 @@ These are decided, and each is said once. A row repeats a choice only where it i
 | `RIGHT` | differs | Counts UTF-16 units, as `LEFT` does. |
 | `SEARCH` | differs | Positions count UTF-16 units, as `FIND` does. |
 | `SUBSTITUTE` | as Excel | |
-| `TEXT` | differs | The display gaps of numfmt: lower- and mixed-case `a/p` and `AM/pm` print as written (`TEXT(0.02,"hh:mm a/p")` is `00:28 a/p`, Excel `12:28 a`); a number given as the format is printed (`TEXT(1234.567,12.5)` is 12.5, Excel 121235.5); an exact half second rounds up (`TEXT(0.5+0.5/86400,"hh:mm:ss")` is 12:00:01, Excel 12:00:00); the weekday of a time that rounds up to midnight stays on its own day (`TEXT(45000.999995,"dddd")` is Wednesday, Excel Thursday). A date format on a number past 31 December 9999 or on 1E+300 prints a year 10000 or the number, and a format or a result past 255 characters is used, where Excel answers `#VALUE!` for each. Dates follow the day line. |
+| `TEXT` | differs | The display gaps of numfmt: lower- and mixed-case `a/p` print as written (`TEXT(0.02,"hh:mm a/p")` is `00:28 a/p`, Excel `12:28 a`), and `AM/pm` takes the hour into it (`TEXT(0.52,"h:mm AM/pm")` is `12:28 A12/p12`, Excel `12:28 PM`); a negative duration is printed where Excel answers `#VALUE!`, its hours wrong past one day (`TEXT(-1.25,"[h]:mm:ss")` is `-18:00:00`); a number given as the format is printed (`TEXT(1234.567,12.5)` is 12.5, Excel 121235.5); an exact half second rounds up (`TEXT(0.5+0.5/86400,"hh:mm:ss")` is 12:00:01, Excel 12:00:00); the weekday of a time that rounds up to midnight stays on its own day (`TEXT(45000.999995,"dddd")` is Wednesday, Excel Thursday). A date format on a number past 31 December 9999 or on 1E+300 prints a year 10000 or the number, and a format or a result past 255 characters is used, where Excel answers `#VALUE!` for each. Dates follow the day line. |
 | `TEXTAFTER` | differs | An error given as `if_not_found` is the answer even when the delimiter is found: `TEXTAFTER("Hello World"," ",1,0,0,1/0)` is `#DIV/0!`, Excel `World`. Of two delimiters that start at one place the one listed first wins: `TEXTAFTER("abcabc",{"b","bc"},1)` is `cabc`, Excel `abc`. |
 | `TEXTBEFORE` | differs | An error given as `if_not_found` is the answer even when the delimiter is found, as in `TEXTAFTER`. |
 | `TEXTJOIN` | as Excel | |
@@ -274,11 +274,11 @@ Every function of this family that reads a date follows the day line, so in Janu
 | `INDEX` | as Excel | |
 | `INDIRECT` | partial | R1C1 text that names a whole row or column (`INDIRECT("R1",FALSE)`, `"C1"`, `"R[1]"`, `"R:R"`) is `#REF!`; Excel answers the row or column. |
 | `LOOKUP` | differs | Sorted data. A result range shorter than, or shaped unlike, the lookup range is `#N/A` where Excel reads the cells past its end (`LOOKUP(20,A1:A5,B1)`). Over an array of references (`LOOKUP(2,{1,2},OFFSET(A1,{0,1},0,2))`) it answers one value where Excel answers one per reference. |
-| `MATCH` | differs | Sorted data, for types 1 and -1: `MATCH("a",{1,"a",2,"a",3,"a"},1)` is 6, Excel 4. A match type given as a range is read, and a cell that holds a text or an error there answers `#VALUE!` or that error, where Excel answers `#REF!`. An exact match folds ß as ss: over `ss` and `ß`, `MATCH("ß",A1:A2,0)` is 1, Excel 2 (criteria agree: `COUNTIF` folds as Excel does). Numbers compare on 15 digits: `MATCH(1E+15+1,{1E+15,1000000000000001},0)` is 1, Excel `#N/A`. No 255-character limit on the key. |
+| `MATCH` | differs | Sorted data, for types 1 and -1: `MATCH("a",{1,"a",2,"a",3,"a"},1)` is 6, Excel 4. A match type given as a range is read, and a cell that holds a text or an error there answers `#VALUE!` or that error, where Excel answers `#REF!`. An exact match folds ß as ss: over `ss` and `ß`, `MATCH("ß",A1:A2,0)` is 1, Excel 2 (criteria agree: `COUNTIF` folds as Excel does). Numbers compare on 15 digits: `MATCH(1E+15+1,{1E+15,1000000000000001},0)` is 1, Excel `#N/A`, and an exact match finds what `=` calls equal: over `=0.1+0.2` in D1, `MATCH(0.3,D1,0)` is 1, Excel `#N/A`. A one-cell array is its value: `MATCH(2,2,0)` is 1 and `MATCH(2,{#DIV/0!},0)` `#DIV/0!`, Excel `#N/A` for both. No 255-character limit on the key. |
 | `OFFSET` | as Excel | |
 | `ROW` | differs | Given a computed array where a reference is needed (`ROW(INDEX(A1:B3,{1,2},1))`), one `#VALUE!` where Excel answers one per element. |
 | `ROWS` | as Excel | |
-| `VLOOKUP` | differs | Sorted data, for an approximate match. A column index given as a range or an array is read where Excel answers `#VALUE!` or `#REF!`, and a cell that holds a text or an error there answers `#VALUE!` or that error, where Excel answers `#REF!`. No 255-character limit on the key: `VLOOKUP(REPT("a",256),A1:B2,2,FALSE)` is `#N/A`, Excel `#VALUE!`. |
+| `VLOOKUP` | differs | Sorted data, for an approximate match. A column index given as a range or an array is read where Excel answers `#VALUE!` or `#REF!`, and a cell that holds a text or an error there answers `#VALUE!` or that error, where Excel answers `#REF!`. No 255-character limit on the key: `VLOOKUP(REPT("a",256),A1:B2,2,FALSE)` is `#N/A`, Excel `#VALUE!`. A one-cell array is its value: `VLOOKUP(5,5,1,FALSE)` is 5, Excel `#N/A`. |
 | `XLOOKUP` | partial | Match mode 3, regular expressions, is not built: `XLOOKUP(25,E1:E4,D1:D4,"nf",3)` is `#VALUE!`. An `if_not_found` given as an array is paired element by element with the keys, where Excel uses its first element. |
 | `XMATCH` | partial | Match mode 3, regular expressions, is not built: `XMATCH(4,C1:C3,3)` is `#VALUE!`. |
 
@@ -288,4 +288,4 @@ Every function of this family that reads a date follows the day line, so in Janu
 
 ## How the list was checked
 
-`as Excel` means the function agrees with every Excel answer recorded for it, not that it was proven equal. The answers were recorded in Excel on the web, English (US), and every one was computed again on this build: 17,654 rows from the family batches and the later batches (math 2,414, statistical 3,152, text 3,046, date and time 3,285, logical 1,051, information 1,530, lookup and reference 2,865, operators alone 311), and about 200 more for `CEILING.PRECISE`, `FLOOR.PRECISE`, `ISO.CEILING`, number formats and the open checks. A row counts toward the outermost function of its formula. Rows whose recorded value could not be read as a value, such as a text cut at 40 characters in the record, were judged by hand. Where a source and a run disagreed, the run on this build decided. `src/test/functions/functions-list.test.ts` keeps the names of this list equal to the functions the engine computes.
+`as Excel` means the function agrees with every Excel answer recorded for it, not that it was proven equal. The answers were recorded in Excel on the web, English (US), and every one was computed again on this build: 17,654 rows from the family batches and the later batches (math 2,414, statistical 3,152, text 3,046, date and time 3,285, logical 1,051, information 1,530, lookup and reference 2,865, operators alone 311), and about 200 more for `CEILING.PRECISE`, `FLOOR.PRECISE`, `ISO.CEILING`, number formats and the open checks. A row counts toward the function it probes, which is mostly the outermost one: `COLUMNS(IF({TRUE,TRUE},1,{1,2,3}))` counts for `IF`, and a row that probes an operator, such as `SUM((A1:A2,C1:C2) A1:C1)` for the intersection, for no function ([FORMULA.md § Known differences](../../docs/FORMULA.md#known-differences-from-excel)). Rows whose recorded value could not be read as a value, such as a text cut at 40 characters in the record, were judged by hand. Where a source and a run disagreed, the run on this build decided. `src/test/functions/functions-list.test.ts` keeps the names of this list equal to the functions the engine computes.
