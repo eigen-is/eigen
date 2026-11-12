@@ -8,13 +8,13 @@ import {
     printStored,
     RefFlag,
     RefKind,
-    ShapeTable,
     SheetKind,
     sheetFinder,
     storedText,
     Token,
     typedText,
 } from '../../text';
+import { ShapeTable } from '../../text/shapes';
 
 export const SHEETS = [
     { id: 's1', name: 'Sheet1' },

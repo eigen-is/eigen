@@ -161,6 +161,22 @@ describe('a whole column read by many formulas, and a row inserted', () => {
         engine.recalc(NO_CAP);
         expect([valueAt(engine, 'A8'), valueAt(engine, 'A9'), valueAt(engine, 'A10')]).toEqual([1, 1, 7]);
     });
+    test('a row inserted under one formula filled across columns computes each host whose own column lost a cell', () => {
+        // D1 and E1 hold one stored text: it reads column A at D1 and column B at E1, and only B is full.
+        const engine = computed({ s1: { A1: 1, B1: 2, [`B${GRID_ROWS}`]: 5, D1: '=SUM(A:A)', E1: '=SUM(B:B)' } });
+        expect([text(engine, 'D1'), valueAt(engine, 'D1'), valueAt(engine, 'E1')]).toEqual([text(engine, 'E1'), 1, 7]);
+        expect(engine.editLines(rows(true, 3)).dropped).toBe(1);
+        engine.recalc(NO_CAP);
+        expect([valueAt(engine, 'D1'), valueAt(engine, 'E1')]).toEqual([1, 2]);
+    });
+    test('a column inserted beside one formula filled down rows computes each host whose own row lost a cell', () => {
+        // Only row 1 is full, which the first host reads.
+        const engine = computed({ s1: { B1: 1, B2: 2, XFD1: 5, A4: '=SUM(1:1)', A5: '=SUM(2:2)' } });
+        expect([text(engine, 'A4'), valueAt(engine, 'A4'), valueAt(engine, 'A5')]).toEqual([text(engine, 'A5'), 6, 2]);
+        expect(engine.editLines(columns(true, 'D')).dropped).toBe(1);
+        engine.recalc(NO_CAP);
+        expect([valueAt(engine, 'A4'), valueAt(engine, 'A5')]).toEqual([1, 2]);
+    });
 });
 
 describe('what an edit seeds', () => {
@@ -505,6 +521,26 @@ describe('sheets', () => {
         engine.setValue('s2', 0, 1, 20);
         engine.recalc(NO_CAP);
         expect(engine.valueOf('s3', 0, 0)).toBe(21);
+    });
+    test('a sheet that comes beside one whose name differs only in case reads each as a typed name does', () => {
+        const engine = new Engine([{ id: 'a', name: 'data', cells: (cell) => cell(0, 0, 1, null) }]);
+        const added = engine.addSheet(
+            {
+                id: 'c',
+                name: 'Data',
+                cells: (cell) => {
+                    cell(0, 0, 3, null);
+                    cell(1, 0, null, "='data'!R1C1");
+                    cell(2, 0, null, "='Data'!R1C1");
+                    cell(3, 0, null, "='DATA'!R1C1");
+                },
+            },
+            0,
+        );
+        // The sheet of exactly that name, else the first in another case, the new sheet before the others.
+        expect(added.rewrites.map((rewrite) => rewrite.formula)).toEqual(['=[a]!R1C1', '=[c]!R1C1', '=[c]!R1C1']);
+        engine.recalc(NO_CAP);
+        expect([1, 2, 3].map((row) => engine.valueOf('c', row, 0))).toEqual([1, 3, 3]);
     });
     test('a sheet whose cells cannot be read is not added, and nothing changes', () => {
         const engine = book();

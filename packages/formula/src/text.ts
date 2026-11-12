@@ -18,7 +18,6 @@ export {
     parseStored,
 } from './text/parser';
 export { printA1, printStored } from './text/printer';
-export { ShapeTable } from './text/shapes';
 export { findSheetByName, quoteSheetName, sheetFinder, sheetNameKey } from './text/sheet-name';
 export { tokens } from './text/tokens';
 export type { FormulaNode } from './text/tree';

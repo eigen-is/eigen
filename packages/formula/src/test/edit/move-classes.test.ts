@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { Move } from '../../edit/move';
 import { moveClasses } from '../../edit/move';
-import { GRID_COLUMNS, GRID_ROWS, printStored, ShapeTable, transformMove } from '../../text';
+import { GRID_COLUMNS, GRID_ROWS, printStored, transformMove } from '../../text';
+import { ShapeTable } from '../../text/shapes';
 import { random } from './support';
 
 // Hosts, corners and blocks sit on the first and the last ten lines of both axes, where a class is cut by the grid.

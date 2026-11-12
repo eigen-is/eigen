@@ -9,9 +9,9 @@ import {
     printStored,
     RefFlag,
     RefKind,
-    ShapeTable,
     transformLines,
 } from '../../text';
+import { ShapeTable } from '../../text/shapes';
 import { CONTEXTS, deleteRows, insertRows, random, reread, tree } from './support';
 
 type End = { absolute: boolean; value: number };

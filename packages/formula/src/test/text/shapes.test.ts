@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { NodeKind, parseA1, printA1, RefKind, ShapeTable } from '../../text';
+import { NodeKind, parseA1, printA1, RefKind } from '../../text';
+import { ShapeTable } from '../../text/shapes';
 import { at, findSheet, sheetName, stored, treeA1 } from './support';
 
 describe('ShapeTable', () => {
