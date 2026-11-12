@@ -234,7 +234,6 @@ Only S and XS rows, grouped by area. Anything larger goes in P2.
 | A day in milliseconds is spelled in many places | S | `DAY_MS` lives in `apps/api/src/lib/versioning/retention.ts` and again in `ooxml/spreadsheetml.ts`, `ical/vtimezone.ts`, `cli/status.ts` and `scheduler/jobs.ts`, and as `24 * 60 * 60 * 1000` in about ten more files. One lib constant for a day and a week, which the API imports. |
 | A single-row query's result is typed `!` | S | Drizzle's `.get()` and bun:sqlite's can return nothing even for a `COUNT` without `GROUP BY`, so `contacts.ts`, `dav-store.ts`, `maildb.ts` and `setup.ts` assert with `!`. One typed helper for an aggregate that always returns a row removes them. |
 | The pre-commit hook re-stages a whole partly staged file | XS | `.githooks/pre-commit` ends in `git update-index --again`, so a commit split by hunks silently takes the rest of the file. Stage only the files Biome changed, or skip a file with unstaged changes. |
-| Six `packages/ui` tests fail only when the whole suite shares a process | XS | `file-menu.test.tsx` and `drive-action-runner.test.tsx` fail with `router.routesById` undefined in a full `bun test` of `packages/ui` and pass alone: a router mock leaks. Restore the mock in the file that sets it. |
 
 ## Focused audits
 
