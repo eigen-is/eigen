@@ -123,7 +123,7 @@
                     "message": "lib must not import sheet or ui (would pull React into the backend). Put shared sheet types in packages/lib/src/sheets/types.ts."
                   },
                   {
-                    "group": ["@workspace/formula", "@workspace/formula/text"],
+                    "group": ["@workspace/formula", "@workspace/formula/text", "@workspace/formula/names"],
                     "message": "lib imports only the number-display entry of the engine: @workspace/formula/format."
                   },
                   // Overrides replace the root rule options wholesale — restate the suffix ban.

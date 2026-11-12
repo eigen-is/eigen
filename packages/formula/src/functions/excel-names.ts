@@ -1,8 +1,8 @@
-// Every function name Excel knows, so the xlsx writer can add the `_xlfn.` prefix to each one Excel added after 2007,
-// and the formula engine can tell a real Excel function it lacks from a typo. The names are Microsoft's "Excel functions
-// (alphabetical)" (support.microsoft.com, read 2026-10-28), with the B variants of the text functions spelled out, plus
-// three the writer listed before that the page leaves out: ANCHORARRAY, SINGLE and QUERYSTRING. formulajs is no source:
-// beside Excel's, it registers Google Sheets' functions and aliases Excel doesn't know, such as ADD, SPLIT and CEILINGMATH.
+// Every function name Excel knows, a wider list than FUNCTIONS, which holds the ones this engine computes. A reader
+// tells a real Excel function the engine lacks from a typo, and the xlsx writer adds the `_xlfn.` prefix to each one
+// Excel added after 2007. The names are Microsoft's "Excel functions (alphabetical)" (support.microsoft.com, read
+// 2026-10-28), with the B variants of the text functions spelled out, plus ANCHORARRAY, SINGLE and QUERYSTRING, which
+// it leaves out. formulajs is no source: it also registers Google Sheets' functions and aliases Excel lacks, like ADD.
 
 // The functions Excel added after 2007. A file stores each as `_xlfn.NAME`, so an older Excel that lacks one shows
 // #NAME? rather than misreading it. Excel reads one without the prefix as an unknown name, so the writer adds it back.
@@ -178,7 +178,7 @@ export const EXCEL_FUTURE_FUNCTIONS: ReadonlySet<string> = new Set([
 ]);
 
 // The functions Excel 2007 already had, which a file stores by their bare name.
-const EXCEL_2007_FUNCTIONS: ReadonlySet<string> = new Set([
+export const EXCEL_2007_FUNCTIONS: ReadonlySet<string> = new Set([
     'ABS',
     'ACCRINT',
     'ACCRINTM',
