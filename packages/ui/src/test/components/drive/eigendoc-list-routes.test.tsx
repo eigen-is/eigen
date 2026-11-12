@@ -20,7 +20,12 @@ const row = drivePath({
 
 // Which listing each hook was asked for, and the props the view handed the layout.
 const asked: { mount: string[]; aggregate: string[]; shared: string[] } = { mount: [], aggregate: [], shared: [] };
-type LayoutProps = { pid?: string; onRowSelect: (path: DrivePath) => void; onBackToList: () => void };
+type LayoutProps = {
+    pid?: string;
+    onRowSelect: (path: DrivePath) => void;
+    onBackToList: () => void;
+    onAfterAction: () => void;
+};
 let layout: LayoutProps | undefined;
 
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
@@ -65,13 +70,23 @@ const { validateDriveSearch } = await import('@workspace/lib/drive');
 const { DOCS_CONFIG } = await import('../../../components/drive/eigendoc-config');
 const { EigenDocListView } = await import('../../../components/drive/eigendoc-list-view');
 const { EigenDocSharedView } = await import('../../../components/drive/eigendoc-shared-view');
+const { PreviewContext } = await import('../../../components/preview-provider/preview-context');
 
 // The app's tree as its route files build it: the _auth guard puts the viewer in the context.
 const rootRoute = createRootRoute();
 const authRoute = createRoute({
     getParentRoute: () => rootRoute,
     id: '_auth',
-    beforeLoad: () => ({ user: { id: VIEWER } }),
+    beforeLoad: () => ({
+        user: {
+            id: VIEWER,
+            email: 'viewer@example.com',
+            name: 'Viewer',
+            emailVerified: true,
+            createdAt: new Date(0),
+            updatedAt: new Date(0),
+        },
+    }),
 });
 const indexRoute = createRoute({
     getParentRoute: () => authRoute,
@@ -105,7 +120,10 @@ afterEach(async () => {
 async function open(url: string) {
     const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [url] }) });
     await router.load();
-    ({ unmount } = await renderInDocument(createElement(RouterProvider, { router })));
+    const preview = { openPreview: () => {}, updatePreview: () => {}, closePreview: () => {}, isPreviewOpen: false };
+    ({ unmount } = await renderInDocument(
+        createElement(PreviewContext.Provider, { value: preview }, createElement(RouterProvider, { router })),
+    ));
     if (!layout) throw new Error('the view drew no layout');
     return { router, layout };
 }
@@ -144,5 +162,12 @@ test('Shared by me lists the viewer’s shared side its param names, and a selec
     expect(where(router)).toEqual({ pathname: '/shared/by-me', search: SELECTED });
 
     await act(async () => layout.onBackToList());
+    expect(where(router)).toEqual({ pathname: '/shared/by-me', search: {} });
+});
+
+// A rename or a delete from the detail leaves the list as it was, without the stale selection.
+test('an action on a shared row clears the selection and stays on the shared list', async () => {
+    const { router, layout } = await open('/shared/by-me?pid=row-1&uid=owner-2&mid=team-1');
+    await act(async () => layout.onAfterAction());
     expect(where(router)).toEqual({ pathname: '/shared/by-me', search: {} });
 });
