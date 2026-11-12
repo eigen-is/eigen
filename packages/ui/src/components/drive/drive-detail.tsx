@@ -1,6 +1,6 @@
 // The detail column of a Drive view: the selected item's preview, its Open, Download, Share and Watch
-// buttons, a ⋮ with the item's whole menu, and its details, sharing and recent activity. DriveLayout
-// draws it beside the list.
+// buttons, a ⋮ with the item's whole menu, and its details, sharing and recent activity. A layout such
+// as DriveLayout draws it beside the list.
 
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { formatDateTime } from '@workspace/lib/date';

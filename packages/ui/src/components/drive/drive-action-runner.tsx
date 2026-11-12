@@ -1,6 +1,6 @@
 // The Drive action runner: performs a Drive action on a set of items, such as rename, move, share or
-// delete, and owns the dialogs behind them. DriveLayout builds one and hands it to the list, the detail
-// column and the toolbar. Which rows apply comes from driveActionsFor, read through the view's
+// delete, and owns the dialogs behind them. A layout such as DriveLayout builds one and hands it to its
+// list, detail column and toolbar. Which rows apply comes from driveActionsFor, read through the view's
 // capabilities: the item menu and the command palette draw those rows, and run refuses any other.
 
 import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';

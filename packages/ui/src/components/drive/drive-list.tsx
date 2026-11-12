@@ -1,7 +1,7 @@
 // The list column of a Drive view: DriveList draws the rows as a table or a grid with selection, drop
 // and context menus, and hands the selection to the command palette. DriveListToolbar draws the crumb
-// row or title above it with the view controls. DriveLayout mounts both, for example in Drive's folder
-// view and in the document apps' lists.
+// row or title above it with the view controls. A layout such as DriveLayout mounts both, in Drive's
+// folder view and in the document apps' lists for example.
 
 import { useBreadcrumb, useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';

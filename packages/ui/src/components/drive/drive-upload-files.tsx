@@ -1,7 +1,7 @@
 // The hidden file input behind Drive's Upload files, and the upload it starts into one folder. Opening it shows
 // the browser's file picker, or uploads the files it was handed at once, such as files dropped on the list. It
-// closes right away either way, and the upload provider shows the progress. The Drive action runner and Drive's
-// New menu mount it.
+// closes right away either way, and the upload provider shows the progress. A host such as the Drive action
+// runner mounts it.
 
 import { useQueryClient } from '@tanstack/react-query';
 import { getDriveFileUploadUrl } from '@workspace/lib/api';
