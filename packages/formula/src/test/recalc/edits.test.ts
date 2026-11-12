@@ -252,6 +252,29 @@ describe('a block that moves', () => {
             0, 0, 1,
         ]);
     });
+    test('a block that reaches past the last row is the part of it on the grid, and pulls no reference onto the grid', () => {
+        const last = GRID_ROWS - 1;
+        const engine = engineOf({ s1: { [`A${GRID_ROWS}`]: 4 } });
+        // From the last row but two, three rows down is past the grid: the formula reads #REF!.
+        engine.setFormula('s1', last - 2, 2, '=R[3]C[-2]');
+        engine.recalc(NO_CAP);
+        engine.moveCells({
+            fromSheet: 's1',
+            row: last,
+            column: 0,
+            rows: 3,
+            columns: 1,
+            toSheet: 's1',
+            toRow: last - 1,
+            toColumn: 0,
+        });
+        expect(engine.isPending('s1', last - 2, 2)).toBe(false);
+        expect([
+            engine.formulaOf('s1', last - 2, 2),
+            engine.valueOf('s1', last - 2, 2),
+            engine.valueOf('s1', last - 1, 0),
+        ]).toEqual(['=R[3]C[-2]', REF, 4]);
+    });
     test('a block that lands where the sheet holds no column leaves nothing standing there', () => {
         const engine = computed({ s1: { A1: 5, A2: 6, C1: '=A1+A2' } });
         engine.moveCells(move('H1', 'A1'));

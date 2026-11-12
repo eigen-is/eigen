@@ -191,8 +191,8 @@ export function applyLines(model: Model, edit: LineEdit): Applied {
 export function clipped(move: Move): Move {
     return {
         ...move,
-        rows: Math.max(0, Math.min(move.rows, GRID_ROWS - move.toRow)),
-        columns: Math.max(0, Math.min(move.columns, GRID_COLUMNS - move.toColumn)),
+        rows: Math.max(0, Math.min(move.rows, GRID_ROWS - move.row, GRID_ROWS - move.toRow)),
+        columns: Math.max(0, Math.min(move.columns, GRID_COLUMNS - move.column, GRID_COLUMNS - move.toColumn)),
     };
 }
 

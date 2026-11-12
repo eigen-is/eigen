@@ -52,11 +52,12 @@ export class Engine {
     }
 
     // Moves a block of cells, as a cut and paste does, over whatever it lands on. A block as high or as wide as
-    // the grid is a block like any other. What would land past the last line is cleared and counted instead.
+    // the grid is a block like any other. The block is what lies on the grid, before and after: what would land
+    // past the last line is cleared and counted instead.
     public moveCells(move: Move): EditResult {
         const from = this.workbook.known(move.fromSheet);
-        const rows = Math.max(0, Math.min(move.rows, GRID_ROWS - move.toRow));
-        const columns = Math.max(0, Math.min(move.columns, GRID_COLUMNS - move.toColumn));
+        const rows = Math.max(0, Math.min(move.rows, GRID_ROWS - move.row, GRID_ROWS - move.toRow));
+        const columns = Math.max(0, Math.min(move.columns, GRID_COLUMNS - move.column, GRID_COLUMNS - move.toColumn));
         let dropped = 0;
         for (let c = move.column; c < Math.min(move.column + move.columns, from.columns.length); c += 1) {
             const held = from.columns[c];

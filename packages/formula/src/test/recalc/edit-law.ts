@@ -2,7 +2,7 @@
 // through the public engine by writes, structural edits, recalcs that stop and undo, each step held against the
 // model of edit-model.ts and a fresh engine loaded from it.
 
-import type { Engine as EngineType, LineEdit, Move, Rewrite } from '../../index';
+import type { Engine as EngineType, LineEdit, Move, Rewrite, SheetSource } from '../../index';
 import { Engine } from '../../index';
 import { GRID_COLUMNS, GRID_ROWS } from '../../text';
 import { random } from '../edit/support';
@@ -105,6 +105,19 @@ function show(value: unknown): string {
     if (value === null) return '';
     if (typeof value === 'object' && 'text' in value) return String(value.text);
     return `${typeof value}:${String(value)}`;
+}
+
+// A sheet as a host hands it over to be added: every formula that is computed comes with a value it once had,
+// which is not to be trusted.
+function handed(sheet: ModelSheet): SheetSource {
+    const [source] = sourcesOf([sheet]);
+    return {
+        ...source,
+        cells: (cell) =>
+            source.cells((row, column, value, formula) =>
+                cell(row, column, formula === null || RAW.includes(formula) ? value : 777, formula),
+            ),
+    };
 }
 
 function span(from: number, count: number): number[] {
@@ -354,7 +367,7 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
                 }
                 case 'add':
                     applied = applyAdd(model, op.sheet, op.place);
-                    ({ rewrites } = engine.addSheet(sourcesOf([op.sheet])[0], op.place));
+                    ({ rewrites } = engine.addSheet(handed(op.sheet), op.place));
                     removed = removed.filter((sheet) => sheet.id !== op.sheet.id);
                     break;
                 case 'remove': {
@@ -505,7 +518,7 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
                     break;
                 case 'remove': {
                     const place = before.findIndex((sheet) => sheet.id === op.id);
-                    engine.addSheet(sourcesOf([before[place]])[0], place);
+                    engine.addSheet(handed(before[place]), place);
                     break;
                 }
                 case 'rename':
