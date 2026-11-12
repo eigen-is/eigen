@@ -2,7 +2,8 @@
 // date or a time, in one fixed notation (a point for decimals, a comma between thousands, the month before the
 // day). Whatever coerces text, such as an operator or a criterion, does it through parseNumber, so what coerces is
 // what could have been typed, and DATEVALUE and TIMEVALUE read only the dates and times through parseDateTime. It
-// reads character codes and never asks the host: no Date and no clock, so the year of a date without one is given.
+// reads character codes and never asks the host: no Date and no clock, so the year of a date without one is given,
+// and where none is given such a date is no date.
 
 import { dateSerial, daysInMonth, isDate, SECONDS_IN_DAY } from './dates';
 import { POWERS_OF_TEN } from './precision';
@@ -65,8 +66,8 @@ export function parseNumber(text: string): number | undefined {
 }
 
 // The serial of a text that is a date, a time or both, and undefined for any other, a plain number included. A
-// date without a year is of `year`.
-export function parseDateTime(text: string, year: number): number | undefined {
+// date without a year is of `year`, and no date when no year is given.
+export function parseDateTime(text: string, year?: number): number | undefined {
     const end = contentEnd(text);
     const start = spacesEnd(text, 0);
     return start >= end ? undefined : readDateTime(text, start, end, year);
@@ -74,7 +75,7 @@ export function parseDateTime(text: string, year: number): number | undefined {
 
 // Digits with what may stand around them: a sign in front or a pair of brackets, a currency sign in front or a
 // euro sign behind, commas between groups of three, a decimal point, an exponent and a percent sign, which may
-// follow the brackets. The digits may be Arabic-Indic ones.
+// follow the brackets. Spaces may follow the sign, as in - 5. The digits may be Arabic-Indic ones.
 function readDecorated(text: string, start: number, end: number): number | undefined {
     let at = start;
     const bracketed = text.charCodeAt(at) === OPEN;
@@ -87,6 +88,7 @@ function readDecorated(text: string, start: number, end: number): number | undef
         if (!signed && (code === MINUS || code === PLUS)) {
             signed = true;
             negative = code === MINUS;
+            at = spacesEnd(text, at + 1) - 1;
         } else if (!currency && (code === DOLLAR || code === EURO)) {
             currency = true;
             at = spacesEnd(text, at + 1) - 1;
@@ -178,10 +180,12 @@ function readFraction(text: string, start: number, end: number): number | undefi
     return negative && value !== 0 ? -value : value;
 }
 
-// A date, a time, or a date, spaces and a time. The time is found from its colon or its AM or PM, the date is
-// what stands before it. A time that carries the last date into the next day leaves no date.
+// A date, a time, or a date, spaces and a time. The time is found from its colon or its AM or PM, which may end
+// in a point, and the date is what stands before it. A time of 24 hours or more carries the date on, past the
+// last date too, as Excel has it.
 function readDateTime(text: string, start: number, end: number, thisYear: number | undefined): number | undefined {
-    const markAt = (text.charCodeAt(end - 1) | 32) === LOWER_M ? end - 2 : end - 1;
+    const last = text.charCodeAt(end - 1) === POINT && (text.charCodeAt(end - 2) | 32) === LOWER_M ? end - 2 : end - 1;
+    const markAt = (text.charCodeAt(last) | 32) === LOWER_M ? last - 1 : last;
     const mark = text.charCodeAt(markAt) | 32;
     let half = 0;
     let timeEnd = end;
@@ -202,29 +206,31 @@ function readDateTime(text: string, start: number, end: number, thisYear: number
     let dateEnd = timeAt;
     while (text.charCodeAt(dateEnd - 1) === SPACE) dateEnd -= 1;
     const date = readDate(text, start, dateEnd, thisYear);
-    return date === undefined || !isDate(Math.floor(date + time)) ? undefined : date + time;
+    return date === undefined ? undefined : date + time;
 }
 
 // Three parts: year, month and day with / or - between them, the year first when it has four digits and else the
 // month first; a day, a month by name and a year; a month by name, a day, a comma and a year. Two parts: a month
-// by name and a year of four digits, which is its first day, or a month and a day of `thisYear`. A year has up to
-// four digits and is the year it says from 100 on.
+// and a year of four digits, which is its first day, or a month and a day of `thisYear`. Spaces may stand around
+// a / or a -. A year has up to four digits and is the year it says from 100 on.
 function readDate(text: string, from: number, to: number, thisYear: number | undefined): number | undefined {
     const named = !isDigit(text.charCodeAt(from));
     const firstEnd = named ? lettersEnd(text, from, to) : digitsEnd(text, from, to);
-    const between = text.charCodeAt(firstEnd);
-    const secondAt = between === SPACE ? spacesEnd(text, firstEnd) : firstEnd + 1;
+    const markAt = spacesEnd(text, firstEnd);
+    const between = text.charCodeAt(markAt);
+    const marked = between === SLASH || between === MINUS;
+    const secondAt = marked ? spacesEnd(text, markAt + 1) : markAt;
     const secondNamed = !isDigit(text.charCodeAt(secondAt));
     const secondEnd = secondNamed ? lettersEnd(text, secondAt, to) : digitsEnd(text, secondAt, to);
     if (firstEnd === from || secondEnd === secondAt || (named && secondNamed)) return undefined;
-    if (between !== SLASH && between !== MINUS && !(between === SPACE && (named || secondNamed))) return undefined;
+    if (!marked && (markAt === firstEnd || !(named || secondNamed))) return undefined;
     const first = named ? monthNamed(text, from, firstEnd) : toWhole(text, from, firstEnd);
     const second = secondNamed ? monthNamed(text, secondAt, secondEnd) : toWhole(text, secondAt, secondEnd);
     let year = first;
     let month = second;
     let day = 1;
     if (secondEnd === to) {
-        if (named && to - secondAt === 4) {
+        if (!secondNamed && to - secondAt === 4) {
             year = second;
             month = first;
         } else {
@@ -232,19 +238,22 @@ function readDate(text: string, from: number, to: number, thisYear: number | und
             year = thisYear;
             month = secondNamed ? second : first;
             day = secondNamed ? first : second;
-            // A day that month does not have that year is a year of two digits and its first day, as Excel
-            // reads 2/29 in a year without a leap day: February 2029.
-            if (month >= 1 && month <= 12 && day < 100 && day > daysInMonth(year, month)) {
+            // After a month, a day that month does not have that year is a year of two digits and its first
+            // day, as Excel reads 2/29 in a year without a leap day: February 2029. 29-Feb is no date then.
+            if (!secondNamed && month >= 1 && month <= 12 && day < 100 && day > daysInMonth(year, month)) {
                 year = day;
                 day = 1;
             }
         }
     } else {
-        const thirdAt = named ? spacesEnd(text, secondEnd + 1) : secondEnd + 1;
-        if (text.charCodeAt(secondEnd) !== (named ? COMMA : between)) return undefined;
+        const nextAt = named ? secondEnd : spacesEnd(text, secondEnd);
+        const thirdAt = named || marked ? spacesEnd(text, nextAt + 1) : nextAt;
+        if (named || marked ? text.charCodeAt(nextAt) !== (named ? COMMA : between) : nextAt === secondEnd) {
+            return undefined;
+        }
         if (thirdAt >= to || digitsEnd(text, thirdAt, to) !== to) return undefined;
         day = toWhole(text, thirdAt, to);
-        if (secondNamed || firstEnd - from !== 4) {
+        if (named || secondNamed || firstEnd - from !== 4) {
             if (to - thirdAt > 4 || (named && to - thirdAt !== 4)) return undefined;
             year = day;
             month = secondNamed ? second : first;
@@ -259,7 +268,7 @@ function readDate(text: string, from: number, to: number, thisYear: number | und
 
 // Hours, then minutes, seconds and parts of a second if given, as a fraction of a day. `half` is 1 for AM, 2 for PM
 // and 0 for a 24 hour time, which may count hours past 24. Minutes and seconds have one or two digits, and past 59
-// they are carried into the hour or the minute.
+// they are carried into the hour or the minute. Only one of the three may be past its range: 25:61 is no time.
 function readTime(text: string, from: number, to: number, half: number): number | undefined {
     const hoursEnd = digitsEnd(text, from, to);
     if (hoursEnd === from || hoursEnd - from > 4) return undefined;
@@ -286,6 +295,7 @@ function readTime(text: string, from: number, to: number, half: number): number 
             }
         }
     }
+    if ((hours > 23 ? 1 : 0) + (minutes > 59 ? 1 : 0) + (seconds >= 60 ? 1 : 0) > 1) return undefined;
     if (half !== 0) {
         if (hours > 12) return undefined;
         hours = (hours % 12) + (half === 2 ? 12 : 0);
@@ -293,12 +303,13 @@ function readTime(text: string, from: number, to: number, half: number): number 
     return (hours * 3600 + minutes * 60 + seconds) / SECONDS_IN_DAY;
 }
 
-// 1 to 12 for a month's full name or its first three letters, in any case, and 0 for anything else.
+// 1 to 12 for a month's full name or its first three letters, in any case, and 0 for anything else. September
+// is Sept too.
 function monthNamed(text: string, from: number, to: number): number {
     let month = 0;
     for (const name of MONTHS) {
         month += 1;
-        if (to - from !== 3 && to - from !== name.length) continue;
+        if (to - from !== 3 && to - from !== name.length && !(month === 9 && to - from === 4)) continue;
         let at = from;
         while (at < to && (text.charCodeAt(at) | 32) === name.charCodeAt(at - from)) at += 1;
         if (at === to) return month;
