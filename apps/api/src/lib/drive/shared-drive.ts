@@ -23,7 +23,6 @@ import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError } from '../core';
 import type { Home } from '../home';
 import type { Mount } from '../mount';
-import type { CopyTree } from '../mount/copy';
 import type { StorageFile } from '../storage';
 import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
@@ -269,7 +268,7 @@ export class SharedDrive {
         return this.drive.renamePath(mountId, pathId, newName, this.user);
     }
 
-    // The copy writes through the target's drive, and Drive.copyPath checks the write access there.
+    // Access to the target folder is the target's to check, as it can be another owner's drive.
     public async copyPath(
         mountId: string,
         srcPathId: string,
@@ -295,18 +294,20 @@ export class SharedDrive {
         return this.drive.copyPathOver(mountId, srcPathId, destParentId, name, this.user);
     }
 
-    // Only Drive.copyPath calls this, after it listed the source under the caller's read access. So the tree and its
-    // mount are taken as given, and write access on the folder is all this checks.
+    // The source can be in another owner's drive, which checked the read access on it. A copy needs read on its
+    // folder besides write, so a folder shared write-only takes none.
     public async receiveCopy(
         mountId: string,
         destParentId: string,
-        name: string,
-        tree: CopyTree,
         source: Mount,
+        src: DrivePath,
+        desiredName: string | undefined,
         _user: User,
     ): Promise<DrivePath> {
-        await this.requireWrite(mountId, destParentId);
-        return this.drive.receiveCopy(mountId, destParentId, name, tree, source, this.user);
+        const memberships = await getMemberships(this.user.id);
+        await this.requireRead(mountId, destParentId, memberships);
+        await this.requireWrite(mountId, destParentId, memberships, 'No write permission on target folder');
+        return this.drive.receiveCopy(mountId, destParentId, source, src, desiredName, this.user);
     }
 
     public async flushContainerDb(mountId: string, containerId: string): Promise<void> {

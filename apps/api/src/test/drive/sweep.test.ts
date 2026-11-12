@@ -346,7 +346,7 @@ describe('Delete history', () => {
 });
 
 describe('a copy', () => {
-    const intoRoot = () => ({ drive, ownerId: home.user.id, mountId: M, parentId: rootId });
+    const intoRoot = () => ({ drive, mountId: M, parentId: rootId });
 
     // A source with a named image, a loose one from a moment ago, a kept thread with a named and a loose file, and a
     // thread nothing names that was written in a moment ago.
@@ -418,10 +418,10 @@ describe('a copy', () => {
         let added: DrivePath | undefined;
         const copyPath = mount.copyPath.bind(mount);
         const copies = spyOn(mount, 'copyPath').mockImplementation(async (...args) => {
-            const copied = await copyPath(...args);
-            await addMedia(mount, copied.id, 'added.png');
-            added = await addThread(mount, M, copied.id);
-            return copied;
+            const copy = await copyPath(...args);
+            await addMedia(mount, copy.path.id, 'added.png');
+            added = await addThread(mount, M, copy.path.id);
+            return copy;
         });
         try {
             const copied = await drive.copyPath(M, path.id, intoRoot(), `${path.name} copy`, home.user);
@@ -434,27 +434,29 @@ describe('a copy', () => {
         await close(M, path);
     });
 
-    test('of a folder succeeds when its cleanup fails', async () => {
-        const folder = await drive.createFolder(M, rootId, `CopyCleanupFails-${crypto.randomUUID()}`, home.user);
-        let copyId = '';
+    test('succeeds and stays whole when its cleanup fails', async () => {
+        const { path } = await sourceDoc('CopyCleanupFails');
+        let landed = false;
         const copyPath = mount.copyPath.bind(mount);
         const copies = spyOn(mount, 'copyPath').mockImplementation(async (...args) => {
-            const copied = await copyPath(...args);
-            copyId = copied.id;
-            return copied;
+            const copy = await copyPath(...args);
+            landed = true;
+            return copy;
         });
         const listFolder = mount.listFolder.bind(mount);
         const lists = spyOn(mount, 'listFolder').mockImplementation(async (id) => {
-            if (id === copyId) throw new Error('listing failed');
+            if (landed) throw new Error('listing failed');
             return listFolder(id);
         });
+        let copied: DrivePath;
         try {
-            const copied = await drive.copyPath(M, folder.id, intoRoot(), `${folder.name} copy`, home.user);
-            expect(copied.id).toBe(copyId);
+            copied = await drive.copyPath(M, path.id, intoRoot(), `${path.name} copy`, home.user);
         } finally {
             copies.mockRestore();
             lists.mockRestore();
         }
+        expect(await mediaNames(mount, copied.id)).toEqual(['kept.png', 'loose.png']);
+        await close(M, path);
     });
 });
 

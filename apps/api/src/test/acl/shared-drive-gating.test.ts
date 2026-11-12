@@ -204,14 +204,7 @@ describe('SharedDrive gating enumeration', () => {
         copyPath: {
             gate: 'denies',
             reason: 'read-gated on source, write-gated on target',
-            call: (sd) =>
-                sd.copyPath(
-                    mountId,
-                    fileId,
-                    { drive: sd, ownerId: ctx.alice.user.id, mountId, parentId: folderId },
-                    'copy.txt',
-                    charlie,
-                ),
+            call: (sd) => sd.copyPath(mountId, fileId, { drive: sd, mountId, parentId: folderId }, 'copy.txt', charlie),
         },
         copyPathOver: {
             gate: 'denies',
@@ -255,7 +248,7 @@ describe('SharedDrive gating enumeration', () => {
             call: async (sd) => {
                 const { drive } = await getHome(ctx.alice.user.id);
                 const { mount, path } = await drive.resolveFile(mountId, fileId);
-                return sd.receiveCopy(mountId, folderId, 'intruder.txt', { path, children: [] }, mount, charlie);
+                return sd.receiveCopy(mountId, folderId, mount, path, 'intruder.txt', charlie);
             },
         },
         emailCollaborators: {
@@ -372,4 +365,53 @@ describe('SharedDrive gating enumeration', () => {
             }
         });
     }
+
+    const refusal = (call: Promise<unknown>): Promise<unknown> =>
+        call.then(
+            () => null,
+            (e: unknown) => (e instanceof ApiError ? `${e.status} ${e.message}` : e),
+        );
+
+    test('a copy into a folder the caller may only read is a 403 and writes nothing', async () => {
+        const home = await getHome(ctx.alice.user.id);
+        const bob = await getUserById(ctx.bob.user.id);
+        if (!bob) throw new Error('bob user not found');
+        const folder = await home.drive.createFolder(mountId, folderId, 'Read Only Probe', home.user);
+        const file = await home.drive.createFileFromData(
+            mountId,
+            folder.id,
+            'readable.txt',
+            'text/plain',
+            Buffer.from('x'),
+            home.user,
+        );
+        const share = { add: [{ id: bob.email, read: true, write: false }] };
+        await home.drive.updateACLDelta(mountId, folder.id, share, undefined, undefined, home.user);
+        const reader = new SharedDrive(home, bob);
+        expect((await reader.resolveFile(mountId, file.id)).path.id).toBe(file.id);
+
+        const to = { drive: reader, mountId, parentId: folder.id };
+        expect(await refusal(reader.copyPath(mountId, file.id, to, 'copy.txt', bob))).toBe(
+            '403 No write permission on target folder',
+        );
+        expect(await refusal(reader.copyPathOver(mountId, file.id, folder.id, 'copy.txt', bob))).toBe(
+            '403 No write permission on target folder',
+        );
+        expect((await home.drive.getFolderContents(mountId, folder.id)).map((path) => path.name)).toEqual([
+            'readable.txt',
+        ]);
+    });
+
+    test('a copy of a path the caller may not read into their own drive is a 403 and writes nothing', async () => {
+        const { drive } = await getHome(charlie.id);
+        const [mount] = drive.getMounts();
+        const root = mount ? await mount.getRootFolder() : null;
+        if (!mount || !root) throw new Error('charlie has no drive');
+
+        const to = { drive, ownerId: charlie.id, mountId: mount.id, parentId: root.id };
+        expect(await refusal(sd.copyPath(mountId, fileId, to, 'stolen.txt', charlie))).toBe(
+            '403 No read permission on source',
+        );
+        expect(await drive.getChildByName(mount.id, root.id, 'stolen.txt')).toBeNull();
+    });
 });

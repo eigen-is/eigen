@@ -45,7 +45,7 @@ describe('opening a document copy before its data.db lands', () => {
             copy = await home.drive.copyPath(
                 mountId,
                 source.id,
-                { drive: home.drive, ownerId: home.user.id, mountId, parentId: rootId },
+                { drive: home.drive, mountId, parentId: rootId },
                 'copy-source copy',
                 home.user,
             );

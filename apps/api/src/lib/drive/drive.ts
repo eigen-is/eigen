@@ -118,9 +118,8 @@ export type ContentWriteOptions = { user: User; ifMatch?: string; event?: 'uploa
 // after can't show in either. The caller sends them back, so its next save is checked against its own bytes.
 export type ContentWriteResult = { path: DrivePath; etag: string };
 
-// The folder a copy lands in, reached as the copying user reaches it. The owner and the mount are the ones whose
-// limits the copy meets.
-export type CopyTarget = { drive: DriveLike; ownerId: string; mountId: string; parentId: string };
+// The folder a copy lands in, reached as the copying user reaches it.
+export type CopyTarget = { drive: DriveLike; mountId: string; parentId: string };
 
 export class Drive {
     // A live WebDAV lock holds the home, so only a close for another reason, such as a restore, drops it.
@@ -700,18 +699,7 @@ export class Drive {
     ): Promise<DrivePath> {
         const source = this.getMount(mountId);
         const src = await source.getActivePath(srcPathId);
-        return this.withHomeHeld(async () => {
-            // Every copy needs read on the target folder, wherever it comes from.
-            const target = await to.drive.resolveFile(to.mountId, to.parentId);
-            return to.drive.withHomeHeld(async () => {
-                const tree = await this.checkedCopyTree(source, src, to, target.mount, user);
-                // NFC first: the store keeps names NFC, so the free name is compared in the same form.
-                const name = (desiredName ?? src.name).replace(/[/\\]/g, '_').normalize('NFC');
-                return withFreeName(folderIn(target.mount, to.parentId), name, (freeName) =>
-                    to.drive.receiveCopy(to.mountId, to.parentId, freeName, tree, source, user),
-                );
-            });
-        });
+        return this.withHomeHeld(() => to.drive.receiveCopy(to.mountId, to.parentId, source, src, desiredName, user));
     }
 
     // Copies a path into a folder of its own mount under exactly this name, as a WebDAV COPY with Overwrite: T asks.
@@ -726,50 +714,45 @@ export class Drive {
         const mount = this.getMount(mountId);
         const safeName = validateName(name);
         const src = await mount.getActivePath(srcPathId);
-        const to = { drive: this, ownerId: this.owner.id, mountId, parentId: destParentId };
-        const tree = await this.checkedCopyTree(mount, src, to, mount, user);
+        const tree = await this.checkedCopyTree(mount, src, mount, destParentId);
         await this.trashOccupant(mount, destParentId, safeName, src, user);
         return this.writeCopy(mount, destParentId, safeName, tree, mount, user);
     }
 
-    // Writes a copy that the source's drive listed into a folder of this one. It writes the parts of each document it
-    // brings, so the rule for a person's write inside a document is checked once, on the destination folder.
+    // Copies `src`, a path of a mount of this drive or of another one, into a folder of this drive under a free name.
     public async receiveCopy(
         mountId: string,
         destParentId: string,
-        name: string,
-        tree: CopyTree,
         source: Mount,
+        src: DrivePath,
+        desiredName: string | undefined,
         user: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
-        await this.personParent(mount, destParentId, tree.path.type);
-        return this.writeCopy(mount, destParentId, name, tree, source, user);
+        return this.withHomeHeld(async () => {
+            const tree = await this.checkedCopyTree(source, src, mount, destParentId);
+            // NFC first: the store keeps names NFC, so the free name is compared in the same form.
+            const name = (desiredName ?? src.name).replace(/[/\\]/g, '_').normalize('NFC');
+            return withFreeName(folderIn(mount, destParentId), name, (freeName) =>
+                this.writeCopy(mount, destParentId, freeName, tree, source, user),
+            );
+        });
     }
 
-    // Lists what a copy of `src` writes, once the target folder takes it. Everything that can refuse the copy is
-    // checked here, before a byte is written, and the folder itself before the source is listed: that listing
-    // flushes the source's documents and reads the limits of the target's owner.
-    private async checkedCopyTree(
-        source: Mount,
-        src: DrivePath,
-        to: CopyTarget,
-        target: Mount,
-        user: User,
-    ): Promise<CopyTree> {
-        if (!(await to.drive.canWrite(to.mountId, to.parentId, user))) {
-            throw new ApiError(403, 'No write permission on target folder');
-        }
-        await this.personParent(target, to.parentId, src.type);
+    // Lists what a copy of `src` writes into a folder of `target`, a mount of this drive. Everything that can refuse
+    // the copy is checked here, before a byte is written, and the folder before the listing flushes any document.
+    private async checkedCopyTree(source: Mount, src: DrivePath, target: Mount, parentId: string): Promise<CopyTree> {
+        // The copy writes the parts of each document it brings, so the document rule is checked on its folder alone.
+        await this.personParent(target, parentId, src.type);
         // RFC 4918 asks for a 409 for a folder copied into itself.
-        if (source === target && (await source.isSelfOrDescendant(src.id, to.parentId))) {
+        if (source === target && (await source.isSelfOrDescendant(src.id, parentId))) {
             throw new ApiError(409, 'Cannot copy a folder into itself or its own descendant');
         }
         // The copy writes exactly what this lists, so it never copies its own output. Every copy has to fit the
         // target's free space, and a single file also the per-file upload cap, the same as an upload.
         const tree = await source.listCopy(src.id);
         if (!isContainerType(src.type)) enforceMaxUploadSize(src.size);
-        await enforceMountQuota(to.ownerId, to.mountId, copySize(tree));
+        await enforceMountQuota(this.owner.id, target.id, copySize(tree));
         return tree;
     }
 
@@ -794,7 +777,7 @@ export class Drive {
         source: Mount,
         user: User,
     ): Promise<DrivePath> {
-        const copied = await mount.copyPath(
+        const copy = await mount.copyPath(
             source,
             tree,
             destParentId,
@@ -803,7 +786,8 @@ export class Drive {
                 this.removePath(mount.id, pathId, (_, item) => deleteFailedCopy(this, mount, item, createdIds, user)),
             user,
         );
-        await sweepCopy(this, copied, tree);
+        await sweepCopy(this, mount, copy);
+        const copied = copy.path;
         // The copy shows once, when it is whole. Only its top fans out too: everything under it is new, so nobody
         // watches it yet.
         this.emit(

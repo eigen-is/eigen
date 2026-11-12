@@ -3499,7 +3499,7 @@ describe('Drive', () => {
             const copied = await source.copyPath(
                 aliceMountId,
                 uploaded.id,
-                { drive: target, ownerId: teamOwner, mountId: teamMountId, parentId: teamRootId },
+                { drive: target, mountId: teamMountId, parentId: teamRootId },
                 'bridge-file.txt',
                 actor!,
             );
@@ -3532,7 +3532,7 @@ describe('Drive', () => {
             const copied = await source.copyPath(
                 aliceMountId,
                 doc.id,
-                { drive: target, ownerId: teamOwner, mountId: teamMountId, parentId: teamRootId },
+                { drive: target, mountId: teamMountId, parentId: teamRootId },
                 doc.name,
                 actor!,
             );

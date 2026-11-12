@@ -100,7 +100,7 @@ describe('Drive content-index', () => {
         const copied = await home.drive.copyPath(
             mountId,
             src.id,
-            { drive: home.drive, ownerId: home.user.id, mountId, parentId: rootId },
+            { drive: home.drive, mountId, parentId: rootId },
             'rt-copydst',
             home.user,
         );

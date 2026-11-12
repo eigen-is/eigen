@@ -546,7 +546,7 @@ describe('Drive history recording', () => {
         const copied = await home.drive.copyPath(
             aliceMountId,
             folder.id,
-            { drive: home.drive, ownerId: aliceOwnerId, mountId: aliceMountId, parentId: destFolder.id },
+            { drive: home.drive, mountId: aliceMountId, parentId: destFolder.id },
             'CopiedFolder',
             actor!,
         );

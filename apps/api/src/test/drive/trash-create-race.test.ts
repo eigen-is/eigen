@@ -86,7 +86,7 @@ describe('a write into a folder that goes to the trash', () => {
                     .copyPath(
                         mount.id,
                         doc.id,
-                        { drive: home.drive, ownerId: home.user.id, mountId: mount.id, parentId: folder.id },
+                        { drive: home.drive, mountId: mount.id, parentId: folder.id },
                         'copy',
                         home.user,
                     )

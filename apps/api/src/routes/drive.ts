@@ -232,12 +232,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // Without this the client would retry and copy the tree twice.
             server?.timeout(request, 0);
             const sourceDrive = await getSharedDrive(params.ownerId, user);
-            const to = {
-                drive: await getSharedDrive(body.targetOwnerId, user),
-                ownerId: body.targetOwnerId,
-                mountId: body.targetMountId,
-                parentId: body.targetParentId,
-            };
+            const drive = await getSharedDrive(body.targetOwnerId, user);
+            const to = { drive, mountId: body.targetMountId, parentId: body.targetParentId };
             return await sourceDrive.copyPath(params.mountId, params.pathId, to, body.name, user);
         },
         {

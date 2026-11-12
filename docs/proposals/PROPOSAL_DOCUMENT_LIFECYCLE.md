@@ -72,7 +72,7 @@ So one rule marks a comment deleted: its thread is gone from `chat/`, or its hos
 
 ### A copy keeps only what its state names
 
-A Drive copy writes every part's bytes and leaves the versions behind, then sweeps each document it made with no grace (`sweepCopy`). The sweep only considers the parts the copy wrote, matched by name against the listing it wrote from. A copy to another drive shows in the target's tabs as each piece lands, so a part someone adds to it meanwhile is never a candidate. So the copy holds what the source's state names, plus whatever someone added since, and the source keeps everything. [STORAGE.md](../STORAGE.md#copy-goes-anywhere-a-move-stays-in-its-mount) has the rest. A portable package ([PROPOSAL_PORTABLE_DOCUMENTS.md](PROPOSAL_PORTABLE_DOCUMENTS.md)) packs only the names a state uses when it is built.
+A Drive copy writes every part's bytes and leaves the versions behind, then sweeps each document it made with no grace (`sweepCopy`). The sweep only considers the parts the copy wrote, known by the ids the copy returns. A copy to another drive shows in the target's tabs as each piece lands, so a part someone adds to it meanwhile is never a candidate. So the copy holds what the source's state names, plus whatever someone added since, and the source keeps everything. [STORAGE.md](../STORAGE.md#copy-goes-anywhere-a-move-stays-in-its-mount) has the rest. A portable package ([PROPOSAL_PORTABLE_DOCUMENTS.md](PROPOSAL_PORTABLE_DOCUMENTS.md)) packs only the names a state uses when it is built.
 
 ### A version of a document is a set
 

@@ -15,6 +15,13 @@ import type { Mount } from './mount';
 // A source path with the paths below it that a copy writes, as they were when the copy began.
 export type CopyTree = { readonly path: DrivePath; readonly children: readonly CopyTree[] };
 
+// What a copy wrote: its top path, every path it made, and each document among them that is not a part of another.
+export type Copied = {
+    readonly path: DrivePath;
+    readonly createdIds: ReadonlySet<string>;
+    readonly documentIds: readonly string[];
+};
+
 // Removes the top folder of a copy that failed part way. createdIds holds every path the copy made.
 export type DiscardCopy = (pathId: string, createdIds: ReadonlySet<string>) => Promise<void>;
 
@@ -51,13 +58,14 @@ export async function copyPath(
     name: string,
     discard: DiscardCopy,
     actor: Actor,
-): Promise<DrivePath> {
+): Promise<Copied> {
     // The walk creates the top folder before anything else, so it is the first one here.
     const createdIds = new Set<string>();
+    const documentIds: string[] = [];
     try {
-        const topId = await copyTree(mount, source, tree, destParentId, name, actor, createdIds);
+        const topId = await copyTree(mount, source, tree, destParentId, name, actor, createdIds, documentIds);
         // Read once everything landed, so the top folder's size counts it.
-        return await mount.getActivePath(topId);
+        return { path: await mount.getActivePath(topId), createdIds, documentIds };
     } catch (e) {
         // A copy that fails part way removes its folder, so each retry does not leave another half-built
         // one. The source is untouched, so nothing the copy wrote needs keeping.
@@ -79,24 +87,29 @@ async function copyTree(
     name: string,
     actor: Actor,
     createdIds: Set<string>,
+    // Null inside a document: a thread in it is one of its parts.
+    documentIds: string[] | null,
 ): Promise<string> {
     const listed = tree.path;
+    const isEigenDoc = isContainerType(listed.type) && listed.type !== DRIVE_TYPE_FOLDER;
     const copyId = isContainerType(listed.type)
         ? await mount.createFolder(parentId, name, listed.type)
         : await copyFile(mount, source, listed, parentId, name);
     createdIds.add(copyId);
+    if (isEigenDoc) documentIds?.push(copyId);
     const details = {
         sourceOwnerId: source.history.ownerId,
         sourceMountId: source.history.mountId,
         sourcePathId: listed.id,
     };
     mount.history.record({ pathId: copyId, eventType: 'copied', actor, details });
+    const below = isEigenDoc ? null : documentIds;
     for (const child of tree.children) {
-        await copyTree(mount, source, child, copyId, child.path.name, actor, createdIds);
+        await copyTree(mount, source, child, copyId, child.path.name, actor, createdIds, below);
     }
     // A document's data.db arrives as plain bytes, so no sync tells search about the new document. It is
     // marked for the reindexer once everything inside has landed.
-    if (isContainerType(listed.type) && listed.type !== DRIVE_TYPE_FOLDER) mount.markContentDirty(copyId);
+    if (isEigenDoc) mount.markContentDirty(copyId);
     return copyId;
 }
 
