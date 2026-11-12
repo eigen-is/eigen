@@ -233,7 +233,7 @@ describe('finding and replacing', () => {
         ['=REPT("x",1E+300)', VALUE],
         ['=REPT("",32768)', ''],
         ['=REPT(TRUE,2)', 'TRUETRUE'],
-        ['=REPT(D6,2)', VALUE],
+        ['=REPT(D6,110)', VALUE],
     ]);
     rows('EXACT', [
         ['=EXACT("a","A")', false],
@@ -294,7 +294,6 @@ describe('characters and their codes', () => {
         ['=CODE("")', VALUE],
         ['=CODE(B1)', VALUE],
         ['=CODE(65)', 54],
-        ['=CODE(D6)', VALUE],
     ]);
     rows('UNICHAR and UNICODE', [
         ['=UNICHAR(65.5)', 'A'],
@@ -322,8 +321,37 @@ describe('characters and their codes', () => {
         ['=UNICODE(CHAR(128))', 8364],
         ['=UNICODE(65)', 54],
         ['=UNICODE("")', VALUE],
-        ['=UNICODE(D6)', VALUE],
     ]);
+});
+
+// CODE, UNICODE and REPT answer for a text of any length, as LEN and LEFT do, where Excel refuses a text longer
+// than 255 characters. Excel's rows of batch 11 (L1 is 300 times a, L3 256 times, L4 300 typed) and of the family.
+describe("a text past 255 characters, which differs from Excel by the owner's pick", () => {
+    const LONG = { ...SHEET, L1: '=REPT("a",300)', L3: '=REPT("a",256)', L4: 'a'.repeat(300) };
+    test.each([
+        ['=CODE(L1)', VALUE, 97],
+        ['=CODE(L3)', VALUE, 97],
+        ['=UNICODE(L1)', VALUE, 97],
+        ['=UNICODE(L3)', VALUE, 97],
+        ['=REPT(L1,2)', VALUE, 'a'.repeat(600)],
+        ['=LEN(REPT(L1,2))', VALUE, 600],
+        ['=REPT(L3,1)', VALUE, 'a'.repeat(256)],
+        ['=CODE(REPT("a",300))', VALUE, 97],
+        ['=UNICODE(REPT("a",256))', VALUE, 97],
+        ['=LEN(REPT(REPT("a",300),2))', VALUE, 600],
+        ['=CHAR(CODE(L1))', VALUE, 'a'],
+        ['=CODE(L4)', VALUE, 97],
+        ['=UNICODE(L4)', VALUE, 97],
+        ['=REPT(L4,2)', VALUE, 'a'.repeat(600)],
+        ['=LEN(REPT(L4,2))', VALUE, 600],
+        ['=REPT(REPT("x",256),2)', VALUE, 'x'.repeat(512)],
+        ['=CODE(REPT("x",256))', VALUE, 120],
+        ['=REPT(D6,109)', VALUE, 'x'.repeat(32700)],
+        ['=CODE(D6)', VALUE, 120],
+        ['=UNICODE(D6)', VALUE, 120],
+    ])('%s is %p in Excel', (formula, excel, ours) => {
+        expect([evaluate(formula, LONG), excel]).toEqual([ours, VALUE]);
+    });
 });
 
 describe('numbers as text', () => {

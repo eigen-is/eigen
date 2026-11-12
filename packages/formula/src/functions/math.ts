@@ -52,8 +52,8 @@ const SUBTOTALS = [
     'VAR.P',
 ];
 
-// CEILING.MATH when `up`, else FLOOR.MATH. The sign of the step says nothing, and a mode other than 0 turns the
-// direction around for a negative number.
+// CEILING.MATH when `up`, else FLOOR.MATH, and with mode 0 their PRECISE forms. The sign of the step says nothing,
+// and a mode other than 0 turns the direction around for a negative number.
 function toStep(n: number, step: number, mode: number, up: boolean) {
     if (step === 0) return 0;
     const size = Math.abs(step);
@@ -92,6 +92,9 @@ export const MATH = [
     fn('FLOOR.MATH', [NUMBER, skippable(NUMBER, 1), optional(NUMBER, 0)], (n, step, mode) =>
         toStep(n, step, mode, false),
     ),
+    fn('CEILING.PRECISE', [NUMBER, skippable(NUMBER, 1)], (n, step) => toStep(n, step, 0, true)),
+    fn('ISO.CEILING', [NUMBER, skippable(NUMBER, 1)], (n, step) => toStep(n, step, 0, true)),
+    fn('FLOOR.PRECISE', [NUMBER, skippable(NUMBER, 1)], (n, step) => toStep(n, step, 0, false)),
     // The exact remainder, with the sign of the divisor. A number tiny against the divisor leaves nothing.
     fn('MOD', [NUMBER, NUMBER], (n, divisor) => {
         if (divisor === 0) return DIV0;

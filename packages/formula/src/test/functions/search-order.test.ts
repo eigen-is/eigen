@@ -24,23 +24,47 @@ function usedOf(list: readonly Item[]): number {
     return used;
 }
 
-// MATCH type 1, LOOKUP and an approximate VLOOKUP or HLOOKUP. The list is halved. A probe at an item of another
-// kind moves to the next item of the key's kind after it, else to the one before it. A probe that equals the key
-// ends the search at the last of the equal items that follow it; a smaller one sends the search to the right of
-// the item it moved to, a larger one to the left of that item.
+// The item a halving probes: the middle one, or when that is of another kind than the key the next item of the
+// key's kind after it, else the one before it; -1 when the window holds none.
+function probed(list: readonly Item[], key: Key, low: number, high: number): number {
+    const middle = (low + high) >> 1;
+    let at = middle;
+    while (at < high && Number.isNaN(against(list[at], key))) at += 1;
+    if (Number.isNaN(against(list[at], key))) at = middle;
+    while (at > low && Number.isNaN(against(list[at], key))) at -= 1;
+    return Number.isNaN(against(list[at], key)) ? -1 : at;
+}
+
+// MATCH type 1, LOOKUP and an approximate VLOOKUP or HLOOKUP, by the owner's pick: the list is taken to be sorted
+// upward and halved. An item at most the key sends the search to the right of it and is the answer when no later
+// probe is, so of equal items the last is found; a larger one sends the search to its left.
 function upward(list: readonly Item[], key: Key): number {
+    let low = 0;
+    let high = usedOf(list) - 1;
+    let before = -1;
+    while (low <= high) {
+        const at = probed(list, key, low, high);
+        if (at < 0) break;
+        if (against(list[at], key) <= 0) {
+            before = at;
+            low = at + 1;
+        } else high = at - 1;
+    }
+    return before;
+}
+
+// Excel's own steps there, which ours leaves: the same halving, but the first probe that equals the key ends the
+// search at the last of the equal items that follow it, read one by one. On a sorted list that is what `upward`
+// finds; where equal items come back after a larger one it is not.
+function walked(list: readonly Item[], key: Key): number {
     const used = usedOf(list);
     let low = 0;
     let high = used - 1;
     let before = -1;
     while (low <= high) {
-        const middle = (low + high) >> 1;
-        let at = middle;
-        while (at < high && Number.isNaN(against(list[at], key))) at += 1;
-        if (Number.isNaN(against(list[at], key))) at = middle;
-        while (at > low && Number.isNaN(against(list[at], key))) at -= 1;
+        let at = probed(list, key, low, high);
+        if (at < 0) break;
         const order = against(list[at], key);
-        if (Number.isNaN(order)) break;
         if (order === 0) {
             while (at + 1 < used && against(list[at + 1], key) === 0) at += 1;
             return at;
@@ -53,9 +77,31 @@ function upward(list: readonly Item[], key: Key): number {
     return before;
 }
 
-// MATCH type -1: no halving. The items of the key's kind are read from the first one on; the key itself ends the
-// search, and so does the first smaller item, which leaves the last larger one before it.
+// MATCH type -1, by the owner's pick: the list is taken to be sorted downward and halved. A probe that equals the
+// key sends the search to its left, so the first of equal items is found; a larger one sends it right and is the
+// answer when no item equals.
 function downward(list: readonly Item[], key: Key): number {
+    let low = 0;
+    let high = usedOf(list) - 1;
+    let hit = -1;
+    let above = -1;
+    while (low <= high) {
+        const at = probed(list, key, low, high);
+        if (at < 0) break;
+        const order = against(list[at], key);
+        if (order === 0) hit = at;
+        if (order > 0) {
+            above = at;
+            low = at + 1;
+        } else high = at - 1;
+    }
+    return hit >= 0 ? hit : above;
+}
+
+// Excel's own steps for MATCH type -1, which ours leaves too: no halving. The items of the key's kind are read from the
+// first one on; the key itself ends the search, and so does the first smaller item, which leaves the last larger
+// one before it. On a list sorted downward that is what `downward` finds.
+function scanned(list: readonly Item[], key: Key): number {
     let above = -1;
     for (let at = 0; at < list.length; at += 1) {
         const order = against(list[at], key);
@@ -140,6 +186,17 @@ const RANGES: Readonly<Record<string, readonly Item[]>> = {
 // The fixture of Excel's sheet b13_2e: a blank inside a sorted list.
 const BLANKED: Readonly<Record<string, readonly Item[]>> = { 'G1:G5': [1, 2, null, 3, 4] };
 
+// The fixture of Excel's sheet b14_a: equal items that come back after a larger one.
+const RUNS: Readonly<Record<string, readonly Item[]>> = {
+    'A1:G1': [1, 2, 2, 3, 2, 2, 2],
+    'A2:H2': [1, 2, 2, 3, 2, 2, 2, 4],
+    'A3:G3': [2, 2, 3, 2, 2, 2, 2],
+    'A4:I4': [1, 2, 3, 2, 2, 2, 2, 2, 2],
+    'A5:O5': [1, 1, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 5],
+    'A6:O6': [2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2],
+    'A7:P7': [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 4],
+};
+
 function cellOf(item: Exclude<Item, null>): Literal {
     if (item === '') return '=""';
     return typeof item === 'object' ? (item === ERRORS.na ? '=NA()' : '=1/0') : item;
@@ -165,14 +222,17 @@ function itemOf(text: string): Item | undefined {
     return text.startsWith('#') ? errorOf(text) : undefined;
 }
 
-// What the model says a recorded formula shows: a position, the item found, or #N/A.
-function modelOf(formula: string): string {
+// What the model says a recorded formula shows: a position, the item found, or #N/A, by our steps or by Excel's.
+function modelOf(formula: string, excel = false): string {
+    const up = excel ? walked : upward;
+    const down = excel ? scanned : downward;
     const [, name = '', inside = ''] = /^=(\w+)\((.*)\)$/.exec(formula) ?? [];
     const [first = '', second = '', ...rest] = inside.split(/,(?![^{]*\})/);
     const key = itemOf(first);
     const list =
         RANGES[second] ??
         BLANKED[second] ??
+        RUNS[second] ??
         second
             .slice(1, -1)
             .split(/[,;]/)
@@ -181,12 +241,12 @@ function modelOf(formula: string): string {
     const [third, fourth] = rest.map((text) => (text === '' ? undefined : Number(text)));
     let at: number;
     if (name === 'LOOKUP' || name === 'VLOOKUP') {
-        at = upward(list, key);
+        at = up(list, key);
         return at < 0 ? '#N/A' : shown(list[at]);
     }
     if (name === 'MATCH') {
         const type = third ?? 1;
-        at = type === 0 ? linear(list, key, true, false) : type > 0 ? upward(list, key) : downward(list, key);
+        at = type === 0 ? linear(list, key, true, false) : type > 0 ? up(list, key) : down(list, key);
     } else {
         const match = Math.trunc(third ?? 0);
         const search = Math.floor(fourth ?? 1);
@@ -206,11 +266,11 @@ function shown(value: Item): string {
 function engineOn(formulas: readonly string[], ranges = RANGES): string[] {
     const cells: Record<string, Literal> = sheetOf(ranges);
     formulas.forEach((formula, row) => {
-        cells[`N${row + 1}`] = formula;
+        cells[`R${row + 1}`] = formula;
     });
     const engine = engineOf({ s1: cells });
     engine.recalc(Number.POSITIVE_INFINITY);
-    return formulas.map((_, row) => shown(valueAt(engine, `N${row + 1}`)));
+    return formulas.map((_, row) => shown(valueAt(engine, `R${row + 1}`)));
 }
 
 // The eleven forms of batch 12, part A, in the order of its columns.
@@ -463,20 +523,90 @@ const CELLS = RECORDED.flatMap(([key, list, answers]) =>
     answers.split(' ').map((answer, form) => [FORMS[form](key, list), answer] as const),
 );
 
+// The recorded rows of MATCH types 1 and -1, LOOKUP and an approximate VLOOKUP on lists that are not sorted as the
+// search takes them to be, where ours differs from Excel by the owner's pick: Excel also reads on item by item,
+// ours only halves. A formula, Excel's value, ours.
+const PICKED: readonly (readonly [string, string, string])[] = [
+    ['=MATCH(4,{6,4,2},1)', '2', '3'],
+    ['=LOOKUP(4,{6,4,2})', '4', '2'],
+    ['=VLOOKUP(4,{6;4;2},1,TRUE)', '4', '2'],
+    ['=MATCH(8,{1,5,2,8,3},1)', '4', '5'],
+    ['=LOOKUP(8,{1,5,2,8,3})', '8', '3'],
+    ['=VLOOKUP(8,{1;5;2;8;3},1,TRUE)', '8', '3'],
+    ['=MATCH(2,{1,5,2,8,3},-1)', '#N/A', '3'],
+    ['=MATCH(2,{1,2,2,2,3},-1)', '#N/A', '3'],
+    ['=MATCH(2,{3,2,2,2,1},1)', '4', '5'],
+    ['=LOOKUP(2,{3,2,2,2,1})', '2', '1'],
+    ['=VLOOKUP(2,{3;2;2;2;1},1,TRUE)', '2', '1'],
+    ['=MATCH("b",{1,"a",3,"b",5,"c",7},-1)', '#N/A', '4'],
+    ['=MATCH(5,{1,"a",3,"b",5,"c",7},-1)', '#N/A', '5'],
+    ['=MATCH(4,{1,"a",3,"b",5,"c",7},-1)', '#N/A', '7'],
+    ['=MATCH(2,{"a",1,"b",2,"c",3,"d"},-1)', '#N/A', '4'],
+    ['=MATCH("c",{"a",1,"b",2,"c",3,"d"},-1)', '#N/A', '5'],
+    ['=MATCH(2,{"a","b",1,2,"c","d",3},-1)', '#N/A', '4'],
+    ['=MATCH("c",{"a","b",1,2,"c","d",3},-1)', '#N/A', '5'],
+    ['=MATCH(3,{1,2,"a","b",3,4,"c"},-1)', '#N/A', '5'],
+    ['=MATCH("b",{1,2,"a","b",3,4,"c"},-1)', '#N/A', '4'],
+    ['=MATCH(2,{TRUE,1,"a",FALSE,2,"b"},-1)', '#N/A', '5'],
+    ['=MATCH(3,{1,#N/A,3,#N/A,5},-1)', '#N/A', '3'],
+    ['=MATCH(3,{5,1,4,2,3},-1)', '1', '3'],
+    ['=MATCH(6,{1,3,5,7,9,2,4,6,8},-1)', '#N/A', '5'],
+    ['=MATCH(5,{1,3,5,7,9,2,4,6,8},-1)', '#N/A', '5'],
+    ['=MATCH(5,{9,7,5,3,1},1)', '3', '5'],
+    ['=LOOKUP(5,{9,7,5,3,1})', '5', '1'],
+    ['=VLOOKUP(5,{9;7;5;3;1},1,TRUE)', '5', '1'],
+    ['=MATCH(3,{1,"",3,"",5},-1)', '#N/A', '3'],
+    ['=MATCH(2,{1,1,2,2,3,3},-1)', '#N/A', '3'],
+    ['=MATCH(2,{3,3,2,2,1,1},1)', '4', '6'],
+    ['=LOOKUP(2,{3,3,2,2,1,1})', '2', '1'],
+    ['=VLOOKUP(2,{3;3;2;2;1;1},1,TRUE)', '2', '1'],
+    ['=MATCH("a",{1,"a",2,"a",3,"a"},1)', '4', '6'],
+    ['=MATCH(2,{"a",1,"a",2,"a",3},-1)', '#N/A', '4'],
+    ['=MATCH(95,{10,20,30,40,50,60,70,80,"x",100,110,120,130,140,150,160,170},-1)', '#N/A', '17'],
+    ['=MATCH(95,{10,20,30,40,50,60,70,80,TRUE,100,110,120,130,140,150,160,170},-1)', '#N/A', '17'],
+    ['=MATCH(2,C1:C3,-1)', '1', '3'],
+    ['=MATCH(4,C1:C3,-1)', '#N/A', '2'],
+    ['=MATCH(4,{6,4,2})', '2', '3'],
+    ['=MATCH(2,C1:C3,-0.5)', '1', '3'],
+    ['=MATCH(2,C1:C3,-1.9)', '1', '3'],
+    ['=MATCH("abc",B1:B7,1)', '5', '6'],
+    ['=MATCH("abc",B1:B7)', '5', '6'],
+    ['=MATCH(2,{1,#N/A,3},-1)', '#N/A', '3'],
+    ['=MATCH(2,{1,2,2,2,2,2,2,2,2,2,2,2,3,2,2,4},1)', '12', '15'],
+    ['=MATCH(2,A7:P7,1)', '12', '15'],
+];
+
+// The recorded rows with ours in place of Excel's value where the owner's pick differs.
+function pinned(rows: readonly (readonly [string, string])[]): string[][] {
+    return rows.map(([formula, answer]) => [formula, PICKED.find((row) => row[0] === formula)?.[2] ?? answer]);
+}
+
 describe("Excel's search order, the model", () => {
     test('answers every cell of batch 12, part A', () => {
         expect(CELLS.length).toBe(517);
-        expect(CELLS.filter(([formula, answer]) => modelOf(formula) !== answer)).toEqual([]);
+        expect(CELLS.filter(([formula, answer]) => modelOf(formula, true) !== answer)).toEqual([]);
     });
 
     test('answers every typed row of MATCH and XMATCH', () => {
         expect(TYPED.length).toBe(175);
-        expect(TYPED.filter(([formula, answer]) => modelOf(formula) !== answer)).toEqual([]);
+        expect(TYPED.filter(([formula, answer]) => modelOf(formula, true) !== answer)).toEqual([]);
     });
 
     test('answers every row of batch 13, part 2e, but the XLOOKUP', () => {
-        const rows = BATCH_13.filter(([formula]) => !formula.startsWith('=XLOOKUP'));
-        expect(rows.filter(([formula, answer]) => modelOf(formula) !== answer)).toEqual([]);
+        expect(MODELLED_13.filter(([formula, answer]) => modelOf(formula, true) !== answer)).toEqual([]);
+    });
+
+    test('answers every row of batch 14, part a', () => {
+        expect(BATCH_14.length).toBe(22);
+        expect(BATCH_14.filter(([formula, answer]) => modelOf(formula, true) !== answer)).toEqual([]);
+    });
+
+    test("halving differs from Excel on the rows of the owner's pick and on no other", () => {
+        const differing = [...CELLS, ...TYPED, ...MODELLED_13, ...BATCH_14]
+            .map(([formula, answer]) => [formula, answer, modelOf(formula)])
+            .filter(([, answer, ours]) => ours !== answer)
+            .filter(([formula], at, rows) => rows.findIndex((row) => row[0] === formula) === at);
+        expect(differing).toEqual(PICKED.map((row) => [...row]));
     });
 });
 
@@ -503,10 +633,38 @@ const BATCH_13: readonly (readonly [string, string])[] = [
     ['=LOOKUP(2.5,G1:G5)', '2'],
 ];
 
+// Excel batch 14, part a: equal items that come back after a larger one, as arrays and as cells.
+const BATCH_14: readonly (readonly [string, string])[] = [
+    ['=MATCH(2,{1,2,2,3,2,2,2},1)', '3'],
+    ['=MATCH(2,{1,2,2,3,2,2,2,4},1)', '3'],
+    ['=MATCH(2,{2,2,3,2,2,2,2},1)', '7'],
+    ['=MATCH(2,{1,2,3,2,2,2,2,2,2},1)', '9'],
+    ['=MATCH(2,{1,1,2,2,3,2,2,2,2,2,2,2,2,2,5},1)', '14'],
+    ['=MATCH(2,{2,2,2,2,2,2,2,3,2,2,2,2,2,2,2},1)', '7'],
+    ['=MATCH(2,{1,2,2,2,2,2,2,2,2,2,2,2,3,2,2,4},1)', '12'],
+    ['=MATCH("b",{"a","b","b","c","b","b","b"},1)', '3'],
+    ['=LOOKUP(2,{1,2,2,3,2,2,2})', '2'],
+    ['=VLOOKUP(2,{1;2;2;3;2;2;2},1,TRUE)', '2'],
+    ['=XMATCH(2,{1,2,2,3,2,2,2},0,2)', '2'],
+    ['=XMATCH(2,{1,2,2,3,2,2,2},0,-2)', '7'],
+    ['=XMATCH(2,{1,2,2,3,2,2,2},-1,2)', '2'],
+    ['=MATCH(2,{1,2,2,2,2,2,2},1)', '7'],
+    ['=MATCH(2,{2,2,2,2,2,2,2,2},1)', '8'],
+    ['=MATCH(2,A1:G1,1)', '3'],
+    ['=MATCH(2,A2:H2,1)', '3'],
+    ['=MATCH(2,A3:G3,1)', '7'],
+    ['=MATCH(2,A4:I4,1)', '9'],
+    ['=MATCH(2,A5:O5,1)', '14'],
+    ['=MATCH(2,A6:O6,1)', '7'],
+    ['=MATCH(2,A7:P7,1)', '12'],
+];
+
+const MODELLED_13 = BATCH_13.filter(([formula]) => !formula.startsWith('=XLOOKUP'));
+
 describe("Excel's search order, the engine", () => {
     test('answers every cell of batch 12, part A', () => {
         const ours = engineOn(CELLS.map(([formula]) => formula));
-        expect(CELLS.map(([formula], at) => [formula, ours[at]])).toEqual(CELLS.map((cell) => [...cell]));
+        expect(CELLS.map(([formula], at) => [formula, ours[at]])).toEqual(pinned(CELLS));
     });
 
     test('answers every row of batch 13, part 2e', () => {
@@ -514,14 +672,22 @@ describe("Excel's search order, the engine", () => {
             BATCH_13.map(([formula]) => formula),
             BLANKED,
         );
-        expect(BATCH_13.map(([formula], at) => [formula, ours[at]])).toEqual(BATCH_13.map((row) => [...row]));
+        expect(BATCH_13.map(([formula], at) => [formula, ours[at]])).toEqual(pinned(BATCH_13));
+    });
+
+    test('answers every row of batch 14, part a', () => {
+        const ours = engineOn(
+            BATCH_14.map(([formula]) => formula),
+            RUNS,
+        );
+        expect(BATCH_14.map(([formula], at) => [formula, ours[at]])).toEqual(pinned(BATCH_14));
     });
 
     // The escape of a pattern, "k~2", is the wildcard module's and not held here.
     test('answers every typed row of MATCH and XMATCH', () => {
         const rows = TYPED.filter(([formula]) => !formula.includes('~'));
         const ours = engineOn(rows.map(([formula]) => formula));
-        expect(rows.map(([formula], at) => [formula, ours[at]])).toEqual(rows.map((row) => [...row]));
+        expect(rows.map(([formula], at) => [formula, ours[at]])).toEqual(pinned(rows));
     });
 });
 
@@ -585,7 +751,7 @@ describe("Excel's search order, the engine against the model", () => {
     });
 
     // The blank cells above the sevens are one run that the array holds once.
-    test('a scan from the top stops at the first of a run of equals, and leaves the last of a run above the key', () => {
+    test('a search downward finds the first of a run of equals, and the last of a run above the key', () => {
         const ours = engineOn(
             ['=MATCH(2,(A1:A9="")+1,-1)', '=MATCH(1.5,(A1:A9="")+1,-1)', '=MATCH(1,(A1:A9="")+1,-1)'],
             {
@@ -593,6 +759,64 @@ describe("Excel's search order, the engine against the model", () => {
             },
         );
         expect(ours).toEqual(['1', '6', '7']);
+    });
+
+    // The owner's pick keeps Excel's answer on sorted lists, long runs of equal items included: there halving finds
+    // what Excel's reading on finds. Downward that holds with items of another kind anywhere among them; upward
+    // Excel's walk along a run stops at one, so there they stand before the first item or after the last.
+    test("on 1,200 sorted lists MATCH types 1 and -1 answer as Excel's own steps do", () => {
+        const differing = [];
+        for (let round = 0; round < 1200; round += 1) {
+            const up = round % 4 < 2;
+            const all: readonly Key[] =
+                round % 2 === 0 ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+            const long = round % 5 === 0;
+            const pool = long ? [all[next(all.length)], all[next(all.length)], all[next(all.length)]] : all;
+            const others: readonly Item[] = round % 2 === 0 ? ['x', true, ERRORS.na, null] : [5, false, null];
+            const list: Item[] = Array.from(
+                { length: long ? 30 + next(60) : 1 + next(12) },
+                () => pool[next(pool.length)],
+            );
+            list.sort((one, other) => (up ? against(one, other) : -against(one, other)));
+            if (round % 3 === 0) {
+                for (let more = next(6); more > 0; more -= 1) {
+                    const at = up ? next(2) * list.length : next(list.length);
+                    list.splice(at, 0, others[next(others.length)]);
+                }
+            }
+            // Every tenth list is the cells of a whole column, far apart.
+            let row = 0;
+            const rows = list.map(() => {
+                row += 1 + (round % 10 === 0 ? next(Math.floor(1048576 / list.length)) : 0);
+                return row;
+            });
+            const sparse: Item[] = new Array(row).fill(null);
+            list.forEach((item, at) => {
+                sparse[rows[at] - 1] = item;
+            });
+            const key: Key = round % 2 === 0 ? next(27) / 2 : ['a', 'aa', 'c', 'cc', 'g', 'h', ''][next(7)];
+            const cells: Record<string, Literal> = {};
+            list.forEach((item, at) => {
+                if (item !== null) cells[`A${rows[at]}`] = cellOf(item);
+            });
+            const constant = list.includes(null) ? `A1:A${row}` : `{${list.map(typed).join(';')}}`;
+            [`A1:A${row}`, 'A:A', constant].forEach((range, at) => {
+                cells[`N${at + 1}`] = `=MATCH(${typed(key)},${range},${up ? 1 : -1})`;
+            });
+            const engine = engineOf({ s1: cells });
+            engine.recalc(Number.POSITIVE_INFINITY);
+            const ours = ['N1', 'N2', 'N3'].map((cell) => shown(valueAt(engine, cell)));
+            const law = [sparse, sparse, list.includes(null) ? sparse : list].map((items) => {
+                // The model of Excel's walk stops at a blank between equal cells, which no row records: there
+                // only ours is held.
+                const apart = up && items.length > list.length;
+                const excel = apart ? upward(items, key) : up ? walked(items, key) : scanned(items, key);
+                const model = up ? upward(items, key) : downward(items, key);
+                return model !== excel ? 'the model differs' : excel < 0 ? '#N/A' : String(excel + 1);
+            });
+            if (ours.join() !== law.join()) differing.push({ list, rows, key, ours, law });
+        }
+        expect(differing).toEqual([]);
     });
 
     // The law that needs no model: on sorted values that are all different, each form finds what it is named for.
@@ -679,13 +903,75 @@ describe('what a search of sorted values costs', () => {
         expect(values.every((found, row) => found === 3 * row + 3)).toBe(true);
     });
 
-    // A run of equals is walked once, and values of another kind are stepped over once: neither once per halving.
-    test('a column of equal values, or of values of another kind, is read at most once', () => {
-        const equal = readsOf(WHOLE, () => 2, ['=MATCH(2,A:A,1)', '=XMATCH(2,A:A,0,2)', '=XMATCH(2,A:A,0,-2)']);
-        expect(equal.values).toEqual([WHOLE, 1, WHOLE]);
-        expect(equal.reads).toBeLessThanOrEqual(WHOLE / 2 + 3 * 22);
+    test('a whole column sorted downward is halved by MATCH type -1: at most 22 cells read per search', () => {
+        const formulas = [1, 2, 500001, 2097151, 2097152, 3000000].map((key) => `=MATCH(${key},A:A,-1)`);
+        const { reads, values } = readsOf(WHOLE, (row) => 2 * (WHOLE - row), formulas);
+        expect(reads).toBeLessThanOrEqual(22 * formulas.length);
+        expect(values).toEqual([WHOLE, WHOLE, WHOLE - 250000, 1, 1, NA]);
+    });
+
+    test('a run of equal values is halved too: a column of ten values, or of one, reads at most 22 cells', () => {
+        const formulas = [0, 1, 5, 5.5, 10, 11].flatMap((key) => [
+            `=MATCH(${key},A:A,1)`,
+            `=LOOKUP(${key},A:A)`,
+            `=VLOOKUP(${key},A:A,1,TRUE)`,
+        ]);
+        const ten = readsOf(1000000, (row) => 1 + Math.floor(row / 100000), formulas);
+        expect(ten.reads).toBeLessThanOrEqual(22 * formulas.length);
+        expect(ten.values).toEqual([
+            NA,
+            NA,
+            NA,
+            100000,
+            1,
+            1,
+            500000,
+            5,
+            5,
+            500000,
+            5,
+            5,
+            1000000,
+            10,
+            10,
+            1000000,
+            10,
+            10,
+        ]);
+        const one = [
+            '=MATCH(2,A:A,1)',
+            '=VLOOKUP(2,A:A,1,TRUE)',
+            '=MATCH(2,A:A,-1)',
+            '=XMATCH(2,A:A,0,2)',
+            '=XMATCH(2,A:A,0,-2)',
+        ];
+        const equal = readsOf(WHOLE, () => 2, one);
+        expect(equal.values).toEqual([WHOLE, 2, 1, 1, WHOLE]);
+        expect(equal.reads).toBeLessThanOrEqual(22 * one.length);
+    });
+
+    // Values of another kind are stepped over once, not once per halving.
+    test('a column of values of another kind is read at most once', () => {
         const other = readsOf(WHOLE, () => 'x', ['=MATCH(2,A:A,1)', '=XMATCH(2,A:A,0,2)']);
         expect(other.values).toEqual([NA, NA]);
         expect(other.reads).toBeLessThanOrEqual(WHOLE + 2 * 22);
+        expect(readsOf(WHOLE, () => 'x', ['=MATCH(2,A:A,-1)'])).toEqual({ reads: WHOLE, values: [NA] });
+    });
+
+    // Values of the key's kind in any order among values of another kind: a search reads no cell a fourth time.
+    test('no column makes MATCH type -1 read more than three times its cells', () => {
+        let seed = 34;
+        const next = (below: number) => {
+            seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+            return (seed >>> 8) % below;
+        };
+        let most = 0;
+        for (let round = 0; round < 300; round += 1) {
+            const rows = 1 + next(3000);
+            const kinds = Array.from({ length: rows }, () => next(1 + (round % 7) * 40) === 0);
+            const { reads } = readsOf(rows, (row) => (kinds[row] ? next(9) : 'x'), [`=MATCH(${next(9)},A:A,-1)`]);
+            most = Math.max(most, reads / rows);
+        }
+        expect(most).toBeLessThanOrEqual(3);
     });
 });

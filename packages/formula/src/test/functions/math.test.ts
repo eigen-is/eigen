@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { DIV0, NUM, VALUE } from '../../index';
+import { DIV0, NA, NUM, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
 import { evaluate } from '../recalc/support';
 
@@ -784,5 +784,77 @@ describe('SUMSQ', () => {
         const tens: Cells = { A1: 10, A2: 20, A3: 30, A4: 40 };
         expect(evaluate('=SUMSQ(OFFSET(A1,{0,1,2},0,2))', tens)).toBe(1400);
         expect(evaluate('=SUMSQ(OFFSET(Z50,{0,1,2},0,2))', tens)).toBe(0);
+    });
+});
+
+// Excel batch 14, part b. A1 is blank.
+describe('CEILING.PRECISE, FLOOR.PRECISE and ISO.CEILING step up or down whatever the signs', () => {
+    const cells: Cells = { A2: 4.3, A3: -4.3, B1: NA };
+    test.each([
+        ['=CEILING.PRECISE(4.3)', 5],
+        ['=CEILING.PRECISE(-4.3)', -4],
+        ['=CEILING.PRECISE(4.3,2)', 6],
+        ['=CEILING.PRECISE(-4.3,2)', -4],
+        ['=CEILING.PRECISE(4.3,-2)', 6],
+        ['=CEILING.PRECISE(-4.3,-2)', -4],
+        ['=CEILING.PRECISE(4.3,0)', 0],
+        ['=CEILING.PRECISE(0,0)', 0],
+        ['=CEILING.PRECISE(4.3,0.1)', 4.3],
+        ['=CEILING.PRECISE(-4.3,0.1)', -4.3],
+        ['=CEILING.PRECISE(2.5,0.3)', 2.7],
+        ['=CEILING.PRECISE(1E+300,3)', 9.99999999999999e299],
+        ['=CEILING.PRECISE(4.3,1E-20)', 4.3],
+        ['=CEILING.PRECISE("4.3")', 5],
+        ['=CEILING.PRECISE("a")', VALUE],
+        ['=CEILING.PRECISE(TRUE)', 1],
+        ['=CEILING.PRECISE(4.3,TRUE)', 5],
+        ['=CEILING.PRECISE(4.3,"2")', 6],
+        ['=CEILING.PRECISE(A1)', 0],
+        ['=CEILING.PRECISE(A2)', 5],
+        ['=CEILING.PRECISE(4.3,)', 5],
+        ['=CEILING.PRECISE(,2)', 0],
+        ['=CEILING.PRECISE(B1)', NA],
+        ['=CEILING.PRECISE(4.3,B1)', NA],
+        ['=FLOOR.PRECISE(4.3)', 4],
+        ['=FLOOR.PRECISE(-4.3)', -5],
+        ['=FLOOR.PRECISE(4.3,2)', 4],
+        ['=FLOOR.PRECISE(-4.3,2)', -6],
+        ['=FLOOR.PRECISE(4.3,-2)', 4],
+        ['=FLOOR.PRECISE(-4.3,-2)', -6],
+        ['=FLOOR.PRECISE(4.3,0)', 0],
+        ['=FLOOR.PRECISE(0,0)', 0],
+        ['=FLOOR.PRECISE(4.3,0.1)', 4.3],
+        ['=FLOOR.PRECISE(-4.3,0.1)', -4.3],
+        ['=FLOOR.PRECISE(2.5,0.3)', 2.4],
+        ['=FLOOR.PRECISE(1E+300,3)', 9.99999999999999e299],
+        ['=FLOOR.PRECISE(4.3,1E-20)', 4.3],
+        ['=FLOOR.PRECISE("4.3")', 4],
+        ['=FLOOR.PRECISE("a")', VALUE],
+        ['=FLOOR.PRECISE(TRUE)', 1],
+        ['=FLOOR.PRECISE(4.3,TRUE)', 4],
+        ['=FLOOR.PRECISE(4.3,"2")', 4],
+        ['=FLOOR.PRECISE(A1)', 0],
+        ['=FLOOR.PRECISE(A2)', 4],
+        ['=FLOOR.PRECISE(4.3,)', 4],
+        ['=FLOOR.PRECISE(,2)', 0],
+        ['=FLOOR.PRECISE(B1)', NA],
+        ['=FLOOR.PRECISE(4.3,B1)', NA],
+        ['=ISO.CEILING(4.3)', 5],
+        ['=ISO.CEILING(-4.3)', -4],
+        ['=ISO.CEILING(4.3,2)', 6],
+        ['=ISO.CEILING(-4.3,2)', -4],
+        ['=ISO.CEILING(4.3,-2)', 6],
+        ['=ISO.CEILING(-4.3,-2)', -4],
+        ['=ISO.CEILING(4.3,0)', 0],
+        ['=ISO.CEILING(0,0)', 0],
+        ['=INT(CEILING.PRECISE(2.5,0.3)*10)', 27],
+    ])('%s is %p', (formula, expected) => {
+        const value = evaluate(formula, cells);
+        expect(typeof value === 'number' ? Number(value.toPrecision(15)) : value).toBe(expected);
+    });
+
+    test('a range gives one answer per cell', () => {
+        const joined = '=TEXTJOIN(";",,CEILING.PRECISE(A2:A3),FLOOR.PRECISE(A2:A3),ISO.CEILING(A2:A3))';
+        expect(evaluate(joined, cells)).toBe('5;-4;4;-5;5;-4');
     });
 });
