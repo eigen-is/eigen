@@ -3,7 +3,7 @@
 // it reads errors itself, as ISERROR does. An Excel function the engine lacks is an error that no function traps, and
 // only a branch IF or CHOOSE skips may hold.
 
-import { isExcelFunction } from '@workspace/lib/sheets';
+import { isExcelFunction } from '@workspace/formula/names';
 import type { FormulaArg, FormulaOutput } from '../../types';
 import errorText, {
     ERROR_NAME,
