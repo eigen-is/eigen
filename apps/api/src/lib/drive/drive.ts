@@ -109,7 +109,7 @@ import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp } from './streaming';
 import { sweepCopy, sweepDocument } from './sweep';
 import { deleteFailedCopy, deleteForGood, deletePath, permanentlyDelete, restorePath } from './trash';
-import { commitFromTemp, finalizeNamedUpload, finalizeUpload } from './upload';
+import { commitFromTemp, finalizeNamedUpload, finalizeUpload, thumbnailInBackground } from './upload';
 
 // How a content write is guarded and recorded. ifMatch is an If-Match value, checked under the file's
 // lock. The history row says `uploaded`, or `edited` for a save from the inline editor.
@@ -668,12 +668,10 @@ export class Drive {
         const updated = await mount.updatePath(path.id, { ...to, ...(retyped && { mimeType: named }) });
         this.releaseLocksUnder(mount, path.id);
         if (retyped) {
-            // The thumbnail and the search text depend on the type, so both are made again, as after an overwrite.
+            // The thumbnail and the search text depend on the type, so both are made again, as after an overwrite. The
+            // thumbnail job downloads the bytes itself, so the rename never waits for them.
             const tempId = crypto.randomUUID();
-            await commitFromTemp(this, mount, tempId, async () => {
-                await mount.downloadToTemp(path.id, tempId);
-                return updated;
-            });
+            thumbnailInBackground(this, mount, updated, tempId, () => mount.downloadToTemp(path.id, tempId));
             mount.markContentDirty(path.id);
         }
         if (newParentId) {
