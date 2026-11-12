@@ -174,7 +174,12 @@
     },
     {
       // formula is the second leaf: the engine runs unchanged in the browser, Bun and Node, and imports no package.
-      "includes": ["packages/formula/**", "!packages/formula/src/test/**", "!packages/formula/src/format/**"],
+      "includes": [
+        "packages/formula/**",
+        "!packages/formula/src/test/**",
+        "!packages/formula/src/format/**",
+        "!packages/formula/scripts/**"
+      ],
       "linter": {
         "rules": {
           "style": {
