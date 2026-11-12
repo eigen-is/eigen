@@ -47,8 +47,7 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
             const one = to === at + 1 && isReference(value) && value.next === null ? value : null;
             if (one !== null) ctx.recalc.settleArea(one);
             else for (let i = at; i < to; i += 1) settle(ctx, held[i]);
-            const found =
-                family.errors !== OnError.Result ? null : one !== null ? firstError(ctx, one, frame.skips) : null;
+            const found = one !== null && family.errors === OnError.Result ? firstError(ctx, one, frame.skips) : null;
             if (found !== null) return found;
             for (let i = at; one === null && family.errors === OnError.Result && i < to; i += 1) {
                 const error = errorIn(ctx, held[i], family, frame.skips);

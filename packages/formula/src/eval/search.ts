@@ -97,8 +97,7 @@ export class Vector {
     // The first value that equals the key, or the last one when `reverse`. With `wild` a text key is a pattern, and
     // a blank key finds a blank.
     private exact(key: Plain | null, wild: boolean, reverse: boolean): number {
-        const { column, start } = this;
-        const { stored } = this;
+        const { column, start, stored } = this;
         const step = reverse ? -1 : 1;
         const first = reverse ? stored - 1 : 0;
         const end = reverse ? -1 : stored;

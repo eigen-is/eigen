@@ -6,7 +6,7 @@ import { columnLabel, GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { quoteSheetName } from '../text/sheet-name';
 import { NA, REF, VALUE } from '../values/errors';
 import { rectangle } from '../values/rectangle';
-import type { Reference } from '../values/value';
+import type { Plain, Reference } from '../values/value';
 import type { Table } from './registry';
 import {
     ANYWHERE,
@@ -34,11 +34,9 @@ import {
     TEXT,
 } from './registry';
 
-type Key = number | string | boolean | null;
-
 // VLOOKUP when `down`, else HLOOKUP: the key is searched in the first column or row, a blank key as the number 0.
 // A key that is not found is #N/A whatever column or row was asked for, one below 1 or one the table lacks.
-function tableLookup(key: Key, table: Table, index: number, sorted: boolean, down: boolean) {
+function tableLookup(key: Plain | null, table: Table, index: number, sorted: boolean, down: boolean) {
     const at = (down ? table.column(0) : table.row(0)).find(key ?? 0, sorted ? Find.AtMost : Find.Exact);
     if (at < 0) return NA;
     if (index < 1) return VALUE;

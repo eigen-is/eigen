@@ -8,13 +8,6 @@ const LARGEST = 2 ** 53;
 // The largest number whose factorial a cell can hold.
 const LARGEST_FACTORIAL = 170;
 
-function divisor(a: number, b: number): number {
-    let high = a;
-    let low = b;
-    while (low !== 0) [high, low] = [low, high % low];
-    return high;
-}
-
 // The largest whole number that divides every one of `numbers`, and 0 of none.
 export function greatestDivisor(numbers: readonly number[]): number | FormulaError {
     let found = 0;
@@ -49,4 +42,11 @@ export function multinomial(numbers: readonly number[]): number | FormulaError {
         total += size;
     }
     return Math.round(ways);
+}
+
+function divisor(a: number, b: number): number {
+    let high = a;
+    let low = b;
+    while (low !== 0) [high, low] = [low, high % low];
+    return high;
 }

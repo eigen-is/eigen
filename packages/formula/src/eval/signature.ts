@@ -10,8 +10,6 @@ import { ValueType } from '../values/value';
 import type { Family } from './families';
 import type { Table } from './readers';
 
-export { MAX_ARGUMENTS };
-
 export const Prepare = {
     // Read to a value: a range becomes an array, and an array runs the call once per element.
     Scalar: 0,

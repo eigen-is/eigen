@@ -11,10 +11,6 @@ export type FormulaError = {
     readonly code: number;
 };
 
-function known(code: number, text: string): FormulaError {
-    return Object.freeze({ type: ValueType.Error, text, code });
-}
-
 export const NULL = known(1, '#NULL!');
 export const DIV0 = known(2, '#DIV/0!');
 export const VALUE = known(3, '#VALUE!');
@@ -44,4 +40,8 @@ export const ERRORS: readonly FormulaError[] = Object.freeze([
 export function errorOf(text: string): FormulaError {
     const upper = text.toUpperCase();
     return ERRORS.find((error) => error.text === upper) ?? known(0, upper);
+}
+
+function known(code: number, text: string): FormulaError {
+    return Object.freeze({ type: ValueType.Error, text, code });
 }
