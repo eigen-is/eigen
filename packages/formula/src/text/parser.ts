@@ -374,8 +374,13 @@ class Parser {
             case Token.Word:
                 return this.word(space);
             case Token.Quote:
-            case Token.Bracket:
-                return this.prefixed(space, this.sheetPrefix(pos, kind, end));
+            case Token.Bracket: {
+                const bang = this.sheetPrefix(pos, kind, end);
+                // A bracket that is no sheet's is a reference into the table the cell is in.
+                return bang === -1 && kind === Token.Bracket
+                    ? this.name(space, SheetKind.Host, '')
+                    : this.prefixed(space, bang);
+            }
             default:
                 return this.fail();
         }
@@ -415,20 +420,30 @@ class Parser {
         return branch(NodeKind.Call, 0, name, args, space, spaceOpen, spaceEnd);
     }
 
-    // A name must not read as a reference in the other grammar, or it would come back as one: typed, it is stored
-    // in lower case, which the stored grammar never reads as R1C1; stored, it is refused.
+    // A name, or a table reference: a name, which may be none, and the brackets right after it. A name must not
+    // read as a reference in the other grammar, or it would come back as one: typed, it is stored in lower case,
+    // which the stored grammar never reads as R1C1; stored, it is refused. Before a bracket a cell label is too.
     private name(space: string, sheetKind: FormulaNode['sheetKind'], sheet: string): FormulaNode {
-        const { pos, end } = this;
-        let name = this.text.slice(pos, end);
-        if (name.includes('$') || name.includes('[')) return this.fail();
-        if (this.stored) {
-            if (this.storedLeg(pos) === end) return this.fail();
-            if (this.a1Leg(pos) === end && this.legKind === LEG_CELL) return this.fail();
-        } else if (this.storedLeg(pos) === end) {
+        const { text, pos } = this;
+        // A word runs on through a bracket of digits, so the name of Sales[2019] ends inside its token.
+        const inWord = text.slice(pos, this.end).indexOf('[');
+        const end = inWord === -1 ? this.end : pos + inWord;
+        const table = text.charCodeAt(end) === BRACKET_OPEN;
+        let name = text.slice(pos, end);
+        if (name.includes('$')) return this.fail();
+        if ((this.stored || table) && this.a1Leg(pos) === end && this.legKind === LEG_CELL) return this.fail();
+        if (this.storedLeg(pos) >= end) {
+            if (this.stored) return this.fail();
             name = name.toLowerCase();
         }
+        if (table) {
+            const brackets = lexAt(text, end);
+            if (tokenKind(brackets) !== Token.Bracket) return this.fail();
+            this.end = tokenEnd(brackets);
+            name += text.slice(end, this.end);
+        }
         this.next();
-        return leaf(NodeKind.Name, 0, name, space, sheetKind, sheet);
+        return leaf(table ? NodeKind.Table : NodeKind.Name, 0, name, space, sheetKind, sheet);
     }
 
     // The arguments from the current ( to its ), appended to `list`, and the height of the tallest into `height`.
@@ -708,6 +723,7 @@ function yieldsReference(node: FormulaNode): boolean {
     switch (node.kind) {
         case NodeKind.Ref:
         case NodeKind.Name:
+        case NodeKind.Table:
         case NodeKind.Call:
         case NodeKind.Invoke:
         case NodeKind.Paren:

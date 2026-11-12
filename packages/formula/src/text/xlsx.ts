@@ -14,9 +14,11 @@ import {
 } from '../functions/excel-names';
 import type { Registry } from '../functions/registry';
 import { columnIndex } from './a1';
+import { UNDERSCORE } from './chars';
 import { REF_ERROR, Token } from './lexer';
 import type { ParseFailure, SheetFinder } from './parser';
 import { parseA1, readsAsReference } from './parser';
+import { isTableCell } from './tables';
 import type { FormulaNode } from './tree';
 import { branch, leaf, NodeKind, RefFlag, RefKind, referenceNode, SheetKind } from './tree';
 
@@ -28,7 +30,6 @@ const ARRAY = 4;
 const TOP = 8;
 const CLASS = ONE | PLACE | ARRAY;
 
-const UNDERSCORE = 95;
 const PARAMETER = '_xlpm.';
 const OPTIONAL = '_xlop.';
 // The marks of a function that is no one's built-in, such as _XLUDF. and _XLL., as a stored call spells them.
@@ -407,6 +408,8 @@ function many(node: FormulaNode, functions: Registry, top: boolean): boolean {
     switch (node.kind) {
         case NodeKind.Ref:
             return node.op !== RefKind.Cell;
+        case NodeKind.Table:
+            return !isTableCell(node);
         case NodeKind.Array:
             return top;
         case NodeKind.Paren:
@@ -496,7 +499,7 @@ function indent(node: FormulaNode, space: string): FormulaNode {
         const { op, sheetKind, sheet, row, column, row2, column2, flags } = node;
         return referenceNode(op, space, sheetKind, sheet, row, column, row2, column2, flags);
     }
-    if (node.kind <= NodeKind.Error || node.kind === NodeKind.Name) {
+    if (node.kind <= NodeKind.Error || node.kind === NodeKind.Name || node.kind === NodeKind.Table) {
         return leaf(node.kind, node.value, node.text, space, node.sheetKind, node.sheet);
     }
     return branch(node.kind, node.op, node.text, node.children, space, node.spaceOpen, node.spaceEnd);

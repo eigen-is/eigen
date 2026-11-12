@@ -21,8 +21,8 @@ describe('typed text and stored text', () => {
 
     test.each([
         '=R[1]C[1]',
-        '=RC[1]',
-        '=C[-1]:C[2]',
+        '=R[1]C',
+        '=R[-1]C[2]:RC',
         '=SUM(1,',
         '=1+',
         '=',

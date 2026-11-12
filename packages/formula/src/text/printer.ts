@@ -45,10 +45,12 @@ function print(node: FormulaNode, stored: boolean, row: number, column: number, 
         case NodeKind.Empty:
             return '';
         case NodeKind.Error:
-        case NodeKind.Name: {
+        case NodeKind.Name:
+        case NodeKind.Table: {
             const prefix = sheetPrefix(node, stored, sheetName);
             if (prefix === null) return `${space}#REF!`;
             if (node.kind === NodeKind.Error) return space + prefix + ERROR_LITERALS[node.value - 1];
+            if (node.kind === NodeKind.Table) return space + prefix + node.text;
             // Another workbook's name can be any text, so it is quoted unless it reads back bare as itself.
             const bare = node.sheetKind !== SheetKind.External || (isWord(node.text) && !readsAsReference(node.text));
             return space + prefix + (bare ? node.text : quotedSheetName(node.text));

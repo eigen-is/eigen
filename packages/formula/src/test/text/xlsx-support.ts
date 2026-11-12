@@ -34,9 +34,27 @@ export function fileFormulas(seed: number, marked: boolean): () => string {
     const cell = () => column() + row();
     const sheet = () =>
         pick(['Sheet2!', "'My Sheet'!", 'NoSuch!', 'Sheet1:Sheet3!', '[1]Sheet1!', '[1]!', "'[1]x y'!", '[2]Jan:Dec!']);
+    const table = () =>
+        pick(['Sales', 'tblData', '', '[1]!T']) +
+        pick([
+            '[Qty]',
+            '[[#This Row],[Qty]]',
+            '[#All]',
+            '[[#Headers],[Net price]]',
+            '[[Decimal ]]',
+            '[[#This Row],[a]:[b]]',
+        ]);
     const reference = (): string =>
-        (chance(0.7) ? '' : sheet()) +
-        pick([cell, cell, () => `${cell()}:${cell()}`, () => `${column()}:${column()}`, () => `${row()}:${row()}`])();
+        chance(0.12)
+            ? table()
+            : (chance(0.7) ? '' : sheet()) +
+              pick([
+                  cell,
+                  cell,
+                  () => `${cell()}:${cell()}`,
+                  () => `${column()}:${column()}`,
+                  () => `${row()}:${row()}`,
+              ])();
     const constant = () =>
         pick([
             ...['0', '1', '2.5', '"a"', '""', 'TRUE', 'FALSE', '#N/A', '#REF!', '{1,2,3}', '{1;"a"}', 'Rate', 'x.y'],

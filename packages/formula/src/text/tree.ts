@@ -25,6 +25,9 @@ export const NodeKind = {
     Paren: 12,
     // An array constant, its elements row by row, with the column count in `op`.
     Array: 13,
+    // A reference into a table of a file, such as Sales[[#This Row],[Qty]]: `text` is the table's name, which is
+    // empty for the table the cell is in, and its brackets as written. An importer puts the range in its place.
+    Table: 14,
 } as const;
 
 export const RefKind = { Cell: 0, Range: 1, Columns: 2, Rows: 3 } as const;
