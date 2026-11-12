@@ -563,11 +563,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (463)
+## Types (462)
 
 | Name | Import from | File |
 |------|-------------|------|
-| `CellAddress` | `@workspace/formula` | packages/formula/src/recalc/recalc.ts |
 | `CellSink` | `@workspace/formula` | packages/formula/src/store/workbook.ts |
 | `EditResult` | `@workspace/formula` | packages/formula/src/recalc/recalc.ts |
 | `FormulaError` | `@workspace/formula` | packages/formula/src/values/errors.ts |
@@ -1031,7 +1030,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1230)
+## Utilities & constants (1231)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1039,6 +1038,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DIV0` | `@workspace/formula` | packages/formula/src/values/errors.ts |
 | `ERROR` | `@workspace/formula` | packages/formula/src/values/errors.ts |
 | `errorOf` | `@workspace/formula` | packages/formula/src/values/errors.ts |
+| `FUNCTIONS` | `@workspace/formula` | packages/formula/src/functions/library.ts |
 | `NA` | `@workspace/formula` | packages/formula/src/values/errors.ts |
 | `NAME` | `@workspace/formula` | packages/formula/src/values/errors.ts |
 | `NULL` | `@workspace/formula` | packages/formula/src/values/errors.ts |
@@ -1063,7 +1063,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mapIndex` | `@workspace/formula/text` | packages/formula/src/edit/map.ts |
 | `mapSpan` | `@workspace/formula/text` | packages/formula/src/edit/map.ts |
 | `MAX_ARGUMENTS` | `@workspace/formula/text` | packages/formula/src/text/parser.ts |
-| `MAX_FORMULA_LENGTH` | `@workspace/formula/text` | packages/formula/src/text/parser.ts |
 | `MAX_NESTING` | `@workspace/formula/text` | packages/formula/src/text/parser.ts |
 | `MAX_STORED_LENGTH` | `@workspace/formula/text` | packages/formula/src/text/parser.ts |
 | `NodeKind` | `@workspace/formula/text` | packages/formula/src/text/tree.ts |
@@ -1084,6 +1083,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `sheetFinder` | `@workspace/formula/text` | packages/formula/src/text/sheet-name.ts |
 | `SheetKind` | `@workspace/formula/text` | packages/formula/src/text/tree.ts |
 | `sheetNameKey` | `@workspace/formula/text` | packages/formula/src/text/sheet-name.ts |
+| `storedKey` | `@workspace/formula/text` | packages/formula/src/text/printer.ts |
 | `storedText` | `@workspace/formula/text` | packages/formula/src/text/typed.ts |
 | `toA1` | `@workspace/formula/text` | packages/formula/src/text/a1.ts |
 | `Token` | `@workspace/formula/text` | packages/formula/src/text/lexer.ts |
