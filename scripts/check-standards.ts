@@ -377,8 +377,7 @@ const METRICS: Metric[] = [
         id: 'formula-module-state',
         label: 'Module state, a draw or a locale call in the formula engine',
         hardZero: true,
-        count: ({ path, code }) =>
-            path.startsWith('packages/formula/src/') && !path.includes('/test/') ? countMatches(code, ENGINE_STATE) : 0,
+        count: ({ path, code }) => (path.startsWith('packages/formula/src/') ? countMatches(code, ENGINE_STATE) : 0),
         fix: 'The engine keeps nothing between calls and computes the same on every machine: hold state on the Evaluator or a Frame, take a draw through the RANDOM parameter, and order and show text by rules of its own. See docs/CODE-EXAMPLES.md § Standards Gates.',
     },
 ];
