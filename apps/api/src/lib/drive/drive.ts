@@ -612,7 +612,7 @@ export class Drive {
     }
 
     // Puts a path in a folder under exactly this name, as a WebDAV MOVE asks: a move, a rename or both, in one write.
-    // What holds the name is replaced only once nothing can refuse the move any more. `checkedId` is the path the
+    // What holds the name is replaced only after every check of the move has passed. `checkedId` is the path the
     // caller found there and checked, or null for a free name.
     public async movePathOver(
         mountId: string,
@@ -720,7 +720,7 @@ export class Drive {
     }
 
     // Copies a path into a folder of its own mount under exactly this name, as a WebDAV COPY with Overwrite: T asks.
-    // What holds the name is replaced only once nothing can refuse the copy any more. `checkedId` is as for
+    // What holds the name is replaced only after every check of the copy has passed. `checkedId` is as for
     // movePathOver.
     public async copyPathOver(
         mountId: string,
