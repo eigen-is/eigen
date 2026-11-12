@@ -28,7 +28,11 @@ describe('plain numbers', () => {
             ['2.675', 2.675],
             ['1.7976931348623157e308', 1.79769313486231e308],
             ['1E-307', 1e-307],
-            ['1E-308', 1e-308],
+            ['1E-308', 0],
+            ['1E-309', 0],
+            ['2.3E-308', 2.3e-308],
+            ['2.2E-308', 0],
+            ['-1E-309', 0],
             ['1.5e-30', 1.5e-30],
             ['1e25', 1e25],
         ]);
@@ -87,6 +91,7 @@ describe('plain numbers', () => {
             'TRUE',
             'true',
             '1e-320',
+            '9.9E-310',
             '1E-400',
             '1.000,5',
             '0x1A',
@@ -312,6 +317,10 @@ describe('times', () => {
             ['12:60', 13 / 24],
             ['12:30:60', 751 / 1440],
             ['23:59:60', 1],
+            ['0:75', 75 / 1440],
+            ['12:61', 781 / 1440],
+            ['23:59:61', 86401 / 86400],
+            ['23:59:60.5', 86400.5 / 86400],
         ]);
     });
 
@@ -346,10 +355,9 @@ describe('times', () => {
             '4:35:',
         ]);
         refused([
-            '0:75',
-            '12:61',
-            '23:59:61',
-            '23:59:60.5',
+            '1:005',
+            '0:100',
+            '0:0:100',
             '1:30PM',
             'PM',
             ' pm',
@@ -422,8 +430,22 @@ describe('parseDateTime', () => {
         expect(parseDateTime('3/15 12:00', 2026)).toBe(46096.5);
     });
 
+    test('a day the month does not have that year is a year of two digits', () => {
+        expect(parseDateTime('2/29', 2026)).toBe(47150);
+        expect(parseDateTime('2/30', 2024)).toBe(10990);
+        expect(parseDateTime('Feb 29', 2026)).toBe(47150);
+        expect(parseDateTime('29-Feb', 2026)).toBe(47150);
+    });
+
+    test('no text becomes a number that is none', () => {
+        const nines = '9'.repeat(400);
+        for (const text of [`${nines} 1/2`, `1 ${nines}/${nines}`, `${nines}/1/1`, `1/1/${nines}`]) {
+            expect([text.length, parseNumber(text)]).toEqual([text.length, undefined]);
+        }
+    });
+
     test('a day the month of that year does not have is no date', () => {
-        for (const text of ['15/3', '2/29', '2/30', '0/5', '5-Janu', 'Mar 0']) {
+        for (const text of ['15/3', '2/100', '0/5', '5-Janu', 'Mar 0', '0/29', '12/31/9999 24:00']) {
             expect([text, parseDateTime(text, 2026)]).toEqual([text, undefined]);
         }
     });

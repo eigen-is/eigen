@@ -65,7 +65,14 @@ describe('DATE', () => {
         ['=DATE(2024,2,-30)', 45292],
         ['=DATE(2024,2,32767)', 78089],
         ['=DATE(2024,2,32768)', 78089],
-        ['=DATE(2024,3,A5)', 78118],
+        ['=DATE(2024,3,D1)', 78118],
+        // More days than the calendar has reach no date, and a month is a 16-bit number short of both its ends.
+        ['=DATE(2024,1,A5)', NUM],
+        ['=DATE(2024,1,3652059)', 78058],
+        ['=DATE(2024,1,3652060)', NUM],
+        ['=DATE(2024,32766,15)', 1042569],
+        ['=DATE(9999,-32768,1)', NUM],
+        ['=DATE(9999,-32767.5,1)', NUM],
         ['=DATE(1900,2,29)', 61],
         ['=DATE(1900,2,30)', 62],
         ['=DATE(1900,1,60)', 61],
@@ -102,6 +109,11 @@ describe('TIME', () => {
         ['=TIME(0,0,-0.4)', NUM],
         ['=TIME(1.5,1.5,1.5)', 0.0423726851851852],
         ['=TIME(1E+300,0,0)', NUM],
+        // A part is a 16-bit number: below the smallest of them it comes round to the largest.
+        ['=TIME(0,32767,0)', 0.754861111111111],
+        ['=TIME(24,-32769,0)', 0.754861111111111],
+        ['=TIME(0,0,-32769.5)', 0.379236111111111],
+        ['=TIME(24,-32768,0)', NUM],
     ]);
 });
 
@@ -238,10 +250,17 @@ describe('WEEKNUM and ISOWEEKNUM', () => {
         ['=WEEKNUM(60)', 9],
         ['=WEEKNUM(60,2)', 9],
         ['=WEEKNUM(60,21)', 9],
-        ['=WEEKNUM(366)', 53],
-        ['=WEEKNUM(366,2)', 53],
         ['=WEEKNUM(366,21)', 1],
         ['=WEEKNUM(367,2)', 1],
+        // The day line through all of 1900: 1 January 1900 is a Monday, which Excel has as a Sunday, so a week
+        // that starts on Monday (types 2 and 11) is one lower than Excel's 10, 10, 54 and 54. The others agree.
+        ['=WEEKNUM(61,2)', 9],
+        ['=WEEKNUM(61,11)', 9],
+        ['=WEEKNUM(366,2)', 53],
+        ['=WEEKNUM(366,11)', 53],
+        ['=WEEKNUM(61)', 9],
+        ['=WEEKNUM(366)', 53],
+        ['=WEEKNUM(366,17)', 53],
         ['=WEEKNUM(45298)', 2],
         ['=WEEKNUM(45298,2)', 1],
         ['=WEEKNUM(45656)', 53],
@@ -343,6 +362,8 @@ describe('DATEDIF', () => {
         ['=DATEDIF(45000,45400,TRUE)', NUM],
         ['=DATEDIF(45000,45400,)', NUM],
         ['=DATEDIF(45400,45000,"D")', NUM],
+        ['=DATEDIF(45001,45000,"D")', NUM],
+        ['=DATEDIF(45000,45000,"D")', 0],
         ['=DATEDIF(45000,45000.9,"D")', 0],
         ['=DATEDIF(45000.9,45001,"MD")', 1],
         ['=DATEDIF(TRUE,45400,"Y")', 124],
@@ -431,6 +452,9 @@ describe('YEARFRAC', () => {
         ['=YEARFRAC(45000,45400,4)', 1.09166666666667],
         ['=YEARFRAC(45000,45400,5)', NUM],
         ['=YEARFRAC(45000,45400,-1)', NUM],
+        ['=YEARFRAC(45000,45400,-0.5)', NUM],
+        ['=YEARFRAC(45000,45400,0.9)', 1.09166666666667],
+        ['=YEARFRAC(45000,45400,4.9)', 1.09166666666667],
         ['=YEARFRAC(45000,45400,12.5)', NUM],
         ['=YEARFRAC(45000,45400,1.9)', 1.09439124487004],
         ['=YEARFRAC(45000,45400,"1")', 1.09439124487004],
@@ -453,6 +477,10 @@ describe('YEARFRAC', () => {
         // Basis 1: within a year the year has 366 days when a 29 February is in reach, past it the mean year counts.
         ['=YEARFRAC(45351,45716,1)', 0.997267759562842],
         ['=YEARFRAC(43891,44256,1)', 1],
+        // A span that ends on the 29 February itself has reached it, and one that ends the day before has not.
+        ['=YEARFRAC(44986,45351,1)', 365 / 366],
+        ['=YEARFRAC(44986,45350,1)', 364 / 365],
+        ['=YEARFRAC(45000,45000,1)', 0],
         ['=YEARFRAC(45473,45504,1)', 0.0846994535519126],
         ['=YEARFRAC(45290,45321,1)', 0.0849315068493151],
         ['=YEARFRAC(45000,45365,1)', 0.997267759562842],
@@ -541,6 +569,10 @@ describe('NETWORKDAYS and NETWORKDAYS.INTL', () => {
 describe('WORKDAY and WORKDAY.INTL', () => {
     rows([
         ['=WORKDAY(45000,10)', 45014],
+        // A holiday on the start day is not on the way.
+        ['=WORKDAY(45000,1,45000)', 45001],
+        ['=WORKDAY(45000,-1,45000)', 44999],
+        ['=WORKDAY(45000,1,45001)', 45002],
         ['=WORKDAY(45000,0)', 45000],
         ['=WORKDAY(45000,-10)', 44986],
         ['=WORKDAY(45004,10)', 45016],
@@ -638,6 +670,14 @@ describe('DATEVALUE and TIMEVALUE', () => {
         ['=DATEVALUE("1/1/1899")', -363],
         ['=DATEVALUE("12/31/9999")', 2958465],
         ['=DATEVALUE("1/1/10000")', VALUE],
+        // A year has at most four digits, zeros in front counted, and the last day has no 24:00.
+        ['=DATEVALUE("1/1/02024")', VALUE],
+        ['=DATEVALUE("1/1/0024")', 45292],
+        ['=DATEVALUE("12/31/9999 24:00")', VALUE],
+        ['=DATEVALUE("12/31/9999 23:59")', 2958465],
+        ['=DATEVALUE("12/30/9999 24:00")', 2958465],
+        // A text is a number or none: digits without end make no infinite one.
+        ['=YEAR(REPT("9",400)&" 1/2")', VALUE],
         ['=DATEVALUE("03/15/24")', 45366],
         ['=DATEVALUE("1/1/30")', 10959],
         ['=DATEVALUE("1/1/29")', 47119],
@@ -668,6 +708,12 @@ describe('DATEVALUE and TIMEVALUE', () => {
         ['=TIMEVALUE("12:60")', 0.541666666666667],
         ['=TIMEVALUE("12:30:60")', 0.521527777777778],
         ['=TIMEVALUE("12:59:60")', 0.541666666666667],
+        // Minutes and seconds past 59 are carried, in at most two digits each.
+        ['=TIMEVALUE("12:61")', 0.542361111111111],
+        ['=TIMEVALUE("0:99:99")', 6039 / 86400],
+        ['=TIMEVALUE("12:61 PM")', 0.542361111111111],
+        ['=TIMEVALUE("1:005")', VALUE],
+        ['=TIMEVALUE("1:05:005")', VALUE],
         ['=TIMEVALUE("12:30:45.5")', 0.521359953703704],
         ['=TIMEVALUE("1 PM")', 0.541666666666667],
         ['=TIMEVALUE("13 PM")', VALUE],
@@ -704,6 +750,12 @@ describe('the clock of the pass', () => {
         ['=DATEVALUE("Mar-15")', 46096],
         ['=DATEVALUE("mar 15")', 46096],
         ['=DATEVALUE("15/3")', VALUE],
+        // A day its month does not have this year is a year of two digits: February 2029, January 1932.
+        ['=DATEVALUE("2/29")', 47150],
+        ['=DATEVALUE("1/32")', 11689],
+        ['=DATEVALUE("2/28")', 46081],
+        ['=DATEVALUE("2/100")', VALUE],
+        ['=DATEVALUE("0/29")', VALUE],
         ['=TIMEVALUE("3/15")', 0],
         ['=TIMEVALUE("15/3")', VALUE],
     ])('%s is %p', (formula, expected) => {

@@ -2,7 +2,7 @@
 // the days of a span that are neither in the weekend nor a holiday, and the day a number of working days on. Both
 // work by whole weeks and a rest of under one, so their cost does not grow with the span.
 
-import { FIRST_SERIAL, LAST_SERIAL, weekdayFromMonday } from './dates';
+import { isDate, weekdayFromMonday } from './dates';
 import type { FormulaError } from './errors';
 import { NUM, VALUE } from './errors';
 
@@ -52,7 +52,7 @@ export function addWorkdays(
     // Whole weeks first, keeping at least one day to walk so that the walk ends on a working day.
     const weeks = Math.trunc((count - step) / perWeek);
     let day = start + weeks * 7;
-    if (day < FIRST_SERIAL || day > LAST_SERIAL) return NUM;
+    if (!isDate(day)) return NUM;
     for (let left = Math.abs(count - weeks * perWeek); left > 0; left -= 1) day = next(day, step, off);
     // Each holiday met on the way pushes the end one working day on, which may meet the next.
     holidays.sort();
@@ -64,7 +64,7 @@ export function addWorkdays(
         }
         last = holiday;
     }
-    return day < FIRST_SERIAL || day > LAST_SERIAL ? NUM : day;
+    return isDate(day) ? day : NUM;
 }
 
 // The days off as seven bits, Monday the lowest. A code 1 to 7 is two days from Saturday and Sunday on, 11 to 17
@@ -105,7 +105,7 @@ function next(day: number, step: number, off: number): number {
 function allDates(holidays: Float64Array): boolean {
     for (let at = 0; at < holidays.length; at += 1) {
         holidays[at] = Math.floor(holidays[at]);
-        if (holidays[at] < FIRST_SERIAL || holidays[at] > LAST_SERIAL) return false;
+        if (!isDate(holidays[at])) return false;
     }
     return true;
 }
