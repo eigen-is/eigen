@@ -207,7 +207,11 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
 }
 
 // The runs with text, a copy per cell, charged each as a cell before they are built; plain text takes the cell's font.
-function runsOf(runs: (string | InlineStringSegment)[], font: CellStyle, context: GridContext): InlineStringSegment[] {
+function runsOf(
+    runs: readonly (string | InlineStringSegment)[],
+    font: CellStyle,
+    context: GridContext,
+): InlineStringSegment[] {
     const shown = runs.filter((run) => (typeof run === 'string' ? run : run.v));
     context.charge(
         shown.length,
