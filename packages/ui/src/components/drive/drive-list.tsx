@@ -328,7 +328,10 @@ export function DriveList({
         >
             {allowUpload && <FileDropOverlay visible={isDragging} label="Drop files to upload" icon={UploadIcon} />}
 
-            {mode === 'grid' ? (
+            {/* In place of the table, so the empty state centers in the whole list area. */}
+            {items.length === 0 ? (
+                <EmptyState hint={emptyHint} />
+            ) : mode === 'grid' ? (
                 <DriveGrid {...sharedProps} />
             ) : (
                 <DriveTable
@@ -339,8 +342,6 @@ export function DriveList({
                     sort={sort}
                 />
             )}
-
-            {items.length === 0 && <EmptyState hint={emptyHint} />}
             <DrivePaletteSelection
                 items={selection.selectedItems}
                 listing={items}

@@ -189,6 +189,14 @@ test('an empty trash shows the standard empty text and offers nothing to empty',
     expect(buttonLabels(container)).not.toContain('Empty trash');
 });
 
+// The empty text stands in for the table, so it centers in the whole list area, and nothing can be dropped here.
+test('an empty trash draws its empty text in place of the table, with no hint', async () => {
+    const container = await open();
+    expect(container.querySelector('[role="grid"]')).toBeNull();
+    expect(container.textContent).not.toContain('Drop files');
+    expect(container.textContent).not.toContain('button');
+});
+
 test('a trash that failed to load shows the null vector, with no detail and no empty text', async () => {
     trash.error = new Error('The server is unreachable');
     const container = await open();
