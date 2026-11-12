@@ -5,7 +5,7 @@
 
 import { CALC, NUM } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
-import { arrayOf, isArray, isReference, MOST_ELEMENTS } from '../values/value';
+import { arrayOf, isArray, isReference } from '../values/value';
 import { align } from './bands';
 import type { Evaluator } from './evaluator';
 import { heightOf, widthOf } from './search';
@@ -35,7 +35,7 @@ function rangeProducts(ctx: Evaluator, args: readonly Value[]): Scalar | ArrayVa
         rows = Math.min(rows, used);
     }
     if (rows <= 0) return 0;
-    if (!ctx.recalc.room(rows * columns, MOST_ELEMENTS)) return null;
+    if (!ctx.recalc.room(rows * columns)) return null;
     const products = new Float64Array(rows * columns);
     for (let c = 0; c < columns; c += 1) {
         let common = rows;
@@ -59,7 +59,7 @@ function lined(ctx: Evaluator, args: readonly Value[]): Scalar | ArrayValue {
     const down = align(arrays, rows, true);
     const across = align(arrays, columns, false);
     const width = across.count;
-    if (!ctx.recalc.room(down.count * width, MOST_ELEMENTS)) return CALC;
+    if (!ctx.recalc.room(down.count * width)) return CALC;
     const made = new Float64Array(down.count * width).fill(1);
     for (let k = 0; k < arrays.length; k += 1) {
         const { items } = arrays[k];

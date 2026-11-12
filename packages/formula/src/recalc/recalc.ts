@@ -31,6 +31,10 @@ export type RecalcResult = {
 const BUDGET = 640;
 const CELL = 6;
 
+// The most one formula makes: the elements its arrays store, and the numbers it adds one by one for cells that no
+// array stores. A formula that needs more is #CALC!, whatever the other formulas made.
+const MOST_MADE = 2 ** 24;
+
 const UNWIND = Object.freeze({ reason: 'the evaluation nests too deep' });
 const STOP = Object.freeze({ reason: 'the recalc computed as many formulas as its cap' });
 
@@ -69,7 +73,7 @@ export class Recalc {
     private cap = 0;
     // Whether the pass has stored a formula yet.
     private stored = false;
-    // The array elements each cell in progress has made since its formula last started.
+    // What each cell in progress has made since its formula last started.
     private readonly made: number[] = [];
 
     public constructor(workbook: Workbook, functions: Registry) {
@@ -198,10 +202,11 @@ export class Recalc {
     }
 
     // Asks for what the running formula is about to make, such as the elements of an array, before it makes them:
-    // false when that is more than `most`, and else it is added to what the pass costs.
-    public room(units: number, most: number): boolean {
-        if (units > most) return false;
-        this.made[this.current] += units;
+    // false when the formula would then have made more than it may, and else it is added to what the pass costs.
+    public room(units: number): boolean {
+        const made = this.made[this.current] + units;
+        if (made > MOST_MADE) return false;
+        this.made[this.current] = made;
         return true;
     }
 

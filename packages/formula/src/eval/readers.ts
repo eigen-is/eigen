@@ -6,7 +6,7 @@ import type { FormulaError } from '../values/errors';
 import { CALC, NA } from '../values/errors';
 import { snapSum } from '../values/precision';
 import type { ArrayValue, Scalar, Value } from '../values/value';
-import { arrayOf, elementAt, isArray, isReference, MOST_ELEMENTS, partOf, ValueType } from '../values/value';
+import { arrayOf, elementAt, isArray, isReference, partOf, ValueType } from '../values/value';
 import { Tally } from './criteria';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
@@ -246,7 +246,7 @@ export class Room {
     public series(first: number, rows: number, columns: number): Scalar | ArrayValue {
         const count = rows * columns;
         if (count === 1) return first;
-        if (!this.ctx.recalc.room(count, MOST_ELEMENTS)) return CALC;
+        if (!this.ctx.recalc.room(count)) return CALC;
         const numbers = new Float64Array(count);
         for (let i = 0; i < count; i += 1) numbers[i] = first + i;
         return arrayOf(rows, columns, numbers);

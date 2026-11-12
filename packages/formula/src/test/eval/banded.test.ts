@@ -286,22 +286,22 @@ describe('the bound on what one array stores', () => {
             cells[label(0, i + 1)] = 1;
         }
         const engine = engineOf({
-            s1: { A1: '=SUM(Sheet2!A:A+Sheet2!B1:XFD1)', A2: `=SUM(Sheet2!A1:A4096+Sheet2!B1:${label(0, 4096)})` },
+            s1: { A1: '=SUM(Sheet2!A:A+Sheet2!B1:XFD1)', A2: `=SUM(Sheet2!A1:A4000+Sheet2!B1:${label(0, 4000)})` },
             s2: cells,
         });
         engine.recalc(ALL);
         expect(valueAt(engine, 'A1')).toBe(CALC);
-        expect(valueAt(engine, 'A2')).toBe(2 * 4096 * 4096);
+        expect(valueAt(engine, 'A2')).toBe(2 * 4000 * 4000);
     });
 
-    test('a row of different numbers is added for at most 2^27 unstored cells', () => {
+    test('a row of different numbers is added for at most 2^24 cells that no array stores', () => {
         const row: Record<string, Literal> = {};
-        for (let i = 0; i < 200; i += 1) row[label(0, i + 1)] = i % 2 === 0 ? 0.1 : 0.7;
-        const few = Object.fromEntries(Object.entries(row).slice(0, 100));
+        for (let i = 0; i < 20; i += 1) row[label(0, i + 1)] = i % 2 === 0 ? 0.1 : 0.7;
+        const few = Object.fromEntries(Object.entries(row).slice(0, 10));
         const engine = engineOf({
             s1: {
-                A1: `=SUM((Sheet2!A:A="")*Sheet2!B1:${label(0, 200)})`,
-                A2: `=SUM((Data!A:A="")*Data!B1:${label(0, 100)})`,
+                A1: `=SUM((Sheet2!A:A="")*Sheet2!B1:${label(0, 20)})`,
+                A2: `=SUM((Data!A:A="")*Data!B1:${label(0, 10)})`,
                 A3: '=A2+A1',
             },
             s2: row,
@@ -311,8 +311,36 @@ describe('the bound on what one array stores', () => {
         expect(valueAt(engine, 'A1')).toBe(CALC);
         expect(valueAt(engine, 'A3')).toBe(CALC);
         let sum = 0;
-        for (let r = 0; r < 1048576; r += 1) for (let i = 0; i < 50; i += 1) sum = sum + 0.1 + 0.7;
+        for (let r = 0; r < 1048576; r += 1) for (let i = 0; i < 5; i += 1) sum = sum + 0.1 + 0.7;
         expect(valueAt(engine, 'A2')).toBe(sum);
+    });
+
+    // A million stored elements, and three million additions for cells that no array stores.
+    const stored = 'SUM(ROW(A1:A1048576))';
+    const added = 'SUM({1,2,3}*(B1:B1048576=""))';
+    const of = (count: number, part: string) => Array.from({ length: count }, () => part).join('+');
+
+    test('the bound is on all that one formula makes, and what another formula made does not count', () => {
+        const engine = engineOf({
+            s1: {
+                A1: `=${of(17, stored)}`,
+                A2: `=${of(15, stored)}`,
+                A3: `=${of(15, stored)}`,
+                A4: `=${of(6, added)}`,
+                A5: `=${of(5, added)}`,
+                A6: `=${of(3, added)}+${of(8, stored)}`,
+                A7: `=${of(3, added)}+${of(6, stored)}`,
+            },
+        });
+        expect(engine.recalc(ALL)).toEqual({ loops: [], stopped: false });
+        const million = (1048576 * 1048577) / 2;
+        expect(valueAt(engine, 'A1')).toBe(CALC);
+        expect(valueAt(engine, 'A2')).toBe(15 * million);
+        expect(valueAt(engine, 'A3')).toBe(15 * million);
+        expect(valueAt(engine, 'A4')).toBe(CALC);
+        expect(valueAt(engine, 'A5')).toBe(5 * 6 * 1048576);
+        expect(valueAt(engine, 'A6')).toBe(CALC);
+        expect(valueAt(engine, 'A7')).toBe(3 * 6 * 1048576 + 6 * million);
     });
 });
 

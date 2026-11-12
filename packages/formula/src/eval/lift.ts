@@ -10,7 +10,7 @@ import { NodeKind } from '../text/tree';
 import type { FormulaError } from '../values/errors';
 import { CALC, NA, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
-import { arrayOf, isArray, isError, isReference, MOST_ELEMENTS } from '../values/value';
+import { arrayOf, isArray, isError, isReference } from '../values/value';
 import type { Axis } from './bands';
 import { align, apart } from './bands';
 import { ends, isLazy, picked, read, run, slotOf } from './call';
@@ -171,8 +171,8 @@ type Lined = { readonly rows: number; readonly columns: number; readonly down: A
 
 const ONE: Axis = { count: 1, ends: null, from: [] };
 
-// The shape of an operation over these arrays and how each of them runs along it, or null when the result would
-// store more than an array may. `apiece` cuts every run into single elements.
+// The shape of an operation over these arrays and how each of them runs along it, or null when the formula has
+// no room to store the result. `apiece` cuts every run into single elements.
 function lineUp(ctx: Evaluator, arrays: readonly ArrayValue[], apiece: boolean): Lined | null {
     let rows = 1;
     let columns = 1;
@@ -185,12 +185,10 @@ function lineUp(ctx: Evaluator, arrays: readonly ArrayValue[], apiece: boolean):
     const down = align(arrays, rows, true);
     const across = align(arrays, columns, false);
     // A row that answers anew at every call makes each written element by a call of its own.
-    if (apiece && ctx.recalc.room(rows * columns, MOST_ELEMENTS)) {
+    if (apiece && ctx.recalc.room(rows * columns)) {
         return { rows, columns, down: apart(down, rows), across: apart(across, columns) };
     }
-    return !apiece && ctx.recalc.room(down.count * across.count, MOST_ELEMENTS)
-        ? { rows, columns, down, across }
-        : null;
+    return !apiece && ctx.recalc.room(down.count * across.count) ? { rows, columns, down, across } : null;
 }
 
 // Where array `k` stores its element for a run of rows and a run of columns, or -1 past its end.

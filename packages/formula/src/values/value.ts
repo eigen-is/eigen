@@ -22,9 +22,6 @@ export type Reference = {
     readonly next: Reference | null;
 };
 
-// The most elements one array stores. An array that would store more is #CALC!.
-export const MOST_ELEMENTS = 2 ** 24;
-
 // An array has the size that was written, such as the 1,048,576 rows of A:A, and stores one row for every run of
 // written rows that are equal, such as a stretch of blank ones, and one column for every such run of columns.
 export type ArrayValue = {

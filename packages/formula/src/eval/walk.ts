@@ -17,10 +17,6 @@ import { Families } from './families';
 import type { Held } from './signature';
 import { repeated } from './sum';
 
-// The most additions one sum makes one by one for cells an array does not store: a row of different numbers that
-// stands for many written rows is added that many times over. A sum that needs more is #CALC!.
-const MOST_ADDITIONS = 2 ** 27;
-
 export class Walk {
     // The span: `num` from `from` up to `to`. Of a cell or an element that is no number only the count means something.
     public num: Float64Array;
@@ -52,8 +48,6 @@ export class Walk {
     private end = 0;
     private array: ArrayValue | null = null;
     private item = 0;
-    // The additions made so far for cells that no array stores.
-    private unstored = 0;
     // Whether a span that `hand` was given is still to be handed out.
     private handed = false;
     private skips = 0;
@@ -77,7 +71,6 @@ export class Walk {
         this.rows = 1;
         this.count = 0;
         this.error = null;
-        this.unstored = 0;
         this.handed = false;
     }
 
@@ -142,11 +135,10 @@ export class Walk {
             return this.before + num[from];
         }
         const more = (rows - 1) * (to - from);
-        if (!this.ctx.recalc.room(more, MOST_ADDITIONS - this.unstored)) {
+        if (!this.ctx.recalc.room(more)) {
             this.fail(CALC);
             return sum;
         }
-        this.unstored += more;
         for (let row = 0; row < rows; row += 1) {
             for (let i = from; i < to; i += 1) {
                 this.before = reps === null ? sum : repeated(sum, num[i], reps[i] - 1);
