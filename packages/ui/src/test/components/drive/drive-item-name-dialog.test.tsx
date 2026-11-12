@@ -162,6 +162,30 @@ test('a slow save keeps the Create label and waits with both buttons', async () 
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
+test('the name opens selected whole, or up to where the caller ends the selection', async () => {
+    const selections = [];
+    for (const selectionEnd of [undefined, 5]) {
+        ({ unmount } = await renderInDocument(
+            createElement(DriveItemNameDialog, {
+                open: true,
+                onOpenChange: () => {},
+                onSave,
+                type: 'File',
+                path: drivePath({ name: 'notes.txt', mimeType: 'text/plain' }),
+                defaultValue: 'notes.txt',
+                selectionEnd,
+            }),
+        ));
+        await settle();
+        selections.push([nameField().selectionStart, nameField().selectionEnd]);
+        await unmount();
+    }
+    expect(selections).toEqual([
+        [0, 9],
+        [0, 5],
+    ]);
+});
+
 test('a save that fails stays open with the typed name kept', async () => {
     onSave.mockImplementation(async () => {
         throw toasted('offline');
