@@ -1,5 +1,5 @@
 // Drive's Upload files into one folder, from the browser's file picker or from files dropped on the list. Each
-// batch is one upload with one row in the upload provider, which draws its progress. A host such as
+// batch is one upload with one row in the upload provider, which draws its progress and cancels it. A host such as
 // the Drive action runner calls pickFiles or upload, and renders the hidden input the picker needs.
 
 import { useUploadFiles } from '@workspace/lib/drive';
@@ -18,9 +18,10 @@ export function useDriveUploadFiles(
     const upload = (files: File[]) => {
         if (!folder || files.length === 0) return;
         const name = files.length > 1 ? 'multiple files' : files[0].name;
-        const row = uploads.createUpload(name);
+        const controller = new AbortController();
+        const row = uploads.createUpload(name, () => controller.abort());
         // The hook toasts a failure; the row only shows it failed.
-        uploadFiles({ folder, files, onProgress: row.updateProgress }).then(
+        uploadFiles({ folder, files, onProgress: row.updateProgress, signal: controller.signal }).then(
             () => {
                 row.complete();
                 onAfterAction?.('upload', { fileName: name, files: files.length });

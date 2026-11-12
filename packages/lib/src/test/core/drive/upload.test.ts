@@ -1,6 +1,6 @@
 // Every Drive upload is one multipart POST. A refusal carries the server's status and reason to the toast, so the
-// user reads "Upload too large (413)" rather than a bare status. The upload reports its progress and a batch
-// refreshes its folder once.
+// user reads "Upload too large (413)" rather than a bare status. The upload reports its progress, a cancel aborts
+// the request without a toast, and a batch refreshes its folder once.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '../../../types/drive';
 import { renderHook } from '../../render-hook';
@@ -130,6 +130,23 @@ describe('uploadFiles', () => {
         await done;
         expect(seen).toEqual([33]);
     });
+
+    test('the signal aborts the request and rejects with its reason', async () => {
+        const controller = new AbortController();
+        const done = uploadFiles(OWNER, 'm1', 'folder', [file('a.txt')], { signal: controller.signal });
+        controller.abort();
+        await expect(done).rejects.toMatchObject({ name: 'AbortError' });
+        expect((await sentRequest()).aborted).toBe(true);
+    });
+
+    // A mutation that waits for the network may start after its cancel.
+    test('a signal aborted before the start sends nothing', async () => {
+        const signal = AbortSignal.abort();
+        await expect(uploadFiles(OWNER, 'm1', 'folder', [file('a.txt')], { signal })).rejects.toMatchObject({
+            name: 'AbortError',
+        });
+        expect(FakeXHR.sent).toHaveLength(0);
+    });
 });
 
 async function renderUploads() {
@@ -194,5 +211,19 @@ describe('useUploadFiles', () => {
         });
         await unmount();
         expect(toasts).toEqual(['error: Insufficient storage (507)']);
+    });
+
+    test('a cancelled upload toasts nothing', async () => {
+        const { act } = await import('react');
+        const { latest, unmount } = await renderUploads();
+        const controller = new AbortController();
+        await act(async () => {
+            const done = latest.many.mutateAsync({ folder: FOLDER, files: [file('a.txt')], signal: controller.signal });
+            await sentRequest();
+            controller.abort();
+            await done.catch(() => {});
+        });
+        await unmount();
+        expect(toasts).toEqual([]);
     });
 });

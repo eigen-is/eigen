@@ -1,5 +1,6 @@
 // Drive's Upload files: files chosen in the picker or dropped on the list go up as one request with one row in the
-// upload provider, a render never sends them again, and a refusal toasts the server's reason.
+// upload provider, a render never sends them again, a refusal toasts the server's reason, and the row's cancel
+// aborts the request without a toast.
 import { beforeEach, expect, mock, test } from 'bun:test';
 import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
@@ -108,4 +109,21 @@ test('a refusal toasts the reason the server gave', async () => {
     await act(async () => FakeXHR.sent[0].respond(413, 'Upload too large'));
     await settle();
     expect(toasts).toEqual(['Upload too large (413)']);
+});
+
+test('cancel aborts the upload and shows no error', async () => {
+    const { container, choose, settle } = await renderUpload();
+    await choose([files[0]]);
+    await settle();
+    const cancel = [...container.ownerDocument.querySelectorAll('button')].find(
+        (button) => button.textContent === 'Cancel',
+    );
+    if (!cancel) throw new Error('no cancel button');
+    await act(async () => {
+        cancel.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await settle();
+    expect(FakeXHR.sent[0].aborted).toBe(true);
+    expect(toasts).toEqual([]);
+    expect(container.ownerDocument.body.textContent).not.toContain('Uploading a.txt');
 });
