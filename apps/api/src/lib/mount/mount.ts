@@ -402,7 +402,7 @@ export class Mount {
         return results.map((r) => this.toDrivePath(r));
     }
 
-    // Given a folder, only the paths below it, and not the folder itself.
+    // Trashed paths included. Given a folder, only the paths below it, and not the folder itself.
     public async getPathsWithACL(underFolderId?: string): Promise<DrivePath[]> {
         const results = await this.db
             .select()
@@ -410,7 +410,6 @@ export class Mount {
             .where(
                 and(
                     sql`${paths.acl} IS NOT NULL AND json_array_length(${paths.acl}) > 0`,
-                    isNull(paths.trashedAt),
                     underFolderId ? sql`${paths.id} IN (${descendantIds(underFolderId)})` : undefined,
                 ),
             )

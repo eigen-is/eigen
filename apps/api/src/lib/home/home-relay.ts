@@ -254,7 +254,7 @@ export async function pullFromEach<T>(
 
 export async function pullSharedPaths(ownerId: string, user: User): Promise<DrivePath[]> {
     const home = await getHome(ownerId);
-    return home.drive.getSharedWith(user);
+    return home.drive.getAllSharedWith(user);
 }
 
 export async function pullDrivePath(ownerId: string, mountId: string, pathId: string): Promise<DrivePath | null> {

@@ -913,7 +913,7 @@ export class Drive {
         const crumbs = await mount.getBreadcrumb(pathId);
         const path = crumbs.at(-1);
         const sharedBelow = path?.type === DRIVE_TYPE_FOLDER ? await mount.getPathsWithACL(path.id) : [];
-        const reached = [...crumbs, ...sharedBelow];
+        const reached = [...crumbs, ...sharedBelow.filter((below) => !below.trashedAt)];
         const shared =
             parseOwnerId(this.owner.id).type === 'team' ||
             (!isTrashedChain(crumbs) && reached.some((crumb) => crumb.acl?.length));
@@ -956,14 +956,24 @@ export class Drive {
 
     // The paths of this owner whose own ACL lets the user read them, directly or through a team.
     public async getSharedWith(user: User): Promise<DrivePath[]> {
-        const shared = await this.getSharedPathsByMe();
-        const memberships = await getMemberships(user.id);
-        return shared.filter((path) => path.acl && matchesACL(path.acl, user, memberships, 'read'));
+        return (await this.getAllSharedWith(user)).filter((path) => !path.trashedAt);
     }
 
-    // Every path of this owner that has an ACL. Only the owner may see this list, so SharedDrive has
+    // Trashed paths included, because a restore pushes nothing: a pointer to one stays out of Shared with me until then.
+    public async getAllSharedWith(user: User): Promise<DrivePath[]> {
+        const memberships = await getMemberships(user.id);
+        return (await this.pathsWithACL()).filter(
+            (path) => path.acl && matchesACL(path.acl, user, memberships, 'read'),
+        );
+    }
+
+    // Every live path of this owner that has an ACL. Only the owner may see this list, so SharedDrive has
     // no wrapper for it.
     public async getSharedPathsByMe(): Promise<DrivePath[]> {
+        return (await this.pathsWithACL()).filter((path) => !path.trashedAt);
+    }
+
+    private async pathsWithACL(): Promise<DrivePath[]> {
         const shared: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
             shared.push(...(await mount.getPathsWithACL()));

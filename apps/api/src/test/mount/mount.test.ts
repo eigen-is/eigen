@@ -924,7 +924,7 @@ describe('Trash query filtering', () => {
         await expect(mount.deletePath(rootId)).rejects.toThrow('Cannot delete root folder');
     });
 
-    test('getPathsWithACL under a folder returns the live shared paths below it, at any depth', async () => {
+    test('getPathsWithACL under a folder returns the shared paths below it, at any depth, trashed ones included', async () => {
         const acl = [{ id: 'user-1', read: true, write: false }];
         const folderId = await mount.createFolder(rootId, 'SharedBelow');
         const innerId = await mount.createFolder(folderId, 'Inner');
@@ -940,7 +940,7 @@ describe('Trash query filtering', () => {
 
         const ids = (await mount.getPathsWithACL(folderId)).map((path) => path.id);
 
-        expect(ids.sort()).toEqual([childId, deepId].sort());
+        expect(ids.sort()).toEqual([childId, deepId, trashedId].sort());
         expect((await mount.getPathsWithACL()).map((path) => path.id)).toContain(outsideId);
     });
 
