@@ -8,7 +8,7 @@ order: 200
 updated: 2026-11-12
 ---
 
-When a Drive upload fails, a card appears at the bottom-right of the screen showing **Upload failed**, and a message says why, such as **Upload too large**. Two common causes are a file that exceeds the maximum size limit, and a drive that has reached its storage quota.
+When a Drive upload fails, a card appears at the bottom-right of the screen showing **Upload failed**, and a separate message says why, such as **Upload too large (413)**. Two common causes are a file that exceeds the maximum size limit, and a drive that has reached its storage quota.
 
 ## The file is too large
 

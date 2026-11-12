@@ -19,7 +19,7 @@ You can also select the item in the list and press **Delete** or **Backspace**. 
 
 The item disappears from your files and moves to the Trash. If you delete a folder, everything inside it moves to the Trash as well.
 
-The people you shared the item with can't open it while it's in the Trash, and it leaves their **Shared with me**. When you restore it, they get the same access back without a new invitation.
+The people you shared the item with can't open it while it's in the Trash, and it leaves their **Shared with me**. When you restore it, they get the same access back without a new invitation. Neither the move to the Trash nor the restore sends them a notification.
 
 ## Restore something from the Trash
 
