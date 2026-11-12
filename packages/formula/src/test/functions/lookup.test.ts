@@ -231,7 +231,8 @@ describe('XLOOKUP and XMATCH', () => {
         ['=XLOOKUP(6,A1:A6,B1:B6,,1,2)', 'e'],
         ['=XLOOKUP(4,{11,9,5,5,3,1},{"a","b","c","d","e","f"},,1,-2)', 'd'],
         ['=XLOOKUP(4,{11,9,5,5,3,1},{"a","b","c","d","e","f"},,-1,-2)', 'e'],
-        ['=XLOOKUP(5,{11,9,5,5,3,1},{"a","b","c","d","e","f"},,0,-2)', 'c'],
+        // Of equal keys a search down the values takes the last one (Excel: XMATCH(2,{3,2,2,2,1},0,-2) is 4).
+        ['=XLOOKUP(5,{11,9,5,5,3,1},{"a","b","c","d","e","f"},,0,-2)', 'd'],
         ['=XLOOKUP(5,A1:A6,B1:C6)', 'c'],
         ['=INDEX(XLOOKUP(5,A1:A6,B1:C6),1,2)', 0],
         ['=XLOOKUP(5,A1:B6,B1:B6)', VALUE],
@@ -310,6 +311,34 @@ const BATCH: Cells = {
     E4: 40,
 };
 
+// Excel batch 12, parts B and C, on its own cells: Z1 is blank.
+describe('what Excel records for an index cut, a blank key and a search of several rows and columns', () => {
+    test.each([
+        // The sign of an index is taken before the cut: half a row is row 0, the whole column, and minus a half
+        // is below 0.
+        ['=SUM(INDEX(A1:B3,0.5,1))', 60],
+        ['=ROWS(INDEX(A1:B3,0.5,1))', 3],
+        ['=INDEX(A1:B3,-0.5,1)', VALUE],
+        ['=INDEX(A1:B3,1,-1)', VALUE],
+        // Excel check: the column index, taken to be cut as the row index is.
+        ['=INDEX(A1:B3,1,-0.5)', VALUE],
+        ['=SUM(INDEX(A1:B3,1,0.5))', 50],
+        ['=INDEX(A1:B3,1.9,2.9)', 40],
+        ['=MATCH(2,A1:B3,0)', NA],
+        ['=XLOOKUP(20,A1:B3,A1:B3)', VALUE],
+        ['=VLOOKUP(Z1,D1:E4,2,FALSE)', NA],
+        ['=HLOOKUP(Z1,A1:B3,2,FALSE)', NA],
+        ['=VLOOKUP("zz",D1:E4,0,FALSE)', NA],
+        ['=VLOOKUP("k2",D1:E4,0,FALSE)', VALUE],
+        ['=SUM(XLOOKUP("abc",G5,E1:E4))', 100],
+        ['=ROWS(XLOOKUP("abc",G5,E1:E4))', 4],
+        ['=SUM(XLOOKUP("abc",G5,D1:E1))', 10],
+    ])('%s is %p', (formula, expected) => {
+        const cells = { A1: 10, A2: 20, A3: 30, B1: 40, B2: 50, B3: 60, G5: 'abc' };
+        expect(evaluate(formula, { ...BATCH, ...cells })).toBe(expected);
+    });
+});
+
 describe('ROWS, COLUMNS and AREAS', () => {
     test.each([
         ['=ROWS(D1:E4)', 4],
@@ -382,6 +411,7 @@ describe('ADDRESS', () => {
         ['=ADDRESS(2,3,1,FALSE,"my sheet")', "'my sheet'!R2C3"],
         ['=ADDRESS(2,3,1,TRUE,"it\'s")', "'it''s'!$C$2"],
         ['=ADDRESS(2,3,1,TRUE,"")', '!$C$2'],
+        ['=ADDRESS(2,3,1,TRUE,)', '$C$2'],
         ['=ADDRESS(2,3,1,TRUE,B1)', '!$C$2'],
         ['=ADDRESS(2,3,1,TRUE,5)', "'5'!$C$2"],
         ['=ADDRESS(2,3,1,TRUE,TRUE)', "'TRUE'!$C$2"],
@@ -421,14 +451,14 @@ describe('HYPERLINK', () => {
         expect(evaluate(formula, BATCH)).toBe(expected);
     });
 
-    test('a link alone is refused past 255 characters, a friendly name is not', () => {
+    test('a link is refused past 255 characters, with a friendly name or without, and the name never is', () => {
         const long = { F1: 'y'.repeat(300) };
         expect(evaluate('=HYPERLINK("x"&F1)', long)).toBe(VALUE);
         expect(evaluate('=LEN(HYPERLINK("x",F1))', long)).toBe(300);
-        // Excel check: only the 301 characters are recorded, the bound and a long link beside a name are not.
-        expect(evaluate('=LEN(HYPERLINK(F1))', { F1: 'y'.repeat(255) })).toBe(255);
-        expect(evaluate('=HYPERLINK(F1)', { F1: 'y'.repeat(256) })).toBe(VALUE);
-        expect(evaluate('=HYPERLINK(F1,"f")', long)).toBe('f');
+        expect(evaluate('=LEN(HYPERLINK(REPT("a",255)))')).toBe(255);
+        expect(evaluate('=HYPERLINK(REPT("a",256))')).toBe(VALUE);
+        expect(evaluate('=HYPERLINK(REPT("a",300),"f")')).toBe(VALUE);
+        expect(evaluate('=HYPERLINK(REPT("a",255),"f")')).toBe('f');
     });
 });
 
@@ -462,12 +492,33 @@ describe('what Excel records for the lookups on its own cells', () => {
         ['=VLOOKUP(30,E1:E4,2,FALSE)', REF],
         ['=HLOOKUP(2,B1,2,FALSE)', NA],
         ['=HLOOKUP(2,A1:E4,5,FALSE)', REF],
-        // Excel check: a key that is not found with an index below 1.
-        ['=VLOOKUP("zz",D1:E4,0,FALSE)', VALUE],
+        // A key that is not found is #N/A even beside an index below 1, which is #VALUE! once the key is found.
+        ['=VLOOKUP("zz",D1:E4,0,FALSE)', NA],
+        ['=VLOOKUP("k2",D1:E4,0,FALSE)', VALUE],
+        ['=HLOOKUP("zz",D1:E4,0,FALSE)', NA],
+        // A blank key is the number 0.
+        ['=VLOOKUP(B1,A1:C3,3,FALSE)', 6],
+        ['=VLOOKUP(B1,A1:C3,1,FALSE)', 0],
+        ['=VLOOKUP(B1,D1:E4,2,FALSE)', NA],
+        ['=HLOOKUP(B1,A1:E4,2,FALSE)', NA],
+        // No index is below 0, and one search needs one row or one column.
+        ['=INDEX(A1:C3,1,-1)', VALUE],
+        ['=MATCH(2,A1:C3,0)', NA],
+        ['=XLOOKUP(2,A1:C3,A1:C3)', VALUE],
+        // A match mode is cut down as a search mode is: -0.5 asks for the next smaller value.
+        ['=XMATCH(3,C1:C3,-0.5)', 1],
+        ['=XMATCH(3,{1,2,3},-0.5)', 3],
+        ['=XMATCH(3,{1,2,3},0.9)', 3],
+        // Excel check: XLOOKUP's match mode, taken to be cut the same way.
+        ['=XLOOKUP(3,C1:C3,C1:C3,"nf",-0.5)', 2],
+        ['=MATCH(2,{#DIV/0!,2},0)', 2],
         ['=LOOKUP(4,C1:C3,{1,0;TRUE,"x"})', NA],
         ['=LOOKUP(4,C1:C3,D1:E4)', NA],
         ['=LOOKUP(4,C1:C3,(A1:A2,C1:C2))', NA],
         ['=LOOKUP(4,C1:C3,E1:E3)', 20],
+        // A mark sorts before a digit, so "k?" is below every key of the list.
+        ['=LOOKUP("k?",D1:D4,E1:E4)', NA],
+        ['=MATCH("k?",D1:D4)', NA],
         // A search mode is cut down, so -2.5 is no mode.
         ['=XMATCH(2,C1:C3,0,-2.5)', VALUE],
         ['=XMATCH(4,C1:C3,0,1.9)', 2],
@@ -483,9 +534,12 @@ describe('what Excel records for the lookups on its own cells', () => {
         ['=XLOOKUP("k2",A1:A5,E1:E4,"nf")', VALUE],
         ['=XLOOKUP("k2",D1:D4,E1)', VALUE],
         ['=XLOOKUP("k2",D1:D3,E1:E4)', VALUE],
-        // Excel check: one cell that holds the key, beside a result of one column and of one row.
+        // One cell that holds the key hands back the whole result, a column or a row.
         ['=SUM(XLOOKUP("abc",B5,E1:E4))', 100],
+        ['=ROWS(XLOOKUP("abc",B5,E1:E4))', 4],
         ['=SUM(XLOOKUP("abc",B5,C1:E1))', 12],
+        ['=SUM(XLOOKUP("abc",B5,D1:E1))', 10],
+        ['=COLUMNS(XLOOKUP("abc",B5,D1:E1))', 2],
     ])('%s is %p', (formula, expected) => {
         expect(evaluate(formula, BATCH)).toBe(expected);
     });

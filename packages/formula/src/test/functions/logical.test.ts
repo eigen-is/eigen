@@ -28,6 +28,15 @@ const SHEET: Cells = {
     ...{ C1: 2, C2: 4, C3: 6, D1: 'k1', D2: 'k2', E1: 10, E2: 20 },
 };
 
+// Any number but 0 is TRUE, a negative one too (Excel batch 12).
+test.each([
+    ['=OR(-1,0)', true],
+    ['=OR(0,-0.5)', true],
+    ['=OR(0,0)', false],
+])('%s is %p', (formula, expected) => {
+    expect(evaluate(formula)).toBe(expected);
+});
+
 describe('XOR', () => {
     test.each([
         ['=XOR(TRUE)', true],
