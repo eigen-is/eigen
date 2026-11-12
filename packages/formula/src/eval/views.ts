@@ -57,7 +57,10 @@ export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
     const height = rowEnds?.length ?? rows;
     const width = columnEnds?.length ?? columns;
     if (!ctx.recalc.room(height * width, MOST_ELEMENTS)) return CALC;
-    const items = new Array<Scalar>(height * width);
+    // Filled with blanks one by one and never made at its size: an array made ten thousand long or longer throws
+    // the engine that runs this out of its compiled code, for every reference read after it too.
+    const items: Scalar[] = [];
+    for (let at = height * width; at > 0; at -= 1) items.push(null);
     for (let j = 0; j < width; j += 1) {
         const c = columnEnds === null || j === 0 ? j : columnEnds[j - 1];
         const column = c < across && filledColumns[c] === 1 ? sheet[left + c] : null;

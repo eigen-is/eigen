@@ -39,7 +39,9 @@ export function lift(
     if (lined === null) return CALC;
     const { down, across } = lined;
     const width = across.count;
-    const items = new Array<Scalar | Reference>(down.count * width);
+    // Filled element by element and never made at its size: an array made ten thousand long or longer throws the
+    // engine that runs this out of its compiled code, for every call after it too.
+    const items: (Scalar | Reference)[] = [];
     // Per element, the lazy argument it picked, or undefined for an element that has its value.
     const picks: (Lazy | undefined)[] = [];
     let references = false;
@@ -62,12 +64,10 @@ export function lift(
             }
             result ??= run(ctx, entry, held, count);
             if (isLazy(result)) picks[r * width + c] = result;
-            else {
-                // Of an element that answers an array, the first value: ROW of a range of three rows is its first row.
-                const item = isArray(result) ? result.items[0] : result;
-                items[r * width + c] = item;
-                references ||= isReference(item);
-            }
+            // Of an element that answers an array, the first value: ROW of a range of three rows is its first row.
+            const item = isLazy(result) ? null : isArray(result) ? result.items[0] : result;
+            items.push(item);
+            references ||= isReference(item);
         }
     }
     const made = arrayOf(lined.rows, lined.columns, items, down.ends, across.ends, references);
@@ -144,7 +144,7 @@ function fill(
     if (lined === null) return CALC;
     const { down, across } = lined;
     const width = across.count;
-    const items = new Array<Scalar | Reference>(down.count * width);
+    const items: (Scalar | Reference)[] = [];
     for (let r = 0; r < down.count; r += 1) {
         for (let c = 0; c < width; c += 1) {
             const from = placeAt(made, down, across, 0, r, c);
@@ -155,7 +155,7 @@ function fill(
                 const at = isArray(value) ? placeAt(value, down, across, places[token.index], r, c) : -1;
                 item = !isArray(value) ? value : at < 0 ? NA : value.items[at];
             }
-            items[r * width + c] = item;
+            items.push(item);
         }
     }
     return arrayOf(lined.rows, lined.columns, items, down.ends, across.ends, made.references);
