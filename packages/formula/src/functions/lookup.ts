@@ -2,7 +2,10 @@
 // gives back a part of what it was given, so A1:INDEX(B:B,5) is a range. The lookups each search one row or one
 // column of a table and pick their result at the position that search found.
 
+import { columnLabel, GRID_COLUMNS, GRID_ROWS } from '../text/a1';
+import { quoteSheetName } from '../text/sheet-name';
 import { NA, REF, VALUE } from '../values/errors';
+import type { Reference } from '../values/value';
 import type { Table } from './registry';
 import {
     ANYWHERE,
@@ -23,6 +26,7 @@ import {
     refusing,
     skippable,
     TABLE,
+    TEXT,
 } from './registry';
 
 type Key = number | string | boolean | null;
@@ -42,6 +46,28 @@ export const LOOKUP = [
     ),
     fn('COLUMN', [HERE, ROOM], (reference, room) =>
         room.series(reference.left + 1, 1, reference.right - reference.left + 1),
+    ),
+    fn('ROWS', [refusing(TABLE, REF)], (table) => table.rows),
+    fn('COLUMNS', [refusing(TABLE, REF)], (table) => table.columns),
+    fn('AREAS', [areas(REFERENCE)], (reference) => {
+        let count = 0;
+        for (let area: Reference | null = reference; area !== null; area = area.next) count += 1;
+        return count;
+    }),
+    // The kind says which of the row and the column is fixed: both, the row, the column, neither. A sheet name
+    // is quoted as a formula would spell it, and an empty one leaves the bare mark.
+    fn(
+        'ADDRESS',
+        [INTEGER, INTEGER, skippable(INTEGER, 1), skippable(BOOLEAN, true), optional(TEXT)],
+        (row, column, kind, a1, sheet) => {
+            if (row < 1 || row > GRID_ROWS || column < 1 || column > GRID_COLUMNS || kind < 1 || kind > 4) return VALUE;
+            const fixedRow = kind < 3;
+            const fixedColumn = kind % 2 === 1;
+            const cell = a1
+                ? `${fixedColumn ? '$' : ''}${columnLabel(column - 1)}${fixedRow ? '$' : ''}${row}`
+                : `R${fixedRow ? row : `[${row}]`}C${fixedColumn ? column : `[${column}]`}`;
+            return sheet === undefined ? cell : `${sheet === '' ? '' : quoteSheetName(sheet)}!${cell}`;
+        },
     ),
     fn(
         'INDEX',
@@ -125,5 +151,9 @@ export const LOOKUP = [
             return down ? result.part(at, 0, 1, result.columns) : result.part(0, at, result.rows, 1);
         },
         PART,
+    ),
+    // The cell shows the friendly name, a blank one as 0, or the link itself. A link alone is at most 255 long.
+    fn('HYPERLINK', [TEXT, optional(PLAIN)], (link, name) =>
+        name === undefined ? (link.length > 255 ? VALUE : link) : (name ?? 0),
     ),
 ];
