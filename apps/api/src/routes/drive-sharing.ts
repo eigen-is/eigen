@@ -4,7 +4,12 @@
 // from someone who has none yet. Guests can't share, so the sharing routes refuse them.
 
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
-import type { DriveAccessCheckResult, DrivePathPermissions, EffectiveMember } from '@workspace/lib/types/drive';
+import type {
+    DriveAccessCheckResult,
+    DrivePathPermissions,
+    DriveVisibility,
+    EffectiveMember,
+} from '@workspace/lib/types/drive';
 import type { ClientFileEventInput, FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
@@ -38,6 +43,10 @@ const clientFileEventBody = t.Union([
 const _clientFileEventBodyMatchesType: TypesEqual<Static<typeof clientFileEventBody>, ClientFileEventInput> = true;
 void _clientFileEventBodyMatchesType;
 
+const visibilitySchema = t.Union([t.Literal('private'), t.Literal('public-read'), t.Literal('public-write')]);
+const _visibilitySchemaMatchesType: TypesEqual<Static<typeof visibilitySchema>, DriveVisibility> = true;
+void _visibilitySchemaMatchesType;
+
 export const driveSharingRouter = new Elysia({ name: 'drive-sharing' })
     .use(betterAuth)
     .put(
@@ -70,9 +79,7 @@ export const driveSharingRouter = new Elysia({ name: 'drive-sharing' })
                     ),
                 ),
                 remove: t.Optional(t.Array(t.String())),
-                visibility: t.Optional(
-                    t.Union([t.Literal('private'), t.Literal('public-read'), t.Literal('public-write')]),
-                ),
+                visibility: t.Optional(visibilitySchema),
                 sharingRestricted: t.Optional(t.Boolean()),
             }),
             auth: true,
