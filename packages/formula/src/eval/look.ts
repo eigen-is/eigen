@@ -58,6 +58,12 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
             const error = spell(ctx, held, at, to, texts);
             if (error !== null) return error;
             args[p] = texts;
+        } else if (param.read === Read.Pairs) {
+            // Both arguments must be written.
+            const second = held[at + 1];
+            const error = written(value) && written(second) ? frame.pairs.over(value, second) : VALUE;
+            if (error !== null) return error;
+            args[p] = frame.pairs;
         } else args[p] = frame.matches;
         at = to;
     }
@@ -67,7 +73,13 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
 
 // How many arguments one occurrence of a parameter takes.
 function spanOf(param: Param<unknown>): number {
-    return param.prepare === Prepare.Ambient ? 0 : param.read === Read.Where ? 2 : 1;
+    if (param.prepare === Prepare.Ambient) return 0;
+    return param.read === Read.Where || param.read === Read.Pairs ? 2 : 1;
+}
+
+// Whether a slot holds what an argument was evaluated to, which is all it holds where a range is taken.
+function written(value: Held): value is Value {
+    return value !== undefined && !isLazy(value) && !(value instanceof Table);
 }
 
 function settle(ctx: Evaluator, value: Held, family: Family): void {
@@ -97,7 +109,7 @@ function spell(ctx: Evaluator, held: readonly Held[], from: number, to: number, 
     texts.length = 0;
     for (let i = from; i < to; i += 1) {
         const value = held[i];
-        if (value === undefined || isLazy(value) || value instanceof Table) continue;
+        if (!written(value)) continue;
         let error: FormulaError | null = null;
         for (let area = isReference(value) ? value : null; area !== null && error === null; area = area.next) {
             if (!recalc.room(heightOf(area) * widthOf(area))) return CALC;
@@ -137,7 +149,7 @@ function multiply(ctx: Evaluator, held: Held[], from: number, to: number): Formu
     const factors: Value[] = [];
     for (let i = from; i < to; i += 1) {
         const value = held[i];
-        if (value === undefined || isLazy(value) || value instanceof Table) continue;
+        if (!written(value)) continue;
         settle(ctx, value, Families.Counted);
         factors.push(value);
     }

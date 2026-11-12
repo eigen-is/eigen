@@ -10,12 +10,13 @@ import type { Cells } from '../recalc/support';
 import { valuesWith } from '../recalc/support';
 
 // Every law below is derived from a row's own data, for every row of the one table: no law names a function.
-// A1:A5 = 10..50, B1:B5 = a..e, C1:C3 = 1, 2, 3, D1 = TRUE, E1:E3 = 1, #DIV/0!, 3, F1:F3 = 1, #N/A, 3, Z9 is blank.
+// A1:A5 = 10..50, B1:B5 = a..e, C1:C3 = 1, 2, 3, D1 = TRUE, E1:E3 = 1, #DIV/0!, 3, F1:F3 = 1, #N/A, 3, G1:G3 = #N/A, 2,
+// 3, Z9 is blank.
 const SHEET: Cells = {
     ...{ A1: 10, A2: 20, A3: 30, A4: 40, A5: 50 },
     ...{ B1: 'a', B2: 'b', B3: 'c', B4: 'd', B5: 'e' },
     ...{ C1: 1, C2: 2, C3: 3, D1: true },
-    ...{ E1: 1, E2: '=1/0', E3: 3, F1: 1, F2: '=NA()', F3: 3 },
+    ...{ E1: 1, E2: '=1/0', E3: 3, F1: 1, F2: '=NA()', F3: 3, G1: '=NA()', G2: 2, G3: 3 },
 };
 
 // Rows of this test's own, for what no function of this build does yet: a family that reads a text in a cell,
@@ -48,6 +49,8 @@ function pool(param: Param<unknown>): readonly string[] {
             return ['A1:A5', 'C1:C3', '1'];
         case Read.Texts:
             return ['A1:A5', '"abc"', 'B1:B5'];
+        case Read.Pairs:
+            return ['A1:A5', 'C1:C3'];
         case Read.Plain:
             return ['20', '10', '"b"'];
         case Read.Table:
@@ -337,6 +340,35 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         equals('INDEX(A1:A5,{2,4})', VALUE);
         const whole = written(entry, [...base, '{1,2,3}']).slice(1);
         expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);
+    });
+
+    test('two ranges side by side pair by place, leave out a pair with no number, and answer the earliest error', () => {
+        const at = params.findIndex((param) => param.read === Read.Pairs);
+        if (at < 0) return;
+        const both = (first: string, second: string) =>
+            written(entry, withArg(withArg(base, at, first), at + 1, second));
+        const values = evaluateAll([
+            both('A1:A5', 'C1:C3'),
+            both('A1:A4', '{2,4}'),
+            both('E1:E3', 'G1:G3'),
+            both('G1:G3', 'E1:E3'),
+            both('E1:E3', 'F1:F3'),
+            both('F1:F3', 'E1:E3'),
+            both('A1:A5', ''),
+            both('A1:A6', 'A1:C2'),
+            both('{10;30;40}', '{10;1;20}'),
+            both('A1:C6', 'A1:C6'),
+            both('{10;20;30;40;50}', '{10;20;30;40;50}'),
+            both('A1:A5', 'INDEX(A1:A5,{1;2;3;4;5})'),
+            both('{10;20}', '{10;20}'),
+            both('A1:A2', 'A1:A2'),
+        ]);
+        expect(values.slice(0, 7)).toEqual([NA, NA, NA, NA, DIV0, NA, VALUE]);
+        expect(values[7]).toEqual(values[8]);
+        expect(values[9]).toEqual(values[10]);
+        // An element that is a reference is no number, so its pair is left out.
+        expect(values[11]).toEqual(evaluateAll([both('{"a";"b"}', '{1;2}')])[0]);
+        expect(values[12]).toEqual(values[13]);
     });
 
     test('a union of areas answers what the parameter says', () => {

@@ -151,6 +151,52 @@ describe('every value as a text: TEXTJOIN and CONCAT', () => {
     });
 });
 
+describe('two ranges side by side: CORREL', () => {
+    test.each([
+        // Excel batch 3: the pairs are made by place, row by row, whatever the shapes.
+        ['=CORREL(A1:A6,B1:C3)', -4.23361858081695e-1],
+        ['=CORREL(A1:A6,B1:B6)', -6.6924450472418e-3],
+        ['=CORREL(A1:F1,A2:A7)', -2.28163329383594e-1],
+        ['=CORREL(A1:F1,B1:B6)', -1.08916646841617e-1],
+        // A text on either side leaves its pair out.
+        ['=CORREL(A1:A6,J1:J6)', 6.30899673509503e-1],
+        ['=CORREL(J1:J6,K1:K6)', 9.87541439757388e-1],
+        ['=CORREL(A1:A6,{2;7;1;8;2;8})', -6.6924450472418e-3],
+        ['=CORREL(A:A,B:B)', 9.611417370832981e-2],
+    ])('%s', (formula, expected) => {
+        expect(evaluate(formula, F3)).toBeCloseTo(expected, 13);
+    });
+
+    test.each([
+        // Batch 3 and 4: unequal sizes are #N/A, an empty argument is #VALUE!, and of the errors in the two
+        // ranges the one at the earliest place is the result, whichever range holds it.
+        ['=CORREL(A1:A3,B1:B4)', NA],
+        ['=CORREL(A1:A3,"x")', NA],
+        ['=CORREL(A1:A3,)', VALUE],
+        ['=CORREL(H1:H6,I1:I6)', NA],
+        ['=CORREL(I1:I6,H1:H6)', NA],
+        ['=CORREL(A1:A6,H1:H6)', DIV0],
+        ['=CORREL(A1:A6,I1:I6)', NA],
+        ['=CORREL(H2:H6,I2:I6)', DIV0],
+        ['=CORREL(1/0,I1:I6)', DIV0],
+        ['=CORREL(A1:A6)', VALUE],
+    ])('%s', (formula, expected) => {
+        expect(evaluate(formula, F3)).toBe(expected);
+    });
+
+    test('an error beside the blank cells under a shorter column is still the result', () => {
+        const cells = { P1: 1, P2: 2, P3: 4, Q1: 3, Q2: 5, Q3: 6, Q5: '=1/0' };
+        expect(evaluate('=CORREL(P1:P6,Q1:Q6)', cells)).toBe(DIV0);
+        expect(evaluate('=CORREL(Q1:Q6,P1:P6)', cells)).toBe(DIV0);
+        expect(evaluate('=CORREL(P1:P4,Q1:Q4)', cells)).toBeCloseTo(0.9285714285714286, 13);
+    });
+
+    test('the formulas of both ranges are computed before they are paired', () => {
+        const cells = { P1: '=1+1', P2: '=P1*2', P3: '=P2*3', Q1: 1, Q2: '=Q1+1', Q3: '=Q2+2' };
+        expect(evaluate('=CORREL(P1:P3,Q1:Q3)', cells, 'A1')).toBeCloseTo(0.989743318610787, 13);
+    });
+});
+
 // LARGE is not a function of this build: the row is the test's own, on the list and a number after it.
 describe('a parameter that takes every value before one that takes a single value', () => {
     // A k below 1 is refused before it is rounded up.

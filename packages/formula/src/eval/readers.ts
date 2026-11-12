@@ -5,14 +5,14 @@
 import type { FormulaError } from '../values/errors';
 import { CALC, NA } from '../values/errors';
 import { snapSum } from '../values/precision';
-import type { ArrayValue, Scalar, Value } from '../values/value';
-import { arrayOf, elementAt, isArray, isReference, partOf, ValueType } from '../values/value';
+import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
+import { arrayOf, elementAt, isArray, isError, isReference, partOf, ValueType } from '../values/value';
 import { Tally } from './criteria';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
 import { Families } from './families';
 import type { Vector } from './search';
-import { edge } from './search';
+import { edge, heightOf, widthOf } from './search';
 import type { Held } from './signature';
 import { add } from './sum';
 
@@ -25,15 +25,17 @@ export class Frame {
     // What the walk of the call in progress passes over, when another row picked the row that runs.
     public skips = 0;
     private readonly ctx: Evaluator;
-    // What the criteria of the call in progress matched.
+    // What the criteria of the call in progress matched, and what its two ranges read side by side hold.
     public readonly matches = new Matches();
     public readonly tally = new Tally();
+    public readonly pairs: Pairs;
     private readonly readers: Numbers[] = [];
     private readonly tables: Table[] = [];
     private readonly lists: string[][] = [];
 
     public constructor(ctx: Evaluator) {
         this.ctx = ctx;
+        this.pairs = new Pairs(ctx);
     }
 
     // The table of the argument at a place.
@@ -172,6 +174,72 @@ export class Numbers {
         this.counted = walk.count;
         return walk.count;
     }
+}
+
+// Two ranges or arrays of one size read side by side, place by place in written order and a range row by row:
+// the numbers at the places where both hold one.
+export class Pairs {
+    public xs = new Float64Array(0);
+    public ys = new Float64Array(0);
+    private readonly ctx: Evaluator;
+    private first = new Float64Array(0);
+    private second = new Float64Array(0);
+
+    public constructor(ctx: Evaluator) {
+        this.ctx = ctx;
+    }
+
+    // Arguments of unequal size are #N/A, and else the first error at the earliest place is the answer.
+    public over(first: Value, second: Value): FormulaError | null {
+        const { ctx } = this;
+        const size = heightOf(first) * widthOf(first);
+        if (heightOf(second) * widthOf(second) !== size) return NA;
+        if (isReference(first)) ctx.recalc.settleArea(first);
+        if (isReference(second)) ctx.recalc.settleArea(second);
+        // Past the last cell of both ranges every place is a blank, which pairs with nothing.
+        const used = Math.min(size, Math.max(reach(ctx, first), reach(ctx, second)));
+        if (!ctx.recalc.room(2 * used)) return CALC;
+        if (this.first.length < used) {
+            this.first = new Float64Array(used);
+            this.second = new Float64Array(used);
+        }
+        let count = 0;
+        for (let place = 0; place < used; place += 1) {
+            const x = placed(ctx, first, place);
+            const y = placed(ctx, second, place);
+            if (isError(x)) return x;
+            if (isError(y)) return y;
+            if (typeof x !== 'number' || typeof y !== 'number') continue;
+            this.first[count] = x;
+            this.second[count] = y;
+            count += 1;
+        }
+        this.xs = this.first.subarray(0, count);
+        this.ys = this.second.subarray(0, count);
+        return null;
+    }
+}
+
+// How many places of an argument, counted row by row, can hold a value: of a range, up to the last row that a
+// column of it reaches.
+function reach(ctx: Evaluator, value: Value): number {
+    if (!isReference(value)) return heightOf(value) * widthOf(value);
+    const { columns } = ctx.workbook.sheets[value.sheet];
+    let rows = 0;
+    for (let c = value.left; c <= value.right && c < columns.length; c += 1) {
+        rows = Math.max(rows, Math.min(value.bottom + 1, columns[c].length) - value.top);
+    }
+    return rows * widthOf(value);
+}
+
+// The value at one place of an argument, counted row by row.
+function placed(ctx: Evaluator, value: Value, place: number): Scalar | Reference {
+    if (isArray(value)) return elementAt(value, Math.floor(place / value.columns), place % value.columns);
+    if (!isReference(value)) return value;
+    const width = widthOf(value);
+    const { columns } = ctx.workbook.sheets[value.sheet];
+    const c = value.left + (place % width);
+    return c < columns.length ? ctx.workbook.value(columns[c], value.top + Math.floor(place / width)) : null;
 }
 
 // A range, an array or one value as a table: its size, a row or a column of it to search, and one value of it.

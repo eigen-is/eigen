@@ -6,7 +6,7 @@
 
 import type { Family } from '../eval/families';
 import { Families } from '../eval/families';
-import type { Matches, Numbers, Room, Table } from '../eval/readers';
+import type { Matches, Numbers, Pairs, Room, Table } from '../eval/readers';
 import type { ANYWHERE, Entry, Lazy, Next, PART, Param, Returns, Walked } from '../eval/signature';
 import { MAX_ARGUMENTS, Prepare, Read } from '../eval/signature';
 import { toBoolean, toNumber, toText } from '../values/coerce';
@@ -14,7 +14,7 @@ import type { FormulaError } from '../values/errors';
 import { REF, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar } from '../values/value';
 
-export type { Matches, Numbers, Room, Table } from '../eval/readers';
+export type { Matches, Numbers, Pairs, Room, Table } from '../eval/readers';
 export type { Vector } from '../eval/search';
 export { ANYWHERE, Find, NESTED, NEXT, PART } from '../eval/signature';
 export { rectangle } from '../values/rectangle';
@@ -135,6 +135,13 @@ export const TEXTS: Walked<readonly string[]> = Object.freeze({
     ...{ prepare: Prepare.Walked, read: Read.Texts, union: VALUE },
 });
 
+// Two arguments, ranges or arrays of one size, read side by side in written order: the numbers at the places
+// where both hold one. Unequal sizes are #N/A, and of the errors in both the one at the earliest place is the result.
+export const PAIRS: Walked<Pairs> = Object.freeze({
+    ...REQUIRED,
+    ...{ prepare: Prepare.Walked, read: Read.Pairs, union: VALUE },
+});
+
 // The argument may be left out at the end, and the body then gets `fallback`. An empty argument is still a blank.
 // Of a lazy argument the fallback is what the call answers when its token comes back.
 // With no fallback the body gets undefined, or a reader of nothing where a reader is what it gets.
@@ -231,7 +238,9 @@ export function fn<const P extends readonly Param<unknown>[], R extends Returns 
             ? []
             : param.read === Read.Where
               ? [ONLY, ANY]
-              : [param.only ? { ...ONLY, optional: param.optional, union: param.union } : param];
+              : param.read === Read.Pairs
+                ? [param, param]
+                : [param.only ? { ...ONLY, optional: param.optional, union: param.union } : param];
         if (closed && !ambient) throw new Error(`${name}: a parameter after a repeating or an ambient one`);
         // Tables that repeat would be read value by value in the body, which is the call wrapper's to do.
         if (param.rest && param.prepare === Prepare.Whole) throw new Error(`${name}: a table that repeats`);

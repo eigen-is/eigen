@@ -180,8 +180,11 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
         case Read.Random:
         case Read.Now:
             return value;
+        case Read.Pairs:
         case Read.Products:
         case Read.Texts:
+            // Of two ranges read side by side, neither may be left empty.
+            if (value === null && param.read === Read.Pairs) return VALUE;
             return isReference(value) && value.next !== null && param.union !== null ? param.union : value;
         default: {
             const unknown: never = param.read;
