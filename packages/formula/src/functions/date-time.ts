@@ -18,6 +18,7 @@ import { NUM, VALUE } from '../values/errors';
 import { parseDateTime } from '../values/parse-number';
 import { addWorkdays, countWorkdays } from '../values/workdays';
 import {
+    addin,
     BOOLEAN,
     fn,
     INTEGER,
@@ -29,7 +30,6 @@ import {
     refusing,
     SERIAL,
     skippable,
-    strict,
     TEXT,
 } from './registry';
 
@@ -48,7 +48,7 @@ function typed(text: string, now: number) {
     return parseDateTime(text, serialDate(Math.floor(now)).year);
 }
 
-const STRICT_DATE = strict(SERIAL);
+const ADDIN_DATE = addin(SERIAL);
 const HOLIDAYS = optional(refusing(NUMBERS, VALUE));
 // Saturday and Sunday, as a weekend code of the INTL functions.
 const WEEKEND = 1;
@@ -97,28 +97,28 @@ export const DATE_TIME = [
         stamped((_day, second) => second % 60),
     ),
     fn('WEEKDAY', [SERIAL, optional(INTEGER, 1)], weekdayNumber),
-    fn('WEEKNUM', [STRICT_DATE, skippable(strict(INTEGER), 1)], weekNumber),
+    fn('WEEKNUM', [ADDIN_DATE, skippable(addin(INTEGER), 1)], weekNumber),
     fn('ISOWEEKNUM', [SERIAL], isoWeek),
-    fn('EDATE', [STRICT_DATE, strict(INTEGER)], (serial, months) => shiftMonths(serial, months, false)),
-    fn('EOMONTH', [STRICT_DATE, strict(INTEGER)], (serial, months) => shiftMonths(serial, months, true)),
+    fn('EDATE', [ADDIN_DATE, addin(INTEGER)], (serial, months) => shiftMonths(serial, months, false)),
+    fn('EOMONTH', [ADDIN_DATE, addin(INTEGER)], (serial, months) => shiftMonths(serial, months, true)),
     fn('DATEDIF', [SERIAL, SERIAL, TEXT], dateDif),
     fn('DAYS', [SERIAL, SERIAL], (end, start) => end - start),
     fn('DAYS360', [SERIAL, SERIAL, optional(BOOLEAN, false)], days360),
-    fn('YEARFRAC', [STRICT_DATE, STRICT_DATE, optional(strict(NUMBER), 0)], yearFraction),
-    fn('NETWORKDAYS', [STRICT_DATE, STRICT_DATE, HOLIDAYS], (start, end, holidays) =>
+    fn('YEARFRAC', [ADDIN_DATE, ADDIN_DATE, optional(addin(NUMBER), 0)], yearFraction),
+    fn('NETWORKDAYS', [ADDIN_DATE, ADDIN_DATE, HOLIDAYS], (start, end, holidays) =>
         countWorkdays(start, end, WEEKEND, holidays.list()),
     ),
     fn(
         'NETWORKDAYS.INTL',
-        [STRICT_DATE, STRICT_DATE, skippable(PLAIN, WEEKEND), HOLIDAYS],
+        [ADDIN_DATE, ADDIN_DATE, skippable(PLAIN, WEEKEND), HOLIDAYS],
         (start, end, weekend, holidays) => countWorkdays(start, end, weekend, holidays.list()),
     ),
-    fn('WORKDAY', [STRICT_DATE, strict(NUMBER), HOLIDAYS], (start, days, holidays) =>
+    fn('WORKDAY', [ADDIN_DATE, addin(NUMBER), HOLIDAYS], (start, days, holidays) =>
         addWorkdays(start, days, WEEKEND, holidays.list()),
     ),
     fn(
         'WORKDAY.INTL',
-        [STRICT_DATE, strict(NUMBER), skippable(PLAIN, WEEKEND), HOLIDAYS],
+        [ADDIN_DATE, addin(NUMBER), skippable(PLAIN, WEEKEND), HOLIDAYS],
         (start, days, weekend, holidays) => addWorkdays(start, days, weekend, holidays.list()),
     ),
 ];

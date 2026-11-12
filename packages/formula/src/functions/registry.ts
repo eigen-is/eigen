@@ -186,9 +186,15 @@ export function skippable(param: Param<unknown>, fallback?: Scalar): Param<unkno
     return Object.freeze({ ...param, optional: true, skips: true, fallback });
 }
 
-// A number as Excel's add-in functions read one: a boolean, typed or in a cell, is #VALUE!, a range of several
-// cells is #VALUE! for the whole call where an array runs it once per element, and an argument left empty is #N/A.
+// A number that refuses a boolean, typed or in a cell, with #VALUE!, and nothing else: SUBSTITUTE's instance.
 export function strict(param: Param<number>): Param<number> {
+    return Object.freeze({ ...param, strict: true });
+}
+
+// A number as Excel's add-in functions read one, three answers that every recorded one has together: a boolean
+// is #VALUE! as for `strict`, a range of several cells is #VALUE! for the whole call where an array runs it once
+// per element, and an argument left empty is #N/A where it must be given.
+export function addin(param: Param<number>): Param<number> {
     return Object.freeze({ ...param, strict: true, prepare: Prepare.Single });
 }
 

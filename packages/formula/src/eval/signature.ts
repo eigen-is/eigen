@@ -27,7 +27,7 @@ export const Prepare = {
     // an element of it that is a reference gives its first cell.
     Corner: 6,
     // Read to a value as the first, but a range of several cells is #VALUE! for the whole call: an array still
-    // runs the call once per element.
+    // runs the call once per element. An argument left empty is #N/A where it must be given.
     Single: 7,
 } as const;
 
@@ -85,7 +85,7 @@ declare const carries: unique symbol;
 export type Param<T> = {
     readonly prepare: Prepare;
     readonly read: Read;
-    // Whether a number reading refuses a boolean, and an argument left empty with #N/A.
+    // Whether a number reading refuses a boolean.
     readonly strict: boolean;
     // What a walked reading counts.
     readonly family: Family | null;

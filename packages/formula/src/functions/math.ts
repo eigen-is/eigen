@@ -10,6 +10,7 @@ import { power } from '../values/powers';
 import { cutDecimal, round15, roundDecimal } from '../values/precision';
 import { greatestDivisor, leastMultiple, multinomial } from '../values/wholes';
 import {
+    addin,
     chosen,
     ERRORS,
     FACTORS,
@@ -24,7 +25,6 @@ import {
     RANDOM,
     rest,
     skippable,
-    strict,
     WHERE,
     WHOLES,
 } from './registry';
@@ -72,7 +72,7 @@ export const MATH = [
     fn('EVEN', [NUMBER], (n) => Math.sign(n) * 2 * Math.ceil(Math.abs(n) / 2)),
     fn('ODD', [NUMBER], (n) => (n < 0 ? -1 : 1) * (2 * Math.ceil((Math.abs(n) - 1) / 2) + 1)),
     // Half a multiple rounds away from zero, and unlike ROUND on the double as it is: MROUND(6.05,0.1) is 6.
-    fn('MROUND', [strict(NUMBER), strict(NUMBER)], (n, multiple) => {
+    fn('MROUND', [addin(NUMBER), addin(NUMBER)], (n, multiple) => {
         if (Math.sign(n) * Math.sign(multiple) < 0) return NUM;
         return multiple === 0 ? 0 : Math.floor(n / multiple + 0.5) * multiple;
     }),
@@ -99,7 +99,7 @@ export const MATH = [
         const rest = left !== 0 && left < 0 !== divisor < 0 ? left + divisor : left;
         return rest === divisor ? 0 : rest;
     }),
-    fn('QUOTIENT', [strict(NUMBER), strict(NUMBER)], (n, divisor) => (divisor === 0 ? DIV0 : Math.trunc(n / divisor))),
+    fn('QUOTIENT', [addin(NUMBER), addin(NUMBER)], (n, divisor) => (divisor === 0 ? DIV0 : Math.trunc(n / divisor))),
     fn('POWER', [NUMBER, NUMBER], power),
     fn('SQRT', [NUMBER], Math.sqrt),
     fn('EXP', [NUMBER], Math.exp),
@@ -155,7 +155,7 @@ export const MATH = [
     fn('ATANH', [NUMBER], Math.atanh),
     fn('RAND', [RANDOM], (random) => random),
     // A whole number from the bottom rounded up to the top rounded down, and the bottom when none lies between.
-    fn('RANDBETWEEN', [strict(NUMBER), strict(NUMBER), RANDOM], (low, high, random) => {
+    fn('RANDBETWEEN', [addin(NUMBER), addin(NUMBER), RANDOM], (low, high, random) => {
         if (low > high) return NUM;
         const bottom = Math.ceil(low);
         return bottom + Math.floor(random * (Math.max(bottom, Math.floor(high)) - bottom + 1));

@@ -58,7 +58,7 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
         // Any other empty argument is a blank, and is read as one.
         else if (i >= count) value = slot.read === Read.Here ? ctx.here(sheet, row, column) : slot.fallback;
         else if (given[i].kind === NodeKind.Empty)
-            value = slot.skips ? slot.fallback : slot.strict && !slot.optional ? NA : null;
+            value = slot.skips ? slot.fallback : slot.prepare === Prepare.Single && !slot.optional ? NA : null;
         else if (slot.prepare === Prepare.Scalar) {
             value = ctx.operand(given[i], sheet, row, column);
             if (isArray(value)) lifted = true;

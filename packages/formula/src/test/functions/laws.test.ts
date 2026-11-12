@@ -174,18 +174,22 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         }
     });
 
-    test('a strict number refuses a boolean and a range of several cells, and takes one cell and an array', () => {
+    test('a strict number refuses a boolean, and an add-in one a range of several cells too', () => {
         for (const at of scalars.filter((slot) => params[slot].strict)) {
             const put = (argument: string) => written(entry, withArg(base, at, argument));
             const lifted = put('C1:C3*1').slice(1);
-            const [typed, cell, range, union, one, plain, element] = evaluateAll([
+            const [typed, cell, range, union, one, plain, element, ranged] = evaluateAll([
                 ...[put('TRUE'), put('D1'), put('C1:C3'), put('(C1,C2)'), put('C2:C2'), put('2')],
                 `=INDEX(${lifted},2,1)`,
+                `=INDEX(${put('C1:C3').slice(1)},2,1)`,
             ]);
-            expect([typed, cell, range, union]).toEqual([VALUE, VALUE, VALUE, VALUE]);
+            expect([typed, cell, union]).toEqual([VALUE, VALUE, VALUE]);
+            if (params[at].prepare === Prepare.Single) expect(range).toBe(VALUE);
             if (entry.volatile) continue;
             expect(one).toEqual(plain);
             expect(element).toEqual(plain);
+            // What is no add-in argument takes a range as any scalar does: one answer per cell.
+            if (params[at].prepare !== Prepare.Single) expect(ranged).toEqual(plain);
         }
     });
 
@@ -259,7 +263,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             expect(cell).toEqual(blank);
             // An empty argument is a blank that is read, or left out where the parameter says so.
             if (param.skips && at === params.length - 1) expect(empty).toEqual(evaluateAll([written(entry, upTo)])[0]);
-            else if (param.strict && !param.optional && at > 0) expect(empty).toBe(NA);
+            else if (param.prepare === Prepare.Single && !param.optional && at > 0) expect(empty).toBe(NA);
             else if (!param.skips && at > 0) expect(empty).toEqual(blank);
             if (!param.optional || param.fallback === undefined || at !== params.length - 1) continue;
             const fallback =

@@ -8,6 +8,7 @@ import { isError } from '../values/value';
 import {
     ANY,
     ANYTHING,
+    addin,
     apiece,
     areas,
     CORNER,
@@ -17,7 +18,6 @@ import {
     INTEGER,
     optional,
     REFERENCE,
-    strict,
     TEXT,
 } from './registry';
 
@@ -50,8 +50,8 @@ export const INFORMATION = [
     fn('ISTEXT', [ANY], (value) => typeof value === 'string'),
     fn('ISNONTEXT', [ANY], (value) => typeof value !== 'string'),
     // The fraction is cut off first, so 2.9 and -2.9 are even, and a number too large to hold a unit is even.
-    fn('ISEVEN', [strict(INTEGER)], (whole) => whole % 2 === 0),
-    fn('ISODD', [strict(INTEGER)], (whole) => whole % 2 !== 0),
+    fn('ISEVEN', [addin(INTEGER)], (whole) => whole % 2 === 0),
+    fn('ISODD', [addin(INTEGER)], (whole) => whole % 2 !== 0),
     // The place of the error in Excel's list, and #N/A for a value that is no error or an error not in the list.
     fn('ERROR.TYPE', [ANY], (value) => {
         const place = isError(value) ? EXCEL_ERRORS.indexOf(value.text) : -1;
