@@ -132,7 +132,7 @@ describe('a block moved in the store', () => {
 });
 
 describe('what lookups keep of a column across an edit', () => {
-    test('columns that slide keep it, and a column whose rows moved starts over', () => {
+    test('columns that slide keep it, and a column whose rows moved or that a block left starts over', () => {
         const workbook = new Workbook([source('a')]);
         const [sheet] = workbook.sheets;
         for (let row = 0; row < 6; row += 1) workbook.setValue(sheet, row, 3, row % 3);
@@ -162,6 +162,15 @@ describe('what lookups keep of a column across an edit', () => {
         );
         expect(ask()).toBeNull();
         expect(ask()).toEqual([2, 6]);
+        workbook.apply(
+            {
+                kind: ChangeKind.Move,
+                move: { fromSheet: 'a', row: 6, column: 4, rows: 1, columns: 1, toSheet: 'a', toRow: 9, toColumn: 4 },
+            },
+            [],
+        );
+        expect(ask()).toBeNull();
+        expect(ask()).toEqual([2, 9]);
     });
 });
 

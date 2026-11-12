@@ -69,7 +69,7 @@ export function moveClasses(
 }
 
 // The host lines from `from` to `to` on one axis where a class starts: where the host, or an end of a reference
-// that travels with it, crosses an edge of the grid, of the block or of where the block lands.
+// that travels with it, crosses an edge of the block or of where the block lands.
 function cuts(
     references: readonly FormulaNode[],
     move: Move,
@@ -81,7 +81,7 @@ function cuts(
     const first = rows ? move.row : move.column;
     const target = rows ? move.toRow : move.toColumn;
     const size = rows ? move.rows : move.columns;
-    const edges = [0, rows ? GRID_ROWS : GRID_COLUMNS, first, first + size, target, target + size];
+    const edges = [first, first + size, target, target + size];
     const absolute = rows ? RefFlag.RowAbsolute : RefFlag.ColumnAbsolute;
     const absolute2 = rows ? RefFlag.Row2Absolute : RefFlag.Column2Absolute;
     const found: number[] = [];
