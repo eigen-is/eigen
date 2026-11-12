@@ -13,6 +13,7 @@ import {
     areas,
     CORNER,
     ENGINE,
+    expecting,
     fn,
     HERE,
     INTEGER,
@@ -105,6 +106,8 @@ export const INFORMATION = [
     fn('INFO', [TEXT], () => VALUE),
     // The place of a sheet among the tabs changes when a sheet comes, goes or moves, with no cell written: a row
     // that asks the workbook hears of that.
-    fn('SHEET', [areas(HERE), ENGINE], (at) => at.sheet + 1),
-    fn('SHEETS', [optional(areas(REFERENCE)), ENGINE], (at, book) => (at === undefined ? book.sheets() : 1)),
+    fn('SHEET', [expecting(areas(HERE), NA), ENGINE], (at) => at.sheet + 1),
+    fn('SHEETS', [optional(expecting(areas(REFERENCE), NA)), ENGINE], (at, book) =>
+        at === undefined ? book.sheets() : 1,
+    ),
 ];

@@ -185,7 +185,7 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
             if (!isReference(value)) {
                 // What is no reference is refused with its own error, and an array with its first element's.
                 const first = isArray(value) ? value.items[0] : value;
-                return isError(first) ? first : VALUE;
+                return isError(first) ? first : param.stranger;
             }
             return value.next !== null && param.union !== null ? param.union : value;
         case Read.Plain:

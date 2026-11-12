@@ -34,6 +34,7 @@ const REQUIRED = {
     union: null,
     only: false,
     apiece: false,
+    stranger: VALUE,
 };
 
 function scalar<T>(read: Read): Param<T> {
@@ -237,6 +238,12 @@ export function cells<T>(param: Walked<T>): Walked<T> {
 // a union the first area: ISFORMULA(B1:B7) is seven answers.
 export function apiece(param: Param<Reference>): Param<Reference> {
     return Object.freeze({ ...param, apiece: true });
+}
+
+// The error that what is no reference answers at a parameter that takes a reference only, in place of #VALUE!:
+// SHEETS(1) is #N/A. An argument that is an error still answers itself.
+export function expecting(param: Param<Reference>, error: FormulaError): Param<Reference> {
+    return Object.freeze({ ...param, stranger: error });
 }
 
 type Args<P extends readonly Param<unknown>[]> = { [K in keyof P]: P[K] extends Param<infer T> ? T : never };

@@ -516,7 +516,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
                 written(entry, withArg(base, at, '{1,2}')),
             ]);
             expect(values.slice(0, 2)).toEqual(values.slice(2, 4));
-            expect(values[4]).toBe(VALUE);
+            expect(values[4]).toBe(params[at].stranger);
         }
     });
 });

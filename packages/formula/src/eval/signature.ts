@@ -104,6 +104,8 @@ export type Param<T> = {
     readonly only: boolean;
     // Whether a range of several cells runs the call once per cell, each a reference of its own.
     readonly apiece: boolean;
+    // What an argument that is no reference answers where only a reference is taken, unless it is an error itself.
+    readonly stranger: FormulaError;
     // Only in the type, never in a record: what the body gets.
     readonly [carries]?: () => T;
 };
