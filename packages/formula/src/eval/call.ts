@@ -86,7 +86,7 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
             if (isError(value) && ends(param)) result = value;
             held[i] = value;
         }
-        result ??= run(ctx, entry, held, count);
+        result ??= run(ctx, entry, held, count, 0);
         if (isLazy(result)) result = picked(ctx, entry, result, node, sheet, row, column);
     }
     ctx.calls = level;
@@ -217,8 +217,9 @@ function collected(family: Family, value: Value): Held {
 }
 
 // The body on arguments that are read, and its answer as a cell can hold it: a number that is no number is #NUM!,
-// and a text has at most 32,767 characters. `held` are the slots of the call in progress.
-export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number): Value | Lazy {
+// and a text has at most 32,767 characters. `held` are the slots of the call in progress, and `skips` says what
+// the walk of this run passes over.
+export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number, skips: number): Value | Lazy {
     let args: readonly unknown[] = held;
     const frame = entry.plain ? null : ctx.frames[ctx.calls - 1];
     const choice = entry.chosen === null || typeof held[0] !== 'number' ? undefined : entry.chosen.get(held[0]);
@@ -228,13 +229,10 @@ export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number): 
         if (target === undefined) return NAME;
         held.copyWithin(0, 1, count);
         held.length = count - 1;
-        frame.skips = choice.skips;
-        const result = run(ctx, target, held, count - 1);
-        frame.skips = 0;
-        return result;
+        return run(ctx, target, held, count - 1, choice.skips);
     }
     if (frame !== null) {
-        const error = look(ctx, entry, frame, count);
+        const error = look(ctx, entry, frame, count, skips);
         if (error !== null) return error;
         args = frame.args;
     }

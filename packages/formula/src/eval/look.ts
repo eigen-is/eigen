@@ -17,11 +17,14 @@ import type { Entry, Held, Param } from './signature';
 import { Prepare, Read } from './signature';
 import { firstError } from './views';
 
-// The error that ends the call, or null with `frame.args` ready for the body. `count` arguments were written.
-export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number): FormulaError | null {
+// The error that ends the call, or null with `frame.args` ready for the body. `count` arguments were written, and
+// `skips` says what the walk of the call passes over.
+export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, skips: number): FormulaError | null {
     const { params } = entry;
     const { held, args } = frame;
+    // A frame is used again after a call that was cut off, so what a call leaves in it is written here, at its start.
     frame.failed = null;
+    frame.skips = skips;
     const unmatched = entry.where >= 0 ? weigh(ctx, entry, frame, count) : null;
     if (unmatched !== null) return unmatched;
     let at = 0;

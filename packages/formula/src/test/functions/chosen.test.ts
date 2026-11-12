@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { FUNCTIONS } from '../../functions/library';
 import { DIV0, errorOf, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
-import { evaluate } from '../recalc/support';
+import { at as atOf, engineOf, evaluate, valueAt } from '../recalc/support';
 import { F1 } from './collectors.test';
 
 // The sheet of Excel batch 5, check 7: A1:A5 = 1..5, C1 = 1, C2 = 2, and a subtotal of those two in C4.
@@ -114,5 +114,64 @@ describe('SUBTOTAL picks a function by its first argument and hands it the refer
             expect(entry.params.length).toBe(1);
             expect(entry.params[0].rest && entry.params[0].family !== null).toBe(true);
         }
+    });
+});
+
+describe('a recalc that stops inside a SUBTOTAL leaves nothing behind', () => {
+    // D1's SUBTOTAL is cut off by the cap while it computes F1. A1 adds a cell that holds a SUBTOTAL.
+    const cells: Cells = {
+        ...{ A1: '=SUM(C1:C2)', C1: '=SUBTOTAL(9,E1:E1)', C2: 7, E1: 5, D1: '=SUBTOTAL(9,F1:F3)' },
+        ...{ F1: '=G1+1', F2: '=G2+1', F3: '=G3+1', G1: 0, G2: 1, G3: 2 },
+    };
+
+    test('a SUM computed after the stop still adds a cell that holds a SUBTOTAL', () => {
+        const engine = engineOf({ s1: cells });
+        expect(engine.recalc(2).stopped).toBe(true);
+        engine.setValue('s1', 1, 2, 8);
+        expect(engine.recalc(Number.POSITIVE_INFINITY).stopped).toBe(false);
+        expect(valueAt(engine, 'A1')).toBe(13);
+        expect(valueAt(engine, 'D1')).toBe(6);
+    });
+
+    // Columns A to F, eight rows: a formula reads only columns to its right, so there is no loop.
+    test('whatever caps stop the passes, the values are those of a fresh load', () => {
+        let seed = 7;
+        const random = (below: number) => {
+            seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
+            return seed % below;
+        };
+        const label = (row: number, column: number) => `${String.fromCharCode(65 + column)}${row + 1}`;
+        let stops = 0;
+        for (let workbook = 0; workbook < 300; workbook += 1) {
+            const made: Record<string, number | string> = {};
+            const numbers: string[] = [];
+            for (let column = 0; column < 6; column += 1) {
+                for (let row = 0; row < 8; row += 1) {
+                    const at = label(row, column);
+                    const kind = column === 5 ? 0 : random(6);
+                    const left = column + 1 + random(5 - column);
+                    const top = random(8);
+                    const range = `${label(top, left)}:${label(top + random(8 - top), 5)}`;
+                    if (kind === 0) numbers.push(at);
+                    if (kind === 0) made[at] = random(9);
+                    else if (kind <= 2) made[at] = `=SUBTOTAL(${[9, 1, 2, 3, 4, 5][random(6)]},${range})`;
+                    else if (kind === 3)
+                        made[at] = `=${['SUM', 'COUNT', 'COUNTA', 'MAX', 'AVERAGE'][random(5)]}(${range})`;
+                    else if (kind === 4) made[at] = `=${label(top, left)}+1`;
+                }
+            }
+            const engine = engineOf({ s1: made });
+            for (let round = 0; round < 6; round += 1) {
+                if (engine.recalc(1 + random(12)).stopped) stops += 1;
+                const written = numbers[random(numbers.length)];
+                made[written] = random(9);
+                engine.setValue('s1', ...atOf(written), made[written]);
+            }
+            engine.recalc(Number.POSITIVE_INFINITY);
+            const fresh = engineOf({ s1: made });
+            fresh.recalc(Number.POSITIVE_INFINITY);
+            for (const at of Object.keys(made)) expect([at, valueAt(engine, at)]).toEqual([at, valueAt(fresh, at)]);
+        }
+        expect(stops).toBeGreaterThan(300);
     });
 });
