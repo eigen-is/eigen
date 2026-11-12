@@ -48,7 +48,7 @@ export type DriveActionRunner = {
     // Does nothing for a row the items don't offer. Download as… names its format.
     run: (id: DriveActionId, items: readonly DrivePath[], format?: ExportFormat) => void;
     // A drag onto a folder row, absent where the view can't move.
-    onMove?: (path: DrivePath, targetItemId: string) => Promise<void>;
+    onMove?: (path: DrivePath, targetItemId: string) => void;
     onCreateFolder?: () => void;
     onCreateEigenDoc: Partial<Record<EigenDocType, () => void>>;
     onUploadFile?: () => void;
@@ -66,7 +66,7 @@ export function useDriveActionRunner({
     onAfterAction,
 }: UseDriveActionRunnerOptions): DriveActionRunner {
     const dialogs = useDriveDialogs();
-    const { mutateAsync: movePaths } = useMovePaths();
+    const movePathsMutation = useMovePaths();
     const { mutateAsync: copyToFolder } = useCopyToFolder();
     const { mutate: duplicatePaths } = useDuplicatePaths();
     const deletePathsMutation = useDeletePaths();
@@ -105,7 +105,7 @@ export function useDriveActionRunner({
         }
         const done =
             mode === 'move'
-                ? movePaths({ paths: items, targetParentId: location.folderId })
+                ? movePathsMutation.mutateAsync({ paths: items, targetParentId: location.folderId })
                 : copyToFolder({
                       items,
                       targetOwnerId: location.ownerId,
@@ -175,9 +175,7 @@ export function useDriveActionRunner({
         actionsFor,
         run,
         onMove: capabilities.canMove
-            ? async (path, targetItemId) => {
-                  await movePaths({ paths: [path], targetParentId: targetItemId });
-              }
+            ? (path, targetItemId) => movePathsMutation.mutate({ paths: [path], targetParentId: targetItemId })
             : undefined,
         onCreateFolder: capabilities.canCreateFolder ? dialogs.createFolder.openDialog : undefined,
         onCreateEigenDoc,
