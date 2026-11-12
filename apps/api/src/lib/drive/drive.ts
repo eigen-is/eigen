@@ -1265,7 +1265,7 @@ export class Drive {
         const container = await mount.getActivePath(containerId);
         if (!isDocumentType(container.type)) throw new ApiError(400, 'Only a document has versions');
         await deleteVersions(mount, containerId);
-        await sweepDocument(this, container, SWEEP_GRACE_MS);
+        await sweepDocument(this, mount, container, SWEEP_GRACE_MS);
         await this.recordFileEvent(mountId, containerId, user, { eventType: 'versions-deleted' });
     }
 

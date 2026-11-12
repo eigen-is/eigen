@@ -153,7 +153,7 @@ describe('the sweep', () => {
         await addMedia(mount, path.id, 'young.png', { ageHours: 71 });
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await mediaNames(mount, path.id)).toEqual(['kept.png', 'young.png']);
     });
 
@@ -165,7 +165,7 @@ describe('the sweep', () => {
         await addMedia(mount, path.id, 'loose.pdf', { mimeType: 'application/pdf' });
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await mediaNames(mount, path.id)).toEqual(['card.pdf']);
     });
 
@@ -179,7 +179,7 @@ describe('the sweep', () => {
         await addMedia(mount, path.id, decomposed);
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await mediaNames(mount, path.id)).toEqual(['Café.png'.normalize('NFC'), 'photo.png']);
     });
 
@@ -196,7 +196,7 @@ describe('the sweep', () => {
         await addMedia(mount, path.id, 'loose.png');
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await mediaNames(mount, path.id)).toEqual([
             'deep.png',
             'inner.svg',
@@ -217,7 +217,7 @@ describe('the sweep', () => {
         addCard(collab.doc, 'c-gone', { chatName: gone.name });
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await threadNames(mount, path.id)).toEqual([kept.name]);
         expect(await commentRows(M, path.id)).toEqual([kept.name]);
         const hits = await withCommentIndex(drive, M, path.id, (index) => index.searchComments('needle'));
@@ -240,7 +240,7 @@ describe('the sweep', () => {
         await closeThreadDb(mount, replied.id);
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await threadNames(mount, path.id)).toEqual([replied.name, young.name].sort());
     });
 
@@ -254,7 +254,7 @@ describe('the sweep', () => {
         addCard(collab.doc, 'c-deleted', { chatName: deleted.name, deletedAt: Date.now() });
 
         await close(M, created);
-        await sweepDocument(drive, created, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, created, SWEEP_GRACE_MS);
         expect(await threadNames(mount, created.id)).toEqual([documentLevel.name]);
     });
 
@@ -267,7 +267,7 @@ describe('the sweep', () => {
         await addThread(mount, M, path.id, { ageHours: 1 });
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await commentRows(M, path.id)).not.toContain('ghost.eigenchat');
     });
 
@@ -282,7 +282,7 @@ describe('the sweep', () => {
         await addMedia(mount, thread.id, 'young.png', { ageHours: 1 });
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await mediaNames(mount, thread.id)).toEqual(['named.png', 'young.png']);
     });
 
@@ -293,7 +293,7 @@ describe('the sweep', () => {
         await addThread(mount, M, path.id);
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await mediaNames(mount, path.id)).toEqual(['loose.png']);
         expect(await threadNames(mount, path.id)).toHaveLength(1);
     });
@@ -312,7 +312,7 @@ describe('the sweep', () => {
         const readBytes = mount.readBytes.bind(mount);
         const reads = spyOn(mount, 'readBytes').mockImplementation(async (id) => (id === outer ? null : readBytes(id)));
         try {
-            await sweepDocument(drive, path, SWEEP_GRACE_MS);
+            await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         } finally {
             reads.mockRestore();
         }
@@ -500,7 +500,7 @@ describe('the sweep on s3', () => {
         await addMedia(s3.mount, path.id, 'loose.png');
 
         await close(S3_MOUNT, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, s3.mount, path, SWEEP_GRACE_MS);
         expect(await mediaNames(s3.mount, path.id)).toEqual(['leaf.png', 'École.svg', 'Über.svg']);
     });
 });

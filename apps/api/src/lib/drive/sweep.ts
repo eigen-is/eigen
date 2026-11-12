@@ -19,9 +19,8 @@ import type { Drive } from './drive';
 
 // Runs on an open document as well as a closed one, as both read the same data.db. The grace is how old a part must
 // be to go.
-export async function sweepDocument(drive: Drive, document: DrivePath, graceMs: number): Promise<void> {
+export async function sweepDocument(drive: Drive, mount: Mount, document: DrivePath, graceMs: number): Promise<void> {
     try {
-        const { mount } = await drive.resolveFile(document.mountId, document.id);
         await sweepParts(drive, mount, document, Date.now() - graceMs, null);
     } catch (error) {
         console.warn(`[sweep] stopped in ${document.id}:`, error instanceof Error ? error.message : error);

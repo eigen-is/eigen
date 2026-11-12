@@ -408,7 +408,7 @@ describe('SharedDrive gating enumeration', () => {
         const root = mount ? await mount.getRootFolder() : null;
         if (!mount || !root) throw new Error('charlie has no drive');
 
-        const to = { drive, ownerId: charlie.id, mountId: mount.id, parentId: root.id };
+        const to = { drive, mountId: mount.id, parentId: root.id };
         expect(await refusal(sd.copyPath(mountId, fileId, to, 'stolen.txt', charlie))).toBe(
             '403 No read permission on source',
         );
