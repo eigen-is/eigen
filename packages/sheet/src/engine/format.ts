@@ -5,7 +5,6 @@
 
 import { isDateFormat, numberDisplay } from '@workspace/formula/format';
 import numeral from 'numeral';
-import { format } from 'numfmt';
 import { dateToSerial } from './parser/helper/number';
 import type { Cell, CellMatrix, CellType, FormulaArg } from './types';
 import { ID_CARD_NUMBER, isdatetime, isPlainNumber, isRealNum, valueIsError } from './validation';
@@ -163,7 +162,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
         }
 
         ct = { fa, t: 'n' };
-        m = format(fa, v);
+        m = numberDisplay(v, fa);
     } else if (text.indexOf('%') > -1) {
         const index = text.indexOf('%');
         const value2 = text.substring(0, index);
@@ -195,7 +194,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
                             const fa = `#,##0.${new Array(len + 1).join('0')}%`;
                             ct = { fa, t: 'n' };
                             v = numeral(value).value() ?? 0;
-                            m = format(fa, v);
+                            m = numberDisplay(v, fa);
                         } else {
                             m = text;
                             ct = { fa: '@', t: 's' };
@@ -204,7 +203,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
                         const fa = `0.${new Array(len + 1).join('0')}%`;
                         ct = { fa, t: 'n' };
                         v = numeral(value).value() ?? 0;
-                        m = format(fa, v);
+                        m = numberDisplay(v, fa);
                     }
                 } else {
                     m = text;
@@ -225,7 +224,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
                     const fa = '#,##0%';
                     ct = { fa, t: 'n' };
                     v = numeral(value).value() ?? 0;
-                    m = format(fa, v);
+                    m = numberDisplay(v, fa);
                 } else {
                     m = text;
                     ct = { fa: '@', t: 's' };
@@ -234,7 +233,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
                 const fa = '0%';
                 ct = { fa, t: 'n' };
                 v = numeral(value).value() ?? 0;
-                m = format(fa, v);
+                m = numberDisplay(v, fa);
             }
         } else {
             m = text;
@@ -265,7 +264,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
                     const fa = `#,##0.${new Array(len + 1).join('0')}`;
                     ct = { fa, t: 'n' };
                     v = numeral(value).value() ?? 0;
-                    m = format(fa, v);
+                    m = numberDisplay(v, fa);
                 } else {
                     m = text;
                     ct = { fa: '@', t: 's' };
@@ -275,7 +274,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
                     const fa = `0.${new Array(len + 1).join('0')}`;
                     ct = { fa, t: 'n' };
                     v = numeral(value).value() ?? 0;
-                    m = format(fa, v);
+                    m = numberDisplay(v, fa);
                 } else {
                     m = text;
                     ct = { fa: '@', t: 's' };
@@ -306,7 +305,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
         }
 
         ct = { fa, t: 'd' };
-        m = format(fa, v);
+        m = numberDisplay(v, fa);
     } else if (isdatetime(value, '12') && (text.indexOf('.') > -1 || text.indexOf(':') > -1 || text.length < 20)) {
         v = dateToSerial(
             new Date(
@@ -331,17 +330,13 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
         }
 
         ct = { fa, t: 'd' };
-        m = format(fa, v);
+        m = numberDisplay(v, fa);
     } else {
         m = text;
         ct = { fa: 'General', t: 'g' };
     }
 
     return [m, ct, v];
-}
-
-export function update(fmt: string, v: string | number | boolean | null | undefined): string {
-    return format(fmt, v);
 }
 
 export { isValidFormat as isValidNumberFormat } from 'numfmt';

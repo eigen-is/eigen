@@ -6,7 +6,7 @@ import { numberDisplay } from '@workspace/formula/format';
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { Cell, CellBorderSides, CellStyle, InlineStringSegment } from '@workspace/lib/sheets';
 import { columnLabelToIndex, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
-import { booleanDisplay, functionCopy, update } from '@workspace/sheet/engine';
+import { booleanDisplay, functionCopy } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
@@ -195,7 +195,7 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
         if (typeof value === 'number') {
             // numfmt renders a bare serial under General as a number, so a date without a format it can draw shows as
             // m/d/yyyy.
-            cell.m = date ? update(look.numFmt ?? DATE_FORMAT, value) : numberDisplay(value, look.numFmt);
+            cell.m = numberDisplay(value, date ? (look.numFmt ?? DATE_FORMAT) : look.numFmt);
         } else cell.m = typeof value === 'boolean' ? booleanDisplay(value) : value;
     }
     if (formula) cell.f = `=${formula}`;

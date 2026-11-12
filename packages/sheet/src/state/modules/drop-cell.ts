@@ -7,7 +7,7 @@
 import { numberDisplay } from '@workspace/formula/format';
 import dayjs from 'dayjs';
 import { cloneDeep } from 'es-toolkit/compat';
-import { parseCellInput, update, writeFormulaResult } from '../../engine/format';
+import { parseCellInput, writeFormulaResult } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, SingleRange } from '../../engine/types';
 import type { Context } from '../context';
@@ -319,7 +319,7 @@ function numberSeries(cells: readonly Cell[]) {
 }
 
 function dateSeries(cells: readonly Cell[]) {
-    const dates = cells.map((cell) => dayjs(update('yyyy-MM-dd', cell.v)));
+    const dates = cells.map((cell) => dayjs(numberDisplay(cell.v, 'yyyy-MM-dd')));
     const sameDay = dates.every((date) => date.date() === dates[0].date());
     const step = evenStep(
         dates.map((date) => (sameDay ? date.year() * 12 + date.month() : date.diff(dates[0], 'days'))),
