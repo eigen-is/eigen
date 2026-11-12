@@ -930,7 +930,7 @@ export class Drive {
     public async checkAccessForEmails(
         mountId: string,
         pathId: string,
-        emails: string[],
+        emails: readonly string[],
     ): Promise<DriveAccessCheckResult> {
         return checkAccessForEmails(this.owner, this.getMount(mountId), pathId, emails);
     }
@@ -1055,7 +1055,7 @@ export class Drive {
 
     // The route checks ownership, so SharedDrive has no wrapper.
     public async ensureChatsFolder(mountId: string, user: User): Promise<string> {
-        return ensureChatsFolder(this, this.getMount(mountId), user);
+        return ensureChatsFolder(this, mountId, user);
     }
 
     public async assignComment(

@@ -26,7 +26,7 @@ import type { Drive } from './drive';
 
 // Takes the paths whose ACLs count, the breadcrumb first, so a caller that read one already reads no second. A
 // path in the trash is its owner's alone, so the ACLs of its chain let nobody else in until the restore.
-export async function membersFromCrumbs(owner: User, crumbs: DrivePath[]): Promise<EffectiveMember[]> {
+export async function membersFromCrumbs(owner: User, crumbs: readonly DrivePath[]): Promise<EffectiveMember[]> {
     const allACL = isTrashedChain(crumbs) ? [] : crumbs.flatMap((crumb) => crumb.acl ?? []);
 
     // Every member of a team has full access to the team's drive. So the team goes in as one more
@@ -49,7 +49,7 @@ export async function checkAccessForEmails(
     owner: User,
     mount: Mount,
     pathId: string,
-    emails: string[],
+    emails: readonly string[],
 ): Promise<DriveAccessCheckResult> {
     // An empty breadcrumb means the path is gone.
     const crumbs = await mount.getBreadcrumb(pathId);

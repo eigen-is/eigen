@@ -9,27 +9,26 @@ import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import { withCommentIndex } from '../chat';
 import { broadcastCommentIndexUpdated } from '../chat/sse-events';
 import { ApiError } from '../core';
-import type { Mount } from '../mount';
 import type { User } from '../user';
 import { propagateAssignment } from './assignment-propagation';
 import type { Drive } from './drive';
 
 // The folder new chats go in, looked up by name every time, so the user may rename, move or delete it. A file of
 // that name sends new chats to the mount root.
-export async function ensureChatsFolder(drive: Drive, mount: Mount, user: User): Promise<string> {
-    const root = await mount.getRootFolder();
-    if (!root) throw new Error(`Mount '${mount.id}' has no root folder`);
+export async function ensureChatsFolder(drive: Drive, mountId: string, user: User): Promise<string> {
+    const root = await drive.getRootFolder(mountId);
+    if (!root) throw new Error(`Mount '${mountId}' has no root folder`);
 
-    const existing = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
+    const existing = await drive.getChildByName(mountId, root.id, CHATS_FOLDER_NAME);
     if (existing) return existing.type === DRIVE_TYPE_FOLDER ? existing.id : root.id;
 
     // Drive.createFolder tells other tabs about the new folder. Two first chats at once both try to
     // create it, and the one that loses the race uses the folder of the winner.
     try {
-        return (await drive.createFolder(mount.id, root.id, CHATS_FOLDER_NAME, user)).id;
+        return (await drive.createFolder(mountId, root.id, CHATS_FOLDER_NAME, user)).id;
     } catch (err) {
         if (err instanceof ApiError && err.status === 409) {
-            const winner = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
+            const winner = await drive.getChildByName(mountId, root.id, CHATS_FOLDER_NAME);
             if (winner) return winner.type === DRIVE_TYPE_FOLDER ? winner.id : root.id;
         }
         throw err;

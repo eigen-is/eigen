@@ -410,7 +410,7 @@ export class SharedDrive {
     public async checkAccessForEmails(
         mountId: string,
         pathId: string,
-        emails: string[],
+        emails: readonly string[],
     ): Promise<DriveAccessCheckResult> {
         const memberships = await getMemberships(this.user.id);
         await this.requireRead(mountId, pathId, memberships);
