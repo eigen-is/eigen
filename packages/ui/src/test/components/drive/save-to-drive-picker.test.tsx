@@ -2,6 +2,7 @@
 // land twice, and its title counts what is left. Opening the picker again saves the full list. The picker is
 // driven through the file-action runner that owns it, as every host does.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
@@ -23,13 +24,14 @@ const g = globalThis as any;
 
 // The source ids the copy route was asked for, in order. The source `bad` always fails.
 const posted: string[] = [];
+const root = drivePath({ id: 'root', name: 'Drive', mimeType: DRIVE_MIME_FOLDER, type: 'folder' });
 beforeEach(() => {
     posted.length = 0;
     g.fetch = async (input: string | URL | Request) => {
         const url = input instanceof Request ? input.url : String(input);
         const sourceId = /\/path\/([^/]+)\/copy$/.exec(url)?.[1];
-        // The runner's other hooks read too, such as the viewer's teams.
-        if (!sourceId) return Response.json([]);
+        // The runner's other hooks read too, such as the viewer's teams, and the picker reads the root it saves to.
+        if (!sourceId) return Response.json(url.endsWith('/root') ? root : []);
         posted.push(sourceId);
         if (sourceId === 'bad') return new Response('Server error', { status: 500 });
         return Response.json(drivePath({ id: `copy-of-${sourceId}`, name: 'copy.png', mimeType: 'image/png' }));
@@ -61,6 +63,8 @@ async function openSaveToDrive() {
         createElement(PreviewContext.Provider, { value: preview }, createElement(Runner)),
     ));
     await act(async () => openPicker(subjects));
+    // The root loads.
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
 async function save() {

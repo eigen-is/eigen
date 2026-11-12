@@ -4,6 +4,7 @@
 import { afterEach, expect, jest, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { answerUploads } from '../../fixtures/answered-upload';
 import { waitUntil } from '../../fixtures/wait-until';
 
 installHappyDom();
@@ -432,7 +433,8 @@ test('an indent stops at the text column of the page the doc holds, in the body 
     }
 });
 
-// The uploads below land through the real media resolver; the upload answers when the test lets it.
+// The uploads below land through the real media resolver; the upload answers when the test lets it, and every other
+// request answers empty.
 const { renderInDocument } = await import('@workspace/ui/test/render-in-document');
 const { act, createElement, useMemo, useState } = await import('react');
 const { AuthProvider } = await import('@workspace/lib/auth');
@@ -445,18 +447,9 @@ type Media = ReturnType<typeof useDocMedia>;
 
 const path = drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC });
 
-let finishUpload = (_name: string) => {};
+const finishUpload = answerUploads(path);
 spyOn(globalThis, 'fetch').mockImplementation(
-    Object.assign(
-        async (_input: RequestInfo | URL, init?: RequestInit) => {
-            if (init?.method !== 'POST') return Response.json(null);
-            const name = await new Promise<string>((resolve) => {
-                finishUpload = resolve;
-            });
-            return Response.json([{ ...path, id: name, name, parentId: 'media', mimeType: 'image/png' }]);
-        },
-        { preconnect: fetch.preconnect },
-    ),
+    Object.assign(async () => Response.json(null), { preconnect: fetch.preconnect }),
 );
 
 let unmount = async () => {};

@@ -2,24 +2,21 @@
 // folder as a crumb row, with a Drive browser under it to pick another. The host owns the value and whether the
 // browser is open. Open, the crumbs and New folder act on the browser, and the bar's toggle closes it.
 
-import { useAuth } from '@workspace/lib/auth';
-import { useBreadcrumb, useRootFolder } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { useBreadcrumb } from '@workspace/lib/drive';
 import { Label } from '@workspace/ui/components/label';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, FolderPlus } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { InfoBlock, STRETCHED_TRIGGER_CLASS } from '../info-block';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { DriveBreadcrumb } from './drive-breadcrumb';
-import { DriveBrowser } from './drive-browser';
+import type { DriveLocationValue } from './drive-browser';
+import { DriveBrowser, useResolvedDriveLocation } from './drive-browser';
 import { useMountLabel } from './drive-mount-list';
 import type { DriveSortControl } from './drive-table';
 
 // Folders first, then by name, A to Z. The header that would change the sort is hidden.
 const BY_NAME: DriveSortControl = { value: { key: 'name', dir: 'asc' }, onChange: () => {} };
-
-export type DriveLocationValue = { ownerId: string; mountId: string; folderId: string };
 
 type DriveLocationFieldProps = {
     value: DriveLocationValue;
@@ -40,29 +37,10 @@ export function DriveLocationField({
     collapsible = true,
     ownMountsOnly,
 }: DriveLocationFieldProps) {
-    const { user } = useAuth();
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
-
-    const resolvedOwnerId = value.ownerId || user?.id || '';
-    const { data: rootFolder } = useRootFolder(resolvedOwnerId, value.mountId);
-    const mountLabel = useMountLabel(resolvedOwnerId, value.mountId);
-    const currentFolderId = value.folderId || rootFolder?.id || '';
-    const { data: breadcrumbPaths = [] } = useBreadcrumb(resolvedOwnerId, value.mountId, currentFolderId);
-
-    const handleFolderChange = useCallback(
-        (folder: DrivePath, mountId: string) => {
-            onChange({ ownerId: folder.ownerId, mountId, folderId: folder.id });
-        },
-        [onChange],
-    );
-
-    // An empty folderId becomes the mount's root as soon as the root is known. Collapsed, the browser never
-    // mounts to report it. Open, its report can come after a quick submit, which would then confirm no folder.
-    useEffect(() => {
-        if (!value.folderId && rootFolder) {
-            onChange({ ...value, folderId: rootFolder.id });
-        }
-    }, [value, rootFolder, onChange]);
+    const { ownerId, mountId, folderId } = useResolvedDriveLocation(value);
+    const mountLabel = useMountLabel(ownerId, mountId);
+    const { data: breadcrumbPaths = [] } = useBreadcrumb(ownerId, mountId, folderId);
 
     return (
         <>
@@ -76,7 +54,11 @@ export function DriveLocationField({
                             <DriveBreadcrumb
                                 paths={breadcrumbPaths}
                                 mountLabel={mountLabel}
-                                onNavigate={expanded ? (path) => handleFolderChange(path, value.mountId) : undefined}
+                                onNavigate={
+                                    expanded
+                                        ? (path) => onChange({ ownerId: path.ownerId, mountId, folderId: path.id })
+                                        : undefined
+                                }
                                 itemClassName="text-xs"
                             />
                         </div>
@@ -117,18 +99,14 @@ export function DriveLocationField({
             {expanded && (
                 <div className="flex-1 overflow-hidden border-t px-6 pb-2 pt-2">
                     <DriveBrowser
-                        ownerId={value.ownerId}
+                        value={value}
+                        onChange={onChange}
                         mode="folder"
-                        onFolderChange={handleFolderChange}
-                        defaultMountId={value.mountId}
-                        defaultFolderId={value.folderId || undefined}
-                        showNewFolder
                         hideToolbar
                         hideHeader
                         sort={BY_NAME}
                         ownMountsOnly={ownMountsOnly}
-                        createFolderOpen={createFolderOpen}
-                        onCreateFolderOpenChange={setCreateFolderOpen}
+                        newFolder={{ open: createFolderOpen, onOpenChange: setCreateFolderOpen }}
                         className="h-full"
                     />
                 </div>

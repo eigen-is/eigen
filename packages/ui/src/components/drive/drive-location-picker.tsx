@@ -1,7 +1,9 @@
 // The dialog that picks a Drive folder, and a name where the mode asks one, for a new file, a save-as or a folder
-// pick. Save-to-Drive, a new Eigen document and the app shell open it; it can offer a download instead.
+// pick. Hosts such as Save to Drive and a new Eigen document open it; it can offer a download instead. Confirm waits
+// for a folder: a picker opened with none confirms its drive's root, once that has loaded.
 
 import { useAuth } from '@workspace/lib/auth';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
@@ -18,19 +20,15 @@ import { cn } from '@workspace/ui/lib/utils';
 import { Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { EigenLoader } from '../braket/eigen-loader';
-import type { DriveLocationValue } from './drive-location-field';
+import type { DriveLocationValue } from './drive-browser';
+import { useResolvedDriveLocation } from './drive-browser';
 import { DriveLocationField } from './drive-location-field';
 
 type DriveLocationPickerProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     mode: 'create' | 'save-as' | 'folder';
-    onConfirm: (location: {
-        ownerId: string;
-        mountId: string;
-        folderId: string;
-        name?: string;
-    }) => void | Promise<void>;
+    onConfirm: (location: DriveLocationValue & { name?: string }) => void | Promise<void>;
     onDownloadInstead?: () => void;
     title?: string;
     defaultName?: string;
@@ -50,7 +48,7 @@ export function DriveLocationPicker({
     title,
     defaultName = '',
     defaultOwnerId,
-    defaultMountId = 'default',
+    defaultMountId = DEFAULT_MOUNT_ID,
     defaultFolderId,
     nameLabel,
     confirmLabel,
@@ -64,6 +62,7 @@ export function DriveLocationPicker({
         mountId: defaultMountId,
         folderId: defaultFolderId ?? '',
     });
+    const destination = useResolvedDriveLocation(location, open);
 
     useEffect(() => {
         if (!user) return;
@@ -75,17 +74,11 @@ export function DriveLocationPicker({
     if (!user) return null;
 
     const hasName = mode === 'create' || mode === 'save-as';
+    const canConfirm = !!destination.folderId && (!hasName || !!name.trim());
 
     const handleSubmit = () => {
-        if (hasName && !name.trim()) return;
-        return run(() =>
-            onConfirm({
-                ownerId: location.ownerId || user.id,
-                mountId: location.mountId,
-                folderId: location.folderId,
-                name: hasName ? name.trim() : undefined,
-            }),
-        );
+        if (!canConfirm) return;
+        return run(() => onConfirm({ ...destination, name: hasName ? name.trim() : undefined }));
     };
 
     const resolvedTitle =
@@ -151,7 +144,7 @@ export function DriveLocationPicker({
                         <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
                             Cancel
                         </Button>
-                        <Button onClick={handleSubmit} disabled={pending || (hasName && !name.trim())}>
+                        <Button onClick={handleSubmit} disabled={pending || !canConfirm}>
                             {pending && <EigenLoader className="text-current" />}
                             {resolvedConfirmLabel}
                         </Button>

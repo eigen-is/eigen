@@ -1,8 +1,10 @@
 // The New chat wizard lists each picked person with an × that removes them, and with a team picked it shows the team
 // with an × of its own. A screen reader hears each × by what it removes, never a row of bare "Remove"s, and a click
 // removes only that one. A mouse user sees each × on hover only, and Tab reaches and shows it. The Location bar of the
-// second step is a button that opens the folder browser.
+// second step is a button that opens the folder browser, and a chat made after that goes into the folder it shows.
 import { afterAll, expect, mock, test } from 'bun:test';
+import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
+import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -15,6 +17,7 @@ const DESIGN_TEAM = {
     members: [],
 };
 let myTeams: (typeof DESIGN_TEAM)[] = [];
+const createdRooms: unknown[] = [];
 
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realAuth = { ...(await import('@workspace/lib/auth')) };
@@ -27,14 +30,29 @@ const realChat = { ...(await import('@workspace/lib/chat')) };
 mock.module('@workspace/lib/chat', () => ({
     ...realChat,
     useChatSections: () => ({ teams: [], isLoading: false }),
-    useCreateChatRoom: () => ({ mutateAsync: async () => {}, isPending: false }),
+    useCreateChatRoom: () => ({
+        mutateAsync: async (room: unknown) => {
+            createdRooms.push(room);
+            return drivePath({ name: 'Ada & Me.eigenchat', mimeType: 'application/eigenchat' });
+        },
+        isPending: false,
+    }),
     useFindChatByMembers: () => ({ data: [], isPending: false }),
 }));
 const realHome = { ...(await import('@workspace/lib/home')) };
 mock.module('@workspace/lib/home', () => ({ ...realHome, useMyTeams: () => ({ data: myTeams }) }));
+// The root of the viewer's drive, once it has loaded. The browser's other reads fail and draw an empty browser.
+const driveRoot = drivePath({ id: 'root', name: 'Drive', mimeType: DRIVE_MIME_FOLDER, type: 'folder', ownerId: 'me' });
+let rootLoaded = false;
+const realDrive = { ...(await import('@workspace/lib/drive')) };
+mock.module('@workspace/lib/drive', () => ({
+    ...realDrive,
+    useRootFolder: (ownerId: string) => ({ data: rootLoaded && ownerId ? driveRoot : undefined }),
+}));
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@workspace/lib/chat', () => realChat);
+    mock.module('@workspace/lib/drive', () => realDrive);
     mock.module('@workspace/lib/home', () => realHome);
 });
 
@@ -47,13 +65,12 @@ const { expectKeyboardReveal } = await import('../../hover-reveal');
 
 async function openWizard(teams: (typeof DESIGN_TEAM)[] = []) {
     myTeams = teams;
-    // The folder browser the Location bar opens reads Drive; its queries fail here and draw an empty browser.
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     await renderInDocument(
         createElement(
             QueryClientProvider,
             { client },
-            createElement(ChatCreateWizard, { open: true, onOpenChange: () => {} }),
+            createElement(ChatCreateWizard, { open: true, onOpenChange: () => {}, onNavigate: () => {} }),
         ),
     );
 }
@@ -113,18 +130,50 @@ test('a picked team has a remove button named after the team, and it goes back t
     expect(document.querySelector('#chat-wizard-people')).not.toBeNull();
 });
 
-test('the Location bar is a button named for what it does, and Enter on it opens the folder browser', async () => {
+const letsChat = () => {
+    const button = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === "Let's chat");
+    if (!button) throw new Error("the wizard drew no Let's chat button");
+    return button;
+};
+
+async function openSecondStep() {
     await openWizard();
     await pick('ada@example.com');
     // The first step waits for its debounced look for an existing chat with these people.
     await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
-    const next = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === "Let's chat");
-    if (!next) throw new Error('the wizard drew no first-step button');
-    await act(async () => next.click());
+    await act(async () => letsChat().click());
+}
+
+test('the Location bar is a button named for what it does, and Enter on it opens the folder browser', async () => {
+    await openSecondStep();
 
     const change = buttonNamed('Change location');
     if (!change) throw new Error('the Location bar is no button');
     expect(change.getAttribute('aria-expanded')).toBe('false');
     await act(async () => pressKey(change, 'Enter'));
     expect(document.querySelector('button[aria-label="Change location"][aria-expanded="true"]')).not.toBeNull();
+});
+
+test('a chat whose location was never opened names no folder, so the server picks the chats folder', async () => {
+    createdRooms.length = 0;
+    await openSecondStep();
+    await act(async () => letsChat().click());
+    expect(createdRooms).toEqual([expect.objectContaining({ parentId: undefined, members: ['ada@example.com'] })]);
+});
+
+test('once the location is opened, the chat waits for the drive’s root and goes into the folder shown', async () => {
+    createdRooms.length = 0;
+    rootLoaded = false;
+    await openSecondStep();
+    await act(async () => buttonNamed('Change location')?.click());
+    expect(letsChat().disabled).toBe(true);
+    await act(async () => letsChat().click());
+    expect(createdRooms).toEqual([]);
+
+    rootLoaded = true;
+    // Closing the browser draws the wizard again, as the root's arrival does.
+    await act(async () => buttonNamed('Change location')?.click());
+    expect(letsChat().disabled).toBe(false);
+    await act(async () => letsChat().click());
+    expect(createdRooms).toEqual([expect.objectContaining({ parentId: 'root', members: ['ada@example.com'] })]);
 });

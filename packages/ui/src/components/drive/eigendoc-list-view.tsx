@@ -1,8 +1,10 @@
 // A document app's own index, such as all of the viewer's sheets or the docs on one team drive,
 // drawn in Drive's list and detail layout. A row opens its document in the app. An app's routes, such as
-// its index, render it, and the selection lives in the URL they own.
+// its index, render it and hand over themselves, so the view reads its params, the selection and the
+// viewer from that route, and a selected row goes into its URL.
 
 import { openDocument } from '@workspace/lib/api';
+import type { validateDriveSearch } from '@workspace/lib/drive';
 import {
     DEFAULT_MOUNT_ID,
     useAggregateMimeContent,
@@ -20,29 +22,28 @@ import type { EigenDocAppConfig } from './eigendoc-config';
 import { EigenDocDriveContext } from './eigendoc-root';
 import { useDriveQuickLook } from './use-drive-quick-look';
 
-type EigenDocListViewProps = {
-    config: EigenDocAppConfig;
-    viewerId: string;
-    pid?: string;
-    uid?: string;
-    mid?: string;
-    ownerId?: string;
-    mountId?: string;
-    onNavigate: (search: DriveSearchParams) => void;
-    onNavigateBack: () => void;
+// The app route that renders a view, typed by its shape because each app has its own route tree. `types`
+// holds TanStack's type-only fields, so a route whose search skips validateDriveSearch fails to compile.
+// Its navigate stays on the route and its params, so it changes only the search.
+export type EigenDocListRoute<TParams> = {
+    types: { searchValidator: typeof validateDriveSearch };
+    useParams: () => TParams;
+    useSearch: () => DriveSearchParams;
+    useRouteContext: () => { user: { id: string } };
+    useNavigate: () => (options: { search?: DriveSearchParams }) => Promise<void>;
 };
 
-export function EigenDocListView({
-    config,
-    viewerId,
-    pid,
-    uid,
-    mid,
-    ownerId,
-    mountId,
-    onNavigate,
-    onNavigateBack,
-}: EigenDocListViewProps) {
+type EigenDocListViewProps = {
+    config: EigenDocAppConfig;
+    route: EigenDocListRoute<{ ownerId?: string; mountId?: string }>;
+};
+
+export function EigenDocListView({ config, route }: EigenDocListViewProps) {
+    const { ownerId, mountId } = route.useParams();
+    const { pid, uid, mid } = route.useSearch();
+    const viewerId = route.useRouteContext().user.id;
+    const navigate = route.useNavigate();
+    const clearSelection = () => navigate({});
     const { rootPath } = useContext(EigenDocDriveContext);
     const effectiveOwnerId = ownerId ?? viewerId;
     const isMountScoped = !!mountId;
@@ -76,7 +77,7 @@ export function EigenDocListView({
         if (isMobile && isDocumentType(path.type)) {
             openDocument(path);
         } else {
-            onNavigate({ pid: path.id, uid: path.ownerId, mid: path.mountId });
+            navigate({ search: { pid: path.id, uid: path.ownerId, mid: path.mountId } });
         }
     };
 
@@ -92,8 +93,8 @@ export function EigenDocListView({
             onRowSelect={onRowSelect}
             onRowActivate={openDocument}
             onQuickLook={onQuickLook}
-            onBackToList={onNavigateBack}
-            onAfterAction={onNavigateBack}
+            onBackToList={clearSelection}
+            onAfterAction={clearSelection}
             capabilities={capabilities}
             title={config.allLabel}
             currentPath={rootPath}

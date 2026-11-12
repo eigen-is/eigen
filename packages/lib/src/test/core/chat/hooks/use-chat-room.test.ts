@@ -56,9 +56,39 @@ function path(over: Partial<DrivePath> & Pick<DrivePath, 'id' | 'name' | 'type' 
 const media = path({ id: 'media-1', name: 'media', type: 'folder', mimeType: '' });
 const doc = path({ id: 'doc-1', name: 'Plan.eigendoc', type: 'doc', mimeType: DRIVE_MIME_DOC });
 
+// A staged file goes up by XHR, which the fetch stub never sees, so its upload is a post answered the same way.
+let uploadAnswer = { status: 0, body: '' };
+class AnsweredUpload {
+    public withCredentials = false;
+    public status = 0;
+    public responseText = '';
+    public upload = { onprogress: null };
+    public onload: (() => void) | null = null;
+    public onerror: (() => void) | null = null;
+    public onabort: (() => void) | null = null;
+    private url = '';
+
+    public open(_method: string, url: string) {
+        this.url = url;
+    }
+
+    public send() {
+        posts.push(this.url);
+        this.status = uploadAnswer.status;
+        this.responseText = uploadAnswer.body;
+        this.onload?.();
+    }
+
+    public getResponseHeader() {
+        return 'application/json';
+    }
+}
+Object.assign(globalThis, { XMLHttpRequest: AnsweredUpload });
+
 // Reads fail, so the room keeps what the test seeded. Only a post answers with the status under test.
 const posts: string[] = [];
 function answerPostsWith(status: number, body: unknown = { id: 'message-1' }) {
+    uploadAnswer = { status, body: JSON.stringify(body) };
     globalThis.fetch = Object.assign(
         async (input: RequestInfo | URL, init?: RequestInit) => {
             const isPost = init?.method === 'POST' || (input instanceof Request && input.method === 'POST');

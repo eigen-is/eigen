@@ -1,9 +1,9 @@
 // A small Drive browser for picking a file or a folder: a mount list, a breadcrumb and a bare table
-// whose rows have no actions. Pickers and the location field draw it, for example the Copy to… picker,
-// and it reports the folder it is in and the rows the user picks. A folder picker can also make a new folder there.
+// whose rows have no actions. Pickers and the location field draw it, for example the Copy to… picker.
+// Its host holds the location: the browser shows the one it is given and asks for another through onChange.
+// A location with no folder id means the mount's root, which useResolvedDriveLocation fills in.
 
 import {
-    DEFAULT_MOUNT_ID,
     getDriveComparator,
     useBreadcrumb,
     useCreateFolder,
@@ -12,11 +12,10 @@ import {
 } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
-import { Button } from '@workspace/ui/components/button';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { FolderPlus } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { ContextMenuAnchor, useContextMenu } from '../context-menu';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveItemNameDialog } from './drive-item-name-dialog';
@@ -24,22 +23,22 @@ import { DriveMountList, useMountLabel } from './drive-mount-list';
 import type { DriveSortControl } from './drive-table';
 import { DriveTable, useDriveSort } from './drive-table';
 
+export type DriveLocationValue = { ownerId: string; mountId: string; folderId: string };
+
 type DriveBrowserProps = {
-    ownerId: string;
+    value: DriveLocationValue;
+    onChange: (value: DriveLocationValue) => void;
     mode: 'file' | 'folder';
     // Which rows are pickable; every row when omitted.
     canPick?: (item: DrivePath) => boolean;
-    selectedId?: string | null;
+    selectedId?: string;
     onSelect?: (path: DrivePath) => void;
     onConfirm?: (path: DrivePath) => void;
-    onFolderChange?: (folder: DrivePath, mountId: string) => void;
-    defaultMountId?: string;
-    defaultFolderId?: string;
-    showNewFolder?: boolean;
     hideToolbar?: boolean;
     hideHeader?: boolean;
-    createFolderOpen?: boolean;
-    onCreateFolderOpenChange?: (open: boolean) => void;
+    // The open state of the New folder dialog, held by the host that draws its button. Without it, the browser
+    // offers no new folder.
+    newFolder?: { open: boolean; onOpenChange: (open: boolean) => void };
     onSelectionChange?: (items: DrivePath[]) => void;
     ownMountsOnly?: boolean;
     sort?: DriveSortControl;
@@ -47,195 +46,98 @@ type DriveBrowserProps = {
 };
 
 export function DriveBrowser({
-    ownerId,
+    value,
+    onChange,
     mode,
     canPick,
     selectedId,
     onSelect,
     onConfirm,
-    onFolderChange,
-    defaultMountId = DEFAULT_MOUNT_ID,
-    defaultFolderId,
-    showNewFolder = mode === 'folder',
-    hideToolbar = false,
-    hideHeader = false,
-    createFolderOpen: controlledCreateFolderOpen,
-    onCreateFolderOpenChange,
+    hideToolbar,
+    hideHeader,
+    newFolder,
     onSelectionChange,
     ownMountsOnly,
     sort,
     className,
 }: DriveBrowserProps) {
-    const [activeMountId, setActiveMountId] = useState(defaultMountId);
-    const [activeOwnerId, setActiveOwnerId] = useState(ownerId);
-    const [currentFolderId, setCurrentFolderId] = useState<string | null>(defaultFolderId ?? null);
-    const [internalCreateFolderOpen, setInternalCreateFolderOpen] = useState(false);
-    const createFolderOpen = controlledCreateFolderOpen ?? internalCreateFolderOpen;
-    const setCreateFolderOpen = onCreateFolderOpenChange ?? setInternalCreateFolderOpen;
-
     // The "New folder" menu a right-click on the listing area opens. A right-click on a row opens nothing,
     // since the rows stop it from reaching the listing.
     const newFolderMenu = useContextMenu<true>();
 
-    const prevDefaultFolderIdRef = useRef(defaultFolderId);
-    useEffect(() => {
-        if (defaultFolderId !== prevDefaultFolderIdRef.current) {
-            prevDefaultFolderIdRef.current = defaultFolderId;
-            if (defaultFolderId !== undefined) {
-                setCurrentFolderId(defaultFolderId);
-            }
-        }
-    }, [defaultFolderId]);
-
-    // A new owner or mount from the parent moves the browser only when it differs from where the browser is: a
-    // parent catching up through onFolderChange passes back the mount the user just picked.
-    const prevOwnerIdRef = useRef(ownerId);
-    useEffect(() => {
-        if (ownerId !== prevOwnerIdRef.current) {
-            prevOwnerIdRef.current = ownerId;
-            if (ownerId && ownerId !== activeOwnerId) {
-                setActiveOwnerId(ownerId);
-                setCurrentFolderId(null);
-            }
-        }
-    }, [ownerId, activeOwnerId]);
-
-    const prevDefaultMountIdRef = useRef(defaultMountId);
-    useEffect(() => {
-        if (defaultMountId !== prevDefaultMountIdRef.current) {
-            prevDefaultMountIdRef.current = defaultMountId;
-            if (defaultMountId !== activeMountId) {
-                setActiveMountId(defaultMountId);
-                setCurrentFolderId(null);
-            }
-        }
-    }, [defaultMountId, activeMountId]);
-
-    const { data: rootFolder } = useRootFolder(activeOwnerId, activeMountId);
-    const mountLabel = useMountLabel(activeOwnerId, activeMountId);
-    const folderId = currentFolderId ?? rootFolder?.id ?? '';
-    const { data: folderContents = [] } = useFolderContent(activeOwnerId, activeMountId, folderId);
+    const { ownerId, mountId, folderId } = useResolvedDriveLocation(value);
+    const mountLabel = useMountLabel(ownerId, mountId);
+    const { data: folderContents = [] } = useFolderContent(ownerId, mountId, folderId);
     const { key: sortKey, dir: sortDir } = useDriveSort(sort);
     const sortedContents = useMemo(
         () => [...folderContents].sort(getDriveComparator(sortKey, sortDir)),
         [folderContents, sortKey, sortDir],
     );
-    const { data: breadcrumbPaths = [] } = useBreadcrumb(activeOwnerId, activeMountId, folderId);
+    const { data: breadcrumbPaths = [] } = useBreadcrumb(ownerId, mountId, folderId);
     const createFolder = useCreateFolder();
+    const currentPath = breadcrumbPaths.at(-1);
 
-    useEffect(() => {
-        if (!currentFolderId && rootFolder) {
-            setCurrentFolderId(rootFolder.id);
-            onFolderChange?.(rootFolder, activeMountId);
+    const isItemDisabled = (item: DrivePath) =>
+        !isFolderType(item.type) && (mode === 'folder' || canPick?.(item) === false);
+    const openFolder = (folder: DrivePath) => onChange({ ownerId: folder.ownerId, mountId, folderId: folder.id });
+
+    const handleItemClick = (item: DrivePath) => {
+        if (isItemDisabled(item)) return;
+        if (isFolderType(item.type)) {
+            openFolder(item);
+        } else if (onConfirm && selectedId === item.id) {
+            // A click on the row that is already selected confirms it, so the user need not go to the Select button.
+            onConfirm(item);
+        } else {
+            onSelect?.(item);
         }
-    }, [currentFolderId, rootFolder, activeMountId, onFolderChange]);
-
-    const currentPath = breadcrumbPaths.at(-1) ?? null;
-
-    const isPickable = useCallback((item: DrivePath) => canPick?.(item) ?? true, [canPick]);
-
-    const handleMountSelect = useCallback((newOwnerId: string, mountId: string) => {
-        setActiveOwnerId(newOwnerId);
-        setActiveMountId(mountId);
-        setCurrentFolderId(null);
-    }, []);
-
-    const navigateToFolder = useCallback(
-        (folder: DrivePath) => {
-            setCurrentFolderId(folder.id);
-            onFolderChange?.(folder, activeMountId);
-        },
-        [activeMountId, onFolderChange],
-    );
-
-    const handleItemClick = useCallback(
-        (item: DrivePath) => {
-            if (isFolderType(item.type)) {
-                navigateToFolder(item);
-            } else if (mode === 'file' && isPickable(item)) {
-                // With onConfirm and selectedId both set, a click on the row that is already selected confirms
-                // it, so the user need not go to the Select button.
-                if (onConfirm && selectedId === item.id) {
-                    onConfirm(item);
-                } else {
-                    onSelect?.(item);
-                }
-            }
-        },
-        [navigateToFolder, mode, isPickable, onSelect, onConfirm, selectedId],
-    );
-
-    const handleCreateFolder = async (folderName: string) => {
-        const newFolder = await createFolder.mutateAsync({
-            ownerId: activeOwnerId,
-            mountId: activeMountId,
-            parentId: folderId,
-            folderName,
-        });
-        navigateToFolder(newFolder);
     };
-
-    const isItemDisabled = useCallback(
-        (item: DrivePath) => {
-            if (mode === 'folder') return !isFolderType(item.type);
-            return !isFolderType(item.type) && !isPickable(item);
-        },
-        [mode, isPickable],
-    );
-
-    const contentArea = (
-        <div
-            className="flex-1 flex flex-col min-w-0"
-            onContextMenu={showNewFolder ? (e) => newFolderMenu.handleContextMenu(e, true) : undefined}
-        >
-            {!hideToolbar && (
-                <div className="flex items-center gap-2 h-10 app-gutter-x border-b shrink-0">
-                    <DriveBreadcrumb
-                        paths={breadcrumbPaths}
-                        mountLabel={mountLabel}
-                        onNavigate={navigateToFolder}
-                        className="flex-1"
-                    />
-                    {showNewFolder && (
-                        <Button variant="ghost" size="sm" onClick={() => setCreateFolderOpen(true)}>
-                            <FolderPlus className="h-4 w-4 mr-1" />
-                            New folder
-                        </Button>
-                    )}
-                </div>
-            )}
-            <DriveTable
-                items={sortedContents}
-                activeItemId={selectedId ?? undefined}
-                onItemClick={handleItemClick}
-                isItemDisabled={isItemDisabled}
-                hideModified
-                hideOwner
-                hideShareClick
-                hideActions
-                hideHeader={hideHeader}
-                onSelectionChange={onSelectionChange}
-                sort={sort}
-            />
-        </div>
-    );
 
     return (
         <div className={cn('flex h-full', className)}>
             <div className="hidden sm:block w-44 border-r p-2 overflow-y-auto shrink-0">
                 <DriveMountList
-                    activeMountId={activeMountId}
-                    activeOwnerId={activeOwnerId}
-                    onMountSelect={handleMountSelect}
+                    activeMountId={mountId}
+                    activeOwnerId={ownerId}
+                    onMountSelect={(mountOwnerId, pickedMountId) =>
+                        onChange({ ownerId: mountOwnerId, mountId: pickedMountId, folderId: '' })
+                    }
                     ownMountsOnly={ownMountsOnly}
                 />
             </div>
-            {contentArea}
-            {showNewFolder && (
+            <div
+                className="flex-1 flex flex-col min-w-0"
+                onContextMenu={newFolder ? (e) => newFolderMenu.handleContextMenu(e, true) : undefined}
+            >
+                {!hideToolbar && (
+                    <div className="flex items-center gap-2 h-10 app-gutter-x border-b shrink-0">
+                        <DriveBreadcrumb
+                            paths={breadcrumbPaths}
+                            mountLabel={mountLabel}
+                            onNavigate={openFolder}
+                            className="flex-1"
+                        />
+                    </div>
+                )}
+                <DriveTable
+                    items={sortedContents}
+                    activeItemId={selectedId}
+                    onItemClick={handleItemClick}
+                    isItemDisabled={isItemDisabled}
+                    hideModified
+                    hideOwner
+                    hideShareClick
+                    hideActions
+                    hideHeader={hideHeader}
+                    onSelectionChange={onSelectionChange}
+                    sort={sort}
+                />
+            </div>
+            {newFolder && (
                 <ContextMenuAnchor contextMenu={newFolderMenu} className="min-w-48">
                     <DropdownMenuItem
                         onClick={() => {
-                            setCreateFolderOpen(true);
+                            newFolder.onOpenChange(true);
                             newFolderMenu.close();
                         }}
                     >
@@ -244,15 +146,24 @@ export function DriveBrowser({
                     </DropdownMenuItem>
                 </ContextMenuAnchor>
             )}
-            {showNewFolder && currentPath && (
+            {newFolder && currentPath && (
                 <DriveItemNameDialog
-                    open={createFolderOpen}
-                    onOpenChange={setCreateFolderOpen}
-                    onSave={handleCreateFolder}
+                    open={newFolder.open}
+                    onOpenChange={newFolder.onOpenChange}
+                    onSave={async (folderName) =>
+                        openFolder(await createFolder.mutateAsync({ ownerId, mountId, parentId: folderId, folderName }))
+                    }
                     type="Folder"
                     path={currentPath}
                 />
             )}
         </div>
     );
+}
+
+// The location with an empty folder id filled in as the mount's root, which stays empty until the root has loaded.
+// A host that stays mounted while its picker is closed passes false then, so a closed picker reads no root.
+export function useResolvedDriveLocation(value: DriveLocationValue, enabled = true): DriveLocationValue {
+    const { data: rootFolder } = useRootFolder(enabled ? value.ownerId : '', value.mountId);
+    return value.folderId ? value : { ...value, folderId: rootFolder?.id ?? '' };
 }

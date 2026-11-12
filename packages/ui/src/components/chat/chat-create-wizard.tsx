@@ -37,7 +37,8 @@ import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { ContactAddRow } from '../contacts/contact-add-row';
 import { useContactInput } from '../contacts/use-contact-input';
-import type { DriveLocationValue } from '../drive/drive-location-field';
+import type { DriveLocationValue } from '../drive/drive-browser';
+import { useResolvedDriveLocation } from '../drive/drive-browser';
 import { DriveLocationField } from '../drive/drive-location-field';
 import { InfoBlock, STRETCHED_TRIGGER_CLASS } from '../info-block';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
@@ -81,6 +82,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     const [locationTouched, setLocationTouched] = useState(false);
     const [locationExpanded, setLocationExpanded] = useState(false);
     const [createError, setCreateError] = useState<string | null>(null);
+    const destination = useResolvedDriveLocation(location, locationTouched);
 
     const selectedTeam = myTeams?.find((t) => t.id === selectedTeamId) ?? null;
     const teamMode = !!selectedTeam;
@@ -106,10 +108,8 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
         myOwnerId,
         open && !teamMode ? debouncedEmails : [],
     );
-    // The lookup has settled once the debounce has caught up and the current key has resolved or failed.
-    // isPending also covers the idle frame before the fetch starts, which isLoading misses. The match panel
-    // and step 1 both wait on this one check, so they never disagree. A failed lookup settles, and the
-    // wizard falls through to create.
+    // isPending also covers the idle frame before the fetch starts, which isLoading misses. A failed lookup
+    // settles too, and the wizard falls through to create.
     const personLookupPending = debouncedKey !== pickedKey || matchesPending;
     const matches = personLookupPending ? [] : fetchedMatches;
 
@@ -118,11 +118,12 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
 
     // Every match has exactly the picked people and me as its members.
     const memberCount = picked.length + 1;
-    // When an existing chat matches, the main button opens the first one. "Create new chat" leads to step 2 instead.
     const hasMatches = teamMode ? teamChats.length > 0 : matches.length > 0;
     const isBusy = createRoom.isPending || createTeamRoom.isPending;
-    // Both modes need a name. An empty one would create a file called just '.eigenchat'.
-    const canCreate = !!name.trim() && (teamMode ? !!teamRootId : picked.length > 0);
+    // An empty name would create a file called just '.eigenchat'. A location the user opened has no folder
+    // until its drive's root has loaded.
+    const canCreate =
+        !!name.trim() && (teamMode ? !!teamRootId : picked.length > 0 && (!locationTouched || !!destination.folderId));
     // Step 1 waits for the lookup to settle, so a quick Enter can't skip past an existing chat. A team
     // without a drive stays on step 1, which says so.
     const lookupPending = teamMode ? teamChatsLoading : personLookupPending;
@@ -220,7 +221,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                 teamMode
                     ? await createTeamRoom.mutateAsync({ fileName, members: [] })
                     : await createRoom.mutateAsync({
-                          parentId: locationTouched ? location.folderId || undefined : undefined,
+                          parentId: locationTouched ? destination.folderId : undefined,
                           fileName,
                           members: pickedEmails,
                           dedupeName: !nameDirty,
@@ -244,7 +245,6 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                 </DialogHeader>
 
                 {step === 1 ? (
-                    /* Step 1 — who: an ACL-style people picker mirroring the share dialog. */
                     <div className="flex flex-1 flex-col min-h-0">
                         {teamMode ? (
                             <div className="shrink-0 px-6 pt-4 pb-2">
@@ -345,7 +345,6 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                               )}
                     </div>
                 ) : (
-                    /* Step 2 — confirm: name + location. */
                     <div className="flex flex-1 flex-col min-h-0">
                         <div className="shrink-0 px-6 pt-4 pb-2">
                             <Label htmlFor="chat-wizard-name" className="text-sm text-muted-foreground">

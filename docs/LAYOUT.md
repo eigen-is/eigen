@@ -81,7 +81,7 @@ The detail column's Location row reads the parent's `useBreadcrumb`, the query t
 
 `DriveItemMenuItems` (`drive-item-menu.tsx`) is the menu both the row's context menu and the detail column's ⋮ draw, for one item or a multi-selection, which gets only the rows with a `pluralLabel`. Each row is a `DriveActionMenuItem`, which the File menu and Trash's menu draw too. A row's `shortcut` is the hotkey constant the listing's key handler compares against, so the menu shows the key that acts; only the row's context menu names keys, because they act on the listing. The shared file actions come in through `FileActionMenuItems`, minus Save to Drive, which Drive's own Copy to… already says. Space, the detail preview and the menu row all go through the file-action registry, so none of them previews a folder ([PREVIEWS.md](PREVIEWS.md#the-host-mounts-the-runners-dialogs)).
 
-`DriveBrowser` is a lighter layer over the same table, with no dialogs and no detail column, for the file picker and the location field.
+`DriveBrowser` is a lighter layer over the same table, with no dialogs and no detail column, for the file picker and the location field. It keeps no location of its own: its host holds one `DriveLocationValue` (owner, mount, folder), the browser draws that and asks for another through `onChange`, so a folder click, a mount click and a host that moves all go one way. A mount click asks for the mount with an empty folder id, which means its root. `useResolvedDriveLocation` is the one place that fills the root in, from the loaded root during render, and it stays empty while the root loads. The browser and the location field call it to draw, and a host that confirms a destination, such as `DriveLocationPicker` or the new chat dialog, calls it for what it hands on and keeps its confirm button disabled until the folder is there. Such a host is mounted while its dialog is closed, often for a drive the viewer cannot read, so it passes `enabled` false then and a closed picker reads no root.
 
 ## Menus draw their rows in one order
 
@@ -171,7 +171,7 @@ A fixed color mapped onto the palette (`eigenColor(name, step)`) takes the neare
 
 ## The document apps reach Drive through one config
 
-Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Sheets go through `EigenDocListView` and `EigenDocSharedView`, configured by `buildConfig` in `eigendoc-config.ts` from the EigenDocType registry, so an app gets its sidebar, list and shared views without Drive code of its own.
+Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Sheets go through `EigenDocListView` and `EigenDocSharedView`, configured by `buildConfig` in `eigendoc-config.ts` from the EigenDocType registry, so an app gets its sidebar, list and shared views without Drive code of its own. Each list route is its `createFileRoute` line, `validateDriveSearch` and `<EigenDocListView config={…} route={Route} />`: the view reads the params, the selection and the viewer from the route it is handed, typed by shape (`EigenDocListRoute`) since every app has its own route tree, and that type fails to compile for a route whose search skips `validateDriveSearch`.
 
 ## Every Drive list has one empty text and one error text
 

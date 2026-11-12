@@ -11,6 +11,7 @@ import { stubCanvasImageFonts } from '@workspace/ui/test/canvas-image';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
+import { answerUploads } from '../../fixtures/answered-upload';
 import { withBrowserFrames } from '../../fixtures/browser-frames';
 import { waitUntil } from '../../fixtures/wait-until';
 
@@ -82,18 +83,14 @@ const path = drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC });
 // Every request answers empty, but the chat folder, which lists one thread, and an upload, which answers when the test
 // lets it.
 const thread = { ...path, id: 'chat-a', name: 'thread-1.eigenchat', parentId: 'chat', mimeType: DRIVE_MIME_CHAT };
-let finishUpload = (_name: string) => {};
+const finishUpload = answerUploads(path);
 let commentRows: object[] = [];
 spyOn(globalThis, 'fetch').mockImplementation(
     Object.assign(
-        async (input: RequestInfo | URL, init?: RequestInit) => {
+        async (input: RequestInfo | URL) => {
             if (String(input).includes('/folder/chat')) return Response.json([thread]);
             if (String(input).endsWith('/comments')) return Response.json(commentRows);
-            if (init?.method !== 'POST') return Response.json([]);
-            const name = await new Promise<string>((resolve) => {
-                finishUpload = resolve;
-            });
-            return Response.json([{ ...path, id: name, name, parentId: 'media', mimeType: 'image/png' }]);
+            return Response.json([]);
         },
         { preconnect: fetch.preconnect },
     ),
