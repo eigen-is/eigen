@@ -45,11 +45,13 @@ export class Sheet {
 
     public insertColumns(index: number, count: number): number {
         if (index >= this.held.length) return 0;
-        const blank = Array.from({ length: count }, () => new Column(0));
-        this.held.splice(index, 0, ...blank);
+        // Columns from `kept` on would land past the last column of the grid.
+        const kept = Math.max(index, Math.min(this.held.length, GRID_COLUMNS - count));
         let dropped = 0;
-        for (let c = GRID_COLUMNS; c < this.held.length; c += 1) dropped += this.held[c].cells(0, GRID_ROWS);
-        if (this.held.length > GRID_COLUMNS) this.held.length = GRID_COLUMNS;
+        for (let c = kept; c < this.held.length; c += 1) dropped += this.held[c].cells(0, GRID_ROWS);
+        this.held.length = kept;
+        // With no column left to push along, the new ones are columns that were never written.
+        if (kept > index) this.held.splice(index, 0, ...Array.from({ length: count }, () => new Column(0)));
         return dropped;
     }
 
