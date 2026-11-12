@@ -91,6 +91,7 @@ export type Counts = {
     undone: number;
     rewrites: number;
     several: number;
+    refused: number;
 };
 
 type Op =
@@ -141,6 +142,7 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
         undone: 0,
         rewrites: 0,
         several: 0,
+        refused: 0,
     };
     const rows = edge === Edge.Rows ? [...span(0, 5), ...span(GRID_ROWS - 6, 6)] : span(0, 10);
     const columns =
@@ -453,6 +455,33 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
             const drawn = pick(6 + Math.ceil(12 / sheets));
             return drawn < 3 ? lineEdit() : drawn < 6 ? blockMove() : sheetEdit();
         };
+        // An edit as it comes from someone who has not heard that a sheet went, or that names no line: the engine
+        // refuses it, and holds what it held.
+        const refuse = () => {
+            const gone = removed.length > 0 ? one(removed).id : 's0';
+            const from = { fromSheet: present(), row: one(rows), column: one(columns), rows: 1, columns: 1 };
+            const refused = one([
+                () => engine.editLines({ insert: true, index: one(rows), count: 1, sheet: gone, rows: true }),
+                () => engine.editLines({ insert: false, index: -1 - pick(3), count: 1, sheet: present(), rows: true }),
+                () => engine.editLines({ insert: true, index: one(columns), count: 0, sheet: present(), rows: false }),
+                () => engine.moveCells({ ...from, toSheet: gone, toRow: one(rows), toColumn: one(columns) }),
+                () => engine.moveCells({ ...from, toSheet: present(), toRow: GRID_ROWS, toColumn: one(columns) }),
+                () => engine.renameSheet(gone, 'Later'),
+                () => engine.removeSheet(gone),
+                () => engine.moveSheet(gone, 0),
+                () => engine.addSheet(handed({ ...one(model), name: 'Later' }), 0),
+            ]);
+            log.push('refused');
+            let threw = false;
+            try {
+                refused();
+            } catch {
+                threw = true;
+            }
+            if (!threw) fail('an edit to be refused went through');
+            inputs();
+            counts.refused += 1;
+        };
         const write = (sheet: string, row: number, column: number, cell: Cell | null) => {
             const text = cell === null ? null : textOf(cell, row, column);
             log.push(`write ${sheet} ${row},${column} ${text ?? show(cell?.value ?? null)}`);
@@ -576,8 +605,10 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
                     }
                     unmarked = true;
                 } else write(sheet, row, column, what === 1 ? null : what < 4 ? value() : formula());
-            } else if (drawn < 10) perform(anyEdit());
-            else if (drawn < 12) recalc(NO_CAP);
+            } else if (drawn < 10) {
+                if (pick(5) === 0) refuse();
+                perform(anyEdit());
+            } else if (drawn < 12) recalc(NO_CAP);
             else if (drawn < 14) recalc(1 + pick(8));
             else {
                 // An edit, taken back, and done again. What was written before it is computed first, as undo's

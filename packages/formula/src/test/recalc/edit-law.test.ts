@@ -15,6 +15,7 @@ describe('after any edits, writes and recalcs the engine equals a fresh load of 
         expect(counts.several).toBeGreaterThan(COUNT ? 0 : 100);
         expect(counts.stopped).toBeGreaterThan(COUNT ? 0 : 100);
         expect(counts.loops).toBeGreaterThan(COUNT ? 0 : 1000);
+        expect(counts.refused).toBeGreaterThan(COUNT ? 0 : 100);
     }, 120_000);
     test('sheets that come, go, come back, are renamed and change place', () => {
         const counts = runLaw(SEED + 1, COUNT || 100, 14, Edge.None, 1);

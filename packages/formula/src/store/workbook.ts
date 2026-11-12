@@ -91,7 +91,6 @@ export class Workbook {
                 this.known(change.move.toSheet).moveFrom(this.known(change.move.fromSheet), change.move);
                 return 0;
             case ChangeKind.AddSheet: {
-                if (this.byId.has(change.source.id)) throw new Error(`Sheet ${change.source.id} exists`);
                 const sheet = this.load(change.source);
                 // Whatever values its formulas came with were computed against another workbook than this one.
                 for (const column of sheet.columns) {
