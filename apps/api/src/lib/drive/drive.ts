@@ -1,7 +1,7 @@
-// Drive is one owner's file tree, spread over the owner's mounts. It does the work behind every file
-// action, such as upload, move, trash, sharing and history, and tells open tabs what changed. A home
-// with files builds one Drive and destructs it when the home closes. Most routes reach it through
-// getSharedDrive, which checks access. The few owner-only routes check the owner themselves. Other
+// Drive is one owner's file tree, spread over the owner's mounts. It does the work behind every file action, such as
+// upload, move, trash, sharing and history, some of it in functions beside it that take the drive, and tells open
+// tabs what changed. A home with files builds one Drive and destructs it when the home closes. Most routes reach it
+// through getSharedDrive, which checks access, and the few owner-only routes check the owner themselves. Other
 // public methods serve server code, such as chat, collab and the home relay.
 
 import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
@@ -543,9 +543,8 @@ export class Drive {
         await this.changePlace(mount, await this.personPath(mount, pathId), { name: newName }, user);
     }
 
-    // Puts a path in a folder under exactly this name, as a WebDAV MOVE asks: a move, a rename or both, in one write.
-    // What holds the name is replaced only after every check of the move has passed. `checkedId` is the path the
-    // caller found there and checked, or null for a free name.
+    // A WebDAV MOVE: a move, a rename or both in one write. What holds the name is replaced only once every check has
+    // passed, and `checkedId` is the path the caller found there and checked, or null for a free name.
     public async movePathOver(
         mountId: string,
         pathId: string,
@@ -648,9 +647,8 @@ export class Drive {
         return this.withHomeHeld(() => to.drive.receiveCopy(to.mountId, to.parentId, source, src, desiredName, user));
     }
 
-    // Copies a path into a folder of its own mount under exactly this name, as a WebDAV COPY with Overwrite: T asks.
-    // What holds the name is replaced only after every check of the copy has passed. `checkedId` is as for
-    // movePathOver.
+    // A WebDAV COPY with Overwrite: T, into this mount under exactly this name. What holds the name is replaced only
+    // once every check has passed, and `checkedId` is as for movePathOver.
     public async copyPathOver(
         mountId: string,
         srcPathId: string,
@@ -849,9 +847,8 @@ export class Drive {
         return canWriteFromAncestors(ancestors, user, memberships ?? (await getMemberships(user.id)));
     }
 
-    // Routes change an ACL only through here, merged onto the ACL as it is now. Two changes to one path run in turn, or
-    // the one that writes last would drop the entries of the other. A path in the trash keeps its ACL as it is, because
-    // the restore shares it again with the same people.
+    // Merged onto the ACL as it is now, one change per path at a time, or the later write would drop the other's
+    // entries. A path in the trash keeps its ACL as it is, because the restore shares it again.
     public async updateACLDelta(
         mountId: string,
         pathId: string,
@@ -908,9 +905,8 @@ export class Drive {
         return membersFromCrumbs(this.owner, await mount.getBreadcrumb(pathId));
     }
 
-    // The members to tell about a change to the path. A folder's change also reaches the sharees of the paths shared
-    // below it, as their Shared with me shows each of those where it lives. An unshared path in a user's home has
-    // nobody but the owner, so the answer costs no account lookup, which halves what such an event costs.
+    // A folder's change also reaches the sharees of the paths shared below it, as their Shared with me shows those
+    // where they live. An unshared path in a user's home has only its owner, so it costs no account lookup.
     public async membersToTell(mountId: string, pathId: string): Promise<EffectiveMember[]> {
         const mount = this.getMount(mountId);
         const crumbs = await mount.getBreadcrumb(pathId);
