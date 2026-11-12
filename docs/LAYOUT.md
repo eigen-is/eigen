@@ -171,7 +171,7 @@ A fixed color mapped onto the palette (`eigenColor(name, step)`) takes the neare
 
 ## The document apps reach Drive through one config
 
-Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Sheets go through `EigenDocListView` and `EigenDocSharedView`, configured by `buildConfig` in `eigendoc-config.ts` from the EigenDocType registry, so an app gets its sidebar, list and shared views without Drive code of its own.
+Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Sheets go through `EigenDocListView` and `EigenDocSharedView`, configured by `buildConfig` in `eigendoc-config.ts` from the EigenDocType registry, so an app gets its sidebar, list and shared views without Drive code of its own. Each list route is its `createFileRoute` line, `validateDriveSearch` and `<EigenDocListView config={…} route={Route} />`: the view reads the params, the selection and the viewer from the route it is handed, typed by shape (`EigenDocListRoute`) since every app has its own route tree, and that type fails to compile for a route whose search skips `validateDriveSearch`.
 
 ## Every Drive list has one empty text and one error text
 
