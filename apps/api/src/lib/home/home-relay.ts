@@ -445,14 +445,17 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
 }
 
 // A backup opens the home without counting as a request and holds it while the capture runs, so a nightly backup leaves
-// open only the homes somebody uses. A home is never closed by force: a user may have opened it during the capture.
+// open only the homes somebody uses. The backup never closes the home: a user may have opened it during the capture. A
+// home that closes meanwhile, such as for a team drive switched on, fails the capture, which read parts of it closed.
 export async function pullHomeSnapshot(
     ownerId: string,
     targetDir: string,
     options: { level?: BackupLevel; onProgress?: BackupProgress },
 ): Promise<BackupManifest> {
     const home = await openHome(ownerId);
-    return home.withHomeHeld(() => snapshotHome(home, targetDir, options));
+    const manifest = await home.withHomeHeld(() => snapshotHome(home, targetDir, options));
+    if (home.closing) throw new Error('the home closed during the capture');
+    return manifest;
 }
 
 // The server backup sizes every home through here before it starts, to check that there is room.
