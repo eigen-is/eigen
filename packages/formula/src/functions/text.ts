@@ -2,12 +2,13 @@
 // characters from 1. A count is refused for its sign before its fraction is cut: LEFT("abc",-0.9) is #VALUE!.
 // What a character is, how letters change case and how a number is shown are kernels these rows only call.
 
-import { numberAsText } from '../format/number-display';
+import { valueAsText } from '../format/number-display';
 import { ansiCharacter, ansiCode } from '../values/ansi';
 import { countCharacters, cutCharacters, findCharacters, firstCode, searchCharacters } from '../values/characters';
 import { partBeside } from '../values/delimited';
 import { CALC, NA, VALUE } from '../values/errors';
 import { lowerCase, properCase, upperCase } from '../values/letter-case';
+import { fixedText } from '../values/number-text';
 import { parseNumber } from '../values/parse-number';
 import { roundDecimal } from '../values/precision';
 import { separatedNumber } from '../values/separated-number';
@@ -17,7 +18,7 @@ import { BOOLEAN, fn, INTEGER, NUMBER, optional, PLAIN, rest, skippable, strict,
 // Past this a position is no position: MID("abc",2^31,1) is #VALUE!.
 const MOST = 2 ** 31;
 
-// REPT, CODE and UNICODE still refuse a text longer than the one Excel once held.
+// REPT, CODE and UNICODE still refuse a text longer than the one Excel once held, and FIXED and DOLLAR write none.
 const OLD_LONGEST_TEXT = 255;
 
 // The most decimals FIXED and DOLLAR write.
@@ -29,10 +30,10 @@ const LAST_CODE_POINT = 0x10ffff;
 const UNSEEN = /[^\P{Cc}\x7f]/gu;
 
 // The number rounded as ROUND does, with exactly `decimals` digits after the point.
-function fixed(number: number, decimals: number, whole: string) {
+function fixed(number: number, decimals: number, grouped: boolean) {
     if (decimals > MOST_DECIMALS) return VALUE;
-    const format = decimals > 0 ? `${whole}.${'0'.repeat(decimals)}` : whole;
-    return numberAsText(roundDecimal(number, decimals), format) ?? VALUE;
+    const text = fixedText(roundDecimal(number, decimals), decimals, grouped);
+    return countCharacters(text) > OLD_LONGEST_TEXT ? VALUE : text;
 }
 
 // TEXTBEFORE and TEXTAFTER. An instance that was written is refused when the text has no room for that many
@@ -171,18 +172,20 @@ export const TEXT_FUNCTIONS = [
         if (decimal === '' || groups === '' || group === decimal) return VALUE;
         return separatedNumber(text, decimal, group) ?? VALUE;
     }),
-    // A text that reads as a number is shown as that number, and any other text and a boolean as they are.
+    // A text that reads as a number is shown as that number. Any other text goes through the text section of the
+    // format and stays as it is under a format that does not parse, and a boolean is its name.
     fn('TEXT', [PLAIN, TEXT], (value, format) => {
-        const number = value === null ? 0 : typeof value === 'string' ? parseNumber(value) : value;
-        if (typeof number !== 'number') return value === true ? 'TRUE' : value === false ? 'FALSE' : value;
+        if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+        const number = typeof value === 'string' ? (parseNumber(value) ?? value) : (value ?? 0);
+        if (typeof number === 'string') return valueAsText(number, format) ?? number;
         if (format === '') return number < 0 ? '-' : '';
-        return numberAsText(number, format) ?? VALUE;
+        return valueAsText(number, format) ?? VALUE;
     }),
     fn('FIXED', [NUMBER, skippable(INTEGER, 2), optional(BOOLEAN, false)], (number, decimals, plain) =>
-        fixed(number, decimals, plain ? '0' : '#,##0'),
+        fixed(number, decimals, !plain),
     ),
     fn('DOLLAR', [NUMBER, optional(INTEGER, 2)], (number, decimals) => {
-        const digits = fixed(Math.abs(number), decimals, '#,##0');
+        const digits = fixed(Math.abs(number), decimals, true);
         return isError(digits) ? digits : number < 0 ? `($${digits})` : `$${digits}`;
     }),
     fn(

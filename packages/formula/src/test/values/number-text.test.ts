@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { numberToText } from '../../values/number-text';
+import { fixedText, numberToText } from '../../values/number-text';
 import { parseNumber } from '../../values/parse-number';
 import { round15 } from '../../values/precision';
 
@@ -128,5 +128,33 @@ describe('numberToText', () => {
             const n = (random() - 0.5) * 10 ** Math.floor(random() * 60 - 30);
             expect([n, parseNumber(numberToText(n))]).toEqual([n, round15(n)]);
         }
+    });
+});
+
+describe('fixedText', () => {
+    test('exactly that many digits after the point, and none at 0 or below', () => {
+        expect(fixedText(1234.57, 2, false)).toBe('1234.57');
+        expect(fixedText(1234.5, 3, false)).toBe('1234.500');
+        expect(fixedText(1235, 0, false)).toBe('1235');
+        expect(fixedText(1200, -2, false)).toBe('1200');
+        expect(fixedText(0, 2, false)).toBe('0.00');
+        expect(fixedText(0.05, 2, false)).toBe('0.05');
+        expect(fixedText(0.000123, 6, false)).toBe('0.000123');
+        expect(fixedText(-0.5, 1, false)).toBe('-0.5');
+    });
+
+    test('a comma between every three digits before the point', () => {
+        expect(fixedText(999, 0, true)).toBe('999');
+        expect(fixedText(1000, 0, true)).toBe('1,000');
+        expect(fixedText(-123456.5, 1, true)).toBe('-123,456.5');
+        expect(fixedText(1234567, 2, true)).toBe('1,234,567.00');
+    });
+
+    test('the 15 digits Excel holds, and zeros after them', () => {
+        expect(fixedText(5e20, 2, false)).toBe('500000000000000000000.00');
+        expect(fixedText(1e21, 0, true)).toBe('1,000,000,000,000,000,000,000');
+        expect(fixedText(1.2345678901234568e17, 0, false)).toBe('123456789012346000');
+        expect(fixedText(1 / 3, 20, false)).toBe('0.33333333333333300000');
+        expect(fixedText(1e300, 0, false).length).toBe(301);
     });
 });

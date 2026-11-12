@@ -1,6 +1,7 @@
-// A number as text, the way the & operator and text parameters see it: Excel's General at 15 significant digits,
-// whatever number format the cell has. LEN(1/3) is 17 because of it. The digits are written plainly while they fit
-// and in scientific notation past that. Display in a cell is another matter and belongs to the number formats.
+// A number as text without a number format: the way the & operator and text parameters see it, Excel's General
+// at 15 significant digits, so LEN(1/3) is 17, and the way FIXED and DOLLAR write it out. Both write the 15 digits
+// Excel holds, and zeros where a large number has more. Display in a cell is another matter and belongs to the
+// number formats.
 
 // The longest plain form, counted without its sign; a longer one is written in scientific notation.
 const PLAIN_LENGTH = 20;
@@ -25,4 +26,21 @@ export function numberToText(n: number): string {
     const power = Math.abs(exponent);
     const fraction = digits.length > 1 ? `.${digits.slice(1)}` : '';
     return `${sign}${digits.charAt(0)}${fraction}E${exponent < 0 ? '-' : '+'}${power < 10 ? '0' : ''}${power}`;
+}
+
+// The number with exactly `decimals` digits after the point and, when `grouped`, a comma between every three
+// before it. It takes a number that holds no more decimals than that, as roundDecimal leaves it.
+export function fixedText(n: number, decimals: number, grouped: boolean): string {
+    const text = Math.abs(n).toExponential(14);
+    const digits = text.charAt(0) + text.slice(2, 16);
+    const exponent = Number(text.slice(17));
+    let fixed = exponent < 0 ? '0' : digits.slice(0, exponent + 1).padEnd(exponent + 1, '0');
+    if (grouped) {
+        for (let at = fixed.length - 3; at > 0; at -= 3) fixed = `${fixed.slice(0, at)},${fixed.slice(at)}`;
+    }
+    if (decimals > 0) {
+        const after = exponent < 0 ? '0'.repeat(-exponent - 1) + digits : digits.slice(exponent + 1);
+        fixed += `.${after.slice(0, decimals).padEnd(decimals, '0')}`;
+    }
+    return n < 0 ? `-${fixed}` : fixed;
 }

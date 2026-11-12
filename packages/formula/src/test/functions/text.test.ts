@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { CALC, DIV0, NA, VALUE } from '../../index';
+import { grouped, seeded, typedDecimal } from '../format/typed-decimal';
 import type { Cells } from '../recalc/support';
 import { evaluate } from '../recalc/support';
 
@@ -362,6 +363,19 @@ describe('numbers as text', () => {
         ['=TEXT("2024-03-15","d mmm")', '15 Mar'],
         ['=TEXT("12:30","h:mm")', '12:30'],
         ['=TEXT(B4,"0")', DIV0],
+        ['=TEXT("a","0;;;""t:""@")', 't:a'],
+        ['=TEXT(TRUE,"0;;;""t:""@")', 'TRUE'],
+        ['=TEXT("abc",TRUE)', 'abc'],
+        ['=TEXT(1.005,"0.00")', '1.01'],
+        ['=TEXT(-1.005,"0.00")', '-1.01'],
+        ['=TEXT(0.145,"0.00")', '0.15'],
+        ['=TEXT(74.945,"#,##0.00")', '74.95'],
+        ['=TEXT(1.255,"$0.00")', '$1.26'],
+        ['=TEXT(0.285,"0%")', '29%'],
+        ['=TEXT(0.01005,"0.00%")', '1.01%'],
+        ['=TEXT(1.005,"0.00")=FIXED(1.005,2)', true],
+        ['=TEXT(PI(),"0.000000000000000000")', '3.141592653589790000'],
+        ['=TEXT(1/3,"0.00000000000000000000")', '0.33333333333333300000'],
     ]);
     // The day line is Google's, by the owner's pick: day 0 is 30 December 1899, a negative number is an earlier day
     // and 1900 has no 29 February. Excel answers 1900-01-00 for 0, 1900-02-29 for 60 and #VALUE! below 0.
@@ -390,6 +404,13 @@ describe('numbers as text', () => {
         ['=TEXT(-141639,"dddd")', ''],
         ['=TEXT(-0.25,"dddd")', 'Saturday'],
     ]);
+    // numfmt defect: half a second before midnight the time is 0:00:00 and the day stays, where DAY answers 16.
+    // And from 1E+21 on it has no digits, where Excel writes all 22.
+    rows('TEXT at midnight and from 1E+21', [
+        ['=TEXT(45000.999995,"yyyy-mm-dd hh:mm:ss")', '2023-03-15 00:00:00'],
+        ['=DAY(45000.999995)', 16],
+        ['=TEXT(1E+21,"0")', VALUE],
+    ]);
     rows('FIXED', [
         ['=FIXED(1234.567)', '1,234.57'],
         ['=FIXED(1234.567,,FALSE)', '1,234.57'],
@@ -410,6 +431,18 @@ describe('numbers as text', () => {
         ['=FIXED(1.005,2)', '1.01'],
         ['=FIXED(1E+15,2,TRUE)', '1000000000000000.00'],
         ['=FIXED(5E+20,0,TRUE)', '500000000000000000000'],
+        ['=FIXED(5E+20,2,TRUE)', '500000000000000000000.00'],
+        ['=FIXED(5E+20,-2,TRUE)', '500000000000000000000'],
+        ['=FIXED(1E+21,0)', '1,000,000,000,000,000,000,000'],
+        ['=FIXED(1E+21,0,TRUE)', '1000000000000000000000'],
+        ['=FIXED(123456789012345678,1,TRUE)', '123456789012345000.0'],
+        ['=FIXED(0.000001,2,TRUE)', '0.00'],
+        ['=FIXED(0,-2,TRUE)', '0'],
+        ['=FIXED(-0.001,2)', '0.00'],
+        ['=FIXED(999.995,2)', '1,000.00'],
+        ['=FIXED(0.05,1,TRUE)', '0.1'],
+        ['=LEN(FIXED(1E+254,0,TRUE))', 255],
+        ['=FIXED(1E+255,0,TRUE)', VALUE],
         ['=FIXED(1E+300,2,TRUE)', VALUE],
         ['=FIXED("abc",2)', VALUE],
     ]);
@@ -425,6 +458,9 @@ describe('numbers as text', () => {
         ['=DOLLAR(0)', '$0.00'],
         ['=DOLLAR(-0.001,2)', '($0.00)'],
         ['=DOLLAR(5E+20,0)', '$500,000,000,000,000,000,000'],
+        ['=DOLLAR(5E+20,2)', '$500,000,000,000,000,000,000.00'],
+        ['=DOLLAR(-1E+21,0)', '($1,000,000,000,000,000,000,000)'],
+        ['=DOLLAR(123456789.987654321,0)', '$123,456,790'],
         ['=DOLLAR(1E+300,0)', VALUE],
         ['=DOLLAR(TRUE,2)', '$1.00'],
     ]);
@@ -553,6 +589,27 @@ describe('TEXTBEFORE and TEXTAFTER', () => {
         ['=TEXTAFTER(D6,"x",301)', VALUE],
         ['=TEXTAFTER(D1,"x",1,0,0,"nf")', 'nf'],
     ]);
+});
+
+// The law of every display of a number: a typed decimal of up to 15 digits shows as that decimal rounded half away
+// from zero, whichever function writes it, and past its digits come zeros.
+test('TEXT, FIXED and DOLLAR write a typed decimal rounded half away from zero', () => {
+    const random = seeded(1005);
+    for (let run = 0; run < 1500; run += 1) {
+        const decimals = Math.floor(random() * 8);
+        const { typed, rounded, negative } = typedDecimal(random, decimals);
+        const sign = negative && Number(rounded) !== 0 ? '-' : '';
+        const format = decimals === 0 ? '0' : `0.${'0'.repeat(decimals)}`;
+        const more = Math.floor(random() * 12);
+        const texts = `TEXT(${typed},"${format}")&"|"&FIXED(${typed},${decimals},TRUE)&"|"&DOLLAR(${typed},${decimals})`;
+        const longer = `FIXED(${rounded},${decimals + more},TRUE)`;
+        const money = negative ? `($${grouped(rounded)})` : `$${grouped(rounded)}`;
+        const padded = `${decimals === 0 && more > 0 ? `${rounded}.` : rounded}${'0'.repeat(more)}`;
+        expect([typed, evaluate(`=${texts}&"|"&${longer}`, SHEET)]).toEqual([
+            typed,
+            `${sign}${rounded}|${sign}${rounded}|${money}|${padded}`,
+        ]);
+    }
 });
 
 test('an array where one value is asked gives one answer per element', () => {
