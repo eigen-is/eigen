@@ -136,7 +136,8 @@ export function partOf(
         for (let column = firstColumn; column <= lastColumn; column += 1) part.push(items[row * width + column]);
     }
     const down = cut(rowEnds, firstRow, lastRow, top, rows);
-    return arrayOf(rows, columns, part, down, cut(columnEnds, firstColumn, lastColumn, left, columns));
+    const across = cut(columnEnds, firstColumn, lastColumn, left, columns);
+    return arrayOf(rows, columns, part, down, across, array.references);
 }
 
 // The ends of the stored rows or columns `first` to `last`, for a part that starts at `start` and is `size` long.
