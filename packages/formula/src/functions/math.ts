@@ -4,6 +4,7 @@
 
 import { NUM } from '../values/errors';
 import { roundDecimal } from '../values/precision';
+import { greatestDivisor, leastMultiple, multinomial } from '../values/wholes';
 import {
     chosen,
     FACTORS,
@@ -18,6 +19,7 @@ import {
     RANDOM,
     rest,
     WHERE,
+    WHOLES,
 } from './registry';
 
 // The functions the codes 1 to 11 of SUBTOTAL pick. 101 to 111 pick the same and leave out rows hidden by hand,
@@ -58,4 +60,7 @@ export const MATH = [
         'SUBTOTAL',
         SUBTOTALS.flatMap((target, at) => [[at + 1, target, NESTED] as const, [at + 101, target, NESTED] as const]),
     ),
+    fn('GCD', [rest(WHOLES)], greatestDivisor),
+    fn('LCM', [rest(WHOLES)], leastMultiple),
+    fn('MULTINOMIAL', [rest(WHOLES)], multinomial),
 ];

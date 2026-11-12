@@ -146,6 +146,18 @@ export const TEXTS: Walked<readonly string[]> = Object.freeze({
     ...{ prepare: Prepare.Walked, read: Read.Texts, union: VALUE },
 });
 
+// The value met most often is asked of these: the numbers, with a text passed over wherever it stands and a typed
+// boolean as 1 or 0. An argument left empty is #VALUE!, as are one blank cell by itself, a union and an element of
+// an array that is a reference.
+export const MODES: Collector = Object.freeze({ ...walked(Families.Modes), union: VALUE });
+// Every value as a whole number's source, in written order: a text is read as a number, in a cell too, or else
+// #VALUE!, a boolean is #VALUE! wherever it stands, and a blank is passed over. A union is #VALUE!, and so is an
+// element of an array that is a reference.
+export const WHOLES: Walked<readonly number[]> = Object.freeze({
+    ...REQUIRED,
+    ...{ prepare: Prepare.Walked, read: Read.Wholes, union: VALUE },
+});
+
 // Two arguments, ranges or arrays of one size, read side by side: the numbers at the places where both hold one.
 // Unequal sizes are #N/A, the earliest error in either is the result, and neither argument may be left out.
 export const PAIRS: Walked<Pairs> = Object.freeze({

@@ -34,6 +34,8 @@ const BASES: Readonly<Record<string, readonly string[]>> = {
     CELL: ['"row"', 'A2'],
     FORMULATEXT: ['E2'],
     INDIRECT: ['"A1"', 'TRUE'],
+    MODE: ['{5,5,1,0}'],
+    'MODE.SNGL': ['{5,5,1,0}'],
 };
 // The rows whose answer is an error by definition.
 const ERRORS = new Set(['NA', 'INFO']);
@@ -52,6 +54,8 @@ function pool(param: Param<unknown>): readonly string[] {
             return ['A1:A5', 'C1:C3', '1'];
         case Read.Texts:
             return ['A1:A5', '"abc"', 'B1:B5'];
+        case Read.Wholes:
+            return ['A1:A5', 'C1:C3', '4'];
         case Read.Pairs:
             return ['A1:A5', 'C1:C3'];
         case Read.Plain:
@@ -282,11 +286,18 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         if (family === undefined || family === null) return;
         same('TRUE', '1');
         same('FALSE', '0');
-        same('', family.empty ? '0' : null);
-        same('IF(TRUE,)', family.empty ? '0' : null);
+        if (typeof family.empty === 'object') {
+            equals('', family.empty);
+            equals('IF(TRUE,)', family.empty);
+        } else {
+            same('', family.empty ? '0' : null);
+            same('IF(TRUE,)', family.empty ? '0' : null);
+        }
         if (family.text === TypedText.Parsed) equals('"x y"', VALUE);
         if (family.text === TypedText.Parsed || family.text === TypedText.Numeric) same('"2"', '2');
         if (family.text === TypedText.Numeric || family.text === TypedText.Spelled) same('"x y"', null);
+        if (family.text === TypedText.Passed) same('"1"', null);
+        if (family.text === TypedText.Passed) same('"x y"', null);
         if (family.text === TypedText.Counted) same('"x y"', '1');
         if (family.text === TypedText.Spelled) same('"true"', 'TRUE');
         if (family.errors === Errors.Result) equals('1/0', DIV0);
@@ -298,7 +309,10 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         const counts = (kind: number) => ((family.kinds >> kind) & 1) === 1;
         same('D1', counts(2) ? 'TRUE' : null);
         same('B1', counts(3) ? '0' : null);
-        same('Z9', null);
+        // One blank cell by itself is an argument left empty to a family that refuses one.
+        if (typeof family.empty === 'object') equals('Z9', family.empty);
+        else same('Z9', null);
+        same('Z9:Z10', null);
         same('C1', '1');
         same('+D1', 'TRUE');
         same('IF({1,1},Z9:AA9)', '{0,0}');
@@ -339,7 +353,8 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         if (family === undefined || family === null) return;
         const whole = written(entry, [...base, '{1,2,3}']).slice(1);
         expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);
-        same('(A1:A3,C1:C3)', 'A1:A3,C1:C3');
+        if (last?.union === null) same('(A1:A3,C1:C3)', 'A1:A3,C1:C3');
+        else if (last !== undefined) equals('(A1:A3,C1:C3)', last.union);
     });
 
     test('where every value is taken as a text, each is spelled, a range row by row, and nothing lifts', () => {
@@ -358,6 +373,29 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         equals('F1:F3,E1:E3', NA);
         equals('E1:E3,NA()', NA);
         // An element that is a reference is refused, where a family of numbers reads its first cell.
+        equals('INDEX(A1:A5,{2,4})', VALUE);
+        const whole = written(entry, [...base, '{1,2,3}']).slice(1);
+        expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);
+    });
+
+    test('where every value is a whole number, a text is read as one, a boolean is refused and a blank passed over', () => {
+        if (last?.rest !== true || last.read !== Read.Wholes) return;
+        same('"2"', '2');
+        same('', null);
+        same('IF(TRUE,)', null);
+        same('Z9', null);
+        same('Z9:Z10', null);
+        same('{"2",3}', '2,3');
+        same('A1:A2', '10,20');
+        equals('TRUE', VALUE);
+        equals('D1', VALUE);
+        equals('{1,TRUE}', VALUE);
+        equals('"x y"', VALUE);
+        equals('B1', VALUE);
+        equals('E1:E3', DIV0);
+        equals('F1:F3,E1:E3', NA);
+        equals('E1:E3,NA()', NA);
+        equals('(A1:A3,C1:C3)', VALUE);
         equals('INDEX(A1:A5,{2,4})', VALUE);
         const whole = written(entry, [...base, '{1,2,3}']).slice(1);
         expect(evaluateAll([`=INDEX(${whole},1,2)`])[0]).toBe(REF);

@@ -139,7 +139,10 @@ export class Walk {
 
     private cell(at: Reference): boolean {
         const number = this.counted(at, this.family, this.skips);
-        return !Number.isNaN(number) && this.single(number);
+        if (!Number.isNaN(number)) return this.single(number);
+        // To a family that refuses an argument left empty, a cell that holds nothing is one.
+        const { empty } = this.family;
+        return typeof empty === 'object' && this.ctx.first(at) === null && this.fail(empty);
     }
 
     // What the first cell of a reference counts as, or NaN when it does not count.

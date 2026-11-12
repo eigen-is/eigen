@@ -44,6 +44,7 @@ export class Frame {
     private readonly readers: Numbers[] = [];
     private readonly tables: Table[] = [];
     private readonly lists: string[][] = [];
+    private readonly numberLists: number[][] = [];
 
     public constructor(ctx: Evaluator) {
         this.ctx = ctx;
@@ -59,6 +60,11 @@ export class Frame {
     // The list of the texts of one parameter.
     public texts(param: number): string[] {
         return (this.lists[param] ??= []);
+    }
+
+    // The list of the whole numbers of one parameter.
+    public wholes(param: number): number[] {
+        return (this.numberLists[param] ??= []);
     }
 
     // The reader of the numbers of one parameter.

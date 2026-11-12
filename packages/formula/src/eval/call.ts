@@ -163,6 +163,7 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
         case Read.Boolean:
             return toBoolean(value);
         case Read.Walked:
+            if (isReference(value) && value.next !== null && param.union !== null) return param.union;
             return param.family === null ? value : collected(param.family, value);
         case Read.Table:
             if (isError(value)) return value;
@@ -189,6 +190,7 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
         case Read.Pairs:
         case Read.Products:
         case Read.Texts:
+        case Read.Wholes:
             // Of two ranges read side by side, neither may be left empty.
             if (value === null && param.read === Read.Pairs) return VALUE;
             return isReference(value) && value.next !== null && param.union !== null ? param.union : value;
@@ -211,9 +213,10 @@ function collected(family: Family, value: Value): Held {
             if (family.text === TypedText.Parsed) return toNumber(value);
             if (family.text === TypedText.Numeric) return parseNumber(value) === undefined ? null : 0;
             if (family.text === TypedText.Counted) return 0;
+            if (family.text === TypedText.Passed) return null;
             return value.toUpperCase() === 'TRUE' ? 1 : value.toUpperCase() === 'FALSE' ? 0 : null;
         default:
-            if (value === null) return family.empty ? 0 : null;
+            if (value === null) return typeof family.empty === 'object' ? family.empty : family.empty ? 0 : null;
             if (!isError(value)) return value;
             return family.errors === Errors.Result ? value : family.errors === Errors.Counted ? 0 : null;
     }

@@ -51,23 +51,26 @@ export const Read = {
     Texts: 11,
     // Two ranges or arrays of one size, read side by side: the numbers at the places where both hold one.
     Pairs: 12,
+    // Every value of ranges, arrays and typed values as a whole number's source: a text is read as a number, in a
+    // cell too, and a boolean is refused.
+    Wholes: 13,
     // Whatever was written, as a table: an error is a value of it, and nothing fails.
-    Anything: 13,
-    Any: 14,
-    Lazy: 15,
+    Anything: 14,
+    Any: 15,
+    Lazy: 16,
     // The value of the first cell of a reference, or the value itself.
-    Corner: 16,
+    Corner: 17,
     // Readings of a whole parameter, whose arguments are read as Only and Any: a criteria range with its
     // criterion, the numbers beside the cells every criterion accepts, and the cells that show nothing.
-    Where: 17,
-    Matched: 18,
-    Blanks: 19,
+    Where: 18,
+    Matched: 19,
+    Blanks: 20,
     // What takes no argument: room for an array, a draw in [0, 1), the date and time as a serial, and what a
     // body may ask of the workbook.
-    Room: 20,
-    Random: 21,
-    Now: 22,
-    Engine: 23,
+    Room: 21,
+    Random: 22,
+    Now: 23,
+    Engine: 24,
 } as const;
 
 export type Read = (typeof Read)[keyof typeof Read];

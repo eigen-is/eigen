@@ -5,10 +5,11 @@
 
 import { CellKind } from '../store/column';
 import type { FormulaError } from '../values/errors';
+import { VALUE } from '../values/errors';
 
 // A text typed as an argument: read as a number or else #VALUE!, counted when it reads as a number, counted
-// whatever it is, or used when it spells TRUE or FALSE and else passed over.
-export const TypedText = { Parsed: 0, Numeric: 1, Counted: 2, Spelled: 3 } as const;
+// whatever it is, used when it spells TRUE or FALSE and else passed over, or passed over whatever it is.
+export const TypedText = { Parsed: 0, Numeric: 1, Counted: 2, Spelled: 3, Passed: 4 } as const;
 
 // An error among the values: the result of the call, passed over, or counted.
 export const Errors = { Result: 0, Passed: 1, Counted: 2 } as const;
@@ -25,8 +26,9 @@ export type Family = {
     // What an element that is a reference is, or the error the call then answers. It differs per function, so a
     // row may say it anew.
     readonly element: (typeof Element)[keyof typeof Element] | FormulaError;
-    // Whether an argument left empty, or a blank value in its place, counts as a 0.
-    readonly empty: boolean;
+    // Whether an argument left empty, or a blank value in its place, counts as a 0, or the error the call then
+    // answers. With an error, one blank cell that is an argument by itself is an argument left empty too.
+    readonly empty: boolean | FormulaError;
 };
 
 const NUMBER = 1 << CellKind.Number;
@@ -53,4 +55,5 @@ export const Families = {
         empty: true,
     },
     Factors: { kinds: NUMBER, text: TypedText.Parsed, errors: Errors.Result, element: Element.First, empty: false },
+    Modes: { kinds: NUMBER, text: TypedText.Passed, errors: Errors.Result, element: VALUE, empty: VALUE },
 } as const satisfies Record<string, Family>;

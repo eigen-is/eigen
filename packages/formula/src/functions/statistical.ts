@@ -2,12 +2,39 @@
 // found for it: every number of its arguments, the cells that meet its criteria, the numbers beside those, or two
 // ranges paired place by place.
 
-import { DIV0, VALUE } from '../values/errors';
+import { DIV0, NA, VALUE } from '../values/errors';
 import type { Numbers } from './registry';
-import { BLANKS, COUNTED, FILLED, fn, MATCHED, NUMBERS, optional, PAIRS, referring, rest, WHERE } from './registry';
+import {
+    BLANKS,
+    COUNTED,
+    FILLED,
+    fn,
+    MATCHED,
+    MODES,
+    NUMBERS,
+    optional,
+    PAIRS,
+    referring,
+    rest,
+    WHERE,
+} from './registry';
 
 function average(numbers: Numbers) {
     return numbers.count() === 0 ? DIV0 : numbers.sum() / numbers.count();
+}
+
+// The value met most often, and of several met equally often the one that is written first. With no value met
+// twice there is none.
+function mode(numbers: Numbers) {
+    const list = numbers.list();
+    const met = new Map<number, number>();
+    let most = 1;
+    for (const number of list) {
+        const times = (met.get(number) ?? 0) + 1;
+        met.set(number, times);
+        if (times > most) most = times;
+    }
+    return most === 1 ? NA : (list.find((number) => met.get(number) === most) ?? NA);
 }
 
 export const STATISTICAL = [
@@ -44,4 +71,6 @@ export const STATISTICAL = [
     fn('AVERAGEIFS', [MATCHED, rest(WHERE)], average),
     fn('MAXIFS', [MATCHED, rest(WHERE)], (numbers) => (numbers.count() === 0 ? 0 : numbers.max())),
     fn('MINIFS', [MATCHED, rest(WHERE)], (numbers) => (numbers.count() === 0 ? 0 : numbers.min())),
+    fn('MODE', [rest(MODES)], mode),
+    fn('MODE.SNGL', [rest(MODES)], mode),
 ];
