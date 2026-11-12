@@ -297,10 +297,16 @@ test('the browser shows the folder its host holds, so it stays put under a host 
 // The file picker, as File > Open and the imports open it.
 const onSelect = mock((_paths: DrivePath[]) => {});
 let reopen = () => {};
+// Upload from device closes the picker from its host, as a picker whose upload goes straight to the device does.
 function FilePickerHost() {
     const [open, setOpen] = useState(true);
     reopen = () => setOpen(true);
-    return createElement(DriveFilePicker, { open, onOpenChange: setOpen, onSelect });
+    return createElement(DriveFilePicker, {
+        open,
+        onOpenChange: setOpen,
+        onSelect,
+        onUploadFromDevice: () => setOpen(false),
+    });
 }
 async function openFilePicker() {
     onSelect.mockClear();
@@ -337,6 +343,17 @@ test('the file picker opens at the root again after it was closed in another fol
     await clickRow('Briefs');
     expect(crumbs()).toEqual(['Design drive', 'Briefs']);
     await click(buttonNamed('Cancel'));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await act(async () => reopen());
+    expect(rowNames()).toEqual(['Docs', 'Notes.txt']);
+    expect(activeMount()).toBe('Drive');
+});
+
+test('the file picker opens at the root again after Upload from device closed it in another folder', async () => {
+    await openFilePicker();
+    await click(buttonNamed('Design drive'));
+    await clickRow('Briefs');
+    await click(buttonNamed('Upload from device'));
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     await act(async () => reopen());
     expect(rowNames()).toEqual(['Docs', 'Notes.txt']);
