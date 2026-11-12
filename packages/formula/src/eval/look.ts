@@ -45,10 +45,11 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number):
             const one = to === at + 1 && isReference(value) && value.next === null ? value : null;
             if (one !== null) ctx.recalc.settleArea(one);
             else for (let i = at; i < to; i += 1) settle(ctx, held[i], family);
-            const found = family.errors !== Errors.Result ? null : one !== null ? firstError(ctx, one) : null;
+            const found =
+                family.errors !== Errors.Result ? null : one !== null ? firstError(ctx, one, frame.skips) : null;
             if (found !== null) return found;
             for (let i = at; one === null && family.errors === Errors.Result && i < to; i += 1) {
-                const error = errorIn(ctx, held[i], family);
+                const error = errorIn(ctx, held[i], family, frame.skips);
                 if (error !== null) return error;
             }
             args[p] = frame.numbers(p).bind(at, to, family, true);
@@ -70,10 +71,10 @@ function settle(ctx: Evaluator, value: Held, family: Family): void {
     for (let i = 0; i < value.items.length; i += 1) ctx.first(value.items[i]);
 }
 
-// The first error among the values of one argument, row by row.
-function errorIn(ctx: Evaluator, value: Held, family: Family): FormulaError | null {
+// The first error among the values of one argument, row by row, but for the cells that `skips` passes over.
+function errorIn(ctx: Evaluator, value: Held, family: Family, skips: number): FormulaError | null {
     for (let area = isReference(value) ? value : null; area !== null; area = area.next) {
-        const error = firstError(ctx, area);
+        const error = firstError(ctx, area, skips);
         if (error !== null) return error;
     }
     if (!isArray(value) || value.nums !== null) return null;
@@ -96,7 +97,7 @@ function multiply(ctx: Evaluator, held: Held[], from: number, to: number): Formu
     }
     let sized = true;
     for (const factor of factors) {
-        const error = errorIn(ctx, factor, Families.Counted);
+        const error = errorIn(ctx, factor, Families.Counted, 0);
         if (error !== null) return error;
         sized &&= heightOf(factor) === heightOf(factors[0]) && widthOf(factor) === widthOf(factors[0]);
     }

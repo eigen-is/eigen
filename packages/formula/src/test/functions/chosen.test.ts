@@ -62,6 +62,31 @@ describe('SUBTOTAL picks a function by its first argument and hands it the refer
         expect(evaluate('=SUBTOTAL(9,A1:A12)', { ...F1, A11: '=IF(TRUE,SUBTOTAL(9,A1:A10))' })).toBe(550);
     });
 
+    // The ruling on nested SUBTOTALs, for a passed-over cell that holds an error; Excel's own answer is queued.
+    test.each([
+        ['=SUBTOTAL(9,G1:G5)', 35],
+        ['=SUBTOTAL(1,G1:G5)', 35 / 3],
+        ['=SUBTOTAL(4,G1:H5)', 20],
+        ['=SUBTOTAL(9,H1:H3)', 3],
+        ['=SUBTOTAL(9,H2)', 0],
+        ['=SUBTOTAL(9,G1:G4,H1:H3)', 38],
+        ['=SUBTOTAL(9,(G1:G5,H1:H3))', 38],
+        ['=SUBTOTAL(9,G1:G6)', DIV0],
+        ['=SUM(G1:G5)', DIV0],
+    ])('an error in a cell that an outer SUBTOTAL passes over is passed over too: %s', (formula, expected) => {
+        const cells = {
+            G1: 10,
+            G2: 20,
+            G4: 5,
+            G5: '=SUBTOTAL(1,Y1:Y2)',
+            G6: '=1/0',
+            H1: 1,
+            H2: '=SUBTOTAL(9,H1)/0',
+            H3: 2,
+        };
+        expect(evaluate(formula, cells)).toBe(expected);
+    });
+
     test('a function in the range of a SUBTOTAL still adds the cells that the SUBTOTAL passes over', () => {
         expect(evaluate('=SUBTOTAL(9,C1:C5)', { ...SUB, C5: '=SUM(C1:C4)' })).toBe(9);
         expect(evaluate('=SUBTOTAL(9,C1:C2)+SUM(C1:C4)', SUB, 'F1')).toBe(9);
