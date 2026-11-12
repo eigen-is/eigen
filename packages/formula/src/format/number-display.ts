@@ -35,7 +35,7 @@ export function valueAsText(value: number | string, fa: string): string | null {
 }
 
 function shown(fa: string, value: Shown): string {
-    return format(fa, typeof value === 'number' ? Number(value.toExponential(14)) : value, DAYS);
+    return format(fa, value, DAYS);
 }
 
 export { isDateFormat } from 'numfmt';

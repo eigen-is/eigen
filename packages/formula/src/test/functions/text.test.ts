@@ -371,7 +371,7 @@ describe('numbers as text', () => {
         ['=TEXT(1234.567,"@")', '1234.567'],
         ['=TEXT(123456789012345678,"0")', '123456789012345000'],
         ['=TEXT(1E+15,"0")', '1000000000000000'],
-        ['=TEXT(1E+300,"0")', VALUE],
+        ['=LEN(TEXT(1E+300,"0"))', 301],
         ['=TEXT(1234.567,"")', ''],
         ['=TEXT(-1234.567,"")', '-'],
         ['=TEXT(1234.567,)', ''],
@@ -418,23 +418,21 @@ describe('numbers as text', () => {
         ['=TEXT(-6,"dddd")', 'Sunday'],
         ['=TEXT(-1234.567,"0;(0);zero;@")', '(1235)'],
     ]);
-    // numfmt defect: no weekday name from 7 days before day 0 on, and the next day's name for a negative number
-    // with a time. 15 March 1512 was a Friday, and -0.25 is the evening of Friday 29 December 1899.
+    // 15 March 1512 was a Friday, and -0.25 is the evening of Friday 29 December 1899.
     rows('TEXT with a weekday before day 0', [
-        ['=TEXT(-7,"dddd")', ''],
-        ['=TEXT(-141639,"dddd")', ''],
-        ['=TEXT(-0.25,"dddd")', 'Saturday'],
+        ['=TEXT(-7,"dddd")', 'Saturday'],
+        ['=TEXT(-141639,"dddd")', 'Friday'],
+        ['=TEXT(-0.25,"dddd")', 'Friday'],
     ]);
-    // numfmt defect: half a second before midnight the time is 0:00:00 and the day stays, where DAY answers 16.
-    // And from 1E+21 on it has no digits, where Excel writes all 22.
-    // And a decimal that ends in a 5 rounds down where the double under it lies below the half: Excel, FIXED and
-    // ROUND say 1.01.
-    rows('TEXT at midnight, from 1E+21 and at a half', [
-        ['=TEXT(45000.999995,"yyyy-mm-dd hh:mm:ss")', '2023-03-15 00:00:00'],
+    rows('TEXT at midnight, from 1E+21, at a half and at half a second', [
+        ['=TEXT(45000.999995,"yyyy-mm-dd hh:mm:ss")', '2023-03-16 00:00:00'],
         ['=DAY(45000.999995)', 16],
-        ['=TEXT(1E+21,"0")', VALUE],
-        ['=TEXT(1.005,"0.00")', '1.00'],
-        ['=TEXT(74.945,"#,##0.00")', '74.94'],
+        ['=TEXT(1E+21,"0")', '1000000000000000000000'],
+        ['=TEXT(1.005,"0.00")', '1.01'],
+        ['=TEXT(74.945,"#,##0.00")', '74.95'],
+        ['=TEXT(0.1*2.85,"0.00")', '0.29'],
+        ['=TEXT(1/3000000,"0.0000000000")', '0.0000003333'],
+        ['=TEXT(41787+(10*3600+32*60+11.5)/86400,"hh:mm:ss")', '10:32:12'],
     ]);
     rows('FIXED', [
         ['=FIXED(1234.567)', '1,234.57'],
