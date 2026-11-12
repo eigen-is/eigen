@@ -26,7 +26,7 @@ export function countWorkdays(
     const weeks = Math.floor((to - from + 1) / 7);
     let count = weeks * workingIn(off);
     for (let day = from + weeks * 7; day <= to; day += 1) if (works(day, off)) count += 1;
-    let last = -1;
+    let last = Number.NaN;
     for (const holiday of holidays.sort()) {
         if (holiday !== last && holiday >= from && holiday <= to && works(holiday, off)) count -= 1;
         last = holiday;
@@ -56,7 +56,7 @@ export function addWorkdays(
     for (let left = Math.abs(count - weeks * perWeek); left > 0; left -= 1) day = next(day, step, off);
     // Each holiday met on the way pushes the end one working day on, which may meet the next.
     holidays.sort();
-    let last = -1;
+    let last = Number.NaN;
     for (let at = 0; at < holidays.length; at += 1) {
         const holiday = holidays[step > 0 ? at : holidays.length - 1 - at];
         if (holiday !== last && (holiday - start) * step > 0 && (day - holiday) * step >= 0 && works(holiday, off)) {

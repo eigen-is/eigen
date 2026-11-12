@@ -34,7 +34,7 @@ const DIGITS_KEPT = 15;
 // Under this a typed number is no number: Excel takes 1E-308, which a cell shows as 0, and refuses 1E-320.
 const SMALLEST = 1e-308;
 
-// A two digit year below this is in the 2000s, from it on in the 1900s.
+// A year under 100 is in the 2000s below this and in the 1900s from it on, however many digits it was written in.
 const YEAR_PIVOT = 30;
 
 const MONTHS = [
@@ -202,7 +202,8 @@ function readDateTime(text: string, start: number, end: number, thisYear: number
 
 // Three parts: year, month and day with / or - between them, the year first when it has four digits and else the
 // month first; a day, a month by name and a year; a month by name, a day, a comma and a year. Two parts: a month
-// by name and a year of four digits, which is its first day, or a month and a day of `thisYear`.
+// by name and a year of four digits, which is its first day, or a month and a day of `thisYear`. A year has up to
+// four digits and is the year it says from 100 on.
 function readDate(text: string, from: number, to: number, thisYear: number | undefined): number | undefined {
     const named = !isDigit(text.charCodeAt(from));
     const firstEnd = named ? lettersEnd(text, from, to) : digitsEnd(text, from, to);
@@ -233,14 +234,14 @@ function readDate(text: string, from: number, to: number, thisYear: number | und
         if (thirdAt >= to || digitsEnd(text, thirdAt, to) !== to) return undefined;
         day = toWhole(text, thirdAt, to);
         if (secondNamed || firstEnd - from !== 4) {
-            const digits = to - thirdAt;
-            if (digits !== 4 && (named || digits > 2)) return undefined;
-            year = digits === 4 ? day : day + (day < YEAR_PIVOT ? 2000 : 1900);
+            if (to - thirdAt > 4 || (named && to - thirdAt !== 4)) return undefined;
+            year = day;
             month = secondNamed ? second : first;
             day = secondNamed ? first : second;
         }
     }
     if (month < 1 || month > 12 || day < 1) return undefined;
+    if (year < 100) year += year < YEAR_PIVOT ? 2000 : 1900;
     const serial = dateSerial(year, month, day);
     // A day past the end of its month would be read back as a day of the next.
     return serial < FIRST_SERIAL || serial > LAST_SERIAL || serialDate(serial).day !== day ? undefined : serial;

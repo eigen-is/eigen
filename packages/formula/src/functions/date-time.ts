@@ -34,16 +34,13 @@ import {
 } from './registry';
 
 // What a date with its time is made of, to the nearest second as Excel reads one: the last half second of a day
-// is the next day. `part` gets the whole seconds since serial 0.
-function stamped(part: (seconds: number) => number) {
+// is the next day. `part` gets the day and the seconds into it, which count up from midnight before serial 0 too.
+function stamped(part: (day: number, second: number) => number) {
     return (serial: number) => {
         const seconds = Math.round(serial * SECONDS_IN_DAY);
-        return serial < FIRST_SERIAL || seconds >= (LAST_SERIAL + 1) * SECONDS_IN_DAY ? NUM : part(seconds);
+        const day = Math.floor(seconds / SECONDS_IN_DAY);
+        return day < FIRST_SERIAL || day > LAST_SERIAL ? NUM : part(day, seconds - day * SECONDS_IN_DAY);
     };
-}
-
-function dayOf(seconds: number) {
-    return serialDate(Math.floor(seconds / SECONDS_IN_DAY));
 }
 
 // A text that is a date or a time, as its serial. A date without a year is of the year of the pass.
@@ -72,32 +69,32 @@ export const DATE_TIME = [
     fn(
         'YEAR',
         [NUMBER],
-        stamped((seconds) => dayOf(seconds).year),
+        stamped((day) => serialDate(day).year),
     ),
     fn(
         'MONTH',
         [NUMBER],
-        stamped((seconds) => dayOf(seconds).month),
+        stamped((day) => serialDate(day).month),
     ),
     fn(
         'DAY',
         [NUMBER],
-        stamped((seconds) => dayOf(seconds).day),
+        stamped((day) => serialDate(day).day),
     ),
     fn(
         'HOUR',
         [NUMBER],
-        stamped((seconds) => Math.floor((seconds % SECONDS_IN_DAY) / 3600)),
+        stamped((_day, second) => Math.floor(second / 3600)),
     ),
     fn(
         'MINUTE',
         [NUMBER],
-        stamped((seconds) => Math.floor((seconds % 3600) / 60)),
+        stamped((_day, second) => Math.floor((second % 3600) / 60)),
     ),
     fn(
         'SECOND',
         [NUMBER],
-        stamped((seconds) => seconds % 60),
+        stamped((_day, second) => second % 60),
     ),
     fn('WEEKDAY', [SERIAL, optional(INTEGER, 1)], weekdayNumber),
     fn('WEEKNUM', [STRICT_DATE, skippable(strict(INTEGER), 1)], weekNumber),

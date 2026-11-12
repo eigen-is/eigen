@@ -36,13 +36,13 @@ export function dateDif(start: number, end: number, unit: string): number | Form
     }
 }
 
-// The American method makes a start on the last day of February a 30th, in Excel's calendar, and an end on a
-// 31st a 30th only after a start on a 30th. The European one makes every 31st a 30th.
+// The American method makes a start on the last day of February a 30th, and an end on a 31st a 30th only after a
+// start on a 30th. The European one makes every 31st a 30th.
 export function days360(start: number, end: number, european: boolean): number {
     const from = serialDate(start);
     const to = serialDate(end);
     if (european) return thirties(from, to, Math.min(from.day, 30), Math.min(to.day, 30));
-    const closes = from.day === 31 || (from.month === 2 && serialDate(start + 1).month === 3);
+    const closes = from.day === 31 || (from.month === 2 && from.day === daysInMonth(from.year, 2));
     const first = closes ? 30 : from.day;
     return thirties(from, to, first, to.day === 31 && first === 30 ? 30 : to.day);
 }
@@ -54,8 +54,8 @@ export function yearFraction(one: number, other: number, basis: number): number 
     const end = Math.max(one, other);
     switch (basis) {
         case 0: {
-            // Not DAYS360: the last day of February is by the real calendar, two of them are whole months apart,
-            // and an end on a 31st is a 30th only when the start was on a 30th or 31st as written.
+            // Not DAYS360: two last days of February are whole months apart, and an end on a 31st is a 30th only
+            // when the start was on a 30th or 31st as written.
             const from = serialDate(start);
             const to = serialDate(end);
             const closes = from.month === 2 && from.day === daysInMonth(from.year, 2);
