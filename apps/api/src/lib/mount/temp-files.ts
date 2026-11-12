@@ -15,15 +15,9 @@ export function getTempPath(mount: Mount, pathId: string): string {
     return path.join(mount.tmpDir, pathId.replace(/\//g, '_'));
 }
 
-// tempId must be new for each call, such as a randomUUID, or two downloads of one file overwrite each other.
+// tempId must be new for each call, such as a randomUUID: two downloads of one file would overwrite each other, and
+// an open document's working copy is the temp path named after its data.db path id.
 export async function downloadToTemp(mount: Mount, pathId: string, tempId: string): Promise<string> {
-    // An open document's working copy is the temp path named after its data.db path id. A tempId
-    // equal to one would truncate it.
-    if (mount.documentDbs.has(tempId)) {
-        throw new Error(
-            `[Mount] downloadToTemp ${pathId}: tempId ${tempId} is an open document DB — refusing to overwrite its live working copy`,
-        );
-    }
     // Under the tree lock, like a document open, because on `local` an ancestor rename during the
     // read would make the file look gone.
     return mount.withTreeShared(async () => {

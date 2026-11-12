@@ -10,7 +10,7 @@ import { isSearchableTextFile } from '@workspace/lib/constants';
 import { CHATS_FOLDER_NAME } from '@workspace/lib/types/chat';
 import type { DriveContainerType, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
-import type { MountConfig } from '@workspace/lib/types/mount';
+import type { MountConfig, MountInfo } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { CONTROL_CHARS } from '@workspace/lib/validation';
 import { and, eq, isNull, sql } from 'drizzle-orm';
@@ -1179,12 +1179,8 @@ export class Mount {
 
     // ---- Sizes ----
 
-    public async getTotalSize(): Promise<number> {
-        return sizes.getTotalSize(this);
-    }
-
-    public async getFileCount(): Promise<number> {
-        return sizes.getFileCount(this);
+    public async getFileTotals(): Promise<Pick<MountInfo, 'totalSize' | 'fileCount'>> {
+        return sizes.getFileTotals(this);
     }
 
     public async invalidateAncestorsOf(pathId: string): Promise<void> {

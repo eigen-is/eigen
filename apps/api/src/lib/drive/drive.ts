@@ -225,15 +225,14 @@ export class Drive {
                 name: mount.name,
                 storageType: mount.config.storageType,
                 isDefault: id === this.defaultMountId,
-                totalSize: await mount.getTotalSize(),
-                fileCount: await mount.getFileCount(),
+                ...(await mount.getFileTotals()),
             });
         }
         return infos;
     }
 
     public async size(mountId: string): Promise<number> {
-        return this.getMount(mountId).getTotalSize();
+        return (await this.getMount(mountId).getFileTotals()).totalSize;
     }
 
     private getMount(mountId: string): Mount {

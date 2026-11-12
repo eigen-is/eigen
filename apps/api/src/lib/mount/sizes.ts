@@ -3,42 +3,26 @@
 // folder computes it again and stores it. Mount calls these for its own writes and for Drive, such as for
 // the quota, and its sibling modules, such as trash, clear sizes after theirs.
 
+import type { MountInfo } from '@workspace/lib/types/mount';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../core';
 import type { Mount } from './mount';
 import type * as schema from './schema';
 import { paths } from './schema';
 
-export async function getTotalSize(mount: Mount): Promise<number> {
-    const result = await mount.db
-        .select({ total: sql<number>`COALESCE(SUM(${paths.size}), 0)` })
+// Trashed files count, as their bytes are still stored. An aggregate answers exactly one row.
+export async function getFileTotals(mount: Mount): Promise<Pick<MountInfo, 'totalSize' | 'fileCount'>> {
+    const [totals] = await mount.db
+        .select({ totalSize: sql<number>`COALESCE(SUM(${paths.size}), 0)`, fileCount: sql<number>`COUNT(*)` })
         .from(paths)
         .where(eq(paths.type, 'file'))
-        .get();
-
-    return result?.total ?? 0;
-}
-
-export async function getFileCount(mount: Mount): Promise<number> {
-    const result = await mount.db
-        .select({ count: sql<number>`COUNT(*)` })
-        .from(paths)
-        .where(eq(paths.type, 'file'))
-        .get();
-
-    return result?.count ?? 0;
+        .all();
+    return totals;
 }
 
 export async function invalidateAncestorsOf(mount: Mount, pathId: string): Promise<void> {
-    let parentId: string | null;
-    try {
-        const row = await mount.db.select({ parentId: paths.parentId }).from(paths).where(eq(paths.id, pathId)).get();
-        parentId = row?.parentId ?? null;
-    } catch (e) {
-        console.error(`[Mount] Could not invalidate the folder sizes above ${pathId}:`, e);
-        return;
-    }
-    await mount.invalidateSizesFrom(parentId);
+    const row = await mount.db.select({ parentId: paths.parentId }).from(paths).where(eq(paths.id, pathId)).get();
+    await mount.invalidateSizesFrom(row?.parentId ?? null);
 }
 
 // Clears the cached size of parentId and of every folder above it. Every caller has committed its

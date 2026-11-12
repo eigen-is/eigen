@@ -118,7 +118,7 @@ export function isSqliteFile(filePath: string): boolean {
     }
 }
 
-// What Mount.getTotalSize answers, read from the file, so it needs no live mount. The admin usage view
+// The total size Mount.getFileTotals answers, read from the file, so it needs no live mount. The admin usage view
 // sizes every home at once, and opening each Home would take seconds. A home whose default mount is
 // switched off has no live mount to ask. The open is read-write on purpose. A WAL database that nobody
 // holds open has no -shm file beside it, and a read-only open of it fails. Only this SELECT runs.
