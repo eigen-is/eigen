@@ -5,7 +5,7 @@
 
 import { CellKind } from '../store/column';
 import type { FormulaError } from '../values/errors';
-import { VALUE } from '../values/errors';
+import { NA, VALUE } from '../values/errors';
 
 // A text typed as an argument: read as a number or else #VALUE!, counted when it reads as a number, counted
 // whatever it is, used when it spells TRUE or FALSE and else passed over, or passed over whatever it is.
@@ -44,7 +44,7 @@ export const Families = {
         kinds: NUMBER | BOOLEAN,
         text: TypedText.Spelled,
         errors: Errors.Result,
-        element: Element.First,
+        element: NA,
         empty: true,
     },
     NumbersA: {
