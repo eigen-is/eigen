@@ -7,7 +7,7 @@ import { cloneDeep, isNumber } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { dataToCelldata } from '../../engine/celldata';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
-import { lineEdit } from '../../engine/rowcol';
+import { editOf } from '../../engine/rowcol';
 import type { Context } from '../context';
 import type { Op, Sheet } from '../types';
 
@@ -105,7 +105,7 @@ export function storedCopy(sheet: Sheet): Sheet {
 export function inverseRowColOptions({ insertRowColOp, deleteRowColOp }: RowColOptions): RowColOptions {
     if (insertRowColOp) {
         const { type, id, count } = insertRowColOp;
-        const start = lineEdit(insertRowColOp).index;
+        const start = editOf(insertRowColOp).index;
         return { deleteRowColOp: { type, id, start, end: start + count - 1 } };
     }
     if (deleteRowColOp) {

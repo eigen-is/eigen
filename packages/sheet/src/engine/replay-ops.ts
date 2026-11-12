@@ -24,7 +24,7 @@ import { namesSheet } from './formula-shift';
 import type { RecalcBudgets, RecomputeSeeds } from './recalc';
 import { recomputeAfter } from './recalc';
 import type { DeleteRowColOp, InsertRowColOp } from './rowcol';
-import { applySheetsDeleteRowCol, applySheetsInsertRowCol, lineEdit } from './rowcol';
+import { applySheetsDeleteRowCol, applySheetsInsertRowCol, editOf } from './rowcol';
 import { normalizeSheetConfig } from './sheet-config';
 import type { RenameSheetOp } from './sheet-name';
 import { applySheetDelete, applySheetRename, legalSheetNames } from './sheet-name';
@@ -172,7 +172,7 @@ function seedsOf(
     const lines: RecomputeSeeds['lines'][number][] = [];
     for (const { op } of moved) {
         const { id, type } = op;
-        const edit = lineEdit(op);
+        const edit = editOf(op);
         const at = edit.index;
         // A later op moves the lines an earlier one opened or closed, as it moves the cells on them.
         for (const [i, seed] of lines.entries()) {

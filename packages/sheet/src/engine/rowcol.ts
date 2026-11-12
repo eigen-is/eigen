@@ -47,7 +47,7 @@ type InsertLines = Pick<InsertRowColOp, 'type' | 'index' | 'count' | 'direction'
 type DeleteLines = Pick<DeleteRowColOp, 'type' | 'start' | 'end'>;
 
 // A row or column op as mapIndex and mapSpan read it: its `index` is the first line the op adds or deletes.
-export function lineEdit(op: InsertLines | DeleteLines): Edit {
+export function editOf(op: InsertLines | DeleteLines): Edit {
     const lines = op.type === 'row' ? REFERENCE_ROW_COUNT : REFERENCE_COLUMN_COUNT;
     return 'index' in op
         ? { insert: true, index: op.direction === 'lefttop' ? op.index : op.index + 1, count: op.count, lines }
@@ -205,7 +205,7 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     const newCfg: ExtendedSheetConfig = { ...target.config };
     const newData = op.type === 'row' ? [...data] : data.map((row) => [...row]);
     newTarget.data = newData;
-    const edit = lineEdit(op);
+    const edit = editOf(op);
     const insertAt = edit.index;
 
     const { merges, unmerged } = shiftMerges(cfg, op.type, edit);
@@ -273,7 +273,7 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
     const newData = op.type === 'row' ? [...data] : data.map((row) => [...row]);
     newTarget.data = newData;
     const removeCount = op.end - op.start + 1;
-    const edit = lineEdit(op);
+    const edit = editOf(op);
 
     const { merges, unmerged } = shiftMerges(cfg, op.type, edit);
     newCfg.merge = merges;

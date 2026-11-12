@@ -14,8 +14,8 @@ import { functionStrChange, mayShiftOffSheet } from '../../engine/formula-shift'
 import { isFormula } from '../../engine/formula-utils';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
 import {
+    editOf,
     LINE_MAPS,
-    lineEdit,
     shiftCellKeyed,
     shiftKeyedMap,
     shiftMerges,
@@ -43,7 +43,7 @@ export function insertMove(op: InsertRowColOp): RowColMove {
     return {
         id,
         type,
-        edit: lineEdit(op),
+        edit: editOf(op),
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'add', axisName(type), direction, index, count, name, onTargetSheet, findSheet),
     };
@@ -55,7 +55,7 @@ export function deleteMove(op: DeleteRowColOp): RowColMove {
     return {
         id,
         type,
-        edit: lineEdit(op),
+        edit: editOf(op),
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'del', axisName(type), null, start, count, name, onTargetSheet, findSheet),
     };

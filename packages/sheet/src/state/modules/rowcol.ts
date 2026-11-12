@@ -7,7 +7,7 @@
 import { GONE, mapIndex } from '@workspace/formula/text';
 import { isRecord } from '@workspace/lib/guards';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
-import { lineEdit, shiftRange } from '../../engine/rowcol';
+import { editOf, shiftRange } from '../../engine/rowcol';
 import type { CellMatrix } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
@@ -25,7 +25,7 @@ export function insertRowCol(ctx: Context, op: InsertRowColOp, changeSelection =
     applyBatch(ctx, [insertMarker(op)]);
     const data = getFlowdata(ctx, op.id);
     if (changeSelection && data) {
-        const first = lineEdit(op).index;
+        const first = editOf(op).index;
         const span = [first, first + op.count - 1];
         ctx.selections =
             op.type === 'row'
