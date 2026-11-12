@@ -30,6 +30,7 @@ const ROWS = [...FUNCTIONS.values(), ...OWN];
 // A row for which no call from the pools answers a value names one here.
 const BASES: Readonly<Record<string, readonly string[]>> = {
     XMATCH: ['20', 'A1:A5', '0', '1'],
+    LOOKUP: ['20', 'A1:A5', 'A1:A5'],
     AVERAGEIFS: ['A1:A5', 'A1:A5', '">5"'],
     'ERROR.TYPE': ['1/0'],
 };
