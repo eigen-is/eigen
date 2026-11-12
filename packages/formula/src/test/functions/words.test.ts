@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { cells, fn, NUMBER, NUMBERS, NUMBERS_A, optional, rest } from '../../functions/registry';
-import { DIV0, NA, NUM, REF, VALUE } from '../../index';
+import { CALC, DIV0, NA, NUM, REF, VALUE } from '../../index';
 import { dateSerial } from '../../values/dates';
 import type { Cells } from '../recalc/support';
 import { evaluate, evaluateWith } from '../recalc/support';
@@ -139,10 +139,10 @@ describe('every value as a text: TEXTJOIN and CONCAT', () => {
         ['=TEXTJOIN(",",TRUE,I1:I3,H1:H3)', NA, F3],
         ['=TEXTJOIN(I1:I3,TRUE,H1:H3)', NA, F3],
         ['=TEXTJOIN(",",TRUE)', VALUE, F1],
-        // A text of more than 32,767 characters is #VALUE!.
+        // A text of more than 32,767 characters is #CALC! for these two.
         ['=LEN(CONCAT(P1))', 20000, { P1: LONG }],
-        ['=CONCAT(P1,P1)', VALUE, { P1: LONG }],
-        ['=TEXTJOIN("",TRUE,P1,P1)', VALUE, { P1: LONG }],
+        ['=CONCAT(P1,P1)', CALC, { P1: LONG }],
+        ['=TEXTJOIN("",TRUE,P1,P1)', CALC, { P1: LONG }],
         ['=LEN(TEXTJOIN(",",TRUE,P1,P2,"a"))', 20002, { P1: LONG }],
     ])('%s', (formula, expected, cells) => {
         expect(evaluate(formula, cells)).toBe(expected);

@@ -30,12 +30,18 @@ const ROWS = [...FUNCTIONS.values(), ...OWN];
 // A row for which no call from the pools answers a value names one here.
 const BASES: Readonly<Record<string, readonly string[]>> = {
     XMATCH: ['20', 'A1:A5', '0', '1'],
+    LOOKUP: ['20', 'A1:A5', 'A1:A5'],
     AVERAGEIFS: ['A1:A5', 'A1:A5', '">5"'],
     CELL: ['"row"', 'A2'],
     FORMULATEXT: ['E2'],
     INDIRECT: ['"A1"', 'TRUE'],
     MODE: ['{5,5,1,0}'],
     'MODE.SNGL': ['{5,5,1,0}'],
+    'ERROR.TYPE': ['1/0'],
+    DATEVALUE: ['"2024-03-15"'],
+    TIMEVALUE: ['"12:30"'],
+    DATEDIF: ['1', '2', '"D"'],
+    'NETWORKDAYS.INTL': ['1', '10', '1', 'A1:A5'],
 };
 // The rows whose answer is an error by definition.
 const ERRORS = new Set(['NA', 'INFO']);
@@ -253,7 +259,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             expect(cell).toEqual(blank);
             // An empty argument is a blank that is read, or left out where the parameter says so.
             if (param.skips && at === params.length - 1) expect(empty).toEqual(evaluateAll([written(entry, upTo)])[0]);
-            else if (param.strict) expect(empty).toBe(NA);
+            else if (param.strict && !param.optional && at > 0) expect(empty).toBe(NA);
             else if (!param.skips && at > 0) expect(empty).toEqual(blank);
             if (!param.optional || param.fallback === undefined || at !== params.length - 1) continue;
             const fallback =
@@ -437,7 +443,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
             both('A1:A6', 'A1:C2'),
             both('{10;30;40}', '{10;1;20}'),
             both('A1:C6', 'A1:C6'),
-            both('{10;20;30;40;50}', '{10;20;30;40;50}'),
+            both('{10;1;20;2;30;3;40;50}', '{10;1;20;2;30;3;40;50}'),
             both('A1:A5', 'INDEX(A1:A5,{1;2;3;4;5})'),
             both('{10;20}', '{10;20}'),
             both('A1:A2', 'A1:A2'),

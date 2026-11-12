@@ -8,7 +8,7 @@ import type { Sheet } from '../store/sheet';
 import type { FormulaNode } from '../text/tree';
 import { NodeKind } from '../text/tree';
 import { toBoolean, toNumber, toText } from '../values/coerce';
-import { LAST_SERIAL } from '../values/dates';
+import { FIRST_SERIAL, LAST_SERIAL } from '../values/dates';
 import { NA, NAME, NUM, VALUE } from '../values/errors';
 import { parseNumber } from '../values/parse-number';
 import type { Value } from '../values/value';
@@ -57,7 +57,8 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
         // An argument left out is what the body gets for it, and so is one left empty where that means left out.
         // Any other empty argument is a blank, and is read as one.
         else if (i >= count) value = slot.read === Read.Here ? ctx.here(sheet, row, column) : slot.fallback;
-        else if (given[i].kind === NodeKind.Empty) value = slot.skips ? slot.fallback : slot.strict ? NA : null;
+        else if (given[i].kind === NodeKind.Empty)
+            value = slot.skips ? slot.fallback : slot.strict && !slot.optional ? NA : null;
         else if (slot.prepare === Prepare.Scalar) {
             value = ctx.operand(given[i], sheet, row, column);
             if (isArray(value)) lifted = true;
@@ -161,7 +162,7 @@ export function read(param: Param<unknown>, value: Held, frame: Frame, at: numbe
             if (param.read === Read.Integer) return Math.trunc(number);
             // Cut before the bound is tested: a time on the last day is still a date.
             const day = Math.floor(number);
-            return day < 0 || day > LAST_SERIAL ? NUM : day;
+            return day < FIRST_SERIAL || day > LAST_SERIAL ? NUM : day;
         }
         case Read.Text:
             return toText(value);

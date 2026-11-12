@@ -55,7 +55,7 @@ function walked(family: Family): Collector {
 export const NUMBER = scalar<number>(Read.Number);
 // A number cut toward zero, as a count or a position is.
 export const INTEGER = scalar<number>(Read.Integer);
-// A date: a number cut down to a whole day, and #NUM! below 0 or past the last date Excel has.
+// A date: a number cut down to a whole day, and #NUM! before 1 January of the year 1 or past 31 December 9999.
 export const SERIAL = scalar<number>(Read.Serial);
 // A number and a boolean are spelled out, a blank is empty text.
 export const TEXT = scalar<string>(Read.Text);

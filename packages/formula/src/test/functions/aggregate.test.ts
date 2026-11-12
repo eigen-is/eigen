@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { DIV0, NA, VALUE } from '../../index';
+import { DIV0, NA, NUM, VALUE } from '../../index';
 import type { Cells } from '../recalc/support';
 import { evaluate } from '../recalc/support';
 
@@ -59,6 +59,42 @@ describe('AGGREGATE picks a function by its first argument and what its walk pas
         ['(9,6,D1:D3,D5:D8)', 30],
         ['(9,6,(D1:D3,D5:D8))', 30],
         ['(9,6,D1:D8,B1)', 31],
+        // The codes whose function takes a k after its values: those take an array too, and an error in it is
+        // passed over as one in a cell is.
+        // Excel shows 15 digits of these two: 18.6225669551756 and 16.6565302509256.
+        ['(7,6,G1:G6)', 18.62256695517565],
+        ['(8,6,G1:G6)', 16.65653025092561],
+        ['(10,6,G1:G6)', 346.8],
+        ['(11,6,G1:G6)', 277.44],
+        ['(14,6,G1:G6,1)', 50],
+        ['(14,6,G1:G6,2)', 40],
+        ['(14,6,G1:G6,8)', NUM],
+        ['(15,6,G1:G6,2)', 10],
+        ['(16,6,G1:G6,0.25)', 10],
+        ['(17,6,G1:G6,2)', 20],
+        ['(18,6,G1:G6,0.25)', 9],
+        ['(19,6,G1:G6,1)', 9],
+        ['(19,0,D1:D8,1)', 1.25],
+        ['(14,0,G1:G6,1)', DIV0],
+        ['(14,4,E1:E8,1)', DIV0],
+        ['(14,6,E1:E8,1)', 5],
+        ['(14,6,D1:D8/(D1:D8>3),1)', 9],
+        ['(15,6,D1:D8/(D1:D8>3),1)', 4],
+        ['(14,6,{3,"x",TRUE,5},1)', 5],
+        ['(14,6,{1,2,3},2)', 2],
+        ['(14,6,5,1)', 5],
+        ['(14,6,B2,1)', NUM],
+        ['(14,6,D1:D8,1.9)', 6],
+        ['(14,6,D1:D8,"2")', 6],
+        ['(14,6,D1:D8,B2)', 5],
+        ['(14,6,D1:D8,TRUE)', 9],
+        ['(14,6,D1:D8,"x")', VALUE],
+        ['(14,6,D1:D8)', VALUE],
+        ['(14,6,D1:D8,)', NUM],
+        ['(14,6,1/0,1)', DIV0],
+        ['(16,6,D1:D8,1.1)', NUM],
+        ['(17,6,D1:D8,4)', 9],
+        ['(19,6,D1:D8,2)', 3.5],
         // The code and the option are whole numbers, and one that picks nothing is #VALUE!.
         ['(1.9,0,D1:D8)', 3.875],
         ['("9",0,D1:D8)', 31],

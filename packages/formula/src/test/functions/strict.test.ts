@@ -29,6 +29,9 @@ describe('a parameter of an add-in function refuses a range, a boolean and an em
         ['=EDATE(Z9,1)', 31],
         ['=EDATE(E2,1)', DIV0],
         ['=EDATE(E1:E2,1/0)', VALUE],
+        // The date family's rows: a union among the holidays is #VALUE!.
+        ['=NETWORKDAYS(45000,45010,(A1,A2))', VALUE],
+        ['=NETWORKDAYS(45000,45010,Z1:Z2)', 8],
     ])('%s', (formula, expected) => {
         expect(evaluate(formula, CELLS)).toBe(expected);
     });

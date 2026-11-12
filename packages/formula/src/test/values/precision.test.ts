@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { compare15, equal15, round15, roundDecimal, snapSum } from '../../values/precision';
+import { compare15, cutDecimal, equal15, round15, roundDecimal, snapSum, snapWhole } from '../../values/precision';
 
 function seeded(seed: number): () => number {
     let state = seed;
@@ -235,6 +235,116 @@ describe('roundDecimal', () => {
             const n = (random() - 0.5) * 10 ** Math.floor(random() * 50 - 25);
             const digits = Math.floor(random() * 60) - 30;
             expect([n, digits, roundDecimal(n, digits)]).toEqual([n, digits, slowRound(n, digits)]);
+        }
+    });
+});
+
+// The 15 digits of the number as one whole number, cut `digits` places after the decimal point, toward zero or away.
+function slowCut(n: number, digits: number, away: boolean): number {
+    const [mantissa = '', exponent = ''] = Math.abs(n).toExponential(14).split('e');
+    const shown = BigInt(mantissa.replace('.', ''));
+    const drop = 14 - Number(exponent) - digits;
+    if (drop <= 0) return Number(n.toPrecision(15));
+    const unit = 10n ** BigInt(drop);
+    const kept = shown / unit + (away && shown % unit !== 0n ? 1n : 0n);
+    if (kept === 0n) return 0;
+    return Number(`${n < 0 ? '-' : ''}${kept}e${-digits}`);
+}
+
+describe('cutDecimal', () => {
+    test('cuts toward zero', () => {
+        expect(cutDecimal(2.5, 0, false)).toBe(2);
+        expect(cutDecimal(-2.5, 0, false)).toBe(-2);
+        expect(cutDecimal(1234.5678, 2, false)).toBe(1234.56);
+        expect(cutDecimal(1234.5678, -2, false)).toBe(1200);
+        expect(cutDecimal(-2.567, 2, false)).toBe(-2.56);
+        expect(cutDecimal(2.675, 2, false)).toBe(2.67);
+        expect(cutDecimal(1.005, 2, false)).toBe(1);
+    });
+
+    test('steps away from zero when anything is cut off', () => {
+        expect(cutDecimal(2.5, 0, true)).toBe(3);
+        expect(cutDecimal(-2.5, 0, true)).toBe(-3);
+        expect(cutDecimal(1.005, 2, true)).toBe(1.01);
+        expect(cutDecimal(-1.005, 2, true)).toBe(-1.01);
+        expect(cutDecimal(1234.5678, -2, true)).toBe(1300);
+        expect(cutDecimal(0.5, -1, true)).toBe(10);
+        expect(cutDecimal(3, 0, true)).toBe(3);
+        expect(cutDecimal(1200, -2, true)).toBe(1200);
+        expect(cutDecimal(0, 2, true)).toBe(0);
+    });
+
+    test('cuts the decimal Excel shows, not the double under it', () => {
+        expect(cutDecimal(0.29, 2, false)).toBe(0.29);
+        expect(cutDecimal(1.1, 1, true)).toBe(1.1);
+        expect(cutDecimal(4.35, 2, false)).toBe(4.35);
+        expect(cutDecimal(0.1 + 0.2, 1, true)).toBe(0.3);
+        expect(cutDecimal(2.9999999999999996, 0, false)).toBe(3);
+    });
+
+    test('more digits than the number has, and numbers of every size', () => {
+        expect(cutDecimal(2.5, 15, true)).toBe(2.5);
+        expect(cutDecimal(0.1 + 0.2, 20, false)).toBe(0.3);
+        expect(cutDecimal(1e300, -300, true)).toBe(1e300);
+        expect(cutDecimal(10, -300, true)).toBe(1e300);
+        expect(cutDecimal(10, -300, false)).toBe(0);
+        expect(cutDecimal(1e-300, 300, true)).toBe(1e-300);
+        expect(cutDecimal(1e-300, 300, false)).toBe(1e-300);
+        expect(cutDecimal(1e-300, 2, true)).toBe(0.01);
+        expect(cutDecimal(1e300, 2, false)).toBe(1e300);
+    });
+
+    test('a step past the largest number is infinite', () => {
+        expect(cutDecimal(5, -400, true)).toBe(Number.POSITIVE_INFINITY);
+        expect(cutDecimal(-5, -400, true)).toBe(Number.NEGATIVE_INFINITY);
+        expect(cutDecimal(1.5, -1e300, true)).toBe(Number.POSITIVE_INFINITY);
+        expect(cutDecimal(5, -400, false)).toBe(0);
+        expect(cutDecimal(1.5, -1e300, false)).toBe(0);
+    });
+
+    test('never answers negative zero', () => {
+        expect(Object.is(cutDecimal(-0.4, 0, false), 0)).toBe(true);
+        expect(Object.is(cutDecimal(-0, 2, true), 0)).toBe(true);
+        expect(Object.is(cutDecimal(-4, -1, false), 0)).toBe(true);
+    });
+
+    test('agrees with the slow version on whole steps and their neighbours', () => {
+        const random = seeded(29);
+        const bits = new Float64Array(1);
+        const words = new BigInt64Array(bits.buffer);
+        for (let i = 0; i < 40000; i++) {
+            const digits = Math.floor(random() * 12) - 3;
+            const step = (Math.floor(random() * 10 ** Math.floor(random() * 9)) + 1) / 10 ** digits;
+            bits[0] = random() < 0.5 ? step : -step;
+            words[0] = (words[0] ?? 0n) + BigInt(Math.floor(random() * 120) - 60);
+            const n = bits[0] ?? 0;
+            const away = random() < 0.5;
+            expect([n, digits, away, cutDecimal(n, digits, away)]).toEqual([n, digits, away, slowCut(n, digits, away)]);
+        }
+    });
+
+    test('agrees with the slow version on random numbers of every size', () => {
+        const random = seeded(1234);
+        for (let i = 0; i < 40000; i++) {
+            const n = (random() - 0.5) * 10 ** Math.floor(random() * 50 - 25);
+            const digits = Math.floor(random() * 60) - 30;
+            const away = random() < 0.5;
+            expect([n, digits, away, cutDecimal(n, digits, away)]).toEqual([n, digits, away, slowCut(n, digits, away)]);
+        }
+    });
+});
+
+describe('snapWhole', () => {
+    test('a quotient that is whole in its 15 digits is that whole number', () => {
+        expect(snapWhole(1.1 / 0.1)).toBe(11);
+        expect(snapWhole(0.3 / 0.1)).toBe(3);
+        expect(snapWhole(-0.3 / 0.1)).toBe(-3);
+        expect(snapWhole(1e300 / 1e299)).toBe(10);
+    });
+
+    test('any other number is left alone', () => {
+        for (const n of [0, 7, -7, 1.25, -1.25, 2.9999999999, 3.0000000001, 1e-300, 1e300, 0.5]) {
+            expect(snapWhole(n)).toBe(n);
         }
     });
 });

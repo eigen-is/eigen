@@ -18,12 +18,12 @@ describe('a date, any value, a place and a reference a body worked out', () => {
         ['=EDATE(45000,1)', 45031],
         ['=EDATE(45000.9,1.9)', 45031],
         ['=EDATE(45688,1)', 45716],
-        ['=EDATE(-1,"x")', NUM],
+        ['=EDATE(-693594,"x")', NUM],
         ['=EDATE(45000,"x")', VALUE],
         ['=EDATE(TRUE,1)', VALUE],
         ['=EDATE(D1,1)', VALUE],
         ['=EDATE(45000,D1)', VALUE],
-        ['=EDATE(1,-1.5)', NUM],
+        ['=EDATE(-693593,-1.5)', NUM],
         ['=EDATE(2958465,1)', NUM],
         // Excel batch 6: the day after the last date is refused at its position, whatever comes after.
         ['=EDATE(2958466,"x")', NUM],
@@ -32,7 +32,7 @@ describe('a date, any value, a place and a reference a body worked out', () => {
         // Excel, which takes a time on any other day.
         ['=EDATE(2958465.9,0)', 2958465],
         ['=EDATE(2958465.9,-1)', 2958434],
-        ['=EDATE(-0.5,0)', NUM],
+        ['=EDATE(-0.5,0)', -1],
         ['=EDATE(0.5,0)', 0],
         // Batch 4 and 5: TYPE takes anything, lifts over nothing and fails on nothing.
         ['=TYPE(A1:A3)', 64],

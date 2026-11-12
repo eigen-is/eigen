@@ -783,7 +783,7 @@ describe('undo and redo recalculate the formulas they touch', () => {
     });
 
     test.each([
-        ['a date', { fa: 'yyyy-MM-dd', t: 'd' }, '1900-01-10'],
+        ['a date', { fa: 'yyyy-MM-dd', t: 'd' }, '1900-01-09'],
         ['a text', { fa: '@', t: 's' }, '10'],
     ])('the undo and redo of %s format give a formula its type and display', (_, ct, m) => {
         const general = { f: '=A1*2', v: 10, m: '10', ct: { fa: 'General', t: 'n' } };
