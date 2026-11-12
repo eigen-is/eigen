@@ -37,7 +37,7 @@ export function call(ctx: Evaluator, node: FormulaNode, sheet: Sheet, row: numbe
     const { held } = (ctx.frames[level] ??= new Frame(ctx));
     ctx.calls = level + 1;
     const size = Math.max(count, fixed);
-    held.length = size;
+    if (held.length !== size) held.length = size;
     let lifted = false;
     for (let i = 0; i < size; i += 1) {
         let value: Held;
