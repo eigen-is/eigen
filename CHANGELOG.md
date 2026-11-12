@@ -63,7 +63,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Filling in Sheets** — Chinese number and weekday series copy, and 1, 2, 4 fills as a straight line
 - **Formulas Sheets can't calculate** — a function it doesn't have, such as `FILTER`, `ROW` or `FIXED`, keeps what the cell holds, an error included, when its inputs change or you sort or cut it. Typed new, copied or filled, it shows `#NAME?`
 - **Pasted errors in Sheets** — a copied formula that lands on an error, such as `#DIV/0!`, is an error to the formulas that read it, so `ISERROR` and `IFERROR` see it. A formula pasted as text, or under the format painter, keeps the type of its own result
-- **Empty results in Sheets** — a formula that gives empty text, such as `=IF(A1=1,"",5)`, plus 1 is `#VALUE!` as in Excel, whether you typed it or imported it
+- **Empty results in Sheets** — a formula that gives empty text, such as `=IF(A1=1,"",5)`, plus 1 is 1, as in Google Sheets where Excel says `#VALUE!`, whether you typed it or imported it
 - **Number formats in Sheets** — numbers round as in Excel, so 1.005 under 0.00 shows 1.01, very small numbers show their digits, a time just before midnight shows the next day, and dates before 1900 show their weekday. Chart labels too
 - **Dates in early 1900 in Sheets** — a date in January or February 1900 shows one day earlier than in Excel, as in Google Sheets, since 1900 had no 29 February
 - **Excel files in Sheets** — an import keeps what Excel saved, and calculates only a formula saved with no result or with an error, where Sheets can calculate it
