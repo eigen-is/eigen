@@ -1,6 +1,7 @@
-// The last steps of a new file, such as an upload or an attachment saved from mail. They turn a temp
-// file into a file in the tree under a free name, tell open tabs and write the history row. A
-// thumbnail is then made in the background, by a helper that an overwrite of a file uses too.
+// The last steps of a write of a file's bytes, such as an upload, an attachment saved from mail or an
+// overwrite. The bytes wait in a temp file of the mount, which commitFromTemp owns: it runs the commit
+// and makes the thumbnail in the background, and removes the temp file whichever way the write ends.
+// finalizeUpload is the commit of a new file: a free name, a word to open tabs and the history row.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -10,8 +11,44 @@ import type { User } from '../user';
 import type { Drive } from './drive';
 import { folderIn, withFreeName } from './naming';
 
-// The caller tells the watchers, so an upload of many files notifies them once. When this throws, the
-// caller removes the temp file.
+// `commit` writes the temp file when its caller has not yet, and puts the bytes in the tree. No caller
+// removes the temp file: a failed commit does here, and after a commit the thumbnail job does.
+export async function commitFromTemp(
+    drive: Drive,
+    mount: Mount,
+    tempId: string,
+    commit: () => Promise<DrivePath>,
+): Promise<DrivePath> {
+    const file = await commit().catch(async (e: unknown) => {
+        await mount.cleanupTemp(tempId);
+        throw e;
+    });
+    mount.runInBackground(`thumbnail of ${file.id}`, async () => {
+        try {
+            if (file.size === 0) return;
+            const source = mount.getTempPath(tempId);
+            const thumbnail = await saveThumbnail(mount.thumbsDir, file.id, source, file.mimeType, file.name);
+            if (!thumbnail) return;
+            const current = await mount.getPath(file.id);
+            if (!current) return;
+            const updated = await mount.updatePath(file.id, {
+                thumbnail: thumbnail.fileName,
+                details: {
+                    ...current.details,
+                    width: thumbnail.width,
+                    height: thumbnail.height,
+                    ...(thumbnail.duration !== undefined && { duration: thumbnail.duration }),
+                },
+            });
+            drive.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
+        } finally {
+            await mount.cleanupTemp(tempId);
+        }
+    });
+    return file;
+}
+
+// The caller tells the watchers, so an upload of many files notifies them once.
 export async function finalizeUpload(
     drive: Drive,
     mount: Mount,
@@ -33,53 +70,5 @@ export async function finalizeUpload(
     const uploadedFile = await mount.updatePath(pathId, { details: { originalName } });
     drive.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
     mount.history.record({ pathId, eventType: 'uploaded', actor: args.user, details: { size: uploadedFile.size } });
-
-    if (uploadedFile.size === 0) {
-        // An empty file has no thumbnail. Finder copies in two steps: an empty file first, and the
-        // bytes later through writeFileContent.
-        await mount.cleanupTemp(args.tempId);
-    } else {
-        regenerateThumbnailAsync(
-            drive,
-            mount,
-            pathId,
-            mount.getTempPath(args.tempId),
-            args.mimeType,
-            uploadedFile.name,
-            () => mount.cleanupTemp(args.tempId),
-        );
-    }
-
     return uploadedFile;
-}
-
-export function regenerateThumbnailAsync(
-    drive: Drive,
-    mount: Mount,
-    pathId: string,
-    source: Buffer | string,
-    mimeType: string,
-    fileName: string,
-    onCleanup?: () => Promise<void>,
-): void {
-    mount.runInBackground(`thumbnail of ${pathId}`, async () => {
-        try {
-            const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, source, mimeType, fileName);
-            if (!thumbnail) return;
-            const current = await mount.getPath(pathId);
-            if (!current) return;
-            const updated = await mount.updatePath(pathId, {
-                thumbnail: thumbnail.fileName,
-                details: {
-                    ...current.details,
-                    width: thumbnail.width,
-                    height: thumbnail.height,
-                    ...(thumbnail.duration !== undefined && { duration: thumbnail.duration }),
-                },
-            });
-            drive.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
-        } finally {
-            await onCleanup?.();
-        }
-    });
 }

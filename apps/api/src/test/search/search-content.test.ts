@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 import * as Y from 'yjs';
 import { ApiError } from '../../lib/core/errors';
 import { documentTransformRunner } from '../../lib/document/transform/runner';
-import { flushContentReindex } from '../mount-test-helpers';
+import { flushContentReindex, overwriteFile } from '../mount-test-helpers';
 import {
     assertJson,
     authedRequest,
@@ -495,7 +495,7 @@ describe('Drive content-index', () => {
             await drainP;
         });
         try {
-            await mount.writeFile(uploaded.id, Buffer.from('genracefresh body'));
+            await overwriteFile(mount, uploaded.id, Buffer.from('genracefresh body'));
         } finally {
             invalidateSpy.mockRestore();
             readSpy.mockRestore();

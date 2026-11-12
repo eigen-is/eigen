@@ -33,6 +33,7 @@ import MailComposer from 'nodemailer/lib/mail-composer';
 import * as Y from 'yjs';
 import type { Drive } from '../lib/drive';
 import { textToHtml } from '../lib/mail/mail-parser/html';
+import { writeTempWithHash } from '../lib/storage';
 import type { User } from '../lib/user';
 import type { LeadRole, MailAttachment, SeededInvite, SeededMail, VCardSpec } from './demo/content';
 import {
@@ -611,8 +612,11 @@ async function main(): Promise<void> {
     const { mount: teamMount } = await teamDrive.resolveFile(teamMountId, boardFolderId);
     const boardId = await teamMount.createFolder(boardFolderId, `${KANBAN.name}.eigenstickies`, 'stickies');
     for (const dbName of ['data.db', 'comments.db']) {
+        const tempId = crypto.randomUUID();
         const bytes = readFileSync(join(FIXTURES_DIR, 'festival-kanban.eigenstickies', dbName));
-        await teamMount.writeFile(await teamMount.touchFile(boardId, dbName, SQLITE_MIME), bytes);
+        const { size, hash } = await writeTempWithHash(teamMount.getTempPath(tempId), bytes);
+        await teamMount.createFileFromTemp(boardId, dbName, SQLITE_MIME, size, hash, tempId);
+        await teamMount.cleanupTemp(tempId);
     }
     await teamMount.createFolder(boardId, CONTAINER_MEDIA_FOLDER);
     await teamMount.createFolder(boardId, CONTAINER_CHAT_FOLDER);

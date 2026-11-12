@@ -108,7 +108,7 @@ import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp } from './streaming';
 import { sweepCopy, sweepDocument } from './sweep';
 import { deleteFailedCopy, deletePath, permanentlyDelete, restorePath } from './trash';
-import { finalizeUpload, regenerateThumbnailAsync } from './upload';
+import { commitFromTemp, finalizeUpload } from './upload';
 
 // How a content write is guarded and recorded. ifMatch is an If-Match value, checked under the file's
 // lock. The history row says `uploaded`, or `edited` for a save from the inline editor.
@@ -447,22 +447,20 @@ export class Drive {
         await this.personParent(mount, parentId, DRIVE_TYPE_FILE);
 
         const streamed = await streamFilesToTemp(mount, request, maxSize);
-        // All files land at once, each under a free name of its own. A file that fails still has its temp
-        // file, so the catch removes it. A file that landed hands its temp file to its thumbnail job.
+        // All files land at once, each under a free name of its own.
         const settled = await Promise.allSettled(
             streamed.map((file) =>
-                finalizeUpload(this, mount, {
-                    parentId,
-                    name: file.fileName,
-                    mimeType: file.mimeType,
-                    size: file.size,
-                    hash: file.hash,
-                    tempId: file.tempId,
-                    user,
-                }).catch(async (e: unknown) => {
-                    await mount.cleanupTemp(file.tempId);
-                    throw e;
-                }),
+                commitFromTemp(this, mount, file.tempId, () =>
+                    finalizeUpload(this, mount, {
+                        parentId,
+                        name: file.fileName,
+                        mimeType: file.mimeType,
+                        size: file.size,
+                        hash: file.hash,
+                        tempId: file.tempId,
+                        user,
+                    }),
+                ),
             ),
         );
         const uploaded: DrivePath[] = [];
@@ -489,15 +487,10 @@ export class Drive {
         const mount = this.getMount(mountId);
         await this.personParent(mount, parentId, DRIVE_TYPE_FILE);
         const tempId = crypto.randomUUID();
-        let created: DrivePath;
-        try {
+        const created = await commitFromTemp(this, mount, tempId, async () => {
             const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
-            created = await finalizeUpload(this, mount, { parentId, name, mimeType, size, hash, tempId, user });
-        } catch (e) {
-            await mount.cleanupTemp(tempId);
-            throw e;
-        }
-        // Outside the try: the file is created, and its thumbnail job owns the temp file now.
+            return finalizeUpload(this, mount, { parentId, name, mimeType, size, hash, tempId, user });
+        });
         await this.fanOutUpload(mount, user, created);
         return created;
     }
@@ -526,37 +519,13 @@ export class Drive {
             throw new ApiError(404, 'File not found');
         }
 
-        // The thumbnail job starts as soon as the bytes land, so no error after that leaves its temp
-        // file behind. A content write never changes the name or the type of the file.
-        let committed: DrivePath;
-        if (Buffer.isBuffer(data)) {
-            committed = await mount.writeFile(pathId, data, ifMatch);
-            if (data.length > 0) regenerateThumbnailAsync(this, mount, pathId, data, path.mimeType, path.name);
-        } else {
-            // A stream goes through a temp file, so the bytes never sit in memory. The size and hash
-            // come from that write, so the mount doesn't read the file again to compute them.
-            const tempId = crypto.randomUUID();
-            try {
-                const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
-                committed = await mount.writeFileFromTemp(pathId, tempId, size, hash, ifMatch);
-                if (size > 0) {
-                    regenerateThumbnailAsync(
-                        this,
-                        mount,
-                        pathId,
-                        mount.getTempPath(tempId),
-                        path.mimeType,
-                        path.name,
-                        () => mount.cleanupTemp(tempId),
-                    );
-                } else {
-                    await mount.cleanupTemp(tempId);
-                }
-            } catch (e) {
-                await mount.cleanupTemp(tempId);
-                throw e;
-            }
-        }
+        // The bytes go through a temp file, so a stream never sits in memory, and its size and hash come
+        // from that one write. A content write never changes the name or the type of the file.
+        const tempId = crypto.randomUUID();
+        const committed = await commitFromTemp(this, mount, tempId, async () => {
+            const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
+            return mount.writeFileFromTemp(pathId, tempId, size, hash, ifMatch);
+        });
 
         // The file can be deleted or trashed right after the write. That is a 404, the same as during it.
         const updated = await mount.getActivePath(pathId);

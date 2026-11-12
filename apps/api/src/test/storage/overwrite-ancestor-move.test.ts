@@ -9,7 +9,7 @@ import { Mount } from '../../lib/mount/mount';
 import { writeTempWithHash } from '../../lib/storage';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { createGetLocalDatabase, settlesWithin } from '../fault-storage-helpers';
-import { createTestMountConfig, seedFile } from '../mount-test-helpers';
+import { createTestMountConfig, overwriteFile, seedFile } from '../mount-test-helpers';
 
 // On `local` a key is its folder path: a key-derived write racing an ancestor rename, trash or a
 // delete must land at the key the row ends up with, never rebuild the old tree.
@@ -184,7 +184,7 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
     test('a parent renamed during the write leaves the bytes at the new key only', async () => {
         const { mount, storage, folderId, fileId, oldKey } = await fileInFolder('ancestor-rename');
         const gate = storage.armWrite();
-        const write = mount.writeFile(fileId, Buffer.from('v1'));
+        const write = overwriteFile(mount, fileId, Buffer.from('v1'));
         await gate.parked;
         const waiting = mount.armTreeWait();
         const move = mount.updatePath(folderId, { name: 'after' });
@@ -203,7 +203,7 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
     test('a parent trashed during the write leaves the bytes at the trashed key only', async () => {
         const { mount, storage, folderId, fileId, oldKey } = await fileInFolder('ancestor-trash');
         const gate = storage.armWrite();
-        const write = mount.writeFile(fileId, Buffer.from('v1'));
+        const write = overwriteFile(mount, fileId, Buffer.from('v1'));
         await gate.parked;
         const waiting = mount.armTreeWait();
         const trash = mount.trashPath(folderId);
@@ -233,7 +233,7 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
         const trash = mount.trashPath(folderId);
         await trashQueued;
         const saveQueued = mount.armTreeWait();
-        const save = mount.writeFile(fileId, Buffer.from('v1'), base);
+        const save = overwriteFile(mount, fileId, Buffer.from('v1'), base);
         await saveQueued;
         hold.resolve();
         await Promise.all([held, trash]);
@@ -339,7 +339,7 @@ describe('a file delete beside writes at its key on a path-based mount', () => {
     test('a delete and a create of its name during an overwrite leave the new file its bytes', async () => {
         const { mount, storage, folderId, fileId } = await fileInFolder('overwrite-delete-create');
         const gate = storage.armWrite();
-        const overwrite = mount.writeFile(fileId, Buffer.from('late overwrite')).catch(() => null);
+        const overwrite = overwriteFile(mount, fileId, Buffer.from('late overwrite')).catch(() => null);
         await gate.parked;
         const deleteWaiting = mount.armTreeWait();
         const del = mount.deletePath(fileId);

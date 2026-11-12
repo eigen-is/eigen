@@ -991,22 +991,8 @@ export class Mount {
 
     // ---- Overwriting ----
 
-    // Answers the row it committed under the lock, so a later write's etag or updatedAt never reaches this caller.
-    public async writeFile(pathId: string, data: Buffer, ifMatch?: string): Promise<DrivePath> {
-        const hash = new Bun.CryptoHasher('sha256').update(data).digest('hex');
-
-        return this.withPathLock(pathId, () =>
-            this.withTreeShared(async () => {
-                await this.assertOverwritable(pathId, ifMatch);
-                const storageKey = await this.getStorageKey(pathId);
-                await this.storage.write(storageKey, data);
-                return this.commitOverwrite(pathId, storageKey, data.byteLength, hash);
-            }),
-        );
-    }
-
-    // Overwrites from a temp file whose size and hash are known already (writeTempWithHash), so nothing
-    // hashes the bytes twice.
+    // Overwrites from a temp file whose size and hash are known already (writeTempWithHash), so nothing hashes
+    // the bytes twice. Answers the row it committed under the lock, never a later write's etag or updatedAt.
     public async writeFileFromTemp(
         pathId: string,
         tempId: string,
@@ -1016,44 +1002,38 @@ export class Mount {
     ): Promise<DrivePath> {
         return this.withPathLock(pathId, () =>
             this.withTreeShared(async () => {
-                await this.assertOverwritable(pathId, ifMatch);
+                // Checked under both locks before any byte lands, so a trashed file keeps the bytes it was trashed
+                // with, and of two saves from one base only the first writes.
+                const etag = computeEtag(await this.getActivePath(pathId));
+                if (ifMatch !== undefined && !matchesIfMatch(ifMatch, etag)) throw new StaleWriteError(etag);
                 const storageKey = await this.getStorageKey(pathId);
                 await this.uploadFromTemp(storageKey, tempId);
-                return this.commitOverwrite(pathId, storageKey, size, hash);
+
+                const row = await this.db
+                    .select({ name: paths.name, mimeType: paths.mimeType })
+                    .from(paths)
+                    .where(eq(paths.id, pathId))
+                    .get();
+                const searchable = !!row && isSearchableTextFile(row.mimeType, row.name);
+                // The stored row is answered because its column keeps whole seconds, which a GET's etag reads.
+                const committed = await this.db
+                    .update(paths)
+                    .set({ size, hash, updatedAt: new Date(), contentDirty: searchable ? 1 : 0 })
+                    .where(eq(paths.id, pathId))
+                    .returning()
+                    .get();
+                // Off `local` no lock keeps a delete out of the write, and the bytes it leaves at this row's own
+                // key go here.
+                if (!committed) {
+                    await this.removeObject(pathId, storageKey);
+                    throw new ApiError(404, 'File not found');
+                }
+                await this.invalidateAncestorsOf(pathId);
+                if (searchable) this.reindexQueue?.kick();
+                if (committed.trashedAt) throw new ApiError(404, 'File is in trash');
+                return this.toDrivePath(committed);
             }),
         );
-    }
-
-    // Runs under the path and tree locks before any byte lands, so a trashed file keeps the bytes it was trashed
-    // with, and of two saves from one base only the first writes.
-    private async assertOverwritable(pathId: string, ifMatch: string | undefined): Promise<void> {
-        const etag = computeEtag(await this.getActivePath(pathId));
-        if (ifMatch !== undefined && !matchesIfMatch(ifMatch, etag)) throw new StaleWriteError(etag);
-    }
-
-    // Off `local` no lock keeps a delete out of the write, and the bytes it leaves at this row's own key go here. The
-    // stored row is answered because its column keeps whole seconds, which a GET's etag reads.
-    private async commitOverwrite(pathId: string, storageKey: string, size: number, hash: string): Promise<DrivePath> {
-        const row = await this.db
-            .select({ name: paths.name, mimeType: paths.mimeType })
-            .from(paths)
-            .where(eq(paths.id, pathId))
-            .get();
-        const searchable = !!row && isSearchableTextFile(row.mimeType, row.name);
-        const committed = await this.db
-            .update(paths)
-            .set({ size, hash, updatedAt: new Date(), contentDirty: searchable ? 1 : 0 })
-            .where(eq(paths.id, pathId))
-            .returning()
-            .get();
-        if (!committed) {
-            await this.removeObject(pathId, storageKey);
-            throw new ApiError(404, 'File not found');
-        }
-        await this.invalidateAncestorsOf(pathId);
-        if (searchable) this.reindexQueue?.kick();
-        if (committed.trashedAt) throw new ApiError(404, 'File is in trash');
-        return this.toDrivePath(committed);
     }
 
     // ---- Temp files ----

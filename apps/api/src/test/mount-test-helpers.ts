@@ -1,4 +1,5 @@
 import type { MountConfig } from '@workspace/lib/types';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { getS3Config } from '../lib/config/server-settings';
 import type { Drive } from '../lib/drive';
 import type { Mount } from '../lib/mount';
@@ -30,6 +31,17 @@ export async function seedFile(
     try {
         const { hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
         return await mount.createFileFromTemp(parentId, name, mimeType, size, hash, tempId);
+    } finally {
+        await mount.cleanupTemp(tempId);
+    }
+}
+
+// New bytes for a file straight on a mount, the way a content write puts them there.
+export async function overwriteFile(mount: Mount, pathId: string, data: Buffer, ifMatch?: string): Promise<DrivePath> {
+    const tempId = crypto.randomUUID();
+    try {
+        const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
+        return await mount.writeFileFromTemp(pathId, tempId, size, hash, ifMatch);
     } finally {
         await mount.cleanupTemp(tempId);
     }
