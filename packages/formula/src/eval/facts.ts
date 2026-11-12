@@ -1,12 +1,16 @@
 // What a shape's tree says about every cell that holds it, worked out from the tree and the function list alone,
 // without evaluating: whether this build can evaluate it at all, whether it reads cells it does not name or draws,
-// and how much of the stack its evaluation can take. They are packed into one number, the depth above the flags.
+// whether a structural edit can change its answer through a place or a size, and how much of the stack its
+// evaluation can take. They are packed into one number, the depth above the flags.
 
 import type { Registry } from '../functions/registry';
+import { CellKind } from '../store/column';
 import { Token } from '../text/lexer';
 import type { FormulaNode } from '../text/tree';
 import { NodeKind, RefFlag, RefKind, SheetKind } from '../text/tree';
-import { ANYWHERE } from './signature';
+import { slotOf } from './call';
+import type { Param } from './signature';
+import { ANYWHERE, Read } from './signature';
 
 export const Fact = {
     // A reference into another workbook or across sheets: the cell keeps the value it came with.
@@ -17,6 +21,12 @@ export const Fact = {
     ReadsUnnamed: 4,
     // The answer differs from one recalc to the next with nothing written: a draw, or the clock.
     Volatile: 8,
+    // The answer depends on where the cell or a cell it names sits: a call of a row that reads a place, as ROW
+    // does, or the @ in front of a range. Moving the cell or rewriting its references can change it.
+    Positional: 16,
+    // The answer can depend on how many lines a range spans: a range stands somewhere else than as the argument
+    // of a parameter that passes over empty cells.
+    Sized: 32,
 } as const;
 
 export const FACT_BITS = 8;
@@ -49,12 +59,21 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
         const first = shapeFacts(link, functions);
         return flags | (first & FLAGS) | ((Math.max(depth, first >> FACT_BITS) + OPERATOR) << FACT_BITS);
     }
-    for (const child of node.children) {
-        const facts = shapeFacts(child, functions);
+    const entry = node.kind === NodeKind.Call ? functions.get(node.text) : undefined;
+    const { children } = node;
+    for (let i = 0; i < children.length; i += 1) {
+        let facts = shapeFacts(children[i], functions);
+        // A range read by a family that counts no empty cell gives the same answer with more or fewer of them.
+        // A call of a wrong number of arguments has no record for some of them.
+        const slot: Param<unknown> | undefined =
+            entry !== undefined && children[i].kind === NodeKind.Ref ? slotOf(entry, i, children.length) : undefined;
+        const family = slot?.family ?? null;
+        if (family !== null && (family.kinds & (1 << CellKind.Empty)) === 0) facts &= ~Fact.Sized;
         depth = Math.max(depth, facts >> FACT_BITS);
         flags |= facts & FLAGS;
     }
-    const entry = node.kind === NodeKind.Call ? functions.get(node.text) : undefined;
+    if (entry?.slots.some((slot) => slot.read === Read.Here)) flags |= Fact.Positional;
+    if (node.kind === NodeKind.Prefix && node.op === Token.At) flags |= Fact.Positional;
     if (entry !== undefined && entry.chosen !== null) flags |= Fact.Chosen;
     if (entry?.volatile) flags |= Fact.Volatile;
     if (entry?.returns === ANYWHERE) flags |= Fact.ReadsUnnamed;
@@ -65,7 +84,10 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
     if (node.kind === NodeKind.Call) depth = Math.max(READING, depth + CALL);
     else if (node.kind === NodeKind.Prefix || node.kind === NodeKind.Postfix) depth += SIGN;
     else if (node.kind === NodeKind.Paren || node.kind === NodeKind.Invoke) depth += BRACKETS;
-    else if (node.kind === NodeKind.Ref && node.op !== RefKind.Cell) depth = RANGE;
+    else if (node.kind === NodeKind.Ref && node.op !== RefKind.Cell) {
+        depth = RANGE;
+        flags |= Fact.Sized;
+    }
     return flags | (depth << FACT_BITS);
 }
 

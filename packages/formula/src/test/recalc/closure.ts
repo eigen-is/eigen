@@ -84,11 +84,10 @@ export function pendingOf(workbook: Workbook): Set<number> {
     return pending;
 }
 
-// The formulas a marking flags: those that are not pending yet and read a seed span, a formula found here, or,
-// with any seed at all, cells they do not name. To be asked before the marking, since it reads which are pending.
+// The formulas a marking flags: those that are not pending yet and read a seed span, a formula found here, or
+// cells they do not name. To be asked before the marking, since it reads which are pending.
 export function closure(workbook: Workbook, readers: readonly Reader[], seeds: readonly number[]): Set<number> {
     const found = new Set<number>();
-    if (seeds.length === 0) return found;
     const settled = readers.filter(
         ({ sheet, column, row }) => workbook.sheets[sheet].columns[column].kind[row] <= SETTLED,
     );

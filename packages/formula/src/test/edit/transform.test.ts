@@ -4,7 +4,7 @@ import { GONE, parseStored, printStored, toA1, transformLines } from '../../text
 import { at, treeStored } from '../text/support';
 import { deleteColumns, deleteRows, insertColumns, insertRows, lineAfter, shown, tree } from './support';
 
-type Outcome = { text: string; changed: boolean; lossy: boolean; recompute: boolean; resized: boolean };
+type Outcome = { text: string; changed: boolean; lossy: boolean; recompute: boolean; resized: boolean; slid: boolean };
 
 // A formula typed at `host` on `hostSheet`, taken through the edit and read back at the host's new place.
 function after(text: string, host: string, edit: LineEdit, hostSheet = 's1'): Outcome {
@@ -21,10 +21,11 @@ function after(text: string, host: string, edit: LineEdit, hostSheet = 's1'): Ou
         lossy: result.lossy,
         recompute: result.recompute,
         resized: result.resized,
+        slid: result.slid,
     };
 }
 
-const QUIET = { lossy: false, recompute: false, resized: false };
+const QUIET = { lossy: false, recompute: false, resized: false, slid: false };
 
 describe('one row inserted at row 3 of Sheet1: what changes the stored form', () => {
     const edit = insertRows(3);
@@ -79,6 +80,7 @@ describe('a target in a deleted band', () => {
             lossy: true,
             recompute: true,
             resized: false,
+            slid: false,
         });
     });
     test('it keeps its sheet and its whitespace', () => {
@@ -97,7 +99,7 @@ describe('a target in a deleted band', () => {
         expect(after('=SUM(A:A)', 'C1', deleteColumns('A'))).toMatchObject({ text: '=SUM(#REF!)', lossy: true });
     });
     test('a range end in the band moves to the nearest row left, which is lossy and a seed', () => {
-        const clamped = { changed: true, lossy: true, recompute: true, resized: true };
+        const clamped = { changed: true, lossy: true, recompute: true, resized: true, slid: false };
         expect(after('=SUM(A3:A6)', 'B1', deleteRows(2, 4))).toEqual({ text: '=SUM(A2:A3)', ...clamped });
         expect(after('=SUM(A2:A5)', 'B1', deleteRows(4, 6))).toEqual({ text: '=SUM(A2:A3)', ...clamped });
         expect(after('=SUM($A$3:$B$10)', 'C5', deleteColumns('B'))).toEqual({ text: '=SUM($A$3:$A$10)', ...clamped });
@@ -110,8 +112,8 @@ describe('a target in a deleted band', () => {
 });
 
 describe('the three flags', () => {
-    const GREW = { lossy: false, recompute: false, resized: true };
-    const SHRANK = { lossy: false, recompute: true, resized: true };
+    const GREW = { lossy: false, recompute: false, resized: true, slid: false };
+    const SHRANK = { lossy: false, recompute: true, resized: true, slid: false };
     test('a range that gained an empty row is resized, and neither lossy nor a seed by itself', () => {
         expect(after('=SUM(A1:A10)', 'A11', insertRows(5))).toEqual({ text: '=SUM(A1:A11)', changed: true, ...GREW });
     });
@@ -160,10 +162,11 @@ describe('the three flags', () => {
             lossy: true,
             recompute: true,
             resized: false,
+            slid: false,
         });
     });
-    test('rows shifting inside a whole column make a seed with the same tree', () => {
-        const seed = { changed: false, lossy: false, recompute: true, resized: false };
+    test('rows shifting inside a whole column say so with the same tree, and are a seed only by what the store holds', () => {
+        const seed = { changed: false, lossy: false, recompute: false, resized: false, slid: true };
         expect(after('=SUM(A:A)', 'C1', insertRows(9))).toEqual({ text: '=SUM(A:A)', ...seed });
         expect(after('=SUM(A:A)', 'C1', deleteRows(9))).toEqual({ text: '=SUM(A:A)', ...seed });
         expect(after('=SUM(Sheet1!A:A)', 'C1', insertRows(9), 's2')).toEqual({ text: '=SUM(Sheet1!A:A)', ...seed });
@@ -183,6 +186,7 @@ describe('the three flags', () => {
             lossy: true,
             recompute: true,
             resized: false,
+            slid: false,
         });
         expect(after('=B1048575:C1048575', 'A19', insertRows(5, 2)).text).toBe('=#REF!');
     });
@@ -193,6 +197,7 @@ describe('the three flags', () => {
             lossy: true,
             recompute: true,
             resized: true,
+            slid: false,
         });
         expect(after('=B2:B1048576', 'A3', insertRows(1048576)).text).toBe('=B2:B1048576');
     });

@@ -186,13 +186,13 @@ describe('the fast path against the slow version', () => {
                 const stored = printStored(result.tree);
                 expect(`${where}: ${result.tree === before}`).toBe(`${where}: ${stored === text}`);
                 expect([where, reread(result.tree)]).toEqual([where, result.tree]);
-                const flags = { lossy: false, recompute: false, resized: false };
+                const flags = { lossy: false, recompute: false, resized: false, slid: false };
                 const mapped = leaves(result.tree);
                 references.forEach((reference, i) => {
                     const leaf = mapped[i];
                     const was = written[i];
                     if (reference.ends.length === 0) {
-                        if ((reference.sheet ?? hostSheet) === edit.sheet) flags.recompute = true;
+                        if ((reference.sheet ?? hostSheet) === edit.sheet) flags.slid = true;
                         expect(leaf).toBe(was);
                         return;
                     }
@@ -220,8 +220,8 @@ describe('the fast path against the slow version', () => {
                         rows ? [was.column, was.column2] : [was.row, was.row2],
                     );
                 });
-                const { lossy, recompute, resized } = result;
-                expect(`${where}: ${JSON.stringify({ lossy, recompute, resized })}`).toBe(
+                const { lossy, recompute, resized, slid } = result;
+                expect(`${where}: ${JSON.stringify({ lossy, recompute, resized, slid })}`).toBe(
                     `${where}: ${JSON.stringify(flags)}`,
                 );
                 if (result.tree !== before) seen.changed += 1;
@@ -245,7 +245,7 @@ describe('the fast path against the slow version', () => {
         expect(seen.changed).toBeGreaterThan(30000);
         expect(seen.gone).toBeGreaterThan(5000);
         expect(seen.lossy).toBeGreaterThan(10000);
-        expect(seen.recompute).toBeGreaterThan(20000);
+        expect(seen.recompute).toBeGreaterThan(15000);
         expect(seen.resized).toBeGreaterThan(10000);
         expect(seen.offGrid).toBeGreaterThan(5000);
         expect(seen.undone).toBeGreaterThan(40000);
@@ -302,10 +302,10 @@ describe('the fast path against the slow version', () => {
                 }
                 if (found === undefined) throw new Error(`${where}: no class for the host on line ${host}`);
                 const direct = transformLines(shape.tree, real, hostSheet, host);
-                const flags = [found.lossy, found.recompute, found.resized];
+                const flags = [found.lossy, found.recompute, found.resized, found.slid];
                 const same = found.tree === shape.tree;
                 expect(`${where}: line ${host} ${printStored(found.tree)} ${flags} ${same}`).toBe(
-                    `${where}: line ${host} ${printStored(direct.tree)} ${[direct.lossy, direct.recompute, direct.resized]} ${direct.tree === shape.tree}`,
+                    `${where}: line ${host} ${printStored(direct.tree)} ${[direct.lossy, direct.recompute, direct.resized, direct.slid]} ${direct.tree === shape.tree}`,
                 );
             }
             classes.forEach(({ start, end }, i) => {
@@ -378,7 +378,7 @@ describe('a column filled down splits into few classes, not one per cell', () =>
         const shape = table.shape(table.intern('=[s1]!#REF!+SUM([s1]!#REF!:[s1]!#REF!)+[s1]!#REF!#'));
         if (shape.tree === null) throw new Error('unparsed');
         expect(hostClasses(shape.tree, shape.refs, insertRows(50), 's2', 0, 99)).toEqual([
-            { start: 0, end: 99, tree: shape.tree, lossy: false, recompute: false, resized: false },
+            { start: 0, end: 99, tree: shape.tree, lossy: false, recompute: false, resized: false, slid: false },
         ]);
     });
 

@@ -24,7 +24,7 @@ describe('an array costs the cells that exist, wherever they lie', () => {
                 A4: '=SUM(Sheet1!B1:XFD1048576+1)',
             },
         });
-        expect(engine.recalc(ALL)).toEqual({ loops: [], stopped: false });
+        expect(engine.recalc(ALL)).toMatchObject({ loops: [], stopped: false });
         expect(valueAt(engine, 'A1')).toBe(1);
         expect(valueAt(engine, 'A6')).toBe(3);
         expect(valueAt(engine, 'A1', 's2')).toBe(2);
@@ -32,9 +32,9 @@ describe('an array costs the cells that exist, wherever they lie', () => {
         expect(valueAt(engine, 'A3', 's2')).toBe(1);
         expect(valueAt(engine, 'A4', 's2')).toBe(1048576 * 16383 + 2);
         engine.clear('s1', 0, 0);
-        expect(engine.recalc(ALL)).toEqual({ loops: [], stopped: false });
+        expect(engine.recalc(ALL)).toMatchObject({ loops: [], stopped: false });
         engine.setValue('s1', 2, 0, 5);
-        expect(engine.recalc(ALL)).toEqual({ loops: [], stopped: false });
+        expect(engine.recalc(ALL)).toMatchObject({ loops: [], stopped: false });
         expect(valueAt(engine, 'A6')).toBe(6);
     });
 
@@ -301,7 +301,7 @@ describe('the bound on what one array stores', () => {
 
     test('more than 2^24 stored elements is #CALC!, on a load and after any edits', () => {
         const loaded = engineOf({ s1: { A1: blanks, A2: '=1+1' }, s2: diagonal(2048) });
-        expect(loaded.recalc(ALL)).toEqual({ loops: [], stopped: false });
+        expect(loaded.recalc(ALL)).toMatchObject({ loops: [], stopped: false });
         expect(valueAt(loaded, 'A1')).toBe(CALC);
         expect(valueAt(loaded, 'A2')).toBe(2);
 
@@ -344,7 +344,7 @@ describe('the bound on what one array stores', () => {
             },
             s2: row,
         });
-        expect(engine.recalc(ALL)).toEqual({ loops: [], stopped: false });
+        expect(engine.recalc(ALL)).toMatchObject({ loops: [], stopped: false });
         expect(valueAt(engine, 'A1')).toBe(CALC);
         expect(valueAt(engine, 'A3')).toBe(CALC);
         expect(valueAt(engine, 'A2')).toBe(160432128);
@@ -373,7 +373,7 @@ describe('the bound on what one array stores', () => {
             },
             s2: long,
         });
-        expect(engine.recalc(ALL)).toEqual({ loops: [], stopped: false });
+        expect(engine.recalc(ALL)).toMatchObject({ loops: [], stopped: false });
         expect(valueAt(engine, 'A1')).toBe(CALC);
         expect(valueAt(engine, 'A2')).toBe(2 * 2048 * 31000);
         expect(valueAt(engine, 'A3')).toBe(2 * 2048 * 31000);
@@ -406,7 +406,7 @@ describe('the bound on what one array stores', () => {
                 D1: 'b'.repeat(20000),
             },
         });
-        expect(engine.recalc(ALL)).toEqual({ loops: [], stopped: false });
+        expect(engine.recalc(ALL)).toMatchObject({ loops: [], stopped: false });
         expect(valueAt(engine, 'A2')).toBe(CALC);
         expect(valueAt(engine, 'A3')).toBe(700 * 20000 + 9 + 90 * 2 + 601 * 3);
         expect(valueAt(engine, 'A4')).toBe(CALC);

@@ -1,8 +1,8 @@
-// Recalc on demand. A pass flags the formulas that the cells written since the last one reach, then computes them.
-// Reading a cell whose formula is still to be computed computes it first, so a formula always sees final values and
-// no order is worked out ahead. A cell met while it is being computed is on a loop, with every cell that was reading
-// towards it, and all of them get the loop's result whatever they computed. Nesting is bounded by one budget: past
-// it the calls in progress are dropped by a throw and the cells computed again from the list of cells in progress.
+// Recalc on demand. Every write and structural edit goes through here, as one body that first notes or flags what
+// is to be computed and then changes the store. A pass flags the formulas the written cells reach and computes
+// them: reading a cell still to be computed computes it first, so no order is worked out ahead. A cell met while it
+// is being computed is on a loop with every cell reading towards it. Nesting has one budget: past it the calls in
+// progress are dropped by a throw and the cells computed again from the list of cells in progress.
 
 import { Evaluator } from '../eval/evaluator';
 import { FACT_BITS, Fact, shapeFacts } from '../eval/facts';
@@ -10,9 +10,11 @@ import type { Registry } from '../functions/registry';
 import type { Column } from '../store/column';
 import { DIRTY, KIND_MASK, LOOP, RUNNING, SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
-import type { Workbook } from '../store/workbook';
+import type { Change, Literal, Workbook } from '../store/workbook';
 import { ERROR, REF } from '../values/errors';
 import type { Reference, Scalar } from '../values/value';
+import type { Rewrite } from './edit-plan';
+import { planEdit } from './edit-plan';
 import { ReverseIndex } from './reverse-index';
 
 export type CellAddress = { readonly sheet: string; readonly row: number; readonly column: number };
@@ -23,6 +25,16 @@ export type RecalcResult = {
     readonly loops: readonly CellAddress[];
     // True when the pass met its cap with formulas still to compute. What it computed stays, and the next goes on.
     readonly stopped: boolean;
+    // The cells whose value the pass changed, as runs down a column: the place of the sheet, the column, the
+    // first and the last row. They are true until the next edit or pass. A pass that stopped can list a cell of
+    // a loop that is still to be computed.
+    readonly changed: readonly number[];
+};
+
+export type EditResult = {
+    readonly rewrites: readonly Rewrite[];
+    // How many cells that held a value or a formula the edit pushed off the grid, which are gone.
+    readonly dropped: number;
 };
 
 // How much of the stack the cells in progress may take together before their calls are dropped, in the units of a
@@ -44,10 +56,12 @@ export class Recalc {
     private readonly functions: Registry;
     private readonly evaluator: Evaluator;
     private readonly index = new ReverseIndex();
-    // Whether a formula came or went since the index was built.
+    // Whether a formula came, went or moved since the index was built.
     private stale = true;
-    // The spans of rows written since the last pass: sheet, column, first and last row.
+    // The spans of rows written since the last pass or edit: sheet, column, first and last row.
     private readonly seeds: number[] = [];
+    // The runs of cells whose value the pass changed.
+    private changed: number[] = [];
     // Per shape id, its facts.
     private readonly facts: number[] = [];
     // The cells in progress, in the order they were entered. The list is the reading chain, each cell read by the
@@ -88,17 +102,46 @@ export class Recalc {
             for (let c = 0; c < columns.length; c += 1) {
                 const { kind, length } = columns[c];
                 for (let row = 0; columns[c].pending > 0 && row < length; row += 1) {
-                    if (kind[row] > SETTLED) this.seed(s, c, row);
+                    if (kind[row] > SETTLED) extend(this.seeds, s, c, row);
                 }
             }
         }
     }
 
-    // To be called before a cell is written, with whether a formula is: the cell is a seed of the next pass.
-    public touch(sheet: Sheet, row: number, c: number, formula: boolean): void {
-        const column = sheet.columns[c];
-        if (formula || (column !== undefined && column.shape[row] > 0)) this.stale = true;
-        this.seed(this.workbook.sheets.indexOf(sheet), c, row);
+    public setValue(sheet: Sheet, row: number, c: number, value: Literal): void {
+        this.touch(sheet, row, c);
+        this.workbook.setValue(sheet, row, c, value);
+    }
+
+    public clear(sheet: Sheet, row: number, c: number): void {
+        this.touch(sheet, row, c);
+        this.workbook.clear(sheet, row, c);
+    }
+
+    // One formula in its stored text in every cell of a block. It holds no value until a pass computes it.
+    public fillFormula(sheet: Sheet, top: number, left: number, bottom: number, right: number, text: string): void {
+        this.stale = true;
+        for (let c = left; c <= right; c += 1) this.seeds.push(sheet.place, c, top, bottom);
+        this.workbook.fillFormula(sheet, top, left, bottom, right, text);
+    }
+
+    // Performs a structural edit. The formulas whose value it can change are flagged with everything that reads
+    // them while the index still describes the cells as they are, together with the cells written since the last
+    // pass: so nothing but the flags, which move with their cells, has to find its way across the edit.
+    public edit(change: Change): EditResult {
+        const { workbook } = this;
+        this.reach();
+        const plan = planEdit(workbook, this.index.rectangles, this.facts, change);
+        const { seeds } = plan;
+        for (let at = 0; at < seeds.length; at += 4) {
+            const column = workbook.sheets[seeds[at]].columns[seeds[at + 1]];
+            for (let row = seeds[at + 2]; row <= seeds[at + 3]; row += 1) column.markDirty(row);
+        }
+        this.index.mark(workbook, merged(this.seeds.concat(seeds)));
+        this.seeds.length = 0;
+        const dropped = workbook.apply(change, plan.fills);
+        this.stale = true;
+        return { rewrites: plan.rewrites, dropped };
     }
 
     // Computes the formulas that the cells written since the last pass reach, those that read cells they do not
@@ -106,26 +149,13 @@ export class Recalc {
     public pass(cap: number, now = 0, seed = 0): RecalcResult {
         const { workbook } = this;
         this.evaluator.clock(now, seed);
-        if (this.stale) {
-            for (let shape = 1; shape <= workbook.shapes.size; shape += 1) this.factsOf(shape);
-            this.index.rebuild(workbook, this.facts);
-            this.stale = false;
+        // With nothing written, what an edit or a pass that stopped left flagged is all there is to compute.
+        if (this.seeds.length > 0) {
+            this.reach();
+            this.index.mark(workbook, merged(this.seeds));
+            this.seeds.length = 0;
         }
-        // A cell written twice is one seed: the spans in sheet, column and row order, those that meet as one.
-        const { seeds } = this;
-        const order: number[] = [];
-        for (let at = 0; at < seeds.length; at += 4) order.push(at);
-        order.sort((a, b) => seeds[a] - seeds[b] || seeds[a + 1] - seeds[b + 1] || seeds[a + 2] - seeds[b + 2]);
-        const spans: number[] = [];
-        for (const at of order) {
-            const last = spans.length - 4;
-            const sameColumn = last >= 0 && spans[last] === seeds[at] && spans[last + 1] === seeds[at + 1];
-            if (sameColumn && spans[last + 3] >= seeds[at + 2] - 1) {
-                spans[last + 3] = Math.max(spans[last + 3], seeds[at + 3]);
-            } else spans.push(seeds[at], seeds[at + 1], seeds[at + 2], seeds[at + 3]);
-        }
-        this.index.mark(workbook, spans);
-        seeds.length = 0;
+        this.changed = [];
         this.cost = 0;
         this.stored = false;
         this.cap = cap;
@@ -184,7 +214,7 @@ export class Recalc {
                 }
             }
         }
-        return { loops, stopped };
+        return { loops, stopped, changed: this.changed };
     }
 
     // The value of a cell that a formula in progress reads, its own formula computed first when it is still to be.
@@ -227,13 +257,20 @@ export class Recalc {
         return true;
     }
 
-    private seed(sheet: number, c: number, row: number): void {
-        const { seeds } = this;
-        const last = seeds.length - 4;
-        // Cells written down one column are one span.
-        if (last >= 0 && seeds[last] === sheet && seeds[last + 1] === c && seeds[last + 3] === row - 1) {
-            seeds[last + 3] = row;
-        } else seeds.push(sheet, c, row, row);
+    // A cell is about to be written: it is a seed of the next pass or edit.
+    private touch(sheet: Sheet, row: number, c: number): void {
+        const column = sheet.columns[c];
+        if (column !== undefined && column.shape[row] > 0) this.stale = true;
+        extend(this.seeds, sheet.place, c, row);
+    }
+
+    // Makes the index describe the workbook as it is.
+    private reach(): void {
+        if (!this.stale) return;
+        const { workbook } = this;
+        for (let shape = 1; shape <= workbook.shapes.size; shape += 1) this.factsOf(shape);
+        this.index.rebuild(workbook, this.facts);
+        this.stale = false;
     }
 
     // Computes a cell that a formula in progress reads.
@@ -292,7 +329,9 @@ export class Recalc {
             }
             if (!known) {
                 joined.setLoop(this.rows[at], true);
-                this.workbook.put(joined, this.rows[at], REF);
+                if (this.workbook.put(joined, this.rows[at], REF)) {
+                    extend(this.changed, this.sheets[at].place, this.places[at], this.rows[at]);
+                }
                 let rows = this.looped.get(joined);
                 if (rows === undefined) this.looped.set(joined, (rows = new Map()));
                 rows.set(this.rows[at], at);
@@ -323,7 +362,9 @@ export class Recalc {
         // stops before its first store: a formula that costs more than the cap alone would hold every pass up.
         if (this.cost >= this.cap && this.stored) throw STOP;
         this.stored = true;
-        if ((column.kind[row] & LOOP) === 0 && !kept) this.workbook.put(column, row, value);
+        if ((column.kind[row] & LOOP) === 0 && !kept && this.workbook.put(column, row, value)) {
+            extend(this.changed, this.sheets[at].place, this.places[at], row);
+        }
         for (let i = at; i < this.size; i += 1) {
             this.cost += 1 + this.made[i];
             this.columns[i].computed(this.rows[i]);
@@ -345,4 +386,28 @@ export class Recalc {
         }
         return facts;
     }
+}
+
+// Adds a cell to runs of cells down a column, each a sheet, a column, a first and a last row: a cell right below
+// the last run goes on with it.
+function extend(runs: number[], sheet: number, c: number, row: number): void {
+    const last = runs.length - 4;
+    if (last >= 0 && runs[last] === sheet && runs[last + 1] === c && runs[last + 3] === row - 1) runs[last + 3] = row;
+    else runs.push(sheet, c, row, row);
+}
+
+// A cell written twice is one seed: the spans in sheet, column and row order, those that meet as one.
+function merged(seeds: readonly number[]): number[] {
+    const order: number[] = [];
+    for (let at = 0; at < seeds.length; at += 4) order.push(at);
+    order.sort((a, b) => seeds[a] - seeds[b] || seeds[a + 1] - seeds[b + 1] || seeds[a + 2] - seeds[b + 2]);
+    const spans: number[] = [];
+    for (const at of order) {
+        const last = spans.length - 4;
+        const sameColumn = last >= 0 && spans[last] === seeds[at] && spans[last + 1] === seeds[at + 1];
+        if (sameColumn && spans[last + 3] >= seeds[at + 2] - 1) {
+            spans[last + 3] = Math.max(spans[last + 3], seeds[at + 3]);
+        } else spans.push(seeds[at], seeds[at + 1], seeds[at + 2], seeds[at + 3]);
+    }
+    return spans;
 }

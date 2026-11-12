@@ -26,12 +26,16 @@ export type Transformed = {
     readonly tree: FormulaNode;
     // The old text cannot be derived back from the new: undo must keep it.
     readonly lossy: boolean;
-    // A cell a reference named is gone, or lines shifted inside a whole column or row one names: the value can
-    // change whatever the formula computes, so it is a seed of the recompute.
+    // A cell a reference named is gone: the value can change whatever the formula computes, so it is a seed of the
+    // recompute.
     readonly recompute: boolean;
     // A range that is still a range spans another number of lines than it did, and every cell it reads kept its
-    // value: a seed only for a formula that depends on the size of a range, as ROWS does, which the caller decides.
+    // value: a seed only for a formula that depends on the size of a range, which its shape's facts say.
     readonly resized: boolean;
+    // A whole column or row a reference names is on the edited sheet and along the edited lines. It names the
+    // same lines as before, so the value changes only when a cell of them sat at or past the edit, which the
+    // store knows and the tree does not.
+    readonly slid: boolean;
 };
 
 // The hosts on the lines `start` to `end`, counted before the edit, which all get this outcome.
@@ -112,13 +116,14 @@ function shift(
     let lossy = false;
     let recompute = false;
     let resized = false;
+    let slid = false;
     let perHost = false;
     const mapped = mapLeaves(tree, (node) => {
         if (node.kind !== NodeKind.Ref) return node;
         const { op, flags, sheetKind } = node;
         const onSheet = sheetOf(node, hostSheet) === edit.sheet;
         if (op === (rows ? RefKind.Columns : RefKind.Rows)) {
-            if (onSheet) recompute = true;
+            if (onSheet) slid = true;
             return node;
         }
         const absolute = flags & (rows ? RefFlag.RowAbsolute : RefFlag.ColumnAbsolute);
@@ -162,5 +167,5 @@ function shift(
             ? referenceNode(op, node.space, sheetKind, node.sheet, next, node.column, next2, node.column2, flags)
             : referenceNode(op, node.space, sheetKind, node.sheet, node.row, next, node.row2, next2, flags);
     });
-    return { result: { tree: mapped, lossy, recompute, resized }, perHost };
+    return { result: { tree: mapped, lossy, recompute, resized, slid }, perHost };
 }

@@ -110,14 +110,16 @@ describe('a range follows only when all of it is in the block', () => {
         );
     });
     test('part of it', () => {
-        expect(after('=SUM(A1:A2)', 'Sheet1!A3', 'Sheet1!A1', 'Sheet1!B1')).toBe('Sheet1!A3 =SUM(A1:A2)');
-        expect(after('=SUM(A1:A10)', 'Sheet1!C1', 'Sheet1!A10', 'Sheet1!A12')).toBe('Sheet1!C1 =SUM(A1:A10)');
-        expect(after('=SUM(A1:A10)', 'Sheet1!C1', 'Sheet1!A1', 'Sheet1!B3')).toBe('Sheet1!C1 =SUM(A1:A10)');
+        expect(after('=SUM(A1:A2)', 'Sheet1!A3', 'Sheet1!A1', 'Sheet1!B1')).toBe('Sheet1!A3 =SUM(A1:A2) seed');
+        expect(after('=SUM(A1:A10)', 'Sheet1!C1', 'Sheet1!A10', 'Sheet1!A12')).toBe('Sheet1!C1 =SUM(A1:A10) seed');
+        expect(after('=SUM(A1:A10)', 'Sheet1!C1', 'Sheet1!A1', 'Sheet1!B3')).toBe('Sheet1!C1 =SUM(A1:A10) seed');
     });
     test('a whole column follows whole columns and nothing less', () => {
         const columnA = `Sheet1!A1:A${GRID_ROWS}`;
-        expect(after('=SUM(A:A)+SUM($A:B)', 'Sheet1!E1', columnA, 'Sheet1!C1')).toBe('Sheet1!E1 =SUM(C:C)+SUM($A:B)');
-        expect(after('=SUM(A:A)', 'Sheet1!E1', 'Sheet1!A1:A100', 'Sheet1!C1')).toBe('Sheet1!E1 =SUM(A:A)');
+        expect(after('=SUM(A:A)+SUM($A:B)', 'Sheet1!E1', columnA, 'Sheet1!C1')).toBe(
+            'Sheet1!E1 =SUM(C:C)+SUM($A:B) seed',
+        );
+        expect(after('=SUM(A:A)', 'Sheet1!E1', 'Sheet1!A1:A100', 'Sheet1!C1')).toBe('Sheet1!E1 =SUM(A:A) seed');
         expect(after('=SUM(1:1)', 'Sheet1!E5', 'Sheet1!A1:XFD1', 'Sheet2!A3')).toBe('Sheet1!E5 =SUM(Sheet2!3:3) lossy');
     });
 });
@@ -131,7 +133,7 @@ describe('a reference to a cell the block landed on', () => {
     });
     test('as does a range that is covered whole, and no other', () => {
         expect(after('=SUM(B1:B2)', 'Sheet1!D1', 'Sheet1!A1:A3', 'Sheet1!B1')).toBe('Sheet1!D1 =SUM(#REF!) lossy seed');
-        expect(after('=SUM(B1:B4)', 'Sheet1!D1', 'Sheet1!A1:A3', 'Sheet1!B1')).toBe('Sheet1!D1 =SUM(B1:B4)');
+        expect(after('=SUM(B1:B4)', 'Sheet1!D1', 'Sheet1!A1:A3', 'Sheet1!B1')).toBe('Sheet1!D1 =SUM(B1:B4) seed');
     });
     test('as does a range the block covers whole where it lands on its own cells, though two of its cells moved', () => {
         expect(after('=SUM(D5:E6)', 'Sheet1!H1', 'Sheet1!C3:E5', 'Sheet1!C4')).toBe('Sheet1!H1 =SUM(#REF!) lossy seed');

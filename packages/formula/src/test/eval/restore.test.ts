@@ -20,7 +20,7 @@ test('a recalc that threw leaves the engine as a recalc that never ran', () => {
             return engine.recalc(Number.POSITIVE_INFINITY);
         }
     };
-    expect(dive()).toEqual({ loops: [], stopped: false });
+    expect(dive()).toMatchObject({ loops: [], stopped: false });
     expect(thrown).toBeGreaterThan(3);
     expect(valueAt(engine, 'A1')).toBe(300);
     expect(valueAt(engine, 'B1')).toBe((300 * 301) / 2);

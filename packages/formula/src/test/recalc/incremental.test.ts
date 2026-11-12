@@ -349,7 +349,7 @@ describe('the cap of an edit', () => {
     test('an edit computes the formulas of its cone, not of the workbook', () => {
         const engine = filled();
         engine.setValue('s1', 499, 1, 7);
-        expect(engine.recalc(1)).toEqual({ loops: [], stopped: false });
+        expect(engine.recalc(1)).toMatchObject({ loops: [], stopped: false });
         expect(engine.valueOf('s1', 499, 3)).toBe(14);
     });
 
@@ -362,7 +362,7 @@ describe('the cap of an edit', () => {
         expect([499, 500].map((row) => engine.valueOf('s1', row, 3))).toEqual([14, 1000]);
         expect(engine.recalc(1).stopped).toBe(true);
         expect([engine.valueOf('s1', 500, 3), engine.valueOf('s1', 0, 4)]).toEqual([2, null]);
-        expect(engine.recalc(1)).toEqual({ loops: [], stopped: false });
+        expect(engine.recalc(1)).toMatchObject({ loops: [], stopped: false });
         expect(engine.valueOf('s1', 0, 4)).toBe(16);
         expect(engine.recalc(0).stopped).toBe(false);
     });
