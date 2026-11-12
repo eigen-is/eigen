@@ -32,7 +32,8 @@ export const STATISTICAL = [
             squaresX += (xs[i] - meanX) ** 2;
             squaresY += (ys[i] - meanY) ** 2;
         }
-        return both / Math.sqrt(squaresX * squaresY);
+        // A side that does not vary, and no pair at all, leave nothing to divide by.
+        return squaresX * squaresY === 0 ? DIV0 : both / Math.sqrt(squaresX * squaresY);
     }),
     fn('COUNT', [rest(COUNTED)], (numbers) => numbers.count()),
     fn('COUNTA', [rest(FILLED)], (values) => values.count()),

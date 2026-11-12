@@ -49,6 +49,7 @@ export const TEXT_FUNCTIONS = [
         return text.slice(0, from) + put + text.slice(from + Math.trunc(count));
     }),
     fn('LEN', [TEXT], (text) => text.length),
-    fn('VALUE', [TEXT], (text) => parseNumber(text) ?? VALUE),
+    // An empty text is 0, as it is wherever a number is read.
+    fn('VALUE', [TEXT], (text) => (text === '' ? 0 : (parseNumber(text) ?? VALUE))),
     fn('UPPER', [TEXT], upperCase),
 ];

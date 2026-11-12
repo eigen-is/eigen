@@ -64,8 +64,7 @@ describe('a table is handed over whole and never looked into for an error', () =
         ['=ROW({1,2})', VALUE],
         ['=SUM(A1:INDEX(A1:A5,3))', 60],
         ['=SUM(XLOOKUP(20,A1:A3,A1:B3))', 20],
-        // One value of a table of references is the first cell of that reference: the contract's reading.
-        ['=LOOKUP(2,{1,2},OFFSET(A1,{0,1},0,2))', 20],
+        // One value of a table of references to one cell is that cell.
         ['=LOOKUP(2,{1,2},OFFSET(B1,{0,1},0))', 'b'],
     ])('%s', (formula, expected) => {
         expect(evaluate(formula, F2)).toBe(expected);

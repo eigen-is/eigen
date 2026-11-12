@@ -190,6 +190,14 @@ describe('two ranges side by side: CORREL', () => {
         ['=CORREL(H2:H6,I2:I6)', DIV0],
         ['=CORREL(1/0,I1:I6)', DIV0],
         ['=CORREL(A1:A6)', VALUE],
+        // Batch 7: a side that does not vary, and no pair at all, divide by zero.
+        ['=CORREL({1,2,3},{5,5,5})', DIV0],
+        ['=CORREL({5,5,5},{1,2,3})', DIV0],
+        ['=CORREL({1},{1})', DIV0],
+        ['=CORREL(A1,B1)', DIV0],
+        ['=CORREL(5,7)', DIV0],
+        ['=CORREL("1","2")', DIV0],
+        ['=CORREL(Z1:Z3,Z1:Z3)', DIV0],
     ])('%s', (formula, expected) => {
         expect(evaluate(formula, F3)).toBe(expected);
     });

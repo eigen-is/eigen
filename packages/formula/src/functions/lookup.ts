@@ -66,7 +66,7 @@ export const LOOKUP = [
     ),
     fn(
         'OFFSET',
-        [REFERENCE, INTEGER, INTEGER, skippable(INTEGER), skippable(INTEGER)],
+        [refusing(REFERENCE, VALUE), INTEGER, INTEGER, skippable(INTEGER), skippable(INTEGER)],
         (base, down, across, height, width) => {
             const rows = height ?? base.bottom - base.top + 1;
             const columns = width ?? base.right - base.left + 1;
