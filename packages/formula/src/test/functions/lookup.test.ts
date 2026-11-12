@@ -408,6 +408,7 @@ describe('HYPERLINK', () => {
         ['=HYPERLINK(5,6)', 6],
         ['=HYPERLINK("x",TRUE)', true],
         ['=HYPERLINK("x",B1)', 0],
+        ['=HYPERLINK("x",B1)&""', '0'],
         ['=HYPERLINK("x",)', 0],
         ['=HYPERLINK("x",B6)', ''],
         ['=HYPERLINK(,"Friendly")', 'Friendly'],
@@ -428,5 +429,64 @@ describe('HYPERLINK', () => {
         expect(evaluate('=LEN(HYPERLINK(F1))', { F1: 'y'.repeat(255) })).toBe(255);
         expect(evaluate('=HYPERLINK(F1)', { F1: 'y'.repeat(256) })).toBe(VALUE);
         expect(evaluate('=HYPERLINK(F1,"f")', long)).toBe('f');
+    });
+});
+
+describe('what Excel records for the lookups on its own cells', () => {
+    test.each([
+        // A size is cut toward zero after its sign is taken, so half a row is the corner's row and the one before.
+        ['=SUM(ROW(OFFSET(B2,0,0,0.5,1)))', 3],
+        ['=SUM(ROW(OFFSET(B2,0,0,-0.5,1)))', 5],
+        ['=SUM(COLUMN(OFFSET(B2,0,0,1,0.5)))', 3],
+        ['=ROWS(OFFSET(B2,0,0,1.9,1.9))', 1],
+        ['=ROWS(OFFSET(B2,0,0,-2,-2))', 2],
+        ['=SUM(OFFSET(A1,5,0,-3,1))', 1e300],
+        ['=OFFSET(B2,0,0,0,1)', REF],
+        ['=OFFSET(B2,0,0,1,0)', REF],
+        ['=OFFSET(B2,0,0,B1,2)', REF],
+        ['=SUM(OFFSET(A1,0,0,"2",TRUE))', -1],
+        ['=SUM(OFFSET(B2,0,0,,2))', 4],
+        // Excel check: the half row before the first row.
+        ['=OFFSET(A1,0,0,0.5,1)', REF],
+        // One index into a range of several rows and columns is refused, into an array it is a row.
+        ['=INDEX(A1:C3,2)', REF],
+        ['=INDEX(A1:C3,0)', REF],
+        ['=INDEX(A1:C3,-1)', VALUE],
+        ['=INDEX(A1:A3,2)', -2.5],
+        ['=INDEX((A1:A2,C1:C3),1)', 1.5],
+        ['=SUM(INDEX({1,2;3,4},1))', 3],
+        ['=SUM(INDEX(A1:C3,2,))', 1.5],
+        // A key that is not found is #N/A before a column or row the table lacks is #REF!.
+        ['=VLOOKUP("k2",A1:A5,2,FALSE)', NA],
+        ['=VLOOKUP("k2",B2,2,FALSE)', NA],
+        ['=VLOOKUP(30,E1:E4,2,FALSE)', REF],
+        ['=HLOOKUP(2,B1,2,FALSE)', NA],
+        ['=HLOOKUP(2,A1:E4,5,FALSE)', REF],
+        // Excel check: a key that is not found with an index below 1.
+        ['=VLOOKUP("zz",D1:E4,0,FALSE)', VALUE],
+        ['=LOOKUP(4,C1:C3,{1,0;TRUE,"x"})', NA],
+        ['=LOOKUP(4,C1:C3,D1:E4)', NA],
+        ['=LOOKUP(4,C1:C3,(A1:A2,C1:C2))', NA],
+        ['=LOOKUP(4,C1:C3,E1:E3)', 20],
+        // A search mode is cut down, so -2.5 is no mode.
+        ['=XMATCH(2,C1:C3,0,-2.5)', VALUE],
+        ['=XMATCH(4,C1:C3,0,1.9)', 2],
+        ['=XLOOKUP("k2",D1:D4,E1:E4,"nf",0,-2.5)', VALUE],
+        ['=XLOOKUP("k2",D1:D4,E1:E4,"nf",0,1.9)', 20],
+        // Excel check: a search mode between -1 and 0.
+        ['=XMATCH(2,C1:C3,0,-0.5)', 1],
+        ['=XLOOKUP("k2",D1:D4,(E1:E2,E3:E4))', NA],
+        // One cell to search goes with a result of one column as well as with one of one row; a range of
+        // another size than the result is refused whether or not the key is in it.
+        ['=XLOOKUP("k2",B5,E1:E4,"nf")', 'nf'],
+        ['=XLOOKUP("k2",5,E1:E4)', NA],
+        ['=XLOOKUP("k2",A1:A5,E1:E4,"nf")', VALUE],
+        ['=XLOOKUP("k2",D1:D4,E1)', VALUE],
+        ['=XLOOKUP("k2",D1:D3,E1:E4)', VALUE],
+        // Excel check: one cell that holds the key, beside a result of one column and of one row.
+        ['=SUM(XLOOKUP("abc",B5,E1:E4))', 100],
+        ['=SUM(XLOOKUP("abc",B5,C1:E1))', 12],
+    ])('%s is %p', (formula, expected) => {
+        expect(evaluate(formula, BATCH)).toBe(expected);
     });
 });

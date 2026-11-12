@@ -32,11 +32,12 @@ import {
 type Key = number | string | boolean | null;
 
 // VLOOKUP when `down`, else HLOOKUP: the key is searched in the first column or row, a blank key as the number 0.
+// A key that is not found is #N/A even when the table lacks the column or row asked for.
 function tableLookup(key: Key, table: Table, index: number, sorted: boolean, down: boolean) {
     if (index < 1) return VALUE;
-    if (index > (down ? table.columns : table.rows)) return REF;
     const at = (down ? table.column(0) : table.row(0)).find(key ?? 0, sorted ? Find.AtMost : Find.Exact);
     if (at < 0) return NA;
+    if (index > (down ? table.columns : table.rows)) return REF;
     return down ? table.at(at, index - 1) : table.at(index - 1, at);
 }
 
@@ -76,7 +77,9 @@ export const LOOKUP = [
             if (row < 0 || (column ?? 0) < 0 || areaNumber < 1) return VALUE;
             const table = source.area(areaNumber - 1);
             if (table === undefined) return REF;
-            // One index into a single row counts along it.
+            // One index counts along a single row or column, and gives a row of an array, but a range of several
+            // rows and columns refuses it.
+            if (column === undefined && source.reference && table.rows > 1 && table.columns > 1) return REF;
             const along = column === undefined && table.rows === 1;
             const r = along ? 0 : row;
             const c = along ? row : (column ?? 0);
@@ -92,15 +95,22 @@ export const LOOKUP = [
     ),
     fn(
         'OFFSET',
-        [refusing(REFERENCE, VALUE), INTEGER, INTEGER, skippable(INTEGER), skippable(INTEGER)],
+        [refusing(REFERENCE, VALUE), INTEGER, INTEGER, skippable(NUMBER), skippable(NUMBER)],
         (base, down, across, height, width) => {
-            const rows = height ?? base.bottom - base.top + 1;
-            const columns = width ?? base.right - base.left + 1;
-            if (rows === 0 || columns === 0) return REF;
-            // A negative size counts back from the corner.
-            const top = base.top + down + (rows < 0 ? rows + 1 : 0);
-            const left = base.left + across + (columns < 0 ? columns + 1 : 0);
-            return rectangle(base.sheet, top, left, top + Math.abs(rows) - 1, left + Math.abs(columns) - 1);
+            if (height === 0 || width === 0) return REF;
+            // A size counts from the corner, back from it when negative, and is cut toward zero only after its
+            // sign is taken: half a row is the corner's row and the one before it.
+            const top = base.top + down;
+            const left = base.left + across;
+            const end = height === undefined ? base.bottom + down : top + Math.trunc(height) - Math.sign(height);
+            const side = width === undefined ? base.right + across : left + Math.trunc(width) - Math.sign(width);
+            return rectangle(
+                base.sheet,
+                Math.min(top, end),
+                Math.min(left, side),
+                Math.max(top, end),
+                Math.max(left, side),
+            );
         },
         ANYWHERE,
     ),
@@ -113,10 +123,12 @@ export const LOOKUP = [
     }),
     fn(
         'XMATCH',
-        [PLAIN, refusing(TABLE, NA), optional(INTEGER, 0), skippable(INTEGER, 1)],
+        [PLAIN, refusing(TABLE, NA), optional(INTEGER, 0), skippable(NUMBER, 1)],
         (key, table, match, search) => {
             if (table.rows > 1 && table.columns > 1) return VALUE;
-            const at = (table.columns === 1 ? table.column(0) : table.row(0)).seek(key, match, search);
+            const values = table.columns === 1 ? table.column(0) : table.row(0);
+            // A search mode is cut down, not toward zero: -2.5 is no mode.
+            const at = values.seek(key, match, Math.floor(search));
             if (typeof at !== 'number') return at;
             return at < 0 ? NA : at + 1;
         },
@@ -128,8 +140,10 @@ export const LOOKUP = [
         tableLookup(key, table, row, sorted, false),
     ),
     // The values are searched down the first column when the table is at least as high as it is wide, else along
-    // the first row, and the result comes from the last column or row, or from the result range at that place.
-    fn('LOOKUP', [PLAIN, refusing(TABLE, NA), optional(TABLE)], (key, table, result) => {
+    // the first row, and the result comes from the last column or row, or from the result range at that place:
+    // one row or one column, never both.
+    fn('LOOKUP', [PLAIN, refusing(TABLE, NA), optional(refusing(TABLE, NA))], (key, table, result) => {
+        if (result !== undefined && result.rows > 1 && result.columns > 1) return NA;
         const down = table.rows >= table.columns;
         const at = (down ? table.column(0) : table.row(0)).find(key ?? 0, Find.AtMost);
         if (at < 0) return NA;
@@ -137,15 +151,22 @@ export const LOOKUP = [
         return result.rows > 1 ? result.at(at, 0) : result.at(0, at);
     }),
     // The result is the row of the result range beside the value found in a column, or its column under the value
-    // found in a row.
+    // found in a row. One cell to search is a column beside a result of one row, and a row above any other.
     fn(
         'XLOOKUP',
-        [PLAIN, refusing(TABLE, NA), TABLE, skippable(LAZY, NA), optional(INTEGER, 0), skippable(INTEGER, 1)],
+        [
+            PLAIN,
+            refusing(TABLE, NA),
+            refusing(TABLE, NA),
+            skippable(LAZY, NA),
+            optional(INTEGER, 0),
+            skippable(NUMBER, 1),
+        ],
         (key, lookup, result, missing, match, search) => {
-            const down = lookup.columns === 1;
+            const down = lookup.columns === 1 && (lookup.rows > 1 || result.rows === 1);
             if (!down && lookup.rows > 1) return VALUE;
             if ((down ? lookup.rows : lookup.columns) !== (down ? result.rows : result.columns)) return VALUE;
-            const at = (down ? lookup.column(0) : lookup.row(0)).seek(key, match, search);
+            const at = (down ? lookup.column(0) : lookup.row(0)).seek(key, match, Math.floor(search));
             if (typeof at !== 'number') return at;
             if (at < 0) return missing;
             return down ? result.part(at, 0, 1, result.columns) : result.part(0, at, result.rows, 1);
