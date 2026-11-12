@@ -2,6 +2,8 @@
 // edit. An empty or failed trash shows the standard text. Empty trash shows only when there is something to
 // empty, and asks before it deletes everything.
 // A trashed row's menu and the command palette offer the same two rows: Restore and Delete permanently.
+// When Delete permanently gets only part of a selection through, the dialog stays open on the items that
+// failed, and confirming again sends only those.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { PaletteSelectionActions } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -186,4 +188,40 @@ test('a trashed row’s menu draws the same rows, Delete permanently last and re
     expect(menuRows()).toEqual(['Restore', '—', 'Delete permanently']);
     const rows = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')];
     expect(rows.map((row) => row.getAttribute('data-variant'))).toEqual(['default', 'destructive']);
+});
+
+test('confirming Delete permanently again after a partial failure sends only the refused item', async () => {
+    // The trash ids the delete route was asked for, in order. The server refuses `b.txt`.
+    const deleted: string[] = [];
+    // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
+    const g = globalThis as any;
+    const realFetch = g.fetch;
+    g.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input);
+        const id = /\/trash\/([^/]+)$/.exec(url)?.[1];
+        if (!id || init?.method !== 'DELETE') return realFetch(input, init);
+        deleted.push(decodeURIComponent(id));
+        if (id === 'b.txt') return new Response('No access', { status: 403 });
+        return Response.json({ success: true });
+    };
+    try {
+        trash.data = [trashed('a.txt', 1, 3), trashed('b.txt', 1, 2), trashed('c.txt', 1, 1)];
+        const container = await open();
+        const rows = [...container.querySelectorAll('[role="grid"] [data-index] > *')];
+        await click(rows[0]);
+        await act(async () => {
+            rows[2]?.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+        });
+        await act(async () => palette.actions?.find(({ action }) => action.id === 'delete-permanently')?.run());
+        const dialog = () => document.querySelector('[role="alertdialog"], [role="dialog"]');
+        const confirm = () => click(button(dialog() ?? document, 'Delete permanently'));
+        await confirm();
+        expect(deleted).toEqual(['a.txt', 'b.txt', 'c.txt']);
+        expect(dialog()?.textContent).toContain('b.txt');
+        deleted.length = 0;
+        await confirm();
+        expect(deleted).toEqual(['b.txt']);
+    } finally {
+        g.fetch = realFetch;
+    }
 });

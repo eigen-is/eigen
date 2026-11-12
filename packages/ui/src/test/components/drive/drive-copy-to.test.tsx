@@ -1,5 +1,5 @@
-// When Copy to… copies only part of a selection, the picker stays open, and confirming again copies only
-// the items that failed, so the ones that copied don't land twice.
+// When Copy to… or Move to… gets only part of a selection through, the picker stays open, and confirming
+// again sends only the items that failed, so a copy doesn't land twice and a moved item isn't moved again.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
@@ -20,14 +20,14 @@ afterAll(() => mock.module('../../../components/drive/drive-location-field', () 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
 
-// The source ids the copy route was asked for, in order. The source `bad` always fails.
+// The source ids the copy or move route was asked for, in order. The source `bad` always fails.
 const posted: string[] = [];
 g.fetch = async (input: string | URL | Request) => {
     const url = input instanceof Request ? input.url : String(input);
-    const sourceId = /\/path\/([^/]+)\/copy$/.exec(url)?.[1];
+    const sourceId = /\/path\/([^/]+)\/(?:copy|move)$/.exec(url)?.[1];
     if (!sourceId) return Response.json([]);
     posted.push(sourceId);
-    if (sourceId === 'bad') return new Response('Server error', { status: 500 });
+    if (sourceId === 'bad') return new Response('No access', { status: 403 });
     return Response.json(drivePath({ id: `copy-of-${sourceId}`, name: 'copy.txt', mimeType: 'text/plain' }));
 };
 
@@ -42,11 +42,11 @@ const { useDriveActionRunner } = await import('../../../components/drive/drive-a
 let unmount = async () => {};
 afterEach(() => unmount());
 
-const items = ['good', 'bad'].map((id) =>
+const items = ['good', 'bad', 'other'].map((id) =>
     drivePath({ id, name: `${id}.txt`, mimeType: 'text/plain', ownerId: 'user-1', parentId: 'root' }),
 );
 
-let run: (items: DrivePath[]) => void = () => {};
+let run: (id: 'copy-to' | 'move-to', items: DrivePath[]) => void = () => {};
 
 function Probe() {
     const runner = useDriveActionRunner({
@@ -56,19 +56,23 @@ function Probe() {
         capabilities: DRIVE_CAPABILITIES.browse,
         onOpen: () => {},
     });
-    run = (items) => runner.run('copy-to', items);
+    run = (id, items) => runner.run(id, items);
     return runner.dialogs;
 }
 
-async function copyHere() {
-    const button = [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === 'Copy here');
-    if (!button) throw new Error('no copy button');
+async function confirm(label: string) {
+    const button = [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === label);
+    if (!button) throw new Error(`no ${label} button`);
     await act(async () => {
         button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 }
 
-test('confirming again after a partial failure copies only the failed item', async () => {
+test.each([
+    ['copy-to', 'Copy here'],
+    ['move-to', 'Move here'],
+] as const)('%s: confirming again after a partial failure sends only the failed item', async (id, label) => {
+    posted.length = 0;
     const router = createRouter({
         routeTree: createRootRoute({
             component: () => createElement(CommandPaletteProvider, null, createElement(Probe)),
@@ -77,10 +81,10 @@ test('confirming again after a partial failure copies only the failed item', asy
     });
     await router.load();
     ({ unmount } = await renderInDocument(createElement(RouterProvider, { router })));
-    await act(async () => run(items));
-    await copyHere();
-    expect(posted).toEqual(['good', 'bad']);
+    await act(async () => run(id, items));
+    await confirm(label);
+    expect(posted).toEqual(['good', 'bad', 'other']);
     posted.length = 0;
-    await copyHere();
+    await confirm(label);
     expect(posted).toEqual(['bad']);
 });

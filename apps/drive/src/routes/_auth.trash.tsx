@@ -6,6 +6,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import {
     DEFAULT_MOUNT_ID,
     getDriveComparator,
+    PartialBatchError,
     useDriveViewPreferences,
     useEmptyTrash,
     useListTrash,
@@ -140,7 +141,10 @@ function TrashRoute() {
                 }
                 itemName={deleteItems.length === 1 ? deleteItems[0].name : undefined}
                 onDelete={async () => {
-                    await Promise.all(deleteItems.map((item) => permanentlyDelete.mutateAsync(item.id)));
+                    await permanentlyDelete.mutateAsync(deleteItems).catch((error: unknown) => {
+                        if (error instanceof PartialBatchError) setDeleteItems(error.failed);
+                        throw error;
+                    });
                 }}
                 deleteText="Delete permanently"
             />

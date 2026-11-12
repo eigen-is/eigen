@@ -6,14 +6,13 @@
 import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import {
-    copiesBeside,
-    PartialCopyError,
-    useCopyPaths,
+    PartialBatchError,
     useCopyToFolder,
     useDeletePaths,
     useDriveActionsFor,
+    useDuplicatePaths,
     useIsEffectiveOwnerOf,
-    useMovePath,
+    useMovePaths,
 } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { DriveCapabilities, DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
@@ -67,9 +66,9 @@ export function useDriveActionRunner({
     onAfterAction,
 }: UseDriveActionRunnerOptions): DriveActionRunner {
     const dialogs = useDriveDialogs();
-    const movePath = useMovePath(ownerId, mountId, currentPath?.id);
+    const { mutateAsync: movePaths } = useMovePaths(ownerId, mountId, currentPath?.id);
     const { mutateAsync: copyToFolder } = useCopyToFolder();
-    const { mutate: copyPaths } = useCopyPaths();
+    const { mutate: duplicatePaths } = useDuplicatePaths();
     const deletePathsMutation = useDeletePaths();
     const isCoarsePointer = useIsCoarsePointer();
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
@@ -92,27 +91,24 @@ export function useDriveActionRunner({
     };
 
     const handlePickDestination = async (location: { ownerId: string; mountId: string; folderId: string }) => {
-        const items = dialogs.copyMove.items;
-        if (dialogs.copyMove.mode === 'move') {
-            if (location.ownerId !== ownerId || location.mountId !== mountId) {
-                toast.error('Moving across drives isn’t supported yet. Use Copy to… instead.');
-                return;
-            }
-            await Promise.all(
-                items.map((item) => movePath.mutateAsync({ pathId: item.id, targetParentId: location.folderId })),
-            );
-        } else {
-            await copyToFolder({
-                items,
-                targetOwnerId: location.ownerId,
-                targetMountId: location.mountId,
-                targetParentId: location.folderId,
-            }).catch((error) => {
-                // The picker stays open, and a retry sends only the failures, or what copied would land twice.
-                if (error instanceof PartialCopyError) dialogs.copyMove.openDialog(error.failed, 'copy');
-                throw error;
-            });
+        const { items, mode } = dialogs.copyMove;
+        if (mode === 'move' && (location.ownerId !== ownerId || location.mountId !== mountId)) {
+            toast.error('Moving across drives isn’t supported yet. Use Copy to… instead.');
+            return;
         }
+        const done =
+            mode === 'move'
+                ? movePaths({ paths: items, targetParentId: location.folderId })
+                : copyToFolder({
+                      items,
+                      targetOwnerId: location.ownerId,
+                      targetMountId: location.mountId,
+                      targetParentId: location.folderId,
+                  });
+        await done.catch((error: unknown) => {
+            if (error instanceof PartialBatchError) dialogs.copyMove.openDialog(error.failed, mode);
+            throw error;
+        });
     };
 
     const run = (id: DriveActionId, items: readonly DrivePath[], format?: ExportFormat) => {
@@ -131,7 +127,7 @@ export function useDriveActionRunner({
                 dialogs.rename.openDialog(item);
                 return;
             case 'duplicate':
-                copyPaths(copiesBeside(items));
+                duplicatePaths(items);
                 return;
             case 'move-to':
                 dialogs.copyMove.openDialog(items, 'move');
@@ -173,7 +169,7 @@ export function useDriveActionRunner({
         run,
         onMove: capabilities.canMove
             ? async (path, targetItemId) => {
-                  await movePath.mutateAsync({ pathId: path.id, targetParentId: targetItemId });
+                  await movePaths({ paths: [path], targetParentId: targetItemId });
               }
             : undefined,
         onCreateFolder: capabilities.canCreateFolder ? dialogs.createFolder.openDialog : undefined,

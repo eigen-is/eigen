@@ -2,7 +2,7 @@
 // direct share, trash an item in someone else's drive into its owner's trash, or move the viewer's own items
 // to their trash. The Drive action runner and an open document's File menu open it when a delete asks first.
 
-import { PartialDeleteError, useDeletePaths, useIsEffectiveOwnerOf, useIsSharedWithMe } from '@workspace/lib/drive';
+import { PartialBatchError, useDeletePaths, useIsEffectiveOwnerOf, useIsSharedWithMe } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
@@ -19,8 +19,7 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction }: Dr
     const deletePathsMutation = useDeletePaths();
     const isSharedWithMe = useIsSharedWithMe();
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
-    // After a partial failure a retry sends only the items that failed, since trashing an item twice fails.
-    // Closing the dialog clears them, so the next selection starts from its full list.
+    // After a partial failure a retry sends only the items that failed, until the dialog closes.
     const [failed, setFailed] = useState<readonly DrivePath[] | null>(null);
     useEffect(() => {
         if (!open) setFailed(null);
@@ -36,17 +35,14 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction }: Dr
 
     const handleDelete = async () => {
         if (targets.length === 0) return;
-        try {
-            const succeeded = await deletePathsMutation.mutateAsync(targets);
-            for (const path of succeeded) onAfterAction?.('delete', path);
-        } catch (error) {
-            if (error instanceof PartialDeleteError) {
+        const deleted = await deletePathsMutation.mutateAsync(targets).catch((error: unknown) => {
+            if (error instanceof PartialBatchError) {
                 for (const path of error.succeeded) onAfterAction?.('delete', path);
                 setFailed(error.failed);
             }
-            // The dialog stays open, so the user can retry the items that failed.
             throw error;
-        }
+        });
+        for (const path of deleted) onAfterAction?.('delete', path);
     };
 
     const copy =

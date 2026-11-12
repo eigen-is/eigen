@@ -53,24 +53,25 @@ beforeEach(() => {
     };
 });
 
-// useCopyPaths sends each source to targetOf(source), which is the media folder unless a test says otherwise.
+// Duplicate copies each source into its own folder; the other hooks copy into the media folder.
 async function copy(
-    hook: 'paths' | 'folder' | 'media',
-    sources: DrivePath[],
-    targetOf: (source: DrivePath) => typeof TARGET = () => TARGET,
-): Promise<{ result: DrivePath[] | null; error: unknown; invalidated: readonly unknown[][] }> {
+    hook: 'duplicate' | 'folder' | 'media',
+    sources: readonly DrivePath[],
+): Promise<{ result: readonly DrivePath[] | null; error: unknown; invalidated: readonly unknown[][] }> {
     const { act } = await import('react');
-    const { useCopyPaths, useCopyToFolder, useCopyToMediaFolder } = await import('../../../../core/drive/hooks/writes');
+    const { useCopyToFolder, useCopyToMediaFolder, useDuplicatePaths } = await import(
+        '../../../../core/drive/hooks/writes'
+    );
     const { queryClient, invalidated } = trackingClient();
     const { latest, unmount } = await renderHook(
-        () => ({ paths: useCopyPaths(), folder: useCopyToFolder(), media: useCopyToMediaFolder(OWNER, 'm1') }),
+        () => ({ duplicate: useDuplicatePaths(), folder: useCopyToFolder(), media: useCopyToMediaFolder(OWNER, 'm1') }),
         queryClient,
     );
-    const outcome: { result: DrivePath[] | null; error: unknown } = { result: null, error: null };
+    const outcome: { result: readonly DrivePath[] | null; error: unknown } = { result: null, error: null };
     await act(async () => {
         const done =
-            hook === 'paths'
-                ? latest.paths.mutateAsync(sources.map((source) => ({ source, ...targetOf(source) })))
+            hook === 'duplicate'
+                ? latest.duplicate.mutateAsync(sources)
                 : hook === 'folder'
                   ? latest.folder.mutateAsync({ items: sources, ...TARGET })
                   : latest.media.mutateAsync({ paths: sources, mediaFolderId: TARGET.targetParentId });
@@ -87,54 +88,51 @@ async function copy(
     return { ...outcome, invalidated };
 }
 
-describe('useCopyPaths', () => {
+describe('useDuplicatePaths', () => {
     test('a partly failed batch rejects with what copied and the sources that failed', async () => {
-        const { PartialCopyError } = await import('../../../../core/drive/hooks/writes');
-        const { error } = await copy('paths', [GOOD, BAD]);
-        expect(error).toBeInstanceOf(PartialCopyError);
-        if (!(error instanceof PartialCopyError)) return;
-        expect(error.copied.map((p) => p.id)).toEqual(['copy-of-good']);
+        const { PartialBatchError } = await import('../../../../core/drive/hooks/writes');
+        const { error } = await copy('duplicate', [GOOD, BAD]);
+        expect(error).toBeInstanceOf(PartialBatchError);
+        if (!(error instanceof PartialBatchError)) return;
+        expect(error.succeeded.map((p) => p.id)).toEqual(['copy-of-good']);
         expect(error.failed).toEqual([BAD]);
         expect(toasts).toEqual(['error: Failed to copy 1 of 2 items: Server error (500)']);
     });
 
     test('the copies that landed refresh their folder and the mime listings', async () => {
-        const { invalidated } = await copy('paths', [GOOD, BAD]);
-        expect(hasKey(invalidated, ['drive', OWNER, 'folder', 'm1', 'media'])).toBe(true);
+        const { invalidated } = await copy('duplicate', [GOOD, BAD]);
+        expect(hasKey(invalidated, ['drive', OWNER, 'folder', 'm1', 'folder'])).toBe(true);
         expect(hasKey(invalidated, ['drive', OWNER, 'mime'])).toBe(true);
     });
 
-    test('a batch shaped like Duplicate refreshes the folder of each copy', async () => {
+    test('a duplicate refreshes the folder of each copy', async () => {
         const sources = [path('a', 'left'), path('b', 'right')];
-        const { invalidated } = await copy('paths', sources, (source) => ({
-            ...TARGET,
-            targetParentId: source.parentId ?? '',
-        }));
+        const { invalidated } = await copy('duplicate', sources);
         expect(hasKey(invalidated, ['drive', OWNER, 'folder', 'm1', 'left'])).toBe(true);
         expect(hasKey(invalidated, ['drive', OWNER, 'folder', 'm1', 'right'])).toBe(true);
     });
 
     test('a failed copy does not stop another one into the same folder', async () => {
-        const { error } = await copy('paths', [BAD, GOOD]);
+        const { error } = await copy('duplicate', [BAD, GOOD]);
         expect(posted).toEqual(['bad', 'good']);
-        const { PartialCopyError } = await import('../../../../core/drive/hooks/writes');
-        if (!(error instanceof PartialCopyError)) throw error;
-        expect(error.copied.map((p) => p.id)).toEqual(['copy-of-good']);
+        const { PartialBatchError } = await import('../../../../core/drive/hooks/writes');
+        if (!(error instanceof PartialBatchError)) throw error;
+        expect(error.succeeded.map((p) => p.id)).toEqual(['copy-of-good']);
         expect(error.failed).toEqual([BAD]);
     });
 
     test('a retry with the failed sources posts only those', async () => {
-        const first = await copy('paths', [GOOD, BAD]);
+        const first = await copy('duplicate', [GOOD, BAD]);
         posted.length = 0;
-        const { PartialCopyError } = await import('../../../../core/drive/hooks/writes');
-        if (!(first.error instanceof PartialCopyError)) throw first.error;
-        await copy('paths', first.error.failed);
+        const { PartialBatchError } = await import('../../../../core/drive/hooks/writes');
+        if (!(first.error instanceof PartialBatchError)) throw first.error;
+        await copy('duplicate', first.error.failed);
         expect(posted).toEqual(['bad']);
     });
 
     test('a batch where nothing copied rejects with the server error', async () => {
         const { AppError } = await import('../../../../core/api-error');
-        const { error } = await copy('paths', [BAD]);
+        const { error } = await copy('duplicate', [BAD]);
         expect(error).toBeInstanceOf(AppError);
         expect(toasts).toEqual(['error: Server error (500)']);
     });
@@ -153,9 +151,9 @@ describe('useCopyToFolder', () => {
     });
 
     test('a partial failure shows no success toast and rejects with the failures', async () => {
-        const { PartialCopyError } = await import('../../../../core/drive/hooks/writes');
+        const { PartialBatchError } = await import('../../../../core/drive/hooks/writes');
         const { error } = await copy('folder', [GOOD, BAD]);
-        expect(error).toBeInstanceOf(PartialCopyError);
+        expect(error).toBeInstanceOf(PartialBatchError);
         expect(toasts).toEqual(['error: Failed to copy 1 of 2 items: Server error (500)']);
     });
 });
