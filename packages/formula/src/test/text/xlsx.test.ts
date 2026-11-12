@@ -217,7 +217,7 @@ describe('text/xlsx: where Excel puts the @ in a plain <f> (oracle batch 15, par
         ]);
     });
 
-    test('a plain <f> is written back plain and as it was, but for the two whose table argument holds an operator', () => {
+    test('a plain <f> is written back as it was, and plain but for the three whose table argument holds an operator', () => {
         for (const { row, host, file } of LEGACY) {
             const out = fileOf(intersect(read(file, host), FUNCTIONS), host);
             if (row === 'L12b') expect(out).toEqual({ legacy: true, text: '_xlfn.NORM.S.DIST(0,TRUE)' });

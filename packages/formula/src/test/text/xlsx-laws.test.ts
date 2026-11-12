@@ -76,10 +76,8 @@ describe('text/xlsx laws, over generated file text', () => {
                 // named set the rule cannot tell: there every @ is written, as SINGLE, and none is lost.
                 array += 1;
                 const marked = printXlsx(xlsxTree(legacy, FUNCTIONS, false), row, column, sheetName);
-                if (marked.replaceAll('_xlfn.SINGLE', '') !== plain.replaceAll(/(?<=\()\(|\)(?=\))/g, '')) {
-                    if (count(printStored(legacy), '@') !== count(marked, '_xlfn.SINGLE'))
-                        throw new Error(`${text}: ${marked}`);
-                }
+                if (count(marked, '_xlfn.SINGLE(') !== count(printStored(legacy), '@'))
+                    throw new Error(`${text}: ${marked}`);
                 continue;
             }
             const written = printXlsx(xlsxTree(legacy, FUNCTIONS, true), row, column, sheetName);
