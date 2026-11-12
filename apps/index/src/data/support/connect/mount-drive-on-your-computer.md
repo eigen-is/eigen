@@ -6,7 +6,7 @@ category: WebDAV
 tags: [webdav, drive, finder, windows, mount]
 crossSections: [drive]
 related: [drive/get-started, drive/share-a-file]
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 Eigen Drive supports WebDAV, so you can connect any of your drives as a network volume on macOS or Windows. Files appear in Finder or File Explorer like a local folder, so you can open, edit, and save them without going through the browser.
@@ -58,7 +58,7 @@ Windows only signs in over HTTPS. Plain HTTP connections are rejected. Windows a
 - **Open and save files**: most desktop apps (Word, Excel, TextEdit, and so on) can open files directly from the connected drive.
 - **Copy and move files** within the same drive.
 - **Create and delete folders**.
-- **Read Eigen documents as folders**: documents, spreadsheets, and other Eigen file types appear as folders rather than single files. You can open and copy them (handy for backups), but you can't change what's inside them from a WebDAV client.
+- **Read Eigen documents as folders**: documents, spreadsheets, and other Eigen file types appear as folders rather than single files. You can open and copy them (handy for backups), and add a new file to a document's `media` folder by saving or copying it there. Nothing else inside a document can change from a WebDAV client: you can't replace, rename, move, or delete anything in it, or move a file into it.
 
 Cross-drive moves and copies aren't supported over WebDAV. To move files between drives, download them and upload them again.
 
