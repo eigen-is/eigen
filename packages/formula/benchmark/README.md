@@ -13,8 +13,8 @@ bun readme.ts          # writes this README.md from results.json and notes.md
 
 ## The results in three lines
 
-- Speed on Bun: eigen|formula⟩ was faster than HyperFormula in 15 of the 17 workloads both ran, where HyperFormula took from 0.48× to 890× of our time; HyperFormula was as fast or faster in: edit a cell with 3 dependents; running total down 20,000 rows. eigen|formula⟩ was faster than formulajs in 8 of the 9 workloads both ran, where formulajs took from 0.07× to 54× of our time; formulajs was as fast or faster in: text functions on 100,000 rows.
-- Correctness: of 17,584 answers recorded in Excel, eigen|formula⟩ gave Excel's answer on 92.0% and HyperFormula on 55.2%; formulajs, judged only on the 5,129 rows that are one function call, on 61.2% of those.
+- Speed on Bun: eigen|formula⟩ was faster than HyperFormula in 15 of the 17 workloads both ran, where HyperFormula took from 0.45× to 955× of our time; HyperFormula was as fast or faster in: edit a cell with 3 dependents; running total down 20,000 rows. eigen|formula⟩ was faster than formulajs in 8 of the 9 workloads both ran, where formulajs took from 0.07× to 53× of our time; formulajs was as fast or faster in: text functions on 100,000 rows.
+- Correctness: of 17,584 answers recorded in Excel, eigen|formula⟩ gave Excel's answer on 92.0% and HyperFormula on 55.4%; formulajs, judged only on the 5,129 rows that are one function call, on 61.2% of those.
 - Coverage: of Excel's 524 functions, eigen|formula⟩ has 219, HyperFormula 384 and formulajs 406.
 
 ## Words used in this README
@@ -67,61 +67,61 @@ The workloads:
 
 ### On Bun
 
-Bun 1.4.4: 5 rounds, at most 3 runs in each process. The load averages over 1, 5 and 15 minutes were 39.53 13.52 8.80 when the run started, before it waited for a quiet machine, and 3.00 4.45 9.66 at its end; the highest 1-minute load seen after a kept run was 5.96, and 13 runs were taken again because the machine got busy during them. The run took 3,725 seconds.
+Bun 1.4.4: 5 rounds, at most 3 runs in each process. The load averages over 1, 5 and 15 minutes were 2.05 2.18 3.21 when the run started, before it waited for a quiet machine, and 3.09 3.40 3.39 at its end; the highest 1-minute load seen after a kept run was 5.38, and 0 runs were taken again because the machine got busy during them. The run took 1,253 seconds.
 
 | workload | eigen\|formula⟩ | HyperFormula | HyperFormula ÷ eigen\|formula⟩ | formulajs | formulajs ÷ eigen\|formula⟩ |
 |---|---|---|---|---|---|
-| load and compute 300,000 formulas | 298.8 / 305.4 | 1,757 / 1,784 | 5.8× | not supported |  |
-| edit a cell with 3 dependents | 0.30 / 0.30 | 0.22 / 0.25 | 0.84× | not supported |  |
-| edit a cell read by 100,000 formulas | 10.8 / 11.2 | 158.7 / 179.0 | 16× | not supported |  |
-| load a chain of 100,000 formulas | 49.1 / 51.5 | 292.3 / 301.8 | 5.9× | not supported |  |
-| edit the start of a chain of 100,000 | 11.0 / 11.1 | 136.8 / 147.3 | 13× | not supported |  |
-| 200 sums of 90,000 cells each | 36.7 / 37.2 | 3,033 / 3,143 | 85× | 284.5 / 289.7 | 7.8× |
-| running total down 20,000 rows | 296.4 / 303.5 | 133.1 / 145.2 | 0.48× | 1,558 / 1,583 | 5.2× |
-| exact VLOOKUP, 2,000 over 100,000 rows | 18.9 / 22.6 | 14,704 / 15,070 | 666× | 169.4 / 177.1 | 7.8× |
-| approximate VLOOKUP, 2,000 over 100,000 rows | 18.8 / 21.3 | 14,061 / 14,165 | 666× | 168.3 / 175.4 | 8.2× |
-| exact MATCH, 2,000 over 100,000 rows | 19.4 / 23.4 | 7,753 / 7,797 | 333× | 735.2 / 738.2 | 32× |
-| approximate MATCH, 2,000 over 100,000 rows | 17.3 / 19.8 | 7,556 / 8,048 | 407× | 785.8 / 786.8 | 40× |
-| exact XLOOKUP, 2,000 over 100,000 rows | 21.2 / 25.4 | 22,312 / 22,574 | 890× | not supported |  |
-| SUMIFS, 200 over 100,000 rows | 61.7 / 64.3 | 7,006 / 7,100 | 110× | 3,373 / 3,453 | 54× |
-| COUNTIFS, 200 over 100,000 rows | 50.9 / 52.9 | 5,690 / 5,910 | 112× | 1,492 / 1,521 | 29× |
-| text functions on 100,000 rows | 408.5 / 412.7 | 1,216 / 1,298 | 3.1× | 30.8 / 30.9 | 0.07× |
-| insert a row near the top | 1.18 / 1.35 | 10.2 / 10.3 | 7.6× | not supported |  |
+| load and compute 300,000 formulas | 286.2 / 292.4 | 1,714 / 1,748 | 6.0× | not supported |  |
+| edit a cell with 3 dependents | 0.28 / 0.31 | 0.21 / 0.24 | 0.76× | not supported |  |
+| edit a cell read by 100,000 formulas | 10.8 / 11.0 | 153.2 / 166.4 | 15× | not supported |  |
+| load a chain of 100,000 formulas | 48.2 / 48.7 | 278.8 / 291.7 | 6.0× | not supported |  |
+| edit the start of a chain of 100,000 | 10.8 / 10.9 | 133.3 / 142.0 | 13× | not supported |  |
+| 200 sums of 90,000 cells each | 36.5 / 36.9 | 2,959 / 3,018 | 82× | 282.0 / 283.0 | 7.7× |
+| running total down 20,000 rows | 296.7 / 300.6 | 131.7 / 136.2 | 0.45× | 1,552 / 1,572 | 5.2× |
+| exact VLOOKUP, 2,000 over 100,000 rows | 20.6 / 24.3 | 13,961 / 14,109 | 581× | 170.7 / 175.6 | 7.2× |
+| approximate VLOOKUP, 2,000 over 100,000 rows | 17.5 / 18.6 | 13,946 / 14,125 | 759× | 166.8 / 171.4 | 9.2× |
+| exact MATCH, 2,000 over 100,000 rows | 18.4 / 23.8 | 7,779 / 8,140 | 343× | 735.7 / 740.9 | 31× |
+| approximate MATCH, 2,000 over 100,000 rows | 17.4 / 19.6 | 7,497 / 7,814 | 400× | 796.0 / 803.1 | 41× |
+| exact XLOOKUP, 2,000 over 100,000 rows | 21.6 / 23.7 | 21,728 / 22,645 | 955× | not supported |  |
+| SUMIFS, 200 over 100,000 rows | 62.6 / 65.3 | 7,045 / 7,160 | 110× | 3,384 / 3,429 | 53× |
+| COUNTIFS, 200 over 100,000 rows | 41.5 / 55.1 | 5,705 / 5,728 | 104× | 1,507 / 1,511 | 27× |
+| text functions on 100,000 rows | 420.8 / 429.9 | 1,235 / 1,255 | 2.9× | 30.7 / 30.9 | 0.07× |
+| insert a row near the top | 0.92 / 1.28 | 10.5 / 10.6 | 8.3× | not supported |  |
 | memory after loading 300,000 formulas | 9.7 MB | 152.6 MB | 16× | not supported |  |
 
 ### On Node
 
-Node v24.15.0: 5 rounds, at most 3 runs in each process. The load averages over 1, 5 and 15 minutes were 3.00 4.45 9.66 when the run started, before it waited for a quiet machine, and 3.11 3.17 4.12 at its end; the highest 1-minute load seen after a kept run was 5.38, and 2 runs were taken again because the machine got busy during them. The run took 1,694 seconds.
+Node v24.15.0: 5 rounds, at most 3 runs in each process. The load averages over 1, 5 and 15 minutes were 3.09 3.40 3.39 when the run started, before it waited for a quiet machine, and 4.49 4.28 3.98 at its end; the highest 1-minute load seen after a kept run was 5.59, and 0 runs were taken again because the machine got busy during them. The run took 1,622 seconds.
 
 | workload | eigen\|formula⟩ | HyperFormula | HyperFormula ÷ eigen\|formula⟩ | formulajs | formulajs ÷ eigen\|formula⟩ |
 |---|---|---|---|---|---|
-| load and compute 300,000 formulas | 420.8 / 426.0 | 2,434 / 2,455 | 5.8× | not supported |  |
-| edit a cell with 3 dependents | 0.37 / 0.39 | 0.20 / 0.25 | 0.64× | not supported |  |
-| edit a cell read by 100,000 formulas | 13.2 / 13.6 | 124.1 / 129.1 | 9.5× | not supported |  |
-| load a chain of 100,000 formulas | 51.1 / 51.9 | 366.9 / 368.7 | 7.1× | not supported |  |
-| edit the start of a chain of 100,000 | 16.0 / 16.1 | 92.0 / 92.7 | 5.8× | not supported |  |
-| 200 sums of 90,000 cells each | 41.9 / 43.0 | 2,879 / 2,902 | 68× | 422.5 / 427.4 | 9.9× |
-| running total down 20,000 rows | 365.1 / 369.7 | 180.9 / 184.7 | 0.50× | 1,598 / 1,605 | 4.3× |
-| exact VLOOKUP, 2,000 over 100,000 rows | 25.0 / 26.1 | 17,283 / 17,541 | 671× | 122.9 / 123.4 | 4.7× |
-| approximate VLOOKUP, 2,000 over 100,000 rows | 24.5 / 24.9 | 17,373 / 17,708 | 711× | 146.5 / 148.0 | 5.9× |
-| exact MATCH, 2,000 over 100,000 rows | 24.4 / 28.0 | 8,844 / 8,889 | 318× | 1,066 / 1,090 | 39× |
-| approximate MATCH, 2,000 over 100,000 rows | 19.5 / 24.0 | 8,880 / 8,890 | 370× | 1,653 / 1,684 | 70× |
-| exact XLOOKUP, 2,000 over 100,000 rows | 25.9 / 26.1 | 34,860 / 35,039 | 1,343× | not supported |  |
-| SUMIFS, 200 over 100,000 rows | 74.2 / 75.8 | 12,711 / 12,837 | 169× | 5,481 / 5,519 | 73× |
-| COUNTIFS, 200 over 100,000 rows | 68.1 / 68.6 | 9,866 / 9,980 | 146× | 4,176 / 4,229 | 62× |
-| text functions on 100,000 rows | 554.2 / 555.3 | 2,307 / 2,328 | 4.2× | 49.4 / 50.0 | 0.09× |
-| insert a row near the top | 0.85 / 0.94 | 14.7 / 15.2 | 16× | not supported |  |
-| memory after loading 300,000 formulas | 42.6 MB | 252.0 MB | 5.9× | not supported |  |
+| load and compute 300,000 formulas | 421.6 / 437.7 | 2,482 / 2,489 | 5.7× | not supported |  |
+| edit a cell with 3 dependents | 0.39 / 0.41 | 0.20 / 0.25 | 0.61× | not supported |  |
+| edit a cell read by 100,000 formulas | 13.7 / 14.4 | 128.0 / 130.1 | 9.1× | not supported |  |
+| load a chain of 100,000 formulas | 51.0 / 52.4 | 368.3 / 372.7 | 7.1× | not supported |  |
+| edit the start of a chain of 100,000 | 15.9 / 16.1 | 91.3 / 104.9 | 6.5× | not supported |  |
+| 200 sums of 90,000 cells each | 42.8 / 43.4 | 2,846 / 2,912 | 67× | 420.8 / 428.1 | 9.9× |
+| running total down 20,000 rows | 366.7 / 368.6 | 182.7 / 187.1 | 0.51× | 1,597 / 1,618 | 4.4× |
+| exact VLOOKUP, 2,000 over 100,000 rows | 24.9 / 25.5 | 17,609 / 17,786 | 697× | 122.6 / 123.6 | 4.8× |
+| approximate VLOOKUP, 2,000 over 100,000 rows | 20.0 / 24.2 | 17,526 / 17,845 | 739× | 147.5 / 150.1 | 6.2× |
+| exact MATCH, 2,000 over 100,000 rows | 24.9 / 26.4 | 8,842 / 9,107 | 345× | 1,079 / 1,113 | 42× |
+| approximate MATCH, 2,000 over 100,000 rows | 19.8 / 23.5 | 8,817 / 9,021 | 383× | 1,672 / 1,686 | 72× |
+| exact XLOOKUP, 2,000 over 100,000 rows | 25.1 / 25.6 | 35,086 / 35,535 | 1,388× | not supported |  |
+| SUMIFS, 200 over 100,000 rows | 74.0 / 74.7 | 12,811 / 12,894 | 173× | 5,537 / 5,565 | 74× |
+| COUNTIFS, 200 over 100,000 rows | 67.2 / 68.4 | 9,844 / 10,021 | 146× | 4,232 / 4,275 | 62× |
+| text functions on 100,000 rows | 560.8 / 578.9 | 2,301 / 2,346 | 4.1× | 49.9 / 50.4 | 0.09× |
+| insert a row near the top | 0.88 / 1.00 | 14.9 / 15.2 | 15× | not supported |  |
+| memory after loading 300,000 formulas | 42.6 MB | 252.1 MB | 5.9× | not supported |  |
 
-Speed on Node: eigen|formula⟩ was faster than HyperFormula in 15 of the 17 workloads both ran, where HyperFormula took from 0.50× to 1,343× of our time; HyperFormula was as fast or faster in: edit a cell with 3 dependents; running total down 20,000 rows. eigen|formula⟩ was faster than formulajs in 8 of the 9 workloads both ran, where formulajs took from 0.09× to 73× of our time; formulajs was as fast or faster in: text functions on 100,000 rows.
+Speed on Node: eigen|formula⟩ was faster than HyperFormula in 15 of the 17 workloads both ran, where HyperFormula took from 0.51× to 1,388× of our time; HyperFormula was as fast or faster in: edit a cell with 3 dependents; running total down 20,000 rows. eigen|formula⟩ was faster than formulajs in 8 of the 9 workloads both ran, where formulajs took from 0.09× to 74× of our time; formulajs was as fast or faster in: text functions on 100,000 rows.
 
 ### Where another engine was as fast or faster
 
-- Node, edit a cell with 3 dependents: HyperFormula took 0.64× of our time.
-- Node, running total down 20,000 rows: HyperFormula took 0.50× of our time.
+- Node, edit a cell with 3 dependents: HyperFormula took 0.61× of our time.
+- Node, running total down 20,000 rows: HyperFormula took 0.51× of our time.
 - Node, text functions on 100,000 rows: formulajs took 0.09× of our time.
-- Bun, edit a cell with 3 dependents: HyperFormula took 0.84× of our time.
-- Bun, running total down 20,000 rows: HyperFormula took 0.48× of our time.
+- Bun, edit a cell with 3 dependents: HyperFormula took 0.76× of our time.
+- Bun, running total down 20,000 rows: HyperFormula took 0.45× of our time.
 - Bun, text functions on 100,000 rows: formulajs took 0.07× of our time.
 
 ## Correctness
@@ -139,7 +139,7 @@ formulajs is judged only on the rows that are one call of a function with plain 
 | engine | rows judged | equal | differs | not supported | crashed | equal where it answered |
 |---|---|---|---|---|---|---|
 | eigen\|formula⟩ | 17,584 | 16,171 (92.0%) | 1,350 (7.7%) | 63 (0.4%) | 0 (0.0%) | 92.3% |
-| HyperFormula | 17,584 | 9,703 (55.2%) | 3,555 (20.2%) | 4,138 (23.5%) | 188 (1.1%) | 73.2% |
+| HyperFormula | 17,584 | 9,743 (55.4%) | 3,515 (20.0%) | 4,138 (23.5%) | 188 (1.1%) | 73.5% |
 | formulajs | 5,129 | 3,137 (61.2%) | 1,458 (28.4%) | 421 (8.2%) | 113 (2.2%) | 68.3% |
 
 The share of equal answers per family of functions:
@@ -148,9 +148,9 @@ The share of equal answers per family of functions:
 |---|---|---|---|
 | mixed checks | 1,872 of 2,018 (92.8%) | 756 of 2,018 (37.5%) | 157 of 372 (42.2%) |
 | date and time | 2,692 of 3,215 (83.7%) | 2,302 of 3,215 (71.6%) | 1,182 of 1,810 (65.3%) |
-| logical and information | 2,243 of 2,357 (95.2%) | 1,440 of 2,357 (61.1%) | 385 of 507 (75.9%) |
+| logical and information | 2,243 of 2,357 (95.2%) | 1,465 of 2,357 (62.2%) | 385 of 507 (75.9%) |
 | math | 1,439 of 1,540 (93.4%) | 968 of 1,540 (62.9%) | 627 of 771 (81.3%) |
-| lookup and reference | 2,159 of 2,382 (90.6%) | 988 of 2,382 (41.5%) | 12 of 247 (4.9%) |
+| lookup and reference | 2,159 of 2,382 (90.6%) | 1,003 of 2,382 (42.1%) | 12 of 247 (4.9%) |
 | statistical | 3,129 of 3,201 (97.8%) | 1,717 of 3,201 (53.6%) | 263 of 490 (53.7%) |
 | text | 2,637 of 2,871 (91.8%) | 1,532 of 2,871 (53.4%) | 511 of 932 (54.8%) |
 

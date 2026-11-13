@@ -49,12 +49,12 @@
       "rounds": 5,
       "reps": 3,
       "load": {
-        "before": "3.00 4.45 9.66",
-        "after": "3.11 3.17 4.12",
-        "highest": 5.37548828125,
-        "discarded": 2
+        "before": "3.09 3.40 3.39",
+        "after": "4.49 4.28 3.98",
+        "highest": 5.5869140625,
+        "discarded": 0
       },
-      "seconds": 1694,
+      "seconds": 1622,
       "rows": [
         {
           "workload": "load and compute 300,000 formulas",
@@ -64,13 +64,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 420.82783399999994,
-              "median": 425.964959
+              "min": 421.617125,
+              "median": 437.66258400000004
             },
             "hyperformula": {
               "status": "measured",
-              "min": 2434.1688749999994,
-              "median": 2455.387458
+              "min": 2482.260042,
+              "median": 2488.850791
             },
             "formulajs": {
               "status": "not supported"
@@ -85,13 +85,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 0.374625000000151,
-              "median": 0.3874590000000353
+              "min": 0.3858339999999316,
+              "median": 0.4064169999999194
             },
             "hyperformula": {
               "status": "measured",
-              "min": 0.20283399999971152,
-              "median": 0.24745900000016263
+              "min": 0.19845900000018446,
+              "median": 0.24804200000016863
             },
             "formulajs": {
               "status": "not supported"
@@ -106,13 +106,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 13.228000000000009,
-              "median": 13.564665999999988
+              "min": 13.677875000000029,
+              "median": 14.351167000000032
             },
             "hyperformula": {
               "status": "measured",
-              "min": 124.13691699999981,
-              "median": 129.0838749999998
+              "min": 128.04983300000004,
+              "median": 130.1329999999998
             },
             "formulajs": {
               "status": "not supported"
@@ -127,13 +127,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 51.114540999999974,
-              "median": 51.932582999999994
+              "min": 51.02366699999999,
+              "median": 52.36737500000001
             },
             "hyperformula": {
               "status": "measured",
-              "min": 366.85966599999995,
-              "median": 368.68125
+              "min": 368.34279100000003,
+              "median": 372.69112499999994
             },
             "formulajs": {
               "status": "not supported"
@@ -148,13 +148,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 16.001874999999984,
-              "median": 16.09045900000001
+              "min": 15.931250000000006,
+              "median": 16.109250000000003
             },
             "hyperformula": {
               "status": "measured",
-              "min": 92.04379200000005,
-              "median": 92.69512500000019
+              "min": 91.33325000000002,
+              "median": 104.86699999999996
             },
             "formulajs": {
               "status": "not supported"
@@ -169,18 +169,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 41.87591599999999,
-              "median": 42.95741699999999
+              "min": 42.79433399999999,
+              "median": 43.43320800000001
             },
             "hyperformula": {
               "status": "measured",
-              "min": 2878.6483339999995,
-              "median": 2902.4980829999995
+              "min": 2846.213708,
+              "median": 2912.4774579999994
             },
             "formulajs": {
               "status": "measured",
-              "min": 422.5472920000001,
-              "median": 427.35125000000005
+              "min": 420.78258299999993,
+              "median": 428.0898330000001
             }
           }
         },
@@ -192,18 +192,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 365.1283750000001,
-              "median": 369.6820839999999
+              "min": 366.73924999999997,
+              "median": 368.6155
             },
             "hyperformula": {
               "status": "measured",
-              "min": 180.904541,
-              "median": 184.69041700000002
+              "min": 182.692,
+              "median": 187.10504100000003
             },
             "formulajs": {
               "status": "measured",
-              "min": 1598.08625,
-              "median": 1604.5923329999996
+              "min": 1596.771417,
+              "median": 1618.244583
             }
           }
         },
@@ -215,18 +215,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 25.02962499999998,
-              "median": 26.141708000000023
+              "min": 24.876165999999984,
+              "median": 25.521124999999984
             },
             "hyperformula": {
               "status": "measured",
-              "min": 17282.999874999998,
-              "median": 17541.233458
+              "min": 17609.18625,
+              "median": 17785.576624999998
             },
             "formulajs": {
               "status": "measured",
-              "min": 122.91654200000005,
-              "median": 123.38479099999995
+              "min": 122.63537499999995,
+              "median": 123.62012500000003
             }
           }
         },
@@ -238,18 +238,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 24.46558399999998,
-              "median": 24.895125000000007
+              "min": 20.044749999999993,
+              "median": 24.163250000000005
             },
             "hyperformula": {
               "status": "measured",
-              "min": 17373.141875,
-              "median": 17707.794083
+              "min": 17525.930792,
+              "median": 17844.845875
             },
             "formulajs": {
               "status": "measured",
-              "min": 146.46762500000006,
-              "median": 148.04991700000005
+              "min": 147.534875,
+              "median": 150.066958
             }
           }
         },
@@ -261,18 +261,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 24.392500000000013,
-              "median": 27.967208
+              "min": 24.926333999999997,
+              "median": 26.376542
             },
             "hyperformula": {
               "status": "measured",
-              "min": 8844.286875,
-              "median": 8888.883709000002
+              "min": 8842.386874999998,
+              "median": 9106.885459
             },
             "formulajs": {
               "status": "measured",
-              "min": 1065.6910830000002,
-              "median": 1090.403875
+              "min": 1078.6238750000002,
+              "median": 1112.7523750000003
             }
           }
         },
@@ -284,18 +284,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 19.483874999999983,
-              "median": 24.028042
+              "min": 19.753917,
+              "median": 23.526999999999987
             },
             "hyperformula": {
               "status": "measured",
-              "min": 8879.920625,
-              "median": 8889.801209000001
+              "min": 8817.349333000002,
+              "median": 9020.843166999999
             },
             "formulajs": {
               "status": "measured",
-              "min": 1652.841125,
-              "median": 1684.492792
+              "min": 1672.08825,
+              "median": 1685.639875
             }
           }
         },
@@ -307,13 +307,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 25.907749999999993,
-              "median": 26.085417000000007
+              "min": 25.12895800000001,
+              "median": 25.595332999999982
             },
             "hyperformula": {
               "status": "measured",
-              "min": 34859.612334000005,
-              "median": 35038.946124999995
+              "min": 35086.366417000005,
+              "median": 35534.642208
             },
             "formulajs": {
               "status": "not supported"
@@ -328,18 +328,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 74.16387499999996,
-              "median": 75.79154100000005
+              "min": 74.02412500000003,
+              "median": 74.71162499999997
             },
             "hyperformula": {
               "status": "measured",
-              "min": 12710.727667000001,
-              "median": 12837.2655
+              "min": 12811.3375,
+              "median": 12893.919042000001
             },
             "formulajs": {
               "status": "measured",
-              "min": 5481.424374999999,
-              "median": 5518.526791999999
+              "min": 5536.916959000002,
+              "median": 5565.351416000001
             }
           }
         },
@@ -351,18 +351,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 68.12925000000001,
-              "median": 68.558334
+              "min": 67.16237500000005,
+              "median": 68.44191599999999
             },
             "hyperformula": {
               "status": "measured",
-              "min": 9865.855084,
-              "median": 9979.856042000001
+              "min": 9844.381708,
+              "median": 10020.531125
             },
             "formulajs": {
               "status": "measured",
-              "min": 4176.420958000001,
-              "median": 4229.479125
+              "min": 4231.583209,
+              "median": 4274.596791999999
             }
           }
         },
@@ -374,18 +374,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 554.1863749999999,
-              "median": 555.3415419999999
+              "min": 560.761708,
+              "median": 578.8731250000001
             },
             "hyperformula": {
               "status": "measured",
-              "min": 2307.4298339999996,
-              "median": 2328.225375
+              "min": 2301.0856249999997,
+              "median": 2346.412416
             },
             "formulajs": {
               "status": "measured",
-              "min": 49.39833300000001,
-              "median": 50.03812500000001
+              "min": 49.85783299999997,
+              "median": 50.37587499999998
             }
           }
         },
@@ -397,13 +397,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 0.8476670000000013,
-              "median": 0.935790999999881
+              "min": 0.8843329999999696,
+              "median": 1.0013329999999314
             },
             "hyperformula": {
               "status": "measured",
-              "min": 14.685709000000315,
-              "median": 15.154749999999694
+              "min": 14.86083299999973,
+              "median": 15.227375000000393
             },
             "formulajs": {
               "status": "not supported"
@@ -418,13 +418,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 42.606148,
-              "median": 42.60754
+              "min": 42.604508,
+              "median": 42.60674
             },
             "hyperformula": {
               "status": "measured",
-              "min": 251.892932,
-              "median": 252.035964
+              "min": 250.772772,
+              "median": 252.088508
             },
             "formulajs": {
               "status": "not supported"
@@ -438,12 +438,12 @@
       "rounds": 5,
       "reps": 3,
       "load": {
-        "before": "39.53 13.52 8.80",
-        "after": "3.00 4.45 9.66",
-        "highest": 5.9609375,
-        "discarded": 13
+        "before": "2.05 2.18 3.21",
+        "after": "3.09 3.40 3.39",
+        "highest": 5.37841796875,
+        "discarded": 0
       },
-      "seconds": 3725,
+      "seconds": 1253,
       "rows": [
         {
           "workload": "load and compute 300,000 formulas",
@@ -453,13 +453,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 298.7654580000001,
-              "median": 305.38637499999993
+              "min": 286.1574160000001,
+              "median": 292.43108300000006
             },
             "hyperformula": {
               "status": "measured",
-              "min": 1756.5608750000001,
-              "median": 1783.708791
+              "min": 1714.1052919999997,
+              "median": 1747.8059170000001
             },
             "formulajs": {
               "status": "not supported"
@@ -474,13 +474,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 0.29549999999994725,
-              "median": 0.3015419999999267
+              "min": 0.27737500000012005,
+              "median": 0.3091660000000047
             },
             "hyperformula": {
               "status": "measured",
-              "min": 0.22254100000009203,
-              "median": 0.25279199999931734
+              "min": 0.2102500000000873,
+              "median": 0.23520800000005693
             },
             "formulajs": {
               "status": "not supported"
@@ -495,13 +495,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 10.75037500000002,
-              "median": 11.21225000000004
+              "min": 10.792208000000016,
+              "median": 11.009582999999964
             },
             "hyperformula": {
               "status": "measured",
-              "min": 158.72316699999988,
-              "median": 178.9640000000004
+              "min": 153.22912499999984,
+              "median": 166.41499999999996
             },
             "formulajs": {
               "status": "not supported"
@@ -516,13 +516,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 49.058166,
-              "median": 51.54924999999997
+              "min": 48.186458000000016,
+              "median": 48.729208
             },
             "hyperformula": {
               "status": "measured",
-              "min": 292.29041699999993,
-              "median": 301.76275000000004
+              "min": 278.79125,
+              "median": 291.710459
             },
             "formulajs": {
               "status": "not supported"
@@ -537,13 +537,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 11.040750000000003,
-              "median": 11.136374999999987
+              "min": 10.837833999999987,
+              "median": 10.870292000000006
             },
             "hyperformula": {
               "status": "measured",
-              "min": 136.816166,
-              "median": 147.28704199999999
+              "min": 133.34512499999994,
+              "median": 142.0123329999999
             },
             "formulajs": {
               "status": "not supported"
@@ -558,18 +558,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 36.68708400000003,
-              "median": 37.174125000000004
+              "min": 36.453708000000006,
+              "median": 36.88737499999999
             },
             "hyperformula": {
               "status": "measured",
-              "min": 3033.1875419999997,
-              "median": 3142.747625
+              "min": 2959.1688339999996,
+              "median": 3018.3615
             },
             "formulajs": {
               "status": "measured",
-              "min": 284.48350000000005,
-              "median": 289.74741700000004
+              "min": 281.99462500000004,
+              "median": 283.0355830000001
             }
           }
         },
@@ -581,18 +581,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 296.38533399999994,
-              "median": 303.46725000000004
+              "min": 296.652375,
+              "median": 300.62591599999996
             },
             "hyperformula": {
               "status": "measured",
-              "min": 133.08937499999996,
-              "median": 145.21374999999995
+              "min": 131.708167,
+              "median": 136.17075
             },
             "formulajs": {
               "status": "measured",
-              "min": 1557.6452090000002,
-              "median": 1583.362666
+              "min": 1552.1925409999994,
+              "median": 1571.631875
             }
           }
         },
@@ -604,18 +604,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 18.931207999999998,
-              "median": 22.627624999999995
+              "min": 20.646334000000024,
+              "median": 24.282542000000007
             },
             "hyperformula": {
               "status": "measured",
-              "min": 14703.930125,
-              "median": 15070.041834
+              "min": 13960.913625,
+              "median": 14109.287332999998
             },
             "formulajs": {
               "status": "measured",
-              "min": 169.37616699999995,
-              "median": 177.13962500000002
+              "min": 170.69179199999996,
+              "median": 175.591209
             }
           }
         },
@@ -627,18 +627,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 18.811083999999994,
-              "median": 21.27966699999999
+              "min": 17.531875000000014,
+              "median": 18.61749999999998
             },
             "hyperformula": {
               "status": "measured",
-              "min": 14061.192749999998,
-              "median": 14164.729875
+              "min": 13946.029125,
+              "median": 14125.303458
             },
             "formulajs": {
               "status": "measured",
-              "min": 168.33100000000002,
-              "median": 175.35875000000004
+              "min": 166.782292,
+              "median": 171.377625
             }
           }
         },
@@ -650,18 +650,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 19.397166,
-              "median": 23.428292
+              "min": 18.36854200000002,
+              "median": 23.756167000000005
             },
             "hyperformula": {
               "status": "measured",
-              "min": 7752.933,
-              "median": 7797.075084
+              "min": 7778.571125,
+              "median": 8140.022875000001
             },
             "formulajs": {
               "status": "measured",
-              "min": 735.1845000000001,
-              "median": 738.186333
+              "min": 735.7013750000001,
+              "median": 740.857167
             }
           }
         },
@@ -673,18 +673,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 17.28133299999999,
-              "median": 19.792625
+              "min": 17.360709000000014,
+              "median": 19.551999999999992
             },
             "hyperformula": {
               "status": "measured",
-              "min": 7555.903583,
-              "median": 8047.652750000001
+              "min": 7497.15675,
+              "median": 7813.951166000001
             },
             "formulajs": {
               "status": "measured",
-              "min": 785.7730829999999,
-              "median": 786.8315839999998
+              "min": 796.0304169999999,
+              "median": 803.050917
             }
           }
         },
@@ -696,13 +696,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 21.164208000000002,
-              "median": 25.35024999999999
+              "min": 21.64108300000001,
+              "median": 23.708584000000002
             },
             "hyperformula": {
               "status": "measured",
-              "min": 22311.943083000002,
-              "median": 22574.200792
+              "min": 21728.024250000002,
+              "median": 22644.95175
             },
             "formulajs": {
               "status": "not supported"
@@ -717,18 +717,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 61.682333,
-              "median": 64.31354199999998
+              "min": 62.60683399999999,
+              "median": 65.25324999999998
             },
             "hyperformula": {
               "status": "measured",
-              "min": 7005.785916999999,
-              "median": 7099.673959
+              "min": 7045.094375,
+              "median": 7160.179792000001
             },
             "formulajs": {
               "status": "measured",
-              "min": 3372.8464159999994,
-              "median": 3453.311042000001
+              "min": 3383.519292,
+              "median": 3429.0308330000003
             }
           }
         },
@@ -740,18 +740,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 50.853207999999995,
-              "median": 52.86462500000002
+              "min": 41.47108299999999,
+              "median": 55.06299999999999
             },
             "hyperformula": {
               "status": "measured",
-              "min": 5690.080583000001,
-              "median": 5909.593833000001
+              "min": 5705.233792000001,
+              "median": 5728.395165999998
             },
             "formulajs": {
               "status": "measured",
-              "min": 1492.455875,
-              "median": 1521.41475
+              "min": 1506.5585839999999,
+              "median": 1510.5982079999999
             }
           }
         },
@@ -763,18 +763,18 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 408.466542,
-              "median": 412.73
+              "min": 420.814042,
+              "median": 429.8536250000001
             },
             "hyperformula": {
               "status": "measured",
-              "min": 1215.870375,
-              "median": 1298.138334
+              "min": 1235.4850000000001,
+              "median": 1255.494166
             },
             "formulajs": {
               "status": "measured",
-              "min": 30.83137500000001,
-              "median": 30.88020800000001
+              "min": 30.687166999999988,
+              "median": 30.907292000000012
             }
           }
         },
@@ -786,13 +786,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 1.1841249999999945,
-              "median": 1.3543750000000045
+              "min": 0.9247919999997976,
+              "median": 1.28449999999998
             },
             "hyperformula": {
               "status": "measured",
-              "min": 10.15466699999979,
-              "median": 10.260291999999936
+              "min": 10.503833000000668,
+              "median": 10.608750000000327
             },
             "formulajs": {
               "status": "not supported"
@@ -807,13 +807,13 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 9.656552,
-              "median": 9.658856
+              "min": 9.654203,
+              "median": 9.656424
             },
             "hyperformula": {
               "status": "measured",
-              "min": 152.528921,
-              "median": 152.608115
+              "min": 152.526367,
+              "median": 152.550042
             },
             "formulajs": {
               "status": "not supported"
@@ -914,8 +914,8 @@
       },
       "hyperformula": {
         "total": {
-          "equal": 9703,
-          "differs": 3555,
+          "equal": 9743,
+          "differs": 3515,
           "not supported": 4138,
           "crashed": 188
         },
@@ -963,8 +963,8 @@
             "crashed": 5
           },
           "logical": {
-            "equal": 1440,
-            "differs": 323,
+            "equal": 1465,
+            "differs": 298,
             "not supported": 519,
             "crashed": 75
           },
@@ -975,8 +975,8 @@
             "crashed": 4
           },
           "reference": {
-            "equal": 988,
-            "differs": 434,
+            "equal": 1003,
+            "differs": 419,
             "not supported": 912,
             "crashed": 48
           },
