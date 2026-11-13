@@ -6,6 +6,7 @@
   "scripts": {
     "rows": "bun rows.ts",
     "run": "bun run.ts",
+    "quick": "bun run.ts --quick",
     "readme": "bun readme.ts",
     "typecheck": "bun check --no-script"
   },
