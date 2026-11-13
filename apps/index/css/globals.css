@@ -139,6 +139,13 @@
     }
 }
 
+/* An app name in prose or a caption, such as eigen|mail⟩: letters, bar and ket from one font. Not .site-prose only,
+   because a caption also shows in the image dialog. */
+.ket-name {
+    font-family: var(--font-mono);
+    white-space: nowrap;
+}
+
 .dark .site-prose.eigen-prose:not(.eigen-paper *) code {
     background-color: var(--muted);
     color: var(--foreground);
