@@ -119,20 +119,35 @@ describe('exiftool deadline', () => {
     test('a hung exiftool is killed at the deadline, and no call starts after it', async () => {
         fs.mkdirSync(TMP_DIR, { recursive: true });
         const bin = fs.mkdtempSync(path.join(TMP_DIR, 'bin-'));
-        const pids = path.join(bin, 'pids');
-        // A -ver answers, so the fake is the binary the fallback picks; every other call hangs.
-        fs.writeFileSync(
-            path.join(bin, 'exiftool'),
-            `#!/bin/sh\nif [ "$1" = "-ver" ]; then echo 13.0; exit 0; fi\necho $$ >> "${pids}"\nexec sleep 30\n`,
-            { mode: 0o755 },
-        );
         const source = path.join(bin, 'photo.raw');
         fs.writeFileSync(source, 'not an image');
+        // A -ver answers, so the fake is the binary the fallback picks; a call on the source hangs, any other has no preview.
+        fs.writeFileSync(
+            path.join(bin, 'exiftool'),
+            `#!/bin/sh\nif [ "$1" = "-ver" ]; then echo 13.0; exit 0; fi\nif [ "$3" != "${source}" ]; then exit 0; fi\nexec sleep 30\n`,
+            { mode: 0o755 },
+        );
+        // A first call without a preview caches the -ver probe, so the short deadline covers only the hung call. The
+        // wrapper reads each pid at spawn, so a fake killed before its shell ran still counts.
         const script = `
+            const childProcess = require('node:child_process');
+            const { promisify } = require('node:util');
+            const execFileAsync = promisify(childProcess.execFile);
+            const execFile = childProcess.execFile;
+            const spawned = [];
+            childProcess.execFile = Object.assign((...args) => execFile(...args), {
+                [promisify.custom]: (file, args, options) => {
+                    const call = execFileAsync(file, args, options);
+                    spawned.push({ args, pid: call.child.pid });
+                    return call;
+                },
+            });
             const { extractEmbeddedPreview } = await import(process.env.EXIFTOOL_PREVIEW);
+            await extractEmbeddedPreview(process.env.BIN + '/other.raw', process.env.BIN, 'id', Date.now() + 60_000);
+            spawned.length = 0;
             const started = Date.now();
             const extract = await extractEmbeddedPreview(process.env.SOURCE, process.env.BIN, 'id', started + 1000);
-            console.log(JSON.stringify({ extract, ms: Date.now() - started }));
+            console.log(JSON.stringify({ extract, ms: Date.now() - started, spawned }));
         `;
         const child = Bun.spawn([process.execPath, '-e', script], {
             env: {
@@ -143,14 +158,14 @@ describe('exiftool deadline', () => {
                 BIN: bin,
             },
         });
-        const { extract, ms } = JSON.parse(await new Response(child.stdout).text());
+        const { extract, ms, spawned } = JSON.parse(await new Response(child.stdout).text());
         await child.exited;
 
         expect(extract).toBeNull();
         expect(ms).toBeLessThan(3000);
-        const started = fs.readFileSync(pids, 'utf8').trim().split('\n').map(Number);
-        expect(started).toHaveLength(1);
-        for (const pid of started) expect(() => process.kill(pid, 0)).toThrow();
+        const calls: { args: string[]; pid: number }[] = spawned;
+        expect(calls.map((call) => call.args)).toEqual([['-b', '-PreviewImage', source]]);
+        for (const { pid } of calls) expect(() => process.kill(pid, 0)).toThrow();
     }, 10_000);
 
     // execFile reads a timeout of 0 as none, so a call at or past the deadline is not made at all, not even the -ver probe.
