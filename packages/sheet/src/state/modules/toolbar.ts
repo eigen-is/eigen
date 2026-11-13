@@ -2,9 +2,10 @@
 // number format, borders and merging. Each runs inside a setContext recipe. While a cell is open on
 // text, a font format goes to the editor's selected characters rather than to the cells.
 
+import { numberDisplay } from '@workspace/formula/format';
 import type { BorderType } from '@workspace/lib/sheets';
 import { pick } from 'es-toolkit/compat';
-import { is_date, numberDisplay, writeFormulaResult } from '../../engine/format';
+import { is_date, writeFormulaResult } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
@@ -66,7 +67,7 @@ export function updateFormatCell(
                 else if (fa === 'General' && !isRealNum(v)) t = 'g';
 
                 if (cell) {
-                    cell.m = `${m}`;
+                    cell.m = m;
                     Object.assign((cell.ct ??= {}), { fa, t });
                 } else {
                     d[r][c] = { ct: { fa, t }, v, m };

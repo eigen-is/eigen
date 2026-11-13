@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { is_date, numberText, parseCellInput, update, valueShowEs } from '../../engine/format';
+import { numberDisplay } from '@workspace/formula/format';
+import { is_date, numberText, parseCellInput, valueShowEs } from '../../engine/format';
 import type { CellMatrix } from '../../engine/types';
 
 describe('engine/format — date serials', () => {
@@ -8,6 +9,13 @@ describe('engine/format — date serials', () => {
         expect(m).toBe('2023-01-01');
         expect(ct.t).toBe('d');
         expect(v).toBe(44927);
+    });
+
+    test("a typed date shows as the grid shows its serial, on Google's day line", () => {
+        const [m, ct, v] = parseCellInput('1900-01-15');
+        expect(v).toBe(15);
+        expect(m).toBe(numberDisplay(v, ct.fa));
+        expect(m).toBe('1900-01-14');
     });
 
     test('serial for 1900-01-01 is 1', () => {
@@ -139,18 +147,6 @@ describe('engine/format — parseCellInput', () => {
         expect(m).toBe('hello world');
         // Non-date, non-number text → general "g" type
         expect(ct.t).toBe('g');
-    });
-});
-
-describe('engine/format — update', () => {
-    test('formats a number using the given format string', () => {
-        expect(update('0.00', 1.5)).toBe('1.50');
-        expect(update('#,##0', 1234567)).toBe('1,234,567');
-        expect(update('General', 42)).toBe('42');
-    });
-
-    test('formats a percentage', () => {
-        expect(update('0%', 0.25)).toBe('25%');
     });
 });
 

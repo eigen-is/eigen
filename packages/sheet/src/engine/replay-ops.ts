@@ -4,6 +4,7 @@
 // so a peer, a joiner and the server skip the same ops and end with the same sheets. It also owns the shape check a
 // sheet or row op passes before it applies, and says what a batch's ops can affect, which every reader computes again.
 
+import { GONE, mapIndex } from '@workspace/formula/text';
 import { isRecord } from '@workspace/lib/guards';
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import {
@@ -23,7 +24,7 @@ import { namesSheet } from './formula-shift';
 import type { RecalcBudgets, RecomputeSeeds } from './recalc';
 import { recomputeAfter } from './recalc';
 import type { DeleteRowColOp, InsertRowColOp } from './rowcol';
-import { applySheetsDeleteRowCol, applySheetsInsertRowCol, lineMove } from './rowcol';
+import { applySheetsDeleteRowCol, applySheetsInsertRowCol, editOf } from './rowcol';
 import { normalizeSheetConfig } from './sheet-config';
 import type { RenameSheetOp } from './sheet-name';
 import { applySheetDelete, applySheetRename, legalSheetNames } from './sheet-name';
@@ -171,10 +172,13 @@ function seedsOf(
     const lines: RecomputeSeeds['lines'][number][] = [];
     for (const { op } of moved) {
         const { id, type } = op;
-        const { at, to } = lineMove(op);
+        const edit = editOf(op);
+        const at = edit.index;
         // A later op moves the lines an earlier one opened or closed, as it moves the cells on them.
         for (const [i, seed] of lines.entries()) {
-            if (seed.id === id && seed.type === type) lines[i] = { ...seed, line: to(seed.line) ?? at - 1 };
+            if (seed.id !== id || seed.type !== type) continue;
+            const line = mapIndex(edit, seed.line);
+            lines[i] = { ...seed, line: line === GONE ? at - 1 : line };
         }
         if ('index' in op) lines.push({ id, type, line: at });
         else lines.push({ id, type, line: at - 1 }, { id, type, line: at });

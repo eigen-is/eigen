@@ -4,7 +4,8 @@
 
 // @ts-expect-error - No types available for @formulajs/formulajs
 import * as formulajs from '@formulajs/formulajs';
-import { booleanDisplay, update } from '../../../format';
+import { numberDisplay } from '@workspace/formula/format';
+import { booleanDisplay, isValidNumberFormat } from '../../../format';
 import type { FormulaArg, FormulaOutput } from '../../../types';
 import { ERROR_NAME, ERROR_NUM, ERROR_VALUE } from '../../error';
 import { errorType, iserr, iserror } from '../../functions/information';
@@ -143,12 +144,13 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
         if (params.length < 2) throw Error(ERROR_VALUE);
         // An empty format_text, typed or a blank cell, is empty text: TEXT(5,"") = "".
         if (mask == null || mask === '') return '';
+        if (!isValidNumberFormat(String(mask))) throw Error(ERROR_VALUE);
         // Excel hands a boolean through as its text, whatever the mask: TEXT(TRUE,"0") = "TRUE".
-        if (typeof value === 'boolean') return update(String(mask), booleanDisplay(value));
+        if (typeof value === 'boolean') return numberDisplay(booleanDisplay(value), String(mask));
         // A blank argument is 0, as in Excel.
         const num = toNumber(value ?? 0);
         // Non-numeric text keeps its text, formatted by the mask's text section: TEXT("abc","0") = "abc".
-        return update(String(mask), num !== undefined && Number.isFinite(num) ? num : String(value));
+        return numberDisplay(num !== undefined && Number.isFinite(num) ? num : String(value), String(mask));
     },
 
     CONCAT: concatenate,

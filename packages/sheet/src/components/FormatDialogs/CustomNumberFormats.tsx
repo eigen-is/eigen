@@ -1,9 +1,9 @@
 // The Custom number formats dialog: a pattern field with the format of the focus cell, a live preview on a
 // sample value, and presets. Apply sets the pattern on the selection through handleNumberFormat.
 
+import { numberDisplay } from '@workspace/formula/format';
 import { Input } from '@workspace/ui/components/input';
 import { useState } from 'react';
-import { update } from '../../engine/format';
 import { FormatDialog, PatternPreview, PresetList, PresetRow } from './format-dialog';
 import { NUMBER_FORMAT_PRESETS, previewPattern } from './format-pattern';
 import { useAnchorCell } from './useAnchorCell';
@@ -33,7 +33,7 @@ export function CustomNumberFormats() {
                 {NUMBER_FORMAT_PRESETS.map((preset) => (
                     <PresetRow key={preset} active={preset === pattern} onPick={() => setPattern(preset)}>
                         <span className="font-mono">{preset}</span>
-                        <span className="text-muted-foreground">{update(preset, sampleValue)}</span>
+                        <span className="text-muted-foreground">{numberDisplay(sampleValue, preset)}</span>
                     </PresetRow>
                 ))}
             </PresetList>

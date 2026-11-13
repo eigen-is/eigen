@@ -3,6 +3,7 @@
 // Column and line put the value axis upright left of the plot; bar turns both. The layout calls it with the frame the
 // title and legend leave, and with a second context in which the marks draw, flat when the chart is past its sketch cap.
 
+import { numberDisplay } from '@workspace/formula/format';
 import type { ChartLabel, ChartSeriesStyle, ChartShape, ChartSpec, InlineChartSeries } from '../types/chart';
 import { isStackingChartType } from '../types/chart';
 import { serializeFill } from '../vector/fill';
@@ -11,7 +12,6 @@ import type { VectorLinearElement } from '../vector/types';
 import type { Context, Frame } from './context';
 import { LABEL_SHARE } from './context';
 import { fit, hideCrowded, keepUntouched, label, labelBox, measure } from './labels';
-import { numberDisplay } from './number-display';
 import type { Band, ChartTickFormat, ValueAxis } from './scales';
 import { bandScale, MAX_TICK_COUNT, shares, valueAxis, valueExtent } from './scales';
 import { ellipse, isOutlined, line, outlineOf, rectangle } from './shapes';
@@ -36,18 +36,15 @@ type ValueText = { value: number; text: string; width: number };
 // A data label placed by its mark, with its box and the area of its bar or segment, which ranks it in a crowd.
 type ValueLabel = { label: ChartLabel; box: Frame; area: number };
 
-// The axis left of the plot takes its title turned -90°, and the one below takes it upright. A hidden axis gives its
-// labels' room to the plot. Its title and the gridlines stay. The baseline is the category axis's line, so a hidden
-// category axis draws none. A 100% stack plots shares and labels its ticks as percents, whatever the source cells'
-// format. Its min and max are shares too, as Excel's c:min and c:max are, where 1 is 100%. A data label reads the raw
-// value, in the format ChartLayoutInput describes. Null when the frame is too small for a plot.
+// The axis left of the plot takes its title turned -90°, and the one below takes it upright. Null when the frame is
+// too small for a plot.
 export function layoutCartesian(
     ctx: Context,
     marks: Context,
     spec: ChartSpec,
-    categories: string[],
-    series: PaintedSeries[],
-    raw: (number | null)[][],
+    categories: readonly string[],
+    series: readonly PaintedSeries[],
+    raw: readonly (number | null)[][],
     frame: Frame,
     sourceFormat: string | undefined,
 ): ChartShape[] | null {
@@ -225,12 +222,11 @@ export function layoutCartesian(
     return shapes;
 }
 
-// Upright and centered under their bands while they fit; else turned -45° and ellipsized to the room
-// below the plot and left of their band, every nth when even turned ones would touch. Returned with y
-// relative to the label row's top, and the row's height.
+// Upright and centered under their bands while they fit; else turned -45° and ellipsized to the room below the plot
+// and left of their band, every nth when even turned ones would touch. Its y is from the label row's top.
 function placeCategoryLabels(
     ctx: Context,
-    names: string[],
+    names: readonly string[],
     band: Band,
     frame: Frame,
     reserved: number,
@@ -262,8 +258,8 @@ function placeCategoryLabels(
 function barMarks(
     ctx: Context,
     spec: ChartSpec,
-    series: PaintedSeries[],
-    values: (number | null)[][],
+    series: readonly PaintedSeries[],
+    values: readonly (number | null)[][],
     band: Band,
     scale: (v: number) => number,
     horizontal: boolean,
@@ -340,8 +336,8 @@ function valueLabel(
 function lineMarks(
     ctx: Context,
     spec: ChartSpec,
-    series: PaintedSeries[],
-    values: (number | null)[][],
+    series: readonly PaintedSeries[],
+    values: readonly (number | null)[][],
     band: Band,
     scale: (v: number) => number,
     texts: (ValueText | null)[][],

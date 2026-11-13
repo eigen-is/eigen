@@ -55,7 +55,7 @@ test('Enter in a separator field applies the pattern', async () => {
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
-test('a pattern numfmt refuses disables Apply, says why, and keeps the typed text', async () => {
+test('a pattern numfmt refuses disables Apply, says so, and keeps the typed text', async () => {
     const dialog = await openDateTimeFormats();
     await dialog.type(SEPARATOR, '.,');
     expect(dialog.button('Apply')?.disabled).toBe(true);

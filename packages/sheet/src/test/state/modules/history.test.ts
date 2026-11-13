@@ -1,7 +1,3 @@
-// Undo and redo with a peer at work. Each case runs two tabs on one workbook, A and B, through the real record, applyOp
-// and undo steps, and checks what a user sees: the cell the undo lands in, on A, on B and for a joiner who replays
-// every batch. The three must always agree.
-
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { DEFAULT_CHART_SERIES_STYLE, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet as LibSheet } from '@workspace/lib/sheets';
@@ -485,6 +481,8 @@ describe('working alone', () => {
         ['a column insert', insertColumns(0, 2)],
         ['a row insert inside a merge', insertRows(8, 1)],
         ['a row delete', deleteRows(4, 5)],
+        ["a row delete of the filter's header row", deleteRows(2, 2)],
+        ["a column delete of the filter's columns", deleteColumns(0, 2)],
         ['a column delete', deleteColumns(0, 1)],
         ['a row delete through a merge', deleteRows(8, 8)],
         ['a column delete through a merge', deleteColumns(1, 1)],
@@ -785,7 +783,7 @@ describe('undo and redo recalculate the formulas they touch', () => {
     });
 
     test.each([
-        ['a date', { fa: 'yyyy-MM-dd', t: 'd' }, '1900-01-10'],
+        ['a date', { fa: 'yyyy-MM-dd', t: 'd' }, '1900-01-09'],
         ['a text', { fa: '@', t: 's' }, '10'],
     ])('the undo and redo of %s format give a formula its type and display', (_, ct, m) => {
         const general = { f: '=A1*2', v: 10, m: '10', ct: { fa: 'General', t: 'n' } };
@@ -1020,6 +1018,26 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         s.undo(s.a);
         expect(s.a.ctx.sheets[0].config?.merge).toEqual({ '4_0': merge });
         expect(cellAt(s.a, 'B6')?.mc).toEqual({ r: 4, c: 0 });
+        expectAgree(s);
+    });
+
+    test('undoing a delete that cut a merge to one cell brings the merge back everywhere', () => {
+        const merge = { r: 4, c: 0, rs: 2, cs: 1 };
+        const base = produce(
+            workbook({ A5: { v: 'm', m: 'm', mc: merge }, A6: { mc: { r: 4, c: 0 } } }),
+            (ctx: Context) => {
+                ctx.sheets[0].config = { ...ctx.sheets[0].config, merge: { '4_0': merge } };
+            },
+        );
+        const s = session(base);
+        s.edit(s.a, ...deleteRows(5, 5));
+        expect(s.a.ctx.sheets[0].config?.merge).toEqual({});
+        expect(cellAt(s.a, 'A5')?.mc).toBeUndefined();
+        expectAgree(s);
+        s.undo(s.a);
+        expect(s.a.ctx.sheets[0].config?.merge).toEqual({ '4_0': merge });
+        expect(cellAt(s.a, 'A5')?.mc).toEqual(merge);
+        expect(cellAt(s.a, 'A6')?.mc).toEqual({ r: 4, c: 0 });
         expectAgree(s);
     });
 

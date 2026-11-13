@@ -1,7 +1,3 @@
-// A seeded random workbook of formulas over three sheets, and random batches on it as peers and undo steps send them:
-// cell edits with their author's values, row and column ops, sheet adds, deletes and renames, and malformed batches.
-// For property tests that apply many batches and compare readers.
-
 import { isRecord } from '@workspace/lib/guards';
 import type { Cell, Op, Sheet } from '@workspace/lib/sheets';
 import { FormulaEngine } from '../../../engine/formula-engine';
@@ -188,6 +184,57 @@ export function nextBatch(rnd: Random, sheets: Sheet[], step: number): Op[] {
         return withAuthorValues(sheets, [...ops, ...cellOps(rnd, replaySheetsOps(sheets, [ops]))]);
     }
     return ops;
+}
+
+// Formulas on a loop, written to `sheet` as an edit writes them: a cell that reads itself, two or three cells that read
+// each other in a ring, or a cell inside the range it sums, and at times a cell that reads the loop from outside.
+function loopOps(rnd: Random, sheet: Sheet): Op[] {
+    const { rows, columns } = sizeOf(sheet);
+    const at = () => ({ r: rnd.int(rows), c: rnd.int(columns) });
+    const name = ({ r, c }: { r: number; c: number }) => `${letter(c)}${r + 1}`;
+    const write = ({ r, c }: { r: number; c: number }, f: string): Op => ({
+        op: 'replace',
+        id: sheet.id,
+        path: ['data', r, c],
+        value: { f },
+    });
+    const ring = [at(), at(), at()].slice(0, 1 + rnd.int(3));
+    const [first] = ring;
+    const top = Math.max(0, first.r - rnd.int(3));
+    const ops = rnd.chance(0.25)
+        ? [write(first, `=SUM(${letter(first.c)}${top + 1}:${letter(first.c)}${top + 3})`)]
+        : ring.map((cell, i) => write(cell, `=${name(ring[(i + 1) % ring.length])}+1`));
+    if (rnd.chance(0.6)) ops.splice(rnd.int(ops.length + 1), 0, write(at(), `=${name(first)}*2`));
+    return ops;
+}
+
+// A row or column op on the line of one of the workbook's formulas or a line beside it, or null when it holds none.
+// On the line a delete breaks the formula's loop, and before it an op moves the loop.
+function rowColOpAtFormula(rnd: Random, sheets: readonly Sheet[]): Op | null {
+    const formulas = sheets.flatMap((sheet) =>
+        (sheet.data ?? []).flatMap((row, r) => (row ?? []).flatMap((cell, c) => (cell?.f ? [{ sheet, r, c }] : []))),
+    );
+    if (formulas.length === 0) return null;
+    const { sheet, r, c } = rnd.pick(formulas);
+    const type = rnd.chance(0.7) ? 'row' : 'column';
+    const { rows, columns } = sizeOf(sheet);
+    const size = type === 'row' ? rows : columns;
+    const line = Math.min(size - 1, Math.max(0, (type === 'row' ? r : c) + rnd.int(3) - 1));
+    if (size > 4 && (size > 14 || rnd.chance(0.5))) {
+        return { op: 'deleteRowCol', id: sheet.id, path: [], value: { type, start: line, end: line } };
+    }
+    const value = { type, index: line, count: 1, direction: rnd.pick(['lefttop', 'rightbottom']) };
+    return { op: 'insertRowCol', id: sheet.id, path: [], value };
+}
+
+// The next batch on a workbook whose formulas may read themselves: a loop typed in, a row or column op at a formula,
+// or such an op with the loop its undo writes back, which is how a row op creates one.
+export function nextLoopBatch(rnd: Random, sheets: Sheet[]): Op[] {
+    const op = rnd.chance(0.6) ? rowColOpAtFormula(rnd, sheets) : null;
+    if (!op) return withAuthorValues(sheets, loopOps(rnd, rnd.pick(sheets)));
+    if (rnd.chance(0.7)) return [op];
+    const moved = replaySheetsOps(sheets, [[op]]).find((sheet) => sheet.id === op.id);
+    return moved ? withAuthorValues(sheets, [op, ...loopOps(rnd, moved)]) : [op];
 }
 
 // A batch every reader skips, because one of its ops is malformed.

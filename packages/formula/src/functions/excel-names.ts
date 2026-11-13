@@ -1,8 +1,8 @@
-// Every function name Excel knows, so the xlsx writer can add the `_xlfn.` prefix to each one Excel added after 2007,
-// and the formula engine can tell a real Excel function it lacks from a typo. The names are Microsoft's "Excel functions
-// (alphabetical)" (support.microsoft.com, read 2026-10-28), with the B variants of the text functions spelled out, plus
-// three the writer listed before that the page leaves out: ANCHORARRAY, SINGLE and QUERYSTRING. formulajs is no source:
-// beside Excel's, it registers Google Sheets' functions and aliases Excel doesn't know, such as ADD, SPLIT and CEILINGMATH.
+// Every function name Excel knows, a wider list than FUNCTIONS, which holds the ones this engine computes. A reader
+// tells a real Excel function the engine lacks from a typo, and the xlsx writer adds the `_xlfn.` prefix to each one
+// Excel added after 2007. The names are Microsoft's "Excel functions (alphabetical)" (support.microsoft.com), with
+// the B variants of the text functions spelled out, plus ANCHORARRAY, SINGLE and QUERYSTRING, which it leaves
+// out. formulajs is no source: it also registers Google Sheets' functions and aliases Excel lacks, like ADD.
 
 // The functions Excel added after 2007. A file stores each as `_xlfn.NAME`, so an older Excel that lacks one shows
 // #NAME? rather than misreading it. Excel reads one without the prefix as an unknown name, so the writer adds it back.
@@ -178,7 +178,7 @@ export const EXCEL_FUTURE_FUNCTIONS: ReadonlySet<string> = new Set([
 ]);
 
 // The functions Excel 2007 already had, which a file stores by their bare name.
-const EXCEL_2007_FUNCTIONS: ReadonlySet<string> = new Set([
+export const EXCEL_2007_FUNCTIONS: ReadonlySet<string> = new Set([
     'ABS',
     'ACCRINT',
     'ACCRINTM',
@@ -537,11 +537,66 @@ const EXCEL_2007_FUNCTIONS: ReadonlySet<string> = new Set([
     'ZTEST',
 ]);
 
+// The future functions a file stores with a second prefix, the worksheet functions': `_xlfn._xlws.FILTER`.
+export const EXCEL_WORKSHEET_FUNCTIONS: ReadonlySet<string> = new Set(['FILTER', 'SORT']);
+
+// Of the functions the engine lacks, the ones that answer an array whatever they are given: the xlsx reader and
+// writer must know such a call may be more than one cell. A name leaves this list when the engine gets the function.
+export const EXCEL_ARRAY_FUNCTIONS: ReadonlySet<string> = new Set([
+    'BYCOL',
+    'BYROW',
+    'CHOOSECOLS',
+    'CHOOSEROWS',
+    'DROP',
+    'EXPAND',
+    'FILTER',
+    'FILTERXML',
+    'FREQUENCY',
+    'GROUPBY',
+    'GROWTH',
+    'HSTACK',
+    'LINEST',
+    'LOGEST',
+    'MAKEARRAY',
+    'MAP',
+    'MINVERSE',
+    'MMULT',
+    'MODE.MULT',
+    'MUNIT',
+    'PIVOTBY',
+    'RANDARRAY',
+    'REDUCE',
+    'REGEXEXTRACT',
+    'SCAN',
+    'SEQUENCE',
+    'SORT',
+    'SORTBY',
+    'STOCKHISTORY',
+    'TAKE',
+    'TEXTSPLIT',
+    'TOCOL',
+    'TOROW',
+    'TRANSPOSE',
+    'TREND',
+    'TRIMRANGE',
+    'UNIQUE',
+    'VSTACK',
+    'WRAPCOLS',
+    'WRAPROWS',
+]);
+
+// The prefixes a file writes before a future function and before a worksheet one, in the letter case Excel writes.
+export const FUTURE_PREFIX = '_xlfn.';
+export const WORKSHEET_PREFIX = '_xlfn._xlws.';
 const FUTURE_PREFIXES = /^(?:_xlfn\.)?(?:_xlws\.)?/i;
 
 // True for a name Excel knows as a function, in any case and with or without its file prefixes: XLOOKUP,
 // _xlfn.LET, sum. A typo such as FILTRE is false.
 export function isExcelFunction(name: string): boolean {
-    const bare = name.replace(FUTURE_PREFIXES, '').toUpperCase();
-    return EXCEL_FUTURE_FUNCTIONS.has(bare) || EXCEL_2007_FUNCTIONS.has(bare);
+    return isExcelName(name.replace(FUTURE_PREFIXES, '').toUpperCase());
+}
+
+// The same for a bare name in upper case, as a parsed call holds it: a prefix left on it makes it no function.
+export function isExcelName(name: string): boolean {
+    return EXCEL_FUTURE_FUNCTIONS.has(name) || EXCEL_2007_FUNCTIONS.has(name);
 }

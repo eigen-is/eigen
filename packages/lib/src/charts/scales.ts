@@ -36,7 +36,7 @@ export type Band = {
 // The data's range. Bars grow from zero, so it takes in zero for them. A line's axis takes in zero when the line is
 // flat or spreads wide, and otherwise fits its data. Stacks sum positives and negatives apart.
 export function valueExtent(
-    values: (number | null)[][],
+    values: readonly (number | null)[][],
     stacked: boolean,
     zeroBlanks: boolean,
     zeroBased: boolean,
@@ -74,7 +74,7 @@ export function valueExtent(
 
 // Each value as its share of its category's absolute sum (Excel's percentStacked, Plot's normalize), so
 // positives and negatives together span 100%. A category summing to zero has no shares and draws no bar.
-export function shares(values: (number | null)[][]): (number | null)[][] {
+export function shares(values: readonly (number | null)[][]): (number | null)[][] {
     const totals = values[0].map((_, c) => values.reduce((sum, row) => sum + Math.abs(row[c] ?? 0), 0));
     return values.map((row) => row.map((value, c) => (value === null || totals[c] === 0 ? null : value / totals[c])));
 }

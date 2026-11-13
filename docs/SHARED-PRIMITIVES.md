@@ -2,10 +2,10 @@
 
 > **Generated — do not edit by hand.** Run `bun run primitives` to regenerate;
 > `bun run primitives --check` is the CI gate. Source: the `exports` maps of `packages/lib`,
-> `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
+> `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2162 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2233 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -228,10 +228,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEProvider` | `@workspace/ui/components/sse-provider` | packages/ui/src/components/sse-provider/sse-provider.tsx |
 | `UploadProvider` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 
-## Contexts, schemas & classes (17)
+## Contexts, schemas & classes (18)
 
 | Name | Import from | File |
 |------|-------------|------|
+| `Engine` | `@workspace/formula` | packages/formula/src/recalc/engine.ts |
 | `AppError` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `CommandPaletteContext` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `ChartNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
@@ -564,10 +565,24 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (451)
+## Types (465)
 
 | Name | Import from | File |
 |------|-------------|------|
+| `CellSink` | `@workspace/formula` | packages/formula/src/store/workbook.ts |
+| `EditResult` | `@workspace/formula` | packages/formula/src/recalc/recalc.ts |
+| `FormulaError` | `@workspace/formula` | packages/formula/src/values/errors.ts |
+| `LineEdit` | `@workspace/formula` | packages/formula/src/edit/transform.ts |
+| `Literal` | `@workspace/formula` | packages/formula/src/store/workbook.ts |
+| `Move` | `@workspace/formula` | packages/formula/src/edit/move.ts |
+| `RecalcResult` | `@workspace/formula` | packages/formula/src/recalc/recalc.ts |
+| `Rewrite` | `@workspace/formula` | packages/formula/src/recalc/edit-plan.ts |
+| `SheetSource` | `@workspace/formula` | packages/formula/src/store/workbook.ts |
+| `Edit` | `@workspace/formula/text` | packages/formula/src/edit/map.ts |
+| `FormulaNode` | `@workspace/formula/text` | packages/formula/src/text/tree.ts |
+| `Span` | `@workspace/formula/text` | packages/formula/src/edit/map.ts |
+| `Table` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
+| `TableFinder` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
 | `AuthUser` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
 | `RouterAppContext` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
 | `ViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
@@ -1020,10 +1035,69 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1178)
+## Utilities & constants (1234)
 
 | Name | Import from | File |
 |------|-------------|------|
+| `CALC` | `@workspace/formula` | packages/formula/src/values/errors.ts |
+| `DIV0` | `@workspace/formula` | packages/formula/src/values/errors.ts |
+| `ERROR` | `@workspace/formula` | packages/formula/src/values/errors.ts |
+| `errorOf` | `@workspace/formula` | packages/formula/src/values/errors.ts |
+| `FUNCTIONS` | `@workspace/formula` | packages/formula/src/functions/library.ts |
+| `NA` | `@workspace/formula` | packages/formula/src/values/errors.ts |
+| `NAME` | `@workspace/formula` | packages/formula/src/values/errors.ts |
+| `NULL` | `@workspace/formula` | packages/formula/src/values/errors.ts |
+| `NUM` | `@workspace/formula` | packages/formula/src/values/errors.ts |
+| `REF` | `@workspace/formula` | packages/formula/src/values/errors.ts |
+| `SPILL` | `@workspace/formula` | packages/formula/src/values/errors.ts |
+| `VALUE` | `@workspace/formula` | packages/formula/src/values/errors.ts |
+| `numberDisplay` | `@workspace/formula/format` | packages/formula/src/format/number-display.ts |
+| `numberFormatError` | `@workspace/formula/format` | packages/formula/src/format/number-display.ts |
+| `EXCEL_FUTURE_FUNCTIONS` | `@workspace/formula/names` | packages/formula/src/functions/excel-names.ts |
+| `isExcelFunction` | `@workspace/formula/names` | packages/formula/src/functions/excel-names.ts |
+| `bindSheet` | `@workspace/formula/text` | packages/formula/src/edit/sheets.ts |
+| `columnIndex` | `@workspace/formula/text` | packages/formula/src/text/a1.ts |
+| `columnLabel` | `@workspace/formula/text` | packages/formula/src/text/a1.ts |
+| `ERROR_LITERALS` | `@workspace/formula/text` | packages/formula/src/text/lexer.ts |
+| `findSheetByName` | `@workspace/formula/text` | packages/formula/src/text/sheet-name.ts |
+| `GONE` | `@workspace/formula/text` | packages/formula/src/edit/map.ts |
+| `GRID_COLUMNS` | `@workspace/formula/text` | packages/formula/src/text/a1.ts |
+| `GRID_ROWS` | `@workspace/formula/text` | packages/formula/src/text/a1.ts |
+| `hostClasses` | `@workspace/formula/text` | packages/formula/src/edit/transform.ts |
+| `intersect` | `@workspace/formula/text` | packages/formula/src/text/xlsx.ts |
+| `isLegacy` | `@workspace/formula/text` | packages/formula/src/text/xlsx.ts |
+| `mapIndex` | `@workspace/formula/text` | packages/formula/src/edit/map.ts |
+| `mapSpan` | `@workspace/formula/text` | packages/formula/src/edit/map.ts |
+| `MAX_ARGUMENTS` | `@workspace/formula/text` | packages/formula/src/text/parser.ts |
+| `MAX_NESTING` | `@workspace/formula/text` | packages/formula/src/text/parser.ts |
+| `MAX_STORED_LENGTH` | `@workspace/formula/text` | packages/formula/src/text/parser.ts |
+| `NodeKind` | `@workspace/formula/text` | packages/formula/src/text/tree.ts |
+| `offGrid` | `@workspace/formula/text` | packages/formula/src/edit/leaves.ts |
+| `parseA1` | `@workspace/formula/text` | packages/formula/src/text/parser.ts |
+| `parseA1Range` | `@workspace/formula/text` | packages/formula/src/text/parser.ts |
+| `parseStored` | `@workspace/formula/text` | packages/formula/src/text/parser.ts |
+| `parseXlsx` | `@workspace/formula/text` | packages/formula/src/text/xlsx.ts |
+| `printA1` | `@workspace/formula/text` | packages/formula/src/text/printer.ts |
+| `printStored` | `@workspace/formula/text` | packages/formula/src/text/printer.ts |
+| `printXlsx` | `@workspace/formula/text` | packages/formula/src/text/printer.ts |
+| `quoteSheetName` | `@workspace/formula/text` | packages/formula/src/text/sheet-name.ts |
+| `rangeToA1` | `@workspace/formula/text` | packages/formula/src/text/a1.ts |
+| `RefFlag` | `@workspace/formula/text` | packages/formula/src/text/tree.ts |
+| `RefKind` | `@workspace/formula/text` | packages/formula/src/text/tree.ts |
+| `remapSheets` | `@workspace/formula/text` | packages/formula/src/edit/sheets.ts |
+| `resolveTables` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
+| `sheetFinder` | `@workspace/formula/text` | packages/formula/src/text/sheet-name.ts |
+| `SheetKind` | `@workspace/formula/text` | packages/formula/src/text/tree.ts |
+| `sheetNameKey` | `@workspace/formula/text` | packages/formula/src/text/sheet-name.ts |
+| `storedKey` | `@workspace/formula/text` | packages/formula/src/text/printer.ts |
+| `storedText` | `@workspace/formula/text` | packages/formula/src/text/typed.ts |
+| `toA1` | `@workspace/formula/text` | packages/formula/src/text/a1.ts |
+| `Token` | `@workspace/formula/text` | packages/formula/src/text/lexer.ts |
+| `tokens` | `@workspace/formula/text` | packages/formula/src/text/tokens.ts |
+| `transformLines` | `@workspace/formula/text` | packages/formula/src/edit/transform.ts |
+| `transformMove` | `@workspace/formula/text` | packages/formula/src/edit/move.ts |
+| `typedText` | `@workspace/formula/text` | packages/formula/src/text/typed.ts |
+| `xlsxTree` | `@workspace/formula/text` | packages/formula/src/text/xlsx.ts |
 | `handleAdminSSEvent` | `@workspace/lib/admin` | packages/lib/src/core/admin/sse-handlers.ts |
 | `api` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `API_HOST` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -1187,7 +1261,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MAX_SKETCH_POINTS` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `newChartSeriesId` | `@workspace/lib/charts` | packages/lib/src/charts/limits.ts |
 | `newChartSpecParts` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
-| `numberDisplay` | `@workspace/lib/charts` | packages/lib/src/charts/number-display.ts |
 | `parseChartSpec` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `readChartLook` | `@workspace/lib/charts` | packages/lib/src/charts/look.ts |
 | `readChartSpec` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
@@ -1631,14 +1704,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `decodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `decodeSheetsWorkbook` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `encodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
-| `EXCEL_FUTURE_FUNCTIONS` | `@workspace/lib/sheets` | packages/lib/src/sheets/excel-functions.ts |
 | `floatingItems` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
 | `forEachInRect` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `freezesColumns` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `freezesRows` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isCellLinkType` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isCurrentSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
-| `isExcelFunction` | `@workspace/lib/sheets` | packages/lib/src/sheets/excel-functions.ts |
 | `isOpBatch` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isPatchOp` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isStructuralBatch` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |

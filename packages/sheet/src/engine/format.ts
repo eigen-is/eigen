@@ -1,11 +1,10 @@
 // A cell's value as text: what the grid shows, how General aligns it, the type and format that typed input infers,
 // such as "25%" read as 0.25 in a percent format, and the type and display a formula's result writes. Its callers
-// include the grid, recalc and the xlsx import. The number format itself is lib's numberDisplay, which a chart's ticks
-// share, passed on from here.
+// include the grid, recalc and the xlsx import. The number format itself is the formula package's numberDisplay, which
+// a chart's ticks share.
 
-import { numberDisplay } from '@workspace/lib/charts';
+import { isDateFormat, numberDisplay } from '@workspace/formula/format';
 import numeral from 'numeral';
-import { format, isDateFormat } from 'numfmt';
 import { dateToSerial } from './parser/helper/number';
 import type { Cell, CellMatrix, CellType, FormulaArg } from './types';
 import { ID_CARD_NUMBER, isdatetime, isPlainNumber, isRealNum, valueIsError } from './validation';
@@ -16,8 +15,7 @@ export function booleanDisplay(value: boolean): string {
 }
 
 // Excel's General alignment, for a cell without its own, as the editor and the HTML export draw it: numbers and dates
-// right, booleans and errors centred, text left. A snapshot may hold an error with a text type, as the xlsx import once
-// stored one, so its value decides too.
+// right, booleans and errors centered, text left. An error is one by its value too, whatever type its cell carries.
 export function generalAlign(cell: Cell | null | undefined): '0' | '1' | '2' {
     const value = cell?.v;
     if (typeof value === 'number') return '2';
@@ -26,8 +24,7 @@ export function generalAlign(cell: Cell | null | undefined): '0' | '1' | '2' {
 }
 
 // A number as text, in a formula and on the clipboard: Excel's 15 significant digits, so 0.1+0.2 is "0.3", and
-// E notation past 15 digits, as for a 16-digit card number (1.23456789012346E+15). A tiny one goes E where
-// JavaScript does, below 1E-6.
+// E notation past 15 digits (1.23456789012346E+15) and, where JavaScript writes it, below 1E-6.
 export function numberText(value: number): string {
     const rounded = Number(value.toPrecision(15));
     const text = Math.abs(rounded) >= 1e15 ? rounded.toExponential() : String(rounded);
@@ -165,7 +162,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
         }
 
         ct = { fa, t: 'n' };
-        m = format(fa, v);
+        m = numberDisplay(v, fa);
     } else if (text.indexOf('%') > -1) {
         const index = text.indexOf('%');
         const value2 = text.substring(0, index);
@@ -197,7 +194,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
                             const fa = `#,##0.${new Array(len + 1).join('0')}%`;
                             ct = { fa, t: 'n' };
                             v = numeral(value).value() ?? 0;
-                            m = format(fa, v);
+                            m = numberDisplay(v, fa);
                         } else {
                             m = text;
                             ct = { fa: '@', t: 's' };
@@ -206,7 +203,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
                         const fa = `0.${new Array(len + 1).join('0')}%`;
                         ct = { fa, t: 'n' };
                         v = numeral(value).value() ?? 0;
-                        m = format(fa, v);
+                        m = numberDisplay(v, fa);
                     }
                 } else {
                     m = text;
@@ -227,7 +224,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
                     const fa = '#,##0%';
                     ct = { fa, t: 'n' };
                     v = numeral(value).value() ?? 0;
-                    m = format(fa, v);
+                    m = numberDisplay(v, fa);
                 } else {
                     m = text;
                     ct = { fa: '@', t: 's' };
@@ -236,7 +233,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
                 const fa = '0%';
                 ct = { fa, t: 'n' };
                 v = numeral(value).value() ?? 0;
-                m = format(fa, v);
+                m = numberDisplay(v, fa);
             }
         } else {
             m = text;
@@ -267,7 +264,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
                     const fa = `#,##0.${new Array(len + 1).join('0')}`;
                     ct = { fa, t: 'n' };
                     v = numeral(value).value() ?? 0;
-                    m = format(fa, v);
+                    m = numberDisplay(v, fa);
                 } else {
                     m = text;
                     ct = { fa: '@', t: 's' };
@@ -277,7 +274,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
                     const fa = `0.${new Array(len + 1).join('0')}`;
                     ct = { fa, t: 'n' };
                     v = numeral(value).value() ?? 0;
-                    m = format(fa, v);
+                    m = numberDisplay(v, fa);
                 } else {
                     m = text;
                     ct = { fa: '@', t: 's' };
@@ -308,7 +305,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
         }
 
         ct = { fa, t: 'd' };
-        m = format(fa, v);
+        m = numberDisplay(v, fa);
     } else if (isdatetime(value, '12') && (text.indexOf('.') > -1 || text.indexOf(':') > -1 || text.length < 20)) {
         v = dateToSerial(
             new Date(
@@ -333,7 +330,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
         }
 
         ct = { fa, t: 'd' };
-        m = format(fa, v);
+        m = numberDisplay(v, fa);
     } else {
         m = text;
         ct = { fa: 'General', t: 'g' };
@@ -342,11 +339,6 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
     return [m, ct, v];
 }
 
-export function update(fmt: string, v: string | number | boolean | null | undefined): string {
-    return format(fmt, v);
-}
-
-export { numberDisplay } from '@workspace/lib/charts';
 export { isValidFormat as isValidNumberFormat } from 'numfmt';
 
 export function is_date(fmt: number | string): boolean {

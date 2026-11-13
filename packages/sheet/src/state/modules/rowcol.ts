@@ -4,9 +4,10 @@
 // selection, for the author's op, a peer's and an undo alike. It also tells the editors and the arrow keys where the
 // hidden rows and columns are.
 
+import { GONE, mapIndex } from '@workspace/formula/text';
 import { isRecord } from '@workspace/lib/guards';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
-import { lineMove } from '../../engine/rowcol';
+import { editOf, shiftRange } from '../../engine/rowcol';
 import type { CellMatrix } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
@@ -24,8 +25,8 @@ export function insertRowCol(ctx: Context, op: InsertRowColOp, changeSelection =
     applyBatch(ctx, [insertMarker(op)]);
     const data = getFlowdata(ctx, op.id);
     if (changeSelection && data) {
-        const { at } = lineMove(op);
-        const span = [at, at + op.count - 1];
+        const first = editOf(op).index;
+        const span = [first, first + op.count - 1];
         ctx.selections =
             op.type === 'row'
                 ? [{ row: span, column: [0, data[0].length - 1] }]
@@ -39,8 +40,7 @@ export function deleteRowCol(ctx: Context, op: DeleteRowColOp) {
 }
 
 // The open cell editor and the selections move with their cells, so a commit lands where the person chose, not in the
-// row that slid under it. A delete of the editor's cell closes it without writing and drops the selection, so the keys
-// typed next land on no cell rather than on the one that took its place. `data` is the grid the op left.
+// row that slid under it. A delete of the editor's cell closes it without writing and drops the selection.
 export function followView(ctx: Context, move: RowColMove, data: CellMatrix) {
     const row = move.type === 'row';
     const last = (row ? data.length : data[0].length) - 1;
@@ -53,8 +53,8 @@ export function followView(ctx: Context, move: RowColMove, data: CellMatrix) {
     }
     const [r, c] = ctx.editingCellPosition;
     if (r != null && c != null) {
-        const to = move.to(row ? r : c);
-        if (to == null) {
+        const to = mapIndex(move.edit, row ? r : c);
+        if (to === GONE) {
             cancelNormalSelected(ctx);
             ctx.selections = undefined;
             return;
@@ -130,12 +130,13 @@ export function moveCountPastHiddenRowCol(ctx: Context, key: string): number {
 // grid's new last line, whoever deleted it, as in Google Sheets and Excel.
 function movedSelection(selection: Selection, move: RowColMove, data: CellMatrix, last: number): Selection {
     const row = move.type === 'row';
-    const line = Math.min(move.at, last);
+    const line = Math.min(move.edit.index, last);
     const shifted =
-        move.range(selection) ?? (row ? { ...selection, row: [line, line] } : { ...selection, column: [line, line] });
+        shiftRange(selection, move.type, move.edit) ??
+        (row ? { ...selection, row: [line, line] } : { ...selection, column: [line, line] });
     const focus = row ? selection.row_focus : selection.column_focus;
-    const to = focus == null ? null : move.to(focus);
-    if (to != null) return row ? { ...shifted, row_focus: to } : { ...shifted, column_focus: to };
+    const to = focus == null ? GONE : mapIndex(move.edit, focus);
+    if (to !== GONE) return row ? { ...shifted, row_focus: to } : { ...shifted, column_focus: to };
     const [start] = row ? shifted.row : shifted.column;
     return onMergeHead(row ? { ...shifted, row_focus: start } : { ...shifted, column_focus: start }, data);
 }

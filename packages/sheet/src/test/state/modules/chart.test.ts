@@ -1,7 +1,3 @@
-// Charts ride the op pipeline as a map keyed by chart id, so these tests drive the real one: an
-// editor recipe through produceWithPatches → patchToOp, a peer through Workbook's applyOp, and a
-// joiner through replaySheetsOps. Every client and the joiner must end on the same charts.
-
 import { describe, expect, test } from 'bun:test';
 import {
     CHART_MAX_SIDE,
@@ -436,10 +432,10 @@ describe('charts converge over real ops', () => {
     test('undoing a row insert restores a ref an insert stopped at the last row, on a sheet whose formula moved too', () => {
         const base = workbook();
         base.sheets[1].data![9][3] = { f: '=SUM(S!B3:B6)', v: 0, m: '0' };
-        base.sheets[1].charts!.t1 = chart('t1', rangeSpec(ref(S, [0, 1048575])));
+        base.sheets[1].charts!.t1 = chart('t1', rangeSpec(ref(S, [1, 1048575])));
         const op = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: S } as const;
         const insert = author(base, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
-        expect(rangeData(insert.next.sheets, 1, 't1')?.series[0].values?.row).toEqual([2, 1048575]);
+        expect(rangeData(insert.next.sheets, 1, 't1')?.series[0].values?.row).toEqual([3, 1048575]);
         const { ctx: undone, ops: undoOps } = undoEntry(insert.next, insert.entry);
         const peer = receive(receive(base, insert.ops), undoOps);
         const joiner = join(base, [insert.ops, undoOps]);

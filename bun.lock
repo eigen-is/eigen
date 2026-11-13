@@ -68,6 +68,7 @@
         "@tiptap/starter-kit": "^3.31.3",
         "@tiptap/static-renderer": "^3.31.3",
         "@tiptap/y-tiptap": "^3.0.9",
+        "@workspace/formula": "workspace:*",
         "@workspace/lib": "workspace:*",
         "@workspace/math": "workspace:*",
         "@workspace/sheet": "workspace:*",
@@ -286,6 +287,16 @@
         "@workspace/ui": "workspace:*",
       },
     },
+    "packages/formula": {
+      "name": "@workspace/formula",
+      "version": "0.0.0",
+      "dependencies": {
+        "numfmt": "^4.1.3",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.4.4",
+      },
+    },
     "packages/lib": {
       "name": "@workspace/lib",
       "version": "0.0.0",
@@ -294,6 +305,7 @@
         "@better-auth/api-key": "^1.7.14",
         "@elysiajs/eden": "^1.4.9",
         "@tanstack/react-hotkeys": "^0.1.3",
+        "@workspace/formula": "workspace:*",
         "@workspace/math": "workspace:*",
         "better-auth": "^1.7.14",
         "es-toolkit": "^1.53.0",
@@ -301,7 +313,6 @@
         "lib0": "^0.2.119",
         "linkifyjs": "^4.4.0",
         "nanoid": "^5.1.16",
-        "numfmt": "^3.2.6",
         "perfect-freehand": "1.2.3",
         "roughjs": "4.6.4",
         "rrule": "^2.8.1",
@@ -343,13 +354,14 @@
       "dependencies": {
         "@formulajs/formulajs": "^2.9.3",
         "@tanstack/react-hotkeys": "^0.1.3",
+        "@workspace/formula": "workspace:*",
         "@workspace/lib": "workspace:*",
         "@workspace/ui": "workspace:*",
         "dayjs": "^1.11.23",
         "es-toolkit": "^1.53.0",
         "immer": "^9.0.21",
         "numeral": "^2.0.6",
-        "numfmt": "^3.2.6",
+        "numfmt": "^4.1.3",
       },
       "devDependencies": {
         "@types/numeral": "^2.0.5",
@@ -389,6 +401,7 @@
   "patchedDependencies": {
     "@formulajs/formulajs@2.9.3": "patches/@formulajs%2Fformulajs@2.9.3.patch",
     "ical.js@2.2.1": "patches/ical.js@2.2.1.patch",
+    "numfmt@4.1.3": "patches/numfmt@4.1.3.patch",
   },
   "overrides": {
     "jsdom": "^29.1.1",
@@ -1170,6 +1183,8 @@
 
     "@vitejs/plugin-react": ["@vitejs/plugin-react@5.2.0", "", { "dependencies": { "@babel/core": "^7.29.0", "@babel/plugin-transform-react-jsx-self": "^7.27.1", "@babel/plugin-transform-react-jsx-source": "^7.27.1", "@rolldown/pluginutils": "1.0.0-rc.3", "@types/babel__core": "^7.20.5", "react-refresh": "^0.18.0" }, "peerDependencies": { "vite": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0" } }, "sha512-YmKkfhOAi3wsB1PhJq5Scj3GXMn3WvtQ/JC0xoopuHoXSdmtdStOpFrYaT1kie2YgFBcIe64ROzMYRjCrYOdYw=="],
 
+    "@workspace/formula": ["@workspace/formula@workspace:packages/formula"],
+
     "@workspace/lib": ["@workspace/lib@workspace:packages/lib"],
 
     "@workspace/math": ["@workspace/math@workspace:packages/math"],
@@ -1474,7 +1489,7 @@
 
     "numeral": ["numeral@2.0.6", "", {}, "sha512-qaKRmtYPZ5qdw4jWJD6bxEf1FJEqllJrwxCLIm0sQU/A7v2/czigzOb+C2uSiFsa9lBUzeH7M1oK+Q+OLxL3kA=="],
 
-    "numfmt": ["numfmt@3.2.6", "", {}, "sha512-MXc2KP3j+2usdHTY5/ENUc2S+3BRF/cJqnR6RHeq6LBqKoIZOAQ62DQw974nnaZOencbfkmkTPyTmMnlkCpjzg=="],
+    "numfmt": ["numfmt@4.1.3", "", {}, "sha512-rXt3x9KTNIlk4mqMUPpkBVUVBYv1uVOYOcotJ7mjbBOyerljLwTsEMdhW0c/tF2bc2nc3a7dszTo+QBYzv6eDQ=="],
 
     "openapi-types": ["openapi-types@12.1.3", "", {}, "sha512-N4YtSYJqghVu4iek2ZUvcN/0aqH1kRDuNqzcycDxhOUpg7GdvLa2F3DgS6yBNhInhv2r/6I0Flkn7CqL8+nIcw=="],
 

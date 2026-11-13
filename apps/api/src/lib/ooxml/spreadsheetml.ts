@@ -3,11 +3,11 @@
 // names of conditional formats and data validations, and the prefixes of the functions Excel added after 2007. The
 // OOXML every format shares sits in its own module.
 
+import { EXCEL_FUTURE_FUNCTIONS } from '@workspace/formula/names';
 import type { EigenFont } from '@workspace/lib/constants/fonts';
 import type { ConditionalFormatConditionName } from '@workspace/lib/sheets';
 import {
     columnLabelToIndex,
-    EXCEL_FUTURE_FUNCTIONS,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
     SHEET_DEFAULT_DIGIT_WIDTH,

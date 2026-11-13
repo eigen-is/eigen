@@ -1,0 +1,50 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 3bf1bb4b721083414ceee29300488a524a7c4b28..36588a141e713e3445e154a7c49a247f74aa2d3f 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -5249,8 +5249,10 @@ function runPart(value, part, opts, l10n_) {
+ 			time = 0;
+ 			date += 1;
+ 		}
++		// Patched (Eigen, patches/): the weekday of a day before day 0 comes from the day toYMD gets, as the remainder of a negative has no name.
++		const ord = Math.floor(value) + date - Math.trunc(value);
+ 		if (date || part.date_system) {
+-			const dout = toYMD(Math.floor(value) + date - Math.trunc(value), part.date_system, opts.leap1900);
++			const dout = toYMD(ord, part.date_system, opts.leap1900);
+ 			year = dout[0];
+ 			month = dout[1];
+ 			day = dout[2];
+@@ -5261,7 +5263,7 @@ function runPart(value, part, opts, l10n_) {
+ 			minute = Math.floor(x / 60) % 60;
+ 			hour = Math.floor(x / 60 / 60) % 60;
+ 		}
+-		weekday = (6 + date) % 7;
++		weekday = ((6 + ord) % 7 + 7) % 7;
+ 		if (part.date_eval && dateOverflows(value, date + time / DAYSIZE, opts.dateSpanLarge)) {
+ 			if (opts.dateErrorThrows) throw new Error("Date out of bounds");
+ 			if (opts.dateErrorNumber) return general(value < 0 ? [l10n.negative] : [], value, l10n).join("");
+diff --git a/dist/index.js b/dist/index.js
+index 8e571c99c9c4686a2a68bdcb5e8101a7de93d1a9..7edf396c308392bd59f2aa13f2f51a2242b2dc5d 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -5248,8 +5248,10 @@ function runPart(value, part, opts, l10n_) {
+ 			time = 0;
+ 			date += 1;
+ 		}
++		// Patched (Eigen, patches/): the weekday of a day before day 0 comes from the day toYMD gets, as the remainder of a negative has no name.
++		const ord = Math.floor(value) + date - Math.trunc(value);
+ 		if (date || part.date_system) {
+-			const dout = toYMD(Math.floor(value) + date - Math.trunc(value), part.date_system, opts.leap1900);
++			const dout = toYMD(ord, part.date_system, opts.leap1900);
+ 			year = dout[0];
+ 			month = dout[1];
+ 			day = dout[2];
+@@ -5260,7 +5262,7 @@ function runPart(value, part, opts, l10n_) {
+ 			minute = Math.floor(x / 60) % 60;
+ 			hour = Math.floor(x / 60 / 60) % 60;
+ 		}
+-		weekday = (6 + date) % 7;
++		weekday = ((6 + ord) % 7 + 7) % 7;
+ 		if (part.date_eval && dateOverflows(value, date + time / DAYSIZE, opts.dateSpanLarge)) {
+ 			if (opts.dateErrorThrows) throw new Error("Date out of bounds");
+ 			if (opts.dateErrorNumber) return general(value < 0 ? [l10n.negative] : [], value, l10n).join("");

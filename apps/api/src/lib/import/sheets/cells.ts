@@ -2,10 +2,11 @@
 // the borders, the row heights and the hidden rows. Only what the file holds is walked, never the row or column
 // numbers. The xlsx reader calls it for each worksheet, after the merges and links that place cells of their own.
 
+import { numberDisplay } from '@workspace/formula/format';
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { Cell, CellBorderSides, CellStyle, InlineStringSegment } from '@workspace/lib/sheets';
 import { columnLabelToIndex, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
-import { booleanDisplay, functionCopy, numberDisplay, update } from '@workspace/sheet/engine';
+import { booleanDisplay, functionCopy } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
@@ -194,7 +195,7 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
         if (typeof value === 'number') {
             // numfmt renders a bare serial under General as a number, so a date without a format it can draw shows as
             // m/d/yyyy.
-            cell.m = date ? update(look.numFmt ?? DATE_FORMAT, value) : numberDisplay(value, look.numFmt);
+            cell.m = numberDisplay(value, date ? (look.numFmt ?? DATE_FORMAT) : look.numFmt);
         } else cell.m = typeof value === 'boolean' ? booleanDisplay(value) : value;
     }
     if (formula) cell.f = `=${formula}`;
@@ -206,7 +207,11 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
 }
 
 // The runs with text, a copy per cell, charged each as a cell before they are built; plain text takes the cell's font.
-function runsOf(runs: (string | InlineStringSegment)[], font: CellStyle, context: GridContext): InlineStringSegment[] {
+function runsOf(
+    runs: readonly (string | InlineStringSegment)[],
+    font: CellStyle,
+    context: GridContext,
+): InlineStringSegment[] {
     const shown = runs.filter((run) => (typeof run === 'string' ? run : run.v));
     context.charge(
         shown.length,

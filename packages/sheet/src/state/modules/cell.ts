@@ -3,6 +3,7 @@
 // it runs the formula engine, data validation and the row's auto height. Range helpers that read cells,
 // such as getRangeByTxt, live here too.
 
+import { numberDisplay } from '@workspace/formula/format';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
 import { cellFontName, columnIndexToLabel, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
@@ -14,7 +15,6 @@ import {
     cellWrapsText,
     dropRuns,
     generalAlign,
-    numberDisplay,
     parseCellInput,
     richText,
     writeFormulaResult,
@@ -51,7 +51,7 @@ import { validationAt } from './validation-rules';
 export function normalizedCellAttr(cell: Cell, attr: keyof Cell): any {
     const tf = { bl: 1, it: 1, ff: 1, cl: 1, un: 1 };
     // biome-ignore lint/suspicious/noExplicitAny: same union as the return type
-    let value: any = cell?.[attr];
+    let value: any = cell[attr];
 
     if (attr in tf || (attr === 'fs' && isInlineStringCell(cell))) {
         value ||= '0';
@@ -82,7 +82,7 @@ export function normalizedCellAttr(cell: Cell, attr: keyof Cell): any {
 
 // biome-ignore lint/suspicious/noExplicitAny: passes through normalizedCellAttr's per-attr union
 export function normalizedAttr(data: CellMatrix, r: number, c: number, attr: keyof Cell): any {
-    if (!data?.[r]) {
+    if (!data[r]) {
         return null;
     }
     const cell = data[r][c];
@@ -173,24 +173,20 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         cell.m = text;
         cell.ct = { fa: '@', t: 's' };
         cell.v = text;
-    } else if (text.toUpperCase() === 'TRUE' && (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')) {
+    } else if (text.toUpperCase() === 'TRUE' && cell.ct?.fa !== '@') {
         cell.m = booleanDisplay(true);
         cell.ct = { fa: 'General', t: 'b' };
         cell.v = true;
-    } else if (text.toUpperCase() === 'FALSE' && (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')) {
+    } else if (text.toUpperCase() === 'FALSE' && cell.ct?.fa !== '@') {
         cell.m = booleanDisplay(false);
         cell.ct = { fa: 'General', t: 'b' };
         cell.v = false;
-    } else if (
-        text.endsWith('%') &&
-        isRealNum(text.substring(0, text.length - 1)) &&
-        (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')
-    ) {
+    } else if (text.endsWith('%') && isRealNum(text.substring(0, text.length - 1)) && cell.ct?.fa !== '@') {
         cell.ct = { fa: '0%', t: 'n' };
         cell.v = text.substring(0, text.length - 1) / 100;
         cell.m = value;
     } else if (valueIsError(value) && cell.ct?.fa !== '@') {
-        // Typed into a text-formatted cell, an error is text, as in Excel.
+        // An error typed into a text-formatted cell stays text, as in Excel, so only other cells get here.
         cell.m = text;
         if (!isNil(cell.ct)) {
             cell.ct.t = 'e';
@@ -248,7 +244,7 @@ export function isForcedStringNumber(cell: Cell | null | undefined): boolean {
 }
 
 export function mergeBorder(ctx: Context, d: CellMatrix, row_index: number, col_index: number) {
-    if (!d?.[row_index]) {
+    if (!d[row_index]) {
         return null;
     }
     const value = d[row_index][col_index];
@@ -258,7 +254,7 @@ export function mergeBorder(ctx: Context, d: CellMatrix, row_index: number, col_
         col_index = value.mc.c;
         row_index = value.mc.r;
 
-        if (isNil(d?.[row_index]?.[col_index])) {
+        if (isNil(d[row_index]?.[col_index])) {
             return null;
         }
         const col_rs = d[row_index]?.[col_index]?.mc?.cs;
@@ -327,8 +323,8 @@ export function mergeBorder(ctx: Context, d: CellMatrix, row_index: number, col_
 function mergeMove(
     ctx: Context,
     mc: MergeCell,
-    columnseleted: number[],
-    rowseleted: number[],
+    columnSelected: number[],
+    rowSelected: number[],
     top: number,
     height: number,
     left: number,
@@ -338,71 +334,71 @@ function mergeMove(
     const row_ed = mc.r + mc.rs - 1;
     const col_st = mc.c;
     const col_ed = mc.c + mc.cs - 1;
-    let ismatch = false;
+    let matched = false;
 
-    columnseleted[0] = Math.min(columnseleted[0], columnseleted[1]);
-    rowseleted[0] = Math.min(rowseleted[0], rowseleted[1]);
+    columnSelected[0] = Math.min(columnSelected[0], columnSelected[1]);
+    rowSelected[0] = Math.min(rowSelected[0], rowSelected[1]);
 
     if (
-        (columnseleted[0] <= col_st &&
-            columnseleted[1] >= col_ed &&
-            rowseleted[0] <= row_st &&
-            rowseleted[1] >= row_ed) ||
-        (!(columnseleted[1] < col_st || columnseleted[0] > col_ed) &&
-            !(rowseleted[1] < row_st || rowseleted[0] > row_ed))
+        (columnSelected[0] <= col_st &&
+            columnSelected[1] >= col_ed &&
+            rowSelected[0] <= row_st &&
+            rowSelected[1] >= row_ed) ||
+        (!(columnSelected[1] < col_st || columnSelected[0] > col_ed) &&
+            !(rowSelected[1] < row_st || rowSelected[0] > row_ed))
     ) {
         const flowdata = getFlowdata(ctx);
         if (!flowdata) return null;
 
-        const margeset = mergeBorder(ctx, flowdata, mc.r, mc.c);
-        if (margeset) {
-            const row = margeset.row[1];
-            const row_pre = margeset.row[0];
-            const col = margeset.column[1];
-            const col_pre = margeset.column[0];
+        const mergeset = mergeBorder(ctx, flowdata, mc.r, mc.c);
+        if (mergeset) {
+            const row = mergeset.row[1];
+            const row_pre = mergeset.row[0];
+            const col = mergeset.column[1];
+            const col_pre = mergeset.column[0];
 
-            if (!(columnseleted[1] < col_st || columnseleted[0] > col_ed)) {
-                if (rowseleted[0] <= row_ed && rowseleted[0] >= row_st) {
+            if (!(columnSelected[1] < col_st || columnSelected[0] > col_ed)) {
+                if (rowSelected[0] <= row_ed && rowSelected[0] >= row_st) {
                     height += top - row_pre;
                     top = row_pre;
-                    rowseleted[0] = row_st;
+                    rowSelected[0] = row_st;
                 }
 
-                if (rowseleted[1] >= row_st && rowseleted[1] <= row_ed) {
+                if (rowSelected[1] >= row_st && rowSelected[1] <= row_ed) {
                     height = row - top;
 
-                    rowseleted[1] = row_ed;
+                    rowSelected[1] = row_ed;
                 }
             }
 
-            if (!(rowseleted[1] < row_st || rowseleted[0] > row_ed)) {
-                if (columnseleted[0] <= col_ed && columnseleted[0] >= col_st) {
+            if (!(rowSelected[1] < row_st || rowSelected[0] > row_ed)) {
+                if (columnSelected[0] <= col_ed && columnSelected[0] >= col_st) {
                     width += left - col_pre;
                     left = col_pre;
-                    columnseleted[0] = col_st;
+                    columnSelected[0] = col_st;
                 }
 
-                if (columnseleted[1] >= col_st && columnseleted[1] <= col_ed) {
+                if (columnSelected[1] >= col_st && columnSelected[1] <= col_ed) {
                     width = col - left;
 
-                    columnseleted[1] = col_ed;
+                    columnSelected[1] = col_ed;
                 }
             }
 
-            ismatch = true;
+            matched = true;
         }
     }
 
-    if (ismatch) {
-        return [columnseleted, rowseleted, top, height, left, width];
+    if (matched) {
+        return [columnSelected, rowSelected, top, height, left, width];
     }
     return null;
 }
 
 export function mergeMoveMain(
     ctx: Context,
-    columnseleted: number[],
-    rowseleted: number[],
+    columnSelected: number[],
+    rowSelected: number[],
     top: number,
     height: number,
     left: number,
@@ -416,8 +412,8 @@ export function mergeMoveMain(
 
     const mcset = Object.keys(mergesetting);
 
-    rowseleted[1] = Math.max(rowseleted[0], rowseleted[1]);
-    columnseleted[1] = Math.max(columnseleted[0], columnseleted[1]);
+    rowSelected[1] = Math.max(rowSelected[0], rowSelected[1]);
+    columnSelected[1] = Math.max(columnSelected[0], columnSelected[1]);
 
     let offloop = true;
     const mergeMoveData: Record<string, MergeCell> = {};
@@ -433,21 +429,19 @@ export function mergeMoveMain(
                 continue;
             }
 
-            const changeparam = mergeMove(ctx, mc, columnseleted, rowseleted, top, height, left, width);
+            const changeparam = mergeMove(ctx, mc, columnSelected, rowSelected, top, height, left, width);
 
             if (changeparam != null) {
                 mergeMoveData[key] = mc;
 
-                [columnseleted, rowseleted, top, height, left, width] = changeparam;
+                [columnSelected, rowSelected, top, height, left, width] = changeparam;
 
                 offloop = true;
-            } else {
-                delete mergeMoveData[key];
             }
         }
     }
 
-    return [columnseleted, rowseleted, top, height, left, width];
+    return [columnSelected, rowSelected, top, height, left, width];
 }
 
 export function cancelFunctionrangeSelected(ctx: Context) {

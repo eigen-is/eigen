@@ -4,6 +4,7 @@
 // text the op rewrote lists its references again. A rename, add or delete of a sheet changes what a name reads, so the
 // holder builds a new graph. The recompute walks it in affected, under the budgets an untrusted workbook is held to.
 
+import { GONE, mapIndex } from '@workspace/formula/text';
 import type { CellMatrix } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
 import { getCalculationOrder } from './dependency-graph';
@@ -15,7 +16,7 @@ import { isFormula, matrixWidth, resolveCellRange } from './formula-utils';
 import { sheetFinder } from './parser/helper/cell';
 import type { RecalcBudgets } from './recalc';
 import type { DeleteRowColOp, InsertRowColOp } from './rowcol';
-import { lineMove } from './rowcol';
+import { editOf } from './rowcol';
 import type { FormulaCellInfo, FormulaCellInfoMap, FormulaDependency } from './types';
 
 // A sheet's dense `data`, by id, which a pass reads and writes.
@@ -75,11 +76,11 @@ export class FormulaGraph {
     // Follows a row or column op, given the sheets it left: the formulas on its sheet move with their cells, one on a
     // deleted line goes, and one whose text the op rewrote lists its references again.
     public shift(sheets: readonly WorkingSheet[], op: InsertRowColOp | DeleteRowColOp): void {
-        const { to } = lineMove(op);
+        const edit = editOf(op);
         const moved = new Map<number, FormulaCellInfo>();
         for (const node of this.cells.get(op.id)?.values() ?? []) {
-            const line = to(op.type === 'row' ? node.r : node.c);
-            if (line == null) {
+            const line = mapIndex(edit, op.type === 'row' ? node.r : node.c);
+            if (line === GONE) {
                 delete this.nodes[node.key];
                 this.index.delete(node.key);
                 continue;

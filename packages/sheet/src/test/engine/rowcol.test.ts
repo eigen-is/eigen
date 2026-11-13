@@ -297,6 +297,124 @@ describe('applySheetsInsertRowCol/Delete — a merge above the op stays as it wa
     });
 });
 
+// A merge, a row height and a rule's range move by one rule, so they agree at its edges: a new line right after a
+// range is not part of it, and nothing is left past the grid's last line.
+describe('applySheetsInsertRowCol — merges and sizes at the edges of the one rule', () => {
+    const last = REFERENCE_ROW_COUNT - 1;
+    const sheetWith = (config: TestSheet['config']) => [
+        makeSheet(
+            's1',
+            'Sheet1',
+            [
+                [cell('a'), null],
+                [cell('b'), null],
+            ],
+            { config },
+        ),
+    ];
+    const insertRow = (sheets: TestSheet[], direction: 'lefttop' | 'rightbottom') =>
+        applySheetsInsertRowCol(sheets, { type: 'row', index: 0, count: 1, direction, id: 's1' })[0];
+
+    test('a row inserted right below a one-row merge leaves it one row', () => {
+        const sheet = insertRow(sheetWith({ merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 2 } } }), 'rightbottom');
+        expect(sheet.config?.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 1, cs: 2 } });
+        expect(sheet.data?.[1]).toEqual([null, null]);
+    });
+
+    test('a row height pushed past the last row of the grid goes', () => {
+        const sheet = insertRow(sheetWith({ rowlen: { 0: 20, [last]: 30 } }), 'lefttop');
+        expect(sheet.config?.rowlen).toEqual({ 1: 20 });
+    });
+
+    test('a merge the last row of the grid cuts to one cell is removed, and a wider one ends on it', () => {
+        const sheet = insertRow(
+            sheetWith({
+                merge: {
+                    [`${last - 1}_0`]: { r: last - 1, c: 0, rs: 2, cs: 1 },
+                    [`${last - 1}_1`]: { r: last - 1, c: 1, rs: 2, cs: 2 },
+                },
+            }),
+            'lefttop',
+        );
+        expect(sheet.config?.merge).toEqual({ [`${last}_1`]: { r: last, c: 1, rs: 1, cs: 2 } });
+    });
+});
+
+describe('applySheetsDeleteRowCol — a merge cut to one cell is removed', () => {
+    const merged = (merge: { r: number; c: number; rs: number; cs: number }) => {
+        const data: (Cell | null)[][] = Array.from({ length: 3 }, () => [null, null, null]);
+        for (let r = merge.r; r < merge.r + merge.rs; r += 1) {
+            for (let c = merge.c; c < merge.c + merge.cs; c += 1)
+                data[r][c] = { bl: 1, mc: { r: merge.r, c: merge.c } };
+        }
+        data[merge.r][merge.c] = { ...cell('head'), mc: merge };
+        return [makeSheet('s1', 'Sheet1', data, { config: { merge: { [`${merge.r}_${merge.c}`]: merge } } })];
+    };
+
+    test('a cut merge that lands on a live one leaves the live merge its stamps', () => {
+        const data: (Cell | null)[][] = [
+            [{ mc: { r: 0, c: 0, rs: 2, cs: 1 } }, null],
+            [{ mc: { r: 1, c: 0, rs: 1, cs: 2 } }, { mc: { r: 1, c: 0 } }],
+        ];
+        const merge = { '0_0': { r: 0, c: 0, rs: 2, cs: 1 }, '1_0': { r: 1, c: 0, rs: 1, cs: 2 } };
+        const [sheet] = applySheetsDeleteRowCol([makeSheet('s1', 'Sheet1', data, { config: { merge } })], {
+            type: 'row',
+            start: 0,
+            end: 0,
+            id: 's1',
+        });
+        expect(sheet.config?.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 1, cs: 2 } });
+        expect(sheet.data?.[0]).toEqual([{ mc: { r: 0, c: 0, rs: 1, cs: 2 } }, { mc: { r: 0, c: 0 } }]);
+    });
+
+    test('a row delete that leaves the head leaves a plain cell', () => {
+        const [sheet] = applySheetsDeleteRowCol(merged({ r: 0, c: 0, rs: 2, cs: 1 }), {
+            type: 'row',
+            start: 1,
+            end: 1,
+            id: 's1',
+        });
+        expect(sheet.config?.merge).toEqual({});
+        expect(sheet.data?.[0][0]).toEqual(cell('head'));
+    });
+
+    test('a row delete that takes the head leaves the covered cell with its format and no stamp', () => {
+        const [sheet] = applySheetsDeleteRowCol(merged({ r: 0, c: 0, rs: 2, cs: 1 }), {
+            type: 'row',
+            start: 0,
+            end: 0,
+            id: 's1',
+        });
+        expect(sheet.config?.merge).toEqual({});
+        expect(sheet.data?.[0][0]).toEqual({ bl: 1 });
+    });
+
+    test('a column delete does the same', () => {
+        const [sheet] = applySheetsDeleteRowCol(merged({ r: 1, c: 0, rs: 1, cs: 3 }), {
+            type: 'column',
+            start: 1,
+            end: 2,
+            id: 's1',
+        });
+        expect(sheet.config?.merge).toEqual({});
+        expect(sheet.data?.[1][0]).toEqual(cell('head'));
+    });
+
+    test('a merge left wider than one cell stays, and so does a one-cell merge the delete only moves', () => {
+        const sheets = merged({ r: 1, c: 0, rs: 2, cs: 2 });
+        const single = { r: 2, c: 2, rs: 1, cs: 1 };
+        sheets[0].config = { merge: { ...sheets[0].config?.merge, '2_2': single } };
+        sheets[0].data![2][2] = { mc: single };
+        const [sheet] = applySheetsDeleteRowCol(sheets, { type: 'row', start: 1, end: 1, id: 's1' });
+        expect(sheet.config?.merge).toEqual({
+            '1_0': { r: 1, c: 0, rs: 1, cs: 2 },
+            '1_2': { r: 1, c: 2, rs: 1, cs: 1 },
+        });
+        expect(sheet.data?.[1][1]?.mc).toEqual({ r: 1, c: 0 });
+        expect(sheet.data?.[1][2]?.mc).toEqual({ r: 1, c: 2, rs: 1, cs: 1 });
+    });
+});
+
 // A merge can reach past the grid, such as one a peer made before another peer's column delete. Stamping its cells
 // out there would leave the rows uneven, and a joiner reading the stored cells would show a column more.
 describe('applySheetsInsertRowCol/Delete — a merge past the last column', () => {
@@ -814,31 +932,39 @@ describe('validation ranges follow the membership rule, as conditional formats d
         expect(sheet.dataValidations?.v.ranges).toEqual([{ row: [0, 3], column: [0, 0] }]);
     });
 
-    test('a whole-column rule keeps covering every row of the grid after an insert', () => {
+    test('a whole-column rule stays whole under a row insert and a row delete, and a column op moves it', () => {
         const last = REFERENCE_ROW_COUNT - 1;
+        const whole = { row: [0, last], column: [1, 1] };
         const sheets = [
             makeSheet('s1', 'Sheet1', grid(), {
-                dataValidations: { v: { ranges: [{ row: [0, last], column: [1, 1] }], order: 'a0', rule } },
+                dataValidations: { v: { ranges: [whole], order: 'a0', rule } },
                 conditionalFormats: formatsOf([
                     {
                         type: 'default',
                         conditionName: 'greaterThan',
-                        ranges: [{ row: [0, last], column: [1, 1] }],
+                        ranges: [whole],
                         conditionValue: [0],
                         format: { textColor: '#ff0000' },
                     },
                 ]),
             }),
         ];
-        const [sheet] = applySheetsInsertRowCol(sheets, {
-            type: 'row',
-            index: 2,
-            count: 3,
+        const stays = (sheet: TestSheet) => {
+            expect(sheet.dataValidations).toBe(sheets[0].dataValidations);
+            expect(sheet.conditionalFormats).toBe(sheets[0].conditionalFormats);
+        };
+        for (const index of [0, 2]) {
+            stays(applySheetsInsertRowCol(sheets, { type: 'row', index, count: 3, direction: 'lefttop', id: 's1' })[0]);
+        }
+        stays(applySheetsDeleteRowCol(sheets, { type: 'row', start: 0, end: 1, id: 's1' })[0]);
+        const [moved] = applySheetsInsertRowCol(sheets, {
+            type: 'column',
+            index: 0,
+            count: 1,
             direction: 'lefttop',
             id: 's1',
         });
-        expect(sheet.dataValidations?.v.ranges).toEqual([{ row: [0, last], column: [1, 1] }]);
-        expect(formatList(sheet.conditionalFormats)[0].ranges).toEqual([{ row: [0, last], column: [1, 1] }]);
+        expect(moved.dataValidations?.v.ranges).toEqual([{ row: [0, last], column: [2, 2] }]);
     });
 
     test('a rule over several ranges keeps the ones a delete leaves', () => {
@@ -966,18 +1092,22 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
         expect(s.charts!.c1).toBe(sheets[0].charts!.c1);
     });
 
-    test('an insert stops a ref at the last row and column of the grid', () => {
+    test('an insert stops a ref at the last row of the grid, one it pushes off is gone and a whole column stays', () => {
         const [rows] = applySheetsInsertRowCol(
-            workbook({ c1: chart({ categories: null, series: [series(ref('S', [0, REFERENCE_ROW_COUNT - 1]))] }) }),
+            workbook({ c1: chart({ categories: null, series: [series(ref('S', [1, REFERENCE_ROW_COUNT - 1]))] }) }),
             insertRows(0, 2, 'lefttop'),
         );
-        expect(valuesRows(rows)).toEqual([2, REFERENCE_ROW_COUNT - 1]);
+        expect(valuesRows(rows)).toEqual([3, REFERENCE_ROW_COUNT - 1]);
+        const whole = workbook({
+            c1: chart({ categories: null, series: [series(ref('S', [0, REFERENCE_ROW_COUNT - 1]))] }),
+        });
+        expect(applySheetsInsertRowCol(whole, insertRows(0, 2, 'lefttop'))[0].charts!.c1).toBe(whole[0].charts!.c1);
         const lastColumn = REFERENCE_COLUMN_COUNT - 1;
         const [columns] = applySheetsInsertRowCol(
             workbook({ c1: chart({ categories: null, series: [series(ref('S', [0, 3], [lastColumn, lastColumn]))] }) }),
             { type: 'column', index: 0, count: 1, direction: 'lefttop', id: 'S' },
         );
-        expect(rangeData(columns)?.series[0].values?.column).toEqual([lastColumn, lastColumn]);
+        expect(rangeData(columns)?.series[0].values).toBeNull();
     });
 
     test('a malformed spec is kept untouched', () => {
@@ -1029,6 +1159,58 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
                     series: [series(ref('S', [0, 3]))],
                 },
             });
+        });
+    });
+});
+
+// A filter on B3:D9 whose criterion on C hides rows 5 and 7 and whose criterion on D hides row 8. Row 9 is hidden by
+// hand, so no entry lists it.
+describe('applySheetsDeleteRowCol — a filter the delete removes shows its rows again', () => {
+    const entry = (cindex: number, rowhidden: Record<string, number>) => ({
+        [cindex - 1]: { rowhidden, optionstate: true, str: 2, edr: 8, cindex, stc: 1, edc: 3 },
+    });
+    const filtered = () =>
+        makeSheet(
+            's1',
+            'Sheet1',
+            Array.from({ length: 12 }, () => Array.from({ length: 6 }, () => null)),
+            {
+                config: { rowhidden: { 4: 0, 6: 0, 7: 0, 8: 0 } },
+                filterRange: { row: [2, 8], column: [1, 3] },
+                filter: { ...entry(2, { 4: 0, 6: 0 }), ...entry(3, { 7: 0 }) },
+            },
+        );
+    const deleted = (type: 'row' | 'column', start: number, end: number) => {
+        const before = filtered();
+        const [after] = applySheetsDeleteRowCol([before], { type, start, end, id: 's1' });
+        // The op writes on its own copy of the hidden rows.
+        expect(before).toEqual(filtered());
+        return { filterRange: after.filterRange, filter: after.filter, rowhidden: after.config?.rowhidden };
+    };
+    const gone = { filterRange: undefined, filter: undefined };
+
+    test('a delete of the header row leaves only the row hidden by hand, where it moved to', () => {
+        expect(deleted('row', 2, 2)).toEqual({ ...gone, rowhidden: { 7: 0 } });
+    });
+
+    test('a delete of the header row and the rows above it does the same', () => {
+        expect(deleted('row', 0, 2)).toEqual({ ...gone, rowhidden: { 5: 0 } });
+    });
+
+    test('a delete of every column of the filter does', () => {
+        expect(deleted('column', 1, 3)).toEqual({ ...gone, rowhidden: { 8: 0 } });
+    });
+
+    test('a delete of every row of the filter does', () => {
+        expect(deleted('row', 2, 8)).toEqual({ ...gone, rowhidden: {} });
+        expect(deleted('row', 2, 7)).toEqual({ ...gone, rowhidden: { 2: 0 } });
+    });
+
+    test("a delete of one criterion's column shows the rows that criterion hid and keeps the other's", () => {
+        expect(deleted('column', 2, 2)).toEqual({
+            filterRange: { row: [2, 8], column: [1, 2] },
+            filter: { 1: { rowhidden: { 7: 0 }, optionstate: true, str: 2, edr: 8, cindex: 2, stc: 1, edc: 2 } },
+            rowhidden: { 7: 0, 8: 0 },
         });
     });
 });

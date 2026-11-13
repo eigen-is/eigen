@@ -58,11 +58,18 @@ describe('the filter follows a row or column op', () => {
         expect(sheet.filter).toEqual({ 1: { ...entry, rowhidden: { 1: 0 }, str: 0, edr: 2 } });
     });
 
-    test('a row delete of every hidden row drops the filter entries', () => {
+    test('a row delete of every hidden row keeps the criteria', () => {
         const op = { type: 'row', start: 2, end: 2, id: 'id_1' } as const;
         const [sheet] = produce(filtered(), (ctx: Context) => deleteRowCol(ctx, op)).sheets;
         expect(sheet.filterRange).toEqual({ row: [0, 2], column: [0, 3] });
-        expect(sheet.filter).toBeUndefined();
+        expect(sheet.filter).toEqual({ 1: { ...entry, rowhidden: {}, str: 0, edr: 2 } });
+    });
+
+    test('a column delete of a filtered column takes its criteria and keeps the filter', () => {
+        const op = { type: 'column', start: 1, end: 1, id: 'id_1' } as const;
+        const [sheet] = produce(filtered(), (ctx: Context) => deleteRowCol(ctx, op)).sheets;
+        expect(sheet.filterRange).toEqual({ row: [0, 3], column: [0, 2] });
+        expect(sheet.filter).toEqual({});
     });
 
     test('a row delete of the header row drops the filter', () => {
@@ -80,7 +87,7 @@ describe('the filter follows a row or column op', () => {
     });
 
     // Legacy data and a peer's op can carry a filter entry that hides no rows and has no rowhidden map at all.
-    test('a filter entry without hidden rows survives a row insert and a column delete, and a row delete drops it', () => {
+    test('a filter entry without hidden rows survives a row insert, a column delete and a row delete', () => {
         const bare = produce(filtered(), (ctx: Context) => {
             ctx.sheets[0].filter = { 1: { optionstate: true, str: 0, edr: 3, cindex: 1, stc: 0, edc: 3 } };
         });
@@ -96,7 +103,10 @@ describe('the filter follows a row or column op', () => {
         const removeRow = { type: 'row', start: 1, end: 1, id: 'id_1' } as const;
         const [shrunk] = produce(bare, (ctx: Context) => deleteRowCol(ctx, removeRow)).sheets;
         expect(shrunk.filterRange).toEqual({ row: [0, 2], column: [0, 3] });
-        expect(shrunk.filter).toBeUndefined();
+        expect(shrunk.filter).toEqual({ 1: { ...entry, rowhidden: {}, str: 0, edr: 2 } });
+        const below = { type: 'row', start: 5, end: 5, id: 'id_1' } as const;
+        const [kept] = produce(bare, (ctx: Context) => deleteRowCol(ctx, below)).sheets;
+        expect(kept.filter).toEqual({ 1: { ...entry, rowhidden: {}, str: 0, edr: 3 } });
     });
 });
 

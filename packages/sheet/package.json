@@ -6,8 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./engine": "./src/engine/index.ts",
-    "./engine/a1-notation": "./src/engine/a1-notation.ts",
-    "./engine/format": "./src/engine/format.ts"
+    "./engine/a1-notation": "./src/engine/a1-notation.ts"
   },
   "scripts": {
     "typecheck": "bun check --no-script",
@@ -16,13 +15,14 @@
   "dependencies": {
     "@formulajs/formulajs": "^2.9.3",
     "@tanstack/react-hotkeys": "^0.1.3",
+    "@workspace/formula": "workspace:*",
     "@workspace/lib": "workspace:*",
     "@workspace/ui": "workspace:*",
     "dayjs": "^1.11.23",
     "es-toolkit": "^1.53.0",
     "immer": "^9.0.21",
     "numeral": "^2.0.6",
-    "numfmt": "^3.2.6"
+    "numfmt": "^4.1.3"
   },
   "devDependencies": {
     "@types/numeral": "^2.0.5",

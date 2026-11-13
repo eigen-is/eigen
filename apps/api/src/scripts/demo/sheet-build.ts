@@ -4,6 +4,7 @@
 // shapes the editor stores, and the formulas are computed here once, as the xlsx importer does, so the snapshot is
 // stored as computed and opens with its values. Deterministic ids: a reseed builds the same workbook.
 
+import { numberDisplay } from '@workspace/formula/format';
 import { CHART_DEFAULT_SIZE, defaultChartSpec, newChartSpecParts } from '@workspace/lib/charts';
 import { eigenColor } from '@workspace/lib/constants/colors';
 import type {
@@ -25,7 +26,7 @@ import {
     writeSheetsSnapshot,
 } from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
-import { normalizeSheetConfig, numberDisplay, parseA1Range, recalcSheets } from '@workspace/sheet/engine';
+import { normalizeSheetConfig, parseA1Range, recalcSheets } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
 import type { SheetCellSpec, SheetRowSpec, SheetSpec } from './content';
 
@@ -43,19 +44,19 @@ const DATA_BAR_COLOR = eigenColor('blue', 400);
 const BELOW_ZERO_FORMAT = { textColor: eigenColor('red', 700), cellColor: eigenColor('red', 100) };
 
 // The workbook's sheets with every formula computed.
-export function buildWorkbook(specs: SheetSpec[]): Sheet[] {
+export function buildWorkbook(specs: readonly SheetSpec[]): Sheet[] {
     const ids = new Map(specs.map((spec, i) => [spec.name, sheetIdAt(i)]));
     return recalcSheets(specs.map((spec, i) => buildSheet(spec, i, ids)));
 }
 
 // The workbook as a sheets container's snapshot, written the way an import commits one.
-export function buildWorkbookDoc(doc: Y.Doc, specs: SheetSpec[]): void {
+export function buildWorkbookDoc(doc: Y.Doc, specs: readonly SheetSpec[]): void {
     writeSheetsSnapshot(doc, encodeSheetsSnapshot(buildWorkbook(specs), { computed: true }), null);
 }
 
 const sheetIdAt = (order: number) => `sheet-${order + 1}`;
 
-function buildSheet(spec: SheetSpec, order: number, ids: Map<string, string>): Sheet {
+function buildSheet(spec: SheetSpec, order: number, ids: ReadonlyMap<string, string>): Sheet {
     const celldata: CellWithRowAndCol[] = [];
     const borderInfo: Record<string, CellBorderSides> = {};
     for (const [r, row] of spec.rows.entries()) {
@@ -156,7 +157,7 @@ function range(a1: string): SingleRange {
 }
 
 // A chart's ref names its sheet by id, so a renamed tab keeps its charts.
-function chartRef(a1: string, ids: Map<string, string>): CellRangeRef {
+function chartRef(a1: string, ids: ReadonlyMap<string, string>): CellRangeRef {
     const sheetId = ids.get(parseA1Range(a1)?.sheet ?? '');
     if (!sheetId) throw new Error(`Chart range '${a1}' names no tab of its workbook`);
     const { row, column } = range(a1);

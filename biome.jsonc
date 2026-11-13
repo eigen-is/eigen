@@ -122,6 +122,10 @@
                     "group": ["@workspace/sheet", "@workspace/sheet/**", "@workspace/ui", "@workspace/ui/**"],
                     "message": "lib must not import sheet or ui (would pull React into the backend). Put shared sheet types in packages/lib/src/sheets/types.ts."
                   },
+                  {
+                    "group": ["@workspace/formula", "@workspace/formula/text", "@workspace/formula/names"],
+                    "message": "lib imports only the number-display entry of the engine: @workspace/formula/format."
+                  },
                   // Overrides replace the root rule options wholesale — restate the suffix ban.
                   {
                     "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
@@ -151,6 +155,126 @@
                   {
                     "group": ["**", "!./**", "!../**"],
                     "message": "@workspace/math is a leaf: no dependencies (see ARCHITECTURE.md § Dependency direction)."
+                  },
+                  // Overrides replace the root rule options wholesale — restate the suffix ban.
+                  {
+                    "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
+                    "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  },
+                  {
+                    "group": ["./**/*.ts", "./**/*.tsx", "../**/*.ts", "../**/*.tsx"],
+                    "message": "Relative imports resolve extensionless under moduleResolution: bundler — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // formula is the second leaf: the engine runs unchanged in the browser, Bun and Node, and imports no package.
+      "includes": [
+        "packages/formula/**",
+        "!packages/formula/src/test/**",
+        "!packages/formula/src/format/**",
+        "!packages/formula/scripts/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**", "!./**", "!../**"],
+                    "message": "@workspace/formula is a leaf: it imports no package, and numfmt only in src/format (see ARCHITECTURE.md § Dependency direction)."
+                  },
+                  // Overrides replace the root rule options wholesale — restate the suffix ban.
+                  {
+                    "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
+                    "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  },
+                  {
+                    "group": ["./**/*.ts", "./**/*.tsx", "../**/*.ts", "../**/*.tsx"],
+                    "message": "Relative imports resolve extensionless under moduleResolution: bundler — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // A function's body only computes: the call wrapper reads its arguments, so a family file imports no evaluator, store, recalc or coercion. The registry is the one file that makes the vocabulary from them. The reader of a text as a number, values/parse-number, is open: reading a text is what VALUE does.
+      "includes": ["packages/formula/src/functions/**", "!packages/formula/src/functions/registry.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["../eval/**", "../store/**", "../recalc/**", "../values/coerce"],
+                    "message": "A function body does not coerce, evaluate or read a cell: declare a parameter from ./registry instead (see packages/formula/src/functions/registry.ts)."
+                  },
+                  // Overrides replace the root rule options wholesale — restate the leaf rule and the suffix ban.
+                  {
+                    "group": ["**", "!./**", "!../**"],
+                    "message": "@workspace/formula is a leaf: it imports no package, and numfmt only in src/format (see ARCHITECTURE.md § Dependency direction)."
+                  },
+                  {
+                    "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
+                    "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  },
+                  {
+                    "group": ["./**/*.ts", "./**/*.tsx", "../**/*.ts", "../**/*.tsx"],
+                    "message": "Relative imports resolve extensionless under moduleResolution: bundler — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // The engine computes the same on every machine: no clock and no locale but what a pass hands it.
+      "includes": ["packages/formula/src/**", "!packages/formula/src/test/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "Date": "The engine reads no clock: take the time through the NOW parameter.",
+                  "globalThis": "Name a global by itself, so the rules on Date, Intl and performance see it.",
+                  "Intl": "The engine's text order and number display are its own, the same on every machine.",
+                  "performance": "The engine reads no clock."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // Its format module is the one place that imports numfmt, the package's one dependency.
+      "includes": ["packages/formula/src/format/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**", "!./**", "!../**", "!numfmt"],
+                    "message": "@workspace/formula is a leaf: numfmt is its only dependency (see ARCHITECTURE.md § Dependency direction)."
                   },
                   // Overrides replace the root rule options wholesale — restate the suffix ban.
                   {

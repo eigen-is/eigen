@@ -120,7 +120,8 @@ Every Eigen document is a Drive folder with its own `data.db` and `media/`. The 
 | **Charts** | `packages/lib/src/charts/`, `packages/ui/src/components/charts/` | One `ChartSpec`, drawn as plain SVG by every app ([CHARTS.md](CHARTS.md)) |
 | **Docs editor** | `apps/docs/`, `packages/lib/src/docs/eigendoc/` | TipTap over Yjs; one eigendoc schema for the editor and every server renderer ([DOCS.md](DOCS.md)) |
 | **Math** | `packages/math/` | One equation tree, read and written as OMML, MathML and LaTeX ([MATH.md](MATH.md)) |
-| **Sheets engine** | `packages/sheet/src/engine/` | DOM-free formulas and number display, the half the server imports ([SHEETS.md](SHEETS.md#the-engine-is-the-half-the-server-imports)) |
+| **Formula engine** | `packages/formula/` | The headless engine step 1b switches Sheets to: store, parser, recalc, functions, the xlsx dialect; today the product uses its number display, Excel's function names and the row and column map ([FORMULA.md](FORMULA.md)) |
+| **Sheets engine** | `packages/sheet/src/engine/` | The engine that computes Sheets today: DOM-free formulas over formulajs, the half the server imports; it displays numbers through `@workspace/formula/format` and checks Excel's function names through `@workspace/formula/names` ([SHEETS.md](SHEETS.md#the-engine-is-the-half-the-server-imports)) |
 | **Sheet cell glyphs** | `packages/sheet/src/state/modules/data-validation.ts`, `cell-glyph.ts` | Tick boxes, list chevrons and corner marks on the canvas ([SHEETS.md](SHEETS.md#a-tick-box-is-a-validation-rule-and-the-value-is-its-state)) |
 | **Sheets export** | `apps/api/src/lib/export/sheets/` | Class-styled HTML and PDF, and the accepted xlsx round-trip drifts ([SHEETS.md](SHEETS.md#the-full-export-styles-cells-by-class)) |
 | **Everyday UI** | `@workspace/ui` | Check before building UI: `TooltipButton`, `DeleteDialog`, `ConfirmDialog`, `FormDialog`, `EmptyState`, `LoadingState`, `ErrorState`, `SearchBar`, `FileMenu`, `RequestAccessView`; the rest: [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md) |
@@ -162,6 +163,8 @@ Every Eigen document is a Drive folder with its own `data.db` and `media/`. The 
 **Dependencies run one way: `sheet → lib` and `ui → lib`, never back.** `lib` serves the backend too, while `sheet` and `ui` need React and the DOM, so a lib import of either would load React into the backend. A biome rule enforces it. So the sheet types both sides need (`Cell`, `Sheet`, `Op`, `Range`, …) live in `packages/lib/src/sheets/`, re-exported by the sheet package.
 
 `packages/math` is a leaf below all three: anything may import it, and it imports no package and no React, DOM, Bun or Node API, so the browser, the API, a Worker and Node run it unchanged. Its biome rule and tsconfig (`lib: ["ESNext"]`, no `types`) enforce it.
+
+`packages/formula` is the second leaf, by the same rules and for the same reason, with one npm package: numfmt, imported only under `src/format/`. It owns its own types. `sheet` imports its `/text`, `/format` and `/names` entries and the API `/format` and `/names`, each React-free. lib imports only `/format`, a biome rule enforces it, so lib, which every app and the server load, carries number display and not the engine ([FORMULA.md](FORMULA.md#it-is-a-leaf-reached-through-four-entries)).
 
 ### Backend imports of lib
 

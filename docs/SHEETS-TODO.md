@@ -135,7 +135,6 @@ Verified, user-visible, bounded.
 
 - [ ] **A copied underline arrives as a bottom border**: `getFontStyleByCell` (`state/modules/cell.ts`) draws `un` as a `border-bottom`, while `cl` is a real `text-decoration` and the API's HTML export writes `text-decoration:underline` (`buildCellStyle` in `apps/api/src/lib/export/sheets/render.ts`). A paste in a second tab goes through the foreign-HTML parser, and `pasteTable` (`state/events/paste.ts`) reads that border as a real one, so the cell arrives with no underline and a bottom border. Pasting into Excel or Google drifts the same way. The fix is one line, but the same style draws the open cell editor (`SheetOverlay/InputBox.tsx`), so screenshot the editor's underline before merging. At the same time, have `un` read inner markup as `cl` reads `<s>`, so a Google Sheets cell with its decoration on an inner `<span>` keeps it. **S**
 
-- [ ] **A whole-column rule stops being whole after a row delete**: `shiftRangeForDelete` (`engine/rowcol.ts`) pulls a `B:B` rule's last row up with the deleted rows, so it exports as `B1:B1048575`, and an insert below no longer reaches the grid's end. Keep a range that ends on the grid's last row ending there. **S**
 
 - [ ] **Conditional-format value coercion differs by rule type**: `equal "5"` matches the number 5 and the text `5`, `equal 5` matches only the number, and `equal TRUE` matches no boolean cell. `top10` and `aboveAverage` count the text `5` and `TRUE` as numbers, and style a value-less style-only cell as 0 (pinned as characterization in `conditional-format-edges.test.ts`), where Excel ignores text, booleans and blanks. `greaterThan "abb"` never matches text. The 3-stop `colorGradation` midpoint is the floored mean, while the xlsx exporter writes `percentile 50` for the same rule. One coercion rule for every branch is the fix, but it changes which cells light up in existing documents, so it waits for Q2. **M**
 
@@ -172,6 +171,7 @@ Verified, user-visible, bounded.
 - [ ] **A centred tick box draws half a pixel off vertically on 20 px rows**: at the default row height the box's top and bottom lines draw soft where its sides are sharp, because the centred top `checkboxRect` (`state/modules/data-validation.ts`) gives lands on a half pixel. The box then touches 11 pixel rows where it is 10 high, and the faint bottom row takes no click. Round the top, so the painter and the hit test share whole pixels. **S**
 - [ ] **The Format menu has no custom-formula conditional format**: a rule with a formula of its own, such as `=$B1>10`, arrives only through an xlsx import; Manage rules lists it as "Custom formula" and can delete it, but no dialog makes or edits one. Excel and Google Sheets both offer it. Add it to the Format menu's rules, with the formula anchored as [SHEETS.md](SHEETS.md#a-formula-rule-is-anchored-at-its-first-ranges-corner) says. **M**
 - [ ] **Manage rules lists the lowest priority first**: the dialog (`ManageRules` in `components/ConditionFormat/ManageRules.tsx`) shows the rules in stored order, in which a later rule paints over an earlier one, so the rule that wins is at the bottom. Excel and Google Sheets list the winner first. Show the list reversed. **S**
+- [ ] **A conditional format made from a column-header selection** stores the sheet's rows, `row: [0, rows-1]` (the header pick in `state/events/mouse-header.ts`), not the whole column, so a row insert still moves it. A product question: should a header pick mean the whole column? **S**
 
 ### Decided, not defects
 
@@ -262,6 +262,118 @@ Both sides already work on the raw SpreadsheetML: the import reads it itself (`a
 - [ ] **Cross-sheet click-to-reference is dead**: `formulaCache.rangetosheet` (`FormulaCache` in `state/modules/formula-cache.ts`) is read in `formula-range.ts` but never assigned outside a test, so the sheet-name branch of `getRangetxt` (`state/modules/cell.ts`) is unreachable. Switching tabs cancels the composition anyway (`selectSheet` in `SheetItem.tsx` calls `cancelNormalSelected`). Either delete the field and its branches (**S**), or build the feature: the tab switch keeps an active composition instead of cancelling it, which touches focus, the range-highlight overlay and undo (**M–L**). Decide the feature first.
 - [ ] **A running total filled down recalcs in quadratic time**: each cell adding the one above it, filled down 5,000 rows, takes 3.4 s to recalc, and the time grows with the square of the rows (`engine/dependency-index.ts`, `engine/recalc.ts`). The server stops at `SERVER_RECALC_BUDGET`, but the editor's engine has no budget, so the tab freezes. Profile it, then make that step linear. **S**
 - [ ] **The sheet engine swallows an out-of-memory** ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md#out-of-memory-is-the-jobs-not-the-servers)): `isOutOfMemory` lives in `apps/api/src/lib/core/errors.ts`, which `packages/sheet` can't import, so its catches turn an out-of-memory into something else. `replaySheetsOps` (`engine/replay-ops.ts`) skips an op batch and silently truncates an export or preview, `recalcSheets` keeps old values, and `Parser.evaluate` and `inBand` return a formula error. Move `isOutOfMemory` to `packages/lib`, have the API import it, and rethrow it from each of those catches. **S**
+
+## The new formula engine
+
+Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PROPOSAL_FORMULA_ENGINE.md](proposals/PROPOSAL_FORMULA_ENGINE.md) built and nothing computes with yet. What steps 1b and 2 build by design (the adapter, spill, `LET`, `LAMBDA`, defined names, hidden rows) is in the proposal, not here. A formula below is followed by our answer and Excel's recorded one.
+
+### Functions
+
+- [ ] **The index of `VLOOKUP` and `HLOOKUP` and the type of `MATCH` given a cell, a range or an array**: Excel answers `#REF!` for an error cell, a text that is no number, a 2-D range and a union, a 1-D range is one `#VALUE!` for the two lookups and `#REF!` for `MATCH`, and an array lifts only `MATCH`. Ours: `MATCH(10,A1:A6,B1:B2)` is 1, `VLOOKUP(10,A1:B6,C1:C2)` is `#REF!`. 35 recorded rows; not one word, so it needs a ruling first. **M**
+- [ ] **A holidays word for `NETWORKDAYS` and `WORKDAY`**: a text or a boolean among the holidays should fail the call, and with 0 days the argument is not read. `NETWORKDAYS(DATE(2006,1,1),DATE(2006,2,1),{"2006/1/2","2006/1/16"})` is 23, Excel 21; the `.INTL` form with weekend 7 is 24, Excel 22. 63 recorded rows. **M**
+- [ ] **`NUMBERS_A` over the elements of an array, and `RANK`'s order**: a text or a boolean in an array constant is read as in a cell, where Excel skips both in `VARA`, `VARPA`, `STDEVA`, `STDEVPA` and `MINA` (`VARA({1,"x",TRUE,5})` is 4.9167, Excel 8) but counts one of them in `AVERAGEA` (`AVERAGEA({3,"x",TRUE,5})` is 2.25, Excel 2.6667), so it is a path per function, not one rule in the family; and `RANK`'s order refuses a text and takes a boolean (12 recorded rows). **M**
+- [ ] **An empty argument at an optional table**: `LOOKUP(4,C1:C3,)` is `#N/A`, Excel `#VALUE!`; `defaulted` says it only for a parameter that must be given. **S**
+- [ ] **A date typed without a year outside `DATEVALUE`**: `"2/29"+0` and `YEAR("3/15")` are `#VALUE!`, where Excel takes the current year (7 recorded rows). Taking it needs the pass's clock in `values/coerce.ts`, which every reading of a number goes through: decide whether it is worth that. **M**
+- [ ] **`SUBTOTAL` and `AGGREGATE` do not lift over what follows their code**: `choose` in `eval/call.ts` is a read loop of its own (3 recorded `AGGREGATE` rows). Run the picked row through the ordinary prepare, read and lift. **S**
+- [ ] **Match mode 3 of `XMATCH` and `XLOOKUP`**: regular expressions are `#VALUE!` (8 recorded rows). **M**
+- [ ] **`XLOOKUP` with an array as `if_not_found`** pairs it element by element with the keys, where Excel uses its first element. **S**
+- [ ] **`TEXTAFTER` and `TEXTBEFORE`**: of two delimiters that start at one place the first listed wins, `TEXTAFTER("abcabc",{"b","bc"},1)` is `cabc`, Excel `abc`; an error given as `if_not_found` answers even when the delimiter is found. **S**
+- [ ] **`COUNTBLANK` of an array** is one `#VALUE!`, where Excel answers per element; **`SHEET("Sheet2")`** is `#N/A`, Excel the sheet's number. **S**
+- [ ] **`GCD(,6)` and `LCM(,6)`** are 6, Excel `#N/A`. **S**
+- [ ] **Last digits**: `MULTINOMIAL(170)` is 1, Excel 1.0000000000002; `LOG(100,0.9999999999999999)` differs in its last digits; `LN` and `STDEV` differ from Excel's cached values in the last digits on 23 corpus cells. **S**
+- [ ] **`INDIRECT` does not read a structured reference**: `INDIRECT("T[Outstanding Work]")` is `#REF!`, where Excel reads the table's column (30 corpus cells). It needs tables as a live feature, not a file's references resolved at import. **M**
+
+### Values and text
+
+- [ ] **Typed numbers and dates Excel reads**: `VALUE("%12")` is `#VALUE!`, Excel 0.12; `VALUE("June 5, 26")` is `#VALUE!`, Excel 46178. Both in `values/parse-number.ts`. **S**
+- [ ] **`NUMBERVALUE` keeps a 16th digit**: `NUMBERVALUE("1234567890123456")` is 1234567890123456, where a cell holds 15 digits. **S**
+- [ ] **`CODE(UNICHAR(128))`** is 63, Excel 128: the euro sign's code page entry. **S**
+- [ ] **`PROPER` after a combining mark**: `PROPER("e"&UNICHAR(769)&"lise")` is `Élise`, Excel `ÉLise`. **S**
+- [ ] **ß in an exact lookup**: `MATCH("ß",E1:E2,0)` over `ss`, `ß` is 1, Excel 2, while `COUNTIF` over them agrees with Excel, so Excel's lookups and criteria fold ß differently. Record more rows (`="ß"="ss"`, `ẞ`, the `ﬁ` ligature, dotted and dotless i) before a change. **M**
+- [ ] **An intersection with a union**: `SUM((A1:B2,C1:D2) A1:D1)` is `#VALUE!`, where Excel intersects each area (5 recorded rows). **S**
+- [ ] **`INDIRECT` of R1C1 text naming a whole row or column**: `INDIRECT("R1",FALSE)` is `#REF!`, Excel row 1; the stored grammar has no single `R1` or `C1`. **S**
+
+### Typed formula text
+
+- [ ] **Text Excel accepts and the parser refuses**: `=A1:C2!A1#`, `=A1:b6_x2!B2`, `=(A1,@B1:B3)` (the A1 grammar binds `@` looser than a union), and a bare sheet name with a combining mark, such as Thai or Hindi vowel signs (`=กข้!A1`; quoted it works). **S**
+- [ ] **A tiny number prints in plain digits**: `=1.23456789012345E-18` reads back as `=0.00000000000000000123456789012345`, where Excel keeps the exponent (`PLAIN_EXPONENT_MIN` in `text/printer.ts`); check Excel from 1E-13 to 1E-19. **S**
+- [ ] **A sheet named like a cell, first in a 3-D prefix**: the A1 text `='B2:Sheet2'!A1:B2:Sheet2!C3` reads back as another formula, so re-editing it in the formula bar changes it (stored text is safe). One condition in `text/printer.ts` quotes it. **S**
+- [ ] **A space before a comma is dropped**: `=SUM(A1 ,B1)` comes back as `=SUM(A1,B1)`. **S**
+- [ ] **A call's name folds by Unicode**: `=ß(1)` reads back as `=SS(1)`, where `sheetNameKey` folds a name another way. One fold for every name, before `LET` binds names. **S**
+- [ ] **A typed 3-D formula shows blank with no error**: `=SUM(Sales:Data!A1)` is stored as a reference to a sheet named `Sales:Data` that no tab has, and its value is blank, with no error to say why. **S**
+- [ ] **A typed number keeps a 16th digit**: Excel cuts a typed `1234567890123456` to 1234567890123450 at entry, so `=A1&""` is `1234567890123450` there and `1234567890123460` here, fed the typed digits. The cut belongs in step 1b's editor parse, as the engine reads no typing. **S**
+
+### Lookups
+
+- [ ] **A lifted lookup answers per element**: four lifted reference-only rows answer one `#VALUE!` where Excel answers a 1×2 of `#VALUE!`, and the search does not know the blank cell of a lifted `INDEX` or `XLOOKUP` (`lift.ts` makes one blank-cell value). **S**
+
+### Number display (numfmt)
+
+- [ ] **No carry at midnight for a date-only format**: `TEXT(45000.999995,"dddd")` is Wednesday, Excel Thursday; numfmt's own test pins the other answer. **S**
+- [ ] **Half a second rounds up**: `TEXT(0.5+0.5/86400,"hh:mm:ss")` is `12:00:01`, Excel `12:00:00`. **S**
+- [ ] **Negative serials**: `TEXT(-1.25,"[h]:mm:ss")` is `-18:00:00` where 30 hours are meant (Excel `#VALUE!`, and `#######` in a cell), and a negative time does not carry at midnight. numfmt's elapsed parts reuse the wrapped clock time: report it upstream rather than patch numfmt a second time. **S**
+- [ ] **`a/p` in lower or mixed case**: `TEXT(0.02,"hh:mm a/p")` is `00:28 a/p`, Excel `12:28 a`; `TEXT(0.52,"h:mm AM/pm")` is `12:28 A12/p12`, Excel `12:28 PM`. In cells too. A numfmt bug to report upstream. **S**
+- [ ] **A date past 31 December 9999**: `TEXT(2958466,"yyyy-mm-dd")` is `10000-01-01` and `TEXT(1E+300,"yyyy-mm-dd")` `1E+300`, Excel `#VALUE!` for both (`valueAsText` in `format/number-display.ts`). **S**
+- [ ] **Fraction formats past 1E+21** print exponent text, and **a 16-digit number whose 16th digit is an exact 5** rounds toward zero. **S**
+- [ ] **`TEXT` on a 16-digit tie** rounds as numfmt does, the engine's own number text the other way: `TEXT(73938790243119/4,"0.0")` is `18484697560779.7` as in Excel, where `&""`, `FIXED` and `ROUND` give `…779.8` (51 of 200,000 random numbers). **S**
+
+### The xlsx dialect
+
+- [ ] **A range handed to a function the engine lacks is exported plain**, without the `@` an old Excel would need. **S**
+- [ ] **`TYPE(A1:A10)` after import** is 64, where Excel shows 16. **S**
+- [ ] **Two keys for one meaning**: `(@A1,B1)` round-trips to another stored text of the same meaning, and `SUM(T[#All]#)` comes back from one xlsx round trip as `SUM((T[#All])#)`; and `[1]A1!B2` is printed bare: check that Excel reads it. **S**
+- [ ] **The API keeps its own list of the worksheet functions**: `WORKSHEET_FUNCTIONS` and the two prefixes in `apps/api/src/lib/ooxml/spreadsheetml.ts` repeat `EXCEL_WORKSHEET_FUNCTIONS`, `FUTURE_PREFIX` and `WORKSHEET_PREFIX` of `functions/excel-names.ts`, which `@workspace/formula/names` does not export. Export them there, or a `withPrefix` the writer calls, and delete the copy. **S**
+- [ ] **`=(@-A1,B1)` exports as a two-argument `SINGLE`**: the file gets `(_xlfn.SINGLE(-A1,B1))`, which Excel refuses, and its re-import reads `SINGLE(…)` as an unknown name: `#VALUE!` becomes `#NAME?`. Brackets by precedence in the printer would fix it and the row above. **S**
+
+### Table references
+
+- [ ] **Typed R1C1-looking text is a table reference**: `=RC[1]` reads as column `1` of a table named `rc`, and `=C[-1]:C[2]` as columns of a table `c`. With no such table they show `#REF!`, and a file that has one resolves them; the editor in step 1b should say why. **S**
+- [ ] **`Sheet2!T[a]` parses and is never resolved**, where Excel drops the prefix. **S**
+- [ ] **A this-row reference outside the table's data rows** is `#REF!`, Excel `#VALUE!`. **S**
+- [ ] **`tokens()` cuts a table reference into a name and a bracket**, so an editor highlighting references from it misses the reference. **S**
+
+### Performance
+
+- [ ] **`INT` is about four times slower** than before 1a's fix wave (+315% Bun, +227% Node): `round15` takes a text round trip. A common function. **S**
+- [ ] **`A1^2` and `POWER` cost about 70% more** for the wide power kernel in `values/powers.ts`; a whole small power could take a fast path. **S**
+- [ ] **The "MATCH reader, insert inside, 4000" gate row** is 7% slower on Bun and 10% on Node than the pre-fan-out baseline, the one row slower on both runtimes. Look with the bench script. **S**
+- [ ] **A sparse column costs 2.5 times its extent per sorted search**. **M**
+- [ ] **`settleArea` rescans its range after every unwind**, superlinear on a range whose cells each head a deep chain (`recalc/recalc.ts`). **S**
+- [ ] **Writing the value a cell already holds recomputes its cone**. **S**
+- [ ] **A capped pass walks a deep chain again every time it stops**: a stopped pass drops its cells in progress, so a chain read against sheet order (`=R[1]C+1` down a column) deeper than about 70,000 cells is walked down again by every pass. 100,000 cells take 1.2 s over 100 passes at cap 1000, against 52 ms uncapped. A design exists that keeps the list across a stop (48 lines added and 35 removed in `recalc/recalc.ts`, no new field) and was not built: a stopped pass would then list a loop it found, anything that changes cells outside `Recalc` between two stopped passes breaks it, and its cost on the ordinary path is not measured. Step 1b chooses the cap, and with it whether this matters. **M**
+- [ ] **On Node an uncapped pass over a deep chain is slower than a capped one**: 1.6 million cells read against sheet order take 1.9 s uncapped against 0.45 s at cap 1000, on Bun 0.96 s uncapped. Unexplained. **S**
+- [ ] **`ReverseIndex.rebuild` runs on every typed formula**: rebuilding is linear in the rectangles of equal shapes, so in a book where every formula is its own rectangle (a different literal per row) typing one costs 72 ms at 100,000 formulas and 344 ms at 500,000. One shape over 500,000 rows costs 2.3 ms. **S**
+
+### Memory
+
+- [ ] **A column costs its last row**: 17 bytes a row, so one cell on row 1,048,576 reserves about 18 MB for its column, and an engine or an xlsx import has no cap. Measured on Bun and Node: 200 cells on the last row hold 50 to 74 MB resident at load and 3.4 GB after one row insert, which writes every slot; 100 cells 1.7 GB. A file of a few KB can do this, so step 1b closes it before a real file reaches the engine: a slot budget at the decoder and importer bounds it, sparse columns would remove it. **M**
+- [ ] **One formula may still hold eight full arrays of references** under `MOST_STORED`: a lifted call such as `OFFSET(A1,ROW(A:A)-1,COLUMN(A1:P1)-1)` builds 2^24 references charged one slot each, not `REFERENCE_ROOM`'s 17, and one such array peaks at 1.9 to 2.2 GB resident on Bun and 2.0 GB on Node (measured), so eight would take about 15 GB. **S**
+- [ ] **A source of cells that calls back into the engine** during `addSheet` gets one cell's formula swapped for another's, since the shape table forgets the half-loaded sheet's shapes. The `SheetSource` contract forbids it and nothing checks it. **S**
+
+### Tests and checks
+
+- [ ] **Three tests time out at a machine load over 100**: `edit/classes.test.ts`, `edit/reread.test.ts` and `recalc/marking-shapes.test.ts`. Give them less work or a timeout of their own. **S**
+- [ ] **Tests that kill four surviving mutants of `eval/search.ts`**, and one for `REPT`'s 32,767-character check. **S**
+- [ ] **Excel checks nobody could run**: an emoji's length in desktop Excel; whether `FACT` snaps within 1E-7; where `POWER`'s negative base stops (between 2^31 and 2^49); `"+ 5"` as 5; `SUMX2MY2` and `SUMX2PY2` of no pair as `#DIV/0!`; `NEARLY` on `RIGHT`, `ROUNDUP` and `ROUNDDOWN`. **S**
+- [ ] **`packages/formula/scripts/oracle-rows.ts` has no fixture plan for batches 2 to 5 and 14 to 20**, whose fixtures are prose, so their rows are not computed again on each build; a plan per batch is about 20 lines. **S**
+- [ ] **No test pins that a chain read against sheet order costs linear time**: the public path counts only formulas and elements, and a walk or a fill that runs no formula is neither, so a pin needs a counter in production code. **S**
+- [ ] **The edit law's "last rows of the grid" group runs past its own timeout at a high count**: at `EDIT_LAW_COUNT=600` it takes about 213 s against its 120 s timeout, with no law error; the default count passes. **S**
+- [ ] **The oracle repairs batch 13's fixture in code**: `packages/formula/scripts/oracle-rows.ts` puts back a backtick the recorded `excel-batch13.md` lost in part 2a, where the recorded file should be fixed and the repair deleted. **S**
+- [ ] **The depth budget in a worker on Firefox and on iOS Safari** is not measured; Chrome and Safari on macOS have 4.2 times headroom in a worker. **S**
+
+### Code
+
+- [ ] **A structural edit can grow a stored key past the bound**: an edit cannot refuse a formula, so a key within a digit per reference of 131,072 characters, such as `=R[9]C+R[9]C+…` at A1, becomes `R[10]C` terms of 152,915 characters after a row inserted between, and the cell is `#ERROR!` after a reload. Accepted for now: no crash, one cell. **S**
+- [ ] **`ParseFailure` is exported by no entry**: `parseA1`, `parseXlsx`, `intersect` and `storedKey` answer it, and step 1b's importer needs the type to handle `intersect`'s failure. **S**
+- [ ] **`Book` keeps its fields private with `#`** where the package writes `private`, because `functions/gates.test.ts` pins at compile time that a body cannot reach a book's fields by a key in brackets either. The owner's call. **S**
+- [ ] **`spell` in `eval/look.ts`** fills one of two lists by a nullable flag; split it. **S**
+- [ ] **Own math kernels or the runtime's**: `LN`, `LOG`, `EXP`, `ATAN2` and the trigonometric and hyperbolic functions use the runtime's `Math`, and Bun and Node differ in the last bit on about one call in ten, as `values/powers.ts` already avoids for `^`. Step 2 derives values on every reader, so it decides. **M**
+- [ ] **`setFormula` interns the host's text as its key**: `=sum( R[1]C )` is a shape of its own until an edit rewrites it canonical. Harmless for values, but a peer's text is not canonical by construction; step 1b's adapter should hand stored text from `printStored`. **S**
+- [ ] **Duplicate sheet names are not refused**: `addSheet` takes a name that differs from another only by case, and which sheet a typed name binds is the host's finder. **S**
+- [ ] **`RecalcResult.loops` after a load with cached values** lists fewer loop cells than a fresh load: a self-loop `=SUMPRODUCT(R[0]C:R[2]C)` loaded holding `#REF!` is never recomputed, so it is not listed. A host that trusts `loops` after such a load misses it. **S**
+- [ ] **A date typed from 1 January to 28 February 1900 shows the day before**: `1900-01-15` shows `1900-01-14` at once. The sheet's input parse (`parseCellInput`, `dateToSerial`) still makes Excel's serial for those 59 days and the display reads the day line Google uses. No data is lost. Step 1b's typed-date parse decides it. **S**
+- [ ] **A unary plus over a range makes an array**: `SUM(+A1:A20000)` costs 2.8 times what it did, and a range as the fallback of IFERROR or IFNA takes the same path, because a blank that passes through a computed array is 0. `+A1` is unchanged. **S**
+- [ ] **A Hijri `B2` format on a number up to 60** makes numfmt throw on a valid pattern: `TEXT(60,"B2yyyy")` shows `60`, and the format dialog's preview shows numfmt's error for it. Upstream. **S**
 
 ## Sync and undo
 

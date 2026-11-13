@@ -33,9 +33,7 @@ export {
     generalAlign,
     is_date,
     isValidNumberFormat,
-    numberDisplay,
     richText,
-    update,
 } from './format';
 export { FormulaEngine } from './formula-engine';
 export { functionCopy, inlineNames } from './formula-shift';
