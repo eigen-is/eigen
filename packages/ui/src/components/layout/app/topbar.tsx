@@ -278,7 +278,7 @@ function LoginButton() {
     const { data: config } = usePublicConfig();
     const demoMode = config?.demoMode ?? false;
 
-    const label = demoMode ? 'Enter demo' : 'Login';
+    const label = demoMode ? 'Enter demo' : 'Log in';
 
     return (
         <Tooltip>

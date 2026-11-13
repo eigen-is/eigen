@@ -7,7 +7,7 @@ import { LandingBlocks } from '../../components/landing-blocks';
 describe('LandingBlocks', () => {
     test('draws the three blocks', () => {
         const html = renderToStaticMarkup(<LandingBlocks showInstall={false} />);
-        expect(html).toContain('Native sync');
+        expect(html).toContain('Use your favorite apps');
         expect(html).toContain('Office compatible');
         expect(html).toContain('Built for data sovereignty');
     });

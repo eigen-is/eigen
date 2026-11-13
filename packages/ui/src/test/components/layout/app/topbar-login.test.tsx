@@ -74,14 +74,14 @@ function loginLink(bar: HTMLElement): HTMLAnchorElement | undefined {
     return [...bar.querySelectorAll('header a')].find(
         (link): link is HTMLAnchorElement =>
             link instanceof HTMLAnchorElement &&
-            ['Login', 'Enter demo'].includes(link.getAttribute('aria-label') ?? ''),
+            ['Log in', 'Enter demo'].includes(link.getAttribute('aria-label') ?? ''),
     );
 }
 
 describe('the signed-out top bar', () => {
     test('shows a login icon that goes to Space', async () => {
         const link = loginLink(await renderBar());
-        expect(link?.getAttribute('aria-label')).toBe('Login');
+        expect(link?.getAttribute('aria-label')).toBe('Log in');
         expect(link?.getAttribute('href')).toBe(getSpaceAppUrl());
     });
 

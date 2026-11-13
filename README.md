@@ -6,17 +6,17 @@ Mail, drive, docs, sheets, slides, drawings, stickies, calendar, contacts and ch
 
 Try the demo at [demo.eigen.is](https://demo.eigen.is). It is a shared workspace that resets every hour.
 
-### Native sync
+### Use your favorite apps
 
-Works with the mail, calendar, contacts and file apps on your phone, Mac or PC. No vendor lock-in. `IMAP` `SMTP` `CalDAV` `CardDAV` `WebDAV`
+Works with the mail, calendar, contacts and file apps on your phone, Mac or PC. `IMAP` `SMTP` `CalDAV` `CardDAV` `WebDAV`
 
 ### Office compatible
 
-Edit documents, spreadsheets and presentations in the browser. Bring the files you have, and take them with you when you leave. `.docx` `.xlsx` `.pptx`
+Create and edit documents, spreadsheets and slides in your browser. Bring the files you have, and take them with you when you leave. `.docx` `.xlsx` `.pptx`
 
 ### Built for data sovereignty
 
-Runs on your own hardware, and the code is MIT licensed. Your mail, contacts and calendars stay in open formats. `.eml` `.vcf` `.ics`
+MIT-licensed code running on your own server. Your mail, contacts and calendars stay in open formats, so there is no lock-in. `.eml` `.vcf` `.ics`
 
 ## Why
 

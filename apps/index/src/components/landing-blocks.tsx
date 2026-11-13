@@ -12,18 +12,18 @@ const INSTALL_COMMAND = 'curl -fsSL https://eigen.is/install | sh';
 
 const BLOCKS = [
     {
-        title: 'Native sync',
-        text: 'Works with the mail, calendar, contacts and file apps on your phone, Mac or PC. No vendor lock-in.',
+        title: 'Use your favorite apps',
+        text: 'Works with the mail, calendar, contacts and file apps on your phone, Mac or PC.',
         tags: ['IMAP', 'SMTP', 'CalDAV', 'CardDAV', 'WebDAV'],
     },
     {
         title: 'Office compatible',
-        text: 'Edit documents, spreadsheets and presentations in the browser. Bring the files you have, and take them with you when you leave.',
+        text: 'Create and edit documents, spreadsheets and slides in your browser. Bring the files you have, and take them with you when you leave.',
         tags: ['.docx', '.xlsx', '.pptx'],
     },
     {
         title: 'Built for data sovereignty',
-        text: 'Runs on your own hardware, and the code is MIT licensed. Your mail, contacts and calendars stay in open formats.',
+        text: 'MIT-licensed code running on your own server. Your mail, contacts and calendars stay in open formats, so there is no lock-in.',
         tags: ['.eml', '.vcf', '.ics'],
     },
 ];

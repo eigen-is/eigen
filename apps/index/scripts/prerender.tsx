@@ -48,7 +48,12 @@ function routes(shellDescription: string): PrerenderRoute[] {
             // cleanly in place (AuthProvider renders children on the first client render
             // for this ungated app rather than a null loading fallback).
             path: '/',
-            meta: { title: 'eigen', description: shellDescription, url: publicUrl('/'), type: 'website' },
+            meta: {
+                title: 'eigen - a self-hosted alternative to Google Workspace',
+                description: shellDescription,
+                url: publicUrl('/'),
+                type: 'website',
+            },
         },
         {
             path: '/blog',
