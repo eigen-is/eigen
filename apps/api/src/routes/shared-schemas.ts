@@ -4,7 +4,8 @@
 // so only the backend depends on Elysia's type system.
 
 import { S3_NONCURRENT_DAYS_MAX } from '@workspace/lib/constants/s3';
-import type { DriveImportSource, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
+import type { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
+import type { DriveImportSource } from '@workspace/lib/types/drive-convert';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { MAX_EMAIL_LENGTH, NO_CONTROL_PATTERN } from '@workspace/lib/validation';

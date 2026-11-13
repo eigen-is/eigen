@@ -19,7 +19,7 @@ import {
 } from '@workspace/lib/calendar';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
-import { ICS_ACCEPT, isIcsFile } from '@workspace/lib/types/drive';
+import { ICS_ACCEPT, isIcsFile } from '@workspace/lib/types/file-kinds';
 import {
     KebabTrigger,
     RecentFilesSidebarItem,

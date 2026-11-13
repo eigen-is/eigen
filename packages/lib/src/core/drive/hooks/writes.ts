@@ -1,18 +1,20 @@
 // The hooks that change Drive, such as create, upload, copy, move, rename and delete. Each one sends its
-// request per item and then calls the invalidators for the listings the change makes stale, once for the
-// whole batch. A batch goes through settleEach: when only part of it goes through, the hook says which items
-// did, so a dialog can retry the rest and an editor can keep what landed.
+// request per item, but an upload sends its files in one, and then calls the invalidators for the listings
+// the change makes stale, once for the whole batch. A batch goes through settleEach: when only part of it goes
+// through, the hook says which items did, so a dialog can retry the rest and an editor can keep what landed.
 
 import type { QueryClient, UseMutationResult } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { driveApi, getDriveAppUrl, getDriveFileUploadUrl, openDocument } from '@workspace/lib/api';
-import type { DriveCopyDestination, DrivePath, EigenDocType } from '@workspace/lib/types/drive';
+import { driveApi, getDriveAppUrl, openDocument } from '@workspace/lib/api';
+import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPE_INFO, withEigenExtension } from '@workspace/lib/types/drive';
-import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
+import type { DriveCopyDestination } from '@workspace/lib/types/drive-convert';
 import { toast } from 'sonner';
 import { AppError, getErrorMessage, onMutationError } from '../../api-error';
 import { useAuth } from '../../auth';
 import { CREATE_TIMEOUT_MS, createWithReconcile, fetchListingOnce } from '../reconcile-create';
+import type { UploadOptions } from '../upload';
+import { uploadFiles } from '../upload';
 import { invalidateItemCreated, invalidateItemsDeleted, invalidatePathRenamed, invalidatePathsMoved } from './keys';
 import { folderContentQueryConfig } from './reads';
 
@@ -41,30 +43,32 @@ export function useCreateFolder() {
     });
 }
 
-export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
+export function useUploadFile(ownerId: string, mountId: string) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({ parentId, file }: { parentId: string; file: File }): Promise<DrivePath> => {
-            const formData = new FormData();
-            formData.append('file', file);
-            const res = await fetch(getDriveFileUploadUrl(ownerId, mountId, parentId), {
-                method: 'POST',
-                body: formData,
-                credentials: 'include',
-            });
-            if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-            const data = (await res.json()) as DrivePath[];
-            // Raw fetch bypasses Eden's Date reviver, so the dates arrive as strings and are revived here.
-            const path = data[0];
-            return {
-                ...path,
-                createdAt: new Date(path.createdAt),
-                updatedAt: new Date(path.updatedAt),
-                trashedAt: path.trashedAt ? new Date(path.trashedAt) : null,
-            };
+            const [path] = await uploadFiles(ownerId, mountId, parentId, [file]);
+            return path;
         },
         onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId),
         onError: onMutationError,
+    });
+}
+
+// Drive's Upload files: the whole batch is one request, and the caller draws its progress and may cancel it.
+export function useUploadFiles(): UseMutationResult<
+    DrivePath[],
+    unknown,
+    { folder: DrivePath; files: readonly File[] } & UploadOptions
+> {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ folder, files, ...options }) =>
+            uploadFiles(folder.ownerId, folder.mountId, folder.id, files, options),
+        onSuccess: (_data, { folder }) => invalidateItemCreated(queryClient, folder.ownerId, folder.mountId, folder.id),
+        onError: (error, { signal }) => {
+            if (!signal?.aborted) onMutationError(error);
+        },
     });
 }
 

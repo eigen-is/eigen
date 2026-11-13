@@ -3,7 +3,7 @@
 // before a call it passes on. The helpers that merge, normalize and trim an ACL before Drive saves it live here too.
 
 import { CONTAINER_CHAT_FOLDER, CONTAINER_MEDIA_FOLDER } from '@workspace/lib/constants/container';
-import type { DriveACL, DriveACLDelta, DrivePath, DrivePathType, DriveVisibility } from '@workspace/lib/types/drive';
+import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
 import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_FILE,
@@ -11,6 +11,7 @@ import {
     isCollabType,
     isDocumentType,
 } from '@workspace/lib/types/drive';
+import type { DriveACL, DriveACLDelta, DriveVisibility } from '@workspace/lib/types/drive-access';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { ApiError } from '../core';

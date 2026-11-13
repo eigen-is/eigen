@@ -1,8 +1,13 @@
+// The shell of a document app, such as Docs or Slides: the sidebar with the app's New button, and the root folder
+// its pages create in, shared through EigenDocDriveContext. On a team drive's route that is the team drive's root,
+// else the viewer's own; a guest has none. Each app's root route renders it.
+
 import { Outlet } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
-import { DEFAULT_MOUNT_ID, useRootFolder } from '@workspace/lib/drive';
-import { parseOwnerId } from '@workspace/lib/types';
-import type { DriveContextType } from '@workspace/lib/types/drive';
+import { useRootFolder } from '@workspace/lib/drive';
+import type { DriveContextType } from '@workspace/lib/types/drive-view';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import { createContext } from 'react';
 import { AppShell } from '../layout/app/app-shell';
 import { AppSidebar } from '../layout/sidebar/app-sidebar';

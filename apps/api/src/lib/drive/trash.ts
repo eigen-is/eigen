@@ -1,15 +1,13 @@
 // The drive side of the trash: moving a path to the trash, back out of it, and deleting it for good,
 // from the trash or, for a path nobody needs back such as a failed copy, without it. Drive methods such as
-// deletePath check the path and then call these. They close open documents, take away sharing, tell
-// open tabs and write the history.
+// deletePath check the path and then call these. They close open documents, tell open tabs and write
+// the history.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isContainerType } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { ApiError } from '../core';
 import type { Mount } from '../mount';
 import type { User } from '../user';
-import { propagateSharedPathChange } from './acl-propagation';
 import type { Drive } from './drive';
 import { broadcastFileHistoryUpdated } from './sse-events';
 
@@ -20,7 +18,7 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
 
     // Read before the trash for the same reason. The trash takes the item away from everyone it is
     // shared with, and they must still hear that it left their view.
-    const members = await drive.getEffectiveMembers(mount.id, item.id);
+    const members = await drive.membersToTell(mount.id, item.id);
 
     // The mark comes first: after it an open is a 404 and a sync writes to the trashed row's key, so what was
     // open under the item closes after it and saves its last edits into the trash.
@@ -38,22 +36,14 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
     });
     // Nobody waits for it, so a failed broadcast never fails the trash.
     broadcastFileHistoryUpdated(item.ownerId, item, members).catch(() => {});
-
-    // The sharing goes last, as it reaches other homes, and only once the trash is in. The rows keep their ACL in
-    // the trash, so the walk below finds every entry, and the item's ACL chain is held, so its own push goes directly.
-    if (trashedItem.acl) await propagateSharedPathChange(trashedItem, trashedItem.acl, null, user);
-    if (isContainerType(item.type)) await pushSharingBelow(drive, mount, item.id, 'trashed', user);
 }
 
 export async function restorePath(drive: Drive, mount: Mount, pathId: string, user: User): Promise<void> {
     const restoredItem = await mount.restorePath(pathId);
-    drive.emit(SSEventType.DRIVE_PATH_RESTORED, restoredItem);
+    const members = drive.membersToTell(mount.id, pathId);
+    drive.emit(SSEventType.DRIVE_PATH_RESTORED, restoredItem, { members });
     // recordFileEvent reads the path again, so it walks the parent chain of the restored path.
-    await drive.recordFileEvent(mount.id, pathId, user, { eventType: 'restored' });
-
-    // The sharing comes back last, as it reaches other homes, and nobody gets an email again.
-    await drive.pushSharing(mount.id, pathId, 'live', user);
-    if (isContainerType(restoredItem.type)) await pushSharingBelow(drive, mount, restoredItem.id, 'live', user);
+    await drive.recordFileEvent(mount.id, pathId, user, { eventType: 'restored' }, { members });
 }
 
 // Returns false when the item is gone or no longer in trash by the time the delete holds its lock.
@@ -62,14 +52,10 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
     // the events and the notices of a delete of its own.
     const roots = isContainerType(item.type) ? [item, ...(await mount.listTrashRootsInside(item.id))] : [item];
     const notices = await Promise.all(roots.map((root) => readDeleteNotice(mount, root, user)));
-    // The delete takes the path that the members are read from. Everything here is in the trash, which
-    // only the owner, or a team's members, can see, so one read serves every root. The item can be gone
-    // already, taken by the delete of a folder around it, and then there is nobody to tell. Any other
-    // failed read costs only the members' events, so it is logged and the delete goes on.
-    const members = await drive.getEffectiveMembers(mount.id, item.id).catch((error: unknown) => {
-        if (!(error instanceof ApiError && error.status === 404)) {
-            console.error(`Failed to read the members of ${item.id} before its delete:`, error);
-        }
+    // The delete takes the path that the members are read from. Everything here is in the trash, which only the
+    // owner, or a team's members, can see, so one read serves every root. A failed read costs only their events.
+    const members = await drive.membersToTell(mount.id, item.id).catch((error: unknown) => {
+        console.error(`Failed to read the members of ${item.id} before its delete:`, error);
         return [];
     });
 
@@ -110,12 +96,12 @@ export async function deleteFailedCopy(
     user: User,
 ): Promise<void> {
     if (!(await holdsOnlyCopy(mount, item, createdIds))) return deletePath(drive, mount, item, user);
-    return deleteForGood(drive, mount, item, user);
+    return deleteForGood(drive, mount, item);
 }
 
 // Deletes a live path without the trash, such as the source of a move whose bytes went into the file it replaced.
-export async function deleteForGood(drive: Drive, mount: Mount, item: DrivePath, user: User): Promise<void> {
-    const members = await drive.getEffectiveMembers(mount.id, item.id);
+export async function deleteForGood(drive: Drive, mount: Mount, item: DrivePath): Promise<void> {
+    const members = await drive.membersToTell(mount.id, item.id);
     // A document opened under the path between this close and the delete loses its database under the editor,
     // which logs until its socket's read check closes it. The path goes for good either way.
     await closeOpenDocumentsUnder(drive, mount, item.id);
@@ -123,7 +109,6 @@ export async function deleteForGood(drive: Drive, mount: Mount, item: DrivePath,
     drive.emit(isContainerType(item.type) ? SSEventType.DRIVE_FOLDER_DELETED : SSEventType.DRIVE_FILE_DELETED, item, {
         members,
     });
-    if (item.acl) await propagateSharedPathChange(item, item.acl, null, user);
 }
 
 // True when the copy made the path and everything below it, and nobody shared any of it since.
@@ -144,21 +129,6 @@ async function closeOpenDocumentsUnder(drive: Drive, mount: Mount, pathId: strin
         await drive.closeCollabDocument(mount.id, id, { skipFinalSnapshot: true }).catch(logFailure(id));
     }
     for (const id of ids) await mount.closeDatabase(id, { skipFinalSnapshot: true }).catch(logFailure(id));
-}
-
-// Read access comes from the whole chain of folders, so every path below the folder with an ACL of its
-// own gets its own push, each in its own ACL chain.
-async function pushSharingBelow(
-    drive: Drive,
-    mount: Mount,
-    folderId: string,
-    state: 'live' | 'trashed',
-    user: User,
-): Promise<void> {
-    for (const child of await mount.listFolderAll(folderId)) {
-        await drive.pushSharing(mount.id, child.id, state, user);
-        if (isContainerType(child.type)) await pushSharingBelow(drive, mount, child.id, state, user);
-    }
 }
 
 // A deleted path gets no history row, because deleting the path deletes its rows too. The watchers only

@@ -5,7 +5,8 @@
 
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { getDriveComparator } from '@workspace/lib/drive';
-import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveCapabilities } from '@workspace/lib/types/drive-view';
 import { useCallback, useMemo } from 'react';
 import { Column, ColumnLayout } from '../layout/app/column-layout';
 import { useLayout } from '../layout/app/layout-context';

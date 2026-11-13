@@ -75,7 +75,7 @@ export function StickiesBoard({
         yjsDoc,
         undoManager,
         provider,
-    } = useBoard(ownerId, path.mountId, path.id, chatFolderId);
+    } = useBoard(ownerId, path.mountId, path.id, chatFolderId, canWrite);
     const { user } = useAuth();
 
     // A card is in use while a column lists it, the rule the server's sweep reads too. The board's columns change

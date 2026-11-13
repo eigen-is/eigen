@@ -3,7 +3,8 @@
 // subject, and FILE_ACTIONS lists the actions themselves.
 
 import type { LucideIcon } from 'lucide-react';
-import type { DriveImportSource, DrivePath } from './drive';
+import type { DrivePath } from './drive';
+import type { DriveImportSource } from './drive-convert';
 import type { Attachment } from './mail';
 
 // One file a surface can act on, whatever holds it: its identity, and nothing that follows from it.

@@ -12,7 +12,7 @@ import type {
     FreeBusyBlock,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
-import { ICS_CONTENT_TYPE, isIcsFile } from '@workspace/lib/types/drive';
+import { ICS_CONTENT_TYPE, isIcsFile } from '@workspace/lib/types/file-kinds';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { Elysia, t } from 'elysia';
 import { requireNonGuest, requireSelf, requireTeamAdmin } from '../lib/auth/access';

@@ -4,8 +4,10 @@
 
 import { useAuth } from '@workspace/lib/auth';
 import { useDriveViewPreferences } from '@workspace/lib/drive';
-import type { DrivePath, DriveSort } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
+import type { DriveLocationValue, DriveSort } from '@workspace/lib/types/drive-view';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
@@ -16,7 +18,7 @@ import {
     DialogTitle,
 } from '@workspace/ui/components/dialog';
 import { Upload } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { DriveBrowser } from './drive-browser';
 
 type DriveFilePickerProps = {
@@ -29,109 +31,85 @@ type DriveFilePickerProps = {
     multiSelect?: boolean;
 };
 
-export function DriveFilePicker({
-    open,
-    onOpenChange,
-    onSelect,
-    onUploadFromDevice,
-    canPick,
-    title = 'Attach file',
-    multiSelect = false,
-}: DriveFilePickerProps) {
-    const { user } = useAuth();
-    // Seeded once from the view preference and kept here, so a sort picked in the dialog never writes it.
-    const { sortKey, sortDir } = useDriveViewPreferences();
-    const [sort, setSort] = useState<DriveSort>({ key: sortKey, dir: sortDir });
-    const [selected, setSelected] = useState<DrivePath | null>(null);
-    // The table owns a multi pick, Shift and Ctrl clicks included; this mirror lets Select read it.
-    const [multiSelected, setMultiSelected] = useState<DrivePath[]>([]);
-
-    const reset = useCallback(() => {
-        setSelected(null);
-        setMultiSelected([]);
-    }, []);
-
-    const handleSelect = useCallback(
-        (path: DrivePath) => {
-            if (!multiSelect) setSelected(path);
-        },
-        [multiSelect],
-    );
-
-    const handleConfirm = useCallback(
-        (path: DrivePath) => {
-            onSelect([path]);
-            onOpenChange(false);
-            reset();
-        },
-        [onSelect, onOpenChange, reset],
-    );
-
-    if (!user) return null;
-    const ownerId = user.id;
-    const pickedFiles = multiSelected.filter((p) => !isFolderType(p.type));
-
-    const handleSubmit = () => {
-        if (multiSelect) {
-            if (pickedFiles.length === 0) return;
-            onSelect(pickedFiles);
-            onOpenChange(false);
-            reset();
-        } else if (selected) {
-            handleConfirm(selected);
-        }
-    };
-
-    const handleOpenChange = (nextOpen: boolean) => {
-        if (!nextOpen) reset();
-        onOpenChange(nextOpen);
-    };
-
-    const hasSelection = multiSelect ? pickedFiles.length > 0 : !!selected;
-    const submitLabel = multiSelect && pickedFiles.length > 0 ? `Select (${pickedFiles.length})` : 'Select';
-
+export function DriveFilePicker({ open, onOpenChange, title = 'Attach file', ...body }: DriveFilePickerProps) {
     return (
-        <Dialog open={open} onOpenChange={handleOpenChange}>
+        <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="flex flex-col p-0 gap-0 sm:max-w-[688px] max-w-[90vw] h-[520px] max-h-[85vh]">
                 <DialogHeader className="px-6 py-4 border-b">
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription className="sr-only">Browse your Drive and pick a file.</DialogDescription>
                 </DialogHeader>
-
-                <div className="flex-1 overflow-hidden">
-                    <DriveBrowser
-                        ownerId={ownerId}
-                        mode="file"
-                        canPick={canPick}
-                        selectedId={multiSelect ? undefined : selected?.id}
-                        onSelect={handleSelect}
-                        onConfirm={multiSelect ? undefined : handleConfirm}
-                        showNewFolder={false}
-                        onSelectionChange={multiSelect ? setMultiSelected : undefined}
-                        sort={{ value: sort, onChange: setSort }}
-                        className="h-full"
-                    />
-                </div>
-
-                <DialogFooter className="px-6 py-3 border-t flex-row justify-between sm:justify-between">
-                    {onUploadFromDevice ? (
-                        <Button variant="outline" onClick={onUploadFromDevice}>
-                            <Upload className="h-4 w-4 mr-2" />
-                            Upload from device
-                        </Button>
-                    ) : (
-                        <div />
-                    )}
-                    <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => handleOpenChange(false)}>
-                            Cancel
-                        </Button>
-                        <Button onClick={handleSubmit} disabled={!hasSelection}>
-                            {submitLabel}
-                        </Button>
-                    </div>
-                </DialogFooter>
+                <DriveFilePickerBody {...body} onClose={() => onOpenChange(false)} />
             </DialogContent>
         </Dialog>
+    );
+}
+
+// Mounted with the dialog's content, so each opening starts at the root of the viewer's drive with nothing picked.
+function DriveFilePickerBody({
+    onClose,
+    onSelect,
+    onUploadFromDevice,
+    canPick,
+    multiSelect = false,
+}: Omit<DriveFilePickerProps, 'open' | 'onOpenChange' | 'title'> & { onClose: () => void }) {
+    const { user } = useAuth();
+    // Seeded from the view preference and kept here, so a sort picked in the dialog never writes it.
+    const { sortKey, sortDir } = useDriveViewPreferences();
+    const [sort, setSort] = useState<DriveSort>({ key: sortKey, dir: sortDir });
+    const [location, setLocation] = useState<DriveLocationValue>({
+        ownerId: user?.id ?? '',
+        mountId: DEFAULT_MOUNT_ID,
+        folderId: '',
+    });
+    const [selected, setSelected] = useState<DrivePath | null>(null);
+    // The table owns a multi pick, Shift and Ctrl clicks included; this mirror lets Select read it.
+    const [multiSelected, setMultiSelected] = useState<DrivePath[]>([]);
+
+    const pickedFiles = multiSelected.filter((p) => !isFolderType(p.type));
+    const picked = multiSelect ? pickedFiles : selected ? [selected] : [];
+    const submitLabel = multiSelect && pickedFiles.length > 0 ? `Select (${pickedFiles.length})` : 'Select';
+
+    const confirm = (paths: DrivePath[]) => {
+        onSelect(paths);
+        onClose();
+    };
+
+    return (
+        <>
+            <div className="flex-1 overflow-hidden">
+                <DriveBrowser
+                    value={location}
+                    onChange={setLocation}
+                    mode="file"
+                    canPick={canPick}
+                    selectedId={multiSelect ? undefined : selected?.id}
+                    onSelect={multiSelect ? undefined : setSelected}
+                    onConfirm={multiSelect ? undefined : (path) => confirm([path])}
+                    onSelectionChange={multiSelect ? setMultiSelected : undefined}
+                    sort={{ value: sort, onChange: setSort }}
+                    className="h-full"
+                />
+            </div>
+
+            <DialogFooter className="px-6 py-3 border-t flex-row justify-between sm:justify-between">
+                {onUploadFromDevice ? (
+                    <Button variant="outline" onClick={onUploadFromDevice}>
+                        <Upload className="h-4 w-4 mr-2" />
+                        Upload from device
+                    </Button>
+                ) : (
+                    <div />
+                )}
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={onClose}>
+                        Cancel
+                    </Button>
+                    <Button onClick={() => confirm(picked)} disabled={picked.length === 0}>
+                        {submitLabel}
+                    </Button>
+                </div>
+            </DialogFooter>
+        </>
     );
 }

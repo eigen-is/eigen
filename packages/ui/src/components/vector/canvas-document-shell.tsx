@@ -5,7 +5,7 @@
 
 import type { DocSearchController } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isImageMime } from '@workspace/lib/types/drive';
+import { isImageMime } from '@workspace/lib/types/file-kinds';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode, RefObject } from 'react';
 import { CardFormDialog } from '../cards';

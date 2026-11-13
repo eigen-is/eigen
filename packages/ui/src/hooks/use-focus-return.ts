@@ -36,10 +36,10 @@ export function useFocusReturn(
     });
 
     // A menu row that opened the dialog is gone a moment later. A context menu hands its list over through
-    // returnFocusTo and a bar menu its trigger through handFocusReturnTo, but a dropdown menu with its own Radix
-    // trigger focuses that trigger as it closes. The first element outside every open dialog that takes the focus
-    // then becomes the target. A target still on the page stays, and a field in a dialog opened over this one never
-    // becomes it.
+    // returnFocusTo, and a dropdown or bar menu its trigger through handFocusReturnTo. Otherwise, such as for a menu
+    // its owner opened, whose trigger Radix focuses as it closes, the first element outside every open dialog that
+    // takes the focus becomes the target. A target still on the page stays, and a field in a dialog opened over this
+    // one never becomes it.
     useLayoutEffect(() => {
         const replaceLostTarget = (event: FocusEvent) => {
             const focused = event.target;
@@ -77,13 +77,17 @@ export function returnFocusTo(target: HTMLElement, ring?: boolean) {
     else target.focus({ preventScroll: true, ...(ring === false ? { focusVisible: false } : {}) });
 }
 
-// Makes `target` where the dialog that holds the focus gives it back, if what had the focus as that dialog opened is
-// gone, such as the menu row that opened it. The focus itself stays where it is. Without `ring` the dialog keeps the
-// ring of the row, which a browser drew for a key and not for a mouse, so the menu's opener decides.
-export function handFocusReturnTo(target: HTMLElement, ring?: boolean) {
+// Tells a closing menu whether a dialog holds the focus, such as one its row opened, so the menu leaves the focus
+// there. That dialog gives the focus back to `target` when it closes, if what had the focus as it opened is gone, such
+// as the row. Without `ring` it keeps the ring of the row, which a browser drew for a key and not for a mouse. A
+// dialog around `target`, such as one the menu sits in, holds nothing from it.
+export function handFocusReturnTo(target: HTMLElement, ring?: boolean): boolean {
     const focused = focusedElement();
     const holder = focused && [...openDialogs].find((open) => open.content.current?.contains(focused));
-    if (!holder || holder.target?.isConnected) return;
-    holder.target = target;
-    holder.ring = ring ?? holder.ring;
+    if (!holder || holder.content.current?.contains(target)) return false;
+    if (!holder.target?.isConnected) {
+        holder.target = target;
+        holder.ring = ring ?? holder.ring;
+    }
+    return true;
 }

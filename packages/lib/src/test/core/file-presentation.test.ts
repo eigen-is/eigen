@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Calendar, File, Mail, UsersRound } from 'lucide-react';
 import { getFileIconComponent, getFilePresentation } from '../../core/file-presentation';
-import { EML_MIME, ICS_MIME } from '../../types/drive';
+import { EML_MIME, ICS_MIME } from '../../types/file-kinds';
 
 // A .vcf, a .eml and a .ics each belong to an app the way an eigendoc does, so each wears that app's
 // icon and color wherever a file is drawn — and each is recognised by name or by mime alone, because

@@ -4,7 +4,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDriveImportFromDriveUrl, getDriveImportUrl } from '@workspace/lib/api';
-import type { DocumentImportOptions, ImportResult } from '@workspace/lib/types/drive';
+import type { DocumentImportOptions, ImportResult } from '@workspace/lib/types/drive-convert';
 import { toast } from 'sonner';
 import { onMutationError } from '../../api-error';
 import { invalidateVersions } from '../../versioning/hooks/keys';

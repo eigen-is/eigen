@@ -4,7 +4,7 @@
 
 import type { UseMutationResult } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { EditorSaveResult } from '@workspace/lib/types/drive';
+import type { EditorSaveResult } from '@workspace/lib/types/file-kinds';
 import { api } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidatePath } from '../../drive/hooks/keys';

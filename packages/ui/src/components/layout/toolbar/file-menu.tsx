@@ -16,10 +16,10 @@ import {
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_STICKIES,
     DRIVE_MIME_VECTOR,
-    EXPORT_FORMAT_LABELS,
     exportFormatsFor,
 } from '@workspace/lib/types/drive';
 import type { DriveActionId } from '@workspace/lib/types/drive-actions';
+import { EXPORT_FORMAT_LABELS } from '@workspace/lib/types/drive-convert';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import {
     DropdownMenuItem,

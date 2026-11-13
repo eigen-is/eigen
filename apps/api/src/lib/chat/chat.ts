@@ -5,8 +5,9 @@
 
 import { chatActivityTag, chatMentionTag } from '@workspace/lib/notification/tags';
 import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
-import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
+import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import type { SSEventChat } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';

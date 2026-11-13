@@ -4,10 +4,11 @@
 import { getDriveAppUrl } from '@workspace/lib/api';
 import type { AuthUser } from '@workspace/lib/auth';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
-import { DEFAULT_MOUNT_ID, useRootFolder, useTrash } from '@workspace/lib/drive';
+import { useRootFolder, useTrash } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
-import { teamOwnerId } from '@workspace/lib/types';
 import type { EigenDocType } from '@workspace/lib/types/drive';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import { Badge } from '@workspace/ui/components/badge';
 import type { LucideIcon } from 'lucide-react';
 import { Bell, Download, Home, Image, Trash2, UsersRound } from 'lucide-react';

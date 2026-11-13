@@ -6,7 +6,6 @@
 
 import { createFileRoute } from '@tanstack/react-router';
 import {
-    DEFAULT_MOUNT_ID,
     getDriveComparator,
     PartialBatchError,
     useDriveViewPreferences,
@@ -18,6 +17,7 @@ import {
 import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { Column, ColumnLayout, DeleteDialog, LoadingState, ToolbarTitle } from '@workspace/ui';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Button } from '@workspace/ui/components/button';

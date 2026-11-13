@@ -4,8 +4,8 @@
 // has, its add-person icon shows to a mouse user on hover only, and when Tab reaches the button. The lock on a shared
 // link says who the link lets in, in the Share dialog's words.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
-import type { DirectAccessItem } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
+import type { DirectAccessItem } from '@workspace/lib/types/drive-access';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { expectKeyboardReveal } from '../../hover-reveal';

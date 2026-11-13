@@ -287,6 +287,84 @@ describe('share reconciliation', () => {
         expect(invitations).not.toHaveBeenCalled();
     });
 
+    async function aliceFolderAndRoot(): Promise<{ root: DrivePath; folder: DrivePath }> {
+        const alice = await getHome(ctx.alice.user.id);
+        const root = await assertJson<DrivePath>(
+            await authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/default/root`),
+        );
+        const folder = await alice.drive.createFolder('default', root.id, crypto.randomUUID(), alice.user);
+        return { root, folder };
+    }
+
+    async function aliceShares(parentId: string, id: string): Promise<DrivePath> {
+        const alice = await getHome(ctx.alice.user.id);
+        const name = `${crypto.randomUUID()}.txt`;
+        const file = await alice.drive.createFileFromData(
+            'default',
+            parentId,
+            name,
+            'text/plain',
+            Buffer.from('x'),
+            alice.user,
+        );
+        await alice.drive.updateACLDelta(
+            'default',
+            file.id,
+            { add: [{ id, read: true, write: false }] },
+            undefined,
+            undefined,
+            alice.user,
+        );
+        await relay.drainHomeDeliveries();
+        return file;
+    }
+
+    async function sharedWithMe(token: string, userId: string): Promise<string[]> {
+        const list = await assertJson<DrivePath[]>(await authedRequest(token, `/drive/${userId}/shared/with-me`));
+        return list.map((path) => path.id);
+    }
+
+    test('an account created while a shared folder is in the trash sees the file after the restore', async () => {
+        const alice = await getHome(ctx.alice.user.id);
+        const email = `recon-trash-${crypto.randomUUID()}@test.eigen.is`;
+        const { folder } = await aliceFolderAndRoot();
+        const file = await aliceShares(folder.id, email);
+
+        await alice.drive.deletePath('default', folder.id, alice.user);
+        const created = await createTestUser(email, 'testpassword123', 'Late');
+        await relay.drainHomeDeliveries();
+        expect(await sharedWithMe(created.sessionToken, created.id)).not.toContain(file.id);
+        await alice.drive.restorePath('default', folder.id, alice.user);
+
+        expect(await sharedWithMe(created.sessionToken, created.id)).toContain(file.id);
+    });
+
+    test('a member who joins a team while its shared file is in the trash sees it after the restore', async () => {
+        const orgId = getServerConfig()?.orgId;
+        if (!orgId) throw new Error('the test server has no org');
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+        const teamId = await createTeam(ctx, orgId, `Recon trash ${crypto.randomUUID()}`);
+        const alice = await getHome(ctx.alice.user.id);
+        const { root } = await aliceFolderAndRoot();
+        const file = await aliceShares(root.id, teamOwnerId(teamId));
+        const member = await createTestUser(
+            `recon-member-${crypto.randomUUID()}@test.eigen.is`,
+            'testpassword123',
+            'M',
+        );
+
+        await alice.drive.deletePath('default', file.id, alice.user);
+        await addMember(ctx, teamId, member.id);
+        await relay.drainHomeDeliveries();
+        await alice.drive.restorePath('default', file.id, alice.user);
+
+        expect(await sharedWithMe(member.sessionToken, member.id)).toContain(file.id);
+    });
+
     // Reconciliation waits on pulls from other homes, and the newcomer's home may close meanwhile.
     test('a delivery reopens a home that closed during a slow pull', async () => {
         const stamp = Date.now();

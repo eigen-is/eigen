@@ -1,26 +1,12 @@
-// The Drive types the API serves and every app reads: a path and its ACL, the kinds of path and their
-// MIME types, the Eigen document types with their extensions, export formats and Y.Doc roots, and the
-// readers that classify a file by its name and MIME type. The API and the apps import them alike, so a
-// new kind of path or format is added here once. The shape of a Drive view's capabilities lives here
-// too, beside the path it gates.
+// The Drive types the API serves and every app reads: a path, the kinds of path and their MIME types, and
+// the Eigen document types with their extensions, export formats and Y.Doc roots. The API and the apps
+// import them alike, so a new kind of path or document is added here once. Sibling modules hold the other
+// Drive names, such as access, file kinds and views.
 
-import type { BytesTextPreviewMode } from '../constants/preview';
 import { BAND_ROOTS } from '../docs/eigendoc/bands';
 import { STYLE_ROOT } from '../docs/eigendoc/normal-style';
 import { PAGE_ROOT } from '../docs/eigendoc/page';
-
-export type DriveACL = {
-    id: string;
-    read: boolean;
-    write: boolean;
-};
-
-// What a client sends the ACL route: only what changed, which the server merges into the current ACL. The route takes
-// no full list, because replacing the whole list would drop the entries another sharer added at the same time.
-export type DriveACLDelta = {
-    add?: DriveACL[];
-    remove?: string[];
-};
+import type { DriveACL, DriveVisibility } from './drive-access';
 
 export const DRIVE_TYPE_DOC = 'doc' as const;
 export const DRIVE_TYPE_STICKIES = 'stickies' as const;
@@ -57,7 +43,6 @@ export type DrivePathType =
     | DriveTypeVector
     | DriveTypeFolder
     | DriveTypeFile;
-export type DriveVisibility = 'private' | 'public-read' | 'public-write';
 
 export const EIGEN_DOC_TYPES = ['doc', 'stickies', 'slides', 'sheets', 'chat', 'vector'] as const;
 export type EigenDocType = (typeof EIGEN_DOC_TYPES)[number];
@@ -68,36 +53,6 @@ export type YjsRootKind = 'map' | 'array' | 'text' | 'xmlfragment';
 // so ⌘K's per-format rows read like that type's Download menu.
 const EXPORT_FORMATS = ['docx', 'xlsx', 'pptx', 'pdf', 'html'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
-
-// What the convert route turns an office file into: the one format each target reads, by its extension alone, and the
-// type of the document it makes. The file action offers a convert by the same extension the route refuses on.
-export const CONVERT_SOURCES = {
-    eigensheets: { format: 'xlsx', type: 'sheets' },
-    eigendoc: { format: 'docx', type: 'doc' },
-    eigenslides: { format: 'pptx', type: 'slides' },
-} as const satisfies Record<string, { format: string; type: EigenDocType }>;
-export type ConvertTarget = keyof typeof CONVERT_SOURCES;
-
-export function isConvertTarget(t: string): t is ConvertTarget {
-    return Object.hasOwn(CONVERT_SOURCES, t);
-}
-
-export function isConvertSource(name: string, target: ConvertTarget): boolean {
-    return name.toLowerCase().endsWith(`.${CONVERT_SOURCES[target].format}`);
-}
-
-// What an import answers: `summary` says what the file held that did not come over, for a toast. A convert answers its
-// new document's path alone, and shows no summary: the document opens at once.
-export type ImportResult = { success: true; summary: string | null };
-
-// An export answers with the file alone, so what the file left out rides in this header beside it, percent-encoded,
-// for the toast after a download or a print. A file that lost nothing has no such header.
-export const EXPORT_SUMMARY_HEADER = 'Eigen-Export-Summary';
-
-// File › Import… puts the file beside what the document holds, such as slides after `afterFrameId`, or in its place
-// after saving a version. A doc is only ever replaced: the file's page setup and headers can't sit beside the doc's.
-export type ImportMode = 'insert' | 'replace';
-export type DocumentImportOptions = { mode: ImportMode; afterFrameId?: string };
 
 // `urlSlug` is the MIME type in a form that fits a URL, such as `application-eigendoc`. A version restore gives the
 // live doc and the snapshot the `yjsRoots` types first, because Y.applyUpdate gives a root no concrete type.
@@ -207,14 +162,6 @@ export function exportFormatsFor(type: DrivePathType): readonly ExportFormat[] {
     return getEigenDocInfoByType(type)?.exportFormats ?? [];
 }
 
-export const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
-    docx: 'Microsoft Word (.docx)',
-    xlsx: 'Microsoft Excel (.xlsx)',
-    pptx: 'Microsoft PowerPoint (.pptx)',
-    pdf: 'PDF (.pdf)',
-    html: 'Web page (.html)',
-};
-
 export function getEigenDocInfoByType(type: DrivePathType): EigenDocTypeInfo | undefined {
     return isDocumentType(type) ? EIGEN_DOC_TYPE_INFO[type] : undefined;
 }
@@ -272,158 +219,6 @@ export function isDocumentType(type: DrivePathType): type is EigenDocType {
     return EIGEN_DOC_TYPES.some((t) => t === type);
 }
 
-const INLINE_EDITABLE_MIMES = new Set([
-    'text/markdown',
-    'text/plain',
-    'text/csv',
-    'application/json',
-    'text/yaml',
-    'application/x-yaml',
-    'text/xml',
-    'application/xml',
-    'text/html',
-    'text/css',
-    'text/javascript',
-    'application/javascript',
-    'text/typescript',
-    'application/typescript',
-    'text/x-python',
-    'text/x-rust',
-    'text/x-sql',
-    'text/x-shellscript',
-    'application/x-sh',
-    'text/x-toml',
-    'application/toml',
-]);
-
-// The extensions that mark a code file. isInlineEditable reads them, and so does the 'code' preview mode.
-export const CODE_EXTENSIONS = new Set([
-    '.json',
-    '.yaml',
-    '.yml',
-    '.xml',
-    '.html',
-    '.htm',
-    '.css',
-    '.csv',
-    '.js',
-    '.jsx',
-    '.mjs',
-    '.cjs',
-    '.ts',
-    '.tsx',
-    '.mts',
-    '.cts',
-    '.py',
-    '.rs',
-    '.go',
-    '.rb',
-    '.php',
-    '.java',
-    '.c',
-    '.cpp',
-    '.h',
-    '.hpp',
-    '.swift',
-    '.kt',
-    '.scala',
-    '.sql',
-    '.graphql',
-    '.gql',
-    '.sh',
-    '.bash',
-    '.zsh',
-    '.fish',
-    '.conf',
-    '.cfg',
-    '.ini',
-    '.toml',
-    '.env',
-    '.gitignore',
-    '.dockerignore',
-    '.editorconfig',
-    '.log',
-    '.diff',
-    '.patch',
-    '.svelte',
-    '.vue',
-    '.astro',
-    '.dockerfile',
-    '.r',
-    '.lua',
-    '.zig',
-    '.dart',
-]);
-
-const INLINE_EDITABLE_EXTENSIONS = new Set([...CODE_EXTENSIONS, '.md', '.markdown', '.txt']);
-
-// A vCard, a calendar and a saved message are text, but the server previews them as the cards, events and
-// message they hold, not as their raw lines, and has no edit mode for them.
-export function isStructuredTextFile(mimeType: string, name: string): boolean {
-    return isVCardFile(mimeType, name) || isIcsFile(mimeType, name) || isEmlFile(mimeType, name);
-}
-
-export function isInlineEditable(mimeType: string, name: string): boolean {
-    if (isStructuredTextFile(mimeType, name)) return false;
-    if (INLINE_EDITABLE_MIMES.has(mimeType)) return true;
-    const dot = name.lastIndexOf('.');
-    if (dot === -1) return false;
-    return INLINE_EDITABLE_EXTENSIONS.has(name.slice(dot).toLowerCase());
-}
-
-// A binary file, such as an image or a PDF, opens in the preview lightbox instead.
-export function isOpenable(path: { type: DrivePathType; mimeType: string; name: string }): boolean {
-    return path.type !== 'file' || isInlineEditable(path.mimeType, path.name);
-}
-
-// Every image picker takes the whole image/* family, so no caller spells the prefix test itself.
-export function isImageMime(mimeType: string): boolean {
-    return mimeType.startsWith('image/');
-}
-
-export const VCARD_MIMES = ['text/vcard', 'text/x-vcard'] as const;
-
-// The `accept` list for a file input that takes a vCard, named so the picker never re-spells the fact.
-export const VCARD_ACCEPT = `.vcf,${VCARD_MIMES.join(',')}`;
-
-// Exporters disagree on the MIME (Apple writes text/vcard, older clients text/x-vcard, browsers
-// often application/octet-stream), so the .vcf extension counts on its own.
-export function isVCardFile(mimeType: string, name: string): boolean {
-    return name.toLowerCase().endsWith('.vcf') || VCARD_MIMES.some((m) => m === mimeType);
-}
-
-// The media type of one whole mail message wherever it travels, such as the download route, a message attached to
-// another message and a stored .eml file.
-export const EML_MIME = 'message/rfc822';
-
-// Mail clients that write a saved message to disk disagree on the MIME the way vCard exporters do
-// (Outlook drags out application/octet-stream), so the .eml extension counts on its own.
-export function isEmlFile(mimeType: string, name: string): boolean {
-    return name.toLowerCase().endsWith('.eml') || mimeType === EML_MIME;
-}
-
-// The media type an iCalendar body is carried under, everywhere: a stored .ics file, a calendar part of
-// an invitation mail, a CalDAV resource.
-export const ICS_MIME = 'text/calendar';
-
-// The `accept` list for a file input that takes a calendar file, the twin of VCARD_ACCEPT.
-export const ICS_ACCEPT = `.ics,${ICS_MIME}`;
-
-// The media type an iCalendar byte stream is served under (CalDAV GET, PROPFIND getcontenttype, export).
-export const ICS_CONTENT_TYPE = `${ICS_MIME}; charset=utf-8`;
-
-// A calendar body names its purpose in parameters, such as `text/calendar; method=REQUEST`, but a type that only
-// starts with the same letters is another type.
-export function isIcsMime(mimeType: string): boolean {
-    return mimeType === ICS_MIME || mimeType.startsWith(`${ICS_MIME};`);
-}
-
-// A part of an invitation carries no filename at all, so the media type is all there is to go on; the
-// .ics extension counts on its own, as it does for the other two formats.
-export function isIcsFile(mimeType: string, name: string): boolean {
-    return name.toLowerCase().endsWith('.ics') || isIcsMime(mimeType);
-}
-
 export type ImageDimensions = {
     width: number;
     height: number;
@@ -474,42 +269,6 @@ export function sharedChainHead(chain: readonly DrivePath[]): DrivePath | undefi
     return head && head.parentId !== null ? head : undefined;
 }
 
-export type DriveViewMode = 'list' | 'grid';
-export const DRIVE_SORT_KEYS = ['name', 'modified', 'size'] as const;
-export type DriveSortKey = (typeof DRIVE_SORT_KEYS)[number];
-export type DriveSortDir = 'asc' | 'desc';
-export type DriveSort = { key: DriveSortKey; dir: DriveSortDir };
-export type DriveViewPreferences = { mode: DriveViewMode; sortKey: DriveSortKey; sortDir: DriveSortDir };
-
-// What a Drive view lets the user do. Each view declares its whole set as one value, such as a preset
-// spread with overrides, and every Drive action reads its gate from it.
-export type DriveCapabilities = {
-    canCreateFolder: boolean;
-    canUpload: boolean;
-    // May write where the listed items sit: a convert saves the new document beside its source.
-    canWrite: boolean;
-    canDelete: boolean;
-    canRename: boolean;
-    canMove: boolean;
-    canShare: boolean;
-    // The fs browser shows the folder breadcrumb; filtered views show a title instead.
-    showBreadcrumb: boolean;
-    // Omit to allow creating every EigenDocType; an empty set disables create entirely.
-    createTypes?: ReadonlySet<EigenDocType>;
-};
-
-// The Drive file an import-from-drive request names, and nothing about where it lands. Every format posts this one
-// body, so the hooks and routes can't drift apart; importFromDriveSchema mirrors it.
-export type DriveImportSource = { sourceOwnerId: string; sourceMountId: string; sourcePathId: string };
-
-// Where a copy of a Drive item goes, and under which name: the body of the copy route.
-export type DriveCopyDestination = {
-    targetOwnerId: string;
-    targetMountId: string;
-    targetParentId: string;
-    name?: string;
-};
-
 // The part of a DrivePath that names an item, enough to build its URL or open it. DrivePath is assignable to it.
 export type DriveItemRef = {
     id: string;
@@ -519,44 +278,3 @@ export type DriveItemRef = {
     type: DrivePathType;
     mimeType: string;
 };
-
-export type DriveSearchParams = {
-    pid?: string;
-    uid?: string;
-    mid?: string;
-    sharePathId?: string;
-    shareEmail?: string;
-};
-
-export type DriveContextType = {
-    rootPath: DrivePath | null;
-};
-
-export type InviteResult = {
-    alreadyHasAccess: boolean;
-    targetPathId: string;
-};
-
-export type FileEditorContent = {
-    editMode: BytesTextPreviewMode;
-    content: string;
-    frontmatter: string | null;
-    mimeType: string;
-    // The file's HTTP etag when it was read. A save sends it back, and conflicts when the file moved on.
-    etag: string;
-};
-
-export type EditorSaveResult = { conflict: true; currentEtag: string } | { conflict: false; etag: string };
-
-export type EffectiveMember = { email: string; read: boolean; write: boolean };
-
-// One row of the share dialog's access list. A direct entry is the path's own ACL plus the owner
-// row the dialog synthesizes; an inherited one comes from an ancestor folder and names it.
-export type DirectAccessItem = DriveACL & { owner: boolean };
-export type InheritedAccessItem = DriveACL & { sourceFolderName: string };
-export type DriveAccessItem =
-    | (DirectAccessItem & { inherited?: never; sourceFolderName?: never })
-    | (InheritedAccessItem & { owner?: never; inherited: true });
-
-export type DriveAccessRecipient = { email: string; hasReadAccess: boolean; needsGuestAdmission: boolean };
-export type DriveAccessCheckResult = { canShare: boolean; recipients: DriveAccessRecipient[] };

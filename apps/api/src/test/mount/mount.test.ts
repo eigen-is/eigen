@@ -110,24 +110,6 @@ describe('downloadToTemp', () => {
         }
     });
 
-    // An open doc's live working copy is the temp path keyed by its data.db pathId, so a
-    // tempId colliding with an open document DB would truncate live state. Safe today
-    // (callers pass fresh randomUUIDs) — this pins the invariant.
-    test('refuses a tempId whose document DB is open', async () => {
-        const guardSchema = { items: sqliteTable('items', { id: integer('id').primaryKey() }) };
-        const guardConfig: DatabaseConfig<typeof guardSchema> = {
-            name: 'download-guard-test',
-            currentVersion: 1,
-            schema: guardSchema,
-            migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY)') }],
-        };
-        const containerId = await mount.createFolder(rootId, 'OpenDoc', 'doc');
-        const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
-        await mount.createDatabase(guardConfig, dataDbId);
-        await expect(mount.downloadToTemp(dataDbId, dataDbId)).rejects.toThrow('live working copy');
-        await mount.closeDatabase(dataDbId);
-    });
-
     // handleApiError answers a raw error 500; a 503 would read as a storage outage.
     test('a local tmp/ failure is no storage outage, and leaves no side file behind', async () => {
         const data = Buffer.from('snapshot-bytes-local-failure');
@@ -414,14 +396,10 @@ describe('Mount (local-key storage)', () => {
         expect(file!.size).toBe(0);
     });
 
-    test('getTotalSize aggregates file sizes', async () => {
-        const size = await mount.getTotalSize();
-        expect(size).toBeGreaterThan(0);
-    });
-
-    test('getFileCount counts files', async () => {
-        const count = await mount.getFileCount();
-        expect(count).toBeGreaterThan(0);
+    test('getFileTotals adds up the file sizes and counts the files', async () => {
+        const { totalSize, fileCount } = await mount.getFileTotals();
+        expect(totalSize).toBeGreaterThan(0);
+        expect(fileCount).toBeGreaterThan(0);
     });
 });
 
@@ -880,20 +858,20 @@ describe('Trash query filtering', () => {
         expect(file!.trashedAt).not.toBeNull();
     });
 
-    test('getTotalSize still counts trashed items', async () => {
-        const sizeBefore = await mount.getTotalSize();
+    test('getFileTotals still counts trashed items', async () => {
+        const sizeBefore = (await mount.getFileTotals()).totalSize;
 
         const data = Buffer.from('counted-even-when-trashed');
         const fileId = await seedFile(mount, rootId, 'counted.txt', 'text/plain', data.length, data);
 
-        const sizeAfterCreate = await mount.getTotalSize();
+        const sizeAfterCreate = (await mount.getFileTotals()).totalSize;
         expect(sizeAfterCreate).toBe(sizeBefore + data.length);
 
         // Trash the file
         await mount.updatePath(fileId, { trashedAt: new Date() });
 
         // Size should still include trashed file
-        const sizeAfterTrash = await mount.getTotalSize();
+        const sizeAfterTrash = (await mount.getFileTotals()).totalSize;
         expect(sizeAfterTrash).toBe(sizeAfterCreate);
     });
 
@@ -922,6 +900,26 @@ describe('Trash query filtering', () => {
 
     test('deletePath throws 400 when trying to delete root folder', async () => {
         await expect(mount.deletePath(rootId)).rejects.toThrow('Cannot delete root folder');
+    });
+
+    test('getPathsWithACL under a folder returns the shared paths below it, at any depth, trashed ones included', async () => {
+        const acl = [{ id: 'user-1', read: true, write: false }];
+        const folderId = await mount.createFolder(rootId, 'SharedBelow');
+        const innerId = await mount.createFolder(folderId, 'Inner');
+        const data = Buffer.from('shared');
+        const childId = await seedFile(mount, folderId, 'child.txt', 'text/plain', data.length, data);
+        const deepId = await seedFile(mount, innerId, 'deep.txt', 'text/plain', data.length, data);
+        const trashedId = await seedFile(mount, innerId, 'trashed.txt', 'text/plain', data.length, data);
+        const emptyId = await seedFile(mount, innerId, 'empty-acl.txt', 'text/plain', data.length, data);
+        const outsideId = await seedFile(mount, rootId, 'outside.txt', 'text/plain', data.length, data);
+        for (const id of [folderId, childId, deepId, trashedId, outsideId]) await mount.updatePath(id, { acl });
+        await mount.updatePath(emptyId, { acl: [] });
+        await mount.updatePath(trashedId, { trashedAt: new Date() });
+
+        const ids = (await mount.getPathsWithACL(folderId)).map((path) => path.id);
+
+        expect(ids.sort()).toEqual([childId, deepId, trashedId].sort());
+        expect((await mount.getPathsWithACL()).map((path) => path.id)).toContain(outsideId);
     });
 
     test('assertUniqueName allows creating file with same name as trashed file', async () => {

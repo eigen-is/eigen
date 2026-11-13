@@ -2,12 +2,15 @@
 // menu or a file preview, with the browser download as the escape hatch. A Drive item is copied on the
 // server, and a mail part is written from the stored message.
 
+import { useAuth } from '@workspace/lib/auth';
 import { triggerDownload } from '@workspace/lib/download';
 import { PartialBatchError, useCopyToFolder } from '@workspace/lib/drive';
 import { subjectInfo } from '@workspace/lib/file-subject';
+import { useMyTeams } from '@workspace/lib/home';
 import { useSaveMailAttachmentsToDrive } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import { useEffect, useRef } from 'react';
 import { DriveLocationPicker } from './drive-location-picker';
 
@@ -36,6 +39,11 @@ export function SaveToDrivePicker({
     // Siblings come from one surface, so a batch is all Drive items or all mail parts: the first picks the branch.
     const source = subjects[0]?.drive;
     const mail = subjects[0]?.mail;
+    const { user } = useAuth();
+    const { data: myTeams } = useMyTeams();
+    // A sharee cannot write to the source's drive, so the picker starts there only when it is the viewer's or a team's.
+    const startsAtSource =
+        source?.ownerId === user?.id || !!myTeams?.some((team) => teamOwnerId(team.id) === source?.ownerId);
     const { mutateAsync: copyToFolder } = useCopyToFolder();
     const saveMailAttachments = useSaveMailAttachmentsToDrive();
     const items = subjects.flatMap((subject) => (subject.drive ? [subject.drive] : []));
@@ -68,8 +76,8 @@ export function SaveToDrivePicker({
             mode="folder"
             title={title ?? (count > 1 ? `Save ${count} files to Drive` : 'Save to Drive')}
             confirmLabel={confirmLabel ?? 'Save here'}
-            defaultOwnerId={source?.ownerId}
-            defaultMountId={source?.mountId}
+            defaultOwnerId={startsAtSource ? source?.ownerId : undefined}
+            defaultMountId={startsAtSource ? source?.mountId : undefined}
             onConfirm={async (location) => {
                 const target = {
                     targetOwnerId: location.ownerId,

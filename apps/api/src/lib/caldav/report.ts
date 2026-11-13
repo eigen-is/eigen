@@ -1,4 +1,4 @@
-import { ICS_CONTENT_TYPE } from '@workspace/lib/types/drive';
+import { ICS_CONTENT_TYPE } from '@workspace/lib/types/file-kinds';
 import type { Calendar } from '../calendar/calendar';
 import type { ResourceRow } from '../calendar/dav-store';
 import type { CalendarCollection } from '../calendar/resource-store';

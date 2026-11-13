@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getMailImportUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { EML_MIME } from '@workspace/lib/types/drive';
+import { EML_MIME } from '@workspace/lib/types/file-kinds';
 import type { FileImportSource } from '@workspace/lib/types/file-subject';
 import type { ImportMailResult } from '@workspace/lib/types/mail';
 import { toast } from 'sonner';

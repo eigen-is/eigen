@@ -5,8 +5,10 @@
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
 import { subjectFromPath } from '@workspace/lib/file-subject';
-import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
-import { isDocumentType, isFolderType, isInlineEditable } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { isDocumentType, isFolderType } from '@workspace/lib/types/drive';
+import type { DriveCapabilities } from '@workspace/lib/types/drive-view';
+import { isInlineEditable } from '@workspace/lib/types/file-kinds';
 import { useLayout } from '../layout/app/layout-context';
 import { usePreview } from '../preview-provider';
 import { useDriveQuickLook } from './use-drive-quick-look';
@@ -50,10 +52,9 @@ export function useDriveListRoute({
         } else if (isDocumentType(path.type)) {
             openDocument(path);
         } else if (isInlineEditable(path.mimeType, path.name)) {
-            navigate({
-                to: '/edit/$ownerId/$mountId/$pathId',
-                params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
-            });
+            // Widened like auth-route's `to`: this file compiles in every app's router, and only Drive has the editor.
+            const editorPath: string = `/edit/${path.ownerId}/${path.mountId}/${path.id}`;
+            navigate({ to: editorPath });
         } else {
             openPreview(subjectOf(path), items.map(subjectOf));
         }

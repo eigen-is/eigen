@@ -1,3 +1,7 @@
+// The Drive read hooks: one query each for a mount list, a root, a folder, a type list, a path, a breadcrumb
+// and the server-side previews of some file kinds, keyed by driveKeys so write hooks and drive events refresh
+// them. Views across the apps, such as Drive's folder view and a document app's index, read through them.
+
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { driveApi, emlPreviewRoute, icsPreviewRoute, vcardPreviewRoute } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
@@ -6,12 +10,12 @@ import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppError, retryWhenTransformBusy } from '../../api-error';
 import { driveKeys } from './keys';
 
-// GET MOUNTS
 export function useMounts(ownerId: string) {
     return useQuery({
         queryKey: driveKeys.mounts(ownerId),
@@ -25,7 +29,6 @@ export function useMounts(ownerId: string) {
     });
 }
 
-// GET ROOT FOLDER
 export function useRootFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     return useQuery({
         queryKey: driveKeys.root(ownerId, mountId),
@@ -39,16 +42,19 @@ export function useRootFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_I
     });
 }
 
-// GET FOLDER CONTENTS
+// The location with an empty folder id filled in as the mount's root, which stays empty until the root has loaded.
+export function useResolvedDriveLocation(value: DriveLocationValue): DriveLocationValue {
+    const { data: rootFolder } = useRootFolder(value.ownerId, value.mountId);
+    return value.folderId ? value : { ...value, folderId: rootFolder?.id ?? '' };
+}
+
 export function folderContentQueryConfig(ownerId: string, mountId: string, pathId: string) {
     return {
         queryKey: driveKeys.folder(ownerId, mountId, pathId),
         queryFn: async (): Promise<DrivePath[]> => {
             if (!pathId) return [];
             const response = await driveApi({ ownerId })({ mountId }).folder({ pathId }).get();
-            if (response.error) {
-                throw new AppError(response);
-            }
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         enabled: !!pathId && !!ownerId && !!mountId,
@@ -61,10 +67,8 @@ export function useFolderContent(ownerId: string, mountId: string, pathId: strin
     return useQuery(folderContentQueryConfig(ownerId, mountId, pathId));
 }
 
-// FOLDER LOOKUP — wraps useFolderContent with refetch-on-miss for name-based lookups.
-// When a collaborator uploads a file, Yjs propagates the name before our cache updates.
-// findByName() triggers a single refetch per unknown name, preventing infinite loops.
-// isMissing() reads true once that refetch settled without the name, so a renderer can stop waiting.
+// A collaborator's upload reaches a document's Yjs state before this cache, so a name that misses refetches
+// the folder once, and isMissing turns true when that refetch settled without it.
 export function useFolderLookup(ownerId: string, mountId: string, folderId: string | null) {
     const { data = [], refetch } = useFolderContent(ownerId, mountId, folderId || '');
     const attemptedRef = useRef(new Set<string>());
@@ -88,10 +92,8 @@ export function useFolderLookup(ownerId: string, mountId: string, folderId: stri
             const item = data.find((f) => f.name === name);
             if (!item && name && folderId && !attemptedRef.current.has(name)) {
                 attemptedRef.current.add(name);
-                // Consumers resolve names during render (image renderers, chat embeds), so the
-                // refetch kick must not setState here — that's an update to this hook's owner
-                // while a DIFFERENT component renders (React error). Defer to a microtask,
-                // collapsing a burst of misses (multi-file drop) into one refetch.
+                // Names resolve while other components render, where a state update here is a React error, so
+                // the refetch waits for a microtask, which also folds a burst of misses into one.
                 if (!refetchQueuedRef.current) {
                     refetchQueuedRef.current = true;
                     queueMicrotask(() => {
@@ -113,30 +115,12 @@ export function useFolderLookup(ownerId: string, mountId: string, folderId: stri
 
     const isMissing = useCallback((name: string): boolean => missing.has(name), [missing]);
 
-    // Stable return object — MediaResolver's context value memoizes on it, and a fresh
-    // literal per render would re-render every context subscriber (e.g. all board cards).
+    // A context value memoizes on this object, and a fresh one per render would re-render every subscriber.
     return useMemo(() => ({ contents: data, findByName, isMissing }), [data, findByName, isMissing]);
 }
 
-// GET MIME CONTENTS (aggregates over all mounts of one owner)
-export function useMimeContent(ownerId: string, mimeType: string) {
-    return useQuery({
-        queryKey: driveKeys.mime(ownerId, mimeType),
-        queryFn: async (): Promise<DrivePath[]> => {
-            if (!mimeType) return [];
-            const response = await driveApi({ ownerId }).mime({ mimeType }).get();
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
-        enabled: !!mimeType && !!ownerId,
-        retry: 1,
-        staleTime: STALE_TIME.FIVE_MINUTES,
-    });
-}
-
-// GET AGGREGATE MIME CONTENTS — personal + every team the signed-in user belongs to, merged and
-// deduped server-side (GET /drive/:ownerId/mime/:mimeType?teams=1). Always scoped to the current
-// user, so it reads useAuth itself rather than taking an ownerId.
+// The signed-in user's files of one type over their own drive and every team's, merged on the server, and
+// what others shared with them.
 export function useAggregateMimeContent(
     mimeType: string,
     staleTime: number = STALE_TIME.FIVE_MINUTES,
@@ -160,7 +144,6 @@ export function useAggregateMimeContent(
     });
 }
 
-// GET MIME CONTENTS scoped to a single mount
 export function mountMimeContentQueryConfig(ownerId: string, mountId: string, mimeType: string) {
     return {
         queryKey: driveKeys.mountMime(ownerId, mountId, mimeType),
@@ -180,7 +163,6 @@ export function useMountMimeContent(ownerId: string, mountId: string, mimeType: 
     return useQuery(mountMimeContentQueryConfig(ownerId, mountId, mimeType));
 }
 
-// GET PATH INFO
 export function usePathInfo(ownerId: string, mountId: string, pathId: string | undefined) {
     return useQuery({
         queryKey: driveKeys.path(ownerId, mountId, pathId || ''),
@@ -195,8 +177,7 @@ export function usePathInfo(ownerId: string, mountId: string, pathId: string | u
     });
 }
 
-// Batch variant — shares cache with usePathInfo so a path fetched here hits the
-// same `driveKeys.path` entry. Returns the underlying useQuery results in order.
+// Shares usePathInfo's cache entries, so a path fetched by either is fetched once.
 export function usePathInfos(refs: { ownerId: string; mountId: string; pathId: string }[]) {
     return useQueries({
         queries: refs.map((r) => ({
@@ -214,7 +195,6 @@ export function usePathInfos(refs: { ownerId: string; mountId: string; pathId: s
     });
 }
 
-// GET BREADCRUMB PATH
 export function useBreadcrumb(ownerId: string, mountId: string, pathId: string | undefined) {
     return useQuery({
         queryKey: driveKeys.breadcrumb(ownerId, mountId, pathId || ''),
@@ -229,7 +209,6 @@ export function useBreadcrumb(ownerId: string, mountId: string, pathId: string |
     });
 }
 
-// TEXT PREVIEW
 export function useTextPreview(
     ownerId: string,
     mountId: string,
@@ -247,22 +226,19 @@ export function useTextPreview(
             return response.data;
         },
         enabled: enabled && !!pathId && !!ownerId && !!mountId,
-        // Short window so a stale-while-revalidate preview (the previous version, served while
-        // the current one regenerates server-side) self-heals: after 30s the query is stale, so
-        // the next refetch trigger (window focus or remount) fetches the fresh copy.
+        // The server may answer with the previous version's preview while it builds the new one, so a short
+        // window lets the next focus or remount fetch the fresh copy.
         staleTime: STALE_TIME.THIRTY_SECONDS,
     });
 }
 
-// GET VCARD PREVIEW — the contact cards a .vcf holds, parsed server-side (PREVIEWS.md). The quick look
-// and the drive hero read the same query. The 30 s window is useTextPreview's: a new version may first be
-// answered with the previous one's cards; the query stays off a file the import ceiling would refuse anyway.
+// The contact cards a .vcf holds, parsed on the server. The short window is useTextPreview's, and the query
+// stays off a file the import ceiling would refuse anyway.
 export function useVCardPreview(ownerId: string, mountId: string, pathId: string, updatedAt: Date, size: number) {
     return useQuery({
         queryKey: driveKeys.vcardPreview(ownerId, mountId, pathId, updatedAt),
         queryFn: async () => {
-            // vcardPreviewRoute, not driveApi: a card's birthday is a date-only string, and the default
-            // treaty's reviver would hand the renderer a Date (api.ts).
+            // A card's birthday is a date-only string, which driveApi's reviver would turn into a Date.
             const response = await vcardPreviewRoute(ownerId, mountId, pathId).get({
                 query: { updatedAt: updatedAt.toISOString() },
             });
@@ -275,9 +251,7 @@ export function useVCardPreview(ownerId: string, mountId: string, pathId: string
     });
 }
 
-// GET EML PREVIEW — the message a .eml holds, parsed and sanitized server-side (PREVIEWS.md). Keyed by
-// `updatedAt` like the cards above, so a new version is a new entry; the route itself answers
-// `private, no-cache`, so a browser that already holds a body revalidates it.
+// The message a .eml holds, parsed and sanitized on the server, keyed by its version like the cards above.
 export function useEmlPreview(ownerId: string, mountId: string, pathId: string, updatedAt: Date, size: number) {
     return useQuery({
         queryKey: driveKeys.emlPreview(ownerId, mountId, pathId, updatedAt),
@@ -294,8 +268,7 @@ export function useEmlPreview(ownerId: string, mountId: string, pathId: string, 
     });
 }
 
-// GET ICS PREVIEW — the events an .ics holds, parsed server-side (PREVIEWS.md). Keyed by `updatedAt`
-// like the two above, so a new version is a new entry.
+// The events an .ics holds, parsed on the server, keyed by its version like the two above.
 export function useIcsPreview(ownerId: string, mountId: string, pathId: string, updatedAt: Date, size: number) {
     return useQuery({
         queryKey: driveKeys.icsPreview(ownerId, mountId, pathId, updatedAt),

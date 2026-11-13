@@ -2,8 +2,8 @@
 // a calendar, an address book, a mail message or a document. The source can live in any drive the user may
 // read, another owner's included, and SharedDrive checks that access.
 
-import type { DriveImportSource } from '@workspace/lib/types/drive';
 import { isContainerType } from '@workspace/lib/types/drive';
+import type { DriveImportSource } from '@workspace/lib/types/drive-convert';
 import { ApiError, payloadTooLarge } from '../core';
 import { readStorageFile } from '../storage';
 import type { User } from '../user';

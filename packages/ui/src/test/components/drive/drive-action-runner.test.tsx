@@ -20,6 +20,7 @@ const { CommandPaletteProvider } = await import(
     '../../../components/layout/app/command-palette/command-palette-provider'
 );
 const { DRIVE_CAPABILITIES } = await import('../../../components/drive/drive-capabilities');
+const { UploadProvider } = await import('../../../components/upload-provider/upload-provider');
 const { useDriveActionRunner } = await import('../../../components/drive/drive-action-runner');
 
 let unmount = async () => {};
@@ -68,7 +69,8 @@ async function renderRunner(onAfterAction?: (actionType: string, data: Record<st
     }
     const router = createRouter({
         routeTree: createRootRoute({
-            component: () => createElement(CommandPaletteProvider, null, createElement(Probe)),
+            component: () =>
+                createElement(UploadProvider, null, createElement(CommandPaletteProvider, null, createElement(Probe))),
         }),
         history: createMemoryHistory(),
     });

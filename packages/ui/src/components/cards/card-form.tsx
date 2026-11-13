@@ -6,7 +6,7 @@ import { wasToasted } from '@workspace/lib/api-error';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
-import type { EffectiveMember } from '@workspace/lib/types/drive';
+import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import { Button } from '@workspace/ui/components/button';
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';

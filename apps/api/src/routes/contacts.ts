@@ -3,7 +3,7 @@
 
 import { VCARD_CONTENT_TYPE, VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import type { Contact } from '@workspace/lib/types/contact';
-import { isVCardFile } from '@workspace/lib/types/drive';
+import { isVCardFile } from '@workspace/lib/types/file-kinds';
 import type { Label } from '@workspace/lib/types/label';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { Elysia, t } from 'elysia';

@@ -12,7 +12,8 @@ import {
     useDocumentPanels,
 } from '@workspace/lib/comments';
 import type { CardAttachmentDraft, CardFormPatch, CommentHover } from '@workspace/lib/types/comments';
-import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { VectorElement } from '@workspace/lib/vector';
 import { elementForCommentCard, parseIdList, serializeIdList } from '@workspace/lib/vector';
 import type { ComponentProps } from 'react';

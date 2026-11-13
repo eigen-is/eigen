@@ -1,9 +1,10 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setSystemTime, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { DrivePath, FileEditorContent } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileEvent } from '@workspace/lib/types/file-history';
 import { describeFileEvent, toFileEventType } from '@workspace/lib/types/file-history';
+import type { FileEditorContent } from '@workspace/lib/types/file-kinds';
 import type { Notification } from '@workspace/lib/types/notification';
 import { UNRESOLVED_TEAM_LABEL } from '@workspace/lib/types/owner';
 import type { SSEvent } from '@workspace/lib/types/sse';

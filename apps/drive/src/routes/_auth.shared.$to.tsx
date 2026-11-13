@@ -3,8 +3,10 @@
 // offers nothing that writes there, and a delete leaves the share.
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths, validateDriveSearch } from '@workspace/lib/drive';
-import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
+import { usePathInfo, useSharedPaths, validateDriveSearch } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveCapabilities } from '@workspace/lib/types/drive-view';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';

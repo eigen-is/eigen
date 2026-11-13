@@ -3,7 +3,7 @@
 // Each goes to the owner and to everyone who can read the path, such as a team's members or the
 // people a folder above it is shared with.
 
-import type { EffectiveMember } from '@workspace/lib/types/drive';
+import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { broadcastToOwnerAndMembers } from '../home/home-relay';

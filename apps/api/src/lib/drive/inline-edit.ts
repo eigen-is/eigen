@@ -5,7 +5,8 @@
 
 import { getBytesTextPreviewMode } from '@workspace/lib/constants';
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types';
-import type { DrivePath, EditorSaveResult, FileEditorContent } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { EditorSaveResult, FileEditorContent } from '@workspace/lib/types/file-kinds';
 import { enforceMountQuota } from '../config/enforcement';
 import { ApiError, computeEtag, StaleWriteError } from '../core';
 import type { Mount } from '../mount';

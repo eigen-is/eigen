@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
-import { ICS_MIME } from '@workspace/lib/types/drive';
+import { ICS_MIME } from '@workspace/lib/types/file-kinds';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { getServerConfig } from '../../lib/config/server-config';
 import { vcal } from '../ics-test-helpers';

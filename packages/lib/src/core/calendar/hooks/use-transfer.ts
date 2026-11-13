@@ -6,7 +6,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { calendarApi, getCalendarExportUrl, getCalendarImportUrl } from '@workspace/lib/api';
 import { parseOwnerId } from '@workspace/lib/types';
-import { ICS_MIME } from '@workspace/lib/types/drive';
+import { ICS_MIME } from '@workspace/lib/types/file-kinds';
 import type { FileImportSource } from '@workspace/lib/types/file-subject';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { useCallback, useRef } from 'react';

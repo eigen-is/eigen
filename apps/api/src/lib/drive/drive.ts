@@ -1,25 +1,11 @@
-// Drive is one owner's file tree, spread over the owner's mounts. It does the work behind every file
-// action, such as upload, move, trash, sharing and history, and tells open tabs what changed. A home
-// with files builds one Drive and destructs it when the home closes. Most routes reach it through
-// getSharedDrive, which checks access. The few owner-only routes check the owner themselves. Other
+// Drive is one owner's file tree, spread over the owner's mounts. It does the work behind every file action, such as
+// upload, move, trash, sharing and history, some of it in functions beside it that take the drive, and tells open
+// tabs what changed. A home with files builds one Drive and destructs it when the home closes. Most routes reach it
+// through getSharedDrive, which checks access, and the few owner-only routes check the owner themselves. Other
 // public methods serve server code, such as chat, collab and the home relay.
 
 import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
-import { CHATS_FOLDER_NAME } from '@workspace/lib/types/chat';
-import type {
-    DriveACL,
-    DriveACLDelta,
-    DriveAccessCheckResult,
-    DriveAccessRecipient,
-    DrivePath,
-    DrivePathDetails,
-    DrivePathType,
-    DriveVisibility,
-    EffectiveMember,
-    EigenDocType,
-    InviteResult,
-    RecentPath,
-} from '@workspace/lib/types/drive';
+import type { DrivePath, DrivePathDetails, DrivePathType, EigenDocType } from '@workspace/lib/types/drive';
 import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_FILE,
@@ -29,30 +15,32 @@ import {
     withEigenExtension,
 } from '@workspace/lib/types/drive';
 import type {
+    DriveACL,
+    DriveACLDelta,
+    DriveAccessCheckResult,
+    DriveVisibility,
+    EffectiveMember,
+    InviteResult,
+} from '@workspace/lib/types/drive-access';
+import type {
     ClientFileEventRecord,
     FileEvent,
     FileEventRecord,
     PathWatchStatus,
 } from '@workspace/lib/types/file-history';
-import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import type { MountConfig, MountInfo } from '@workspace/lib/types/mount';
-import { mountStorageIdentity } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
-import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
-import { ChatRoom, withCommentIndex } from '../chat';
-import { broadcastCommentIndexUpdated } from '../chat/sse-events';
+import { validateACLEntries } from '@workspace/lib/validation';
+import { ChatRoom } from '../chat';
 import { CollabDocument } from '../collab/collab-document';
 import { enforceMaxUploadSize, enforceMountQuota } from '../config/enforcement';
-import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError, computeEtag, storageGone } from '../core';
 import type { Home } from '../home';
 import { broadcastToOwnerAndMembers } from '../home/home-relay';
-import { composeCollaboratorsEmail } from '../mailer/mail-composers';
-import { sendMail } from '../mailer/mailer';
 import type { DatabaseHold } from '../mount';
 import { createMountConfig, DEFAULT_MOUNT_ID, Mount } from '../mount';
 import type { CopyTree } from '../mount/copy';
@@ -60,22 +48,19 @@ import { copySize } from '../mount/copy';
 import { nameTakenError } from '../mount/helpers';
 import { cleanName, validateName } from '../mount/names';
 import { extractText } from '../search/extract-text';
-import { getEntriesForTarget } from '../share';
 import type { FileBytes, StorageFile } from '../storage';
 import { writeTempWithHash } from '../storage';
 import type { Memberships, User } from '../user';
-import { getMemberships, getUserByEmail } from '../user';
+import { getMemberships } from '../user';
 import { deleteVersions } from '../versioning/delete';
 import { listVersions } from '../versioning/list';
 import { restoreContainer } from '../versioning/restore';
 import { saveVersion } from '../versioning/save';
 import {
-    canonicalACLId,
     canReadFromAncestors,
     canWriteFromAncestors,
     filterRedundantACL,
     findContainerFromAncestors,
-    grantsPublicRead,
     isInsideDocument,
     isTrashedChain,
     matchesACL,
@@ -84,13 +69,8 @@ import {
     refuseDocumentWrite,
 } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
-import {
-    addEffectiveMember,
-    diffACLPrincipals,
-    propagateSharedPathChange,
-    resolveACLToEmails,
-} from './acl-propagation';
-import { propagateAssignment } from './assignment-propagation';
+import { diffACLPrincipals, propagateSharedPathChange } from './acl-propagation';
+import { assignComment, ensureChatsFolder, seedCommentRow, setCommentStatus } from './chats';
 import { CollabRegistry } from './collab-registry';
 import type { DriveLike } from './get-drive';
 import { LockManager } from './lock-manager';
@@ -99,12 +79,8 @@ import type { RecentRow } from './recent';
 import { listRecent, touchRecent } from './recent';
 import type { SharedDb } from './shared';
 import { getSharedDatabase } from './shared';
-import {
-    listSharedOwnerIds,
-    listSharedWithMe,
-    listSharedWithMeByMimeType,
-    receiveSharedPathChange,
-} from './shared-with-me';
+import { listSharedOwnerIds, listSharedWithMe, receiveSharedPathChange } from './shared-with-me';
+import { checkAccessForEmails, emailCollaborators, inviteToChat, membersFromCrumbs } from './sharing';
 import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp } from './streaming';
 import { sweepCopy, sweepDocument } from './sweep';
@@ -122,6 +98,9 @@ export type ContentWriteResult = { path: DrivePath; etag: string };
 // The folder a copy lands in, reached as the copying user reaches it.
 export type CopyTarget = { drive: DriveLike; mountId: string; parentId: string };
 
+// A path another home's row names, such as a Recent or Shared with me row, with the row that named it.
+export type VisiblePath<Row> = { readonly row: Row; readonly path: DrivePath };
+
 const UNKNOWN_TYPE = 'application/octet-stream';
 
 export class Drive {
@@ -136,7 +115,7 @@ export class Drive {
     private defaultMountId: string = DEFAULT_MOUNT_ID;
     private sharedDb!: SharedDb;
     private readonly documents: CollabRegistry;
-    // The last change queued for each key, such as the ACL of one path or the settings of one mount.
+    // The last change queued for each key, such as the ACL of one path.
     private readonly chains = new Map<string, Promise<void>>();
 
     public constructor(home: Home) {
@@ -221,47 +200,10 @@ export class Drive {
         if (config.isDefault) this.defaultMountId = config.id;
     }
 
-    // Applies saved mount settings to the live mount. Two changes to one mount run in turn, or both could build a new
-    // mount and the one that lands last would leave the other open.
-    public async updateMount(config: MountConfig, enabled: boolean): Promise<void> {
-        return this.runInOrder(`mount:${config.id}`, async () => {
-            const live = this.mounts.get(config.id);
-            if (!enabled) {
-                if (live) await this.removeMount(config.id);
-                return;
-            }
-            if (!live) {
-                await this.addMount(config);
-                return;
-            }
-            // A mount binds its storage backend when built, so new storage needs a new mount. Closing the old one syncs
-            // its databases to the old storage, and the new one replays pending uploads when it starts.
-            if (mountStorageIdentity(live.config) !== mountStorageIdentity(config)) {
-                await this.removeMount(config.id);
-                await this.addMount(config);
-                return;
-            }
-            live.applyConfig(config);
-        });
-    }
-
-    private async removeMount(mountId: string): Promise<void> {
-        if (mountId === this.defaultMountId) {
-            throw new ApiError(400, 'Cannot remove default mount');
-        }
-        const mount = this.mounts.get(mountId);
-        if (!mount) return;
-        // The same order as destruct, for one mount: downloads stop, so no loading document keeps destructMount
-        // waiting, and documents close before the databases, so each saves its last edits.
-        mount.downloads.abort();
-        await this.documents.destructMount(mount);
-        // The mount can't serve anything by now, so it goes even when its databases fail to close.
-        try {
-            await mount.closeAllDatabases();
-        } catch (error) {
-            console.error(`Failed to close mount databases:`, error);
-        }
-        this.mounts.delete(mountId);
+    // Gives the live mount a saved name or quota. New storage or an on/off switch needs a fresh home, because a mount
+    // binds its storage when it opens.
+    public updateMount(config: MountConfig): void {
+        this.mounts.get(config.id)?.applyConfig(config);
     }
 
     public getMounts(): Mount[] {
@@ -280,15 +222,14 @@ export class Drive {
                 name: mount.name,
                 storageType: mount.config.storageType,
                 isDefault: id === this.defaultMountId,
-                totalSize: await mount.getTotalSize(),
-                fileCount: await mount.getFileCount(),
+                ...(await mount.getFileTotals()),
             });
         }
         return infos;
     }
 
     public async size(mountId: string): Promise<number> {
-        return this.getMount(mountId).getTotalSize();
+        return (await this.getMount(mountId).getFileTotals()).totalSize;
     }
 
     private getMount(mountId: string): Mount {
@@ -352,9 +293,7 @@ export class Drive {
         for (const mount of this.mounts.values()) {
             own.push(...(await mount.getPathsByMimeType(mimeTypePrefix)));
         }
-        const shared = await listSharedWithMeByMimeType(this.sharedDb, mimeTypePrefix);
-        const seen = new Set(own.map((path) => path.id));
-        return [...own, ...shared.filter((path) => !seen.has(path.id))];
+        return [...own, ...(await listSharedWithMe(this.sharedDb, this.owner, mimeTypePrefix))];
     }
 
     public async getMountMimeTypeContents(mountId: string, mimeTypePrefix: string): Promise<DrivePath[]> {
@@ -381,8 +320,9 @@ export class Drive {
         const pathId = await mount.createFolder(parentId, folderName);
         const folder = await mount.getPath(pathId);
         if (!folder) throw new ApiError(500, 'Failed to create folder');
-        this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder);
-        await this.recordFileEvent(mountId, folder.id, user, { eventType: 'created' }, { burst: true });
+        const members = this.membersToTell(mountId, folder.id);
+        this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder, { members });
+        await this.recordFileEvent(mountId, folder.id, user, { eventType: 'created' }, { burst: true, members });
         return folder;
     }
 
@@ -406,7 +346,7 @@ export class Drive {
         try {
             if (type === DRIVE_TYPE_CHAT) {
                 await ChatRoom.create(this, mount, pathId);
-                await this.seedCommentRow(mountId, pathId, parentId, user.email);
+                await seedCommentRow(this, mountId, pathId, parentId, user.email);
             } else {
                 await CollabDocument.create(this, mount, pathId);
             }
@@ -418,25 +358,33 @@ export class Drive {
         }
         const created = await mount.getPath(pathId);
         if (!created) throw new ApiError(500, `Failed to create ${type}`);
-        this.emit(SSEventType.DRIVE_FILE_CREATED, created);
+        const members = this.membersToTell(mountId, created.id);
+        this.emit(SSEventType.DRIVE_FILE_CREATED, created, { members });
         // Not a burst: a single new document gets its own notification.
-        await this.recordFileEvent(mountId, created.id, user, { eventType: 'created' });
+        await this.recordFileEvent(mountId, created.id, user, { eventType: 'created' }, { members });
         return created;
     }
 
-    // A chat created inside a document is a comment thread, so it gets its row in the document's
-    // comment index. A chat on its own has no document, and nothing to seed.
-    private async seedCommentRow(
-        mountId: string,
-        chatPathId: string,
-        parentId: string,
-        createdBy: string,
-    ): Promise<void> {
-        const container = await this.findContainerPath(mountId, parentId);
-        if (!container) return;
-        const chatPath = await this.getPath(mountId, chatPathId);
-        if (!chatPath) return;
-        await withCommentIndex(this, mountId, container.id, (index) => index.ensureComment(chatPath.name, createdBy));
+    // The folder a person's write adds a new child of type `adding` to, such as an upload or a copy.
+    private async personParent(mount: Mount, parentId: string, adding: DrivePathType): Promise<void> {
+        refuseDocumentWrite(await this.folderChain(mount, parentId), adding);
+    }
+
+    // The chain down to a live folder that a write puts a path in. A file holds nothing, so it is not found either.
+    private async folderChain(mount: Mount, folderId: string): Promise<DrivePath[]> {
+        const crumbs = await mount.getBreadcrumb(folderId);
+        const folder = crumbs.at(-1);
+        if (!folder || folder.trashedAt || !isContainerType(folder.type)) {
+            throw new ApiError(404, 'Parent folder not found');
+        }
+        return crumbs;
+    }
+
+    // The path a person's write changes, such as by a rename, a trash or new bytes.
+    private async personPath(mount: Mount, pathId: string): Promise<DrivePath> {
+        const path = await mount.getActivePath(pathId);
+        refuseDocumentWrite(await mount.getBreadcrumb(pathId));
+        return path;
     }
 
     public async uploadFiles(
@@ -556,36 +504,16 @@ export class Drive {
 
         // The file can be deleted or trashed right after the write. That is a 404, the same as during it.
         const updated = await mount.getActivePath(pathId);
-        this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
+        const members = this.membersToTell(mountId, pathId);
+        this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated, { members });
         await this.recordFileEvent(
             mountId,
             pathId,
             user,
             event === 'edited' ? { eventType: 'edited' } : { eventType: 'uploaded', details: { size: updated.size } },
+            { members },
         );
         return { path: committed, etag: computeEtag(committed) };
-    }
-
-    // The folder a person's write adds a new child of type `adding` to, such as an upload or a copy.
-    private async personParent(mount: Mount, parentId: string, adding: DrivePathType): Promise<void> {
-        refuseDocumentWrite(await this.folderChain(mount, parentId), adding);
-    }
-
-    // The chain down to a live folder that a write puts a path in. A file holds nothing, so it is not found either.
-    private async folderChain(mount: Mount, folderId: string): Promise<DrivePath[]> {
-        const crumbs = await mount.getBreadcrumb(folderId);
-        const folder = crumbs.at(-1);
-        if (!folder || folder.trashedAt || !isContainerType(folder.type)) {
-            throw new ApiError(404, 'Parent folder not found');
-        }
-        return crumbs;
-    }
-
-    // The path a person's write changes, such as by a rename, a trash or new bytes.
-    private async personPath(mount: Mount, pathId: string): Promise<DrivePath> {
-        const path = await mount.getActivePath(pathId);
-        refuseDocumentWrite(await mount.getBreadcrumb(pathId));
-        return path;
     }
 
     public async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {
@@ -611,9 +539,8 @@ export class Drive {
         await this.changePlace(mount, await this.personPath(mount, pathId), { name: newName }, user);
     }
 
-    // Puts a path in a folder under exactly this name, as a WebDAV MOVE asks: a move, a rename or both, in one write.
-    // What holds the name is replaced only after every check of the move has passed. `checkedId` is the path the
-    // caller found there and checked, or null for a free name.
+    // A WebDAV MOVE: a move, a rename or both in one write. What holds the name is replaced only once every check has
+    // passed, and `checkedId` is the path the caller found there and checked, or null for a free name.
     public async movePathOver(
         mountId: string,
         pathId: string,
@@ -634,7 +561,7 @@ export class Drive {
         const kept = await this.replaceOccupant(mount, destParentId, safeName, path, checkedId, user);
         if (kept) {
             // The bytes live on in the kept file, so the source goes for good, not to the trash.
-            await this.removePath(mountId, pathId, (_, source) => deleteForGood(this, mount, source, user));
+            await this.removePath(mountId, pathId, (_, source) => deleteForGood(this, mount, source));
             return kept;
         }
         const to = {
@@ -660,7 +587,7 @@ export class Drive {
         const newParentId = to.parentId;
         // Read before the move: whoever could see the path through its old folders, or watches one, hears that it left.
         const oldChain = newParentId ? await mount.getBreadcrumb(path.id) : [];
-        const oldMembers = newParentId ? await this.getEffectiveMembers(mount.id, path.id) : [];
+        const oldMembers = newParentId ? await this.membersToTell(mount.id, path.id) : [];
         // A file's type follows its name: a new extension with a known type gives the file that type. Bun answers
         // octet-stream for a name it doesn't know, and then the type stays.
         const named = to.name !== undefined && path.type === DRIVE_TYPE_FILE ? Bun.file(to.name).type : UNKNOWN_TYPE;
@@ -674,10 +601,11 @@ export class Drive {
             thumbnailInBackground(this, mount, updated, tempId, () => mount.downloadToTemp(path.id, tempId));
             mount.markContentDirty(path.id);
         }
+        const members = this.membersToTell(mount.id, path.id);
         if (newParentId) {
             this.emit(SSEventType.DRIVE_PATH_MOVED, updated, {
                 oldParentId,
-                members: this.getEffectiveMembers(mount.id, path.id).then((members) => [...oldMembers, ...members]),
+                members: members.then((reached) => [...oldMembers, ...reached]),
             });
         }
         if (newParentId && oldParentId) {
@@ -692,15 +620,12 @@ export class Drive {
                 details,
                 verifyAncestors: [...oldChain, ...(await mount.getBreadcrumb(path.id))],
             });
-            this.broadcastHistoryUpdated(mount.id, updated);
+            this.broadcastHistoryUpdated(mount.id, updated, members);
         }
         if (to.name !== undefined) {
-            this.emit(SSEventType.DRIVE_PATH_RENAMED, updated);
+            this.emit(SSEventType.DRIVE_PATH_RENAMED, updated, { members });
             const details = { oldName: path.name, newName: updated.name };
-            await this.recordFileEvent(mount.id, path.id, user, { eventType: 'renamed', details });
-            // The people the path is shared with keep a copy of it, and this gives them the new name. It reaches other
-            // homes, so it goes last. The actor stays null, because a rename must not email them.
-            await this.pushSharing(mount.id, path.id, 'live', null);
+            await this.recordFileEvent(mount.id, path.id, user, { eventType: 'renamed', details }, { members });
         }
         return updated;
     }
@@ -719,9 +644,8 @@ export class Drive {
         return this.withHomeHeld(() => to.drive.receiveCopy(to.mountId, to.parentId, source, src, desiredName, user));
     }
 
-    // Copies a path into a folder of its own mount under exactly this name, as a WebDAV COPY with Overwrite: T asks.
-    // What holds the name is replaced only after every check of the copy has passed. `checkedId` is as for
-    // movePathOver.
+    // A WebDAV COPY with Overwrite: T, into this mount under exactly this name. What holds the name is replaced only
+    // once every check has passed, and `checkedId` is as for movePathOver.
     public async copyPathOver(
         mountId: string,
         srcPathId: string,
@@ -819,9 +743,11 @@ export class Drive {
         const copied = copy.path;
         // The copy shows once, when it is whole. Only its top fans out too: everything under it is new, so nobody
         // watches it yet.
+        const members = this.membersToTell(mount.id, copied.id);
         this.emit(
             isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,
             copied,
+            { members },
         );
         await mount.history.fanOut({
             eventType: 'copied',
@@ -831,36 +757,8 @@ export class Drive {
             burst: true,
             verifyAncestors: await mount.getBreadcrumb(copied.id),
         });
-        this.broadcastHistoryUpdated(mount.id, copied);
+        this.broadcastHistoryUpdated(mount.id, copied, members);
         return copied;
-    }
-
-    // Writes a document's open databases to storage, so a byte copy of the container gets its latest state.
-    public async flushContainerDb(mountId: string, containerId: string): Promise<void> {
-        await this.getMount(mountId).flushContainerDb(containerId);
-    }
-
-    // The folder new chats go in, looked up by name every time, so the user may rename, move or delete it. A file of
-    // that name sends new chats to the mount root. The route checks ownership, so SharedDrive has no wrapper.
-    public async ensureChatsFolder(mountId: string, user: User): Promise<string> {
-        const mount = this.getMount(mountId);
-        const root = await mount.getRootFolder();
-        if (!root) throw new Error(`Mount '${mountId}' has no root folder`);
-
-        const existing = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
-        if (existing) return existing.type === DRIVE_TYPE_FOLDER ? existing.id : root.id;
-
-        // Drive.createFolder tells other tabs about the new folder. Two first chats at once both try to
-        // create it, and the one that loses the race uses the folder of the winner.
-        try {
-            return (await this.createFolder(mountId, root.id, CHATS_FOLDER_NAME, user)).id;
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 409) {
-                const winner = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
-                if (winner) return winner.type === DRIVE_TYPE_FOLDER ? winner.id : root.id;
-            }
-            throw err;
-        }
     }
 
     // ---- Trash ----
@@ -893,17 +791,6 @@ export class Drive {
         this.lockManager.releaseAllForPaths([pathId, ...mount.collectDescendantIds(pathId)]);
     }
 
-    // A depth-infinity WebDAV lock on any folder above a path covers it, so every lock check reads these.
-    public async ancestorIds(mountId: string, pathId: string): Promise<string[]> {
-        const crumbs = await this.getMount(mountId).getBreadcrumb(pathId);
-        return crumbs.slice(0, -1).map((crumb) => crumb.id);
-    }
-
-    // A WebDAV LOCK on a folder, and a write that takes one along, reaches the locks on everything under it.
-    public async descendantIds(mountId: string, pathId: string): Promise<string[]> {
-        return this.getMount(mountId).collectDescendantIds(pathId);
-    }
-
     public async restorePath(mountId: string, pathId: string, user: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
@@ -932,6 +819,19 @@ export class Drive {
         }
     }
 
+    // ---- WebDAV locks ----
+
+    // A depth-infinity WebDAV lock on any folder above a path covers it, so every lock check reads these.
+    public async ancestorIds(mountId: string, pathId: string): Promise<string[]> {
+        const crumbs = await this.getMount(mountId).getBreadcrumb(pathId);
+        return crumbs.slice(0, -1).map((crumb) => crumb.id);
+    }
+
+    // A WebDAV LOCK on a folder, and a write that takes one along, reaches the locks on everything under it.
+    public async descendantIds(mountId: string, pathId: string): Promise<string[]> {
+        return this.getMount(mountId).collectDescendantIds(pathId);
+    }
+
     // ---- Access and sharing ----
 
     public async canRead(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
@@ -946,9 +846,8 @@ export class Drive {
         return canWriteFromAncestors(ancestors, user, memberships ?? (await getMemberships(user.id)));
     }
 
-    // Routes change an ACL only through here, merged onto the ACL as it is now. Two changes to one path run in turn, or
-    // the one that writes last would drop the entries of the other. A path in the trash keeps its ACL as it is, because
-    // the restore shares it again with the same people.
+    // Merged onto the ACL as it is now, one change per path at a time, or the later write would drop the other's
+    // entries. A path in the trash keeps its ACL as it is, because the restore shares it again.
     public async updateACLDelta(
         mountId: string,
         pathId: string,
@@ -981,33 +880,23 @@ export class Drive {
             if (sharingRestricted !== undefined) updates.sharingRestricted = sharingRestricted;
             const oldACL = item.acl;
             const updatedItem = await mount.updatePath(pathId, updates);
-            this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
+            const members = this.membersToTell(mountId, pathId);
+            this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem, { members });
             if (actor) {
                 const { added, removed } = diffACLPrincipals(oldACL, normalizedACL);
                 if (added.length || removed.length) {
-                    await this.recordFileEvent(mountId, pathId, actor, {
-                        eventType: 'acl-changed',
-                        details: { added, removed },
-                    });
+                    const details = { added, removed };
+                    await this.recordFileEvent(
+                        mountId,
+                        pathId,
+                        actor,
+                        { eventType: 'acl-changed', details },
+                        { members },
+                    );
                 }
             }
-            // The copies in the homes of the people it is shared with go last, as they reach other homes.
+            // The homes of the people it is shared with hear last, as that reaches other homes.
             await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
-        });
-    }
-
-    // Sends a path's sharing to its homes after a change that keeps its ACL, such as a rename. It runs in the path's
-    // ACL chain, so it can't overtake an ACL change and bring back a removed sharee.
-    public async pushSharing(
-        mountId: string,
-        pathId: string,
-        state: 'live' | 'trashed',
-        actor: User | null,
-    ): Promise<void> {
-        return this.runInOrder(`acl:${mountId}:${pathId}`, async () => {
-            const path = await this.getMount(mountId).getPath(pathId);
-            if (!path?.acl || (path.trashedAt !== null) !== (state === 'trashed')) return;
-            await propagateSharedPathChange(path, path.acl, state === 'live' ? path.acl : null, actor);
         });
     }
 
@@ -1017,73 +906,29 @@ export class Drive {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
         if (!path) throw new ApiError(404, 'Path not found');
-        return this.membersFromCrumbs(await mount.getBreadcrumb(pathId));
+        return membersFromCrumbs(this.owner, await mount.getBreadcrumb(pathId));
     }
 
-    // The members to tell about a change to the path. An unshared path in a user's home has nobody but the owner, so
-    // the answer costs one breadcrumb read and no account lookup, which halves what such an event costs.
-    private async membersToTell(mountId: string, pathId: string): Promise<EffectiveMember[]> {
-        const crumbs = await this.getMount(mountId).getBreadcrumb(pathId);
+    // A folder's change also reaches the sharees of the paths shared below it, as their Shared with me shows those
+    // where they live. An unshared path in a user's home has only its owner, so it costs no account lookup.
+    public async membersToTell(mountId: string, pathId: string): Promise<EffectiveMember[]> {
+        const mount = this.getMount(mountId);
+        const crumbs = await mount.getBreadcrumb(pathId);
+        const path = crumbs.at(-1);
+        const sharedBelow = path?.type === DRIVE_TYPE_FOLDER ? await mount.getPathsWithACL(path.id) : [];
+        const reached = [...crumbs, ...sharedBelow.filter((below) => !below.trashedAt)];
         const shared =
             parseOwnerId(this.owner.id).type === 'team' ||
-            (!isTrashedChain(crumbs) && crumbs.some((crumb) => crumb.acl?.length));
-        return shared ? this.membersFromCrumbs(crumbs) : [];
+            (!isTrashedChain(crumbs) && reached.some((crumb) => crumb.acl?.length));
+        return shared ? membersFromCrumbs(this.owner, reached) : [];
     }
 
-    // Takes the breadcrumb, so a caller that read one already reads no second. A path in the trash is its owner's
-    // alone, so the ACLs of its chain let nobody else in until the restore.
-    private async membersFromCrumbs(crumbs: DrivePath[]): Promise<EffectiveMember[]> {
-        const allACL = isTrashedChain(crumbs) ? [] : crumbs.flatMap((crumb) => crumb.acl ?? []);
-
-        // Every member of a team has full access to the team's drive. So the team goes in as one more
-        // ACL entry, and resolveACLToEmails turns it into its members.
-        const parsed = parseOwnerId(this.owner.id);
-        if (parsed.type === 'team') {
-            allACL.push({ id: this.owner.id, read: true, write: true });
-        }
-
-        const members = await resolveACLToEmails(allACL);
-        if (parsed.type !== 'team' && this.owner.email) {
-            addEffectiveMember(members, this.owner.email, true, true);
-        }
-        return [...members.values()];
-    }
-
-    // For the dialog that mails a link: for each address, whether that person can already read the path and whether an
-    // admin must let them in as a guest first. The owner may always share.
     public async checkAccessForEmails(
         mountId: string,
         pathId: string,
-        emails: string[],
+        emails: readonly string[],
     ): Promise<DriveAccessCheckResult> {
-        // An empty breadcrumb means the path is gone.
-        const crumbs = await this.getMount(mountId).getBreadcrumb(pathId);
-        if (crumbs.length === 0) throw new ApiError(404, 'Path not found');
-
-        const members = await this.membersFromCrumbs(crumbs);
-        const memberByEmail = new Map(members.map((m) => [m.email, m]));
-        const ancestorPublic = !isTrashedChain(crumbs) && crumbs.some((crumb) => grantsPublicRead(crumb.visibility));
-        const openSignup = getServerSettings().guests.openSignup;
-
-        const recipients: DriveAccessRecipient[] = [];
-        const seen = new Set<string>();
-        for (const rawEmail of emails) {
-            const email = rawEmail.toLowerCase();
-            // Sending accepts some addresses that sharing refuses, such as a domain without a dot.
-            // Sharing with those would only fail.
-            if (!validateEmailAddress(email) || seen.has(email)) continue;
-            seen.add(email);
-            // An entry may grant write without read, so only the read flag counts here.
-            const hasReadAccess = ancestorPublic || (memberByEmail.get(email)?.read ?? false);
-            // Only an unknown address can need an admin, and only when signup is closed.
-            let needsGuestAdmission = false;
-            if (!openSignup && !(await getUserByEmail(email))) {
-                needsGuestAdmission = (await getEntriesForTarget(email)).length === 0;
-            }
-            recipients.push({ email, hasReadAccess, needsGuestAdmission });
-        }
-
-        return { canShare: true, recipients };
+        return checkAccessForEmails(this.owner, this.getMount(mountId), pathId, emails);
     }
 
     public async emailCollaborators(
@@ -1094,19 +939,7 @@ export class Drive {
         sendCopyToSelf: boolean,
         sender: User,
     ): Promise<{ sent: number }> {
-        const path = await this.getPath(mountId, pathId);
-        if (!path) throw new ApiError(404, 'Path not found');
-
-        const members = await this.getEffectiveMembers(mountId, pathId);
-        const self = sender.email.toLowerCase();
-        const recipients = members.filter((m) => sendCopyToSelf || m.email !== self);
-
-        const results = await Promise.allSettled(
-            recipients.map((member) =>
-                sendMail(composeCollaboratorsEmail(path, subject, message, sender, member.email)),
-            ),
-        );
-        return { sent: results.filter((r) => r.status === 'fulfilled' && r.value).length };
+        return emailCollaborators(this, mountId, pathId, subject, message, sendCopyToSelf, sender);
     }
 
     // The outermost document at or above the path, or null when there is none, such as for a chat on its own.
@@ -1114,8 +947,6 @@ export class Drive {
         return findContainerFromAncestors(await this.getMount(mountId).getBreadcrumb(pathId));
     }
 
-    // Gives someone access to a chat: a chat inside a document shares the document, whose ACL is the one that counts.
-    // A checked target is shared as it is, so a move in between can't share a document nobody checked.
     public async inviteToChat(
         mountId: string,
         chatId: string,
@@ -1123,43 +954,29 @@ export class Drive {
         actor: User | null = null,
         checkedTarget?: DrivePath,
     ): Promise<InviteResult> {
-        if (!validateEmailAddress(email)) {
-            throw new ApiError(400, 'Invalid email address');
-        }
-
-        let targetPath = checkedTarget;
-        if (!targetPath) {
-            const chatPath = await this.getPath(mountId, chatId);
-            if (!chatPath) throw new ApiError(404, 'Chat not found');
-            targetPath = (await this.findContainerPath(mountId, chatPath.parentId ?? '')) ?? chatPath;
-        }
-
-        const id = canonicalACLId(email);
-        if (targetPath.acl?.some((entry) => canonicalACLId(entry.id) === id)) {
-            return { alreadyHasAccess: true, targetPathId: targetPath.id };
-        }
-
-        await this.updateACLDelta(
-            mountId,
-            targetPath.id,
-            { add: [{ id, read: true, write: true }] },
-            undefined,
-            undefined,
-            actor,
-        );
-        return { alreadyHasAccess: false, targetPathId: targetPath.id };
+        return inviteToChat(this, mountId, chatId, email, actor, checkedTarget);
     }
 
     // The paths of this owner whose own ACL lets the user read them, directly or through a team.
     public async getSharedWith(user: User): Promise<DrivePath[]> {
-        const shared = await this.getSharedPathsByMe();
-        const memberships = await getMemberships(user.id);
-        return shared.filter((path) => path.acl && matchesACL(path.acl, user, memberships, 'read'));
+        return (await this.getAllSharedWith(user)).filter((path) => !path.trashedAt);
     }
 
-    // Every path of this owner that has an ACL. Only the owner may see this list, so SharedDrive has
+    // Trashed paths included, because a restore pushes nothing: a pointer to one stays out of Shared with me until then.
+    public async getAllSharedWith(user: User): Promise<DrivePath[]> {
+        const memberships = await getMemberships(user.id);
+        return (await this.pathsWithACL()).filter(
+            (path) => path.acl && matchesACL(path.acl, user, memberships, 'read'),
+        );
+    }
+
+    // Every live path of this owner that has an ACL. Only the owner may see this list, so SharedDrive has
     // no wrapper for it.
     public async getSharedPathsByMe(): Promise<DrivePath[]> {
+        return (await this.pathsWithACL()).filter((path) => !path.trashedAt);
+    }
+
+    private async pathsWithACL(): Promise<DrivePath[]> {
         const shared: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
             shared.push(...(await mount.getPathsWithACL()));
@@ -1167,17 +984,17 @@ export class Drive {
         return shared;
     }
 
-    // What other owners shared with this one. The list is this owner's own state, so SharedDrive has
-    // no wrapper for it.
+    // What other owners shared with this one, each path read from its owner. The list is this owner's own state, so
+    // SharedDrive has no wrapper for it.
     public async getSharedPathsWithMe(): Promise<DrivePath[]> {
-        return listSharedWithMe(this.sharedDb);
+        return listSharedWithMe(this.sharedDb, this.owner);
     }
 
     public async getSharedOwnerIds(): Promise<string[]> {
         return listSharedOwnerIds(this.sharedDb);
     }
 
-    // Another owner changed the sharing of one of their paths, and this home keeps its copy up to date.
+    // Another owner changed the sharing of one of their paths, and this home adds or removes its row for it.
     public async receiveSharedPathChange(
         path: DrivePath,
         newACL: DriveACL[] | null,
@@ -1198,23 +1015,25 @@ export class Drive {
         return listRecent(this.sharedDb);
     }
 
-    // The paths of this owner that another home's rows name and the user may still read. It deletes no row, as a
-    // failed read looks like a deleted file.
-    public async getRecentPathsFor(
+    // The paths of this owner that another home's rows name and the user may still read, each with its row. It
+    // deletes no row, as a failed read looks like a deleted file.
+    public async getVisiblePaths<Row extends { mountId: string; pathId: string }>(
         user: User,
         memberships: Memberships,
-        rows: readonly RecentRow[],
-    ): Promise<RecentPath[]> {
-        const found: RecentPath[] = [];
+        rows: readonly Row[],
+        mimeTypePrefix = '',
+    ): Promise<VisiblePath<Row>[]> {
+        const found: VisiblePath<Row>[] = [];
         for (const [mountId, mountRows] of Map.groupBy(rows, (row) => row.mountId)) {
             const mount = this.mounts.get(mountId);
             if (!mount) continue;
             const chains = await mount.getBreadcrumbs(mountRows.map((row) => row.pathId));
             for (const [i, chain] of chains.entries()) {
                 const path = chain.at(-1);
-                if (!path || path.parentId === null || isTrashedChain(chain) || isInsideDocument(chain)) continue;
+                if (!path || path.parentId === null || !path.mimeType.startsWith(mimeTypePrefix)) continue;
+                if (isTrashedChain(chain) || isInsideDocument(chain)) continue;
                 if (!canReadFromAncestors(chain, user, memberships)) continue;
-                found.push({ ...path, lastActivityAt: mountRows[i].lastActivityAt });
+                found.push({ row: mountRows[i], path });
             }
         }
         return found;
@@ -1230,8 +1049,11 @@ export class Drive {
         return ChatRoom.open(this, this.home, path);
     }
 
-    // The server's comment index holds who is assigned, so the history row is written here and not from a client event,
-    // and only for an assignment. The assignee gets a direct notification, so the watchers' copy skips them.
+    // The route checks ownership, so SharedDrive has no wrapper.
+    public async ensureChatsFolder(mountId: string, user: User): Promise<string> {
+        return ensureChatsFolder(this, mountId, user);
+    }
+
     public async assignComment(
         mountId: string,
         pathId: string,
@@ -1240,42 +1062,7 @@ export class Drive {
         user: User,
         title?: string,
     ): Promise<void> {
-        const assignee = assigneeEmail ? assigneeEmail.toLowerCase() : null;
-        // Read once for the check and the broadcast, because it walks the whole ACL.
-        let members: EffectiveMember[] | undefined;
-        if (assignee) {
-            members = await this.getEffectiveMembers(mountId, pathId);
-            if (!members.some((member) => member.email === assignee)) {
-                throw new ApiError(400, 'Assignee is not a member of this document');
-            }
-        }
-        const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
-        const changed = await withCommentIndex(this, mountId, pathId, async (index) => {
-            const current = await index.get(chatName);
-            if (!current) throw new ApiError(404, 'Comment thread not found');
-            // The client sends the card title, which may have changed in the same edit. So the title is
-            // saved even when the assignee stays the same.
-            if (card) await index.setTitle(chatName, card);
-            const assigneeChanged = current.assignee !== assignee;
-            if (assigneeChanged) await index.assign(chatName, assignee);
-            return assigneeChanged;
-        });
-        if (changed && assignee) {
-            await this.recordFileEvent(
-                mountId,
-                pathId,
-                user,
-                { eventType: 'assigned', details: { assignee, card, chatName } },
-                { excludeEmails: new Set([assignee]) },
-            );
-        }
-        broadcastCommentIndexUpdated(this, this.owner.id, mountId, pathId, members).catch(() => {});
-        if (changed && assignee && assignee !== user.email.toLowerCase()) {
-            // The assignment stands whatever happens to the notice, such as a home a restore holds.
-            await this.resolveFile(mountId, pathId)
-                .then(({ path }) => propagateAssignment(path, chatName, assignee, user, card))
-                .catch((err) => console.error('Failed to propagate assignment:', err));
-        }
+        return assignComment(this, this.owner.id, mountId, pathId, chatName, assigneeEmail, user, title);
     }
 
     public async setCommentStatus(
@@ -1286,16 +1073,7 @@ export class Drive {
         user: User,
         title?: string,
     ): Promise<void> {
-        const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
-        await withCommentIndex(this, mountId, pathId, async (index) => {
-            if (!(await index.get(chatName))) throw new ApiError(404, 'Comment thread not found');
-            if (card) await index.setTitle(chatName, card);
-            if (status === 'resolved') await index.resolve(chatName, user.email);
-            else await index.reopen(chatName);
-        });
-        const eventType = status === 'resolved' ? 'resolved' : 'reopened';
-        await this.recordFileEvent(mountId, pathId, user, { eventType, details: { card, chatName } });
-        broadcastCommentIndexUpdated(this, this.owner.id, mountId, pathId).catch(() => {});
+        return setCommentStatus(this, this.owner.id, mountId, pathId, chatName, status, user, title);
     }
 
     // ---- Collab documents and versions ----
@@ -1364,7 +1142,12 @@ export class Drive {
         pathId: string,
         actor: User,
         event: FileEventRecord,
-        opts?: { excludeEmails?: Set<string>; dedupeWindowMs?: number; burst?: boolean },
+        opts?: {
+            excludeEmails?: Set<string>;
+            dedupeWindowMs?: number;
+            burst?: boolean;
+            members?: Promise<EffectiveMember[]>;
+        },
     ): Promise<void> {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
@@ -1380,7 +1163,7 @@ export class Drive {
             details: event.details,
             verifyAncestors: () => mount.getBreadcrumb(pathId),
         });
-        this.broadcastHistoryUpdated(mountId, path);
+        this.broadcastHistoryUpdated(mountId, path, opts?.members);
     }
 
     public async recordClientFileEvent(
@@ -1394,8 +1177,12 @@ export class Drive {
 
     // Refreshes the open Activity panels of the owner and of everyone the path is shared with. Nobody
     // waits for it, so a failed broadcast never fails or slows the change itself.
-    private broadcastHistoryUpdated(mountId: string, path: DrivePath): void {
-        broadcastFileHistoryUpdated(this.owner.id, path, this.membersToTell(mountId, path.id)).catch(() => {});
+    private broadcastHistoryUpdated(
+        mountId: string,
+        path: DrivePath,
+        members = this.membersToTell(mountId, path.id),
+    ): void {
+        broadcastFileHistoryUpdated(this.owner.id, path, members).catch(() => {});
     }
 
     public async watchPath(mountId: string, pathId: string, user: User): Promise<void> {
@@ -1428,6 +1215,11 @@ export class Drive {
     }
 
     // ---- Document databases ----
+
+    // Writes a document's open databases to storage, so a byte copy of the container gets its latest state.
+    public async flushContainerDb(mountId: string, containerId: string): Promise<void> {
+        await this.getMount(mountId).flushContainerDb(containerId);
+    }
 
     // Runs fn with the database open, such as a chat room's data.db for one request. It closes after
     // a few idle minutes.

@@ -6,7 +6,7 @@ import { DOCX_MIME, PPTX_MIME, XLSX_MIME } from '../../constants/mime';
 import { fileActionsFor } from '../../core/file-actions';
 import { subjectFromMailAttachment, subjectFromPath } from '../../core/file-subject';
 import type { DrivePath, DrivePathType } from '../../types/drive';
-import { EML_MIME, ICS_MIME } from '../../types/drive';
+import { EML_MIME, ICS_MIME } from '../../types/file-kinds';
 import type { FileActionId, FileSubject } from '../../types/file-subject';
 
 function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): DrivePath {

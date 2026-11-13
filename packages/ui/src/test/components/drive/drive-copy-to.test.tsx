@@ -3,6 +3,7 @@
 // The Move to… picker starts in its item's drive, and a move into another drive is refused.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -32,10 +33,12 @@ const g = globalThis as any;
 
 // The source ids the copy or move route was asked for, in order. The source `bad` always fails.
 const posted: string[] = [];
+// The picker confirms the root of its drive, so every drive here has one.
+const root = drivePath({ id: 'root', name: 'Drive', mimeType: DRIVE_MIME_FOLDER, type: 'folder' });
 g.fetch = async (input: string | URL | Request) => {
     const url = input instanceof Request ? input.url : String(input);
     const sourceId = /\/path\/([^/]+)\/(?:copy|move)$/.exec(url)?.[1];
-    if (!sourceId) return Response.json([]);
+    if (!sourceId) return Response.json(url.endsWith('/root') ? root : []);
     posted.push(sourceId);
     if (sourceId === 'bad') return new Response('No access', { status: 403 });
     return Response.json(drivePath({ id: `copy-of-${sourceId}`, name: 'copy.txt', mimeType: 'text/plain' }));
@@ -47,6 +50,7 @@ const { CommandPaletteProvider } = await import(
     '../../../components/layout/app/command-palette/command-palette-provider'
 );
 const { DRIVE_CAPABILITIES } = await import('../../../components/drive/drive-capabilities');
+const { UploadProvider } = await import('../../../components/upload-provider/upload-provider');
 const { useDriveActionRunner } = await import('../../../components/drive/drive-action-runner');
 
 let unmount = async () => {};
@@ -82,13 +86,16 @@ async function openPicker(id: 'copy-to' | 'move-to', picked: DrivePath[]) {
     posted.length = 0;
     const router = createRouter({
         routeTree: createRootRoute({
-            component: () => createElement(CommandPaletteProvider, null, createElement(Probe)),
+            component: () =>
+                createElement(UploadProvider, null, createElement(CommandPaletteProvider, null, createElement(Probe))),
         }),
         history: createMemoryHistory(),
     });
     await router.load();
     ({ unmount } = await renderInDocument(createElement(RouterProvider, { router })));
     await act(async () => run(id, picked));
+    // The root loads.
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
 test.each([

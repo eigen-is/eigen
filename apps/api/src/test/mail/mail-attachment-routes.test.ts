@@ -3,7 +3,7 @@ import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { MAILBOX_DRAFTS } from '@workspace/lib/constants/mailboxes';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
-import { EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
+import { EML_MIME, ICS_MIME } from '@workspace/lib/types/file-kinds';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { eq } from 'drizzle-orm';

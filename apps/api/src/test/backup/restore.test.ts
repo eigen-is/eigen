@@ -45,7 +45,7 @@ import { ApiError } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import * as dataEpochModule from '../../lib/home/data-epoch';
 import { getDataEpoch } from '../../lib/home/data-epoch';
-import { clearHomeRestoring, getHome, loadedHome, markHomeRestoring } from '../../lib/home/get-home';
+import { clearHomeRestoring, evictHome, getHome, loadedHome, markHomeRestoring } from '../../lib/home/get-home';
 import { createSSEStream } from '../../lib/home/sse-stream';
 import { createMountConfig } from '../../lib/mount';
 import { paths } from '../../lib/mount/schema';
@@ -1492,10 +1492,10 @@ describe('Backup restore of a disabled mount', () => {
             new File([TEST_PNG_BYTES], 'archived.png', { type: 'image/png' }),
         );
 
-        const off = await home.settings.set({
+        await home.settings.set({
             mounts: { [DISABLED_MOUNT_ID]: { ...on.mounts![DISABLED_MOUNT_ID], enabled: false } },
         });
-        await home.drive.updateMount(createMountConfig(DISABLED_MOUNT_ID, off.mounts![DISABLED_MOUNT_ID]), false);
+        await evictHome(user.id);
 
         const artifact = await backup(user.id, new Date());
         const mountDir = join(TEST_DATA_DIR, 'home', user.id, 'mounts', DISABLED_MOUNT_ID);
@@ -1537,7 +1537,7 @@ describe('Backup restore of a disabled mount', () => {
 
         // Turned off and pointed at a bucket nothing answers: what a mount an admin disabled after
         // its storage died looks like on the next backup.
-        const off = await home.settings.set({
+        await home.settings.set({
             mounts: {
                 [SKIPPED_MOUNT_ID]: {
                     ...on.mounts![SKIPPED_MOUNT_ID],
@@ -1553,7 +1553,7 @@ describe('Backup restore of a disabled mount', () => {
                 },
             },
         });
-        await home.drive.updateMount(createMountConfig(SKIPPED_MOUNT_ID, off.mounts![SKIPPED_MOUNT_ID]), false);
+        await evictHome(user.id);
 
         let manifest: BackupManifest | undefined;
         const artifact = await backup(user.id, new Date(), (written) => {
@@ -1597,10 +1597,10 @@ describe('Backup restore of a disabled mount', () => {
             root.id,
             new File([TEST_PNG_BYTES], 'passive.png', { type: 'image/png' }),
         );
-        const off = await home.settings.set({
+        await home.settings.set({
             mounts: { [PASSIVE_MOUNT_ID]: { ...on.mounts![PASSIVE_MOUNT_ID], enabled: false } },
         });
-        await home.drive.updateMount(createMountConfig(PASSIVE_MOUNT_ID, off.mounts![PASSIVE_MOUNT_ID]), false);
+        await evictHome(user.id);
 
         const mountDir = join(TEST_DATA_DIR, 'home', user.id, 'mounts', PASSIVE_MOUNT_ID);
         rmSync(join(mountDir, 'tmp'), { recursive: true, force: true });

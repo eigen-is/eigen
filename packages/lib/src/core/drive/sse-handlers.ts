@@ -15,7 +15,6 @@ import { invalidateVersions } from '../versioning/hooks/keys';
 import {
     driveKeys,
     forgetPath,
-    invalidateAclSharedOrUnshared,
     invalidateAclUpdated,
     invalidateBreadcrumbs,
     invalidateEffectiveMembers,
@@ -77,7 +76,7 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
         case SSEventType.DRIVE_ACL_SHARED:
         case SSEventType.DRIVE_ACL_UNSHARED:
         case SSEventType.DRIVE_ACL_UPDATED:
-            invalidateAclSharedOrUnshared(queryClient, userId);
+            invalidateViewerListsSoon(queryClient, userId);
             invalidateAclUpdated(queryClient, path);
             invalidateEffectiveMembers(queryClient, path.ownerId);
             invalidateFileHistory(queryClient, path.ownerId);

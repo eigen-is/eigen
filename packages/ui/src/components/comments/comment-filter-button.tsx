@@ -4,7 +4,7 @@
 import type { useCommentFilter } from '@workspace/lib/comments';
 import { COMMENT_STATUS_FILTERS, COMMENT_STATUS_LABELS } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
-import type { EffectiveMember } from '@workspace/lib/types/drive';
+import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import { Button } from '@workspace/ui/components/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Tabs, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';

@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
+import { EML_MIME, ICS_MIME } from '@workspace/lib/types/file-kinds';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq } from 'drizzle-orm';

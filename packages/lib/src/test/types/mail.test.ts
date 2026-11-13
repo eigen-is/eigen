@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isIcsMime } from '../../types/drive';
+import { isIcsMime } from '../../types/file-kinds';
 import { isCalendarPart, mailAttachmentName } from '../../types/mail';
 
 describe('mailAttachmentName', () => {

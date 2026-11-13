@@ -2,7 +2,7 @@
 // metadata.db holds the tree of files and folders, and a storage backend holds the bytes, such as name
 // paths on local disk or objects in an S3 bucket. Drive calls it for every file read and change, and a
 // backup opens one to read a mount the home does not serve. Some of its work lives in sibling modules,
-// such as trash, copy, search and the document databases.
+// such as trash, copy, search, sizes, temp files and the document databases.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -10,7 +10,7 @@ import { isSearchableTextFile } from '@workspace/lib/constants';
 import { CHATS_FOLDER_NAME } from '@workspace/lib/types/chat';
 import type { DriveContainerType, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
-import type { MountConfig } from '@workspace/lib/types/mount';
+import type { MountConfig, MountInfo } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { CONTROL_CHARS } from '@workspace/lib/validation';
 import { and, eq, isNull, sql } from 'drizzle-orm';
@@ -18,12 +18,12 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { RWLock } from '../../utils/rw-lock';
 import { PATHS } from '../config/paths';
 import { getServerSettings } from '../config/server-settings';
-import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
-import { ApiError, computeEtag, matchesIfMatch, StaleWriteError, storageGone } from '../core';
+import type { DatabaseConfig, Tx as DatabaseTx, ManagedDatabase, SchemaType } from '../core';
+import { ApiError, computeEtag, matchesIfMatch, StaleWriteError } from '../core';
 import { FileHistory } from '../drive/history';
 import { deleteThumbnail } from '../shared/thumbnails';
 import type { StorageBackend, StorageFile } from '../storage';
-import { isMissingObjectCause, readStorageFile, writeTempWithHash } from '../storage';
+import { readStorageFile } from '../storage';
 import type { User } from '../user';
 import type { RetentionPolicy } from '../versioning/retention';
 import * as snapshot from '../versioning/snapshot';
@@ -49,6 +49,8 @@ import { buildStorageKey, foldName, MAX_FOLDER_DEPTH, trashStorageKey, validateN
 import type * as schema from './schema';
 import { paths } from './schema';
 import * as searchIndex from './search-index';
+import * as sizes from './sizes';
+import * as tempFiles from './temp-files';
 import * as trash from './trash';
 import { UploadQueue } from './upload-queue';
 
@@ -57,7 +59,7 @@ type LocalDatabaseGetter = <S extends SchemaType>(
     relativePath: string,
 ) => Promise<ManagedDatabase<S>>;
 
-type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>[0]>[0];
+type Tx = DatabaseTx<typeof schema>;
 
 type FolderLocks = { paths: Map<string, Promise<void>>; tree: RWLock };
 
@@ -212,8 +214,8 @@ export class Mount {
 
         // A temp file older than an hour is left over from an interrupted upload or a crash. A document's
         // crash-recovery copy stays.
-        this.cleanupStaleFiles(this.tmpDir, 60 * 60 * 1000, true);
-        this.cleanupStaleFiles(this.previewsDir, 7 * 24 * 60 * 60 * 1000);
+        tempFiles.cleanupStaleFiles(this, this.tmpDir, 60 * 60 * 1000, true);
+        tempFiles.cleanupStaleFiles(this, this.previewsDir, 7 * 24 * 60 * 60 * 1000);
 
         const retentionDays = getServerSettings().quotas.trashRetentionDays;
         if (retentionDays > 0) {
@@ -268,31 +270,6 @@ export class Mount {
         if (this.config.isDefault && parseOwnerId(this.ownerId).type === 'user') {
             await this.createFolder(rootId, CHATS_FOLDER_NAME);
         }
-    }
-
-    private cleanupStaleFiles(dir: string, maxAgeMs: number, preserveLivePathIds = false): void {
-        try {
-            const cutoff = Date.now() - maxAgeMs;
-            // An entry named after a live path id is a crash temp that only its document's next open adopts,
-            // however old it is, so it stays with its unsynced edits.
-            const liveIds = preserveLivePathIds
-                ? new Set(
-                      this.db
-                          .select({ id: paths.id })
-                          .from(paths)
-                          .all()
-                          .map((r) => r.id),
-                  )
-                : null;
-            for (const entry of fs.readdirSync(dir)) {
-                // A crash temp's journals hold its unsynced tail, so they stay with it.
-                if (liveIds?.has(entry.replace(/-(wal|shm|journal)$/, ''))) continue;
-                const filePath = path.join(dir, entry);
-                try {
-                    if (fs.statSync(filePath).mtimeMs < cutoff) fs.unlinkSync(filePath);
-                } catch {}
-            }
-        } catch {}
     }
 
     // ---- Reading the tree ----
@@ -425,11 +402,17 @@ export class Mount {
         return results.map((r) => this.toDrivePath(r));
     }
 
-    public async getPathsWithACL(): Promise<DrivePath[]> {
+    // Trashed paths included. Given a folder, only the paths below it, and not the folder itself.
+    public async getPathsWithACL(underFolderId?: string): Promise<DrivePath[]> {
         const results = await this.db
             .select()
             .from(paths)
-            .where(and(sql`${paths.acl} IS NOT NULL AND json_array_length(${paths.acl}) > 0`, isNull(paths.trashedAt)))
+            .where(
+                and(
+                    sql`${paths.acl} IS NOT NULL AND json_array_length(${paths.acl}) > 0`,
+                    underFolderId ? sql`${paths.id} IN (${descendantIds(underFolderId)})` : undefined,
+                ),
+            )
             .all();
         return results.map((r) => this.toDrivePath(r));
     }
@@ -439,7 +422,7 @@ export class Mount {
     public toDrivePath(row: typeof paths.$inferSelect): DrivePath {
         let size = row.size;
         if (row.type !== 'file' && size === null) {
-            size = this.db.transaction((tx) => this.computeFolderSizeInTx(tx, row.id));
+            size = this.db.transaction((tx) => sizes.computeFolderSizeInTx(tx, row.id));
         }
         return {
             id: row.id,
@@ -1037,102 +1020,27 @@ export class Mount {
     // ---- Temp files ----
 
     public getTempPath(pathId: string): string {
-        return path.join(this.tmpDir, pathId.replace(/\//g, '_'));
+        return tempFiles.getTempPath(this, pathId);
     }
 
-    // tempId must be new for each call, such as a randomUUID, or two downloads of one file overwrite each other.
     public async downloadToTemp(pathId: string, tempId: string): Promise<string> {
-        // An open document's working copy is the temp path named after its data.db path id. A tempId
-        // equal to one would truncate it.
-        if (this.documentDbs.has(tempId)) {
-            throw new Error(
-                `[Mount] downloadToTemp ${pathId}: tempId ${tempId} is an open document DB — refusing to overwrite its live working copy`,
-            );
-        }
-        // Under the tree lock, like a document open, because on `local` an ancestor rename during the
-        // read would make the file look gone.
-        return this.withTreeShared(async () => {
-            const storageKey = await this.getStorageKey(pathId);
-            // Freshest first, like readKey: a version saved during an outage exists only as its staged copy.
-            const staged = this.pendingStagedCopy(storageKey);
-            if (staged) {
-                try {
-                    await this.replaceTempFrom(tempId, Bun.file(staged));
-                    return this.getTempPath(tempId);
-                } catch (err) {
-                    // The queue unlinks a staged copy once its upload landed, which may happen during the
-                    // read. The bytes are in the bucket by then, so the download below gets them.
-                    if (!isMissingObjectCause(err)) {
-                        console.error(`[Mount] download of staged ${storageKey} failed:`, err);
-                        throw err;
-                    }
-                }
-            }
-            return this.downloadKeyToTemp(storageKey, tempId);
-        });
+        return tempFiles.downloadToTemp(this, pathId, tempId);
     }
 
-    // The plain download, with no look at the staged copy, which a caller looks at first.
     public async downloadKeyToTemp(storageKey: string, tempId: string): Promise<string> {
-        const start = Bun.nanoseconds();
-        const tempPath = this.getTempPath(tempId);
-        await this.cleanupTemp(tempId);
-        // A -wal that survived the cleanup would be replayed into the fresh main file.
-        if (fs.existsSync(`${tempPath}-wal`))
-            throw new Error(`[Mount] download ${storageKey}: stale ${tempPath}-wal could not be removed`);
-        let size: number;
-        try {
-            size = await this.replaceTempFrom(tempId, this.storage.read(storageKey));
-        } catch (err) {
-            console.error(`[Mount] download ${storageKey} failed:`, err);
-            // Only a missing object in the GET body is a 410. A raw error is local, such as the tmp/ write, so
-            // it stays a 500 even as an ENOENT.
-            if (isMissingObjectCause(err)) throw storageGone(err.cause);
-            throw err;
-        }
-        const ms = (Bun.nanoseconds() - start) / 1_000_000;
-        console.log(`[timing] Mount.download ${storageKey} ${(size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
-        return tempPath;
+        return tempFiles.downloadKeyToTemp(this, storageKey, tempId);
     }
 
-    // Through a side file, because the next open would adopt a truncated file at the temp path as crash recovery.
     public async replaceTempFrom(tempId: string, source: StorageFile): Promise<number> {
-        const sideId = crypto.randomUUID();
-        let size: number;
-        try {
-            ({ size } = await writeTempWithHash(this.getTempPath(sideId), source, { signal: this.downloads.signal }));
-            fs.renameSync(this.getTempPath(sideId), this.getTempPath(tempId));
-        } catch (err) {
-            await this.cleanupTemp(sideId);
-            throw err;
-        }
-        return size;
+        return tempFiles.replaceTempFrom(this, tempId, source);
     }
 
     public async uploadFromTemp(storageKey: string, tempId: string): Promise<void> {
-        const tempPath = this.getTempPath(tempId);
-        const tempFile = Bun.file(tempPath);
-        if (!(await tempFile.exists())) {
-            // The caller writes the temp file first. A missing one throws instead of doing nothing, so
-            // a failed sync at close is loud and never drops unflushed writes in silence.
-            throw new Error(`[Mount] uploadFromTemp ${storageKey}: tempfile missing at ${tempPath}`);
-        }
-        const start = Bun.nanoseconds();
-        await this.storage.write(storageKey, tempFile);
-        const ms = (Bun.nanoseconds() - start) / 1_000_000;
-        console.log(`[timing] Mount.upload ${storageKey} ${(tempFile.size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
+        return tempFiles.uploadFromTemp(this, storageKey, tempId);
     }
 
     public async cleanupTemp(tempId: string): Promise<void> {
-        const tempPath = this.getTempPath(tempId);
-        // The journals go too: SQLite replays a leftover -wal into whatever main file lands here next.
-        try {
-            fs.rmSync(`${tempPath}-wal`, { force: true });
-            fs.rmSync(`${tempPath}-shm`, { force: true });
-            fs.rmSync(tempPath, { force: true });
-        } catch (e) {
-            console.error(`[Mount] Failed to remove temp ${tempId}:`, e);
-        }
+        return tempFiles.cleanupTemp(this, tempId);
     }
 
     // ---- Locks ----
@@ -1271,83 +1179,16 @@ export class Mount {
 
     // ---- Sizes ----
 
-    public async getTotalSize(): Promise<number> {
-        const result = await this.db
-            .select({ total: sql<number>`COALESCE(SUM(${paths.size}), 0)` })
-            .from(paths)
-            .where(eq(paths.type, 'file'))
-            .get();
-
-        return result?.total ?? 0;
-    }
-
-    public async getFileCount(): Promise<number> {
-        const result = await this.db
-            .select({ count: sql<number>`COUNT(*)` })
-            .from(paths)
-            .where(eq(paths.type, 'file'))
-            .get();
-
-        return result?.count ?? 0;
+    public async getFileTotals(): Promise<Pick<MountInfo, 'totalSize' | 'fileCount'>> {
+        return sizes.getFileTotals(this);
     }
 
     public async invalidateAncestorsOf(pathId: string): Promise<void> {
-        let parentId: string | null;
-        try {
-            const row = await this.db
-                .select({ parentId: paths.parentId })
-                .from(paths)
-                .where(eq(paths.id, pathId))
-                .get();
-            parentId = row?.parentId ?? null;
-        } catch (e) {
-            console.error(`[Mount] Could not invalidate the folder sizes above ${pathId}:`, e);
-            return;
-        }
-        await this.invalidateSizesFrom(parentId);
+        return sizes.invalidateAncestorsOf(this, pathId);
     }
 
-    // Clears the cached size of parentId and of every folder above it. Every caller has committed its
-    // change already, so a failure is logged and leaves a stale size instead of a 500.
     public async invalidateSizesFrom(parentId: string | null): Promise<void> {
-        if (!parentId) return;
-        try {
-            await this.db.run(sql`
-                WITH RECURSIVE ancestors(id) AS (
-                    SELECT ${parentId} AS id
-                    UNION ALL
-                    SELECT p.parentId FROM paths p
-                        JOIN ancestors a ON p.id = a.id
-                        WHERE p.parentId IS NOT NULL
-                )
-                UPDATE paths SET size = NULL WHERE id IN (SELECT id FROM ancestors)
-            `);
-        } catch (e) {
-            console.error(`[Mount] Could not invalidate the folder sizes from ${parentId}:`, e);
-        }
-    }
-
-    private computeFolderSizeInTx(tx: Tx, folderId: string): number {
-        const row = tx.select({ size: paths.size, type: paths.type }).from(paths).where(eq(paths.id, folderId)).get();
-        if (!row) return 0;
-        if (row.type === 'file') return row.size ?? 0;
-        if (row.size !== null) return row.size;
-
-        // A trashed item moves to the root but keeps its trashedFrom, so it does not count there. The
-        // items trashed along with it stay in its subtree and count toward its own size, as in Google Drive.
-        const children = tx
-            .select({ id: paths.id, size: paths.size, type: paths.type })
-            .from(paths)
-            .where(and(eq(paths.parentId, folderId), isNull(paths.trashedFrom)))
-            .all();
-
-        let total = 0;
-        for (const child of children) {
-            total += child.size ?? (child.type === 'file' ? 0 : this.computeFolderSizeInTx(tx, child.id));
-        }
-
-        tx.update(paths).set({ size: total }).where(eq(paths.id, folderId)).run();
-        return total;
+        return sizes.invalidateSizesFrom(this, parentId);
     }
 }
 

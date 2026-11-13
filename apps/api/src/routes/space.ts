@@ -2,7 +2,7 @@
 // the apps read and save. Only a full user reads or writes them, and only their own. A save sends just the
 // fields it changes, and they merge into the stored settings.
 
-import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive';
+import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive-view';
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { DOCS_TEXT_WIDTHS, USER_THEMES } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';

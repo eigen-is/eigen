@@ -1,5 +1,6 @@
 import { parseOwnerId } from '@workspace/lib/types';
-import type { DirectAccessItem, DriveAccessItem, DrivePath, InheritedAccessItem } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DirectAccessItem, DriveAccessItem, InheritedAccessItem } from '@workspace/lib/types/drive-access';
 import { useCallback, useMemo } from 'react';
 import { useAuth } from '../../auth';
 import { useMyTeams } from '../../home';

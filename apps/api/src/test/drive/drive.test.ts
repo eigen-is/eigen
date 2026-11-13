@@ -3907,7 +3907,7 @@ describe('Drive', () => {
                 newName: 'Rename Propagation New',
             });
 
-            // No further ACL change — the rename alone must refresh the recipient's mirror.
+            // No further ACL change: the listing reads the name from the owner.
             const after = await authedRequest(ctx.bob.user.sessionToken, `/drive/${ctx.bob.user.id}/shared/with-me`);
             const afterShared = findOrFail(await assertJson<DrivePath[]>(after), (item) => item.id === folder.id);
             expect(afterShared.name).toBe('Rename Propagation New');
@@ -3915,7 +3915,7 @@ describe('Drive', () => {
     });
 
     describe('Async ACL fan-out ordering', () => {
-        test('rapid share then revoke never leaves a stale mirror row for the recipient', async () => {
+        test('rapid share then revoke never leaves a row for the recipient', async () => {
             const folder = await drivePost(
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,

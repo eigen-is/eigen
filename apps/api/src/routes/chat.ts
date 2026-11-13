@@ -4,8 +4,9 @@
 // messages counts as an open on the user's Recent page.
 
 import type { ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
-import type { DrivePath, InviteResult } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_CHAT, stripEigenExtension, withEigenExtension } from '@workspace/lib/types/drive';
+import type { InviteResult } from '@workspace/lib/types/drive-access';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { MAX_EMAIL_LENGTH, validateEmailTarget } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';

@@ -2,7 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { contactsApi, getContactsExportUrl, getContactsImportUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { VCARD_MIMES } from '@workspace/lib/types/drive';
+import { VCARD_MIMES } from '@workspace/lib/types/file-kinds';
 import type { FileImportSource } from '@workspace/lib/types/file-subject';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { useCallback } from 'react';

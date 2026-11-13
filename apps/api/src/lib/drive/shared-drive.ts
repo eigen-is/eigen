@@ -3,16 +3,14 @@
 // and checks the caller's access before it passes the call on. It does not extend Drive, on purpose:
 // getSharedDrive returns Drive | SharedDrive, so a route can only call a method that has a wrapper here.
 
+import type { DrivePath, DrivePathDetails, EigenDocType } from '@workspace/lib/types/drive';
 import type {
     DriveACLDelta,
     DriveAccessCheckResult,
-    DrivePath,
-    DrivePathDetails,
     DriveVisibility,
     EffectiveMember,
-    EigenDocType,
     InviteResult,
-} from '@workspace/lib/types/drive';
+} from '@workspace/lib/types/drive-access';
 import type { ClientFileEventRecord, FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { MountInfo } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -410,7 +408,7 @@ export class SharedDrive {
     public async checkAccessForEmails(
         mountId: string,
         pathId: string,
-        emails: string[],
+        emails: readonly string[],
     ): Promise<DriveAccessCheckResult> {
         const memberships = await getMemberships(this.user.id);
         await this.requireRead(mountId, pathId, memberships);

@@ -15,7 +15,7 @@ import {
     subjectInfo,
 } from '../../core/file-subject';
 import type { DrivePath, DrivePathType } from '../../types/drive';
-import { EML_MIME, ICS_MIME } from '../../types/drive';
+import { EML_MIME, ICS_MIME } from '../../types/file-kinds';
 import type { FileSubject } from '../../types/file-subject';
 
 function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): DrivePath {

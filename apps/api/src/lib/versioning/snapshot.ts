@@ -229,10 +229,10 @@ export async function replaceContainerDataDb(mount: Mount, containerId: string, 
                     fs.copyFileSync(sourcePath, staging);
                     mount.uploadQueue.enqueueStaged(storageKey, staging, true);
                 } else {
-                    // On local-key the object is the database file itself. Written over in place it hands SQLite a
-                    // stale vnode (SQLITE_IOERR_VNODE) at the next open, and an old -wal would replay over the new bytes.
+                    // On local-key the object is the database file itself, and its old -wal would replay over the
+                    // new bytes. The main file stays until the write replaces it, so a failed write keeps it.
                     if (!mount.needsTempCopy) {
-                        for (const file of [`${storageKey}-wal`, `${storageKey}-shm`, storageKey]) {
+                        for (const file of [`${storageKey}-wal`, `${storageKey}-shm`]) {
                             await mount.storage.delete(file);
                         }
                     }

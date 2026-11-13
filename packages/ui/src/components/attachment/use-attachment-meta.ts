@@ -1,7 +1,7 @@
 import { getDriveItemThumbnail } from '@workspace/lib/api';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
-import { isImageMime } from '@workspace/lib/types/drive';
+import { isImageMime } from '@workspace/lib/types/file-kinds';
 
 // Board/panel card adornments for attachments: the first image attachment's thumbnail as a
 // cover, plus a count. Filename resolution rides MediaResolver's cached folder lookup, so one

@@ -2,8 +2,9 @@
 // selection. Open runs the view's own open, a writable view offers the copy and move rows and Watch with
 // its live state, and a private item has no collaborators to mail.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
-import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveActionId } from '@workspace/lib/types/drive-actions';
+import type { DriveCapabilities } from '@workspace/lib/types/drive-view';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';

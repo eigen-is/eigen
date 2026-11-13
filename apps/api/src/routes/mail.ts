@@ -4,7 +4,7 @@
 
 import { EML_MAX_BYTES, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isEmlFile } from '@workspace/lib/types/drive';
+import { isEmlFile } from '@workspace/lib/types/file-kinds';
 import type {
     DraftAttachmentUpload,
     Email,

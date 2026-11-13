@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { getTextPreviewMode } from '@workspace/lib/constants';
-import { isInlineEditable } from '@workspace/lib/types/drive';
+import { isInlineEditable } from '@workspace/lib/types/file-kinds';
 
 // Characterization tests locking the behavior of the text/code file registries
 // (isInlineEditable + getTextPreviewMode) so the shared-extension-corpus refactor

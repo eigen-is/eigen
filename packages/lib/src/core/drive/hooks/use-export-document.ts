@@ -3,7 +3,7 @@
 // item menu export through this hook; Print reads the same header.
 
 import { getDriveExportUrl } from '@workspace/lib/api';
-import { EXPORT_SUMMARY_HEADER } from '@workspace/lib/types/drive';
+import { EXPORT_SUMMARY_HEADER } from '@workspace/lib/types/drive-convert';
 import { useCallback } from 'react';
 import { toast } from 'sonner';
 import { useFileDownload } from '../../download';

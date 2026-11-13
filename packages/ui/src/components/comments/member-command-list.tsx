@@ -4,7 +4,7 @@
 
 import type { CommentAssigneeFilter } from '@workspace/lib/comments';
 import { usePublicUsers } from '@workspace/lib/public';
-import type { EffectiveMember } from '@workspace/lib/types/drive';
+import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '@workspace/ui/components/command';
 import { Check, CircleSlash, Users } from 'lucide-react';
 import type { ReactNode } from 'react';

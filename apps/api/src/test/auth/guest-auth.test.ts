@@ -493,13 +493,13 @@ describe('Guest Auth', () => {
             expect(verify1.status).toBe(200);
             const guestId = getAuthDrizzleDb().select().from(userSchema).where(eq(userSchema.email, email)).get()!.id;
 
-            // Wipe the guest's shared_paths cache to simulate a first-login that did NOT
+            // Wipe the guest's shared_paths rows to simulate a first-login that did NOT
             // reconcile (the bug we just fixed). Then assert second login restores it.
             const { getHome } = await import('../../lib/home/get-home');
             const home = await getHome(guestId);
             // biome-ignore lint/suspicious/noExplicitAny: test reaches into private state on purpose
             const sharedDb = (home.drive as any).sharedDb as ReturnType<typeof getAuthDrizzleDb>;
-            const { sharedPaths } = await import('../../lib/drive/sharedschema');
+            const { sharedPaths } = await import('../../lib/drive/shared-schema');
             sharedDb.delete(sharedPaths).run();
 
             // Second login.

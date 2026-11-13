@@ -3,8 +3,9 @@
 // each in its menu group. The caller wraps it in ContextMenuAnchor or DropdownMenuContent.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { EXPORT_FORMAT_LABELS, exportFormatsFor } from '@workspace/lib/types/drive';
+import { exportFormatsFor } from '@workspace/lib/types/drive';
 import type { DriveAction, DriveActionGroup } from '@workspace/lib/types/drive-actions';
+import { EXPORT_FORMAT_LABELS } from '@workspace/lib/types/drive-convert';
 import {
     DropdownMenuItem,
     DropdownMenuSub,

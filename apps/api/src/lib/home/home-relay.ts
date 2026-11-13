@@ -13,7 +13,8 @@ import type {
     CalendarItem,
     CalendarShare,
 } from '@workspace/lib/types/calendar';
-import type { DriveACL, DrivePath, EffectiveMember, RecentPath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveACL, EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import type { HomeSizeResponse, MyTeam, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
@@ -34,7 +35,7 @@ import {
 } from '../config/paths';
 import { readContactsTotalSize } from '../contacts/card-store';
 import { LocalFilesystem } from '../core';
-import type { RecentRow } from '../drive/recent';
+import type { VisiblePath } from '../drive/drive';
 import type { EventPatch } from '../ical/ical-component';
 import { readMailTotalSize } from '../mail/maildir-store';
 import type { Memberships, User } from '../user';
@@ -254,7 +255,7 @@ export async function pullFromEach<T>(
 
 export async function pullSharedPaths(ownerId: string, user: User): Promise<DrivePath[]> {
     const home = await getHome(ownerId);
-    return home.drive.getSharedWith(user);
+    return home.drive.getAllSharedWith(user);
 }
 
 export async function pullDrivePath(ownerId: string, mountId: string, pathId: string): Promise<DrivePath | null> {
@@ -262,14 +263,20 @@ export async function pullDrivePath(ownerId: string, mountId: string, pathId: st
     return home.drive.getPath(mountId, pathId);
 }
 
-export async function pullRecentPaths(
-    ownerId: string,
+// The paths a user's own rows name, such as those of Recent, as far as the user may still see them: one read per
+// owner, who answers from the path as it is now.
+export async function pullVisiblePaths<Row extends { ownerId: string; mountId: string; pathId: string }>(
     user: User,
     memberships: Memberships,
-    rows: readonly RecentRow[],
-): Promise<RecentPath[]> {
-    const home = await getHome(ownerId);
-    return home.drive.getRecentPathsFor(user, memberships, rows);
+    rows: readonly Row[],
+    mimeTypePrefix = '',
+): Promise<VisiblePath<Row>[]> {
+    const byOwner = Map.groupBy(rows, (row) => row.ownerId);
+    const lists = await pullFromEach([...byOwner.keys()], async (ownerId) => {
+        const home = await getHome(ownerId);
+        return home.drive.getVisiblePaths(user, memberships, byOwner.get(ownerId) ?? [], mimeTypePrefix);
+    });
+    return lists.flat();
 }
 
 // --- Calendar ---
@@ -439,15 +446,17 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
     return userHomeSize(homeDir, settings, contacts + mail + calendars, teamIds);
 }
 
-// A backup opens the home without counting as a request and holds it while the capture runs, so a nightly backup leaves
-// open only the homes somebody uses. A home is never closed by force: a user may have opened it during the capture.
+// Opened without counting as a request, so a nightly backup keeps open only the homes somebody uses. It never closes
+// the home, which a user may have opened during the capture, and a home that closed meanwhile fails the capture.
 export async function pullHomeSnapshot(
     ownerId: string,
     targetDir: string,
     options: { level?: BackupLevel; onProgress?: BackupProgress },
 ): Promise<BackupManifest> {
     const home = await openHome(ownerId);
-    return home.withHomeHeld(() => snapshotHome(home, targetDir, options));
+    const manifest = await home.withHomeHeld(() => snapshotHome(home, targetDir, options));
+    if (home.closing) throw new Error('the home closed during the capture');
+    return manifest;
 }
 
 // The server backup sizes every home through here before it starts, to check that there is room.
