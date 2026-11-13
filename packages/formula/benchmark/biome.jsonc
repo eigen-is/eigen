@@ -1,0 +1,32 @@
+{
+  "root": false,
+  "extends": "//",
+  "overrides": [
+    {
+      // The benchmark is no part of the leaf: it runs the engine beside the packages it is compared with, on Bun and
+      // Node, as the scripts beside it do. So it imports them and the runtime; the suffix ban still holds.
+      "includes": ["**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
+                    "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  },
+                  {
+                    "group": ["./**/*.ts", "./**/*.tsx", "../**/*.ts", "../**/*.tsx"],
+                    "message": "Relative imports resolve extensionless under moduleResolution: bundler — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
