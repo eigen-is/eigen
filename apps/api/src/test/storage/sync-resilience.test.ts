@@ -94,42 +94,68 @@ afterAll(() => {
 });
 
 describe('crash-recovery durability', () => {
-    test('a temp surviving an unclean shutdown re-syncs its unsynced bytes on the next open+close', async () => {
+    test.each(['local', 'local-key'] as const)(
+        'on %s a temp surviving an unclean shutdown re-syncs its unsynced bytes on the next open+close',
+        async (storageType) => {
+            const mount = new Mount(
+                OWNER_ID,
+                TEST_DIR,
+                createTestMountConfig(`crash-recovery-${storageType}`, storageType),
+                createGetLocalDatabase(TEST_DIR),
+            );
+            await mount.init();
+            const rootId = (await mount.getRootFolder())!.id;
+
+            const containerId = await mount.createFolder(rootId, 'DocContainer', 'doc');
+            const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+
+            const managed = await mount.createDatabase(docConfig, dataDbId);
+            managed.db.insert(docSchema.items).values({ id: 1, data: 'synced' }).run();
+            await mount.closeDatabase(dataDbId);
+            expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
+
+            // Simulate a crash: rebuild the temp from the backing store, add an UNSYNCED row, and
+            // leave it behind exactly as an unclean shutdown would (no clean close ran).
+            const tempPath = mount.getTempPath(dataDbId);
+            await Bun.write(tempPath, await (await mount.readFile(dataDbId))!.arrayBuffer());
+            const crashTemp = new Database(tempPath);
+            crashTemp.run('PRAGMA journal_mode = WAL;');
+            crashTemp.run("INSERT INTO items (id, data) VALUES (2, 'unsynced')");
+            crashTemp.run('PRAGMA wal_checkpoint(TRUNCATE);');
+            crashTemp.close();
+            for (const j of [`${tempPath}-wal`, `${tempPath}-shm`]) {
+                if (existsSync(j)) unlinkSync(j);
+            }
+
+            await mount.withDatabase(docConfig, dataDbId, async () => {});
+            await mount.closeDatabase(dataDbId);
+
+            // Without the crash-recovery markDirty(), the reopened DB looked clean and cleanupTemp dropped row 2.
+            expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(2);
+        },
+    );
+
+    test('while a document is open on local-key, the file at its key is the last synced state and has no -wal beside it', async () => {
         const mount = new Mount(
             OWNER_ID,
             TEST_DIR,
-            createTestMountConfig('crash-recovery', 'local'),
+            createTestMountConfig('open-local-key', 'local-key'),
             createGetLocalDatabase(TEST_DIR),
         );
         await mount.init();
+        createdMounts.push(mount);
         const rootId = (await mount.getRootFolder())!.id;
-
         const containerId = await mount.createFolder(rootId, 'DocContainer', 'doc');
         const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
 
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'synced' }).run();
-        await mount.closeDatabase(dataDbId);
+        await managed.flush();
+        managed.db.insert(docSchema.items).values({ id: 2, data: 'unsynced' }).run();
+
+        const storedFile = join(mount.dataDir, await mount.getStorageKey(dataDbId));
+        expect(existsSync(`${storedFile}-wal`)).toBe(false);
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
-
-        // Simulate a crash: rebuild the temp from the backing store, add an UNSYNCED row, and
-        // leave it behind exactly as an unclean shutdown would (no clean close ran).
-        const tempPath = mount.getTempPath(dataDbId);
-        await Bun.write(tempPath, await (await mount.readFile(dataDbId))!.arrayBuffer());
-        const crashTemp = new Database(tempPath);
-        crashTemp.run('PRAGMA journal_mode = WAL;');
-        crashTemp.run("INSERT INTO items (id, data) VALUES (2, 'unsynced')");
-        crashTemp.run('PRAGMA wal_checkpoint(TRUNCATE);');
-        crashTemp.close();
-        for (const j of [`${tempPath}-wal`, `${tempPath}-shm`]) {
-            if (existsSync(j)) unlinkSync(j);
-        }
-
-        await mount.withDatabase(docConfig, dataDbId, async () => {});
-        await mount.closeDatabase(dataDbId);
-
-        // Without the crash-recovery markDirty(), the reopened DB looked clean and cleanupTemp dropped row 2.
-        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(2);
     });
 });
 

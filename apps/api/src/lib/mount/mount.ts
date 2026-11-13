@@ -159,10 +159,9 @@ export class Mount {
         return this.config.storageType === 'local';
     }
 
-    // A document database is opened from a temp copy, except on `local-key`, where the stored file is
-    // opened in place.
+    // A document database is opened from a temp copy on every backend.
     public get needsTempCopy(): boolean {
-        return this.isRemote || this.isPathBased;
+        return true;
     }
 
     // ---- Lifecycle ----
