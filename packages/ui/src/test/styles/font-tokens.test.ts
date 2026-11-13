@@ -11,9 +11,12 @@ const GLOBALS_CSS = fs
 // CSS can't import the stack builder, so globals.css spells each --font-* token as a literal. This test keeps each
 // literal equal to the builder's stack, and on a drift prints the line to paste. Biome writes CSS strings in double
 // quotes, and the builder writes single ones, which fit in a style attribute.
+// --font-sans and --font-serif also name the ket family globals.css declares, after the last bundled fallback.
+const withKet = (stack: string) => stack.replace("'Noto Sans KR', ", "'Noto Sans KR', 'Eigen Ket', ");
+
 test.each([
-    ['--font-sans', getFontFamily('Inter')],
-    ['--font-serif', getFontFamily('Source Serif 4')],
+    ['--font-sans', withKet(getFontFamily('Inter'))],
+    ['--font-serif', withKet(getFontFamily('Source Serif 4'))],
     ['--font-mono', getFontFamily('JetBrains Mono')],
     ['--font-hand', getFontFamily('Excalifont')],
     ['--font-math', MATH_FONT_STACK],

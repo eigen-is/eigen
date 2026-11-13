@@ -16,6 +16,18 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* The ket in an app name, eigen|docs⟩. Inter, Source Serif and the CJK faces have no U+27E9, so it would come from
+   whatever the visitor's system holds. This rule draws just that character from the JetBrains Mono slice that has it,
+   at every weight of the variable face, and is named in --font-sans and --font-serif. */
+@font-face {
+    font-family: "Eigen Ket";
+    src: url("../assets/fonts/jetbrains-mono/JetBrainsMono-Variable.rest.woff2") format("woff2");
+    font-weight: 100 800;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+27E9;
+}
+
 :root,
 .eigen-paper {
     /* Drive native UA chrome (scrollbars, form controls) from the theme so the
@@ -204,9 +216,12 @@
     --color-link: var(--link);
     --color-selection-handle: var(--selection-handle);
     /* Each font token is the stack getFontFamily builds, and --font-math is MATH_FONT_STACK. CSS can't import
-       them, so a test checks each literal against its source. */
-    --font-sans: "Inter", "Eigen Emoji", "Noto Sans SC", "Noto Sans KR", ui-sans-serif, system-ui, sans-serif;
-    --font-serif: "Source Serif 4", "Eigen Emoji", "Noto Sans SC", "Noto Sans KR", Georgia, "Times New Roman", serif;
+       them, so a test checks each literal against its source. Sans and serif add "Eigen Ket" after the last bundled
+       face; its unicode-range keeps it out of every other character, so its place decides nothing. */
+    --font-sans:
+        "Inter", "Eigen Emoji", "Noto Sans SC", "Noto Sans KR", "Eigen Ket", ui-sans-serif, system-ui, sans-serif;
+    --font-serif:
+        "Source Serif 4", "Eigen Emoji", "Noto Sans SC", "Noto Sans KR", "Eigen Ket", Georgia, "Times New Roman", serif;
     --font-mono: "JetBrains Mono", "Eigen Emoji", "Noto Sans SC", "Noto Sans KR", "Fira Code", ui-monospace, monospace;
     --font-hand: "Excalifont", "Eigen Emoji", "Noto Sans SC", "Noto Sans KR", "Comic Sans MS", cursive;
     --font-math: "New Computer Modern Math", math;
