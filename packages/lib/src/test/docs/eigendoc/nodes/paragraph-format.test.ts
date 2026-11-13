@@ -66,10 +66,10 @@ const formatsOf = (editor: Editor) =>
 
 describe('paragraph format HTML', () => {
     test.each([
-        [{ lineSpacing: 1 }, 'line-height: 1.21', 'data-line-spacing="1"'],
-        [{ lineSpacing: 1.15 }, 'line-height: 1.3915', 'data-line-spacing="1.15"'],
-        [{ lineSpacing: 1.5 }, 'line-height: 1.815', 'data-line-spacing="1.5"'],
-        [{ lineSpacing: 2 }, 'line-height: 2.42', 'data-line-spacing="2"'],
+        [{ lineSpacing: 1 }, '--line-spacing: 1', 'data-line-spacing="1"'],
+        [{ lineSpacing: 1.15 }, '--line-spacing: 1.15', 'data-line-spacing="1.15"'],
+        [{ lineSpacing: 1.5 }, '--line-spacing: 1.5', 'data-line-spacing="1.5"'],
+        [{ lineSpacing: 2 }, '--line-spacing: 2', 'data-line-spacing="2"'],
         // Padding, so it adds to the space after the block above as Word and Google add the two; margins collapse. It
         // replaces a heading's own space above.
         [{ spaceBefore: 12 }, 'margin-top: 0pt; padding-top: 12pt', 'data-space-before="12"'],
@@ -93,7 +93,7 @@ describe('paragraph format HTML', () => {
             ),
             extensions,
         );
-        expect(html.match(/line-height: 2\.42/g)?.length).toBe(3);
+        expect(html.match(/--line-spacing: 2;/g)?.length).toBe(3);
         expect(schema.nodes['codeBlock']).toBeUndefined();
         expect(schema.nodes['blockquote']?.spec.attrs?.['lineSpacing']).toBeUndefined();
     });
@@ -107,8 +107,8 @@ describe('paragraph format HTML', () => {
         [{ lineSpacing: '1; position: fixed; inset: 0' }, '<p>x</p>'],
         [{ spaceBefore: Number.NaN }, '<p>x</p>'],
         [{ indentLeft: Number.POSITIVE_INFINITY }, '<p>x</p>'],
-        [{ lineSpacing: 1e6 }, '<p style="line-height: 6.05;" data-line-spacing="5">x</p>'],
-        [{ lineSpacing: 0.1 }, '<p style="line-height: 0.605;" data-line-spacing="0.5">x</p>'],
+        [{ lineSpacing: 1e6 }, '<p style="--line-spacing: 5;" data-line-spacing="5">x</p>'],
+        [{ lineSpacing: 0.1 }, '<p style="--line-spacing: 0.5;" data-line-spacing="0.5">x</p>'],
         [{ spaceAfter: -3 }, '<p style="margin-bottom: 0pt;" data-space-after="0">x</p>'],
         [{ spaceBefore: 9999 }, '<p style="margin-top: 0pt; padding-top: 400pt;" data-space-before="400">x</p>'],
         [{ indentLeft: 1e9 }, '<p style="margin-left: 1584pt;" data-indent-left="1584">x</p>'],

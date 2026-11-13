@@ -1321,8 +1321,7 @@ describe('a Word file, imported, written and imported again', () => {
         expect(stored(second.json)).toEqual(stored(first.json));
     });
 
-    // Word draws an auto line in the tallest face on it, the paragraph mark's included, at its size; the writer rescales a
-    // paragraph all in one family by that (familyLine), and the reader undoes it the same way, whitespace runs counted.
+    // A line spacing is the docx line as it stands, whatever faces and sizes the runs draw in.
     test.each<[string, string, string[]]>([
         [
             'smaller code under a larger Normal',
@@ -1388,8 +1387,7 @@ describe('a Word file, imported, written and imported again', () => {
         expect(stored(second.json)).toEqual(stored(first.json));
     });
 
-    // The writer writes a rescaled line on the paragraph itself, so a line the heading takes from its style was never
-    // rescaled, even when its runs are another family than the style's font.
+    // A heading's line is its style's, whatever family its runs draw in.
     test('a heading in Times under a Calibri style, at the style line, keeps no line spacing', async () => {
         const theme =
             '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>';

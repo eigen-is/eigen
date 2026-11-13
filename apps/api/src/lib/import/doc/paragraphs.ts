@@ -22,17 +22,7 @@ import {
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements, xmlText } from '../../core/xml';
-import type { RunFace } from '../../document/looks';
-import {
-    CAPTION_LOOK,
-    CODE_BLOCK_LOOK,
-    familyLineScale,
-    lineMultiple,
-    nodeLook,
-    ownTextLook,
-    QUOTE_LOOK,
-    TASK_DONE_LOOK,
-} from '../../document/looks';
+import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, ownTextLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import type { Lost } from '../../document/transform/protocol';
 import type { DrawingTheme } from '../../ooxml/drawingml';
 import { drawingTheme } from '../../ooxml/drawingml';
@@ -151,7 +141,7 @@ export function createReader(
     const bodySize = 2 * (readFontSize((body.size ?? DEFAULT_RUN_SIZE) / 2) ?? DEFAULT_RUN_SIZE / 2);
     const font = fontMark(latinFace(body), fontTable) ?? DOCUMENT_FONT;
     const para = mergePara(styles.docPara, styles.para(styles.defaultParagraph));
-    // Single where no auto line is set, as Google Docs reads an at-least one; in the font's own line, as a paragraph's.
+    // Single where no auto line is set, as Google Docs reads an at-least one.
     const line = (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? SINGLE_LINE) : SINGLE_LINE;
     for (const section of descendants(pkg.document.root, W_NS, 'sectPr'))
         if (section !== sectPr && !isDeepStrictEqual(sectionPage(section), size)) lost('section-pages-dropped');
@@ -177,7 +167,7 @@ export function createReader(
         normal: readNormalStyle({
             font,
             size: bodySize / 2,
-            lineSpacing: lineMultiple(line, font),
+            lineSpacing: line / SINGLE_LINE,
             spaceBefore: twipsToPt(para.before ?? 0),
             spaceAfter: twipsToPt(para.after ?? 0),
             color: body.color?.hex && markColor(body.color.hex),
@@ -388,13 +378,11 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             : undefined;
     const released = runOn ? abandonToc(reader, runOn.toc) : [];
     const setting: ParagraphSetting = {
-        p,
         scope,
         direct,
         styleId,
         styled,
         role,
-        paraRun,
         numId: listed ? numId : undefined,
     };
     const itemsOf = (pieces: Piece[], ends: ParagraphEnds) => paragraphItems(reader, setting, context, pieces, ends);
@@ -455,13 +443,11 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
 
 // What a paragraph's properties and its style make of it, read before its runs.
 type ParagraphSetting = {
-    p: XmlElement;
     scope: Scope;
     direct: ParaProps;
     styleId: string | undefined;
     styled: ParaProps;
     role: Role;
-    paraRun: DocxRunProps;
     // The list it is in, if any.
     numId: string | undefined;
 };
@@ -474,7 +460,7 @@ const WHOLE: ParagraphEnds = { before: true, after: true };
 // A paragraph's pieces as its items, with the ends asked for.
 function paragraphItems(
     reader: Reader,
-    { p, scope, direct, styleId, styled, role: paraRole, paraRun, numId }: ParagraphSetting,
+    { scope, direct, styleId, styled, role: paraRole, numId }: ParagraphSetting,
     context: RunContext,
     pieces: Piece[],
     ends: ParagraphEnds,
@@ -566,8 +552,7 @@ function paragraphItems(
         });
 
     // What the paragraph sets apart from the docx's Normal, or a heading, a title, a quote or a note from its style,
-    // whose look is the node's. The writer rescales the line of a paragraph all in one family (familyLineScale), which
-    // this undoes over the same faces, so a line Word draws as the Normal's reads as none.
+    // whose look is the node's.
     const { normal } = reader;
     const normalBase = role.kind === 'paragraph' && scope.story !== 'note';
     const base = normalBase ? mergePara(styles.docPara, styles.para(styles.defaultParagraph)) : styled;
@@ -575,36 +560,11 @@ function paragraphItems(
         (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? SINGLE_LINE) : undefined;
     const line = autoLine(props);
     const baseLine = autoLine(base);
-    const mark: RunFace = {
-        family: fontMark(latinFace(paraRun), reader.fontTable, normal.font) ?? normal.font,
-        size: paraRun.size ?? DEFAULT_RUN_SIZE,
-    };
-    // Every run the writer counts: each run of text, whitespace too, and a field or a note reference in the style's run;
-    // not the space a task's or a note's text starts with, which goes, as the writer writes the checkbox or the note's
-    // number and the space after it apart.
-    const noteNumbered =
-        scope.story === 'note' &&
-        descendants(p, W_NS, 'footnoteRef').length + descendants(p, W_NS, 'endnoteRef').length > 0;
-    const start =
-        task || noteNumbered ? pieces.findIndex((piece) => !(piece.kind === 'node' && isWhitespace(piece.node))) : 0;
-    const faces = pieces.slice(Math.max(0, start)).flatMap((piece) => {
-        if (piece.kind !== 'node') return [];
-        if (piece.node.type === 'pageNumber' || piece.node.type === 'footnote') return [mark];
-        if (piece.node.type !== 'text' || !piece.node.text || piece.size === undefined) return [];
-        return [{ family: fontMark(piece.font, reader.fontTable, normal.font) ?? normal.font, size: piece.size }];
-    });
-    // An at-least Normal reads as single, so the Normal's own line is the one to compare with. A style draws its line in
-    // its own font, the style's run's. The writer writes a rescaled line on the paragraph itself, so a node read against
-    // its style that takes its line from the style reads as none, whatever family its runs are in.
-    const baseSpacing = normalBase
-        ? normal.lineSpacing
-        : baseLine === undefined
-          ? undefined
-          : lineMultiple(baseLine, mark.family);
-    const multiple = line === undefined ? undefined : lineMultiple(line / familyLineScale(mark, faces), mark.family);
+    // An at-least Normal reads as single, so the Normal's own line is the one to compare with.
+    const baseSpacing = normalBase ? normal.lineSpacing : baseLine === undefined ? undefined : baseLine / SINGLE_LINE;
+    const multiple = line === undefined ? undefined : line / SINGLE_LINE;
     const lineSpacing =
         multiple !== undefined &&
-        (normalBase || direct.line !== undefined || list?.pPr.line !== undefined) &&
         (baseSpacing === undefined || Math.round(multiple * 100) !== Math.round(baseSpacing * 100))
             ? multiple
             : undefined;
@@ -664,8 +624,7 @@ function paragraphItems(
         if (own) for (const node of content) dropOwn(node, 'fontSize', own.sizePt);
         const unlessOwn = (pt: number | undefined, ownTwips: number | undefined) =>
             pt !== undefined && ownTwips !== undefined && pt === twipsToPt(ownTwips) ? undefined : pt;
-        // The writer's styles write a node's own line in the Normal's font.
-        const ownLine = own && Math.round(lineMultiple(own.line, normal.font) * 100);
+        const ownLine = own && Math.round((own.line / SINGLE_LINE) * 100);
         const keptLineSpacing =
             format.lineSpacing !== undefined && Math.round(format.lineSpacing * 100) === ownLine
                 ? undefined

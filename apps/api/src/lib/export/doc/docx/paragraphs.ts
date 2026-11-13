@@ -12,15 +12,14 @@ import {
     readParagraphFormat,
 } from '@workspace/lib/docs/eigendoc';
 import { readIntIn } from '@workspace/lib/guards';
-import type { RunFace, WordBorder } from '../../../document/looks';
+import type { WordBorder } from '../../../document/looks';
 import {
+    autoLine,
     BLOCK_MARGINS,
     CODE_BLOCK_LOOK,
     cssPt,
-    familyLineScale,
     LIST_LEVEL,
     nodeLook,
-    normalLine,
     proseTextLook,
     proseTwips,
     QUOTE_LOOK,
@@ -289,11 +288,10 @@ export function blocksOf(
     // a picture at its paragraph's start.
     let anchors = '';
     const flush = () => {
-        const faces: RunFace[] = [];
-        const runs = runsXml(inline, context, props.style, faces);
-        const scale = familyLineScale(useFace(context.pkg, {}, props.style), faces);
-        const line = props.spacing?.line ?? styleSpacing(context.pkg.styles, props.style, 'line');
-        let own = scale === 1 ? props : { ...props, spacing: { ...props.spacing, line: Math.round(line * scale) } };
+        const runs = runsXml(inline, context, props.style);
+        // The paragraph mark draws in its style's face, so an empty paragraph embeds it too.
+        useFace(context.pkg, {}, props.style);
+        let own = props;
         // Word's navigator lists every paragraph at an outline level, so a heading a figure splits keeps one entry.
         if (pieces.length > 0 && props.style && context.pkg.styles.get(props.style)?.pPr?.outlineLvl !== undefined)
             own = { ...own, outlineLvl: BODY_TEXT_OUTLINE_LEVEL };
@@ -493,7 +491,7 @@ export function textProps(own: Pick<ParagraphProps, 'style' | 'spacing' | 'jc'>,
 function formatted(node: JSONContent, props: ParagraphProps, context: Context): ParagraphProps {
     const format = readParagraphFormat(node.attrs ?? {});
     const spacing: Spacing = { ...props.spacing };
-    if (format.lineSpacing !== undefined) spacing.line = normalLine(format.lineSpacing, context.pkg.normal);
+    if (format.lineSpacing !== undefined) spacing.line = autoLine(format.lineSpacing);
     if (context.quotes === 0 && context.after === undefined) {
         if (format.spaceBefore !== undefined) spacing.before = twips(format.spaceBefore);
         if (format.spaceAfter !== undefined) spacing.after = twips(format.spaceAfter);

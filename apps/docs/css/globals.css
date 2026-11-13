@@ -105,7 +105,7 @@
 
     .eigen-prose p {
         margin-bottom: 0;
-        line-height: 1.4;
+        --line-spacing: 1.16;
     }
 }
 

@@ -211,7 +211,7 @@ describe('doc export — the Normal', () => {
         async (format) => {
             const css = await exportStyle(format, styledDoc());
             expect(css).toContain(
-                `.page { --doc-font-family: ${getFontFamily('Source Serif 4')}; --doc-font-size: 12pt; --doc-line-height: 1.21; --doc-space-before: 6pt; --doc-space-after: 0pt; --doc-color: #000000; }`,
+                `.page { --doc-font-family: ${getFontFamily('Source Serif 4')}; --doc-font-line: 1.371; --doc-font-size: 12pt; --doc-line-spacing: 1; --doc-space-before: 6pt; --doc-space-after: 0pt; --doc-color: #000000; }`,
             );
             // A doc without the map declares none, so it renders as before the map.
             expect(await exportStyle(format)).not.toMatch(/--doc-[\w-]+:/);
@@ -235,20 +235,19 @@ describe('doc export — the Normal', () => {
         expect(new TextDecoder().decode(data)).toContain('<span style="font-variant-caps: small-caps">Serif</span>');
     });
 
-    test("docx writes the Normal as docDefaults and the Normal style, in the Normal's font's own line", async () => {
+    test('docx writes the Normal as docDefaults and the Normal style, its line spacing as it is', async () => {
         const { data } = await renderEigendocExport(styledDoc(), 'docx', 'Report.eigendoc', async () => [], undefined);
         const styles = new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/styles.xml'));
         expect(styles).toContain(
             '<w:rPrDefault><w:rPr><w:rFonts w:ascii="Source Serif 4" w:hAnsi="Source Serif 4" w:eastAsia="Source Serif 4" w:cs="Source Serif 4"/><w:color w:val="000000"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:rPrDefault>',
         );
-        // A heading and the title draw in the Normal's font, so their line is the editor's 1.2 in Source Serif 4's own.
+        // A heading and the title write their own line spacing, 0.99, whatever the Normal's font.
         for (const id of ['Heading1', 'Title'])
             expect(styles).toMatch(
-                new RegExp(`w:styleId="${id}">(?:(?!</w:style>).)*<w:spacing [^>]*w:line="210" w:lineRule="auto"/>`),
+                new RegExp(`w:styleId="${id}">(?:(?!</w:style>).)*<w:spacing [^>]*w:line="238" w:lineRule="auto"/>`),
             );
-        // Single in Inter's line is Source Serif 4's 1.21 / 1.371 of its own.
         expect(styles).toMatch(
-            /w:styleId="Normal"><w:name w:val="Normal"\/><w:qFormat\/><w:pPr><w:spacing w:before="120" w:after="0" w:line="212" w:lineRule="auto"\/>/,
+            /w:styleId="Normal"><w:name w:val="Normal"\/><w:qFormat\/><w:pPr><w:spacing w:before="120" w:after="0" w:line="240" w:lineRule="auto"\/>/,
         );
     });
 });
@@ -287,7 +286,9 @@ describe('doc export — the stylesheet', () => {
         '%s draws the title and subtitle at their size, the subtitle grey',
         async (format) => {
             const css = await exportStyle(format);
-            expect(css).toMatch(/\.eigen-prose p\[data-type="title"\] \{[^}]*font-size: 26pt;[^}]*line-height: 1\.2;/);
+            expect(css).toMatch(
+                /\.eigen-prose p\[data-type="title"\] \{[^}]*font-size: 26pt;[^}]*--line-spacing: 0\.99;/,
+            );
             expect(css).toMatch(/\.eigen-prose p\[data-type="subtitle"\] \{ font-size: 15pt;/);
             expect(css).toMatch(/, \.eigen-prose p\[data-type="subtitle"\] \{ color: #666666; \}/);
         },
@@ -1382,7 +1383,7 @@ describe('doc export — caps', () => {
             { type: 'paragraph', content: [caps('Serif', 'small', 'Source Serif 4')] },
         ]);
         expect(html).toContain(
-            `<p><span style="font-family: ${getFontFamily('Source Serif 4')}; font-variant-caps: small-caps">Serif</span></p>`,
+            `<p><span style="font-family: ${getFontFamily('Source Serif 4')}; line-height: calc(var(--line-spacing) * 1.371); font-variant-caps: small-caps">Serif</span></p>`,
         );
     });
 });
@@ -2167,10 +2168,32 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
             "if tag == 'p' and type(box).__name__ == 'BlockBox': print(box.style['font_family'][0], box.style['font_size'], round(box.height / box.style['font_size'], 2), float(box.padding_top), float(box.margin_bottom))",
         );
         expect(boxes).toEqual([
-            'Source Serif 4 16.0 1.21 8.0 0.0',
-            'Source Serif 4 16.0 1.21 8.0 0.0',
-            'Source Serif 4 16.0 1.21 0.0 0.0',
+            'Source Serif 4 16.0 1.37 8.0 0.0',
+            'Source Serif 4 16.0 1.37 8.0 0.0',
+            'Source Serif 4 16.0 1.37 0.0 0.0',
         ]);
+    }, 60_000);
+
+    // A run draws its line at its own font's single line, as Word does: Inter's 1.21, Source Serif 4's 1.371.
+    test("a paragraph's line is its line spacing times the line of the font its text draws in", async () => {
+        const serif = { type: 'textStyle', attrs: { fontFamily: 'Source Serif 4' } };
+        const spaced = (lineSpacing: number, marks: JSONContent['marks']): JSONContent => ({
+            type: 'paragraph',
+            attrs: { lineSpacing },
+            content: [{ type: 'text', text: 'x', marks }],
+        });
+        const { data } = await renderEigendocExport(
+            seededDoc({ type: 'doc', content: [spaced(1, []), spaced(1, [serif]), spaced(2, [serif])] }),
+            'pdf-html',
+            'Report.eigendoc',
+            async () => [],
+            undefined,
+        );
+        const boxes = await laidOut(
+            new TextDecoder().decode(data),
+            "if tag == 'p' and type(box).__name__ == 'BlockBox': print(round(box.height / box.style['font_size'], 2))",
+        );
+        expect(boxes).toEqual(['1.21', '1.37', '2.74']);
     }, 60_000);
 });
 

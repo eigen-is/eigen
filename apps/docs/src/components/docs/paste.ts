@@ -72,6 +72,8 @@ export function cleanPastedHTML(
         // The Normal's font needs no mark; any other, Inter in a Times doc too, keeps one.
         const font = bundledFontOfStack(el.style.fontFamily);
         el.style.fontFamily = font && font !== normalFont ? getFontFamily(font) : '';
+        // The font mark writes a run's line-height when it draws, and one left alone would be a mark.
+        el.style.lineHeight = '';
         // Google Docs writes a size on every span: its body's, which is the doc's, and in a heading the heading's,
         // which the doc's heading draws as its own.
         if (!pmCopy && (el.style.fontSize === `${DOCUMENT_FONT_SIZE}pt` || el.closest('h1, h2, h3, h4, h5, h6')))

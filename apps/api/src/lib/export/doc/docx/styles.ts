@@ -2,6 +2,7 @@
 // the title, with their values from eigen-prose.css. stylesXml writes them once per export, and the paragraphs name
 // them by id.
 
+import { fontLineHeight } from '@workspace/lib/constants/fonts';
 import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
 import { cssColorToHex } from '../../../document/colors';
 import {
@@ -15,16 +16,15 @@ import {
     HEADING_LOOKS,
     halfPoints,
     LINK_LOOK,
-    lineHeightPt,
     normalTextLook,
     noteTextLook,
     proseBorder,
     proseColor,
     QUOTE_LOOK,
-    sizedTextLook,
     TASK_DONE_LOOK,
     TITLE_LOOKS,
     TITLE_SELECTORS,
+    textMetrics,
     twips,
 } from '../../../document/looks';
 import { proseValue, proseValueIfSet } from '../../../document/prose-css';
@@ -131,7 +131,7 @@ export function styleDefinitions(
     const rule = { ...proseBorder('.eigen-prose hr', 'border-top'), space: 1 };
     const ruleMargin = proseValue('.eigen-prose hr', 'margin');
     const titles = TITLE_STYLES.map(({ type, id, uiPriority }): StyleDef => {
-        const { sizePt, before, after, line, tracking } = sizedTextLook(TITLE_SELECTORS[type], normal);
+        const { sizePt, before, after, line, tracking } = textMetrics(TITLE_SELECTORS[type], normal.size);
         return {
             type: 'paragraph',
             id,
@@ -150,7 +150,7 @@ export function styleDefinitions(
     });
     const headings = HEADING_LOOKS.map((look, index): StyleDef => {
         const level = index + 1;
-        const { sizePt, before, after, line, tracking } = sizedTextLook(`.eigen-prose h${level}`, normal);
+        const { sizePt, before, after, line, tracking } = textMetrics(`.eigen-prose h${level}`, normal.size);
         return {
             type: 'paragraph',
             id: `Heading${level}`,
@@ -259,10 +259,11 @@ export function styleDefinitions(
                 spacing: {
                     before: twips(cssPt(boxSide(codeMargin, 'top'), BODY.sizePt)),
                     after: twips(cssPt(boxSide(codeMargin, 'bottom'), BODY.sizePt)),
+                    // A code block's CSS line is a multiple of its size, and Word's of its font's own line at the size
+                    // Word rounds to.
                     line: autoLine(
-                        lineHeightPt(proseValue('.eigen-prose pre', 'line-height'), codePt),
-                        halfPoints(codePt) / 2,
-                        CODE_LOOK.font,
+                        (Number(proseValue('.eigen-prose pre', 'line-height')) * codePt) /
+                            ((halfPoints(codePt) / 2) * fontLineHeight(CODE_LOOK.font)),
                     ),
                 },
                 ind: { left: CODE_BLOCK_LOOK.indent, right: CODE_BLOCK_LOOK.indent },

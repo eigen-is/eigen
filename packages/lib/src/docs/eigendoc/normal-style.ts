@@ -7,10 +7,11 @@ import {
     DOCUMENT_FONT,
     DOCUMENT_FONT_SIZE,
     EIGEN_FONT_NAMES,
+    fontLineHeight,
     getFontFamily,
     readFontSize,
 } from '../../constants/fonts';
-import { cssLineHeight, DOCUMENT_PARAGRAPH_FORMAT, readParagraphFormat } from './paragraph-format';
+import { DOCUMENT_PARAGRAPH_FORMAT, readParagraphFormat } from './paragraph-format';
 
 // The doc's Normal text, which text without a font, size or color mark and a paragraph without a format draws: a
 // bundled font's name, the size and spacing in pt, line spacing a multiple, as a paragraph's.
@@ -56,13 +57,17 @@ export function readNormalStyle(record: Record<string, unknown>): NormalStyle {
 }
 
 // The custom properties eigen-prose.css draws the body text from, set on the page: only those apart from Eigen's, so a
-// doc that keeps Eigen's look renders exactly as one without the map.
+// doc that keeps Eigen's look renders exactly as one without the map. A font comes with its single line, which a text
+// block's line spacing multiplies.
 export function normalStyleProperties(style: NormalStyle): Record<string, string> {
     const properties: Record<string, string> = {};
     const own = (key: keyof NormalStyle) => style[key] !== DEFAULT_NORMAL_STYLE[key];
-    if (own('font')) properties['--doc-font-family'] = getFontFamily(style.font);
+    if (own('font')) {
+        properties['--doc-font-family'] = getFontFamily(style.font);
+        properties['--doc-font-line'] = String(fontLineHeight(style.font));
+    }
     if (own('size')) properties['--doc-font-size'] = `${style.size}pt`;
-    if (own('lineSpacing')) properties['--doc-line-height'] = String(cssLineHeight(style.lineSpacing));
+    if (own('lineSpacing')) properties['--doc-line-spacing'] = String(style.lineSpacing);
     if (own('spaceBefore')) properties['--doc-space-before'] = `${style.spaceBefore}pt`;
     if (own('spaceAfter')) properties['--doc-space-after'] = `${style.spaceAfter}pt`;
     if (own('color')) properties['--doc-color'] = style.color;
