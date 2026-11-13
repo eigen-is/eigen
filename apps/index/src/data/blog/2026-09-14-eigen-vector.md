@@ -1,12 +1,12 @@
 ---
 id: eigen-vector
 title: "Eigen: Vector"
-description: "Eigen has a new app: eigen|vector>, a collaborative whiteboard for drawings and diagrams. Shapes, arrows that stay attached, freehand strokes, live cursors and comments."
+description: "Eigen has a new app: eigen|vector⟩, a collaborative whiteboard for drawings and diagrams. Shapes, arrows that stay attached, freehand strokes, live cursors and comments."
 cover: /data/blog/media/2026-08-14-eigen-demo/vector.webp
 draft: true
 ---
 
-Eigen is a European Google Workspace alternative where you own your data. In the post from [six months later](https://eigen.is/blog/eigen-six-months-later) I listed a drawing and diagramming app as a gap, with a question mark behind the name. Eigen now has [eigen|vector>](https://eigen.is/support/vector/get-started).
+Eigen is a European Google Workspace alternative where you own your data. In the post from [six months later](https://eigen.is/blog/eigen-six-months-later) I listed a drawing and diagramming app as a gap, with a question mark behind the name. Eigen now has [eigen|vector⟩](https://eigen.is/support/vector/get-started).
 
 ## What it is
 

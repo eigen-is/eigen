@@ -12,14 +12,14 @@ I kept building. Here is where it stands.
 
 Five new apps joined the workspace:
 
-- **eigen|calendar>**: recurring events, team calendars, invitations with RSVP. Supports CalDAV, so you can use it
+- **eigen|calendar⟩**: recurring events, team calendars, invitations with RSVP. Supports CalDAV, so you can use it
   with Apple Calendar, Thunderbird or any standard client. Calendar invitations work over email too (iMIP), so inviting
   external people should work.
-- **eigen|sheets>**: collaborative spreadsheets. Real-time editing with Yjs, same as docs.
-- **eigen|slides>**: collaborative presentations. A slide editor with export to HTML and PDF. You can present
+- **eigen|sheets⟩**: collaborative spreadsheets. Real-time editing with Yjs, same as docs.
+- **eigen|slides⟩**: collaborative presentations. A slide editor with export to HTML and PDF. You can present
   directly from the browser.
-- **eigen|chat>**: real-time chat inspired by MUDs. Attachments, mentions and an unreasonable number of slash commands.
-- **eigen|admin>**: server administration with a setup wizard, team management, waitlist and
+- **eigen|chat⟩**: real-time chat inspired by MUDs. Attachments, mentions and an unreasonable number of slash commands.
+- **eigen|admin⟩**: server administration with a setup wizard, team management, waitlist and
   invite-based signup.
 
 <media-grid columns="3">
@@ -27,47 +27,47 @@ Five new apps joined the workspace:
     src="/data/blog/media/2026-04-11-eigen-six-months-later/mail.webp" 
     thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_mail.webp"
     type="image" 
-    caption="eigen|mail>" />
+    caption="eigen|mail⟩" />
   <media 
     src="/data/blog/media/2026-04-11-eigen-six-months-later/calendar.webp" 
     thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_calendar.webp"
     type="image" 
-    caption="eigen|calendar>" />
+    caption="eigen|calendar⟩" />
   <media 
     src="/data/blog/media/2026-04-11-eigen-six-months-later/drive.webp" 
     thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_drive.webp"
     type="image" 
-    caption="eigen|drive>" />
+    caption="eigen|drive⟩" />
   <media 
     src="/data/blog/media/2026-04-11-eigen-six-months-later/contacts.webp" 
     thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_contacts.webp"
     type="image" 
-    caption="eigen|contacts>" />
+    caption="eigen|contacts⟩" />
   <media 
     src="/data/blog/media/2026-04-11-eigen-six-months-later/docs.webp" 
     thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_docs.webp"
     type="image" 
-    caption="eigen|docs>" />
+    caption="eigen|docs⟩" />
   <media 
     src="/data/blog/media/2026-04-11-eigen-six-months-later/stickies.webp" 
     thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_stickies.webp"
     type="image" 
-    caption="eigen|stickies>" />
+    caption="eigen|stickies⟩" />
   <media 
     src="/data/blog/media/2026-04-11-eigen-six-months-later/sheets.webp" 
     thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_sheets.webp"
     type="image" 
-    caption="eigen|sheets>" />
+    caption="eigen|sheets⟩" />
   <media 
     src="/data/blog/media/2026-04-11-eigen-six-months-later/slides.webp" 
     thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_slides.webp"
     type="image" 
-    caption="eigen|slides>" />
+    caption="eigen|slides⟩" />
   <media 
     src="/data/blog/media/2026-04-11-eigen-six-months-later/chat.webp" 
     thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_chat.webp"
     type="image" 
-    caption="eigen|chat>" />
+    caption="eigen|chat⟩" />
 </media-grid>
 
 Beyond new apps, a lot happened under the hood:
@@ -91,7 +91,7 @@ A lot. Some of the bigger gaps:
 - Import and export to common formats. There is a proof of concept for export of docs and slides, but importing Google Docs, Office files or
   migrating data from other services is not there yet.
 - Charts and graphs in spreadsheets, docs and slides.
-- A drawing and diagramming app (eigen|vector> ?).
+- A drawing and diagramming app (eigen|vector⟩ ?).
 - Search across all your data.
 - It works on mobile, but it's not optimized.
 

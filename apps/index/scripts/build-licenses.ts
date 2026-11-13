@@ -18,7 +18,7 @@ const VENDORED: LicenseVendored[] = [
         name: 'Excalidraw',
         license: 'MIT',
         url: 'https://github.com/excalidraw/excalidraw',
-        note: 'eigen|vector> ports its elbow-arrow routing, freehand and elbow SVG path generation, and fractional-index repair',
+        note: 'eigen|vector⟩ ports its elbow-arrow routing, freehand and elbow SVG path generation, and fractional-index repair',
     },
     {
         name: 'fortune-sheet',
@@ -36,7 +36,7 @@ const VENDORED: LicenseVendored[] = [
         name: 'fractional-indexing',
         license: 'CC0-1.0',
         url: 'https://github.com/rocicorp/fractional-indexing',
-        note: 'vendored verbatim to pin z-order behavior in eigen|vector>',
+        note: 'vendored verbatim to pin z-order behavior in eigen|vector⟩',
     },
     {
         name: 'ECMA-376 preset shape definitions',

@@ -491,7 +491,7 @@ Whole-server backup and restore. Eigen backs up the whole server every night whi
 
 ## [0.3.0] - 2026-09-25
 
-Self-hosting release. Eigen now installs from prebuilt images with one line, and the `./eigen` launcher updates, rolls back and backs up the server. Slides use the same canvas as eigen|vector>. Mail, calendar and contacts keep exactly what your mail, calendar and contacts apps write, and `.eml`, `.ics` and `.vcf` files open and import everywhere a file shows up. The findings of the September security audit are fixed.
+Self-hosting release. Eigen now installs from prebuilt images with one line, and the `./eigen` launcher updates, rolls back and backs up the server. Slides use the same canvas as eigen|vector⟩. Mail, calendar and contacts keep exactly what your mail, calendar and contacts apps write, and `.eml`, `.ics` and `.vcf` files open and import everywhere a file shows up. The findings of the September security audit are fixed.
 
 **Breaking** — calendars, contacts, slides and vector drawings don't carry their data over from 0.2.0 (breaking). Events and contact books are dropped, decks open empty, and drawings lose their plain text and fills.
 
@@ -521,7 +521,7 @@ Self-hosting release. Eigen now installs from prebuilt images with one line, and
 - **Calendar and contacts storage (breaking)** — events and cards are stored exactly as a client wrote them and served back byte for byte. Calendar data counts toward the storage budget. Existing data is not converted
 - **Mail off is a complete product** — without hosted mail the Mail app and its settings disappear, and one `SMTP_RELAY_*` key set serves both modes: Postfix relays through it, or the API sends through it itself
 - **Owner-only administration** — only the owner sees server settings, onboarding, guest access, the waitlist and the S3 secret. The owner cannot be deleted. The wizard no longer asks for a domain
-- **eigen|vector>** — text elements are rich text. Shapes get gradient fills, true rounded corners and an optional border. Arrows dock on a shape's real outline. Phones open a drawing view-only
+- **eigen|vector⟩** — text elements are rich text. Shapes get gradient fills, true rounded corners and an optional border. Arrows dock on a shape's real outline. Phones open a drawing view-only
 - **Canvas editing** — a run of nudges is one undo step, and so is a typed panel value. The aspect-ratio lock is remembered per element. Copy and paste between apps keep text as text
 - **Sheets numbers** — every number shows the way Excel's General format shows it: no rounding noise, long values cut to 11 characters, scientific notation past that. A typed number is stored as a number, and a copy keeps full precision
 - **Sheets** — pasted text is read like typed input, `Ctrl+D` and `Ctrl+R` copy the whole source cell, conditional-format rules follow Excel on case and blanks, and an imported Excel rule stays one rule. Exports lay out exactly as the screen does
@@ -556,11 +556,11 @@ Self-hosting release. Eigen now installs from prebuilt images with one line, and
 
 ## [0.2.0] - 2026-09-02
 
-Drawing, contacts sync, and hardening release. Eigen gains a new app, eigen|vector>, a collaborative whiteboard heavily inspired by Excalidraw's impressive work. Contacts are stored as vCard files and served over CardDAV, so phones and desktops sync them the way they already sync calendars. Mail got its own parser, per-recipient document links, and a hardened outbound relay after an abuse incident. Under the hood, every collaborative editor shares one way to load and save, copy and paste, show live cursors and draw.
+Drawing, contacts sync, and hardening release. Eigen gains a new app, eigen|vector⟩, a collaborative whiteboard heavily inspired by Excalidraw's impressive work. Contacts are stored as vCard files and served over CardDAV, so phones and desktops sync them the way they already sync calendars. Mail got its own parser, per-recipient document links, and a hardened outbound relay after an abuse incident. Under the hood, every collaborative editor shares one way to load and save, copy and paste, show live cursors and draw.
 
 ### Added
 
-- **eigen|vector>** — a new collaborative whiteboard app. Shapes, freehand strokes with pen pressure, lines, text and images. Arrows stay bound to the shapes they connect, curved by default, with elbow routing, pinnable segments, heads and labels. There's an eraser, snap lines with align and distribute, live cursors, comments, an activity panel, and tuning for touch and stylus. Drawings export to SVG and PDF, show up in Drive previews and search, and paste into other apps as real images
+- **eigen|vector⟩** — a new collaborative whiteboard app. Shapes, freehand strokes with pen pressure, lines, text and images. Arrows stay bound to the shapes they connect, curved by default, with elbow routing, pinnable segments, heads and labels. There's an eraser, snap lines with align and distribute, live cursors, comments, an activity panel, and tuning for touch and stylus. Drawings export to SVG and PDF, show up in Drive previews and search, and paste into other apps as real images
 - **Contacts over CardDAV** — contacts are stored as vCard files and served under `/dav/addressbooks`, so iOS, macOS, Thunderbird, and other clients sync them two-way. Apple clients edit in place, vCard 4.0 uploads are accepted, labels round-trip as categories, and contact photos become avatars. The Integrations page shows a CardDAV card next to CalDAV, a device setup article walks through each client, and the setup guide documents the `_carddavs._tcp` / `_caldavs._tcp` autodiscovery DNS records
 - **Contacts** — edit a card straight from the context menu, select several contacts and email or chat with them at once, and the form shows what's wrong and marks only the fields that are required
 - **Mail: send a document link** — the share-and-send dialog lists the linked files, gives the recipients read access when you send, and writes each recipient a personal link. When some recipients fail, Eigen tells you which
