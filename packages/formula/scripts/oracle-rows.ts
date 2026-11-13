@@ -608,12 +608,16 @@ function runFile(file: string, tag: string, plan: Plan, outcomes: Outcome[], ski
                     record(section, formula, fixture, { rows, columns, elements }, excel, extra);
                 } else {
                     const type = /type (\d+)/.exec(shape)?.[1] ?? (shape.includes('error') ? '16' : undefined);
+                    // ARRAYTOTEXT errs on some answers TYPE calls no error, such as a blank one; then what the
+                    // formula's own cell shows, in the notes, is its answer.
+                    const shows = /\bcell shows `([^`]*)`/.exec(notes)?.[1];
+                    const text = type !== '16' && excel.startsWith('#') && shows !== undefined ? shows : excel;
                     record(
                         section,
                         formula,
                         fixture,
-                        { text: excel, type: type && ['1', '2', '4', '16'].includes(type) ? type : undefined },
-                        excel,
+                        { text, type: type && ['1', '2', '4', '16'].includes(type) ? type : undefined },
+                        text,
                         extra,
                     );
                 }
