@@ -1,5 +1,10 @@
+// Renders the site's Markdown, such as help articles, blog posts and the changelog, to HTML at build time. Each h2
+// and h3 gets a slug id and a link icon, and is collected for the page's table of contents. Raw HTML passes through,
+// since every source is written in this repo, and each app name in the text is marked to be set in the mono font.
+
 import MarkdownIt from 'markdown-it';
 import anchor from 'markdown-it-anchor';
+import { splitKetNames } from '../../src/components/ket-names';
 import type { TocEntry } from './content-types';
 
 // Lucide "link" icon, inlined so each heading gets a hover anchor that copies its link.
@@ -15,8 +20,6 @@ function slugify(text: string): string {
         .replace(/\s+/g, '-');
 }
 
-// Render Markdown to HTML and collect the h2/h3 headings for the on-this-page TOC.
-// `html: true` keeps trusted inline HTML in articles (content is authored in-repo).
 export function renderMarkdown(markdown: string): { html: string; toc: TocEntry[] } {
     const toc: TocEntry[] = [];
     const md = new MarkdownIt({ html: true, linkify: true, typographer: false });
@@ -35,6 +38,14 @@ export function renderMarkdown(markdown: string): { html: string; toc: TocEntry[
             toc.push({ id: slug, text: title, level });
         },
     });
+    // App names in text get the mono class. A bare URL that linkify made a link shows as text, but stays as written.
+    md.renderer.rules.text = (tokens, idx) => {
+        const { content } = tokens[idx];
+        if (tokens[idx - 1]?.markup === 'linkify') return md.utils.escapeHtml(content);
+        return splitKetNames(content)
+            .map((part, i) => (i % 2 ? `<span class="ket-name">${part}</span>` : md.utils.escapeHtml(part)))
+            .join('');
+    };
 
     return { html: md.render(markdown), toc };
 }

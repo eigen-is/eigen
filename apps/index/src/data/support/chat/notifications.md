@@ -44,4 +44,4 @@ When a notification arrives while you are using Eigen, a small pop-up appears in
 
 ## Browser tab title
 
-When you have unread notifications, the page title in the browser tab starts with a count in brackets, for example `(3) eigen|chat>`. This lets you see new activity even when the tab is in the background.
+When you have unread notifications, the page title in the browser tab starts with a count in brackets, for example `(3) eigen|chat⟩`. This lets you see new activity even when the tab is in the background.

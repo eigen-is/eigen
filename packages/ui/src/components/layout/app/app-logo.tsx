@@ -1,5 +1,5 @@
 // The wordmark in the top bar: "eigen" in the text color, then the app's name between a bar and a ket, such as
-// "eigen|mail>". With an empty app name it is the bare "eigen", as on the public landing page.
+// "eigen|mail⟩". With an empty app name it is the bare "eigen", as on the public landing page.
 
 import { Link } from '@tanstack/react-router';
 import { getDriveAppUrl, getSpaceAppUrl } from '@workspace/lib/api';

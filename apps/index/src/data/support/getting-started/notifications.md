@@ -63,4 +63,4 @@ Ordinary edits by other people don't notify you, because that would fill the bel
 
 While you have Eigen open, a new notification also appears as a short pop-up in the corner of the screen. It shows the same title and preview, with a **View** button that opens the item.
 
-The browser tab title carries the count too. With three unread notifications a Drive tab reads `(3) eigen|drive>`, so you can leave Eigen in the background and still spot when something arrives.
+The browser tab title carries the count too. With three unread notifications a Drive tab reads `(3) eigen|drive⟩`, so you can leave Eigen in the background and still spot when something arrives.

@@ -28,6 +28,8 @@ postbuild  prerender.tsx, build-search-index.ts                       every rout
 
 `build-content.ts` walks `src/data/{blog,support}`, parses frontmatter with `Bun.YAML` and validates it against the Zod schemas in `apps/index/scripts/lib/content-types.ts`. A bad or missing required field throws, so a broken article never ships. It extracts media grids and renders Markdown with `markdown-it` and `markdown-it-anchor`.
 
+An app name written as a ket, such as `eigen|mail⟩`, is set in the mono font wherever the site shows prose, so its letters, bar and ket come from one face. The Markdown keeps the plain text. `renderMarkdown`'s text rule wraps each name in `<span class="ket-name">` and `MediaGrid` does the same for a caption, both through `splitKetNames`. Code spans, code blocks, URLs and attributes stay as written, and heading ids and TOC text come from the tokens, so they keep the plain name. A name in backticks is code: use that only for text that appears on screen as written, such as a browser tab title.
+
 Per collection it writes one `<slug>.json` body (`{ html, mediaGrids }`) and one `<collection>.manifest.json` with metadata only: title, description, type, category, tags, order, `updated`, cross-sections, the h2/h3 TOC and the resolved `related` list. The output goes to `src/content/.generated/`, which is gitignored: it is a build artifact.
 
 ## Manifests load eagerly and bodies lazily
@@ -53,7 +55,7 @@ A mismatch makes React throw the prerendered DOM away and render the page again.
 - `useMediaQuery` is `useSyncExternalStore` with a desktop `getServerSnapshot`.
 - The `Toaster` mounts only after hydration.
 - React's auto-emitted `<link rel="preload">` tags are moved into `<head>`, where the browser's React puts them.
-- The landing page's first render is deterministic: the `eigen|app>` wordmark starts at the first app, and the waitlist and link buttons, the install line and the version label wait for the config. The hero Login button is in the static HTML as Login and turns into Enter demo once the config says so.
+- The landing page's first render is deterministic: the `eigen|app⟩` wordmark starts at the first app, and the waitlist and link buttons, the install line and the version label wait for the config. The hero Login button is in the static HTML as Login and turns into Enter demo once the config says so.
 
 The comments in `prerender.tsx`, `entry-server.tsx` and `main.tsx` explain each one. Read them before changing the render path.
 

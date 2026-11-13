@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogTitle } from '@workspace/ui/components/dia
 import { cn } from '@workspace/ui/lib/utils';
 import { Play } from 'lucide-react';
 import { useState } from 'react';
+import { splitKetNames } from './ket-names';
 
 type MediaItemProps = {
     src: string;
@@ -15,11 +16,24 @@ type MediaItemProps = {
     poster?: string;
 };
 
+// A caption as text, with each app name in the class the site's prose gives app names.
+function Caption({ text }: { text: string }) {
+    return splitKetNames(text).map((part, i) =>
+        i % 2 ? (
+            <span key={i} className="ket-name">
+                {part}
+            </span>
+        ) : (
+            part
+        ),
+    );
+}
+
 function MediaItem({ src, type, caption, thumbnail, poster }: MediaItemProps) {
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-    const thumbnailSrc = thumbnail || src;
-    const posterSrc = poster || thumbnail;
+    const thumbnailSrc = thumbnail ?? src;
+    const posterSrc = poster ?? thumbnail;
 
     return (
         <>
@@ -28,14 +42,14 @@ function MediaItem({ src, type, caption, thumbnail, poster }: MediaItemProps) {
                     {type === 'image' && (
                         <img
                             src={thumbnailSrc}
-                            alt={caption || ''}
+                            alt={caption ?? ''}
                             className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                         />
                     )}
                     {type === 'video' && (
                         <div className="relative w-full h-full">
                             {posterSrc ? (
-                                <img src={posterSrc} alt={caption || ''} className="w-full h-full object-cover" />
+                                <img src={posterSrc} alt={caption ?? ''} className="w-full h-full object-cover" />
                             ) : (
                                 <video src={src} className="w-full h-full object-cover" muted preload="metadata" />
                             )}
@@ -45,19 +59,27 @@ function MediaItem({ src, type, caption, thumbnail, poster }: MediaItemProps) {
                         </div>
                     )}
                 </div>
-                {caption && <p className="mt-2 text-sm text-muted-foreground text-center">{caption}</p>}
+                {caption && (
+                    <p className="mt-2 text-[11px] text-muted-foreground text-center">
+                        <Caption text={caption} />
+                    </p>
+                )}
             </button>
 
             <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
                 <DialogContent className="w-auto sm:max-w-[90vw] justify-items-center">
-                    <DialogTitle className="sr-only">{caption || 'Media preview'}</DialogTitle>
+                    <DialogTitle className="sr-only">{caption ?? 'Media preview'}</DialogTitle>
                     {type === 'image' && (
-                        <img src={src} alt={caption || 'Preview'} className="max-w-full max-h-[80vh] rounded" />
+                        <img src={src} alt={caption ?? 'Preview'} className="max-w-full max-h-[80vh] rounded" />
                     )}
                     {type === 'video' && (
                         <video src={src} controls autoPlay className="max-w-full max-h-[80vh] rounded" />
                     )}
-                    {caption && <p className="text-sm text-muted-foreground text-center max-w-2xl">{caption}</p>}
+                    {caption && (
+                        <p className="text-sm text-muted-foreground text-center max-w-2xl">
+                            <Caption text={caption} />
+                        </p>
+                    )}
                 </DialogContent>
             </Dialog>
         </>
@@ -74,16 +96,7 @@ export function MediaGrid({ columns = '2', items = [] }: MediaGridProps) {
         return null;
     }
 
-    const mediaElements = items.map((item, index) => (
-        <MediaItem
-            key={index}
-            src={item.src}
-            type={item.type}
-            caption={item.caption}
-            thumbnail={item.thumbnail}
-            poster={item.poster}
-        />
-    ));
+    const mediaElements = items.map((item, index) => <MediaItem key={index} {...item} />);
 
     const gridColsMap: Record<string, string> = {
         '1': 'grid-cols-1',
@@ -93,7 +106,7 @@ export function MediaGrid({ columns = '2', items = [] }: MediaGridProps) {
         '5': 'grid-cols-2 md:grid-cols-3 lg:grid-cols-5',
         '6': 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6',
     };
-    const gridCols = gridColsMap[columns] || 'grid-cols-1 md:grid-cols-2';
+    const gridCols = gridColsMap[columns] ?? 'grid-cols-1 md:grid-cols-2';
 
     return <div className={cn('grid', gridCols, 'gap-6 my-8')}>{mediaElements}</div>;
 }
