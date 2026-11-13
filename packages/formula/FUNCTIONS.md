@@ -6,11 +6,13 @@ Each row has one of three words. `as Excel`: the function agrees with every Exce
 
 ## Choices that apply to many functions
 
-These are decided, and each is said once. A row repeats a choice only where it is that function's daily business: the day line in the date functions, UTF-16 counting in the functions that count or cut characters, the 255 line where Excel refuses a long text, sorted data in the approximate lookups, a one-cell array in `TYPE`. The empty-text rule and the year-less date touch nearly every function and are not repeated.
+These are decided, and each is said once. A row repeats a choice only where it is that function's daily business: the day line in the date functions, UTF-16 counting in the functions that count or cut characters, the 255 line where Excel refuses a long text, sorted data in the approximate lookups, a one-cell array in `TYPE`. The empty-text rule, the blank result and the year-less date touch nearly every function and are not repeated.
 
 **The day line.** Day 0 is 30 December 1899 and the calendar is the real one: there is no 29 February 1900, and a negative number is a day before day 0. Dates run from 1 January 0001 to 31 December 9999, and every date function works on all of them. Excel counts 1 January 1900 as day 1 and has a 29 February 1900, so its dates in January and February 1900 are one day off from ours, and it has no dates before 1900. `DATE` reads a year from 1000 to 9999 as written, where Excel adds 1900 to any year under 1900. From 1 March 1900 on, the serials are Excel's. Example: `=YEAR(0)` is 1900 in Excel and 1899 in this engine.
 
 **An empty text in arithmetic is 0.** An empty text, such as a cell holding `=""`, counts as 0 where a number is needed and as FALSE where a truth value is. Example: `=""+1` is `#VALUE!` in Excel and 1 in this engine, and so are `IF("",1,2)` and `NOT("")`, 2 and TRUE here.
+
+**A blank result stays blank.** A formula whose result is blank, such as `=A1` over an empty A1, `=IF(TRUE,,1)` or a lookup that lands on an empty cell, leaves its cell blank, as Google Sheets does, where Excel stores 0. Every reader sees a blank cell: `ISBLANK` is TRUE, `COUNT` and `COUNTA` pass it over, `COUNTBLANK` counts it and `&"x"` gives `x`; arithmetic reads it as 0, as it reads any blank. A blank element of a computed array stays 0, as in Excel. Example: with `=A1` in B1, `=ISBLANK(B1)` is FALSE in Excel and TRUE in this engine.
 
 **A date typed without a year is no number.** A text such as `"1/2"` or `"15 March"` is read as a date only by `DATEVALUE` and `TIMEVALUE`, which take the year of the recalc. Everywhere else, in arithmetic and as a date argument, it is `#VALUE!`, because reading it would make the cell depend on the clock. Example: `=VALUE("1/2")` is 2 January of this year in Excel and `#VALUE!` in this engine; `=DATEVALUE("1/2")` agrees.
 

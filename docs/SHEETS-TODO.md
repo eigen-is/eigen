@@ -305,6 +305,7 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 
 ### Lookups
 
+- [ ] **A blank element of a computed array is 0**, as Excel stores it, where Google keeps it blank: over C1:C3 = 5, 6, 7 and a blank C4, `PRODUCT(IF({1;1;1;1},C1:C4))` is 0 (Google 210) and `COUNTA` of it 4 (Google 3). A formula's own blank result already stays blank, as in Google. Decide it with step 2's spill, from Excel batch 20 and the array probes of batch 21. **S**
 - [ ] **A lifted lookup answers per element**: four lifted reference-only rows answer one `#VALUE!` where Excel answers a 1×2 of `#VALUE!`, and the search does not know the blank cell of a lifted `INDEX` or `XLOOKUP` (`lift.ts` makes one blank-cell value). **S**
 
 ### Number display (numfmt)

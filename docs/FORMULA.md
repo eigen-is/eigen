@@ -8,7 +8,7 @@ The host's cells are the truth. The engine holds nothing a second load would not
 
 These terms come back in every section. A pass is one `recalc` call. A seed is a cell written since the last pass, the start of what the pass computes. A row is one function as the registry declares it, and a word is the declaration of one of its parameters. The host also hands each pass the time and a seed for random draws.
 
-The sections run from the package's place, through the three spellings of a formula, the store, values, evaluation, functions, recalc, edits, number display and the xlsx dialect, to the rules the build wrote down, the differences from Excel and the tests. A few things surprise people: [the day line is Google's](#the-day-line-is-googles-not-excels), so a date in January or February 1900 is one day earlier than in Excel; [empty text is 0 in arithmetic](#empty-text-is-0-in-arithmetic); [a cell on a loop holds `#REF!`](#a-loop-is-found-by-computing-it-and-every-cell-on-it-holds-ref); [a clock formula does not move by itself](#the-clock-and-the-draw-come-from-the-host); and [a table reference is gone after import](#a-table-reference-is-one-leaf-and-the-importer-resolves-it-to-a-range).
+The sections run from the package's place, through the three spellings of a formula, the store, values, evaluation, functions, recalc, edits, number display and the xlsx dialect, to the rules the build wrote down, the differences from Excel and the tests. A few things surprise people: [the day line is Google's](#the-day-line-is-googles-not-excels), so a date in January or February 1900 is one day earlier than in Excel; [empty text is 0 in arithmetic](#empty-text-is-0-in-arithmetic); [a formula whose result is blank leaves its cell blank](#a-blank-result-leaves-its-cell-blank-as-in-google-sheets); [a cell on a loop holds `#REF!`](#a-loop-is-found-by-computing-it-and-every-cell-on-it-holds-ref); [a clock formula does not move by itself](#the-clock-and-the-draw-come-from-the-host); and [a table reference is gone after import](#a-table-reference-is-one-leaf-and-the-importer-resolves-it-to-a-range).
 
 ## It is a leaf, reached through four entries
 
@@ -131,7 +131,17 @@ A serial is the days since 30 December 1899 in the one real calendar, negative b
 
 ## Empty text is 0 in arithmetic
 
-`=""+1` is 1 and `=B1*2` over a `=""` is 0, where Excel says `#VALUE!`; empty text is also FALSE as a condition and 0 in `VALUE` and `ABS`. It is the owner's pick from Google, since sheets are full of `=IF(x,"",…)` feeding arithmetic, and one coercion function holds it (`src/values/coerce.ts`). A blank result of a formula is 0 in a cell, as in Excel.
+`=""+1` is 1 and `=B1*2` over a `=""` is 0, where Excel says `#VALUE!`; empty text is also FALSE as a condition and 0 in `VALUE` and `ABS`. It is the owner's pick from Google, since sheets are full of `=IF(x,"",…)` feeding arithmetic, and one coercion function holds it (`src/values/coerce.ts`).
+
+## A blank result leaves its cell blank, as in Google Sheets
+
+`=A1` over an empty A1 leaves its cell blank, and so do `=IF(TRUE,A1)`, `=IF(TRUE,,1)`, `=IFERROR(A1,1)`, `=CHOOSE(1,A1)`, `=INDEX(A1:A3,2)` and a lookup that lands on an empty cell. Excel stores 0 there. The cell is blank to every reader: `ISBLANK` is TRUE, `COUNT` and `COUNTA` pass it over, `COUNTBLANK` and `COUNTIF(…,"")` count it, `AVERAGE` and `MIN` skip it, `&"x"` gives `x`, `=""` is TRUE, `MATCH(0,…,0)` does not find it, and arithmetic still reads it as 0. The blank survives a chain of such formulas. The cell still holds its formula, so `ISFORMULA` and `FORMULATEXT` see it.
+
+It is the owner's pick from Google. A mirror of an empty cell is then empty, and a mirrored column keeps its source's counts and averages, where Excel users write `=IF(A1="","",A1)` to get that. A blank is a value of its own everywhere in the engine, so the rule is only the cell write in `Evaluator.result` storing it as it is. Over the corpus the pick changes 161,299 cells in 26 of the 162 workbooks Excel wrote, nearly all in two models, and the owner's Google export goes from 33,109 cells that differ to 160. Google's recorded rows are pinned in `src/test/eval/blank-result.test.ts`.
+
+The store holds such a cell as a formula with no value, as an uncomputed one sits: whether a cell is still to be computed is a flag beside its value (`isPending`), not the value. A host learns of a blank result from `RecalcResult.changed` when a value turns blank, but a formula written over a value is blank from the write on, so the pass that computes it to a blank names nothing. A load cannot tell a blank result from a formula never computed, since both come with no value, so such a formula and its readers are computed again by the first pass after a load.
+
+One Excel blank stays: a blank element of a computed array is 0 ([§ A lifted call hands values](#a-lifted-call-hands-values-and-only-offset-and-indirect-keep-references)), where Google keeps it blank. So `=IF({1;1;1;1},C1:C4)` over a blank C4 holds 0 in its 4th element.
 
 ## A character is a UTF-16 code unit
 
@@ -170,7 +180,7 @@ So `LEFT("abcdef",2.9999999999)` is `abc` and `MID("abcdef",1,2.9999999999)` is 
 
 ## A lifted call hands values, and only OFFSET and INDIRECT keep references
 
-When a call is lifted over an array, each element's answer becomes a value: of an array the first element, of a reference the value of its first cell, and a cell that holds nothing stays that cell, so it is passed over as a blank cell of a range is. So `INDEX(A1:B3,{1,2},1)` is an array of values, as Excel records. A blank answer is stored as 0, as a formula's is in its cell, so every reader of a computed array meets the same value: over C1:C3 = 5, 6, 7 and a blank C4, `TEXTJOIN("|",TRUE,IF({1;1;1;1},C1:C4))` is `5|6|7|0`, as in Excel, and the same over `INDEX(C1:C4,{1;2;3;4})`, whose C4 is still a cell, is `5|6|7`. Only a row marked `ANYWHERE`, which works a reference out (`OFFSET`, `INDIRECT`), keeps one reference per element, and that array of references is `#CALC!` when it reaches the cell.
+When a call is lifted over an array, each element's answer becomes a value: of an array the first element, of a reference the value of its first cell, and a cell that holds nothing stays that cell, so it is passed over as a blank cell of a range is. So `INDEX(A1:B3,{1,2},1)` is an array of values, as Excel records. A blank answer is stored as 0, as Excel stores it, so every reader of a computed array meets the same value: over C1:C3 = 5, 6, 7 and a blank C4, `TEXTJOIN("|",TRUE,IF({1;1;1;1},C1:C4))` is `5|6|7|0`, as in Excel, and the same over `INDEX(C1:C4,{1;2;3;4})`, whose C4 is still a cell, is `5|6|7`. Only a row marked `ANYWHERE`, which works a reference out (`OFFSET`, `INDIRECT`), keeps one reference per element, and that array of references is `#CALC!` when it reaches the cell.
 
 ## `room` bounds bytes, not elements
 
@@ -190,6 +200,7 @@ Each line is a decided choice; the function-by-function list is `packages/formul
 
 - The day line is Google's: a serial under 61 is a day earlier, and a negative serial is a date.
 - Empty text is 0 and FALSE in arithmetic, conditions, `VALUE` and `ABS`, so `IF("",1,2)` is 2 and `NOT("")` TRUE, where Excel answers `#VALUE!`; `SUMPRODUCT` of one blank cell is 0.
+- A formula whose result is blank leaves its cell blank, as Google does, where Excel shows 0: over an empty A1, `=A1` is blank, `ISBLANK` of it TRUE and `COUNTA` of it 0. A blank element of a computed array is still 0, as in Excel.
 - No 255-character limit on criteria, lookup keys, `CODE`, `UNICODE`, `REPT` and number formats.
 - A formula that does not parse is stored and shows `#ERROR!`, where Excel refuses the entry.
 - Text lengths count UTF-16 code units.
