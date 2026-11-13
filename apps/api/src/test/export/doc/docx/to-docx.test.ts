@@ -3907,12 +3907,12 @@ describe('docx writer — styles from the CSS', () => {
             return [...sizeOf(heading), ...spacingOf(heading), w(child(child(heading, 'rPr'), 'spacing'), 'val')];
         });
         expect(rows).toEqual([
-            ['42', '42', '630', '210', '238', 'auto', '-8'],
-            ['33', '33', '495', '165', '247', 'auto', '-5'],
-            ['27', '27', '405', '135', '257', 'auto', '-3'],
-            ['24', '24', '360', '120', '278', 'auto', undefined],
-            ['22', '22', '330', '110', '298', 'auto', undefined],
-            ['22', '22', '330', '110', '298', 'auto', undefined],
+            ['42', '42', '630', '210', '240', 'auto', '-8'],
+            ['33', '33', '495', '165', '252', 'auto', '-5'],
+            ['27', '27', '405', '135', '264', 'auto', '-3'],
+            ['24', '24', '360', '120', '276', 'auto', undefined],
+            ['22', '22', '330', '110', '300', 'auto', undefined],
+            ['22', '22', '330', '110', '300', 'auto', undefined],
         ]);
     });
 
@@ -3962,8 +3962,8 @@ describe('docx writer — styles from the CSS', () => {
             const rPr = child(title, 'rPr');
             return [...sizeOf(title), ...spacingOf(title), w(child(rPr, 'color'), 'val'), !!child(rPr, 'b')];
         };
-        expect(look('Title')).toEqual(['52', '52', '0', '60', '238', 'auto', undefined, false]);
-        expect(look('Subtitle')).toEqual(['30', '30', '0', '320', '257', 'auto', '666666', false]);
+        expect(look('Title')).toEqual(['52', '52', '0', '60', '240', 'auto', undefined, false]);
+        expect(look('Subtitle')).toEqual(['30', '30', '0', '320', '264', 'auto', '666666', false]);
         // Inline code is 0.9em of the title's 26 pt.
         const body = await bodyOf(doc({ type: 'title', content: [text('x', { type: 'code' })] }));
         expect(w(only(descendants(body, W, 'sz')), 'val')).toBe('47');

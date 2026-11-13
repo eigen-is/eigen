@@ -241,10 +241,10 @@ describe('doc export — the Normal', () => {
         expect(styles).toContain(
             '<w:rPrDefault><w:rPr><w:rFonts w:ascii="Source Serif 4" w:hAnsi="Source Serif 4" w:eastAsia="Source Serif 4" w:cs="Source Serif 4"/><w:color w:val="000000"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:rPrDefault>',
         );
-        // A heading and the title write their own line spacing, 0.99, whatever the Normal's font.
+        // A heading and the title write their own line spacing, single, whatever the Normal's font.
         for (const id of ['Heading1', 'Title'])
             expect(styles).toMatch(
-                new RegExp(`w:styleId="${id}">(?:(?!</w:style>).)*<w:spacing [^>]*w:line="238" w:lineRule="auto"/>`),
+                new RegExp(`w:styleId="${id}">(?:(?!</w:style>).)*<w:spacing [^>]*w:line="240" w:lineRule="auto"/>`),
             );
         expect(styles).toMatch(
             /w:styleId="Normal"><w:name w:val="Normal"\/><w:qFormat\/><w:pPr><w:spacing w:before="120" w:after="0" w:line="240" w:lineRule="auto"\/>/,
@@ -286,9 +286,7 @@ describe('doc export — the stylesheet', () => {
         '%s draws the title and subtitle at their size, the subtitle grey',
         async (format) => {
             const css = await exportStyle(format);
-            expect(css).toMatch(
-                /\.eigen-prose p\[data-type="title"\] \{[^}]*font-size: 26pt;[^}]*--line-spacing: 0\.99;/,
-            );
+            expect(css).toMatch(/\.eigen-prose p\[data-type="title"\] \{[^}]*font-size: 26pt;[^}]*--line-spacing: 1;/);
             expect(css).toMatch(/\.eigen-prose p\[data-type="subtitle"\] \{ font-size: 15pt;/);
             expect(css).toMatch(/, \.eigen-prose p\[data-type="subtitle"\] \{ color: #666666; \}/);
         },
