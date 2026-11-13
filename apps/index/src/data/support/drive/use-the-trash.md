@@ -5,7 +5,7 @@ type: how-to
 tags: [drive, trash, delete, restore]
 related: [drive/get-started]
 order: 110
-updated: 2026-11-02
+updated: 2026-11-12
 ---
 
 Deleting a file in Drive doesn't remove it straight away. It goes to the Trash, where it stays until you empty the Trash or it is cleaned up automatically. This means you can always recover something you've deleted by mistake.
@@ -19,7 +19,7 @@ You can also select the item in the list and press **Delete** or **Backspace**. 
 
 The item disappears from your files and moves to the Trash. If you delete a folder, everything inside it moves to the Trash as well.
 
-The people you shared the item with can't open it while it's in the Trash, and it leaves their **Shared with me**. When you restore it, they get the same access back without a new invitation.
+The people you shared the item with can't open it while it's in the Trash, and it leaves their **Shared with me**. When you restore it, they get the same access back without a new invitation. Neither the move to the Trash nor the restore sends them a "shared with you" or "removed your access" notification. Anyone who watches the item, or a folder it is in, is still notified of both.
 
 ## Restore something from the Trash
 
@@ -27,7 +27,11 @@ The people you shared the item with can't open it while it's in the Trash, and i
 2. Find the item you want to restore.
 3. Right-click it (or click the **⋮** button at the end of its row) and choose **Restore**.
 
-Drive puts the item back where it was. If the original folder was also deleted, the item goes back to the top level of your Drive instead.
+Drive puts the item back where it was. If the original folder was also deleted, the item goes back to the top level of its drive instead.
+
+The Trash lists what was deleted from every drive of your own and from the drives of your teams. In the list view on a computer, the **Owner** column shows whose drive each item came from. Everyone in a team sees what was deleted from the team's drive, and any of them can restore it or delete it permanently.
+
+If the Trash of one drive can't be loaded, a line above the list names that drive, and the other drives still show their items.
 
 ## Delete an item permanently from the Trash
 
@@ -41,13 +45,15 @@ This cannot be undone.
 
 ## Empty the Trash
 
-To remove everything in the Trash at once:
+To remove everything that came from your own drives at once:
 
 1. Open **Trash** from the sidebar.
 2. Click **Empty trash** in the top-right corner.
 3. Confirm in the dialog that appears.
 
-Every item in the Trash is permanently deleted. This cannot be undone.
+Every item from your own drives is permanently deleted. This cannot be undone.
+
+Items from a team's drive stay in the Trash, and the dialog tells you so when there are any. To remove one of those, delete it permanently as described above.
 
 ## How long items stay in the Trash
 

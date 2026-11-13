@@ -16,10 +16,10 @@ import {
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_STICKIES,
     DRIVE_MIME_VECTOR,
-    EXPORT_FORMAT_LABELS,
     exportFormatsFor,
 } from '@workspace/lib/types/drive';
 import type { DriveActionId } from '@workspace/lib/types/drive-actions';
+import { EXPORT_FORMAT_LABELS } from '@workspace/lib/types/drive-convert';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import {
     DropdownMenuItem,
@@ -28,6 +28,7 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import type { LucideIcon } from 'lucide-react';
 import { CopyPlus, Download, FileText, Folder, Upload } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -86,8 +87,8 @@ export function FileMenu({
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [emailOpen, setEmailOpen] = useState(false);
     // The version dialogs' state lives here, because the menu unmounts VersionHistoryMenu when it closes.
-    const [pendingSnapshot, setPendingSnapshot] = useState<Snapshot | null>(null);
-    const [deleteHistorySize, setDeleteHistorySize] = useState<number | null>(null);
+    const restoreDialog = useDialogValue<Snapshot>();
+    const deleteHistoryDialog = useDialogValue<number>();
     const openConfig = OPEN_LABELS[createType];
     const downloadFormats = exportFormatsFor(createType);
     const canExport = !!onExport && downloadFormats.length > 0;
@@ -98,9 +99,8 @@ export function FileMenu({
     const actionsFor = useDriveActionsFor(browseCapabilities(canWrite));
     const { mutate: makeCopy } = useMakeCopy();
 
-    // The Drive rows this menu can run, through the dialogs it owns. The menu draws Rename, Share, Email
-    // collaborators and the delete row; Copy link and Mail to go to the palette only, and so does
-    // Download as, which the menu draws as its own Download submenu.
+    // The Drive rows this menu can run, through the dialogs it owns. Copy link and Mail to go to the palette
+    // only, and so does Download as, which the menu draws as its own Download submenu.
     const runs: Partial<Record<DriveActionId, (format?: ExportFormat) => void>> = {
         rename: () => setRenameOpen(true),
         'download-as':
@@ -178,8 +178,8 @@ export function FileMenu({
                 {canWrite && (
                     <VersionHistoryMenu
                         path={path}
-                        onRequestRestore={setPendingSnapshot}
-                        onRequestDeleteHistory={setDeleteHistorySize}
+                        onRequestRestore={restoreDialog.openDialog}
+                        onRequestDeleteHistory={deleteHistoryDialog.openDialog}
                     />
                 )}
                 {children}
@@ -220,8 +220,22 @@ export function FileMenu({
                     if (actionType === 'delete') navigate({ to: '/' });
                 }}
             />
-            <RestoreVersionDialog path={path} snapshot={pendingSnapshot} onClose={() => setPendingSnapshot(null)} />
-            <DeleteHistoryDialog path={path} size={deleteHistorySize} onClose={() => setDeleteHistorySize(null)} />
+            {restoreDialog.value && (
+                <RestoreVersionDialog
+                    path={path}
+                    snapshot={restoreDialog.value}
+                    open={restoreDialog.open}
+                    onOpenChange={restoreDialog.setOpen}
+                />
+            )}
+            {deleteHistoryDialog.value !== undefined && (
+                <DeleteHistoryDialog
+                    path={path}
+                    size={deleteHistoryDialog.value}
+                    open={deleteHistoryDialog.open}
+                    onOpenChange={deleteHistoryDialog.setOpen}
+                />
+            )}
         </>
     );
 }

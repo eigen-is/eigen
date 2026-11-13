@@ -1,12 +1,20 @@
 // Who may read or write a Drive path, decided from the chain of folders above it, and what else that chain says,
-// such as whether the path is in the trash or inside a document. SharedDrive asks this before every call it passes
-// on, and the watcher fan-out asks it before each notification. The helpers that merge, normalize and trim an ACL
-// before Drive saves it live here too.
+// such as whether the path is in the trash or inside a document. Every access check reads it, such as SharedDrive's
+// before a call it passes on. The helpers that merge, normalize and trim an ACL before Drive saves it live here too.
 
-import { parseOwnerId } from '@workspace/lib/types';
-import type { DriveACL, DriveACLDelta, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
-import { isCollabType, isDocumentType } from '@workspace/lib/types/drive';
+import { CONTAINER_CHAT_FOLDER, CONTAINER_MEDIA_FOLDER } from '@workspace/lib/constants/container';
+import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
+import {
+    DRIVE_TYPE_CHAT,
+    DRIVE_TYPE_FILE,
+    DRIVE_TYPE_FOLDER,
+    isCollabType,
+    isDocumentType,
+} from '@workspace/lib/types/drive';
+import type { DriveACL, DriveACLDelta, DriveVisibility } from '@workspace/lib/types/drive-access';
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import { validateEmailAddress } from '@workspace/lib/validation';
+import { ApiError } from '../core';
 import type { Memberships, User } from '../user';
 
 export function grantsPublicRead(visibility: DriveVisibility): boolean {
@@ -22,6 +30,30 @@ export function isTrashedChain(ancestors: readonly DrivePath[]): boolean {
 // Whether a folder above the path is a document, so the path is one of its parts. The chain ends with the path itself.
 export function isInsideDocument(chain: readonly DrivePath[]): boolean {
     return chain.slice(0, -1).some((crumb) => isDocumentType(crumb.type));
+}
+
+const DOCUMENT_WRITE_ERROR = 'Cannot change the inside of a document';
+
+// The folders of a document a person may add to, and what each takes.
+const OPEN_DOCUMENT_FOLDERS = new Map<string, DrivePathType>([
+    [CONTAINER_MEDIA_FOLDER, DRIVE_TYPE_FILE],
+    [CONTAINER_CHAT_FOLDER, DRIVE_TYPE_CHAT],
+]);
+
+// A person's write: adding a child of type `adding` to the last crumb, or with no `adding` changing the last crumb
+// itself. Inside a document a person only adds a file to its media/ or a thread to its chat/.
+export function refuseDocumentWrite(crumbs: readonly DrivePath[], adding?: DrivePathType): void {
+    const inside = adding ? crumbs.some((crumb) => isDocumentType(crumb.type)) : isInsideDocument(crumbs);
+    if (!inside) return;
+    const document = crumbs.at(-2);
+    const folder = crumbs.at(-1);
+    const intoOpenFolder =
+        adding !== undefined &&
+        document !== undefined &&
+        isDocumentType(document.type) &&
+        folder?.type === DRIVE_TYPE_FOLDER &&
+        OPEN_DOCUMENT_FOLDERS.get(folder.name) === adding;
+    if (!intoOpenFolder) throw new ApiError(423, DOCUMENT_WRITE_ERROR);
 }
 
 // Ownership, team membership, public visibility or an ACL entry on the path or any ancestor. Only the
@@ -115,13 +147,12 @@ export function findContainerFromAncestors(ancestors: readonly DrivePath[]): Dri
     return ancestors.findLast((path) => isCollabType(path.type)) ?? null;
 }
 
-// Splits an ACL into the entries worth storing and the ones an ancestor's ACL (or team
-// ownership of the drive) already grants.
+// The entries of an ACL worth storing: those neither an ancestor's ACL nor the team that owns the drive grants.
 export function filterRedundantACL(
     acl: readonly DriveACL[],
     path: DrivePath,
     ancestors: readonly DrivePath[],
-): { filtered: DriveACL[]; removed: DriveACL[] } {
+): DriveACL[] {
     const inherited = new Map<string, { read: boolean; write: boolean }>();
 
     // Breadcrumbs include the path itself; without the skip every entry would cover itself.
@@ -134,17 +165,11 @@ export function filterRedundantACL(
     }
 
     const ownerParsed = parseOwnerId(path.ownerId);
-
-    const filtered: DriveACL[] = [];
-    const removed: DriveACL[] = [];
-
-    for (const entry of acl) {
+    return acl.filter((entry) => {
         const entryParsed = parseOwnerId(entry.id);
         const ownTeam = ownerParsed.type === 'team' && entryParsed.type === 'team' && entryParsed.id === ownerParsed.id;
         const granted = inherited.get(canonicalACLId(entry.id));
         const covered = granted !== undefined && (!entry.read || granted.read) && (!entry.write || granted.write);
-        (ownTeam || covered ? removed : filtered).push(entry);
-    }
-
-    return { filtered, removed };
+        return !ownTeam && !covered;
+    });
 }

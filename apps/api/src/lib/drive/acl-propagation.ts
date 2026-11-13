@@ -1,8 +1,9 @@
 // Tells the homes of the people a path is shared with that its sharing changed. It resolves who the
 // ACL names, hands the push to the relay, and sends the share emails. Drive calls it after an ACL
-// change, a rename, a restore or a trash.
+// change.
 
-import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveACL, EffectiveMember } from '@workspace/lib/types/drive-access';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import { getServerSettings } from '../config/server-settings';
 import { sendToUserHomes } from '../home/home-relay';
@@ -20,7 +21,7 @@ export type ACLPropagationOptions = { suppressShareEmail?: 'registered' | 'all' 
 
 export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Promise<Set<string>> {
     const ids = new Set<string>();
-    // Only acl.id drives resolution, and a restore feeds [...acl, ...acl].
+    // Only acl.id drives resolution, and the old and the new list mostly name the same people.
     const uniqueAcls = [...new Map(acls.map((acl) => [acl.id, acl])).values()];
     for (const acl of uniqueAcls) {
         const parsed = parseOwnerId(acl.id);

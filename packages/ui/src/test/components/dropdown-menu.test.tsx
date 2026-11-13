@@ -234,3 +234,90 @@ test('a menu gives the focus back by what opened it this time, to the trigger on
     await settle();
     expect(document.activeElement).toBe(second);
 });
+
+// A browser takes the focus from an element as it leaves the page, and sends its focusout. happy-dom keeps it there.
+function blurWhatLeavesThePage(): () => void {
+    const removeChild = Node.prototype.removeChild;
+    Node.prototype.removeChild = function <T extends Node>(child: T): T {
+        const focused = document.activeElement;
+        if (focused instanceof HTMLElement && child.contains(focused)) focused.blur();
+        removeChild.call(this, child);
+        return child;
+    };
+    return () => {
+        Node.prototype.removeChild = removeChild;
+    };
+}
+
+// Drive's list takes the focus whenever it falls to the page body, as it does the moment a closing menu leaves the
+// page, before the menu gives the focus back. The trigger gets it all the same, after a pointer and after a key, also
+// where the list and the menu sit in a dialog, as in a file picker.
+test('a menu beside a list that takes the focus from the body gives its trigger the focus back', async () => {
+    const { useRef } = await import('react');
+    const { useKeyboardListNavigation } = await import('../../hooks/use-keyboard-list-navigation');
+    const { Dialog, DialogContent, DialogTitle } = await import('../../components/dialog');
+    function Listing({ inDialog }: { inDialog: boolean }) {
+        const containerRef = useRef<HTMLDivElement>(null);
+        useKeyboardListNavigation<string>({ items: [], getId: (item) => item, onSelect: () => {}, containerRef });
+        const listing = [
+            createElement('div', { key: 'list', ref: containerRef, role: 'grid', tabIndex: 0 }),
+            createElement(
+                DropdownMenu,
+                { key: 'menu' },
+                createElement(DropdownMenuTrigger, null, 'New'),
+                createElement(DropdownMenuContent, null, createElement(DropdownMenuItem, null, 'New folder')),
+            ),
+        ];
+        if (!inDialog) return listing;
+        return createElement(
+            Dialog,
+            { open: true },
+            createElement(
+                DialogContent,
+                { 'aria-describedby': undefined },
+                createElement(DialogTitle, null, 'Pick'),
+                listing,
+            ),
+        );
+    }
+    const restore = blurWhatLeavesThePage();
+    const focused = [];
+    try {
+        for (const [inDialog, opener] of [
+            [false, 'pointer'],
+            [false, 'Enter'],
+            [true, 'pointer'],
+            [true, 'Enter'],
+        ] as const) {
+            ({ unmount } = await renderInDocument(createElement(Listing, { inDialog })));
+            const trigger = document.querySelector<HTMLElement>('[data-slot="dropdown-menu-trigger"]');
+            if (!trigger) throw new Error('no trigger');
+            const event =
+                opener === 'pointer'
+                    ? new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 })
+                    : new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+            await act(async () => {
+                trigger.dispatchEvent(event);
+            });
+            await settle();
+            expect(menuOpen()).toBe(true);
+            await pressEscape();
+            // The menu gives the focus back once it has left the page, which takes longer on a busy machine.
+            for (let turn = 0; turn < 100 && document.activeElement !== trigger; turn++) await settle();
+            focused.push([
+                inDialog ? 'dialog' : 'page',
+                opener,
+                document.activeElement === trigger ? 'trigger' : document.activeElement?.role,
+            ]);
+            await unmount();
+        }
+    } finally {
+        restore();
+    }
+    expect(focused).toEqual([
+        ['page', 'pointer', 'trigger'],
+        ['page', 'Enter', 'trigger'],
+        ['dialog', 'pointer', 'trigger'],
+        ['dialog', 'Enter', 'trigger'],
+    ]);
+});

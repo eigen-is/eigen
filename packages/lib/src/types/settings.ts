@@ -4,7 +4,7 @@
 // so the API and every app read it the same way.
 
 import type { CalendarItem } from './calendar';
-import type { DriveViewPreferences } from './drive';
+import type { DriveViewPreferences } from './drive-view';
 import type { MountStorageType, S3Config } from './mount';
 
 export type MountSettings = {

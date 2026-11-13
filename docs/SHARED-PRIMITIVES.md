@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2226 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2233 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -228,7 +228,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEProvider` | `@workspace/ui/components/sse-provider` | packages/ui/src/components/sse-provider/sse-provider.tsx |
 | `UploadProvider` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 
-## Contexts, schemas & classes (19)
+## Contexts, schemas & classes (18)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -243,8 +243,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PageNumberNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
 | `TableOfContentsNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-of-contents.ts |
 | `TextBoxNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/text-box.ts |
-| `PartialCopyError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
-| `PartialDeleteError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `PartialBatchError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `MathError` | `@workspace/math` | packages/math/src/error.ts |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
@@ -252,7 +251,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (306)
+## Hooks (309)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -391,7 +390,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useBreadcrumb` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useCheckPermissions` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useConvertDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-convert-document.ts |
-| `useCopyPaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useCopyToFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useCopyToMediaFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useCreateDriveItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
@@ -400,6 +398,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useDriveAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useDriveActionsFor` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-actions.ts |
 | `useDriveViewPreferences` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-view-preferences.ts |
+| `useDuplicatePaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useEffectiveMembers` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useEmailCollaborators` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useEmlPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
@@ -414,13 +413,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useIsEffectiveOwner` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useIsEffectiveOwnerOf` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useIsSharedWithMe` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
-| `useListTrash` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
 | `useMakeCopy` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useMediaResolver` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
-| `useMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useMountMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useMounts` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
-| `useMovePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `useMovePaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `usePathInfo` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `usePathInfos` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `usePermanentlyDelete` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
@@ -429,12 +426,15 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useRecordHistory` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-file-history.ts |
 | `useRenamePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useRequestAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
-| `useRestorePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
+| `useResolvedDriveLocation` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `useRestorePaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
 | `useRootFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useSharedPaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useTextPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `useTrash` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
 | `useUpdateACL` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useUploadFile` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `useUploadFiles` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useVCardPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useWatchToggle` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useZombieMediaSweep` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-zombie-media-sweep.ts |
@@ -524,6 +524,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useContextMenu` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/use-context-menu.ts |
 | `useDocumentExport` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/use-document-export.tsx |
 | `useDriveSort` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
+| `useDriveUploadFiles` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/use-drive-upload-files.tsx |
 | `useMountLabel` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-mount-list.tsx |
 | `useDriveListRoute` | `@workspace/ui/components/drive/use-drive-list-route` | packages/ui/src/components/drive/use-drive-list-route.ts |
 | `useFileActionRunner` | `@workspace/ui/components/file-actions` | packages/ui/src/components/file-actions/use-file-action-runner.tsx |
@@ -547,6 +548,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useDialogOpen` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `useMenuOpen` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `useDialogPending` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
+| `useDialogValue` | `@workspace/ui/hooks/use-dialog-value` | packages/ui/src/hooks/use-dialog-value.ts |
 | `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useElementSize` | `@workspace/ui/hooks/use-element-size` | packages/ui/src/hooks/use-element-size.ts |
 | `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
@@ -563,7 +565,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (462)
+## Types (465)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -683,39 +685,42 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommentEntry` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `Contact` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `ContactSuggestion` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
-| `ConvertTarget` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `ConvertTarget` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
 | `CreateContactInput` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `CreateEventInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `DeepPartial` | `@workspace/lib/types` | packages/lib/src/types/util.ts |
-| `DirectAccessItem` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DirectAccessItem` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
 | `DocsTextWidth` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
-| `DocumentImportOptions` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DocumentImportOptions` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
 | `DraftAttachmentUpload` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `DraftInput` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `DraftUpdateOptions` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
-| `DriveAccessCheckResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveAccessItem` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveAccessRecipient` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveACL` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveACLDelta` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveCapabilities` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveAccessCheckResult` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
+| `DriveAccessItem` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
+| `DriveAccessRecipient` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
+| `DriveACL` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
+| `DriveACLDelta` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
+| `DriveCapabilities` | `@workspace/lib/types` | packages/lib/src/types/drive-view.ts |
 | `DriveCollabType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveContainerType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveContextType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveImportSource` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveContextType` | `@workspace/lib/types` | packages/lib/src/types/drive-view.ts |
+| `DriveCopyDestination` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
+| `DriveImportSource` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
 | `DriveItemRef` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveLocationValue` | `@workspace/lib/types` | packages/lib/src/types/drive-view.ts |
 | `DrivePath` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePathDetails` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DrivePathPermissions` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
 | `DrivePathType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveSearchParams` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveSort` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveSortDir` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveSortKey` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveViewMode` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveViewPreferences` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveVisibility` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `EditorSaveResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `EffectiveMember` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveSearchParams` | `@workspace/lib/types` | packages/lib/src/types/drive-view.ts |
+| `DriveSort` | `@workspace/lib/types` | packages/lib/src/types/drive-view.ts |
+| `DriveSortDir` | `@workspace/lib/types` | packages/lib/src/types/drive-view.ts |
+| `DriveSortKey` | `@workspace/lib/types` | packages/lib/src/types/drive-view.ts |
+| `DriveViewMode` | `@workspace/lib/types` | packages/lib/src/types/drive-view.ts |
+| `DriveViewPreferences` | `@workspace/lib/types` | packages/lib/src/types/drive-view.ts |
+| `DriveVisibility` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
+| `EditorSaveResult` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
+| `EffectiveMember` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
 | `EigenClipboardChartItem` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
 | `EigenClipboardData` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
 | `EigenClipboardElementsItem` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
@@ -731,7 +736,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EmailSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `EventData` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `ExportFormat` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `FileEditorContent` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `FileEditorContent` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
 | `FileEvent` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `FileEventDetailsMap` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `FileEventInput` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
@@ -745,10 +750,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ImipMethod` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `ImportCountsResult` | `@workspace/lib/types` | packages/lib/src/types/transfer.ts |
 | `ImportMailResult` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
-| `ImportMode` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `ImportResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `InheritedAccessItem` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `InviteResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `ImportMode` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
+| `ImportResult` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
+| `InheritedAccessItem` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
+| `InviteResult` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
 | `Label` | `@workspace/lib/types` | packages/lib/src/types/label.ts |
 | `LandingLink` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `MaildirMailbox` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -993,11 +998,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MenuSectionsProps` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/menu-sections.tsx |
 | `DriveAccessListProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-access-list.tsx |
 | `DriveListDate` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
-| `DriveLocationValue` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-location-field.tsx |
 | `DriveSortControl` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
 | `DriveTableProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
 | `DriveViewProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
 | `EigenDocAppConfig` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
+| `EigenDocListRoute` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-list-view.tsx |
 | `CreateCallbacks` | `@workspace/ui/components/drive/create-menu` | packages/ui/src/components/drive/create-menu.ts |
 | `FileActionRunner` | `@workspace/ui/components/file-actions` | packages/ui/src/components/file-actions/use-file-action-runner.tsx |
 | `LabelFilterHeaderProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-filter-header.tsx |
@@ -1030,7 +1035,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1232)
+## Utilities & constants (1234)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1598,16 +1603,16 @@ rather than inlining `queryClient.invalidateQueries`.
 | `downloadDriveFile` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `triggerDownload` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `checkPathAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
-| `copiesBeside` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
-| `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/types/mount.ts |
 | `driveActionsFor` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-actions.ts |
 | `folderContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `forgetPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/keys.ts |
 | `getDriveComparator` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `labelFor` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-actions.ts |
 | `mountMimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `PENDING_PREFIX` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
+| `settleEach` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `toastExportSummary` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-export-document.ts |
 | `validateDriveSearch` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-search-params.ts |
 | `EIGEN_DOC_ICONS` | `@workspace/lib/eigendoc-icons` | packages/lib/src/core/eigendoc-icons.ts |
@@ -1756,8 +1761,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CARD_TITLE_MAX_LENGTH` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `celebrationsOn` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
-| `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `CONVERT_SOURCES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
+| `CONVERT_SOURCES` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
+| `DEFAULT_MOUNT_ID` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `describeFileEvent` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `DOCS_TEXT_WIDTHS` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `docsTextWidth` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
@@ -1768,7 +1774,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DRIVE_MIME_SLIDES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_STICKIES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_VECTOR` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DRIVE_SORT_KEYS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DRIVE_SORT_KEYS` | `@workspace/lib/types` | packages/lib/src/types/drive-view.ts |
 | `DRIVE_TYPE_CHAT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_TYPE_DOC` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_TYPE_FILE` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -1779,40 +1785,40 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DRIVE_TYPE_VECTOR` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EIGEN_DOC_TYPE_INFO` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EIGEN_DOC_TYPES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `EML_MIME` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `EML_MIME` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
 | `EMPTY_S3` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
-| `EXPORT_FORMAT_LABELS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `EXPORT_SUMMARY_HEADER` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `EXPORT_FORMAT_LABELS` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
+| `EXPORT_SUMMARY_HEADER` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
 | `exportFormatsFor` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `externalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `getEigenDocInfoByMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `getEigenDocInfoByType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `ICS_ACCEPT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `ICS_CONTENT_TYPE` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `ICS_MIME` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `ICS_ACCEPT` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
+| `ICS_CONTENT_TYPE` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
+| `ICS_MIME` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
 | `IMIP_METHODS` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `isAttachmentReference` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `isCalendarPart` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `isChatType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isCollabType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isContainerType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `isConvertSource` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `isConvertTarget` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `isConvertSource` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
+| `isConvertTarget` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
 | `isDocumentType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isEmailDraft` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
-| `isEmlFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `isEmlFile` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
 | `isExternalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `isFolderType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `isIcsFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `isIcsMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `isImageMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `isInlineEditable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `isOpenable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `isIcsFile` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
+| `isIcsMime` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
+| `isImageMime` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
+| `isInlineEditable` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
+| `isOpenable` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
 | `isS3ConfigValid` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `isServerStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
-| `isStructuredTextFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `isStructuredTextFile` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
 | `isUserTheme` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
-| `isVCardFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `isVCardFile` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
 | `keepsSavedSecret` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `mailAttachmentName` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `mapStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
@@ -1832,8 +1838,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `toFileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `UNRESOLVED_TEAM_LABEL` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `USER_THEMES` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
-| `VCARD_ACCEPT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `VCARD_MIMES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `VCARD_ACCEPT` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
+| `VCARD_MIMES` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
 | `withEigenExtension` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `BACKUP_JOB_STATES` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BACKUP_KINDS` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
@@ -2232,7 +2238,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FIND_REPLACE_HOTKEY` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |
 | `buildDocSearchQuery` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 | `searchFlashKey` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
-| `uploadWithProgress` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-with-progress.tsx |
 | `alphaGroupKey` | `@workspace/ui/components/user` | packages/ui/src/components/user/alphabetical-list.tsx |
 | `USER_ITEM_AVATAR_SIZE` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-item.tsx |
 | `isVectorFontLoaded` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
@@ -2249,6 +2254,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `createEigenAppRouter` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
 | `mountEigenApp` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
 | `stubCanvasImageFonts` | `@workspace/ui/test/canvas-image` | packages/ui/src/test/canvas-image.ts |
+| `closingDialog` | `@workspace/ui/test/closing-dialog` | packages/ui/src/test/closing-dialog.ts |
+| `holdClosingDialogs` | `@workspace/ui/test/closing-dialog` | packages/ui/src/test/closing-dialog.ts |
 | `contextMenuEvent` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `KEY_SOURCES` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `POINTER_SOURCES` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |

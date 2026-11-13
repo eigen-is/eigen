@@ -2,7 +2,7 @@
 // click or key press, so it must open before the first await; every way the PDF can't be had falls back to browser
 // print, says what is left out, and leaves no empty tab behind.
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { EXPORT_SUMMARY_HEADER } from '../../../../types/drive';
+import { EXPORT_SUMMARY_HEADER } from '../../../../types/drive-convert';
 import { installHappyDom } from '../../../happy-dom';
 
 installHappyDom();

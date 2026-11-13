@@ -1,12 +1,12 @@
 // WebDAV locks for one Drive. A client such as an office app locks a file while it edits, and the
-// manager decides which later requests may write: shared locks can coexist, an exclusive lock
-// excludes the rest. It also covers a folder lock that reaches the items inside. Locks live in
-// memory and expire on their own, and while one lives the manager holds its Home open. The WebDAV
-// handlers call it for LOCK, UNLOCK and every write.
+// manager decides which later requests may lock or write: shared locks can coexist, an exclusive
+// lock excludes every other, and a folder lock reaches the items inside. A lock and its token count
+// only for the user who took it. Locks live in memory and expire on their own, and while one lives
+// the manager holds its Home open. The WebDAV handlers call it for LOCK, UNLOCK and every write.
 
 import { ApiError } from '../core/errors';
 
-export type LockScope = 'exclusive' | 'shared';
+type LockScope = 'exclusive' | 'shared';
 
 export type Lock = {
     token: string;
@@ -25,16 +25,17 @@ const MAX_LOCKS_PER_PATH = 32;
 
 export class LockManager {
     private readonly locks = new Map<string, Lock>();
-    private readonly byPath = new Map<string, Set<string>>();
     private readonly hold: () => () => void;
     private releaseHold: (() => void) | undefined;
     private expiryTimer: Timer | undefined;
 
-    // A WebDAV-only client, such as Word, sends nothing between its lock refreshes, longer than the
-    // Home's idle time. So the manager holds the Home while it has a live lock, or the idle close
-    // would drop the lock and anyone could overwrite the file.
     public constructor(hold: () => () => void) {
         this.hold = hold;
+    }
+
+    public clear(): void {
+        this.locks.clear();
+        this.settle();
     }
 
     public acquire(args: {
@@ -43,24 +44,20 @@ export class LockManager {
         scope: LockScope;
         userId: string;
         owner?: string;
-        ttlMs?: number;
-        ifHeader?: string | null;
-        ancestorPathIds?: string[];
+        ttlMs: number;
+        ifHeader: string | null;
+        ancestorPathIds: readonly string[];
+        descendantPathIds: readonly string[];
     }): Lock {
-        this.gc();
-        // RFC 4918 §6.2 and §7.5: shared locks may coexist, and an exclusive lock excludes every other
-        // lock. A request that conflicts must name a current token in its If header. The covering locks
-        // include a depth-infinity lock on an ancestor, so a child of a locked folder needs that token too.
-        const heldLocks = this.coveringLocks(args.pathId, args.ancestorPathIds ?? []);
-        if (heldLocks.length > 0) {
-            const ifTokens = parseIfHeaderTokens(args.ifHeader ?? null);
-            const hasAuthorizingToken = heldLocks.some((l) => ifTokens.includes(l.token));
-            const conflicts = args.scope === 'exclusive' || heldLocks.some((l) => l.scope === 'exclusive');
-            if (conflicts && !hasAuthorizingToken) {
-                throw new ApiError(423, 'Locked');
-            }
+        // RFC 4918 §6.2 and §7.5: two locks conflict when either is exclusive. Each lock in the new one's reach that
+        // conflicts with it must be the caller's own, with its token in the If header, so no write meets two owners.
+        const { covering, below } = this.inReach(args.pathId, args.ancestorPathIds, args.descendantPathIds);
+        const owned = ownedWith(args.userId, args.ifHeader);
+        const conflicts = (lock: Lock) => args.scope === 'exclusive' || lock.scope === 'exclusive';
+        if ([...covering, ...below].some((lock) => conflicts(lock) && !owned(lock))) {
+            throw new ApiError(423, 'Locked');
         }
-        if ((this.byPath.get(args.pathId)?.size ?? 0) >= MAX_LOCKS_PER_PATH) {
+        if (this.listForPath(args.pathId).length >= MAX_LOCKS_PER_PATH) {
             throw new ApiError(423, 'Too many locks');
         }
         // Every new lock asks for a hold, so a closing Home refuses it with its 503. One hold is enough.
@@ -75,79 +72,64 @@ export class LockManager {
             depth: args.depth,
             scope: args.scope,
             userId: args.userId,
-            expiresAt: Date.now() + (args.ttlMs ?? LOCK_DEFAULT_TTL_MS),
+            expiresAt: Date.now() + args.ttlMs,
         };
         this.locks.set(token, lock);
-        const pathTokens = this.byPath.get(args.pathId) ?? new Set<string>();
-        pathTokens.add(token);
-        this.byPath.set(args.pathId, pathTokens);
         this.settle();
         return lock;
     }
 
-    public refresh(token: string, ttlMs = LOCK_DEFAULT_TTL_MS): Lock | null {
-        const lock = this.locks.get(token);
-        if (!lock || lock.expiresAt <= Date.now()) return null;
+    public refresh(pathId: string, userId: string, ifHeader: string | null, ttlMs: number): Lock | undefined {
+        const lock = this.listForPath(pathId).find(ownedWith(userId, ifHeader));
+        if (!lock) return undefined;
         lock.expiresAt = Date.now() + ttlMs;
         this.settle();
         return lock;
     }
 
-    public release(token: string): boolean {
-        const lock = this.locks.get(token);
-        if (!lock) return false;
-        this.drop(lock);
-        this.settle();
-        return true;
+    public release(token: string): void {
+        if (this.locks.delete(token)) this.settle();
     }
 
-    // The Drive calls this when paths leave their place, such as by a trash or a WebDAV MOVE, with every
-    // path under them. Their locks would otherwise keep the Home held until they expire.
     public releaseAllForPaths(pathIds: readonly string[]): void {
-        for (const pathId of pathIds) {
-            for (const token of this.byPath.get(pathId) ?? []) this.locks.delete(token);
-            this.byPath.delete(pathId);
+        const gone = new Set(pathIds);
+        for (const lock of this.locks.values()) {
+            if (gone.has(lock.pathId)) this.locks.delete(lock.token);
         }
         this.settle();
     }
 
-    public listForPath(pathId: string): Lock[] {
+    public listForPath(pathId: string): readonly Lock[] {
         this.gc();
-        const tokens = this.byPath.get(pathId);
-        if (!tokens) return [];
-        const out: Lock[] = [];
-        for (const token of tokens) {
-            const lock = this.locks.get(token);
-            if (lock) out.push(lock);
-        }
-        return out;
+        return [...this.locks.values()].filter((lock) => lock.pathId === pathId);
     }
 
-    // The path's own locks, and the depth-infinity locks on its ancestors, which RFC 4918 §6.2 applies
-    // to every member. The caller passes the ancestors root first, usually a breadcrumb without the path.
-    private coveringLocks(pathId: string, ancestorPathIds: string[] = []): Lock[] {
-        const own = this.listForPath(pathId);
-        const ancestor = ancestorPathIds.flatMap((id) => this.listForPath(id).filter((l) => l.depth === 'infinity'));
-        return [...own, ...ancestor];
-    }
-
+    // The locks covering one path are all shared or all one user's, so the token of one the caller owns passes them.
+    // The locks below are other paths' locks, so a write that takes those paths along needs the token of each.
     public isWriteAllowed(
         pathId: string,
         ifHeader: string | null,
         userId: string,
-        ancestorPathIds: string[] = [],
+        ancestorPathIds: readonly string[],
+        descendantPathIds: readonly string[],
     ): boolean {
-        const active = this.coveringLocks(pathId, ancestorPathIds);
-        if (active.length === 0) return true;
-        const tokens = parseIfHeaderTokens(ifHeader);
-        return active.every((lock) => lock.userId === userId && tokens.includes(lock.token));
+        const { covering, below } = this.inReach(pathId, ancestorPathIds, descendantPathIds);
+        const owned = ownedWith(userId, ifHeader);
+        return (covering.length === 0 || covering.some(owned)) && below.every(owned);
     }
 
-    // The Home calls this when it closes for another reason, such as a restore or the shutdown.
-    public clear(): void {
-        this.locks.clear();
-        this.byPath.clear();
-        this.settle();
+    // RFC 4918 §6.2 applies a depth-infinity lock on a folder to every member, so those above the path cover it too.
+    // The descendants are empty unless the request reaches them, as a depth-infinity LOCK or a folder's DELETE does.
+    private inReach(
+        pathId: string,
+        ancestorPathIds: readonly string[],
+        descendantPathIds: readonly string[],
+    ): { covering: readonly Lock[]; below: readonly Lock[] } {
+        const own = this.listForPath(pathId);
+        const ancestor = ancestorPathIds.flatMap((id) => this.listForPath(id).filter((l) => l.depth === 'infinity'));
+        const under = new Set(descendantPathIds);
+        const below = [...this.locks.values()].filter((lock) => under.has(lock.pathId));
+        return { covering: [...own, ...ancestor], below };
     }
 
     // Runs on every read, so it moves the timer only when a lock went.
@@ -156,17 +138,10 @@ export class LockManager {
         let dropped = false;
         for (const lock of this.locks.values()) {
             if (lock.expiresAt > now) continue;
-            this.drop(lock);
+            this.locks.delete(lock.token);
             dropped = true;
         }
         if (dropped) this.settle();
-    }
-
-    private drop(lock: Lock): void {
-        this.locks.delete(lock.token);
-        const pathTokens = this.byPath.get(lock.pathId);
-        pathTokens?.delete(lock.token);
-        if (pathTokens?.size === 0) this.byPath.delete(lock.pathId);
     }
 
     // One timer, at the latest expiry: until then some lock lives, so the hold stays. With no lock
@@ -196,4 +171,10 @@ export class LockManager {
 export function parseIfHeaderTokens(header: string | null): string[] {
     if (!header) return [];
     return [...header.matchAll(/<([^>]+)>/g)].map((m) => m[1]);
+}
+
+// A token counts only for the user who took its lock, so one user can't pass a lock with another's token.
+function ownedWith(userId: string, ifHeader: string | null): (lock: Lock) => boolean {
+    const tokens = parseIfHeaderTokens(ifHeader);
+    return (lock) => lock.userId === userId && tokens.includes(lock.token);
 }

@@ -17,7 +17,7 @@ import { columnIndexToLabel } from '@workspace/lib/sheets';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isImageMime } from '@workspace/lib/types/drive';
+import { isImageMime } from '@workspace/lib/types/file-kinds';
 import type { ImageSize } from '@workspace/lib/vector';
 import { fitImageSize } from '@workspace/lib/vector';
 import type { ChartPanelState, Sheet, WorkbookInstance } from '@workspace/sheet';

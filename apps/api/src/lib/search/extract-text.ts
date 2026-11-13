@@ -1,7 +1,8 @@
 import { isSearchableTextFile } from '@workspace/lib/constants';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DRIVE_MIME_CHAT, DRIVE_MIME_STICKIES, isDocumentType, isVCardFile } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_CHAT, DRIVE_MIME_STICKIES, isDocumentType } from '@workspace/lib/types/drive';
+import { isVCardFile } from '@workspace/lib/types/file-kinds';
 import { ApiError } from '../core/errors';
 import { readChatContent } from '../document/chat';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';

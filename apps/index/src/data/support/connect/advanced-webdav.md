@@ -7,7 +7,7 @@ tags: [webdav, drive, rclone, mountain-duck, sync, backup]
 related: [connect/mount-drive-on-your-computer, connect/app-passwords]
 crossSections: [drive]
 order: 50
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 Eigen Drive supports WebDAV, and the built-in WebDAV client in Finder or File Explorer works. On large folders, though, Finder can be slow, and it holds on to old file information for a long time. rclone and Mountain Duck are two well-regarded alternatives that handle those cases better. Both use exactly the same connection details as the built-in client.
@@ -57,7 +57,7 @@ On macOS, rclone requires [FUSE-T](https://www.fuse-t.org) (free) to create the 
 
 <div class="eigen-callout">
 
-Eigen document files (such as `.eigendoc` or `.eigensheets`) appear as folders in the mount. You can read and copy them, but you cannot edit their contents from the mount. To work on a document, open it in the browser.
+Eigen document files (such as `.eigendoc` or `.eigensheets`) appear as folders in the mount. You can read and copy them, and add a new file to a document's `media` folder. You can't replace, rename, move, or delete anything inside a document from the mount, or move a file into one. To work on a document, open it in the browser.
 
 </div>
 

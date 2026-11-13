@@ -36,7 +36,7 @@ The fan-out finds the watchers to notify by walking up the parent chain from the
 
 `CollabDocument` maps each connection to its user. It resolves a Yjs update's origin connection back to that user and records `'edited'`, at most once per user per 10 minutes per open document. An update the server applies itself, like a version restore, has no connection origin and records nothing. A stickies board records no `'edited'` at all: every board action already records a `sticky-*` or comment event, and an `'edited'` row would report each drag twice.
 
-A plain file has no Yjs document, so its rows come from `Drive.writeFileContent`. A save in Drive's inline editor records `'edited'`, once per save with no throttle, because each save is a deliberate act. Any other overwrite, such as a WebDAV PUT, records `'uploaded'` with the new size.
+A plain file has no Yjs document, so its rows come from `Drive.writeFileContent`. A save in Drive's inline editor records `'edited'`, once per save with no throttle, because each save is a deliberate act. Any other overwrite, such as a WebDAV PUT or a file moved or copied over a file by WebDAV, records `'uploaded'` with the new size.
 
 ## Clients post only the stickies card events
 
@@ -60,7 +60,7 @@ A recorded event broadcasts `drive:file-history-updated` to the owner's home and
 
 ## Retention is a count per file, never an age
 
-`FileHistory.prune` runs off `Mount.init` without blocking it. Per path it keeps the newest 100 `'edited'` rows, then the newest 500 rows of any kind. There is no age cap: the Activity panel is the file's story, and a quiet file keeps its creation, sharing and assignment rows. The cap makes the log a feed, not an authoritative history. `path_watchers` is explicit user state and is never pruned.
+`FileHistory.record` trims the path it writes to, right after the insert: it keeps the newest 100 `'edited'` rows, then the newest 500 rows of any kind. The trim reads only that path's rows through the `(pathId, createdAt)` index, so no job scans the table and nothing runs when a mount opens. A path over the cap is trimmed by its next event. There is no age cap: the Activity panel is the file's story, and a quiet file keeps its creation, sharing and assignment rows. The cap makes the log a feed, not an authoritative history. `path_watchers` is explicit user state and is never pruned.
 
 Tests: `apps/api/src/test/drive/file-history.test.ts`, `file-watch.test.ts`, `drive-watch-fanout.test.ts`.
 

@@ -226,6 +226,75 @@ describe('a drive change inside a shared folder', () => {
     });
 });
 
+// Shared with me reads each shared path live, so Bob's open lists hear of a path that leaves or comes back only
+// through the event of the folder around it.
+describe('a change to a folder above a shared path', () => {
+    let aliceMountId: string;
+    let aliceRoot: DrivePath;
+
+    beforeAll(async () => {
+        aliceMountId = await firstMountId(ctx.alice.user.sessionToken, ctx.alice.user.id);
+        aliceRoot = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, 'root');
+    });
+
+    async function share(pathId: string, user: TestUser, write: boolean): Promise<void> {
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${pathId}/acl`, {
+            add: [{ id: user.email, read: true, write }],
+        });
+        await drainHomeDeliveries();
+    }
+
+    // Charlie can read a folder beside it, not below it.
+    test('reaches the sharee of a file inside on a trash, a restore and a move, and nobody else', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const folder = await createFolder(token, ownerId, aliceMountId, aliceRoot.id, 'sse-above-share');
+        const target = await createFolder(token, ownerId, aliceMountId, aliceRoot.id, 'sse-above-target');
+        const beside = await createFolder(token, ownerId, aliceMountId, aliceRoot.id, 'sse-above-beside');
+        const file = await driveUpload(
+            token,
+            ownerId,
+            aliceMountId,
+            folder.id,
+            new File(['below'], 'sse-below.txt', { type: 'text/plain' }),
+        );
+        await share(file.id, ctx.bob.user, false);
+        await share(beside.id, ctx.charlie.user, false);
+        const bobSSE = await collectSSE(ctx.bob.user.id);
+        const charlieSSE = await collectSSE(ctx.charlie.user.id);
+
+        await driveDelete(token, ownerId, aliceMountId, `path/${folder.id}`);
+        await bobSSE.next(driveEvent(SSEventType.DRIVE_PATH_TRASHED, folder.id));
+        await authedRequest(token, `/drive/${ownerId}/${aliceMountId}/trash/${folder.id}/restore`, { method: 'POST' });
+        await bobSSE.next(driveEvent(SSEventType.DRIVE_PATH_RESTORED, folder.id));
+        await drivePut(token, ownerId, aliceMountId, `path/${folder.id}/move`, { targetParentId: target.id });
+        await bobSSE.next(driveEvent(SSEventType.DRIVE_PATH_MOVED, folder.id));
+        await settle();
+        bobSSE.stop();
+        charlieSSE.stop();
+
+        expect(namedEvents(charlieSSE, folder.id)).toEqual([]);
+    });
+
+    test('tells a sharee of the folder and of a path inside it once', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const folder = await createFolder(token, ownerId, aliceMountId, aliceRoot.id, 'sse-shared-twice');
+        const inner = await createFolder(token, ownerId, aliceMountId, folder.id, 'sse-shared-twice-inner');
+        await share(folder.id, ctx.bob.user, false);
+        await share(inner.id, ctx.bob.user, true);
+        const bobSSE = await collectSSE(ctx.bob.user.id);
+
+        await driveDelete(token, ownerId, aliceMountId, `path/${folder.id}`);
+        const isTrashed = driveEvent(SSEventType.DRIVE_PATH_TRASHED, folder.id);
+        await bobSSE.next(isTrashed);
+        await settle();
+        bobSSE.stop();
+
+        expect(bobSSE.events.filter(isTrashed)).toHaveLength(1);
+    });
+});
+
 describe('a chat message in a shared chat', () => {
     function chatEvents(collector: SSECollector, chatId: string): SSEvent[] {
         return collector.events.filter(

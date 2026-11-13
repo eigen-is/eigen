@@ -6,186 +6,103 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Added
 
-- **Login in the top bar** — a signed-out visitor sees a login icon at the top right of every page, the sign-in pages included. On a demo server it enters the demo
-- **Install line on the landing page** — the owner can show the one-line install command, with a copy button, from **Show install section** under **Landing page** in Admin's server settings. It is off until turned on
-- **Covers on the blog** — a blog post can have a cover image, shown big under its title
-- **Delete history** — in Docs, Sheets, Slides, Vector and Stickies, File › Version history › **Delete history…** deletes every earlier version of a document, and the images and comments deleted from it, to free space. It keeps what was added or replied to in the last three days. Only an owner of the drive sees it
-- **Make a copy** — in Docs, Sheets, Slides, Vector and Stickies, File › **Make a copy** puts a copy of the open file beside it, named "Copy of" its name. You stay in the file, and the notice's **Open** opens the copy
-- **Comments on hover** — in Docs, Sheets, Slides and Vector, rest the mouse on a comment to read its card, then click to open it. The pane lists comments by title, and in Sheets a click there jumps to the cell
-- **Assignment emails** — assigning a comment or card in Docs, Sheets, Slides, Vector or Stickies emails a guest a link to it, at most once an hour per document. Admin's server settings have a toggle for guests (on) and one for users (off)
-- **Recent files in Drive** — **Recent files** lists the files you lately opened or were notified about, from any drive, newest first. The sidebars of Drive, the document apps, Chat, Calendar, Mail and Contacts link to it
+- **Location in Drive** — the details panel shows the drive and folders a file is in, and links to its folder. For a file shared with you, it starts at the owner's name where you can't see the folders above
 
 ### Changed
 
-- **Trashing an open document** — it no longer adds a version to its history first. The document keeps every edit, and a restore brings them back
-- **Deleting a chat message** — the files attached to a deleted message are deleted for good with it, instead of landing in Drive's Trash
-- **Storage limit for mail, contacts and calendar (breaking)** — the limit per user, and a team's override of it, goes back to its default of 100 MB. Set it again under **Storage quotas** in Admin's server settings and **Quota overrides** on the team's page
-- **A new look for the public site** — the landing page, Support, the blog and the changelog share one layout, with a footer that shows the version.
-- **Tile titles** — on the Space home page and the help center's front page, an app's title is in the normal text color. The icon and the stripe keep the app's color
-- **Table of contents in the changelog** — a Versions list beside the changelog jumps to a release, and each entry starts with its bold title
-- **Moving a formula in Sheets** — a formula cut to another tab keeps reading the cells it read, as in Excel: `=A1*2` cut from One to Two becomes `=One!A1*2`, and a cell that moved along with it is still followed
-- **Uploading a backup** — only the owner can upload an archive in the **Backup** section of a user or team in Admin. Other admins still back up, download and restore
-- **Cards assigned to you** — on a Stickies board and in the comments pane of Docs, Sheets, Slides and Vector, the assignee's avatar stands out with a ring in the app's color when an open card is yours
-- **Deleting a comment** — in Docs, Sheets, Slides, Vector and Stickies, the edit form of a comment or sticky has a Delete button, and deleting from it or from the comment's right-click menu asks you to confirm
-- **Menus in Docs** — the menus read File, Edit, Insert, Format, Tools. Edit has **Paste**, which asks your browser for the clipboard, and Print and Insert › Comment show their shortcuts, ⌘P and ⌥⌘M
-- **Links in Docs** — the link dialog matches the one in Sheets: it shows the selected text, waits for a valid address and edits a link the cursor is on. Right-clicking a link offers Open, Copy, Edit and Remove link
-- **Menus in Slides and Vector** — Edit has Cut, Copy, Paste, Select all, Duplicate and Delete, and Insert › **Comment** comments on the one object you selected
-- **Unread dots** — on a sticky or a comment in the pane, the red dot moves to the start of the card's footer, beside its replies
-- **Attachments in a row** — the files on a sticky or comment, a chat message and a mail sit in one row that scrolls sideways, so a card with many files no longer pushes its footer under the reply box
-- **Flat icon buttons** — icon-only buttons have no border in the edit form of a sticky or comment, Drive's file details, the add button of share dialogs and guest lists, and the remove-image button in properties panels, so they match the toolbars
-- **GIFs stand still in lists** — in Drive's grid, on Stickies card covers and in the slide list of Slides, an animated GIF or WebP shows its first frame. It still plays in a file's details in Drive, in Quick preview, on the slide itself and in present mode. A deck full of GIFs opens faster, because the slide list loads small stills instead of every animation. Pictures uploaded before this keep playing in lists until the file changes
-- **Deleted comments** — a link, notification, activity entry or search result for a deleted comment opens it as "This comment was deleted" under its grayed title, with nothing to reply to, resolve or assign
-- **Copies in Drive** — a copy or Duplicate of a document leaves out the images and comments deleted from the original
-- **Folder depth in Drive** — folders nest at most 256 levels deep, in Drive and over WebDAV. A deeper tree you already have stays readable
-- **Comments in Sheets** — the comments pane lists the comments on every tab, with another tab's name first. Deleting a comment removes it from every cell it sits on, and a duplicated tab starts without comments
-- **Undo in Sheets** — once someone else edits the spreadsheet, you can no longer undo or redo your last insert or delete of rows or columns, your last added, duplicated, deleted or renamed tab, or anything before it. What you did after it still undoes. When someone else renames a tab, you can no longer undo or redo anything before that. Pressing undo or redo with nothing left for this reason shows a notice that says so
-- **Restoring a version of an open spreadsheet** — your selection, scroll position and tab stay where they were, and so do other people's cursors. After a restore, or an import that replaces the spreadsheet, what you did before can't be undone, and pressing undo says so
-- **Renaming a tab in Sheets** — formulas, formula rules, dropdown lists and links that name the tab follow its new name, as in Excel, and undo renames it back
-- **Menus in Sheets** — Edit matches the other apps and adds **Select all** (⌘A), and every row has an icon. Insert › **Image** and **Link** and Format › Text › **Text color** take Docs' names, and **Clear formatting** gets ⌘\\
-- **Paste from a menu in Sheets** — **Edit › Paste** and the right-click **Paste** paste what is on the clipboard, from any app. Where the browser blocks that, a notice says to press ⌘V (Ctrl+V on Windows and Linux)
-- **Pasting edited cells in Sheets** — if you edit cells after copying them, a paste in the same tab brings them as they are now
-- **Tick boxes in Sheets** — a tick box with its own values, such as Yes and No, shows the box alone, centered like any other, as in Google Sheets. A cell whose value the rule doesn't name shows it as text with the red invalid mark, and no box
-- **Moving cells in Sheets** — a drag from the selection's border moves the cells when it starts on a comment or invalid mark too
-- **Validation limits in Sheets** — an edit that would push a validation rule past its limit goes through, and the cells past it get no rule
-- **Conditional formatting limit in Sheets** — a sheet holds up to 1,024 conditional formatting rules, and a rule past that is not added
-- **Speed in Sheets** — editing a cell in a workbook of 100,000 formulas takes milliseconds, where it took over a tenth of a second, and a cell that 100,000 formulas read no longer stalls a sheet for a minute
-- **Large spreadsheets after row edits** — opening, exporting and searching a large workbook after many row or column inserts and deletes takes about half as long as before
-- **Formula text in Sheets** — inserting or deleting a row or column changes only the references it moves, so a formula keeps its line breaks and spaces, on every tab
-- **Links in Sheets (breaking)** — an existing spreadsheet opens without its cell links, and their text keeps its blue underline. Add them again, or import the Excel file again. A link now moves with its cell through a sort or a fill
-- **Charts in Sheets (breaking)** — a chart in an existing spreadsheet keeps its type, title, legend, data and look, and loses its axis titles and settings, its stacking, and its series and slice colors and styles. Set them again in the chart's panel
-- **Rules in Sheets (breaking)** — an existing spreadsheet opens without its conditional formats, dropdowns, tick boxes and other validation rules, and every cell keeps its value. Set the rules up again, or import the Excel file again
-- **Slice colors** — a pie slice's own color stays at its place in the pie, as in Google Sheets. After a row is inserted or deleted inside a chart's data in Sheets, or removed in **Edit data** in Docs, Sheets, Slides and Vector, the slice that takes the place takes the color
-- **Editing a chart together in Sheets** — when two people change the same kind of setting on one chart at once, such as two series' colors, the later change stays. Undo skips a chart setting someone else has changed since
-- **Deleting a tab in Sheets** — formulas that name the tab show `#REF!`, as after deleting a row, and dropdown lists and links that name it stop working. A new tab with that name doesn't bring them back. Undo does, until someone else edits
-- **Sorting in Sheets** — a sort moves a cell's contents, formatting and link, and leaves borders, data validation and conditional formatting where they are. Hidden rows stay put, whether you hid them or a filter did
-- **Pasting and filling rules in Sheets** — a paste or fill from a cell with no rule takes the rule off the cell it lands on, so a rule can get a gap. A fill also copies links and replaces the data validation it lands on
-- **Cutting filtered rows in Sheets** — a cut or a drag over rows a filter hides moves nothing and says to clear the filter first. So does a copy of a merged cell a filter partly hides
-- **Filling in Sheets** — Chinese number and weekday series copy, and 1, 2, 4 fills as a straight line
-- **Formulas Sheets can't calculate** — a function it doesn't have, such as `FILTER`, `ROW` or `FIXED`, keeps what the cell holds, an error included, when its inputs change or you sort or cut it. Typed new, copied or filled, it shows `#NAME?`
-- **Pasted errors in Sheets** — a copied formula that lands on an error, such as `#DIV/0!`, is an error to the formulas that read it, so `ISERROR` and `IFERROR` see it. A formula pasted as text, or under the format painter, keeps the type of its own result
-- **Empty results in Sheets** — a formula that gives empty text, such as `=IF(A1=1,"",5)`, plus 1 is 1, as in Google Sheets where Excel says `#VALUE!`, whether you typed it or imported it
+- **Documents over WebDAV** — a WebDAV client can add a file to a document's `media` folder by saving or copying it there. Moving a file into a document is refused, since the next **Delete history…** would delete it
+- **Renaming a file in Drive** — the **Rename** dialog shows the whole name with the part before the extension selected, so you can change the extension too. A document made in Eigen keeps its extension hidden
+- **Guest sign-in code** — the code mailed to a guest works for 15 minutes instead of 5, so a mail that arrives late still gets them in
+- **Uploads** — an image or file that fails to upload into a document or a chat says why, such as a file over the size limit, instead of a bare error code. An upload in Drive can be stopped from its progress card
+- **Team drive storage** — giving a team drive new storage, or turning one on or off, reconnects the team's open documents. They show "Storage unavailable" for a few seconds and keep every edit
 - **Number formats in Sheets** — numbers round as in Excel, so 1.005 under 0.00 shows 1.01, very small numbers show their digits, a time just before midnight shows the next day, dates before 1900 show their weekday, and Excel's long date shows March 5, not March 05. Chart labels too
 - **Dates in early 1900 in Sheets** — a date in January or February 1900 shows one day earlier than in Excel, as in Google Sheets, since 1900 had no 29 February
-- **Excel files in Sheets** — an import keeps what Excel saved, and calculates only a formula saved with no result or with an error, where Sheets can calculate it
-- **Large PDFs from Sheets** — a tall or chart-heavy spreadsheet prints up to the export's limit of 250,000 cells, or fails if it takes too long. The page count no longer cuts it. PDFs and web pages draw at most 1,000 images and charts, and about 200 MB of images
-- **Deleted invitations in Calendar** — an invitation from someone on your server that you deleted comes back, faded as declined and with its moved and cancelled dates, when its organizer changes the event. So does a date you removed
-- **Large invites in Mail** — a calendar invite over 1 MiB shows "This calendar invitation could not be read" instead of a preview, and no longer changes your calendar by itself
-- **Unusual repeat rules in Calendar** — an event whose repeat rule would take the server too long to work out shows on its first date only, and calendar apps still get the whole rule. An invite whose rule names no frequency arrives as one event instead of getting lost
-- **Invitation emails in Calendar** — an invitation or cancellation names the time zone of a timed event, and says how a repeating event repeats, such as "Every week on Wednesday"
-- **End dates of repeating events** — the event card, the Repeat menu and invitation emails write a series' end as "until 15 December 2026", on its last day in the event's own time zone
-- **Guests of moved dates in Calendar** — calendar apps syncing your calendar show each moved date of a repeating event with its guests and you as organizer. Clearing one date's guests cancels it for them. A date moved before this update has no guests until you add them again
-- **Organizer of team events** — the person who first adds guests to a team event stays its organizer, so invitations and replies name them, whoever edits the event later
-- **You in your guest lists in Calendar** — an event of yours with guests lists you first, marked Organizer, as your guests already saw it
-- **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
 
 ### Fixed
 
-- **Formulas after a row or column change in Sheets** — inserting or deleting rows or columns updates what formulas show, for everyone: `=SUM(A1:A3)` follows its shrunk range, and `=A2*2` over a deleted row shows `#REF!` instead of its old number
-- **Links while others edit in Sheets** — two people adding or removing links at once no longer overwrite each other's or put them a row off
-- **The link card in Sheets** — it no longer covers a linked cell's fill handle or gets in the way of a drag, and it goes when a paste takes the link off its cell. Near the bottom or right edge of the grid it opens above the cell or further left, so its buttons stay in reach, and the validation card does the same. On a merged cell both cards open under the whole merge. The blank margin past the last row or column shows no card of the last cell
-- **Merge, link and split in Sheets** — formulas reading those cells update, and a link's new text or a split piece replaces a formula instead of the formula's result coming back
-- **More formulas in Sheets** — `=A1%` works, `T` and `N` work, `ROWS` and `COLUMNS` count one cell, `AVERAGEIF` skips blanks instead of going blank, a result such as `STDEV(5)` shows `#NUM!`, and `TEXT` with a number format it can't read shows `#VALUE!`, not `#ERROR!`
-- **The name box in Sheets** — the box left of the formula bar that names the selection, such as A1, no longer looks like a field you can type in, and clicking it leaves your keys with the selected cell
-- **Moving cells in Sheets** — cells dragged to the edge of the view land where you drop them, or on the last row or column you can see, not at the far end of the sheet over what was there
-- **Fills in Sheets** — a block dragged up or left lands in step with its source, and a date series counts by the date, not the text it shows
-- **Frozen panes in Sheets** — a press in a frozen cell that moves a pixel no longer throws the view back to the start
-- **Frozen panes and selection while others edit in Sheets** — a row someone inserts or a freeze someone sets moves your selection and panes at once
-- **Deleting frozen rows in Sheets** — deleting every frozen row or column ends the freeze on that side, for everyone, instead of pinning a row that was never frozen. Undo brings it back, until someone else edits
-- **Format painter in Sheets** — text such as `'005` stays text under a number format, and a number stays a number under a text cell's format. Painting from an empty cell shows numbers as General and leaves rich text in place
-- **Deleting rows and columns in Sheets** — when a delete takes what you selected, yours, someone else's or an undo, your selection stays at that position, on the row or column that took its place. The name box, the arrow keys and typing work from there, and a place inside a merged cell selects the merged cell, so what you type shows
-- **Inserting rows and columns in Sheets** — inserting above or left of a cell you are editing moves the edit with its cell, so it no longer writes into the row that slid under it
-- **Comments in Sheets** — **Clear formatting** keeps a cell's link and comment, and **Delete comment** in a cell's menu asks first
-- **Typing a formula in Sheets** — a formula with a quoted text or a line break (Alt+Enter) types as you type it, instead of the rest landing at its start, such as `=VLOOKUP("k3",A1:B4,2)`
-- **Array formulas in Sheets** — a formula such as `SUMPRODUCT(A1:A3*B1:B3)`, which Sheets can't calculate yet, keeps the number it has when you edit around it, instead of turning into 0. Typed new, it shows `#CALC!`
-- **Drafts in Mail** — a save that fails, or a crash during one, no longer loses the draft. An attached email stays an attachment, and removing an attachment never takes another with it
-- **Older drafts in Mail** — a draft saved before this update loses its Bcc and its links to Drive documents, whose pills stay plain links in the text
-- **Drafts in other mail apps** — a mail app reading over IMAP gets each save as a new message, with its links to Drive documents and its Bcc. Bcc also stays on the copy in **Sent**. A mail app's own send of the draft carries a hidden comment naming those links to its recipients
-- **Editing a draft in a mail app** — while Eigen's composer holds the draft, the next auto-save makes two drafts, with neither's text lost. Eigen's copy keeps its links but not its attachments, and the mail app's keeps both
-- **A draft left open** — opened from Drafts and left idle while a mail app edits it, it says the message is gone, and one draft remains. In two Eigen tabs, the last save wins
-- **Sent mail** — a tab left open after a send can no longer pull the message back into Drafts or mail it twice. A collapsed message keeps Bcc off its To line, and shows Bcc on its summary line only when it went to nobody else
-- **Comments on a text box in Docs** — **Add comment** on a text box opens the new comment form, where it did nothing
-- **Resolved comments in Docs** — resolving a comment removes its highlight from the text, which used to stay yellow
-- **Merged cells in Sheets** — pasting text over a merged cell replaces the merge, and wrapped text in a merged cell no longer makes its row very tall
+- **Trash in Drive** — the Trash and its sidebar count include what was deleted from every drive of yours and from your team drives, so anyone in the team can restore it. **Empty trash** empties only your own drives, and its dialog says so. A drive whose trash fails to load is named above the list
+- **Moving several items in Drive** — when some of them fail, the **Move to** dialog keeps only those, so **Move here** again leaves the moved ones alone. **Delete permanently** in the Trash does the same
+- **Copying to another drive** — the copy appears once it is complete, and a copied document is found by searching its text right away
+- **All images in Drive** — the list includes the images someone shared with you directly
+- **Shared with me in Drive** — a file someone shared with you shows its current name, folder, size and thumbnail, also after they moved or changed it, or moved the folder it is in. When they move it to the Trash or restore it, it leaves and returns without a "shared with you" or "removed your access" notification
+- **Sharing with your own team** — a file you share with a team you are in stays out of your own **Shared with me** and sends you no notice. A team drive's file shared with a member shows only in the team drive
+- **Files on the server's own disk** — a save replaces a file in one step, so a crash during the save, or a download at that moment, gets the whole old file or the whole new one, never part of either
+- **Saving from Word and Excel over WebDAV** — **Save as** into a mounted drive works. A save, move or copy over an existing file that the server refuses leaves that file in place instead of in the Trash
+- **Sharing after a save over WebDAV** — saving from Word or Excel into a mounted drive keeps the file's sharing, history and watchers. Such a save, or **Replace** in Finder or Explorer, overwrites the file as an upload does, so its old content no longer goes to the Trash
+- **Folders over WebDAV** — renaming a file in Finder to change only its capitals works, and copying a folder without its contents onto an existing one is refused instead of replacing it. Folder listings give addresses a client can follow on a standard install
+- **New files over WebDAV** — when two clients create a file of the same name at once, one gets the file and the other an error, instead of a second, numbered copy
+- **Locks over WebDAV** — a file someone locked stays locked to everyone else, and only they can renew the lock. A lock on a folder also holds for people who only have a subfolder shared with them
+- **Folders with a locked file over WebDAV** — deleting, moving or replacing a folder is refused while someone else has a file inside it locked
+- **Download names in Drive** — a file downloads and attaches to mail under the name you see in Drive, also after a rename or a save from Word or Excel over WebDAV. Attachments in a chat or document keep the name they were uploaded with
+- **Renamed files in Drive** — a file renamed to another extension, such as `photo.bin` to `photo.png`, gets the icon, preview and thumbnail of its new type and shows under **All images**. A file renamed earlier keeps its old type until its extension changes again
+- **Dialogs in Drive that close** — a dialog keeps its text while it fades out, where **Move to trash** flashed "Remove 0 shared items". **Email collaborators** now fades out like the others
+- **Shared and Recent in Drive** — **Shared by me**, **Shared with me**, **Recent** and **Watched** show a renamed, moved or deleted item right away, not minutes later
+- **Restoring several items in Drive** — when some of them fail, one message says how many, and those stay in the Trash
+- **Empty lists in Drive** — the empty text sits in the middle of the list again, in Drive and in the file lists of Docs, Sheets, Slides, Stickies and Vector
+- **Move to in Drive** — for an item of another drive, such as a team's file in a document app's list, the **Move to** dialog starts in that item's drive
 - **Merged cells and row or column changes in Sheets** — a row inserted right below a merged cell one row high stays out of the merge, as does a column inserted right of one a column wide, and a merge that a delete leaves with one cell becomes a plain cell
-- **Restoring in Slides and Vector** — restoring an earlier version of a deck or drawing brings back the comments deleted since, as Docs and Sheets do. Their replies stay as they are now
-- **Version history in other tabs** — after a restore or a Delete history, another tab open on the same document shows the new list of versions at once
-- **Pictures cropped in Google Slides** — a picture that Google Slides cropped to fit its box, such as a logo, no longer comes in squashed when you convert or import the deck
-- **Validation rules and formats in Sheets** — a rule checks a cell's value, not its text: a date shown in another format, a number shown as 50% and an unchanged formula pass, and an imported "any date" rule no longer refuses every date
-- **Row and column changes while others edit in Sheets** — a rename, tab color or link someone sets while you insert or delete rows stays
-- **Tabs while others edit in Sheets** — a tab added at the same moment as another of its name is kept as "Name (2)" instead of vanishing. Two people deleting or hiding the last two visible tabs at once leave one showing, and Duplicate works on a tab whose old name breaks the naming rules
-- **Filters while others edit in Sheets** — a filter someone else changes no longer leaves rows hidden for good after your next filter edit
 - **Filters and deleted rows in Sheets** — deleting rows keeps a column's filter set, also when they are the last rows it hides
 - **Filters and deleted headers in Sheets** — deleting a filter's header row or its columns shows the rows it hid again, instead of leaving them hidden with no filter to bring them back
-- **Refused edits in Sheets** — Delete on part of a merged cell shows a notice, a paste past the sheet's size limit says so, and a paste over part of a merge says it can't and changes nothing
-- **Long text in Sheets** — wrapped text grows its row to fit every line, however you confirm it, from the formula bar or by clicking elsewhere too
-- **Clicks and drags in Sheets** — the link card over a frozen pane shows the link you point at, dragging a formula's range picks the right rows, and a move near the bottom of the grid no longer snaps to the last row
-- **Selecting in Sheets** — dragging a selection beside a frozen pane keeps the view where it is, and a row or column header no longer stays highlighted after its right-click menu
-- **Tab menus in Sheets** — after a pick from a tab's menu your keys go to the grid, so a typed word no longer runs a menu row such as Hide, and Rename lets you type the name at once
-- **Cutting and moving formulas in Sheets** — a formula you cut or drag follows the cells that moved with it, so `=D5*2` moved together with D5 keeps its value
-- **Pasting tables in Sheets** — numbers from a table with no alignment of its own land on the right, and a cell spanning past the table's last row pastes instead of failing
-- **Several selected ranges in Sheets** — the cell editor and the formula bar show the cell you are editing, in the last range you selected
-- **Date shortcut in Sheets** — Ctrl+Shift+; on a filled cell no longer wipes it, so Escape brings back what was there
-- **Formulas in Sheets** — `A1 : B2` with spaces recalculates, a formula reading a tab nobody opened stays current, undoing a replace restores the formulas that read those cells, and deleting a formula that reads a cell twice leaves the others reading it current
-- **Formula results that change type in Sheets** — a formula that goes from a number to text, such as `005`, no longer reads as 5 in the formulas that use it, and a true or false result keeps the cell's number format
-- **Undo while others type formulas in Sheets** — two people typing formulas at once no longer lose their undo
-- **Undo of an image or chart in Sheets** — undoing a step that edited an image or chart and then deleted it brings it back, and redoing one that added and then edited it adds it again. Both did nothing
-- **Rules while others edit in Sheets** — two people adding conditional formats at once both keep theirs, and deleting a rule no longer hits another one when someone else just removed a rule before it
 - **Whole-column rules and charts in Sheets** — a conditional format, validation rule or chart on a whole column, such as `B:B`, still covers the whole column after you insert or delete rows. A rule on the sheet's last row or column alone goes when an insert pushes it off
-- **Undo after a paste or a new rule in Sheets** — undoing a paste that added rows or columns, or a conditional format rule you added, no longer deletes what someone else put there. Once someone else edits, you can't undo such a paste or anything before it
-- **Excel downloads from Sheets** — a tab named like a cell, such as Q1, gets the quotes Excel expects in formulas, a formula follows a tab the file has to rename, and a fill down from a linked cell no longer makes the download fail
-- **Tab names from a file in Sheets** — an import repairs a tab name Sheets would refuse, such as one past 31 characters, and the formulas naming it follow
-- **Paste past the last row in Sheets** — a paste that adds rows to a workbook full of formulas no longer pauses to read them all again
-- **Dates from a formula in Sheets** — a formula formatted as a date shows its formula in the formula bar and the open cell. Editing the date it showed there used to replace the formula with a typed date
-- **Text from a formula under a number format in Sheets** — a formula that gives the text `005` shows `005` under any number format, as in Excel, and the format applies again when it gives a number
-- **Insert function and autosum in Sheets** — what they put in the cell shows in the formula bar at once, also over a formula you were still typing. Autosum on a selection that reaches the sheet's last row or column does nothing, where it failed or wrote past the grid
-- **Typing with an input method in Sheets** — the Enter that confirms what you compose, such as Japanese or Chinese, leaves the cell open. The next Enter confirms the cell
-- **A tab opened for the first time in Sheets** — arrow keys and typing work at once, on A1, without a click first
-- **Downloading an empty spreadsheet** — a spreadsheet nobody edited downloads with its blank sheet
-- **Downloads that fail** — downloading or printing a document from Docs, Sheets, Slides or Vector that is too big, or whose PDF takes too long to make, says "Export failed: the document is too big, or it used too much memory" instead of a server error or a timeout
-- **Mail apps during a restore** — a mail app that signs in while an account is being restored or deleted is told to try again later, so it can no longer make the restore fail and keep the account offline
-- **Sending in Chat and comments** — a send that fails keeps its text and files, and a slash command such as /help leaves your attachments waiting. Send stays off until the room has loaded, so a message can't go out without its files
-- **Changing room in Chat** — what you were about to send is cleared when you change room, so it can't go to the wrong one
-- **Two people editing in Calendar** — editing, moving or deleting an event someone else just changed is refused instead of overwriting their change
-- **Removing a location in Calendar** — an update that only removes an event's location or description reaches its guests
-- **Deleting a repeating event in Calendar** — deleting or cancelling the whole series cancels it for guests invited to only one of its dates too
-- **Invitations for a new account in Calendar** — someone invited to a repeating event, or to one of its dates, who signs up after it was cancelled no longer finds it in their calendar
-- **Calendar files from others** — a calendar file someone else made, in a mail invite, from a calendar app or in an import, no longer freezes the server
-- **Guest emails in Calendar** — changing only the color or reminder of an event or of one of its dates, or moving a one-off event to another time zone without changing when it happens, no longer emails its guests. Neither does a save that changes nothing
-- **Events from other calendar apps** — the first save in Calendar of an event made in another calendar app no longer rewrites what you didn't change, or emails its guests
-- **Repeating events that end in Calendar** — a repeating event from Apple Calendar or another app ends on the date it names, and one you end with **This and following events** ends on the same day in other calendar apps, all-day ones included
-- **Guest replies in Calendar** — a guest's answer for a date a repeating event doesn't have no longer adds that date to it
-- **Long date ranges in Calendar** — a repeating event lasting several days shows when it began before the days in view, in Calendar and in calendar apps. A calendar app asking for more than five years at once gets the events past the first five
-- **Time zones in calendar files** — an export keeps each event's time when two custom time zones share a name, and so does an import of a file holding several calendars. An event a calendar app saved in UTC shows as UTC, not GMT, and stays UTC when moved
-- **Importing a file that isn't a calendar** — Calendar says it is not a calendar file instead of showing an internal error
-- **Share notices in Calendar** — changing who a calendar is shared with, in Calendar or in a team's settings in Admin, no longer notifies people whose access stayed the same, so a notice they read stays read
-- **Mailed replies in Calendar** — a guest's answer that arrives by mail shows in your open Calendar tabs without a reload
-- **Guest replies on shared calendars** — an outside guest's reply to an event someone saved on another person's calendar reaches that calendar. The invitation names the calendar's owner as organizer
-- **Cancelling team events** — deleting a team event with outside guests sends them a cancellation from you
-- **Declining one date in Calendar** — declining or answering one date of an invitation that doesn't repeat no longer fails or goes unrecorded
-- **Your answer in Calendar** — your answer to an invitation no longer resets when the organizer makes a small edit, such as a new title
-- **Several dates of one event in Calendar** — when you're invited to several dates of a repeating event, cancelling or deleting one of them no longer removes the others
-- **Answering one moved date in Calendar** — when someone outside your server invites you to one moved date of a repeating event, your answer or decline reaches that date in their calendar
-- **Shortened and lengthened series in Calendar** — an organizer who lengthens a repeating event reaches its guests. A guest who ended it with **This and following events** keeps that end, unless the organizer sets an earlier end date
-- **Invitations to repeating events in Calendar** — an invitation to a repeating event with moved or cancelled dates notifies you once, and one that arrives twice notifies you no more. A date the organizer took you off shows as cancelled
-- **Invitations from before you joined** — an invitation to a repeating event sent before you had an account arrives with its moved and cancelled dates, and one to a single date of it arrives as that date
-- **Mailed invitations in Calendar** — an invitation by mail that lists a moved date before its repeating event keeps the moved date
-- **Guests of repeating events in Calendar** — a guest added to a repeating event gets every date, moved or answered ones included, and a guest removed leaves them all. A guest's answer for the whole series counts on every date
-- **Ending an invitation early in Calendar** — after you remove **This and following events** from an invitation, the dates you kept keep your answer when the organizer changes the event
-- **Removing the last guest in Calendar** — removing the only guest of an event that doesn't repeat saves, instead of keeping the guest
-- **Cancelled dates in Calendar** — cancelling one date of a repeating event or deleting the whole series, and changing a date after that, reach guests whose calendar app skips messages that look old
-- **Dates across time zones in Calendar** — a date an organizer in another time zone moves, or invites you to alone, shows once on its own day, and their later updates and your answer reach that same date
-- **Answering one date by mail** — when you answer one date of a repeating event from someone outside your server, the email they get shows that date, not the first one
-- **A refused Save** — in Calendar, Contacts and Personal info in Space, a Save refused because the item changed elsewhere keeps what you typed and takes the other fields from the server
-- **Removing someone with a document open** — removing someone from a team or an organization, or deleting their account, cuts them off within 15 seconds from the documents they can no longer read. A password reset does too
-- **Losing access to an open document** — in Docs, Sheets, Slides, Vector and Stickies, the page switches to "You need access" within 15 seconds, or to sign-in if your account was deleted, instead of leaving an editor where typing goes nowhere
-- **Signing out with a document open** — signing out or changing your password with **Log out of all other devices** ticked also ends open documents and live updates, within 15 seconds
-- **Logging out from a file list** — **Log out** on Trash, Shared or a file-type page in Drive, or on the file list of Docs, Sheets, Slides, Stickies or Vector, goes straight to the login page without an error flashing first
-- **Shared with me** — items of a deleted person or team no longer show
-- **Removing a share in Drive** — no longer notifies someone who never had the file
-- **Copy link** — the link copied from a share dialog, a file's menu or a comment starts with your server's address, so it opens when you paste it in a mail or chat
-- **Restoring a deleted account or team** — a restore of a deleted team, or of a deleted user whose address another account now holds, is refused before it changes anything. A restore that fails no longer reloads open tabs, so they keep their unsaved edits
+- **TEXT in Sheets** — `TEXT` with a number format it can't read shows `#VALUE!`, not `#ERROR!`
+
+## [0.4.3] - 2026-11-11
+
+Drive gets a Recent files page, and every document app can make a copy of a file and delete its old versions to free space. Comments open on hover, and assigning one to a guest emails them. Sheets is much faster on large workbooks and keeps formulas right when rows, columns and tabs change, also with several people editing at once. Calendar invitations and repeating events, and drafts in Mail, are far more reliable. Four changes break old data: links, rules and some chart settings in existing spreadsheets need setting up again, and the storage limit for mail, contacts and calendar goes back to its default.
+
+### Added
+
+- **Recent files in Drive** — **Recent files** lists the files you lately opened or were notified about, from any drive, newest first. The sidebars of Drive, the document apps, Chat, Calendar, Mail and Contacts link to it
+- **Make a copy** — in Docs, Sheets, Slides, Vector and Stickies, File › **Make a copy** puts a copy named "Copy of" the file's name beside it
+- **Delete history** — in Docs, Sheets, Slides, Vector and Stickies, File › Version history › **Delete history…** deletes a document's earlier versions, and the images and comments deleted from it, to free space. It keeps the last three days, and only an owner of the drive sees it
+- **Comments on hover** — in Docs, Sheets, Slides and Vector, rest the mouse on a comment to read its card. The pane lists comments by title
+- **Assignment emails** — assigning a comment or card to a guest emails them a link to it, at most once an hour per document. Admin's server settings can turn this on for users too
+- **Install line on the landing page** — **Show install section** under **Landing page** in Admin's server settings shows the one-line install command, with a copy button
+
+### Changed
+
+- **Storage limit for mail, contacts and calendar (breaking)** — the limit per user, and a team's override of it, goes back to its default of 100 MB. Set it again under **Storage quotas** in Admin's server settings and **Quota overrides** on the team's page
+- **Links in Sheets (breaking)** — an existing spreadsheet opens without its cell links, and their text keeps its blue underline. Add them again, or import the Excel file again
+- **Rules in Sheets (breaking)** — an existing spreadsheet opens without its conditional formats, dropdowns, tick boxes and other validation rules, and every cell keeps its value. Set them up again, or import the Excel file again
+- **Charts in Sheets (breaking)** — an existing chart keeps its type, title, legend and data, and loses its axis titles and settings, stacking, and series and slice colors. Set them again in the chart's panel
+- **Speed in Sheets** — editing a cell in a workbook of 100,000 formulas takes milliseconds, where it took over a tenth of a second. A large workbook opens, exports and searches about twice as fast after many row and column changes
+- **Tabs and formulas in Sheets** — as in Excel, formulas, rules and links follow a renamed tab, and formulas show `#REF!` for a deleted one. A formula cut to another tab keeps reading its cells
+- **Formulas Sheets can't calculate** — a function it doesn't have, such as `FILTER`, keeps the result the cell holds. Typed new, it shows `#NAME?`
+- **Undo in Sheets** — once someone else edits, you can't undo your earlier row, column or tab changes, and a notice says why. Restoring a version keeps your selection, scroll position and tab
+- **Sorting in Sheets** — a sort moves a cell's contents, formatting and link, and leaves borders and rules where they are. Hidden rows stay put
+- **Comments in Sheets** — the pane lists the comments on every tab, and deleting a comment removes it from every cell it sits on
+- **Large PDFs from Sheets** — a spreadsheet prints up to 250,000 cells, no longer cut off by its page count
+- **Menus** — the Edit menus of Docs, Sheets, Slides and Vector have Paste and Select all, and Slides and Vector get Insert › **Comment**. Docs' link dialog and link menu match the ones in Sheets
+- **Deleting comments** — the edit form of a comment or sticky has a Delete button that asks first. A link or notification for a deleted comment opens it as "This comment was deleted"
+- **GIFs stand still in lists** — in Drive's grid, on Stickies covers and in the slide list of Slides, an animated GIF shows its first frame, so a deck full of GIFs opens faster. It still plays on the slide and in previews
+- **Folder depth in Drive** — folders nest at most 256 levels deep, in Drive and over WebDAV
+- **Deleting a chat message** — the files attached to it are deleted for good, instead of landing in Drive's Trash
+- **Invitation emails in Calendar** — an invitation names the event's time zone and says how a repeating event repeats, such as "Every week on Wednesday, until 15 December 2026"
+- **Default drive size in Admin** — raising **Default mount (MB)** in Admin's server settings gives every existing user's drive the new size at once
+- **Uploading a backup in Admin** — only the owner can upload an archive in the **Backup** section of a user or team
+- **The public site** — the landing page, Support, the blog and the changelog share one layout, with a login icon at the top right. Blog posts can have a cover image
+
+### Fixed
+
+- **Formulas after a row or column change in Sheets** — `=SUM(A1:A3)` follows its shrunk range, and `=A2*2` over a deleted row shows `#REF!` instead of its old number
+- **Editing together in Sheets** — links, tabs, filters, rules, frozen panes and undo no longer clash or get lost when two people edit at once
+- **Smaller fixes in Sheets** — dozens of fixes to moving, filling and pasting cells, merged cells, frozen panes, typing formulas, validation, the link card and Excel downloads
+- **Comments in Docs** — **Add comment** on a text box works, and resolving a comment removes its highlight
+- **Version history** — restoring a deck or drawing brings back the comments deleted since, and other open tabs show the new list of versions at once
+- **Pictures cropped in Google Slides** — a picture Google Slides cropped to fit its box no longer comes in squashed
+- **Downloads that fail** — a document too big to download or print from Docs, Sheets, Slides or Vector says so, instead of showing a server error or timing out
+- **Drafts in Mail** — a failed save or a crash no longer loses a draft, and a draft edited in another mail app keeps both versions' text. A draft saved before this update loses its Bcc and its links to Drive documents
+- **Sent mail** — a tab left open after a send can no longer pull the message back into Drafts or send it twice
+- **Invitations and repeating events in Calendar** — dozens of fixes, so answers, cancellations, moved dates and guest changes reach the right people and dates, across time zones and other calendar apps. Changing only an event's color or reminder no longer emails its guests
+- **Calendar files from others** — a calendar file from a mail invite, a calendar app or an import can no longer freeze the server
+- **A refused Save** — saving an event, a contact or your personal info that someone changed meanwhile is refused, and keeps what you typed
+- **Sending in Chat and comments** — a send that fails keeps its text and files, and changing room clears what you were about to send
+- **Losing access to an open document** — removing someone from a team or organization, deleting their account, resetting their password or signing out everywhere cuts off their open documents within 15 seconds
+- **Copy link** — a copied share link starts with your server's address, so it opens when you paste it in a mail or chat
+- **Sharing in Drive** — items of a deleted person or team leave Shared with me, and removing a share no longer notifies someone who never had the file
 - **Deleting during an upload** — on local storage, deleting a file while an upload of the same name runs no longer loses the new file
-- **Limits in Admin** — a storage, mount or upload limit outside its range keeps Save disabled, with a plain hint under the field, instead of failing with a confusing error
+- **Restoring a deleted account or team** — restoring a deleted team, or a deleted user whose address another account now holds, is refused before it changes anything, and a failed restore no longer reloads open tabs
+- **Mail apps during a restore** — a mail app signing in while an account is restored is told to try again later, instead of making the restore fail
 
 ## [0.4.2] - 2026-11-03
 

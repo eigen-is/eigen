@@ -11,16 +11,17 @@ installHappyDom();
 
 let session = { isAuthenticated: false, isLoading: false, user: null };
 let demoMode = false;
-const realAuth = await import('@workspace/lib/auth');
+// Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
+const realAuth = { ...(await import('@workspace/lib/auth')) };
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session, useIsGuest: () => false }));
-const realPublic = await import('@workspace/lib/public');
+const realPublic = { ...(await import('@workspace/lib/public')) };
 mock.module('@workspace/lib/public', () => ({
     ...realPublic,
     usePublicConfig: () => ({ data: { demoMode } }),
     useEnabledApps: () => [],
 }));
 // The bar sits outside a router here, so its links are plain anchors.
-const realRouter = await import('@tanstack/react-router');
+const realRouter = { ...(await import('@tanstack/react-router')) };
 mock.module('@tanstack/react-router', () => ({
     ...realRouter,
     useRouter: () => ({}),

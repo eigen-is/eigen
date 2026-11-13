@@ -4,16 +4,16 @@
 // and changes nothing. Drive's import and convert routes, for example, call it.
 
 import { readSheetsLog, readSheetsSnapshotJson, sheetsOpLog, writeSheetsSnapshot } from '@workspace/lib/sheets';
-import type { ConvertTarget, DocumentImportOptions, DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import {
-    CONVERT_SOURCES,
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
     EIGEN_DOC_TYPE_INFO,
     isCollabType,
-    isConvertSource,
 } from '@workspace/lib/types/drive';
+import type { ConvertTarget, DocumentImportOptions } from '@workspace/lib/types/drive-convert';
+import { CONVERT_SOURCES, isConvertSource } from '@workspace/lib/types/drive-convert';
 import { readSlidePage } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import { enforceMountQuota } from '../config/enforcement';

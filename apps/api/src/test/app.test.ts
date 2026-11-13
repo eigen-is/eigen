@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { EXPORT_SUMMARY_HEADER } from '@workspace/lib/types/drive';
+import { EXPORT_SUMMARY_HEADER } from '@workspace/lib/types/drive-convert';
 import { authedRequest, driveGet, driveUpload, getTestContext } from './setup';
 
 describe('CORS', () => {

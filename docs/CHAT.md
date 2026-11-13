@@ -98,7 +98,7 @@ Adding members is an ACL edit, so step 1 uses the share dialog's `ContactAddRow`
 
 ### Matching compares effective member sets
 
-`GET /chat/:ownerId/rooms/by-members?emails=…` returns the standalone chats whose members are exactly the caller plus `emails`, writable first, then most recently updated. Writable means the caller owns the chat or the caller's ACL entry has `write`. Matching never looks at the name, so a renamed chat still matches. `findChatsByMembers` (`apps/api/src/lib/chat/find-by-members.ts`) reads only the caller's own home: their mounts plus the shared-with-me mirror. It makes no cross-home calls ([SCALABILITY.md](SCALABILITY.md)), which is why the route is self-only.
+`GET /chat/:ownerId/rooms/by-members?emails=…` returns the standalone chats whose members are exactly the caller plus `emails`, writable first, then most recently updated. Writable means the caller owns the chat or the caller's ACL entry has `write`. Matching never looks at the name, so a renamed chat still matches. `findChatsByMembers` (`apps/api/src/lib/chat/find-by-members.ts`) reads the caller's own mounts plus their Shared with me, which reads each shared chat from its owner ([ACL.md](ACL.md#shared-with-me-reads-each-path-from-its-owner)). Both lists are the caller's own, which is why the route is self-only.
 
 A chat's members are its effective member emails: path ACL, ancestor ACLs, expanded teams and the owner, all lowercased. A chat whose membership is not a fixed set of people never matches:
 
@@ -106,11 +106,11 @@ A chat's members are its effective member emails: path ACL, ancestor ACLs, expan
 - a direct `team_*` ACL entry, since team membership changes
 - a chat on a team drive, since every team member is implicitly in it
 
-Own chats pass a cheap direct-ACL subset screen before the costly `getEffectiveMembers` walk. The walks run concurrently and stop at the `MAX_MEMBER_WALKS` most recently updated candidates, so a match past the cap is missed and the wizard offers create instead. A shared-with-me chat skips the walk: its mirror row has only the direct ACL and the owner, so its set is the owner's email plus the direct entries.
+Own chats pass a cheap direct-ACL subset screen before the costly `getEffectiveMembers` walk. The walks run concurrently and stop at the `MAX_MEMBER_WALKS` most recently updated candidates, so a match past the cap is missed and the wizard offers create instead. A shared-with-me chat skips the walk: only its own row is read from its owner, so its set is the owner's email plus the direct entries.
 
 The panel suggests; it never guards. Two point-in-time misses are accepted:
 
-- A foreign chat that gains members through a shared parent folder can match falsely, since the mirror row doesn't see the parent.
+- A foreign chat that gains members through a shared parent folder can match falsely, since the parent is not read.
 - A `team_*` entry inherited from an ancestor folder is not excluded. The walk expands it to the team's current members, so an own chat in a team-shared folder matches whenever that expansion equals the picked set.
 
 ### Create and share are one server-side step
@@ -125,7 +125,7 @@ A wizard chat is born shared. If the ACL step fails, the route trashes and purge
 
 ### Adding someone to a chat sends no share email
 
-A "someone shared a file with you" email for being added to a chat has the wrong tone and spams groups; the first message is the real notification. The create route passes `suppressShareEmail: 'registered'`, which skips only the email ([ACL.md § Share Emails](ACL.md#share-emails)). The mirror fan-out, the `drive:acl-shared` event and the in-app share notification still happen. An address without an account still gets the email, because it is that person's only invite. `/invite` and the share dialog don't pass the flag and keep sending it.
+A "someone shared a file with you" email for being added to a chat has the wrong tone and spams groups; the first message is the real notification. The create route passes `suppressShareEmail: 'registered'`, which skips only the email ([ACL.md § Share Emails](ACL.md#share-emails)). The push into each member's `shared.db`, the `drive:acl-shared` event and the in-app share notification still happen. An address without an account still gets the email, because it is that person's only invite. `/invite` and the share dialog don't pass the flag and keep sending it.
 
 ### A team chat takes its members from the team
 

@@ -4,10 +4,11 @@
 import { getDriveAppUrl } from '@workspace/lib/api';
 import type { AuthUser } from '@workspace/lib/auth';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
-import { DEFAULT_MOUNT_ID, useListTrash, useRootFolder } from '@workspace/lib/drive';
+import { useRootFolder, useTrash } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
-import { teamOwnerId } from '@workspace/lib/types';
 import type { EigenDocType } from '@workspace/lib/types/drive';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import { Badge } from '@workspace/ui/components/badge';
 import type { LucideIcon } from 'lucide-react';
 import { Bell, Download, Home, Image, Trash2, UsersRound } from 'lucide-react';
@@ -28,8 +29,7 @@ type AppSidebarProps = {
 };
 
 type FilterEntry = {
-    // The eigendoc app that hosts this row's list view, or null when Drive hosts it
-    // (All images, All chats).
+    // The eigendoc app that hosts this row's list view, or null when Drive hosts it, as for All images.
     hostApp: EigenDocType | null;
     label: string;
     icon: LucideIcon;
@@ -37,9 +37,8 @@ type FilterEntry = {
     appHref: () => string;
 };
 
-// "All images" is the one row with no EigenDocType — it filters by mime category, not by
-// container type. The rest come straight off the shared per-app configs, nav order and all.
-const FILTER_ENTRIES: ReadonlyArray<FilterEntry> = [
+// All images filters by a mime category rather than a document type, so it is the one row no app config gives.
+const FILTER_ENTRIES: readonly FilterEntry[] = [
     {
         hostApp: null,
         label: 'All images',
@@ -58,9 +57,8 @@ const FILTER_ENTRIES: ReadonlyArray<FilterEntry> = [
     ),
 ];
 
-// Drive mime slug (`image`, `application-eigenstickies`) → sidebar filter label,
-// so a filter view's toolbar title matches its nav entry exactly.
-export const FILTER_LABELS: Record<string, string> = Object.fromEntries(
+// The sidebar label per Drive mime slug, such as `image`, so a filter view's toolbar title matches its row.
+export const FILTER_LABELS: Readonly<Record<string, string>> = Object.fromEntries(
     FILTER_ENTRIES.map((entry) => [entry.driveMime, entry.label]),
 );
 
@@ -96,9 +94,8 @@ function UserAppSidebar({ user, condensed, newButton }: { user: AuthUser; conden
     const inDrive = host === null;
     const { data: personalRoot } = useRootFolder(user.id, DEFAULT_MOUNT_ID);
 
-    // Empty ownerId short-circuits the hook's enabled guard; only fetch trash count in Drive.
-    const { data: trashedItems } = useListTrash(inDrive ? user.id : '', DEFAULT_MOUNT_ID);
-    const trashCount = trashedItems?.length ?? 0;
+    // Only Drive shows the count, and without a viewer the hook reads no trash.
+    const trashCount = useTrash(inDrive ? user.id : '').items.length;
 
     const { data: myTeams } = useMyTeams();
 
@@ -160,7 +157,7 @@ function UserAppSidebar({ user, condensed, newButton }: { user: AuthUser; conden
                 </SidebarItem>
             </SidebarSection>
 
-            {myTeams?.some((t) => t.mounts.length > 0) && (
+            {myTeams?.some((team) => team.mounts.length > 0) && (
                 <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team drives'}>
                     {myTeams.flatMap((team) =>
                         team.mounts
@@ -190,8 +187,8 @@ function UserAppSidebar({ user, condensed, newButton }: { user: AuthUser; conden
     );
 }
 
-// The eigendoc app we're rendering inside, or null in Drive — and in any app without a
-// filter view of its own, which then gets Drive's own rows and links.
+// The eigendoc app this sidebar renders in, or null in Drive and in any app without a filter view of its own, which
+// then gets Drive's rows and links.
 function currentHostConfig(appName: string): EigenDocAppConfig | null {
     return EIGEN_DOC_APP_CONFIGS.find((config) => config.appUrl && config.appName === appName) ?? null;
 }

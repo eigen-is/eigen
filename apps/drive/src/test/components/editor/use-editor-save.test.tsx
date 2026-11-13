@@ -3,7 +3,7 @@
 // dialog instead of being overwritten, unless the user forces it. A failed save stays unsaved, and an
 // unsaved file asks before it closes or the tab unloads.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
-import type { EditorSaveResult } from '@workspace/lib/types/drive';
+import type { EditorSaveResult } from '@workspace/lib/types/file-kinds';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 

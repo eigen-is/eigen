@@ -39,6 +39,14 @@ describe('ACL Bubbling', () => {
         aliceRootId = root.id;
     });
 
+    // A thread in the document's chat/ folder, the one place a person starts one inside a document.
+    async function startThread(docId: string, fileName: string) {
+        const token = ctx.alice.user.sessionToken;
+        const contents = await driveGetList(token, ctx.alice.user.id, aliceMountId, `folder/${docId}`);
+        const chatFolder = findOrFail(contents, (p) => p.name === 'chat');
+        return drivePost(token, ctx.alice.user.id, aliceMountId, `folder/${chatFolder.id}/create/chat`, { fileName });
+    }
+
     describe('standalone chat (not inside a container)', () => {
         let chatId: string;
 
@@ -128,14 +136,7 @@ describe('ACL Bubbling', () => {
             );
             docId = doc.id;
 
-            // Create chat inside the doc
-            const chat = await drivePost(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `folder/${docId}/create/chat`,
-                { fileName: 'discussion' },
-            );
+            const chat = await startThread(docId, 'discussion');
             chatId = chat.id;
 
             // Share doc with Bob (write) — Bob inherits write on the embedded chat
@@ -376,13 +377,7 @@ describe('ACL Bubbling', () => {
                 { fileName: 'no-doc-write-test' },
             );
 
-            const chat = await drivePost(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `folder/${doc.id}/create/chat`,
-                { fileName: 'restricted-chat' },
-            );
+            const chat = await startThread(doc.id, 'restricted-chat');
             chatId = chat.id;
 
             // Give Bob write on the chat only, NOT on the doc
@@ -411,13 +406,7 @@ describe('ACL Bubbling', () => {
             );
             docId = doc.id;
 
-            const chat = await drivePost(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `folder/${docId}/create/chat`,
-                { fileName: 'restricted-container-chat' },
-            );
+            const chat = await startThread(docId, 'restricted-container-chat');
             chatId = chat.id;
 
             // Share doc with Bob (write) + restrict sharing

@@ -28,7 +28,7 @@ Paths are under `apps/api/src/` unless they say otherwise.
 | **Auth** | `lib/auth/auth.ts` | better-auth over `users3.db`, which has no migrations: a new column goes into `auth-schema.ts`, the `setup.ts` DDL and `ensureAuthSchemaColumns` together, or better-auth refuses to start ([DATABASE.md](DATABASE.md)) |
 | **Protocol auth** | `lib/auth/protocol-auth.ts` | `verifyProtocolAuth()`, the one IMAP, CalDAV, CardDAV and WebDAV login: an app password, else the primary one |
 | **Trusted networks** | `lib/auth/access.ts`, `trusted-networks.ts` | `requireLocalhost()` admits loopback or `TRUSTED_NETWORKS`, never a caller Caddy proxied ([MAIL.md](MAIL.md#mail-only-arrives-from-the-local-mta)) |
-| **ACL and sharing** | `lib/drive/acl.ts`, `acl-propagation.ts` | Per-path ACLs, additive down the tree ([ACL.md](ACL.md)) |
+| **ACL and sharing** | `lib/drive/acl.ts`, `acl-propagation.ts`, `sharing.ts` | Per-path ACLs, additive down the tree, and who a path reaches ([ACL.md](ACL.md)) |
 | **Guests** | `lib/auth/guest-auth.ts`, `lib/home/guest-home.ts` | Emailed-code sign-in into a Home with only drive and notifications ([GUEST-ACCESS.md](GUEST-ACCESS.md)) |
 | **Organization and teams** | `lib/org/`, `lib/team/` | One organization per server; teams are flat ACL groups that own a `TeamHome` ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md)) |
 | **WebDAV** | `lib/webdav/` | RFC 4918 over Drive mounts ([WEBDAV.md](WEBDAV.md)) |
@@ -56,12 +56,12 @@ Paths are under `apps/api/src/` unless they say otherwise.
 | **Previews** | `lib/preview/` | Version-keyed preview cache and thumbnails ([PREVIEWS.md](PREVIEWS.md)) |
 | **Upload pipeline** | `lib/mount/upload-queue.ts` | Write-behind uploads of an `s3` mount's databases, one queue per mount ([SYNC.md](SYNC.md)) |
 | **Versioning** | `lib/versioning/` | Opt-in snapshots inside the container ([STORAGE.md](STORAGE.md#version-snapshots-live-inside-the-container)) |
-| **Copy and move** | `lib/mount/copy.ts`, `lib/drive/copy-across.ts` | A move stays in its mount; a copy goes anywhere ([STORAGE.md](STORAGE.md#copy-goes-anywhere-a-move-stays-in-its-mount)) |
+| **Copy and move** | `lib/mount/copy.ts`, `lib/drive/drive.ts` | A move stays in its mount; a copy goes anywhere ([STORAGE.md](STORAGE.md#copy-goes-anywhere-a-move-stays-in-its-mount)) |
 | **Import from Drive** | `lib/drive/import-source.ts` | `readImportSourceBytes`, the one import-from-drive reader, with the user's access and a byte cap |
 | **Recent files** | `lib/drive/recent.ts`, `lib/drive/aggregate.ts`, `apps/drive/src/routes/_auth.recent.tsx` | Which paths a user opened or was notified about, in their own `shared.db`, checked against each owner on every load ([STORAGE.md](STORAGE.md#recent-files-stores-only-which-path-and-when)) |
 | **File history** | `lib/drive/history.ts` | Typed file events and watcher notifications ([FILE-HISTORY.md](FILE-HISTORY.md)) |
-| **Trash** | `lib/mount/trash.ts`, `lib/drive/trash.ts` | A delete moves to trash and revokes shares ([SOFT-DELETE.md](SOFT-DELETE.md)) |
-| **Comments** | `lib/chat/` | A card in the Y.Doc and a chat thread in its container ([COMMENTS.md](COMMENTS.md)) |
+| **Trash** | `lib/mount/trash.ts`, `lib/drive/trash.ts` | A delete moves to trash, out of the reach of the people it is shared with ([SOFT-DELETE.md](SOFT-DELETE.md)) |
+| **Comments** | `lib/chat/`, `lib/drive/chats.ts` | A card in the Y.Doc and a chat thread in its container ([COMMENTS.md](COMMENTS.md)) |
 | **Mail store** | `lib/mail/` | A per-user Maildir++ Dovecot serves too; the files are the truth ([MAIL.md](MAIL.md), [IMAP.md](IMAP.md)) |
 | **Export and import** | `lib/export/`, `lib/import/` | One HTML document per format (PDF via WeasyPrint), except xlsx, docx and pptx, which have their own readers and writers ([EXPORT.md](EXPORT.md)) |
 
@@ -73,10 +73,10 @@ A Drive feature usually touches all four layers:
 Route (thin handler)  →  SharedDrive (ACL wrapper)  →  Drive (business logic)  →  Mount (storage + DB)
 ```
 
-- **Mount** (`lib/mount/mount.ts`): storage and `metadata.db` of one mount over one of three backends; trash, copy, search and versioning are sibling modules ([STORAGE.md](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)).
+- **Mount** (`lib/mount/mount.ts`): storage and `metadata.db` of one mount over one of three backends; trash, copy, search, sizes and temp files are sibling modules, and versioning is `lib/versioning/` ([STORAGE.md](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)).
 - **Drive** (`lib/drive/drive.ts`): the API over a Home's mounts, with ACL propagation, the collab document lifecycle, SSE and sharing.
 - **SharedDrive** (`lib/drive/shared-drive.ts`): the ACL-checking wrapper, by composition. `getSharedDrive()` returns the raw `Drive` for the caller's own drive and a `SharedDrive` for another owner's, so a `Drive` method without a wrapper is a type error at the route.
-- **Routes** (`routes/drive.ts`): thin handlers through `getSharedDrive`.
+- **Routes** (`routes/drive.ts` for the tree, with `drive-listings.ts`, `drive-sharing.ts` and `drive-content.ts` beside it): thin handlers through `getSharedDrive`.
 
 A few owner-only routes, such as `/shared/by-me`, call `requireSelf` and then `getDrive(user)`; other unwrapped Drive methods serve server code (collab, chat, the relay). A new route that needs one gets a `SharedDrive` wrapper, not this escape hatch.
 

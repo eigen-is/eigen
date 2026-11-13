@@ -3,11 +3,11 @@
 // loads.
 
 import type { DatabaseConfig } from '../core/managed-database';
-import * as schema from './sharedschema';
+import * as schema from './shared-schema';
 
 export const SHARED_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'shared',
-    currentVersion: 2,
+    currentVersion: 3,
     schema,
     migrations: [
         {
@@ -44,6 +44,22 @@ export const SHARED_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     lastActivityAt INTEGER NOT NULL,
                     PRIMARY KEY (ownerId, mountId, pathId)
                 );
+            `),
+        },
+        {
+            version: 3,
+            up: (db) =>
+                db.exec(`
+                CREATE TABLE shared_pointers (
+                    ownerId TEXT NOT NULL,
+                    mountId TEXT NOT NULL,
+                    pathId TEXT NOT NULL,
+                    sharedAt INTEGER NOT NULL,
+                    PRIMARY KEY (ownerId, mountId, pathId)
+                );
+                INSERT INTO shared_pointers SELECT ownerId, mountId, id, createdAt FROM shared_paths;
+                DROP TABLE shared_paths;
+                ALTER TABLE shared_pointers RENAME TO shared_paths;
             `),
         },
     ],

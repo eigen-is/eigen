@@ -2,7 +2,7 @@
 // selected item whose detail opens beside the list, its owner and its mount. Every such route's
 // validateSearch reads them here, since a URL can hold anything.
 
-import type { DriveSearchParams } from '@workspace/lib/types/drive';
+import type { DriveSearchParams } from '@workspace/lib/types/drive-view';
 
 export function validateDriveSearch(search: Record<string, unknown>): DriveSearchParams {
     return {

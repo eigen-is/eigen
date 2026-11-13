@@ -1,4 +1,4 @@
-import { EML_MIME } from '@workspace/lib/types/drive';
+import { EML_MIME } from '@workspace/lib/types/file-kinds';
 import type { PartHeaders } from './headers';
 import { parseHeaders } from './headers';
 

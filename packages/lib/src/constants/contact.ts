@@ -1,5 +1,5 @@
 import type { Contact } from '../types/contact';
-import { VCARD_MIMES } from '../types/drive';
+import { VCARD_MIMES } from '../types/file-kinds';
 
 // The blank card the "new contact" form starts from. It stands in for a contact that isn't stored yet, so
 // the two server-assigned fields are empty sentinels — a create submits neither.

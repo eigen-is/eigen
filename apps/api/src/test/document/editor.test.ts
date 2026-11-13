@@ -1,8 +1,10 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import type { DrivePath, EditorSaveResult, FileEditorContent } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
+import type { EditorSaveResult, FileEditorContent } from '@workspace/lib/types/file-kinds';
 import { MAX_INLINE_EDIT_SIZE } from '../../lib/drive/inline-edit';
 import { getHome } from '../../lib/home';
+import { overwriteFile } from '../mount-test-helpers';
 import { authedRequest, capUserDrive, driveGet, drivePut, driveUpload, getTestContext } from '../setup';
 
 describe('Editor', () => {
@@ -182,10 +184,10 @@ describe('Editor', () => {
             const uploaded = await uploadTextFile('own-etag.txt', 'original');
             const { data: initial } = await editorGet(uploaded.id);
             const { mount } = await (await getHome(ctx.alice.user.id)).drive.resolveFile(mountId, uploaded.id);
-            const writeFile = mount.writeFile.bind(mount);
-            const write = spyOn(mount, 'writeFile').mockImplementationOnce(async (...args) => {
-                const committed = await writeFile(...args);
-                await writeFile(uploaded.id, Buffer.from('theirs'));
+            const writeFileFromTemp = mount.writeFileFromTemp.bind(mount);
+            const write = spyOn(mount, 'writeFileFromTemp').mockImplementationOnce(async (...args) => {
+                const committed = await writeFileFromTemp(...args);
+                await overwriteFile(mount, uploaded.id, Buffer.from('theirs'));
                 return committed;
             });
             let saved: Awaited<ReturnType<typeof editorPut>>;

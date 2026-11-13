@@ -153,7 +153,7 @@ describe('the sweep', () => {
         await addMedia(mount, path.id, 'young.png', { ageHours: 71 });
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await mediaNames(mount, path.id)).toEqual(['kept.png', 'young.png']);
     });
 
@@ -165,7 +165,7 @@ describe('the sweep', () => {
         await addMedia(mount, path.id, 'loose.pdf', { mimeType: 'application/pdf' });
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await mediaNames(mount, path.id)).toEqual(['card.pdf']);
     });
 
@@ -179,7 +179,7 @@ describe('the sweep', () => {
         await addMedia(mount, path.id, decomposed);
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await mediaNames(mount, path.id)).toEqual(['Café.png'.normalize('NFC'), 'photo.png']);
     });
 
@@ -196,7 +196,7 @@ describe('the sweep', () => {
         await addMedia(mount, path.id, 'loose.png');
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await mediaNames(mount, path.id)).toEqual([
             'deep.png',
             'inner.svg',
@@ -217,7 +217,7 @@ describe('the sweep', () => {
         addCard(collab.doc, 'c-gone', { chatName: gone.name });
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await threadNames(mount, path.id)).toEqual([kept.name]);
         expect(await commentRows(M, path.id)).toEqual([kept.name]);
         const hits = await withCommentIndex(drive, M, path.id, (index) => index.searchComments('needle'));
@@ -240,7 +240,7 @@ describe('the sweep', () => {
         await closeThreadDb(mount, replied.id);
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await threadNames(mount, path.id)).toEqual([replied.name, young.name].sort());
     });
 
@@ -254,7 +254,7 @@ describe('the sweep', () => {
         addCard(collab.doc, 'c-deleted', { chatName: deleted.name, deletedAt: Date.now() });
 
         await close(M, created);
-        await sweepDocument(drive, created, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, created, SWEEP_GRACE_MS);
         expect(await threadNames(mount, created.id)).toEqual([documentLevel.name]);
     });
 
@@ -267,7 +267,7 @@ describe('the sweep', () => {
         await addThread(mount, M, path.id, { ageHours: 1 });
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await commentRows(M, path.id)).not.toContain('ghost.eigenchat');
     });
 
@@ -282,7 +282,7 @@ describe('the sweep', () => {
         await addMedia(mount, thread.id, 'young.png', { ageHours: 1 });
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await mediaNames(mount, thread.id)).toEqual(['named.png', 'young.png']);
     });
 
@@ -293,7 +293,7 @@ describe('the sweep', () => {
         await addThread(mount, M, path.id);
 
         await close(M, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         expect(await mediaNames(mount, path.id)).toEqual(['loose.png']);
         expect(await threadNames(mount, path.id)).toHaveLength(1);
     });
@@ -312,7 +312,7 @@ describe('the sweep', () => {
         const readBytes = mount.readBytes.bind(mount);
         const reads = spyOn(mount, 'readBytes').mockImplementation(async (id) => (id === outer ? null : readBytes(id)));
         try {
-            await sweepDocument(drive, path, SWEEP_GRACE_MS);
+            await sweepDocument(drive, mount, path, SWEEP_GRACE_MS);
         } finally {
             reads.mockRestore();
         }
@@ -346,6 +346,8 @@ describe('Delete history', () => {
 });
 
 describe('a copy', () => {
+    const intoRoot = () => ({ drive, mountId: M, parentId: rootId });
+
     // A source with a named image, a loose one from a moment ago, a kept thread with a named and a loose file, and a
     // thread nothing names that was written in a moment ago.
     async function sourceDoc(name: string) {
@@ -373,7 +375,7 @@ describe('a copy', () => {
     test('holds what the source state names and nothing else, and the source keeps everything', async () => {
         const { path, kept, left } = await sourceDoc('Copy');
 
-        const copied = await drive.copyPath(M, path.id, rootId, `${path.name} copy`, home.user);
+        const copied = await drive.copyPath(M, path.id, intoRoot(), `${path.name} copy`, home.user);
         await expectOnlyNamed(copied, kept);
         expect(await mediaNames(mount, path.id)).toEqual(['kept.png', 'loose.png']);
         expect(await threadNames(mount, path.id)).toEqual([kept.name, left.name].sort());
@@ -381,13 +383,12 @@ describe('a copy', () => {
         await close(M, path);
     });
 
-    test('to another drive, and inside a copied folder, holds only what each state names', async () => {
+    test('inside a copied folder holds only what each state names', async () => {
         const folder = await drive.createFolder(M, rootId, `CopyFolder-${crypto.randomUUID()}`, home.user);
         const { path, kept } = await sourceDoc('CopyAcross');
         await drive.movePath(M, path.id, folder.id, home.user);
 
-        const to = { drive, ownerId: home.user.id, mountId: M };
-        const copied = await drive.copyPath(M, folder.id, rootId, `${folder.name} copy`, home.user, to);
+        const copied = await drive.copyPath(M, folder.id, intoRoot(), `${folder.name} copy`, home.user);
         const copiedDoc = await mount.getChildByName(copied.id, path.name);
         if (!copiedDoc) throw new Error('no copied document');
         await expectOnlyNamed(copiedDoc, kept);
@@ -405,25 +406,25 @@ describe('a copy', () => {
         added.setAttribute('mediaName', 'new.png');
         collab.doc.getXmlFragment('default').insert(0, [added]);
 
-        const copied = await drive.copyPath(M, path.id, rootId, `${path.name} copy`, home.user);
+        const copied = await drive.copyPath(M, path.id, intoRoot(), `${path.name} copy`, home.user);
         expect(await commentRows(M, copied.id)).toEqual([thread.name]);
         expect(await mediaNames(mount, copied.id)).toEqual(['new.png']);
         await close(M, path);
     });
 
-    // The copy shows in the target's tabs as it lands, so its owner may add to it before the cleanup runs.
+    // A listing of the target folder shows the copy while it lands, so its owner may add to it before the cleanup runs.
     test('keeps an image and a thread added to it before its cleanup runs', async () => {
         const { path, kept } = await sourceDoc('CopyAdded');
         let added: DrivePath | undefined;
         const copyPath = mount.copyPath.bind(mount);
         const copies = spyOn(mount, 'copyPath').mockImplementation(async (...args) => {
-            const copied = await copyPath(...args);
-            await addMedia(mount, copied.id, 'added.png');
-            added = await addThread(mount, M, copied.id);
-            return copied;
+            const copy = await copyPath(...args);
+            await addMedia(mount, copy.path.id, 'added.png');
+            added = await addThread(mount, M, copy.path.id);
+            return copy;
         });
         try {
-            const copied = await drive.copyPath(M, path.id, rootId, `${path.name} copy`, home.user);
+            const copied = await drive.copyPath(M, path.id, intoRoot(), `${path.name} copy`, home.user);
             if (!added) throw new Error('nothing added');
             expect(await mediaNames(mount, copied.id)).toEqual(['added.png', 'kept.png']);
             expect(await threadNames(mount, copied.id)).toEqual([added.name, kept.name].sort());
@@ -433,27 +434,29 @@ describe('a copy', () => {
         await close(M, path);
     });
 
-    test('of a folder succeeds when its cleanup fails', async () => {
-        const folder = await drive.createFolder(M, rootId, `CopyCleanupFails-${crypto.randomUUID()}`, home.user);
-        let copyId = '';
+    test('succeeds and stays whole when its cleanup fails', async () => {
+        const { path } = await sourceDoc('CopyCleanupFails');
+        let landed = false;
         const copyPath = mount.copyPath.bind(mount);
         const copies = spyOn(mount, 'copyPath').mockImplementation(async (...args) => {
-            const copied = await copyPath(...args);
-            copyId = copied.id;
-            return copied;
+            const copy = await copyPath(...args);
+            landed = true;
+            return copy;
         });
         const listFolder = mount.listFolder.bind(mount);
         const lists = spyOn(mount, 'listFolder').mockImplementation(async (id) => {
-            if (id === copyId) throw new Error('listing failed');
+            if (landed) throw new Error('listing failed');
             return listFolder(id);
         });
+        let copied: DrivePath;
         try {
-            const copied = await drive.copyPath(M, folder.id, rootId, `${folder.name} copy`, home.user);
-            expect(copied.id).toBe(copyId);
+            copied = await drive.copyPath(M, path.id, intoRoot(), `${path.name} copy`, home.user);
         } finally {
             copies.mockRestore();
             lists.mockRestore();
         }
+        expect(await mediaNames(mount, copied.id)).toEqual(['kept.png', 'loose.png']);
+        await close(M, path);
     });
 });
 
@@ -497,7 +500,7 @@ describe('the sweep on s3', () => {
         await addMedia(s3.mount, path.id, 'loose.png');
 
         await close(S3_MOUNT, path);
-        await sweepDocument(drive, path, SWEEP_GRACE_MS);
+        await sweepDocument(drive, s3.mount, path, SWEEP_GRACE_MS);
         expect(await mediaNames(s3.mount, path.id)).toEqual(['leaf.png', 'École.svg', 'Über.svg']);
     });
 });

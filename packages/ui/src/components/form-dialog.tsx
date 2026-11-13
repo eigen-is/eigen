@@ -17,6 +17,7 @@ type FormDialogProps = {
     title: string;
     description?: string;
     size?: ComponentProps<typeof DialogContent>['size'];
+    onOpenAutoFocus?: (event: Event) => void;
     onCloseAutoFocus?: (event: Event) => void;
     children: ReactNode;
 };
@@ -49,6 +50,7 @@ export function FormDialog({
     title,
     description,
     size,
+    onOpenAutoFocus,
     onCloseAutoFocus,
     children,
 }: FormDialogProps) {
@@ -61,7 +63,7 @@ export function FormDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent size={size} onCloseAutoFocus={onCloseAutoFocus}>
+            <DialogContent size={size} onOpenAutoFocus={onOpenAutoFocus} onCloseAutoFocus={onCloseAutoFocus}>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     {description && <DialogDescription>{description}</DialogDescription>}

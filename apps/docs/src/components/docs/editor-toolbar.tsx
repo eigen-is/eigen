@@ -10,7 +10,7 @@ import type { BandEdge, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { usePrintPdf } from '@workspace/lib/drive';
 import { useIsMobile, useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isImageMime } from '@workspace/lib/types/drive';
+import { isImageMime } from '@workspace/lib/types/file-kinds';
 import type { DocsTextWidth } from '@workspace/lib/types/settings';
 import { TEXT_ALIGNS } from '@workspace/lib/vector';
 import {

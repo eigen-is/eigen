@@ -34,7 +34,7 @@ export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath
                         trashedAt: now,
                         trashedFrom: item.parentId,
                         parentId: root.id,
-                        ...(file !== undefined ? { file } : {}),
+                        ...(file !== undefined && { file }),
                         updatedAt: now,
                     })
                     .where(eq(paths.id, pathId));
@@ -65,7 +65,7 @@ export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath
 
             // getPath, not getActivePath: the row this returns is the trashed one.
             const updated = await mount.getPath(pathId);
-            if (!updated) throw new ApiError(500, 'Path not found after update');
+            if (!updated) throw new ApiError(404, 'Path not found');
             return updated;
         }),
     );
@@ -123,7 +123,7 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
                                     trashedAt: null,
                                     trashedFrom: null,
                                     name: restoreName,
-                                    ...(mount.isPathBased ? { file: restoreName } : {}),
+                                    ...(mount.isPathBased && { file: restoreName }),
                                     updatedAt: now,
                                 })
                                 .where(eq(paths.id, pathId))
@@ -275,7 +275,7 @@ export async function permanentlyDeleteFromTrash(mount: Mount, pathId: string): 
 }
 
 // The trash roots a folder's permanent delete takes with it: the items trashed on their own from inside
-// the folder, and from inside those in turn. Drive reads them before the delete to tell their watchers.
+// the folder, and from inside those in turn. They are read before the delete, so their watchers can be told.
 export async function listTrashRootsInside(mount: Mount, folderId: string): Promise<DrivePath[]> {
     const found: DrivePath[] = [];
     const collect = (id: string): void => {

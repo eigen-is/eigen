@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 import * as Y from 'yjs';
 import { ApiError } from '../../lib/core/errors';
 import { documentTransformRunner } from '../../lib/document/transform/runner';
-import { flushContentReindex } from '../mount-test-helpers';
+import { flushContentReindex, overwriteFile } from '../mount-test-helpers';
 import {
     assertJson,
     authedRequest,
@@ -97,7 +97,13 @@ describe('Drive content-index', () => {
 
         // The search term lives only in the body (neither name contains it), so a hit on the
         // copy proves the copied container's body was indexed.
-        const copied = await home.drive.copyPath(mountId, src.id, rootId, 'rt-copydst', home.user);
+        const copied = await home.drive.copyPath(
+            mountId,
+            src.id,
+            { drive: home.drive, mountId, parentId: rootId },
+            'rt-copydst',
+            home.user,
+        );
         await flushContentReindex(home.drive);
         expect((await searchFile('flibbercopy')).file.some((h) => h.id === copied.id)).toBe(true);
     });
@@ -489,7 +495,7 @@ describe('Drive content-index', () => {
             await drainP;
         });
         try {
-            await mount.writeFile(uploaded.id, Buffer.from('genracefresh body'));
+            await overwriteFile(mount, uploaded.id, Buffer.from('genracefresh body'));
         } finally {
             invalidateSpy.mockRestore();
             readSpy.mockRestore();

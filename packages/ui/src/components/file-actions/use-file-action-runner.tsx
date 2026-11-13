@@ -8,7 +8,8 @@ import { triggerDownload } from '@workspace/lib/download';
 import { useConvertDocument } from '@workspace/lib/drive';
 import { importSourceOf, subjectInfo } from '@workspace/lib/file-subject';
 import { useImportMail } from '@workspace/lib/mail';
-import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { ConvertTarget } from '@workspace/lib/types/drive-convert';
 import type { FileAction, FileActionId, FileImportSource, FileSubject } from '@workspace/lib/types/file-subject';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -145,6 +146,7 @@ export function useFileActionRunner(
                     onSaved={(paths) => {
                         if (picker.convert) for (const path of paths) convertPath(path, picker.convert.targetType);
                     }}
+                    onPartialFailure={(failed) => openPicker(failed, picker.convert)}
                 />
                 <ImportToCalendarPicker
                     subject={picker.subjects[0] ?? null}

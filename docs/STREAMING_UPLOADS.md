@@ -6,7 +6,7 @@ Uploads come from Drive's upload dialog and drag and drop, from an image an edit
 
 ## Elysia never reads the upload body
 
-The route declares `parse: 'none'`, so Elysia leaves the request body alone and `Drive.uploadFiles` hands it to the parser. The client appends every file as a `file` field of one `FormData` and posts it once, with XHR for progress in the upload dialog. Before any byte is read, the route computes the size limit with `getUploadMaxSize` ([QUOTA.md](QUOTA.md)). A mount that is already full answers 507 without reading the body.
+The route declares `parse: 'none'`, so Elysia leaves the request body alone and `Drive.uploadFiles` hands it to the parser. The client appends every file as a `file` field of one `FormData` and posts it once by XHR (`uploadFiles` in `packages/lib/src/core/drive/upload.ts`), which reports progress and can be cancelled. Before any byte is read, the route computes the size limit with `getUploadMaxSize` ([QUOTA.md](QUOTA.md)). A mount that is already full answers 507 without reading the body.
 
 Mail draft attachments (`Mail.uploadDraftAttachment`, `apps/api/src/lib/mail/mail-domain.ts`) use the same parser.
 
@@ -16,7 +16,7 @@ The parser yields flat events: `part` with the parsed headers, `chunk` with body
 
 Memory is constant. Each upload in flight holds one 256 KB `FileSink` buffer. The parser holds back at most a part's headers (8 KiB at most) and a possible partial boundary at a chunk's tail.
 
-Then `finalizeUpload` (`apps/api/src/lib/drive/upload.ts`) moves each temp into storage and writes its row. It records one history row per file, but `Drive.uploadFiles` notifies watchers once per batch, tagged with the parent folder, so a hundred files are one notification ([FILE-HISTORY.md](FILE-HISTORY.md)). The thumbnail runs in the background and removes the temp when it is done. When one file fails, its temp and those of every file after it are removed.
+Then `finalizeUpload` (`apps/api/src/lib/drive/upload.ts`) moves each temp into storage and writes its row. It records one history row per file, but `Drive.uploadFiles` notifies watchers once per batch, tagged with the parent folder, so a hundred files are one notification ([FILE-HISTORY.md](FILE-HISTORY.md)). From there one function owns the temp, `commitFromTemp` in the same file, as it does for the other writes of new bytes, such as an overwrite, an inline save or a WebDAV PUT: a failed commit removes the temp at once, and after a commit the thumbnail job reads it in the background and removes it when it is done. An empty file gets no thumbnail, and that job only removes the temp. A caller of `commitFromTemp` never removes one. A copy is the exception: `copyFile` in `lib/mount/copy.ts` writes each file through a temp of its own and removes it once the file is written, and the copied thumbnail comes along instead of a new one. When one file fails, its temp and those of every file after it are removed.
 
 ## The size limit holds per file and cuts the request off mid-stream
 

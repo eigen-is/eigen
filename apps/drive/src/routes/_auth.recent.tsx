@@ -4,8 +4,10 @@
 // page is read-only, and a selected row's ?pid=&uid=&mid= opens its detail beside the list.
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { DEFAULT_MOUNT_ID, usePathInfo, useRecentPaths, validateDriveSearch } from '@workspace/lib/drive';
-import type { DrivePath, DriveSort } from '@workspace/lib/types/drive';
+import { usePathInfo, useRecentPaths, validateDriveSearch } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveSort } from '@workspace/lib/types/drive-view';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';

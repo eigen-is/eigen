@@ -10,7 +10,7 @@ The sections cover the guest's Home and limits, the sign-in and its rate limits,
 
 ## A guest has a disk-based home with only drive and notifications
 
-`getHome()` builds a `GuestHome` for a user with `role: 'guest'`. It holds a Drive and a NotificationCenter under `data/guest/{guestId}/` ([STORAGE.md](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)), and leaves mail, contacts and calendar uninitialized. Its `settings.json` names no mounts, so the Drive only carries `shared.db`, the mirror of what others shared with the guest. `GuestHome.size()` reports zero everywhere.
+`getHome()` builds a `GuestHome` for a user with `role: 'guest'`. It holds a Drive and a NotificationCenter under `data/guest/{guestId}/` ([STORAGE.md](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)), and leaves mail, contacts and calendar uninitialized. Its `settings.json` names no mounts, so the Drive only carries `shared.db`, which names what others shared with the guest. `GuestHome.size()` reports zero everywhere.
 
 The home is on disk rather than in memory so it reuses Drive and NotificationCenter unchanged. An in-memory stand-in would have to subclass `Drive`, whose `home` is private, and reimplement `receiveSharedPathChange`. On disk, `shared.db` and the notifications also survive idle eviction, restarts and the next session.
 
@@ -29,7 +29,7 @@ A calendar invitation treats a guest like an external address: an iMIP mail and 
 
 ## Sign-in is a two-step code flow on custom endpoints
 
-Guests do not use better-auth's emailOTP plugin. `POST /guest-auth/request-otp` mails a 6-digit code, and `POST /guest-auth/verify-otp` checks it and signs the guest in (`apps/api/src/routes/guest-auth.ts`). The code expires after 5 minutes. A new request replaces the email's previous code, so only the newest one works.
+Guests do not use better-auth's emailOTP plugin. `POST /guest-auth/request-otp` mails a 6-digit code, and `POST /guest-auth/verify-otp` checks it and signs the guest in (`apps/api/src/routes/guest-auth.ts`). The code expires after 15 minutes. A new request replaces the email's previous code, so only the newest one works.
 
 `request-otp` refuses an address that belongs to a non-guest user ("use password login") and an address on the server's own mail domain. The second check is needed because a guest is created by a direct insert that skips the auth hook guarding that domain.
 

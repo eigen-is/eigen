@@ -2,7 +2,7 @@
 
 Finding a file you just worked on is harder than it should be when it sits deep in a shared folder or a team drive. Drive's listings show where a file lives, and the bell shows events, not files. This proposal adds a **Recent files** page to Drive: one flat list of the files and folders that involve you, wherever they live, each once, newest first.
 
-**Status:** built on branch `recent-files`, not yet on `develop`. The owner agreed to the design on 2026-11-09, with the yes for the `shared.db` migration and the route. How it works now: [STORAGE.md § Recent files stores only which path and when](../STORAGE.md#recent-files-stores-only-which-path-and-when). The later steps at the end, the palette and the mail addresses, are not built. Size: M.
+**Status:** built, and released in 0.4.3. The owner agreed to the design on 2026-11-09, with the yes for the `shared.db` migration and the route. How it works now: [STORAGE.md § Recent files stores only which path and when](../STORAGE.md#recent-files-stores-only-which-path-and-when). The later steps at the end, the palette and the mail addresses, are not built. Size: M.
 
 > **TLDR**: A small `recent_paths` table in each user's own `shared.db` holds which file and when, nothing else. A file moves to the top when the server sees you open it or when a notification about it reaches you. The Drive route `/recent` checks the newest rows against each file's owner at read time, so names are always current and a file you can no longer read never shows. One helper in `home-relay.ts` reads many homes, logs a failed read and leaves that owner out, and Watched, All docs, file search and the teams list use it too. The sidebars of Drive, the document apps, Chat, Calendar, Mail and Contacts link to that one page, **Recent files**, which sits directly below Drive in Drive and the document apps.
 
@@ -30,7 +30,7 @@ Non-goals for now: guests, removing one row by hand, a Clear button, per-type Re
 
 ## Data
 
-One table in the viewer's own `shared.db` (`apps/api/src/lib/drive/sharedschema.ts`), added as schema version 2 in `apps/api/src/lib/drive/db-config.ts`. `shared.db` is already in `HOME_DATABASES`, so backups carry it with no new registration, and no new database file or class is needed.
+One table in the viewer's own `shared.db` (`apps/api/src/lib/drive/shared-schema.ts`), added as schema version 2 in `apps/api/src/lib/drive/db-config.ts`. `shared.db` is already in `HOME_DATABASES`, so backups carry it with no new registration, and no new database file or class is needed.
 
 ```sql
 CREATE TABLE recent_paths (
@@ -76,18 +76,18 @@ GET /drive/:ownerId/recent     requireSelf + requireNonGuest
 
 1. Take the caller's newest 100 rows and group them by owner.
 2. Look up the caller's team memberships once, for the whole load.
-3. Ask each owner through `pullFromEach` and `pullRecentPaths` ([below](#one-helper-for-reads-across-homes)). The caller's own home is asked the same way. An owner that is gone is skipped, an owner whose read fails is logged and adds nothing, and the others still answer.
+3. Ask each owner through `pullVisiblePaths`, which groups the rows by owner and reads each through `pullFromEach` ([below](#one-helper-for-reads-across-homes)). The caller's own home is asked the same way. An owner that is gone is skipped, an owner whose read fails is logged and adds nothing, and the others still answer.
 4. If fewer than 100 rows came back visible, do the same for the remaining rows, at most 100 more. This is what the other 100 stored rows are for: after a bulk trash the page still has older files to show, and in the usual load those owners are never asked.
 5. Merge and sort by `lastActivityAt`, newest first, and return at most 100, each as the current `DrivePath` plus `lastActivityAt`.
 
-`Drive.getRecentPathsFor(user, memberships, rows)` answers for one owner, batched per mount with `mount.getBreadcrumbs`. It does its own access check and is called only from the relay, so it falls under the "server code" clause of [ARCHITECTURE.md](../ARCHITECTURE.md#drive-architecture) and needs no `SharedDrive` wrapper. A row whose mount this home doesn't have, because it is disabled, removed or failed to start, is skipped, because `Drive.getMount` would otherwise throw and lose that owner's other rows. It drops a row when:
+`Drive.getVisiblePaths(user, memberships, rows)` answers for one owner, the same read **Shared with me** uses, batched per mount with `mount.getBreadcrumbs`. It does its own access check and is called only from the relay, so it falls under the "server code" clause of [ARCHITECTURE.md](../ARCHITECTURE.md#drive-architecture) and needs no `SharedDrive` wrapper. A row whose mount this home doesn't have, because it is disabled, removed or failed to start, is skipped, because `Drive.getMount` would otherwise throw and lose that owner's other rows. It drops a row when:
 
 | Dropped | Why |
 |---|---|
 | Empty breadcrumb | The file was deleted for good |
 | `canReadFromAncestors` fails | You lost access. The owner, members of the owning team, a direct or parent folder ACL and a public visibility all pass |
 | `isTrashedChain` | It is in the trash. A trash already ends a sharee's access, but the owner and team members can still read it, so they need this check. A restore brings the file back, sharing included |
-| Any ancestor is a document type | It is inside a doc container. `FileHistory` and the comment tags already avoid these, and this is the one check that guarantees it. A breadcrumb ends with the file itself, so the check reads `slice(0, -1)`, as `refuseInsideDocument` does; otherwise every doc and chat would be dropped |
+| Any ancestor is a document type | It is inside a doc container. `FileHistory` and the comment tags already avoid these, and this is the one check that guarantees it. A breadcrumb ends with the file itself, so the check reads `slice(0, -1)`, as `isInsideDocument` does; otherwise every doc and chat would be dropped |
 | `parentId` is null | A mount root, such as Drive home, which would otherwise rank first |
 
 **A read never deletes a row.** A failed lookup looks the same as a missing file at this level, and a brief error must not wipe someone's history. A hidden row comes back when access or the file does, and otherwise falls off through the 200-row trim.
@@ -119,20 +119,13 @@ It runs every read at once, with no limit, by the owner's choice on 2026-11-09. 
 
 The real cost is homes held open. That run took file descriptors from 37 to 937, and those hundred homes stayed open for their idle time, as any read of them does. That is the job of the LRU cap in [PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md). Production pins a high file limit in `docker-compose.yml`, and a dev machine at a low `ulimit -n` can run out sooner, as it already can with Watched or a large share. Recent is normally the lighter of the two, because it asks only the owners in your list, while Watched asks every team and everyone who shared with you.
 
-`pullRecentPaths` is an ordinary pull:
-
-```ts
-export async function pullRecentPaths(ownerId: string, user: User, memberships: Memberships, rows: RecentRow[]) {
-    const home = await getHome(ownerId);
-    return home.drive.getRecentPathsFor(user, memberships, rows);
-}
-```
+`pullVisiblePaths` groups the rows by owner and hands each owner's `Drive.getVisiblePaths` only that owner's rows, through `pullFromEach`.
 
 | | Cost per load |
 |---|---|
 | The list itself | One small query in your own home |
 | Each owner already open | One batched query per mount |
-| Each owner closed | A full open, which also runs what any open runs (history prune, trash purge, reindex kick), then the same queries. The home stays open for its idle time, so the next load is the row above |
+| Each owner closed | A full open, which also runs what any open runs (trash purge, reindex kick), then the same queries. The home stays open for its idle time, so the next load is the row above |
 
 ## The page
 
@@ -148,7 +141,7 @@ export async function pullRecentPaths(ownerId: string, user: User, memberships: 
 ## Build order
 
 1. `pullFromEach` in `aggregate.ts`, with Watched, All docs and file search on it. Its own commit: these log a failed read whether or not Recent files ships.
-2. `pullFromEach` moved to `home-relay.ts`, with the teams list on it. Table, `recordOpened` in the three places, `Drive.getRecentPathsFor`, `pullRecentPaths`, the route, the `Home.notify` write, tests.
+2. `pullFromEach` moved to `home-relay.ts`, with the teams list on it. Table, `recordOpened` in the three places, `Drive.getVisiblePaths`, `pullVisiblePaths`, the route, the `Home.notify` write, tests.
 3. Sidebar rows, page, the sort and date props.
 4. Dropped: the latest-activity line, by the owner's ruling of 2026-11-09 above.
 
@@ -164,7 +157,7 @@ Plus `app-sidebar.test.tsx` for the row in Drive and in an app, a test that sort
 
 ## Docs when it lands
 
-`docs/STORAGE.md` or a new domain doc for the table, [ARCHITECTURE.md](../ARCHITECTURE.md) for the concept, [NOTIFICATION-CENTER.md](../NOTIFICATION-CENTER.md) for the write in `Home.notify`, [SCALABILITY.md](../SCALABILITY.md) for `pullFromEach` and `pullRecentPaths`, a help-center article under `apps/index/src/data/support/drive/` and `CHANGELOG.md`.
+`docs/STORAGE.md` or a new domain doc for the table, [ARCHITECTURE.md](../ARCHITECTURE.md) for the concept, [NOTIFICATION-CENTER.md](../NOTIFICATION-CENTER.md) for the write in `Home.notify`, [SCALABILITY.md](../SCALABILITY.md) for `pullFromEach` and `pullVisiblePaths`, a help-center article under `apps/index/src/data/support/drive/` and `CHANGELOG.md`.
 
 ## Later: Recent files in the command palette
 
@@ -189,5 +182,5 @@ To decide then: whether an address typed into a draft that is never sent counts,
 - **Recording opens in `GET /collab/.../info`.** It refetches on focus and on someone else's rename, so a doc you aren't looking at would move up, and it misses chats and plain files.
 - **A `POST` from the client for each open.** A route and a hook in three apps, for opens the server already serves, and a body the server would have to bound because the ids aren't a path it has checked.
 - **A server-wide queue for reads that open homes.** A stuck open would stall other users' loads too.
-- **Closing a home straight after reading it, with `openHome` and `withHomeHeld`.** It would hold down how many homes stay open, but every load would rerun each closed owner's whole open and close: `history.prune`, the trash purge, the reindex kick, and a close that waits on them while that owner's own requests wait too.
+- **Closing a home straight after reading it, with `openHome` and `withHomeHeld`.** It would hold down how many homes stay open, but every load would rerun each closed owner's whole open and close: the trash purge, the reindex kick, and a close that waits on them while that owner's own requests wait too.
 - **A list that updates live.** Each notification, such as every message in a busy chat, would read every owner again.

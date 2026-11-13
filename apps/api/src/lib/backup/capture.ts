@@ -6,11 +6,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
 import { eventLoopTurn } from '../core';
-import type { StorageFile } from '../storage';
+import type { FileBytes, StorageFile } from '../storage';
 import { hashFile, isMissingObjectCause, writeTempWithHash } from '../storage';
 
 export async function captureFile(
-    source: Buffer | Uint8Array | StorageFile | ReadableStream<Uint8Array>,
+    source: FileBytes,
     destPath: string,
     relPath: string,
     yields = false,

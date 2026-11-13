@@ -5,7 +5,8 @@ import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
-import { DRIVE_MIME_SLIDES, EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
+import { EML_MIME, ICS_MIME } from '@workspace/lib/types/file-kinds';
 import sharp from 'sharp';
 import type { DatabaseConfig, SchemaType } from '../../lib/core';
 import { ManagedDatabase } from '../../lib/core';
@@ -30,7 +31,7 @@ import {
     seedDocumentMedia,
     seedVectorDoc,
 } from '../fixtures/golden-documents';
-import { createTestMountConfig, seedFile } from '../mount-test-helpers';
+import { createTestMountConfig, overwriteFile, seedFile } from '../mount-test-helpers';
 import { authedRequest, driveGet, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 describe('Preview', () => {
@@ -473,7 +474,7 @@ describe('getTextPreview (stale-while-revalidate)', () => {
 
         // Edit: new content under a newer updatedAt. Cache names are content-addressed by updatedAt,
         // so the current version is now a miss while the prior one becomes a stale candidate.
-        await mount.writeFile(fileId, Buffer.from('version two'));
+        await overwriteFile(mount, fileId, Buffer.from('version two'));
         const edited = { ...path, updatedAt: new Date(2000) };
 
         // The request serves the prior version immediately (the route marks it no-store) and kicks
@@ -605,7 +606,7 @@ describe('one generation per preview', () => {
         const bytes = Buffer.from('version one');
         const { mount, path } = await previewMount('one-stale-regeneration', 'notes.txt', 'text/plain', bytes);
         await getTextPreview(mount, { ...path, updatedAt: new Date(1000) });
-        await mount.writeFile(path.id, Buffer.from('version two'));
+        await overwriteFile(mount, path.id, Buffer.from('version two'));
         const edited = { ...path, updatedAt: new Date(2000) };
 
         const readBytes = spyOn(mount, 'readBytes');

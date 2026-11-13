@@ -12,7 +12,7 @@ import type { User } from '../user';
 import { isGuest } from '../user';
 import { isInsideDocument } from './acl';
 import type { SharedDb } from './shared';
-import * as sharedSchema from './sharedschema';
+import * as sharedSchema from './shared-schema';
 
 export type RecentRow = typeof sharedSchema.recentPaths.$inferSelect;
 

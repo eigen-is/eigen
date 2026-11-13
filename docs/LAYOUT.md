@@ -51,11 +51,19 @@ A sidebar row is selected by its path alone (`includeSearch: false` in `SidebarI
 
 Radix gives the focus back only to a `DialogTrigger`. A dialog opened from a menu or a key would drop the focus on `<body>` as it closes, and a list's keys would do nothing until a click. `useFocusReturn` (`packages/ui/src/hooks/use-focus-return.ts`) fixes that: `DialogContent` and `FilePreview` call it, and so does any Radix dialog built outside `DialogContent`. It reads what had the focus as the dialog opens, before a field's `autoFocus` moves it.
 
-A menu row that opens a dialog is gone a moment later, so the menu names the target instead. A context menu hands the dialog its list through `returnFocusTo`, which leaves the focus inside the dialog; focusing the list would make the dialog's focus trap pull the focus back and select its field's text. A bar menu such as File hands over its trigger with `handFocusReturnTo`, because Radix's Menubar focuses no trigger once the focus moved into a dialog. A test of that needs a real `Menubar`, since a `DropdownMenu` does focus its trigger.
+A menu row that opens a dialog is gone a moment later, so the menu names the target instead and leaves the focus in the dialog. Nothing may take the focus out of an open dialog: its focus trap takes it straight back and selects its field's text, which undoes a selection the dialog set as it opened, such as Rename's name without its extension. A context menu hands the dialog its list through `returnFocusTo`. A dropdown menu such as the detail column's ⋮ and a bar menu such as File hand over their trigger with `handFocusReturnTo`, which tells the dropdown whether a dialog holds the focus; Radix's Menubar focuses no trigger once the focus moved into a dialog. A row of a closed menu, still on the page while it animates out under the dialog, doesn't let Radix focus the menu as the pointer leaves the row. A test of the bar menu needs a real `Menubar`, whose close differs from a `DropdownMenu`'s.
+
+A dropdown menu that closes with no dialog over it focuses its trigger itself, whatever holds the focus by then. `returnFocusTo` is the wrong call there: it leaves the focus with whatever took it meanwhile, and Drive's list takes it the moment a closing menu leaves the page (`useKeyboardListNavigation`), so New, the avatar and the detail ⋮ would never get it back. A context menu and a closing dialog do go through `returnFocusTo`, so in Drive they end on the list.
 
 A target still on the page is never replaced, and an element inside an open dialog never becomes one, so a dialog opened over another can't steal its target. A caller's `onCloseAutoFocus` that calls `preventDefault`, such as the sheet's grid refocus, decides for itself. Something that took the focus as the dialog closed, such as a Rename dialog a palette row opened, keeps it.
 
-The returned focus shows a ring only when its target had one as it left (`:focus-visible`). A dropdown menu a pointer opened focuses its trigger with `focusVisible: false`, because Radix's plain `focus()` after Escape draws a ring in Chrome, and a hover-revealed ⋮ with a ring stays shown after the pointer leaves.
+The returned focus shows a ring only when its target had one as it left (`:focus-visible`). A dropdown menu a pointer opened gives its trigger the focus with `focusVisible: false`, because Radix's plain `focus()` after Escape draws a ring in Chrome, and a hover-revealed ⋮ with a ring stays shown after the pointer leaves.
+
+## A dialog opened by a value keeps it while it closes
+
+A dialog that shows a value, such as the items to delete, still draws its text while it fades out, so its owner never clears that value on close. `useDialogValue<T>()` (`packages/ui/src/hooks/use-dialog-value.ts`) holds the open flag and the last value: `openDialog(value)` sets both, `setOpen` is the dialog's `onOpenChange`, and the owner mounts the dialog once `value` is set. An `open` derived from `value !== null` is the bug, because the close then blanks the text or counts "0 items", and unmounting the dialog on close skips its fade-out.
+
+A test reads a closing dialog with `holdClosingDialogs` (`packages/ui/src/test/closing-dialog.ts`). It goes in before the dialog mounts, because Radix reads the content's animation as it mounts.
 
 ## One `DriveCapabilities` value gates every Drive action
 
@@ -69,11 +77,13 @@ The returned focus shows a ring only when its target had one as it left (`:focus
 
 `canWrite` also rides into every file subject the view builds, because a convert writes beside its source and a read-only view has nowhere to write ([PREVIEWS.md](PREVIEWS.md#a-file-subject-stores-identity-everything-else-is-derived)).
 
+The detail column's Location row reads the parent's `useBreadcrumb`, the query the folder view reads, and names the drive as the sidebar does, or the owner or team where the server cut the chain short, then the folders down to the parent, as a link only when the viewer can read that parent.
+
 ## One item menu serves the row and the detail column
 
 `DriveItemMenuItems` (`drive-item-menu.tsx`) is the menu both the row's context menu and the detail column's ⋮ draw, for one item or a multi-selection, which gets only the rows with a `pluralLabel`. Each row is a `DriveActionMenuItem`, which the File menu and Trash's menu draw too. A row's `shortcut` is the hotkey constant the listing's key handler compares against, so the menu shows the key that acts; only the row's context menu names keys, because they act on the listing. The shared file actions come in through `FileActionMenuItems`, minus Save to Drive, which Drive's own Copy to… already says. Space, the detail preview and the menu row all go through the file-action registry, so none of them previews a folder ([PREVIEWS.md](PREVIEWS.md#the-host-mounts-the-runners-dialogs)).
 
-`DriveBrowser` is a lighter layer over the same table, with no dialogs and no detail column, for the file picker and the location field.
+`DriveBrowser` is a lighter layer over the same table, with no dialogs and no detail column, for the file picker and the location field. It keeps no location of its own: its host holds one `DriveLocationValue` (owner, mount, folder), the browser draws that and asks for another through `onChange`, so a folder click, a mount click and a host that moves all go one way. A mount click asks for the mount with an empty folder id, which means its root. `useResolvedDriveLocation` is the one place that fills the root in, from the loaded root during render, and it stays empty while the root loads. The browser and the location field call it to draw, and a host that confirms a destination, such as `DriveLocationPicker` or the new chat dialog, calls it for what it hands on and keeps its confirm button disabled until the folder is there. `DriveLocationPicker` and `DriveFilePicker` mount their body inside `DialogContent`, so a closed picker reads no root, and the new chat dialog reads the viewer's own root.
 
 ## Menus draw their rows in one order
 
@@ -163,11 +173,11 @@ A fixed color mapped onto the palette (`eigenColor(name, step)`) takes the neare
 
 ## The document apps reach Drive through one config
 
-Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Sheets go through `EigenDocListView` and `EigenDocSharedView`, configured by `buildConfig` in `eigendoc-config.ts` from the EigenDocType registry, so an app gets its sidebar, list and shared views without Drive code of its own.
+Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Sheets go through `EigenDocListView` and `EigenDocSharedView`, configured by `buildConfig` in `eigendoc-config.ts` from the EigenDocType registry, so an app gets its sidebar, list and shared views without Drive code of its own. Each list route is its `createFileRoute` line, `validateDriveSearch` and `<EigenDocListView config={…} route={Route} />`: the view reads the params, the selection and the viewer from the route it is handed, typed by shape (`EigenDocListRoute`) since every app has its own route tree, and that type fails to compile for a route whose search skips `validateDriveSearch`.
 
 ## Every Drive list has one empty text and one error text
 
-`DriveList` draws both, so no page passes copy of its own. An empty list shows `EmptyState`'s default sentence, with a hint only where you can drop or create (the button's own label when the list creates one kind). A failed load shows `ErrorState`'s default sentence alone, with no error detail; the error boundary shows the same one. A page that needs other words is a different screen, such as `RequestAccessView` for a folder you can't read.
+`DriveList` draws both, so no page passes copy of its own. An empty list shows `EmptyState`'s default sentence in place of the table or grid, so it centers in the whole list area, with a hint only where you can drop or create (the button's own label when the list creates one kind). Drawn below the table, the two `flex-1` children split the column and the sentence sat in its lower half. A failed load shows `ErrorState`'s default sentence alone, with no error detail; the error boundary shows the same one. A page that needs other words is a different screen, such as `RequestAccessView` for a folder you can't read.
 
 ## A file's icon comes from its name as well as its MIME type
 

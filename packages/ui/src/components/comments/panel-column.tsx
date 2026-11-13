@@ -6,7 +6,8 @@
 import type { useCommentFilter } from '@workspace/lib/comments';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { ActiveComments, CommentCard, DocumentPanel } from '@workspace/lib/types/comments';
-import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import { cn } from '@workspace/ui/lib/utils';
 import { Plus, X } from 'lucide-react';
 import type { useContextMenu } from '../context-menu';

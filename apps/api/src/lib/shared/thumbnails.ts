@@ -126,8 +126,13 @@ export async function saveThumbnail(
 }
 
 // Returns the new thumbnail's file name, or null when the source row is stale and its file is gone.
-export async function copyThumbnail(thumbsDir: string, sourceFileName: string, pathId: string): Promise<string | null> {
-    const source = Bun.file(path.join(thumbsDir, sourceFileName));
+export async function copyThumbnail(
+    sourceDir: string,
+    sourceFileName: string,
+    thumbsDir: string,
+    pathId: string,
+): Promise<string | null> {
+    const source = Bun.file(path.join(sourceDir, sourceFileName));
     if (!(await source.exists())) return null;
     await Bun.write(thumbnailPath(thumbsDir, pathId), source);
     return thumbnailFileName(pathId);

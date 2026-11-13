@@ -6,7 +6,8 @@ import {
     TEXT_PREVIEW_MAX_BYTES,
 } from '../constants/preview';
 import type { DrivePath } from '../types/drive';
-import { isCollabType, isEmlFile, isIcsFile, isImageMime, isVCardFile } from '../types/drive';
+import { isCollabType } from '../types/drive';
+import { isEmlFile, isIcsFile, isImageMime, isVCardFile } from '../types/file-kinds';
 import type { FileImportSource, FileSubject, MailPartRef, PreviewMode, SubjectInfo } from '../types/file-subject';
 import type { Attachment } from '../types/mail';
 import { mailAttachmentName } from '../types/mail';

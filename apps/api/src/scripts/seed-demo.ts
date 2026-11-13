@@ -25,14 +25,17 @@ import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, VCARD_MIMES } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { toAttachmentReference } from '@workspace/lib/types/drive-reference';
+import { VCARD_MIMES } from '@workspace/lib/types/file-kinds';
 import { JSDOM } from 'jsdom';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import * as Y from 'yjs';
 import type { Drive } from '../lib/drive';
 import { textToHtml } from '../lib/mail/mail-parser/html';
+import { CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB } from '../lib/mount/container-dbs';
+import { writeTempWithHash } from '../lib/storage';
 import type { User } from '../lib/user';
 import type { LeadRole, MailAttachment, SeededInvite, SeededMail, VCardSpec } from './demo/content';
 import {
@@ -484,8 +487,8 @@ async function main(): Promise<void> {
         teamDocs.set('crew roster', docPath);
     }
 
-    // Fixture files into a container's media/ folder (CollabDocument.create makes it), where a doc's figures and a
-    // canvas's images find them by name, so the document stays whole.
+    // Fixture files into a container's media/ folder, where a doc's figures and a canvas's images find them by name,
+    // so the document stays whole.
     const uploadMedia = async (
         drive: Drive,
         mountId: string,
@@ -603,24 +606,23 @@ async function main(): Promise<void> {
         await seedBuiltContainer(BUDGET, 'sheets', [], (doc) => buildWorkbookDoc(doc, BUDGET.sheets)),
     );
 
-    // --- Stickies: a byte copy of the committed fixture container, its data.db and comments.db. A container finds
-    // its parts by name, never by path id, so the copy works. The board's creators and colors are patched below. ---
+    // --- Stickies: a byte copy of the fixture's databases. A container finds its parts by name, so the copy works,
+    // and they go in through the mount, as no person writes inside a document. ---
     const boardAuthor = userForRole('production');
-    const boardPath = await teamDrive.createFolder(
-        teamMountId,
-        lookup(folderId, KANBAN.folder),
-        `${KANBAN.name}.eigenstickies`,
-        boardAuthor,
-        'stickies',
-    );
-    for (const dbName of ['data.db', 'comments.db']) {
+    const boardFolderId = lookup(folderId, KANBAN.folder);
+    const { mount: teamMount } = await teamDrive.resolveFile(teamMountId, boardFolderId);
+    const boardId = await teamMount.createFolder(boardFolderId, `${KANBAN.name}.eigenstickies`, 'stickies');
+    for (const dbName of [CONTAINER_DATA_DB, CONTAINER_COMMENTS_DB]) {
+        const tempId = crypto.randomUUID();
         const bytes = readFileSync(join(FIXTURES_DIR, 'festival-kanban.eigenstickies', dbName));
-        await teamDrive.createFileFromData(teamMountId, boardPath.id, dbName, SQLITE_MIME, bytes, boardAuthor);
+        const { size, hash } = await writeTempWithHash(teamMount.getTempPath(tempId), bytes);
+        await teamMount.createFileFromTemp(boardId, dbName, SQLITE_MIME, size, hash, tempId);
+        await teamMount.cleanupTemp(tempId);
     }
-    await teamDrive.createFolder(teamMountId, boardPath.id, CONTAINER_MEDIA_FOLDER, boardAuthor);
-    await teamDrive.createFolder(teamMountId, boardPath.id, CONTAINER_CHAT_FOLDER, boardAuthor);
-    teamDocs.set(KANBAN.name, boardPath);
-    const boardId = boardPath.id;
+    await teamMount.createFolder(boardId, CONTAINER_MEDIA_FOLDER);
+    await teamMount.createFolder(boardId, CONTAINER_CHAT_FOLDER);
+    await teamDrive.recordFileEvent(teamMountId, boardId, boardAuthor, { eventType: 'created' });
+    teamDocs.set(KANBAN.name, await teamMount.getActivePath(boardId));
 
     // Card chat threads work like doc comments: a real chat in the container's chat/ subfolder, started by the
     // card's creator and linked back onto the card by name.

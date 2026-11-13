@@ -14,7 +14,7 @@ import {
 } from '@workspace/lib/contacts';
 import { useMyTeams } from '@workspace/lib/home';
 import type { Contact } from '@workspace/lib/types/contact';
-import { isVCardFile, VCARD_ACCEPT } from '@workspace/lib/types/drive';
+import { isVCardFile, VCARD_ACCEPT } from '@workspace/lib/types/file-kinds';
 import { DeleteDialog, EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui';
 import { IMPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';
 import { FileImportPicker } from '@workspace/ui/components/drive';

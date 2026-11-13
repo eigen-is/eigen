@@ -2,7 +2,8 @@
 // read-only feed. A view picks one, spreads in its own overrides and hands the value to DriveLayout,
 // whose action runner gates every Drive action on it.
 
-import type { DriveCapabilities, EigenDocType } from '@workspace/lib/types/drive';
+import type { EigenDocType } from '@workspace/lib/types/drive';
+import type { DriveCapabilities } from '@workspace/lib/types/drive-view';
 
 export const DRIVE_CAPABILITIES = {
     // The full folder browser (the fs route): create, upload, rearrange.
@@ -17,7 +18,7 @@ export const DRIVE_CAPABILITIES = {
         showBreadcrumb: true,
     },
     // Flat views over existing items (mime filters, per-app doc lists): act on the items, but no
-    // folder ops, because a move needs the folder context these views lack.
+    // folder ops. They also list items shared with the viewer, whose drive the move picker can't open.
     listing: {
         canCreateFolder: false,
         canUpload: false,

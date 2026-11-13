@@ -8,8 +8,9 @@ import {
     sheetsOpLog,
     writeSheetsSnapshot,
 } from '@workspace/lib/sheets';
-import type { DrivePath, ImportResult } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_SHEETS } from '@workspace/lib/types/drive';
+import type { ImportResult } from '@workspace/lib/types/drive-convert';
 import { escapeXml } from '@workspace/lib/xml';
 import JSZip from 'jszip';
 import * as Y from 'yjs';

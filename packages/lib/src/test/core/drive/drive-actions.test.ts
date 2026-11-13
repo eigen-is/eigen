@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { DELETE_HOTKEY } from '../../../constants/hotkeys';
 import { driveActionsFor } from '../../../core/drive/drive-actions';
-import type { DriveCapabilities, DrivePath } from '../../../types/drive';
+import type { DrivePath } from '../../../types/drive';
 import type { DriveActionId, DriveActionSubject } from '../../../types/drive-actions';
+import type { DriveCapabilities } from '../../../types/drive-view';
 
 function path(p: Partial<DrivePath> & { name: string }): DrivePath {
     return {

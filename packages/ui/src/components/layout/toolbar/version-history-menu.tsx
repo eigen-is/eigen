@@ -10,8 +10,8 @@ import { formatFileSize } from '@workspace/lib/format';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { useDeleteVersions, useRestoreVersion, useSaveVersion, useVersions } from '@workspace/lib/versioning';
+import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { History, Save, Trash2 } from 'lucide-react';
-import { useState } from 'react';
 import { Button } from '../../button';
 import { ConfirmDialog } from '../../confirm-dialog';
 import { DeleteDialog } from '../../delete/delete-dialog';
@@ -23,16 +23,15 @@ import {
     DropdownMenuSubTrigger,
 } from '../../dropdown-menu';
 
-// VersionHistoryMenu renders only the menu rows. Pair it with RestoreVersionDialog and DeleteHistoryDialog
-// rendered outside the menu's content: inside it, Radix unmounts the dialog the moment the menu closes, and
-// the dialog flashes and disappears.
+// Only the menu rows. Its owner renders RestoreVersionDialog and DeleteHistoryDialog outside the menu's content,
+// where Radix would unmount them the moment the menu closes.
 export function VersionHistoryMenu({
     path,
     onRequestRestore,
     onRequestDeleteHistory,
 }: {
     path: DrivePath;
-    onRequestRestore: (snap: Snapshot) => void;
+    onRequestRestore: (snapshot: Snapshot) => void;
     // The size of the listed versions, which the dialog says it frees.
     onRequestDeleteHistory: (size: number) => void;
 }) {
@@ -53,13 +52,13 @@ export function VersionHistoryMenu({
                     {/* Only the list scrolls, so Delete history stays in view below a long one. */}
                     <div className="max-h-64 overflow-y-auto">
                         {data && data.length > 0 ? (
-                            data.map((snap) => (
+                            data.map((snapshot) => (
                                 <DropdownMenuItem
-                                    key={snap.id}
+                                    key={snapshot.id}
                                     className="flex items-center justify-between gap-4"
-                                    onSelect={() => onRequestRestore(snap)}
+                                    onSelect={() => onRequestRestore(snapshot)}
                                 >
-                                    <span>{formatDateTime(snap.createdAt)}</span>
+                                    <span>{formatDateTime(snapshot.createdAt)}</span>
                                     <span className="text-xs text-muted-foreground">Restore</span>
                                 </DropdownMenuItem>
                             ))
@@ -74,7 +73,9 @@ export function VersionHistoryMenu({
                                 variant="destructive"
                                 disabled={!data || data.length === 0}
                                 onSelect={() =>
-                                    onRequestDeleteHistory((data ?? []).reduce((sum, snap) => sum + snap.size, 0))
+                                    onRequestDeleteHistory(
+                                        (data ?? []).reduce((sum, snapshot) => sum + snapshot.size, 0),
+                                    )
                                 }
                             >
                                 <Trash2 className="h-4 w-4" /> Delete history…
@@ -91,37 +92,33 @@ export function RestoreVersionDialog({
     path,
     snapshot,
     storageGone,
-    onClose,
+    open,
+    onOpenChange,
 }: {
     path: DrivePath;
-    snapshot: Snapshot | null;
+    snapshot: Snapshot;
     // The document's stored data is missing: there is no current state to save first, and nothing loaded to update.
     storageGone?: boolean;
-    onClose: () => void;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
 }) {
     const restore = useRestoreVersion(path.ownerId, path.mountId, path.id);
-    // The last version picked, so the text stays while the dialog fades out.
-    const [shown, setShown] = useState(snapshot);
-    if (snapshot && snapshot !== shown) setShown(snapshot);
 
     return (
         <ConfirmDialog
-            open={!!snapshot}
-            onOpenChange={(open) => !open && onClose()}
+            open={open}
+            onOpenChange={onOpenChange}
             title="Restore this version?"
             description={
-                !shown
-                    ? ''
-                    : storageGone
-                      ? `Rebuild the document from the ${formatDateTime(shown.createdAt)} version. ` +
-                        `Comments go back with the text they're on. Their replies stay as they are now.`
-                      : `Replace current contents with the ${formatDateTime(shown.createdAt)} version. ` +
-                        `Comments go back with the text they're on. Their replies stay as they are now. The current state ` +
-                        `is saved as a new version first, so you can undo this by restoring it.`
+                storageGone
+                    ? `Rebuild the document from the ${formatDateTime(snapshot.createdAt)} version. ` +
+                      `Comments go back with the text they're on. Their replies stay as they are now.`
+                    : `Replace current contents with the ${formatDateTime(snapshot.createdAt)} version. ` +
+                      `Comments go back with the text they're on. Their replies stay as they are now. The current state ` +
+                      `is saved as a new version first, so you can undo this by restoring it.`
             }
             confirmText="Restore"
             onConfirm={async () => {
-                if (!snapshot) return;
                 await restore.mutateAsync(snapshot.name);
                 if (storageGone) window.location.reload();
             }}
@@ -129,28 +126,28 @@ export function RestoreVersionDialog({
     );
 }
 
-// Open while `size` holds the total size of the versions the menu listed. The comment threads' versions are deleted
-// too, but their size is not counted. The text keeps the last size while the dialog fades out, or it would read "?".
+// `size` is the total size of the versions the menu listed. The comment threads' versions are deleted too, but their
+// size is not counted.
 export function DeleteHistoryDialog({
     path,
     size,
-    onClose,
+    open,
+    onOpenChange,
 }: {
     path: DrivePath;
-    size: number | null;
-    onClose: () => void;
+    size: number;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
 }) {
     const deleteVersions = useDeleteVersions(path.ownerId, path.mountId, path.id);
-    const [shownSize, setShownSize] = useState(size ?? 0);
-    if (size !== null && size !== shownSize) setShownSize(size);
 
     return (
         <DeleteDialog
-            open={size !== null}
-            onOpenChange={(next) => !next && onClose()}
+            open={open}
+            onOpenChange={onOpenChange}
             title="Delete version history?"
             description={
-                `Frees ${formatFileSize(shownSize)}. Earlier versions of this document and its comments can't be ` +
+                `Frees ${formatFileSize(size)}. Earlier versions of this document and its comments can't be ` +
                 `restored after this. Images and comments you deleted are removed now, except those added or ` +
                 `replied to in the last ${SWEEP_GRACE_DAYS} days.`
             }
@@ -163,31 +160,34 @@ export function DeleteHistoryDialog({
 // VersionHistoryMenu's rows as plain buttons, for the gone screen outside any menu.
 export function StorageGoneVersions({ path }: { path: DrivePath }) {
     const { data } = useVersions(path.ownerId, path.mountId, path.id);
-    const [pendingSnapshot, setPendingSnapshot] = useState<Snapshot | null>(null);
+    const restoreDialog = useDialogValue<Snapshot>();
 
     if (!data || data.length === 0) return null;
 
     return (
         <>
             <div className="mt-2 flex max-h-64 min-w-[240px] flex-col overflow-y-auto">
-                {data.map((snap) => (
+                {data.map((snapshot) => (
                     <Button
-                        key={snap.id}
+                        key={snapshot.id}
                         variant="ghost"
                         className="justify-between gap-4"
-                        onClick={() => setPendingSnapshot(snap)}
+                        onClick={() => restoreDialog.openDialog(snapshot)}
                     >
-                        <span>{formatDateTime(snap.createdAt)}</span>
+                        <span>{formatDateTime(snapshot.createdAt)}</span>
                         <span className="text-xs text-muted-foreground">Restore</span>
                     </Button>
                 ))}
             </div>
-            <RestoreVersionDialog
-                path={path}
-                snapshot={pendingSnapshot}
-                storageGone
-                onClose={() => setPendingSnapshot(null)}
-            />
+            {restoreDialog.value && (
+                <RestoreVersionDialog
+                    path={path}
+                    snapshot={restoreDialog.value}
+                    storageGone
+                    open={restoreDialog.open}
+                    onOpenChange={restoreDialog.setOpen}
+                />
+            )}
         </>
     );
 }

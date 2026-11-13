@@ -134,25 +134,57 @@ describe('Aggregate mime endpoint with team fan-out', () => {
         expect(aggregated.status).toBe(403);
     });
 
-    test('dedupe by path.id: authoritative team copy wins over a shared_paths mirror', async () => {
-        // Share a team1 doc individually with bob → creates a shared_paths mirror in bob's personal
-        // home (same path.id, hash null). Bob's ?teams=1 must return it exactly once, and the surviving
-        // copy must be the authoritative team copy (non-null hash), not the mirror.
+    test('a team doc also shared with a member by name is listed once, from the team drive', async () => {
         const dedupeDoc = await uploadFanout(ctx.alice.user.sessionToken, team1Owner, team1MountId, 'dedupe-doc.bin');
         await drivePut(ctx.alice.user.sessionToken, team1Owner, team1MountId, `path/${dedupeDoc.id}/acl`, {
             add: [{ id: ctx.bob.user.email, read: true, write: false }],
             visibility: 'private',
         });
 
-        // Precondition: the mirror is now visible in bob's personal (no-teams) view.
+        // A member sees the team drive itself, so the entry by name adds no Shared with me row.
         const personal = await assertJson<DrivePath[]>(
             await mimeList(ctx.bob.user.sessionToken, ctx.bob.user.id, false),
         );
-        expect(personal.some((p) => p.id === dedupeDoc.id)).toBe(true);
+        expect(personal.some((p) => p.id === dedupeDoc.id)).toBe(false);
 
         const items = await assertJson<DrivePath[]>(await mimeList(ctx.bob.user.sessionToken, ctx.bob.user.id, true));
         const matches = items.filter((p) => p.id === dedupeDoc.id);
         expect(matches.length).toBe(1);
         expect(matches[0].hash).not.toBeNull();
+    });
+
+    test('a type prefix finds a shared file the way it finds an own one, and an exact type only itself', async () => {
+        const aliceToken = ctx.alice.user.sessionToken;
+        const aliceId = ctx.alice.user.id;
+        const mountId = await firstMountId(aliceToken, aliceId);
+        const root = await driveGet(aliceToken, aliceId, mountId, 'root');
+        const fanout = await uploadFanout(aliceToken, aliceId, mountId, 'shared-fanout.bin');
+        const other = await driveUpload(
+            aliceToken,
+            aliceId,
+            mountId,
+            root.id,
+            new File(['other'], 'shared-other.bin', { type: 'application/x-eigen-other' }),
+        );
+        for (const file of [fanout, other]) {
+            await drivePut(aliceToken, aliceId, mountId, `path/${file.id}/acl`, {
+                add: [{ id: ctx.bob.user.email, read: true, write: false }],
+                visibility: 'private',
+            });
+        }
+
+        const bobList = async (segment: string): Promise<Set<string>> => {
+            const items = await assertJson<DrivePath[]>(
+                await authedRequest(ctx.bob.user.sessionToken, `/drive/${ctx.bob.user.id}/mime/${segment}`),
+            );
+            return new Set(items.map((p) => p.id));
+        };
+        const byPrefix = await bobList('application-x-eigen-');
+        expect(byPrefix.has(fanout.id)).toBe(true);
+        expect(byPrefix.has(other.id)).toBe(true);
+
+        const exact = await bobList(MIME_SEGMENT);
+        expect(exact.has(fanout.id)).toBe(true);
+        expect(exact.has(other.id)).toBe(false);
     });
 });

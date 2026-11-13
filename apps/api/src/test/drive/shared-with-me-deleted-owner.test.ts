@@ -5,7 +5,7 @@ import type { Notification } from '@workspace/lib/types/notification';
 import { eq } from 'drizzle-orm';
 import { getPublicConfig } from '../../lib/config/server-config';
 import { getSharedDatabase } from '../../lib/drive/shared';
-import { sharedPaths } from '../../lib/drive/sharedschema';
+import { sharedPaths } from '../../lib/drive/shared-schema';
 import { getHome } from '../../lib/home/get-home';
 import * as userModule from '../../lib/user/user';
 import type { TestUser } from '../setup';
@@ -28,7 +28,7 @@ import {
 const MIME = 'application/x-eigen-deleted-owner';
 const MIME_SEGMENT = 'application-x-eigen-deleted-owner';
 
-describe('Shared with me drops the rows of a deleted owner', () => {
+describe('Shared with me leaves out the items of a deleted owner', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let orgId: string;
 
@@ -78,11 +78,11 @@ describe('Shared with me drops the rows of a deleted owner', () => {
         await drivePut(token, ownerId, mountId, `path/${path.id}/acl`, {
             add: [{ id: recipient.email, read: true, write: false }],
         });
-        await eventually(async () => ((await mirrorRows(recipient, ownerId)).length > 0 ? true : undefined), 'the row');
+        await eventually(async () => ((await sharedRows(recipient, ownerId)).length > 0 ? true : undefined), 'the row');
         return path;
     }
 
-    async function mirrorRows(recipient: TestUser, ownerId: string) {
+    async function sharedRows(recipient: TestUser, ownerId: string) {
         const sharedDb = await getSharedDatabase(await getHome(recipient.id));
         return sharedDb.select().from(sharedPaths).where(eq(sharedPaths.ownerId, ownerId)).all();
     }
@@ -106,7 +106,7 @@ describe('Shared with me drops the rows of a deleted owner', () => {
         );
     }
 
-    test("a deleted user's item leaves the list and shared.db, with no bell row", async () => {
+    test("a deleted user's item leaves the list, with no bell row", async () => {
         const { bob } = ctx;
         const owner = await newOwner();
         const path = await share(owner.sessionToken, owner.id, bob.user);
@@ -114,14 +114,12 @@ describe('Shared with me drops the rows of a deleted owner', () => {
         const bellBefore = await bell(bob.user);
 
         expect((await deleteUser(owner)).status).toBe(200);
-        expect(await mirrorRows(bob.user, owner.id)).toHaveLength(1);
 
         expect(await sharedIds(bob.user)).not.toContain(path.id);
-        expect(await mirrorRows(bob.user, owner.id)).toHaveLength(0);
         expect(await bell(bob.user)).toEqual(bellBefore);
     });
 
-    test("a deleted team's item leaves the list and shared.db, with no bell row", async () => {
+    test("a deleted team's item leaves the list, with no bell row", async () => {
         const { alice, bob } = ctx;
         const { teamId, ownerId } = await newTeam();
         const path = await share(alice.user.sessionToken, ownerId, bob.user);
@@ -129,14 +127,12 @@ describe('Shared with me drops the rows of a deleted owner', () => {
         const bellBefore = await bell(bob.user);
 
         expect((await deleteTeam(teamId)).status).toBe(200);
-        expect(await mirrorRows(bob.user, ownerId)).toHaveLength(1);
 
         expect(await sharedIds(bob.user)).not.toContain(path.id);
-        expect(await mirrorRows(bob.user, ownerId)).toHaveLength(0);
         expect(await bell(bob.user)).toEqual(bellBefore);
     });
 
-    test('the listing of one type drops the same rows', async () => {
+    test('the listing of one type leaves out the same items', async () => {
         const { alice, charlie } = ctx;
         const owner = await newOwner();
         const { teamId, ownerId: team } = await newTeam();
@@ -150,11 +146,9 @@ describe('Shared with me drops the rows of a deleted owner', () => {
         const listed = await mimeIds(charlie.user);
         expect(listed).not.toContain(ofUser.id);
         expect(listed).not.toContain(ofTeam.id);
-        expect(await mirrorRows(charlie.user, owner.id)).toHaveLength(0);
-        expect(await mirrorRows(charlie.user, team)).toHaveLength(0);
     });
 
-    test('a listing with a mix drops only the deleted owners, and a live user and a live team keep their rows', async () => {
+    test('a listing with a mix leaves out only the deleted owners, and keeps every row', async () => {
         const { alice, bob } = ctx;
         const live = await newOwner();
         const liveTeam = await newTeam();
@@ -175,43 +169,49 @@ describe('Shared with me drops the rows of a deleted owner', () => {
         const listed = await sharedIds(bob.user);
         expect(listed).toEqual(expect.arrayContaining(kept.map((path) => path.id)));
         for (const path of dropped) expect(listed).not.toContain(path.id);
-        expect(await mirrorRows(bob.user, live.id)).toHaveLength(1);
-        expect(await mirrorRows(bob.user, liveTeam.ownerId)).toHaveLength(1);
-        expect(await mirrorRows(bob.user, doomed.id)).toHaveLength(0);
-        expect(await mirrorRows(bob.user, doomedTeam.ownerId)).toHaveLength(0);
+        for (const ownerId of [live.id, liveTeam.ownerId, doomed.id, doomedTeam.ownerId]) {
+            expect(await sharedRows(bob.user, ownerId)).toHaveLength(1);
+        }
     });
 
-    test('an owner lookup that throws fails the listing and deletes nothing', async () => {
+    test('an owner lookup that throws leaves only that owner out, and the item is back at the next listing', async () => {
         const { bob } = ctx;
         const owner = await newOwner();
+        const other = await newOwner();
         const path = await share(owner.sessionToken, owner.id, bob.user);
-        expect((await deleteUser(owner)).status).toBe(200);
+        const ofOther = await share(other.sessionToken, other.id, bob.user);
 
         const getUserById = userModule.getUserById;
         spyOn(userModule, 'getUserById').mockImplementation(async (id) => {
             if (id === owner.id) throw new Error('users3.db is unreadable');
             return getUserById(id);
         });
-        expect((await listShared(bob.user)).status).toBe(500);
-        expect(await mirrorRows(bob.user, owner.id)).toHaveLength(1);
+        const logged = spyOn(console, 'error').mockImplementation(() => {});
+        const listed = await sharedIds(bob.user);
+        expect(listed).not.toContain(path.id);
+        expect(listed).toContain(ofOther.id);
+        expect(logged).toHaveBeenCalled();
 
         mock.restore();
-        expect(await sharedIds(bob.user)).not.toContain(path.id);
-        expect(await mirrorRows(bob.user, owner.id)).toHaveLength(0);
+        expect(await sharedIds(bob.user)).toContain(path.id);
     });
 
-    test('a row whose owner is neither a user nor a team stays, because nothing can say it is gone', async () => {
+    test('a row whose owner is neither a user nor a team lists nothing and fails no listing', async () => {
         const { bob } = ctx;
+        const owner = await newOwner();
+        const path = await share(owner.sessionToken, owner.id, bob.user);
         const orgOwner = `org_${crypto.randomUUID().replaceAll('-', '')}`;
-        const id = crypto.randomUUID();
         const sharedDb = await getSharedDatabase(await getHome(bob.user.id));
+        const pointer = { ownerId: orgOwner, mountId: 'm', pathId: crypto.randomUUID() };
         sharedDb
             .insert(sharedPaths)
-            .values({ id, mountId: 'm', name: 'n', type: 'file', ownerId: orgOwner, mimeType: MIME })
+            .values({ ...pointer, sharedAt: new Date() })
             .run();
+        spyOn(console, 'error').mockImplementation(() => {});
 
-        expect(await sharedIds(bob.user)).toContain(id);
-        expect(await mirrorRows(bob.user, orgOwner)).toHaveLength(1);
-        sharedDb.delete(sharedPaths).where(eq(sharedPaths.id, id)).run();
+        const listed = await sharedIds(bob.user);
+        expect(listed).toContain(path.id);
+        expect(listed).not.toContain(pointer.pathId);
+        sharedDb.delete(sharedPaths).where(eq(sharedPaths.ownerId, orgOwner)).run();
     });
 });

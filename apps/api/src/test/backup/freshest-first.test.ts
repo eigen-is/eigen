@@ -604,7 +604,7 @@ describe('Backup freshest-first on an s3 mount', () => {
             [`${docFolderName}/data.db`, `.trash/${trashedFileId}.png`, 'Nested/nested.txt', 'kept.png'].sort(),
         );
         // Every file row in the paths table, and nothing else.
-        expect(archived.length).toBe(await fullMount.getFileCount());
+        expect(archived.length).toBe((await fullMount.getFileTotals()).fileCount);
 
         expect(await archiveBytes(folder, `${prefix}kept.png`)).toEqual(TEST_PNG_BYTES);
         expect(await archiveBytes(folder, `${prefix}Nested/nested.txt`)).toEqual(nestedFileBytes);

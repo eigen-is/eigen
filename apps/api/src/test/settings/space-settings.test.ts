@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive';
+import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive-view';
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { THEMES } from '@workspace/lib/types/settings';
 import { assertJson, authedRequest, getTestContext } from '../setup';

@@ -6,7 +6,7 @@
 
 import { DEFAULT_RELAY_PORT, defaultSenderAddress } from '@workspace/lib/constants/mail';
 import type { ImipMethod } from '@workspace/lib/types/calendar';
-import { ICS_MIME } from '@workspace/lib/types/drive';
+import { ICS_MIME } from '@workspace/lib/types/file-kinds';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import nodemailer from 'nodemailer';

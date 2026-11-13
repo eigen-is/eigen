@@ -6,6 +6,7 @@ import {
     authedRequest,
     driveGet,
     driveGetList,
+    drivePut,
     driveUpload,
     getTestContext,
     setMaxUploadSizeMB,
@@ -137,6 +138,20 @@ describe.skipIf(isWindows)('Mail — Drive Attachment Integration', () => {
             expect(data.filename).toBe('from-drive.txt');
             expect(data.contentType).toStartWith('text/plain');
             expect(data.size).toBe('drive-content'.length);
+        });
+
+        test('a renamed drive file is attached under its new name', async () => {
+            const { sessionToken, id } = ctx.alice.user;
+            const file = new File(['drive-content'], 'attach-draft.txt', { type: 'text/plain' });
+            const drivePath = await driveUpload<DrivePath>(sessionToken, id, mountId, aliceRootId, file);
+            await drivePut(sessionToken, id, mountId, `path/${drivePath.id}/rename`, { newName: 'attach-final.txt' });
+
+            const res = await attachFromDrive(sessionToken, id, {
+                sourceOwnerId: drivePath.ownerId,
+                sourceMountId: drivePath.mountId,
+                sourcePathId: drivePath.id,
+            });
+            expect((await assertJson<{ filename: string }>(res)).filename).toBe('attach-final.txt');
         });
 
         test("rejects Alice attaching Bob's private file", async () => {

@@ -464,9 +464,9 @@ export async function capUserDrive(userId: string, mountId: string, maxSizeMB: n
     const snapshot = { ...home.drive.getMountConfig(mountId) };
     const defaultMB = getServerSettings().quotas.defaultMountMaxSizeMB;
     await updateServerSettings({ quotas: { defaultMountMaxSizeMB: maxSizeMB } });
-    await home.drive.updateMount({ ...snapshot, maxSizeMB }, true);
+    home.drive.updateMount({ ...snapshot, maxSizeMB });
     return async () => {
-        await home.drive.updateMount(snapshot, true);
+        home.drive.updateMount(snapshot);
         await updateServerSettings({ quotas: { defaultMountMaxSizeMB: defaultMB } });
     };
 }

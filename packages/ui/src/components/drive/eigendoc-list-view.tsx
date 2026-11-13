@@ -1,52 +1,44 @@
 // A document app's own index, such as all of the viewer's sheets or the docs on one team drive,
-// drawn in Drive's list and detail layout. A row opens its document in the app. The app's index and
-// team drive routes render it, and the selection lives in the URL they own.
+// drawn in Drive's list and detail layout. A row opens its document in the app. An app's routes, such as
+// its index, render it and hand over themselves, so the view reads its params, the selection and the
+// viewer from that route, and a selected row goes into its URL.
 
 import { openDocument } from '@workspace/lib/api';
-import {
-    DEFAULT_MOUNT_ID,
-    useAggregateMimeContent,
-    useMimeContent,
-    useMountMimeContent,
-    usePathInfo,
-} from '@workspace/lib/drive';
-import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
-import { isDocumentType } from '@workspace/lib/types/drive';
+import type { AuthUser } from '@workspace/lib/auth';
+import type { validateDriveSearch } from '@workspace/lib/drive';
+import { useAggregateMimeContent, useMountMimeContent, usePathInfo } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveSearchParams } from '@workspace/lib/types/drive-view';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { useContext } from 'react';
-import { useLayout } from '../layout/app/layout-context';
 import { DRIVE_CAPABILITIES } from './drive-capabilities';
 import { DriveLayout } from './drive-layout';
 import type { EigenDocAppConfig } from './eigendoc-config';
 import { EigenDocDriveContext } from './eigendoc-root';
-import { useDriveQuickLook } from './use-drive-quick-look';
+import { useDriveListRoute } from './use-drive-list-route';
+
+// An app route typed by its shape, as each app has its own route tree; a search without validateDriveSearch fails to
+// compile through `types`. Its navigate keeps the route and its params, so it changes only the search.
+export type EigenDocListRoute<TParams> = {
+    types: { searchValidator: typeof validateDriveSearch };
+    useParams: () => TParams;
+    useSearch: () => DriveSearchParams;
+    useRouteContext: () => { user: AuthUser };
+    useNavigate: () => (options: { search?: DriveSearchParams }) => Promise<void>;
+};
 
 type EigenDocListViewProps = {
     config: EigenDocAppConfig;
-    viewerId: string;
-    pid?: string;
-    uid?: string;
-    mid?: string;
-    ownerId?: string;
-    mountId?: string;
-    // Move to… works inside the layout's one owner and mount, so it is safe only in a list of one mount.
-    // The default index spans several mounts and shared items, so moving is off unless a route asks.
-    allowMove?: boolean;
-    onNavigate: (search: DriveSearchParams) => void;
-    onNavigateBack: () => void;
+    // The index names no drive, and a team drive's route names both its owner and its mount.
+    route: EigenDocListRoute<{ ownerId?: undefined; mountId?: undefined } | { ownerId: string; mountId: string }>;
 };
 
-export function EigenDocListView({
-    config,
-    viewerId,
-    pid,
-    uid,
-    mid,
-    ownerId,
-    mountId,
-    allowMove = false,
-    onNavigate,
-    onNavigateBack,
-}: EigenDocListViewProps) {
+export function EigenDocListView({ config, route }: EigenDocListViewProps) {
+    const { ownerId, mountId } = route.useParams();
+    const { pid, uid, mid } = route.useSearch();
+    const viewerId = route.useRouteContext().user.id;
+    const navigate = route.useNavigate();
+    const clearSelection = () => navigate({});
     const { rootPath } = useContext(EigenDocDriveContext);
     const effectiveOwnerId = ownerId ?? viewerId;
     const isMountScoped = !!mountId;
@@ -55,33 +47,24 @@ export function EigenDocListView({
     // The default index also lists items others shared with the viewer, so the selected item's owner, the
     // `uid` in the URL, can differ from the list's owner.
     const { data: selectedPath = null } = usePathInfo(uid || effectiveOwnerId, effectiveMountId, pid);
-    const { isMobile } = useLayout();
     const capabilities = {
         ...DRIVE_CAPABILITIES.listing,
-        canMove: allowMove,
+        // The other lists also hold items shared with the viewer, whose drive the move picker can't open.
+        canMove: isMountScoped,
         createTypes: new Set([config.type]),
     };
-    const onQuickLook = useDriveQuickLook(capabilities.canWrite);
 
-    // The viewer's own index gathers their personal drive and all their team drives. Another owner without
-    // a mount gets a plain listing of that owner, and a view with a mount lists only that mount.
-    const isOwnAggregate = !isMountScoped && effectiveOwnerId === viewerId;
-    const aggregate = useAggregateMimeContent(isOwnAggregate ? config.mimeType : '');
-    const ownerScoped = useMimeContent(isMountScoped || isOwnAggregate ? '' : effectiveOwnerId, config.mimeType);
-    const mountScoped = useMountMimeContent(isMountScoped ? effectiveOwnerId : '', mountId ?? '', config.mimeType);
-    const {
-        data: folderContents = [],
-        isLoading,
-        error,
-    } = isMountScoped ? mountScoped : isOwnAggregate ? aggregate : ownerScoped;
+    // The index gathers the viewer's personal drive and all their team drives; a team drive lists only its mount.
+    const aggregate = useAggregateMimeContent(isMountScoped ? '' : config.mimeType);
+    const mountScoped = useMountMimeContent(ownerId ?? '', mountId ?? '', config.mimeType);
+    const { data: folderContents = [], isLoading, error } = isMountScoped ? mountScoped : aggregate;
 
-    const onRowSelect = (path: DrivePath) => {
-        if (isMobile && isDocumentType(path.type)) {
-            openDocument(path);
-        } else {
-            onNavigate({ pid: path.id, uid: path.ownerId, mid: path.mountId });
-        }
-    };
+    const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
+        items: folderContents,
+        capabilities,
+        onOpenFolder: openDocument,
+        onSelectItem: (path: DrivePath) => navigate({ search: { pid: path.id, uid: path.ownerId, mid: path.mountId } }),
+    });
 
     return (
         <DriveLayout
@@ -93,10 +76,10 @@ export function EigenDocListView({
             isLoading={isLoading}
             error={error}
             onRowSelect={onRowSelect}
-            onRowActivate={openDocument}
+            onRowActivate={onRowActivate}
             onQuickLook={onQuickLook}
-            onBackToList={onNavigateBack}
-            onAfterAction={onNavigateBack}
+            onBackToList={clearSelection}
+            onAfterAction={clearSelection}
             capabilities={capabilities}
             title={config.allLabel}
             currentPath={rootPath}

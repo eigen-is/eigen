@@ -38,7 +38,7 @@ Before applying anything, `runMigrations` refuses a database whose stamp is high
 
 A stamp that is not an integer is refused the same way (503 `unreadable schema stamp`). Only Eigen's migrations write it, and a non-number compares false against every migration, so the database would open with nothing migrated and fail on its first query instead.
 
-A missing stamp row is recreated at 0 by `INSERT OR IGNORE`, and every migration runs again. The `CREATE ... IF NOT EXISTS` steps pass. The first step that can't run twice, such as an `ADD COLUMN` or a `DROP COLUMN`, fails inside its transaction, and the open fails. A database whose migrations can all run twice just opens: collab, the share registry and `waitlist.db`, each a single v1 of `IF NOT EXISTS` steps, and `shared.db`, whose v1 and v2 are such steps too.
+A missing stamp row is recreated at 0 by `INSERT OR IGNORE`, and every migration runs again. The `CREATE ... IF NOT EXISTS` steps pass. The first step that can't run twice, such as an `ADD COLUMN` or a `DROP COLUMN`, fails inside its transaction, and the open fails. A database whose migrations can all run twice just opens: collab, the share registry and `waitlist.db`, each a single v1 of `IF NOT EXISTS` steps. `shared.db` is not one: its v3 rebuilds `shared_paths` from the old columns, which a second run doesn't find.
 
 ## The dirty watermark moves only after `onSync` returns
 
@@ -70,7 +70,7 @@ Every open sets `journal_mode=WAL`, `foreign_keys=ON` and `busy_timeout=5000`. A
 
 Every open, create and close of one container database runs through `withDocumentDb` (`apps/api/src/lib/mount/document-db.ts`), one at a time and in call order. So a fresh instance never shares a closing one's temp or journal files. The slot holds the live instance only while it is open. A close clears it before closing, so a snapshot read mid-close never sees the closing instance. It is a promise chain rather than `withPathLock`, because `has` must also see queued opens and closes.
 
-Once `closeAllDatabases` starts its sweep, after the downloads abort, the reindex drain and the thumbnail wait, a new open is refused with a 503. The lock order is in [STORAGE.md](STORAGE.md#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree).
+Once `closeAllDatabases` starts its sweep, after the downloads abort, the reindex drain and the wait for the mount's background jobs, a new open is refused with a 503. The lock order is in [STORAGE.md](STORAGE.md#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree).
 
 ## A reader holds a container database only while it runs
 

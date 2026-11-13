@@ -1,9 +1,9 @@
 import { S3_ABORT_INCOMPLETE_UPLOAD_DAYS, S3_LIFECYCLE_RULE_ID } from '@workspace/lib/constants/s3';
 import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
 import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
-import type { BunFile, S3File } from 'bun';
+import type { S3File } from 'bun';
 import { S3Client } from 'bun';
-import type { XmlElement } from '../core';
+import type { WriteData, XmlElement } from '../core';
 import { ApiError, parseXml, storageUnavailable, xmlChild, xmlChildren, xmlElements, xmlText } from '../core';
 import { errnoOf, storageRead, withStorageDeadline } from './deadline';
 import type { S3Config, StorageBackend } from './types';
@@ -347,7 +347,7 @@ export class S3Storage implements StorageBackend {
         return this.client.file(this.getKey(key));
     }
 
-    public write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+    public write(key: string, data: WriteData): Promise<number> {
         return this.read(key).write(data);
     }
 

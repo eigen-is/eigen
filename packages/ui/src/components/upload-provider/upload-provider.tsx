@@ -1,16 +1,16 @@
+// The upload chips in the corner of every app: a hook that sends a file, such as Drive's Upload files or a
+// contact's avatar, opens a chip through useUpload and moves it to its progress, done or failed. A chip whose
+// upload can be cancelled shows a cancel button. EigenApp mounts the provider around every app.
+
 import type React from 'react';
 import { createContext, useContext, useState } from 'react';
 import { UploadContainer } from './upload-container';
 
-type UploadStatus = 'uploading' | 'completed' | 'error';
-type UploadId = string;
-
 export type UploadItem = {
-    id: UploadId;
+    id: string;
     filename: string;
     progress: number;
-    status: UploadStatus;
-    errorMessage?: string;
+    status: 'uploading' | 'completed' | 'error';
     cancelFn?: () => void;
 };
 
@@ -19,13 +19,10 @@ type UploadContextValue = {
         filename: string,
         cancelFn?: () => void,
     ) => {
-        id: UploadId;
         updateProgress: (progress: number) => void;
         complete: () => void;
-        error: (message?: string) => void;
-        cancel: () => void;
+        error: () => void;
     };
-    removeUpload: (id: UploadId) => void;
 };
 
 const UploadContext = createContext<UploadContextValue | undefined>(undefined);
@@ -33,67 +30,38 @@ const UploadContext = createContext<UploadContextValue | undefined>(undefined);
 export function UploadProvider({ children }: { children: React.ReactNode }) {
     const [uploads, setUploads] = useState<UploadItem[]>([]);
 
+    const update = (id: string, change: Partial<UploadItem>) =>
+        setUploads((prev) => prev.map((upload) => (upload.id === id ? { ...upload, ...change } : upload)));
+    const remove = (id: string) => setUploads((prev) => prev.filter((upload) => upload.id !== id));
+
     const contextValue: UploadContextValue = {
         createUpload: (filename, cancelFn) => {
             const id = crypto.randomUUID();
-
-            const newUpload: UploadItem = {
-                id,
-                filename,
-                progress: 0,
-                status: 'uploading',
-                cancelFn,
-            };
-
-            setUploads((prev) => [...prev, newUpload]);
-
+            setUploads((prev) => [...prev, { id, filename, progress: 0, status: 'uploading', cancelFn }]);
             return {
-                id,
-                updateProgress: (progress) => {
-                    setUploads((prev) => prev.map((upload) => (upload.id === id ? { ...upload, progress } : upload)));
-                },
+                updateProgress: (progress) => update(id, { progress }),
                 complete: () => {
-                    setUploads((prev) =>
-                        prev.map((upload) =>
-                            upload.id === id ? { ...upload, status: 'completed', progress: 100 } : upload,
-                        ),
-                    );
-                    // Auto-remove after 1 second
-                    setTimeout(() => {
-                        setUploads((prev) => prev.filter((upload) => upload.id !== id));
-                    }, 1000);
+                    update(id, { status: 'completed', progress: 100 });
+                    setTimeout(() => remove(id), 1000);
                 },
-                error: (message) => {
-                    setUploads((prev) =>
-                        prev.map((upload) =>
-                            upload.id === id ? { ...upload, status: 'error', errorMessage: message } : upload,
-                        ),
-                    );
-                    // Auto-remove after 3 seconds
-                    setTimeout(() => {
-                        setUploads((prev) => prev.filter((upload) => upload.id !== id));
-                    }, 3000);
-                },
-                cancel: () => {
-                    // Call the cancelFn if it exists
-                    if (cancelFn) cancelFn();
-                    setUploads((prev) => prev.filter((upload) => upload.id !== id));
+                // A failed chip stays longer, so it is read.
+                error: () => {
+                    update(id, { status: 'error' });
+                    setTimeout(() => remove(id), 3000);
                 },
             };
         },
-        removeUpload: (id) => {
-            // Get the upload to check if it has a cancelFn
-            const upload = uploads.find((u) => u.id === id);
-            if (upload?.cancelFn) upload.cancelFn();
+    };
 
-            setUploads((prev) => prev.filter((upload) => upload.id !== id));
-        },
+    const cancel = (upload: UploadItem) => {
+        upload.cancelFn?.();
+        remove(upload.id);
     };
 
     return (
         <UploadContext.Provider value={contextValue}>
             {children}
-            <UploadContainer uploads={uploads} onRemove={contextValue.removeUpload} />
+            <UploadContainer uploads={uploads} onCancel={cancel} />
         </UploadContext.Provider>
     );
 }

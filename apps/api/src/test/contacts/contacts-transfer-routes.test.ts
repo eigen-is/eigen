@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { VCARD_MIMES } from '@workspace/lib/types/drive';
+import { VCARD_MIMES } from '@workspace/lib/types/file-kinds';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { splitVCards } from '../../lib/vcard';
 import { basicAuth, DAV_PASSWORD } from '../dav-test-helpers';

@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, jest, test } from 'bun:test';
+import { LOCK_DEFAULT_TTL_MS } from '../../lib/drive/lock-manager';
 import { getHome } from '../../lib/home';
 import { DAV_PASSWORD } from '../dav-test-helpers';
 import type { TestUser } from '../setup';
@@ -76,27 +77,33 @@ describe('a WebDAV lock holds its Home', () => {
 
     // A lock on a file in a folder that goes away, by a WebDAV DELETE or MOVE or by the trash in the web
     // app, can never be refreshed or unlocked at its URL again. It must not hold the Home.
-    async function lockedFileInFolder(user: TestUser): Promise<{ folderUrl: string; folderName: string }> {
+    type LockedFolder = { folderUrl: string; folderName: string; token: string };
+
+    async function lockedFileInFolder(user: TestUser): Promise<LockedFolder> {
         const mountId = await getDefaultMountId(user.sessionToken, user.id);
         const folderName = `folder-${crypto.randomUUID()}`;
         const folderUrl = `/webdav/${user.id}/${mountId}/${folderName}`;
         expect((await webdavRequest(user.email, 'MKCOL', folderUrl)).status).toBe(201);
-        await lockedFile(user, 'Second-3600', `${folderName}/locked.txt`);
-        return { folderUrl, folderName };
+        const { token } = await lockedFile(user, 'Second-3600', `${folderName}/locked.txt`);
+        return { folderUrl, folderName, token };
     }
 
-    const removals: [string, (user: TestUser, folder: { folderUrl: string; folderName: string }) => Promise<void>][] = [
+    // The folder goes only with the token of the lock inside it.
+    const removals: [string, (user: TestUser, folder: LockedFolder) => Promise<void>][] = [
         [
             'a WebDAV DELETE of the folder',
-            async (user, { folderUrl }) => {
-                expect((await webdavRequest(user.email, 'DELETE', folderUrl)).status).toBe(204);
+            async (user, { folderUrl, token }) => {
+                const removed = await webdavRequest(user.email, 'DELETE', folderUrl, {
+                    headers: { If: `(<${token}>)` },
+                });
+                expect(removed.status).toBe(204);
             },
         ],
         [
             'a WebDAV MOVE of the folder',
-            async (user, { folderUrl }) => {
+            async (user, { folderUrl, token }) => {
                 const moved = await webdavRequest(user.email, 'MOVE', folderUrl, {
-                    headers: { Destination: `${folderUrl}-moved` },
+                    headers: { Destination: `${folderUrl}-moved`, If: `(<${token}>)` },
                 });
                 expect(moved.status).toBe(201);
             },
@@ -134,7 +141,16 @@ describe('a WebDAV lock holds its Home', () => {
         const home = await getHome(user.id);
         const closing = home.close();
         expect(() =>
-            home.drive.lockManager.acquire({ pathId: 'p', depth: 0, scope: 'exclusive', userId: user.id }),
+            home.drive.lockManager.acquire({
+                pathId: 'p',
+                depth: 0,
+                scope: 'exclusive',
+                userId: user.id,
+                ttlMs: LOCK_DEFAULT_TTL_MS,
+                ifHeader: null,
+                ancestorPathIds: [],
+                descendantPathIds: [],
+            }),
         ).toThrow('Home is closing');
         await closing;
     });

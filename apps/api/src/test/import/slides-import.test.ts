@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { PPTX_MIME } from '@workspace/lib/constants/mime';
-import type { DocumentImportOptions, DrivePath, ImportResult } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DocumentImportOptions, ImportResult } from '@workspace/lib/types/drive-convert';
 import type { VectorScene } from '@workspace/lib/vector';
 import { readVectorFromDoc, SLIDES_STYLE_DEFAULTS, writeElementInDoc, writeFrameInDoc } from '@workspace/lib/vector';
 import { ApiError } from '../../lib/core';

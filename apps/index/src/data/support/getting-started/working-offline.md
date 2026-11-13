@@ -6,7 +6,7 @@ category: Basics
 tags: [offline, sync, editing, troubleshooting, getting-started]
 related: [getting-started/your-first-steps, drive/file-versions]
 order: 7
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 Documents, spreadsheets, presentations, drawings, and boards save themselves as you type, which means they need the server. This page explains what you see when the connection to it goes away for a moment, and what happens to the work you did meanwhile.
@@ -37,7 +37,7 @@ The same check covers reloading the page and closing the tab, where your browser
 
 **What it means:** the connection is fine, but the server cannot reach the place your document is stored. The crossed-out wifi icon appears again, and clicking it says "Storage is temporarily unavailable, retrying. Edits will sync when it is back".
 
-**What to do:** the same as being offline. Keep your tab open and Eigen retries every few seconds by itself. This one is usually a problem on the server rather than on your side, so if it lasts more than a few minutes, tell whoever runs your Eigen.
+**What to do:** the same as being offline. Keep your tab open and Eigen retries every few seconds by itself. This one is usually a problem on the server rather than on your side, so if it lasts more than a few minutes, tell whoever runs your Eigen. In a team's documents it also shows for a few seconds when an admin gives one of the team's drives new storage or turns one on or off.
 
 ## The document is slow to open
 

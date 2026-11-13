@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, upload, files]
 related: [drive/get-started]
 order: 30
-updated: 2026-09-13
+updated: 2026-11-12
 ---
 
 You can upload files to Drive in two ways: through the **New** menu, or by dragging files from your computer directly onto the file list.
@@ -18,7 +18,7 @@ You can upload files to Drive in two ways: through the **New** menu, or by dragg
 3. Choose **Upload file** from the menu.
 4. A file picker opens. Select one or more files, then click **Open** (or **Choose** on macOS).
 
-Drive uploads all the files you selected and adds them to the current folder. While the upload is running, a small progress indicator appears in the bottom-right corner of the screen. It disappears automatically once the upload finishes.
+Drive uploads all the files you selected and adds them to the current folder. While the upload is running, a small progress indicator appears in the bottom-right corner of the screen. It disappears automatically once the upload finishes. To stop an upload, click the **×** on its progress card.
 
 ## Upload by dragging files
 

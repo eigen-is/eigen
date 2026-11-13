@@ -79,6 +79,7 @@
     "./components/vector": "./src/components/vector/index.ts",
     "./hooks/*": "./src/hooks/*.ts",
     "./test/canvas-image": "./src/test/canvas-image.ts",
+    "./test/closing-dialog": "./src/test/closing-dialog.ts",
     "./test/context-menu-event": "./src/test/context-menu-event.ts",
     "./test/drive-path": "./src/test/drive-path.ts",
     "./test/happy-dom": "./src/test/happy-dom.ts",

@@ -1,24 +1,25 @@
 // The Drive action runner: performs a Drive action on a set of items, such as rename, move, share or
-// delete, and owns the dialogs behind them. DriveLayout builds one and hands it to the list, the detail
-// column and the toolbar. Which rows apply comes from driveActionsFor, read through the view's
+// delete, and owns the dialogs behind them. A layout such as DriveLayout builds one and hands it to its
+// list, detail column and toolbar. Which rows apply comes from driveActionsFor, read through the view's
 // capabilities: the item menu and the command palette draw those rows, and run refuses any other.
 
 import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import {
-    copiesBeside,
-    PartialCopyError,
-    useCopyPaths,
+    PartialBatchError,
     useCopyToFolder,
     useDeletePaths,
     useDriveActionsFor,
+    useDuplicatePaths,
     useIsEffectiveOwnerOf,
-    useMovePath,
+    useMovePaths,
 } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
-import type { DriveCapabilities, DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
+import type { DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { DriveAction, DriveActionId } from '@workspace/lib/types/drive-actions';
+import type { DriveCapabilities } from '@workspace/lib/types/drive-view';
+import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 import { DriveAccessDialog } from './drive-access-dialog';
@@ -28,9 +29,11 @@ import { DriveDeleteItem } from './drive-delete-item';
 import { DriveEmailCollaborators } from './drive-email-collaborators';
 import { DriveLocationPicker } from './drive-location-picker';
 import { DriveRenameItem } from './drive-rename-item';
-import { DriveUploadFiles } from './drive-upload-files';
 import { ExportProgressDialog, useDocumentExport } from './use-document-export';
-import { useDriveDialogs } from './use-drive-dialogs';
+import { useDriveUploadFiles } from './use-drive-upload-files';
+
+// The picker behind Move to and Copy to, with the items it was opened for.
+type CopyMove = { items: readonly DrivePath[]; mode: 'move' | 'copy' };
 
 type UseDriveActionRunnerOptions = {
     ownerId: string;
@@ -49,7 +52,7 @@ export type DriveActionRunner = {
     // Does nothing for a row the items don't offer. Download as… names its format.
     run: (id: DriveActionId, items: readonly DrivePath[], format?: ExportFormat) => void;
     // A drag onto a folder row, absent where the view can't move.
-    onMove?: (path: DrivePath, targetItemId: string) => Promise<void>;
+    onMove?: (path: DrivePath, targetItemId: string) => void;
     onCreateFolder?: () => void;
     onCreateEigenDoc: Partial<Record<EigenDocType, () => void>>;
     onUploadFile?: () => void;
@@ -66,53 +69,68 @@ export function useDriveActionRunner({
     onOpen,
     onAfterAction,
 }: UseDriveActionRunnerOptions): DriveActionRunner {
-    const dialogs = useDriveDialogs();
-    const movePath = useMovePath(ownerId, mountId, currentPath?.id);
+    // One create dialog is open at a time, so the value says which.
+    const createDialog = useDialogValue<EigenDocType | 'folder'>();
+    const deleteDialog = useDialogValue<readonly DrivePath[]>();
+    const renameDialog = useDialogValue<DrivePath>();
+    const shareDialog = useDialogValue<DrivePath>();
+    const emailDialog = useDialogValue<DrivePath>();
+    const copyMoveDialog = useDialogValue<CopyMove>();
+    const movePathsMutation = useMovePaths();
     const { mutateAsync: copyToFolder } = useCopyToFolder();
-    const { mutate: copyPaths } = useCopyPaths();
+    const { mutate: duplicatePaths } = useDuplicatePaths();
     const deletePathsMutation = useDeletePaths();
     const isCoarsePointer = useIsCoarsePointer();
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
     const actionsFor = useDriveActionsFor(capabilities);
     const { exportPath, isExporting } = useDocumentExport();
+    const uploads = useDriveUploadFiles(currentPath, onAfterAction);
 
-    // A delete asks first on touch, where a tap can land on the wrong row and nothing hovers to warn of it.
-    // It asks too for an item in someone else's drive, where it leaves a direct share or trashes the owner's
-    // copy. With a mouse in the viewer's own drive, it deletes at once.
+    const afterDelete = (deleted: readonly DrivePath[]) => {
+        for (const path of deleted) onAfterAction?.('delete', path);
+    };
+
+    // A delete asks first on touch, where a tap can land on the wrong row, and for an item in someone else's
+    // drive, where it leaves a direct share or trashes the owner's copy.
     const deletePaths = (paths: readonly DrivePath[]) => {
         if (isCoarsePointer || paths.some((path) => !isEffectiveOwnerOf(path.ownerId))) {
-            dialogs.delete.openDialog(paths);
+            deleteDialog.openDialog(paths);
             return;
         }
         deletePathsMutation.mutate(paths, {
-            onSuccess: () => {
-                for (const path of paths) onAfterAction?.('delete', path);
+            onSuccess: afterDelete,
+            onError: (error) => {
+                if (error instanceof PartialBatchError) afterDelete(error.succeeded);
             },
         });
     };
 
-    const handlePickDestination = async (location: { ownerId: string; mountId: string; folderId: string }) => {
-        const items = dialogs.copyMove.items;
-        if (dialogs.copyMove.mode === 'move') {
-            if (location.ownerId !== ownerId || location.mountId !== mountId) {
-                toast.error('Moving across drives isn’t supported yet. Use Copy to… instead.');
-                return;
-            }
-            await Promise.all(
-                items.map((item) => movePath.mutateAsync({ pathId: item.id, targetParentId: location.folderId })),
-            );
-        } else {
-            await copyToFolder({
-                items,
-                targetOwnerId: location.ownerId,
-                targetMountId: location.mountId,
-                targetParentId: location.folderId,
-            }).catch((error) => {
-                // The picker stays open, and a retry sends only the failures, or what copied would land twice.
-                if (error instanceof PartialCopyError) dialogs.copyMove.openDialog(error.failed, 'copy');
-                throw error;
-            });
+    const copyMove = copyMoveDialog.value;
+    // A move never leaves its item's drive, so its picker starts there. A copy starts in the view's drive.
+    const pickerDrive = copyMove?.mode === 'move' ? copyMove.items[0] : { ownerId, mountId };
+
+    const handlePickDestination = async (
+        { items, mode }: CopyMove,
+        location: { ownerId: string; mountId: string; folderId: string },
+    ) => {
+        const leavesDrive = (item: DrivePath) => item.ownerId !== location.ownerId || item.mountId !== location.mountId;
+        if (mode === 'move' && items.some(leavesDrive)) {
+            toast.error('Moving across drives isn’t supported yet. Use Copy to… instead.');
+            return;
         }
+        const done =
+            mode === 'move'
+                ? movePathsMutation.mutateAsync({ paths: items, targetParentId: location.folderId })
+                : copyToFolder({
+                      items,
+                      targetOwnerId: location.ownerId,
+                      targetMountId: location.mountId,
+                      targetParentId: location.folderId,
+                  });
+        await done.catch((error: unknown) => {
+            if (error instanceof PartialBatchError) copyMoveDialog.openDialog({ items: error.failed, mode });
+            throw error;
+        });
     };
 
     const run = (id: DriveActionId, items: readonly DrivePath[], format?: ExportFormat) => {
@@ -128,25 +146,25 @@ export function useDriveActionRunner({
                 return;
             }
             case 'rename':
-                dialogs.rename.openDialog(item);
+                renameDialog.openDialog(item);
                 return;
             case 'duplicate':
-                copyPaths(copiesBeside(items));
+                duplicatePaths(items);
                 return;
             case 'move-to':
-                dialogs.copyMove.openDialog(items, 'move');
+                copyMoveDialog.openDialog({ items, mode: 'move' });
                 return;
             case 'copy-to':
-                dialogs.copyMove.openDialog(items, 'copy');
+                copyMoveDialog.openDialog({ items, mode: 'copy' });
                 return;
             case 'download-as':
                 if (format) exportPath(item, format);
                 return;
             case 'share':
-                dialogs.share.openDialog(item);
+                shareDialog.openDialog(item);
                 return;
             case 'email-collaborators':
-                dialogs.email.openDialog(item);
+                emailDialog.openDialog(item);
                 return;
             case 'copy-link':
                 copyToClipboard(getDriveShareUrl(item), 'Link copied to clipboard');
@@ -164,7 +182,7 @@ export function useDriveActionRunner({
     const createTypes = capabilities.createTypes ?? new Set<EigenDocType>(EIGEN_DOC_TYPES);
     const onCreateEigenDoc: Partial<Record<EigenDocType, () => void>> = {};
     for (const type of EIGEN_DOC_TYPES) {
-        if (createTypes.has(type)) onCreateEigenDoc[type] = dialogs.create[type].openDialog;
+        if (createTypes.has(type)) onCreateEigenDoc[type] = () => createDialog.openDialog(type);
     }
 
     return {
@@ -172,28 +190,18 @@ export function useDriveActionRunner({
         actionsFor,
         run,
         onMove: capabilities.canMove
-            ? async (path, targetItemId) => {
-                  await movePath.mutateAsync({ pathId: path.id, targetParentId: targetItemId });
-              }
+            ? (path, targetItemId) => movePathsMutation.mutate({ paths: [path], targetParentId: targetItemId })
             : undefined,
-        onCreateFolder: capabilities.canCreateFolder ? dialogs.createFolder.openDialog : undefined,
+        onCreateFolder: capabilities.canCreateFolder ? () => createDialog.openDialog('folder') : undefined,
         onCreateEigenDoc,
-        onUploadFile: capabilities.canUpload
-            ? () => {
-                  if (currentPath) dialogs.upload.openDialog();
-              }
-            : undefined,
-        onUploadFiles: capabilities.canUpload
-            ? (files) => {
-                  if (currentPath && files.length > 0) dialogs.upload.openDialog(files);
-              }
-            : undefined,
+        onUploadFile: capabilities.canUpload ? uploads.pickFiles : undefined,
+        onUploadFiles: capabilities.canUpload ? uploads.upload : undefined,
         dialogs: (
             <>
                 {capabilities.canCreateFolder && (
                     <DriveCreateFolder
-                        open={dialogs.createFolder.open}
-                        onOpenChange={dialogs.createFolder.setOpen}
+                        open={createDialog.open && createDialog.value === 'folder'}
+                        onOpenChange={createDialog.setOpen}
                         defaultOwnerId={currentPath?.ownerId}
                         defaultFolderId={currentPath?.id}
                         defaultMountId={currentPath?.mountId}
@@ -205,82 +213,69 @@ export function useDriveActionRunner({
                     <DriveCreateEigenDoc
                         key={type}
                         type={type}
-                        open={dialogs.create[type].open}
-                        onOpenChange={dialogs.create[type].setOpen}
+                        open={createDialog.open && createDialog.value === type}
+                        onOpenChange={createDialog.setOpen}
                         defaultOwnerId={currentPath?.ownerId}
                         defaultFolderId={currentPath?.id}
                         defaultMountId={currentPath?.mountId}
                     />
                 ))}
 
-                {capabilities.canUpload && currentPath && (
-                    <DriveUploadFiles
-                        path={currentPath}
-                        open={dialogs.upload.open}
-                        onOpenChange={dialogs.upload.setOpen}
-                        initialFiles={dialogs.upload.files}
-                        onAfterUpload={dialogs.upload.closeDialog}
-                        onAfterAction={onAfterAction}
-                    />
-                )}
+                {capabilities.canUpload && currentPath && uploads.input}
 
-                {dialogs.rename.item && (
+                {renameDialog.value && (
                     <DriveRenameItem
-                        path={dialogs.rename.item}
-                        open={dialogs.rename.open}
-                        onOpenChange={dialogs.rename.setOpen}
+                        path={renameDialog.value}
+                        open={renameDialog.open}
+                        onOpenChange={renameDialog.setOpen}
                         onAfterAction={onAfterAction}
                     />
                 )}
 
-                <DriveAccessDialog
-                    open={dialogs.share.open}
-                    onOpenChange={dialogs.share.setOpen}
-                    path={dialogs.share.item}
-                />
-
-                {dialogs.email.item && (
-                    <DriveEmailCollaborators
-                        path={dialogs.email.item}
-                        open={dialogs.email.open}
-                        onOpenChange={(open) => {
-                            if (!open) dialogs.email.closeDialog();
-                            else dialogs.email.setOpen(open);
-                        }}
+                {shareDialog.value && (
+                    <DriveAccessDialog
+                        path={shareDialog.value}
+                        open={shareDialog.open}
+                        onOpenChange={shareDialog.setOpen}
                     />
                 )}
 
-                <DriveLocationPicker
-                    open={dialogs.copyMove.open}
-                    onOpenChange={(open) => {
-                        if (!open) dialogs.copyMove.closeDialog();
-                        else dialogs.copyMove.setOpen(open);
-                    }}
-                    mode="folder"
-                    title={dialogs.copyMove.mode === 'move' ? 'Move to' : 'Copy to'}
-                    confirmLabel={dialogs.copyMove.mode === 'move' ? 'Move here' : 'Copy here'}
-                    defaultOwnerId={ownerId}
-                    defaultMountId={mountId}
-                    // currentPath can sit on another drive: a document app's index passes the viewer's own root
-                    // while a team drive item is selected. So it seeds the start folder only when it is on the
-                    // layout's drive, and the picker starts at that drive's root otherwise.
-                    defaultFolderId={
-                        currentPath?.ownerId === ownerId && currentPath?.mountId === mountId
-                            ? currentPath?.id
-                            : undefined
-                    }
-                    onConfirm={handlePickDestination}
-                />
+                {emailDialog.value && (
+                    <DriveEmailCollaborators
+                        path={emailDialog.value}
+                        open={emailDialog.open}
+                        onOpenChange={emailDialog.setOpen}
+                    />
+                )}
 
-                <DriveDeleteItem
-                    paths={dialogs.delete.items}
-                    open={dialogs.delete.open}
-                    onOpenChange={(open) => {
-                        if (!open) dialogs.delete.closeDialog();
-                        else dialogs.delete.setOpen(open);
-                    }}
-                    onAfterAction={onAfterAction}
-                />
+                {copyMove && (
+                    <DriveLocationPicker
+                        open={copyMoveDialog.open}
+                        onOpenChange={copyMoveDialog.setOpen}
+                        mode="folder"
+                        title={copyMove.mode === 'move' ? 'Move to' : 'Copy to'}
+                        confirmLabel={copyMove.mode === 'move' ? 'Move here' : 'Copy here'}
+                        defaultOwnerId={pickerDrive.ownerId}
+                        defaultMountId={pickerDrive.mountId}
+                        // The view's folder can sit on another drive than the picker's. Then it starts at the root.
+                        defaultFolderId={
+                            currentPath?.ownerId === pickerDrive.ownerId && currentPath.mountId === pickerDrive.mountId
+                                ? currentPath.id
+                                : undefined
+                        }
+                        onConfirm={(location) => handlePickDestination(copyMove, location)}
+                    />
+                )}
+
+                {deleteDialog.value && (
+                    <DriveDeleteItem
+                        paths={deleteDialog.value}
+                        open={deleteDialog.open}
+                        onOpenChange={deleteDialog.setOpen}
+                        onAfterAction={onAfterAction}
+                        onPartialFailure={deleteDialog.openDialog}
+                    />
+                )}
 
                 <ExportProgressDialog open={isExporting} />
             </>

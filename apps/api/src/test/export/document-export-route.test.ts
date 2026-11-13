@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { inflateSync } from 'node:zlib';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { EXPORT_SUMMARY_HEADER } from '@workspace/lib/types/drive';
+import { EXPORT_SUMMARY_HEADER } from '@workspace/lib/types/drive-convert';
 import { serializeFill } from '@workspace/lib/vector';
 import type { MathRow } from '@workspace/math';
 import { writeMathml } from '@workspace/math';

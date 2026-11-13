@@ -161,28 +161,21 @@ describe('ACL share email', () => {
         broadcast.mockRestore();
     });
 
-    test('trash + restore of a shared item name the actor, never "undefined"', async () => {
+    test('a trash and a restore of a shared item send the sharee no notice', async () => {
         const doc = await createDoc('trash-notify');
         await setAcl(doc.id, { add: [{ id: ctx.bob.user.email, read: true, write: false }] });
+        const bobsNotices = async () => {
+            const res = await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`);
+            return (await assertJson<Notification[]>(res)).filter((n) => n.body === 'trash-notify');
+        };
+        const shared = await bobsNotices();
+        expect(shared.map((n) => n.type)).toEqual(['share']);
 
-        // Trashing routes through the null-actor propagateSharedPathChange path, which must not
-        // render "undefined removed your access" for the sharee.
         await driveDelete(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${doc.id}`);
-        const afterTrash = await assertJson<Notification[]>(
-            await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
-        );
-        const unshared = afterTrash.find((n) => n.type === 'unshare' && n.body === 'trash-notify');
-        expect(unshared?.title).toBe(`${ctx.alice.user.name} removed your access`);
-        expect(afterTrash.every((n) => !n.title.includes('undefined'))).toBe(true);
+        expect(await bobsNotices()).toEqual(shared);
 
-        // Restoring re-inserts the mirror row → share branch, again naming the actor.
         await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `trash/${doc.id}/restore`, {});
-        const afterRestore = await assertJson<Notification[]>(
-            await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
-        );
-        const reshared = afterRestore.find((n) => n.tag === `share:${ctx.alice.user.id}:${aliceMountId}:${doc.id}`);
-        expect(reshared?.title).toBe(`${ctx.alice.user.name} shared a doc`);
-        expect(afterRestore.every((n) => !n.title.includes('undefined'))).toBe(true);
+        expect(await bobsNotices()).toEqual(shared);
     });
 
     // suppressShareEmail: 'all' — internal callers (e.g. mailed-document grants) suppress the

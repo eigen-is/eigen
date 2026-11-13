@@ -4,7 +4,7 @@
 
 import type { app } from '@apps/api';
 import { treaty } from '@elysiajs/eden';
-import type { DocumentImportOptions, DriveItemRef, DrivePath } from '../types/drive';
+import type { DriveItemRef, DrivePath } from '../types/drive';
 import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_DOC,
@@ -13,9 +13,9 @@ import {
     DRIVE_TYPE_STICKIES,
     DRIVE_TYPE_VECTOR,
     isFolderType,
-    isImageMime,
-    isInlineEditable,
 } from '../types/drive';
+import type { DocumentImportOptions } from '../types/drive-convert';
+import { isImageMime, isInlineEditable } from '../types/file-kinds';
 
 // A relative VITE_API_HOST (e.g. "/eigen") gets prefixed with window.location.origin at module load, so the same bundle
 // works on the public domain, a LAN IP or a tunnel. The WebSocket and SSE helpers need it absolute.
@@ -255,7 +255,7 @@ function getDocumentUrl(path: DriveItemRef): string | undefined {
 
 // Same tab always. See LAYOUT.md § Buttons navigate here, links in content open a new tab.
 export function openDocument(path: DriveItemRef) {
-    const url = getDocumentUrl(path);
+    const url = getDriveItemUrl(path);
     if (!url) {
         console.warn('Cannot open document. Unsupported type:', path.type);
         return;

@@ -93,7 +93,7 @@ test('Delete and Backspace run the row that shows the delete key, even after ano
 
 test('a folder is a drop target only where the view can move', () => {
     expect(render(runner([]).actions).isValidFolderDrop(folder)).toBe(false);
-    expect(render(runner([], async () => {}).actions).isValidFolderDrop(folder)).toBe(true);
+    expect(render(runner([], () => {}).actions).isValidFolderDrop(folder)).toBe(true);
 });
 
 const FILES = ['a', 'b', 'c', 'd'].map((id) =>

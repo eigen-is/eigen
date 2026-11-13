@@ -26,7 +26,7 @@ This proposal lets a user download an Eigen document from Drive as one file and 
 
 ## Current state
 
-**A document has no download.** `driveInfo` (`packages/lib/src/core/file-subject.ts`) gives a container no `downloadUrl`, so no Download row shows for it. Over WebDAV a document lists as a folder, and its `data.db` downloads byte for byte ([WEBDAV.md](../WEBDAV.md#a-document-container-is-a-folder-that-is-read-only-inside)).
+**A document has no download.** `driveInfo` (`packages/lib/src/core/file-subject.ts`) gives a container no `downloadUrl`, so no Download row shows for it. Over WebDAV a document lists as a folder, and its `data.db` downloads byte for byte ([WEBDAV.md](../WEBDAV.md#a-document-container-is-a-folder-a-client-only-adds-media-to)).
 
 **Export has one menu and one gate.** `exportFormats` in `EIGEN_DOC_TYPE_INFO` (`packages/lib/src/types/drive.ts`) lists a type's download formats. Every Download menu is built from it, and `GET /drive/:ownerId/:mountId/file/:pathId/export/:format` refuses anything else. `EXPORT_ENVELOPES` (`apps/api/src/lib/export/export-document.ts`) maps a format to its content type and extension. Stickies and chat have no export formats.
 

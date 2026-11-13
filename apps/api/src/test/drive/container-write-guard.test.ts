@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { ApiError } from '../../lib/core';
+import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getHome } from '../../lib/home/get-home';
 import {
     authedRequest,
@@ -14,54 +16,52 @@ import {
     TEST_PNG_BYTES,
 } from '../setup';
 
-// No person trashes, renames or moves a part of a document, nor overwrites its databases and saved versions,
-// nor puts anything into its versions/ folder. A writer still uploads into its media/ folder and starts a thread.
+// Inside a document a person only adds a file to its media/ or a thread to its chat/. Every other add there is
+// refused, and so is every change to something inside it, the owner's included, all with one 423.
+const REFUSED = '423 Cannot change the inside of a document';
+
 describe('Container write guard', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
-    let mountId: string;
+    const mountId = 'default';
     let rootId: string;
     const aliceId = () => ctx.alice.user.id;
 
     beforeAll(async () => {
         ctx = await getTestContext();
-        mountId = 'default';
         const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
         rootId = root.id;
     });
 
-    async function createDoc(name: string, parentId = rootId): Promise<DrivePath> {
-        return drivePost<DrivePath>(ctx.alice.user.sessionToken, aliceId(), mountId, `folder/${parentId}/create/doc`, {
-            fileName: name,
+    function request(token: string, ownerId: string, method: string, path: string, body?: Record<string, unknown>) {
+        return authedRequest(token, `/drive/${ownerId}/${mountId}/${path}`, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: body && JSON.stringify(body),
         });
     }
 
-    async function containerChildren(docId: string): Promise<DrivePath[]> {
-        return driveGetList(ctx.alice.user.sessionToken, aliceId(), mountId, `folder/${docId}`);
+    function upload(token: string, ownerId: string, parentId: string, name = 'photo.png') {
+        const formData = new FormData();
+        formData.append('file', new File([TEST_PNG_BYTES], name, { type: 'image/png' }));
+        return authedRequest(token, `/drive/${ownerId}/${mountId}/file/${parentId}`, {
+            method: 'POST',
+            body: formData,
+        });
     }
 
-    // A document shared with Bob for writing, with one saved version, and its parts: the two
-    // databases, the versions folder and the version in it.
-    async function docWithVersion(name: string, parentId = rootId): Promise<{ doc: DrivePath; parts: DrivePath[] }> {
-        const doc = await createDoc(name, parentId);
-        await drivePut(ctx.alice.user.sessionToken, aliceId(), mountId, `path/${doc.id}/acl`, {
-            add: [{ id: ctx.bob.user.email, read: true, write: true }],
+    async function children(token: string, ownerId: string, folderId: string): Promise<DrivePath[]> {
+        return driveGetList(token, ownerId, mountId, `folder/${folderId}`);
+    }
+
+    async function sharedFolder(name: string, owner = ctx.alice.user, guest = ctx.bob.user): Promise<DrivePath> {
+        const root = await driveGet<DrivePath>(owner.sessionToken, owner.id, mountId, 'root');
+        const folder = await drivePost<DrivePath>(owner.sessionToken, owner.id, mountId, `folder/${root.id}`, {
+            folderName: name,
         });
-        const saved = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${aliceId()}/${mountId}/file/${doc.id}/versions/save`,
-            { method: 'POST' },
-        );
-        expect(saved.status).toBe(200);
-        const children = await containerChildren(doc.id);
-        const versionsFolder = findOrFail(children, (c) => c.name === 'versions');
-        const [version] = await listVersions(ctx.alice.user.sessionToken, aliceId(), mountId, doc.id);
-        const parts = [
-            findOrFail(children, (c) => c.name === 'data.db'),
-            findOrFail(children, (c) => c.name === 'comments.db'),
-            versionsFolder,
-            findOrFail(await containerChildren(versionsFolder.id), (c) => c.id === version.id),
-        ];
-        return { doc, parts };
+        await drivePut(owner.sessionToken, owner.id, mountId, `path/${folder.id}/acl`, {
+            add: [{ id: guest.email, read: true, write: true }],
+        });
+        return folder;
     }
 
     function editorPut(token: string, ownerId: string, pathId: string, body: Record<string, unknown>) {
@@ -73,47 +73,13 @@ describe('Container write guard', () => {
     }
 
     describe('editor save', () => {
-        test('a write collaborator cannot overwrite a shared container data.db', async () => {
-            const doc = await createDoc('shared-guard.eigendoc');
-            await drivePut(ctx.alice.user.sessionToken, aliceId(), mountId, `path/${doc.id}/acl`, {
-                add: [{ id: ctx.bob.user.email, read: true, write: true }],
-            });
-
-            const children = await containerChildren(doc.id);
-            const dataDb = children.find((c) => c.name === 'data.db');
-            expect(dataDb).toBeDefined();
-            const before = await driveGet<DrivePath>(
-                ctx.bob.user.sessionToken,
-                aliceId(),
-                mountId,
-                `path/${dataDb!.id}`,
-            );
-
-            const res = await editorPut(ctx.bob.user.sessionToken, aliceId(), dataDb!.id, {
-                content: 'malicious overwrite',
-                force: true,
-            });
-            expect(res.status).toBe(400);
-
-            const after = await driveGet<DrivePath>(
-                ctx.bob.user.sessionToken,
-                aliceId(),
-                mountId,
-                `path/${dataDb!.id}`,
-            );
-            expect(after.size).toBe(before.size);
-            // driveGet returns raw JSON (dates as strings) — a byte-equal string compare is enough.
-            expect(String(after.updatedAt)).toBe(String(before.updatedAt));
-        });
-
         test('a non-editable file (.png) is refused by the save route', async () => {
-            const file = new File([TEST_PNG_BYTES], 'photo.png', { type: 'image/png' });
             const uploaded = await driveUpload<DrivePath>(
                 ctx.alice.user.sessionToken,
                 aliceId(),
                 mountId,
                 rootId,
-                file,
+                new File([TEST_PNG_BYTES], 'photo.png', { type: 'image/png' }),
             );
             const res = await editorPut(ctx.alice.user.sessionToken, aliceId(), uploaded.id, {
                 content: 'text into a png',
@@ -123,13 +89,12 @@ describe('Container write guard', () => {
         });
 
         test('an editable file (.md) still saves', async () => {
-            const file = new File(['# hi'], 'notes.md', { type: 'text/markdown' });
             const uploaded = await driveUpload<DrivePath>(
                 ctx.alice.user.sessionToken,
                 aliceId(),
                 mountId,
                 rootId,
-                file,
+                new File(['# hi'], 'notes.md', { type: 'text/markdown' }),
             );
             const res = await editorPut(ctx.alice.user.sessionToken, aliceId(), uploaded.id, {
                 content: '# hi there',
@@ -140,401 +105,387 @@ describe('Container write guard', () => {
         });
     });
 
-    // A document's databases and its saved versions are rows a writer can name, through the folder
-    // listing and the version list. Trashing one would break the document or undo its history, so
-    // the delete route refuses them for everyone, the owner included.
-    describe('trash of a document part', () => {
-        function deletePath(token: string, pathId: string) {
-            return authedRequest(token, `/drive/${aliceId()}/${mountId}/path/${pathId}`, { method: 'DELETE' });
-        }
+    // A document in a folder shared with Bob for writing, with one saved version, a media file, a thread and a file in
+    // the thread's media/.
+    describe('inside a document', () => {
+        let folder: DrivePath;
+        let doc: DrivePath;
+        let media: DrivePath;
+        let chat: DrivePath;
+        let versions: DrivePath;
+        let thread: DrivePath;
+        let threadMedia: DrivePath;
+        let parts: DrivePath[];
+        let plainFile: DrivePath;
+        let plainFolder: DrivePath;
+        const alice = () => ctx.alice.user.sessionToken;
 
-        test('a writer and the owner cannot trash a database, the versions folder or a version', async () => {
-            const { parts } = await docWithVersion('parts-guard.eigendoc');
-            for (const part of parts) {
-                for (const token of [ctx.bob.user.sessionToken, ctx.alice.user.sessionToken]) {
-                    const res = await deletePath(token, part.id);
-                    expect(`${part.name}: ${res.status}`).toBe(`${part.name}: 400`);
-                }
-                const after = await driveGet<DrivePath>(
-                    ctx.alice.user.sessionToken,
-                    aliceId(),
-                    mountId,
-                    `path/${part.id}`,
-                );
-                expect(after.trashedAt).toBeNull();
-            }
-            const trash = await driveGetList(ctx.alice.user.sessionToken, aliceId(), mountId, 'trash');
-            expect(trash.filter((item) => parts.some((part) => part.id === item.id))).toEqual([]);
-        });
-
-        test('the whole document still goes to the trash', async () => {
-            const { doc } = await docWithVersion('parts-guard-whole.eigendoc');
-            const res = await deletePath(ctx.alice.user.sessionToken, doc.id);
-            expect(res.status).toBe(200);
-            const trash = await driveGetList(ctx.alice.user.sessionToken, aliceId(), mountId, 'trash');
-            expect(trash.map((item) => item.id)).toContain(doc.id);
-        });
-    });
-
-    // A thread, a media file or anything else inside a document changes only with the whole document, so no person
-    // trashes, renames or moves one on its own, the owner included. A thread can't then go to the trash without its
-    // document. The server still does, such as a chat that trashes a deleted message's attachments.
-    describe('a part inside a document', () => {
-        function request(token: string, method: string, path: string, body?: Record<string, unknown>) {
-            return authedRequest(token, `/drive/${aliceId()}/${mountId}/${path}`, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: body && JSON.stringify(body),
+        beforeAll(async () => {
+            folder = await sharedFolder('inside-guard');
+            doc = await drivePost<DrivePath>(alice(), aliceId(), mountId, `folder/${folder.id}/create/doc`, {
+                fileName: 'inside-guard',
             });
-        }
-
-        test('a writer and the owner cannot trash, rename or move a thread, a media file or a folder in it', async () => {
-            const token = ctx.alice.user.sessionToken;
-            const sharedFolder = await drivePost<DrivePath>(token, aliceId(), mountId, `folder/${rootId}`, {
-                folderName: 'inside-guard',
-            });
-            await drivePut(token, aliceId(), mountId, `path/${sharedFolder.id}/acl`, {
-                add: [{ id: ctx.bob.user.email, read: true, write: true }],
-            });
-            const { doc } = await docWithVersion('inside-guard', sharedFolder.id);
-            const children = await containerChildren(doc.id);
-            const chat = findOrFail(children, (c) => c.name === 'chat');
-            const media = findOrFail(children, (c) => c.name === 'media');
-            const thread = await drivePost<DrivePath>(token, aliceId(), mountId, `folder/${chat.id}/create/chat`, {
+            const saved = await request(alice(), aliceId(), 'POST', `file/${doc.id}/versions/save`);
+            expect(saved.status).toBe(200);
+            const inDoc = await children(alice(), aliceId(), doc.id);
+            media = findOrFail(inDoc, (c) => c.name === 'media');
+            chat = findOrFail(inDoc, (c) => c.name === 'chat');
+            versions = findOrFail(inDoc, (c) => c.name === 'versions');
+            const [version] = await listVersions(alice(), aliceId(), mountId, doc.id);
+            thread = await drivePost<DrivePath>(alice(), aliceId(), mountId, `folder/${chat.id}/create/chat`, {
                 fileName: 'inside-thread',
             });
-            const threadMedia = findOrFail(await containerChildren(thread.id), (c) => c.name === 'media');
-            const png = () => new File([TEST_PNG_BYTES], 'photo.png', { type: 'image/png' });
-            const items = [
-                thread,
+            threadMedia = findOrFail(await children(alice(), aliceId(), thread.id), (c) => c.name === 'media');
+            parts = [
+                findOrFail(inDoc, (c) => c.name === 'data.db'),
+                findOrFail(inDoc, (c) => c.name === 'comments.db'),
                 media,
-                await driveUpload<DrivePath>(token, aliceId(), mountId, media.id, png()),
-                await driveUpload<DrivePath>(token, aliceId(), mountId, threadMedia.id, png()),
-                await drivePost<DrivePath>(token, aliceId(), mountId, `folder/${doc.id}`, { folderName: 'notes' }),
+                chat,
+                versions,
+                findOrFail(await children(alice(), aliceId(), versions.id), (c) => c.id === version.id),
+                await driveUpload<DrivePath>(
+                    alice(),
+                    aliceId(),
+                    mountId,
+                    media.id,
+                    new File([TEST_PNG_BYTES], 'photo.png', { type: 'image/png' }),
+                ),
+                thread,
+                await driveUpload<DrivePath>(
+                    alice(),
+                    aliceId(),
+                    mountId,
+                    threadMedia.id,
+                    new File([TEST_PNG_BYTES], 'photo.png', { type: 'image/png' }),
+                ),
             ];
-
-            // A writer who may not write in the document's folders gets a 403 first, and everyone else a 400.
-            const done: string[] = [];
-            for (const item of items) {
-                for (const visitor of [ctx.bob.user, ctx.alice.user]) {
-                    const writes = {
-                        trash: await request(visitor.sessionToken, 'DELETE', `path/${item.id}`),
-                        rename: await request(visitor.sessionToken, 'PUT', `path/${item.id}/rename`, {
-                            newName: `renamed-${item.name}`,
-                        }),
-                        move: await request(visitor.sessionToken, 'PUT', `path/${item.id}/move`, {
-                            targetParentId: sharedFolder.id,
-                        }),
-                    };
-                    for (const [write, res] of Object.entries(writes)) {
-                        if (res.status !== 400 && res.status !== 403) done.push(`${write} ${item.name}: ${res.status}`);
-                    }
-                }
-            }
-            expect(done).toEqual([]);
-            for (const item of items) {
-                const after = await driveGet<DrivePath>(token, aliceId(), mountId, `path/${item.id}`);
-                expect(`${after.name} in ${after.parentId}, trashed ${after.trashedAt}`).toBe(
-                    `${item.name} in ${item.parentId}, trashed null`,
-                );
-            }
-        });
-    });
-
-    // The same parts can be renamed, moved or written into through the other routes. A renamed
-    // data.db breaks the document, a version moved out leaves a gap in its history, and a file
-    // put in versions/ would list and restore as a version. So those routes refuse them too.
-    describe('writes to a document part', () => {
-        const bobToken = () => ctx.bob.user.sessionToken;
-        let sharedFolder: DrivePath;
-        let doc: DrivePath;
-        let parts: DrivePath[];
-        let versionsFolder: DrivePath;
-        let plainFile: DrivePath;
-
-        beforeAll(async () => {
-            sharedFolder = await drivePost<DrivePath>(
-                ctx.alice.user.sessionToken,
-                aliceId(),
-                mountId,
-                `folder/${rootId}`,
-                {
-                    folderName: 'parts-write-guard',
-                },
-            );
-            await drivePut(ctx.alice.user.sessionToken, aliceId(), mountId, `path/${sharedFolder.id}/acl`, {
-                add: [{ id: ctx.bob.user.email, read: true, write: true }],
-            });
-            ({ doc, parts } = await docWithVersion('parts-write-guard', sharedFolder.id));
-            versionsFolder = findOrFail(parts, (part) => part.name === 'versions');
             plainFile = await driveUpload<DrivePath>(
-                ctx.alice.user.sessionToken,
+                alice(),
                 aliceId(),
-                mountId,
-                sharedFolder.id,
-                new File(['plain'], 'plain.txt', { type: 'text/plain' }),
-            );
-        });
-
-        function bobPut(path: string, body: Record<string, unknown>) {
-            return authedRequest(bobToken(), `/drive/${aliceId()}/${mountId}/${path}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-        }
-
-        function bobPost(path: string, body: Record<string, unknown>) {
-            return authedRequest(bobToken(), `/drive/${aliceId()}/${mountId}/${path}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-        }
-
-        // Every part keeps its name and its folder, and versions/ holds only the saved version.
-        async function expectPartsUnchanged() {
-            for (const part of parts) {
-                const after = await driveGet<DrivePath>(
-                    ctx.alice.user.sessionToken,
-                    aliceId(),
-                    mountId,
-                    `path/${part.id}`,
-                );
-                expect(`${after.name} in ${after.parentId}`).toBe(`${part.name} in ${part.parentId}`);
-            }
-            const inVersions = await containerChildren(versionsFolder.id);
-            expect(inVersions.map((child) => child.name)).toEqual(parts.slice(3).map((part) => part.name));
-        }
-
-        test('a writer cannot rename or move out a database, the versions folder or a version', async () => {
-            const statuses: Record<string, number> = {};
-            for (const part of parts) {
-                const renamed = await bobPut(`path/${part.id}/rename`, { newName: `renamed-${part.name}` });
-                statuses[`rename ${part.name}`] = renamed.status;
-                const moved = await bobPut(`path/${part.id}/move`, { targetParentId: sharedFolder.id });
-                statuses[`move ${part.name}`] = moved.status;
-            }
-            expect(statuses).toEqual(Object.fromEntries(Object.keys(statuses).map((write) => [write, 400])));
-            await expectPartsUnchanged();
-        });
-
-        // The routes refuse such a write before they reach the drive, and the drive refuses it again for any
-        // caller that comes later.
-        test('the drive refuses new bytes for a database or a version', async () => {
-            const { drive, user } = await getHome(aliceId());
-            const files = parts.filter((part) => part.type === 'file');
-            for (const part of files) {
-                await expect(
-                    drive.writeFileContent(mountId, part.id, Buffer.from('overwrite'), { user }),
-                ).rejects.toThrow('Cannot change a part of a document on its own');
-            }
-            for (const part of files) {
-                const after = await driveGet<DrivePath>(
-                    ctx.alice.user.sessionToken,
-                    aliceId(),
-                    mountId,
-                    `path/${part.id}`,
-                );
-                expect(after.size).toBe(part.size);
-            }
-        });
-
-        test('a writer cannot move, upload, create or copy anything into versions/', async () => {
-            const formData = new FormData();
-            formData.append('file', new File(['fake'], 'fake.db', { type: 'application/x-sqlite3' }));
-            const writes = {
-                move: await bobPut(`path/${plainFile.id}/move`, { targetParentId: versionsFolder.id }),
-                upload: await authedRequest(bobToken(), `/drive/${aliceId()}/${mountId}/file/${versionsFolder.id}`, {
-                    method: 'POST',
-                    body: formData,
-                }),
-                'create folder': await bobPost(`folder/${versionsFolder.id}`, { folderName: 'fake' }),
-                'create doc': await bobPost(`folder/${versionsFolder.id}/create/doc`, { fileName: 'fake' }),
-                copy: await bobPost(`path/${plainFile.id}/copy`, {
-                    targetOwnerId: aliceId(),
-                    targetMountId: mountId,
-                    targetParentId: versionsFolder.id,
-                }),
-            };
-            const statuses = Object.entries(writes).map(([write, res]) => `${write}: ${res.status}`);
-            expect(statuses).toEqual(Object.keys(writes).map((write) => `${write}: 400`));
-            await expectPartsUnchanged();
-            const file = await driveGet<DrivePath>(
-                ctx.alice.user.sessionToken,
-                aliceId(),
-                mountId,
-                `path/${plainFile.id}`,
-            );
-            expect(file.parentId).toBe(sharedFolder.id);
-            expect(await listVersions(ctx.alice.user.sessionToken, aliceId(), mountId, doc.id)).toHaveLength(1);
-        });
-
-        test('a writer still renames, moves and uploads a document and a plain file', async () => {
-            const target = await bobPost(`folder/${sharedFolder.id}`, { folderName: 'parts-write-target' });
-            expect(target.status).toBe(200);
-            const targetFolder: DrivePath = await target.json();
-            const { doc: other } = await docWithVersion('parts-write-other', sharedFolder.id);
-            const file = await driveUpload<DrivePath>(
-                bobToken(),
-                aliceId(),
-                mountId,
-                sharedFolder.id,
-                new File(['mine'], 'mine.txt', { type: 'text/plain' }),
-            );
-            for (const item of [other, file]) {
-                const renamed = await bobPut(`path/${item.id}/rename`, { newName: `moved-${item.name}` });
-                expect(renamed.status).toBe(200);
-                const moved = await bobPut(`path/${item.id}/move`, { targetParentId: targetFolder.id });
-                expect(moved.status).toBe(200);
-                const after = await driveGet<DrivePath>(bobToken(), aliceId(), mountId, `path/${item.id}`);
-                expect(`${after.name} in ${after.parentId}`).toBe(`moved-${item.name} in ${targetFolder.id}`);
-            }
-            const media = findOrFail(await containerChildren(other.id), (c) => c.name === 'media');
-            const image = await driveUpload<DrivePath>(
-                bobToken(),
-                aliceId(),
-                mountId,
-                media.id,
-                new File([TEST_PNG_BYTES], 'photo.png', { type: 'image/png' }),
-            );
-            expect(image.parentId).toBe(media.id);
-        });
-    });
-
-    // Every lookup of versions/ ignores case, and a document has none before its first saved version or after a
-    // Delete history. A folder or file a writer gives that name would take the place of the real one, so no write
-    // names a child of a document that way.
-    describe('a versions folder planted in a document', () => {
-        const bobToken = () => ctx.bob.user.sessionToken;
-        let sharedFolder: DrivePath;
-
-        beforeAll(async () => {
-            sharedFolder = await drivePost<DrivePath>(
-                ctx.alice.user.sessionToken,
-                aliceId(),
-                mountId,
-                `folder/${rootId}`,
-                { folderName: 'planted-versions' },
-            );
-            await drivePut(ctx.alice.user.sessionToken, aliceId(), mountId, `path/${sharedFolder.id}/acl`, {
-                add: [{ id: ctx.bob.user.email, read: true, write: true }],
-            });
-        });
-
-        function bobRequest(method: string, path: string, body: Record<string, unknown>) {
-            return authedRequest(bobToken(), `/drive/${aliceId()}/${mountId}/${path}`, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-        }
-
-        // A plain folder named versions, with a file in it a save could list as a version.
-        async function fakeVersions(token: string, ownerId: string, parentId: string): Promise<DrivePath> {
-            const folder = await drivePost<DrivePath>(token, ownerId, mountId, `folder/${parentId}`, {
-                folderName: 'versions',
-            });
-            await driveUpload(
-                token,
-                ownerId,
                 mountId,
                 folder.id,
-                new File(['fake'], '2026-01-01T00-00-00-000Z.db', { type: 'application/x-sqlite3' }),
+                new File(['plain'], 'plain.txt', { type: 'text/plain' }),
             );
-            return folder;
-        }
-
-        async function expectNoVersions(doc: DrivePath) {
-            const children = await containerChildren(doc.id);
-            expect(children.filter((child) => child.name.toLowerCase() === 'versions')).toEqual([]);
-            expect(await listVersions(ctx.alice.user.sessionToken, aliceId(), mountId, doc.id)).toEqual([]);
-        }
-
-        test('a writer cannot create, rename to, copy in or move in a versions folder', async () => {
-            const doc = await createDoc('planted-versions-doc', sharedFolder.id);
-            const notes = await bobRequest('POST', `folder/${doc.id}`, { folderName: 'notes' });
-            expect(notes.status).toBe(200);
-            const notesFolder: DrivePath = await notes.json();
-            const inShared = await fakeVersions(bobToken(), aliceId(), sharedFolder.id);
-            const bobRoot = await driveGet<DrivePath>(bobToken(), ctx.bob.user.id, mountId, 'root');
-            const inBobsDrive = await fakeVersions(bobToken(), ctx.bob.user.id, bobRoot.id);
-
-            const writes = {
-                'create Versions': await bobRequest('POST', `folder/${doc.id}`, { folderName: 'Versions' }),
-                'rename to versions': await bobRequest('PUT', `path/${notesFolder.id}/rename`, { newName: 'versions' }),
-                copy: await bobRequest('POST', `path/${inShared.id}/copy`, {
-                    targetOwnerId: aliceId(),
-                    targetMountId: mountId,
-                    targetParentId: doc.id,
-                }),
-                'copy from another drive': await authedRequest(
-                    bobToken(),
-                    `/drive/${ctx.bob.user.id}/${mountId}/path/${inBobsDrive.id}/copy`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            targetOwnerId: aliceId(),
-                            targetMountId: mountId,
-                            targetParentId: doc.id,
-                        }),
-                    },
-                ),
-            };
-            const statuses = Object.entries(writes).map(([write, res]) => `${write}: ${res.status}`);
-            expect(statuses).toEqual(Object.keys(writes).map((write) => `${write}: 400`));
-            // A move only goes into a folder, and a document is not one.
-            const moved = await bobRequest('PUT', `path/${inShared.id}/move`, { targetParentId: doc.id });
-            expect(moved.status).toBe(404);
-            await expectNoVersions(doc);
-        });
-
-        test('a writer cannot upload into a versions folder whose name differs in case', async () => {
-            const doc = await createDoc('planted-versions-upload', sharedFolder.id);
-            const { mount } = await (await getHome(aliceId())).drive.resolveFile(mountId, doc.id);
-            const plantedId = await mount.createFolder(doc.id, 'Versions');
-            const formData = new FormData();
-            formData.append(
-                'file',
-                new File(['fake'], '2026-01-01T00-00-00-000Z.db', { type: 'application/x-sqlite3' }),
-            );
-            const res = await authedRequest(bobToken(), `/drive/${aliceId()}/${mountId}/file/${plantedId}`, {
-                method: 'POST',
-                body: formData,
+            plainFolder = await drivePost<DrivePath>(alice(), aliceId(), mountId, `folder/${folder.id}`, {
+                folderName: 'plain-folder',
             });
-            expect(res.status).toBe(400);
-            expect(await listVersions(ctx.alice.user.sessionToken, aliceId(), mountId, doc.id)).toEqual([]);
         });
 
-        test("a document's databases keep their names: a twin is a name taken", async () => {
-            const doc = await createDoc('planted-database', sharedFolder.id);
-            const res = await bobRequest('POST', `folder/${doc.id}`, { folderName: 'Data.db' });
-            expect(res.status).toBe(409);
-            const names = (await containerChildren(doc.id)).map((child) => child.name).sort();
-            expect(names).toEqual(['chat', 'comments.db', 'data.db', 'media']);
+        test('a writer and the owner add a file to media/ and a thread to chat/', async () => {
+            for (const [i, token] of [ctx.bob.user.sessionToken, alice()].entries()) {
+                const image = await upload(token, aliceId(), media.id);
+                expect(image.status).toBe(200);
+                const [uploaded]: DrivePath[] = await image.json();
+                expect(uploaded.parentId).toBe(media.id);
+
+                const attachment = await upload(token, aliceId(), threadMedia.id);
+                expect(attachment.status).toBe(200);
+
+                const started = await request(token, aliceId(), 'POST', `folder/${chat.id}/create/chat`, {
+                    fileName: `another-thread-${i}`,
+                });
+                expect(started.status).toBe(200);
+                expect((await started.json()).parentId).toBe(chat.id);
+            }
         });
 
-        test('a save still makes the versions folder, and a copy to another drive still copies the document', async () => {
-            const doc = await createDoc('planted-versions-save', sharedFolder.id);
-            const saved = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/drive/${aliceId()}/${mountId}/file/${doc.id}/versions/save`,
-                { method: 'POST' },
+        test('every other add inside the document is refused with one 423', async () => {
+            const refusals: string[] = [];
+            for (const token of [ctx.bob.user.sessionToken, alice()]) {
+                const into = [doc, media, chat, versions, thread, threadMedia];
+                const writes: Record<string, Response> = {};
+                for (const target of into) {
+                    writes[`folder in ${target.name}`] = await request(
+                        token,
+                        aliceId(),
+                        'POST',
+                        `folder/${target.id}`,
+                        {
+                            folderName: 'notes',
+                        },
+                    );
+                    writes[`doc in ${target.name}`] = await request(
+                        token,
+                        aliceId(),
+                        'POST',
+                        `folder/${target.id}/create/doc`,
+                        { fileName: 'nested' },
+                    );
+                    writes[`folder copy into ${target.name}`] = await request(
+                        token,
+                        aliceId(),
+                        'POST',
+                        `path/${plainFolder.id}/copy`,
+                        { targetOwnerId: aliceId(), targetMountId: mountId, targetParentId: target.id },
+                    );
+                    writes[`folder move into ${target.name}`] = await request(
+                        token,
+                        aliceId(),
+                        'PUT',
+                        `path/${plainFolder.id}/move`,
+                        { targetParentId: target.id },
+                    );
+                }
+                for (const target of [doc, chat, versions, thread]) {
+                    writes[`upload into ${target.name}`] = await upload(token, aliceId(), target.id);
+                    writes[`file copy into ${target.name}`] = await request(
+                        token,
+                        aliceId(),
+                        'POST',
+                        `path/${plainFile.id}/copy`,
+                        { targetOwnerId: aliceId(), targetMountId: mountId, targetParentId: target.id },
+                    );
+                    writes[`file move into ${target.name}`] = await request(
+                        token,
+                        aliceId(),
+                        'PUT',
+                        `path/${plainFile.id}/move`,
+                        { targetParentId: target.id },
+                    );
+                }
+                writes['chat in media'] = await request(token, aliceId(), 'POST', `folder/${media.id}/create/chat`, {
+                    fileName: 'misplaced',
+                });
+                for (const [write, res] of Object.entries(writes))
+                    refusals.push(`${write}: ${res.status} ${await res.text()}`);
+            }
+            expect(refusals.filter((refusal) => !refusal.endsWith(`: ${REFUSED}`))).toEqual([]);
+            const after = await driveGet<DrivePath>(alice(), aliceId(), mountId, `path/${plainFile.id}`);
+            expect(after.parentId).toBe(folder.id);
+            expect(await listVersions(alice(), aliceId(), mountId, doc.id)).toHaveLength(1);
+        });
+
+        // Only something new is added to media/ or chat/. A moved path would be trapped there, and nothing in the
+        // document names it, so the next sweep would delete it.
+        test('an existing file or thread is never moved into media/ or chat/', async () => {
+            const looseThread = await drivePost<DrivePath>(
+                alice(),
+                aliceId(),
+                mountId,
+                `folder/${folder.id}/create/chat`,
+                { fileName: 'loose-thread' },
             );
-            expect(saved.status).toBe(200);
-            expect(await listVersions(ctx.alice.user.sessionToken, aliceId(), mountId, doc.id)).toHaveLength(1);
+            const moves: [string, DrivePath, DrivePath][] = [
+                ['file into media/', plainFile, media],
+                ["file into a thread's media/", plainFile, threadMedia],
+                ['thread into chat/', looseThread, chat],
+            ];
+            const refusals: string[] = [];
+            for (const token of [ctx.bob.user.sessionToken, alice()]) {
+                for (const [move, path, target] of moves) {
+                    const res = await request(token, aliceId(), 'PUT', `path/${path.id}/move`, {
+                        targetParentId: target.id,
+                    });
+                    refusals.push(`${move}: ${res.status} ${await res.text()}`);
+                }
+            }
+            expect(refusals.filter((refusal) => !refusal.endsWith(`: ${REFUSED}`))).toEqual([]);
+            for (const path of [plainFile, looseThread]) {
+                const after = await driveGet<DrivePath>(alice(), aliceId(), mountId, `path/${path.id}`);
+                expect(`${after.name} in ${after.parentId}`).toBe(`${path.name} in ${folder.id}`);
+            }
+        });
 
-            const bobRoot = await driveGet<DrivePath>(bobToken(), ctx.bob.user.id, mountId, 'root');
-            const copied = await bobRequest('POST', `path/${doc.id}/copy`, {
-                targetOwnerId: ctx.bob.user.id,
+        test('nothing inside the document is renamed, moved, trashed or overwritten, with the same 423', async () => {
+            const refusals: string[] = [];
+            for (const visitor of [ctx.bob.user, ctx.alice.user]) {
+                const writes: Record<string, Response> = {};
+                for (const part of parts) {
+                    writes[`trash ${part.name}`] = await request(
+                        visitor.sessionToken,
+                        aliceId(),
+                        'DELETE',
+                        `path/${part.id}`,
+                    );
+                    writes[`rename ${part.name}`] = await request(
+                        visitor.sessionToken,
+                        aliceId(),
+                        'PUT',
+                        `path/${part.id}/rename`,
+                        { newName: `renamed-${part.name}` },
+                    );
+                    writes[`move ${part.name}`] = await request(
+                        visitor.sessionToken,
+                        aliceId(),
+                        'PUT',
+                        `path/${part.id}/move`,
+                        { targetParentId: folder.id },
+                    );
+                }
+                for (const [write, res] of Object.entries(writes))
+                    refusals.push(`${write}: ${res.status} ${await res.text()}`);
+
+                const { user } = await getHome(visitor.id);
+                const drive = await getSharedDrive(aliceId(), user);
+                for (const part of parts.filter((p) => p.type === 'file')) {
+                    const refused = await drive
+                        .writeFileContent(mountId, part.id, Buffer.from('overwrite'), { user })
+                        .then(
+                            () => 'written',
+                            (e: unknown) => (e instanceof ApiError ? `${e.status} ${e.message}` : String(e)),
+                        );
+                    refusals.push(`overwrite ${part.name}: ${refused}`);
+                }
+            }
+            expect(refusals.filter((refusal) => !refusal.endsWith(`: ${REFUSED}`))).toEqual([]);
+            for (const part of parts) {
+                const after = await driveGet<DrivePath>(alice(), aliceId(), mountId, `path/${part.id}`);
+                expect(`${after.name} in ${after.parentId}, hash ${after.hash}, trashed ${after.trashedAt}`).toBe(
+                    `${part.name} in ${part.parentId}, hash ${part.hash}, trashed null`,
+                );
+            }
+        });
+
+        test('the whole document still renames, moves and goes to the trash', async () => {
+            const other = await drivePost<DrivePath>(alice(), aliceId(), mountId, `folder/${folder.id}/create/doc`, {
+                fileName: 'inside-guard-whole',
+            });
+            const bob = ctx.bob.user.sessionToken;
+            const renamed = await request(bob, aliceId(), 'PUT', `path/${other.id}/rename`, {
+                newName: 'whole.eigendoc',
+            });
+            expect(renamed.status).toBe(200);
+            const moved = await request(bob, aliceId(), 'PUT', `path/${other.id}/move`, {
+                targetParentId: plainFolder.id,
+            });
+            expect(moved.status).toBe(200);
+            const trashed = await request(alice(), aliceId(), 'DELETE', `path/${other.id}`);
+            expect(trashed.status).toBe(200);
+            const trash = await driveGetList(alice(), aliceId(), mountId, 'trash');
+            expect(trash.map((item) => item.id)).toContain(other.id);
+        });
+    });
+
+    // Pasting content with images from one document into another copies each image into the target's media/.
+    describe("a copy of a media file into another document's media/", () => {
+        async function docAndMedia(owner: typeof ctx.alice.user, parentId: string, name: string): Promise<DrivePath> {
+            const doc = await drivePost<DrivePath>(
+                owner.sessionToken,
+                owner.id,
+                mountId,
+                `folder/${parentId}/create/doc`,
+                { fileName: name },
+            );
+            return findOrFail(await children(owner.sessionToken, owner.id, doc.id), (c) => c.name === 'media');
+        }
+
+        // Alice copies an image out of her own document's media/ into the target's, twice.
+        async function copyTwiceInto(target: DrivePath, name: string): Promise<string[]> {
+            const from = await docAndMedia(ctx.alice.user, rootId, name);
+            const res = await upload(ctx.alice.user.sessionToken, aliceId(), from.id, 'img.png');
+            const [image]: DrivePath[] = await res.json();
+            const outcomes: string[] = [];
+            for (let i = 0; i < 2; i++) {
+                const copy = await request(ctx.alice.user.sessionToken, aliceId(), 'POST', `path/${image.id}/copy`, {
+                    targetOwnerId: target.ownerId,
+                    targetMountId: mountId,
+                    targetParentId: target.id,
+                });
+                const copied: DrivePath = await copy.json();
+                outcomes.push(`${copy.status} ${copied.name} in ${copied.parentId}`);
+            }
+            return outcomes;
+        }
+
+        test('lands in a document of the same mount, the second copy under a free name', async () => {
+            const target = await docAndMedia(ctx.alice.user, rootId, 'media-copy-to');
+            expect(await copyTwiceInto(target, 'media-copy-from')).toEqual([
+                `200 img.png in ${target.id}`,
+                `200 img (2).png in ${target.id}`,
+            ]);
+        });
+
+        test("lands in another owner's document the copier may write, the second copy under a free name", async () => {
+            const bob = ctx.bob.user;
+            const bobsFolder = await sharedFolder('media-copy-shared', bob, ctx.alice.user);
+            const target = await docAndMedia(bob, bobsFolder.id, 'media-copy-shared');
+            expect(await copyTwiceInto(target, 'media-copy-across')).toEqual([
+                `200 img.png in ${target.id}`,
+                `200 img (2).png in ${target.id}`,
+            ]);
+            const names = (await children(bob.sessionToken, bob.id, target.id)).map((c) => c.name).sort();
+            expect(names).toEqual(['img (2).png', 'img.png']);
+        });
+    });
+
+    // A copy to another drive writes the new document's databases, media/ and chat/ into it, which no person may.
+    describe('a copy to another drive', () => {
+        const parts = ['chat', 'comments.db', 'data.db', 'media'];
+
+        async function docWithMedia(owner: typeof ctx.alice.user, parentId: string, name: string): Promise<DrivePath> {
+            const doc = await drivePost<DrivePath>(
+                owner.sessionToken,
+                owner.id,
+                mountId,
+                `folder/${parentId}/create/doc`,
+                {
+                    fileName: name,
+                },
+            );
+            const media = findOrFail(await children(owner.sessionToken, owner.id, doc.id), (c) => c.name === 'media');
+            expect((await upload(owner.sessionToken, owner.id, media.id)).status).toBe(200);
+            return doc;
+        }
+
+        test("copies a whole document into the copier's own drive", async () => {
+            const folder = await sharedFolder('copy-across-own');
+            const doc = await docWithMedia(ctx.alice.user, folder.id, 'copy-across-own');
+            const bob = ctx.bob.user;
+            const bobRoot = await driveGet<DrivePath>(bob.sessionToken, bob.id, mountId, 'root');
+            const res = await request(bob.sessionToken, aliceId(), 'POST', `path/${doc.id}/copy`, {
+                targetOwnerId: bob.id,
                 targetMountId: mountId,
                 targetParentId: bobRoot.id,
             });
-            expect(copied.status).toBe(200);
-            const copy: DrivePath = await copied.json();
-            const inCopy = await driveGetList(bobToken(), ctx.bob.user.id, mountId, `folder/${copy.id}`);
-            expect(inCopy.map((child) => child.name).sort()).toEqual(['chat', 'comments.db', 'data.db', 'media']);
+            expect(res.status).toBe(200);
+            const copy: DrivePath = await res.json();
+            const names = (await children(bob.sessionToken, bob.id, copy.id)).map((c) => c.name).sort();
+            expect(names).toEqual(parts);
+        });
+
+        test("copies a whole document into a folder of another owner's drive", async () => {
+            const bob = ctx.bob.user;
+            const doc = await docWithMedia(ctx.alice.user, rootId, 'copy-across-shared');
+            const bobsFolder = await sharedFolder('copy-across-target', bob, ctx.alice.user);
+            const res = await request(ctx.alice.user.sessionToken, aliceId(), 'POST', `path/${doc.id}/copy`, {
+                targetOwnerId: bob.id,
+                targetMountId: mountId,
+                targetParentId: bobsFolder.id,
+            });
+            expect(res.status).toBe(200);
+            const copy: DrivePath = await res.json();
+            expect(copy.parentId).toBe(bobsFolder.id);
+            const names = (await children(bob.sessionToken, bob.id, copy.id)).map((c) => c.name).sort();
+            expect(names).toEqual(parts);
+        });
+
+        test("a copy into another owner's document is refused with the same 423", async () => {
+            const bob = ctx.bob.user;
+            const bobsFolder = await sharedFolder('copy-across-into-doc', bob, ctx.alice.user);
+            const bobsDoc = await drivePost<DrivePath>(
+                bob.sessionToken,
+                bob.id,
+                mountId,
+                `folder/${bobsFolder.id}/create/doc`,
+                {
+                    fileName: 'copy-across-into-doc',
+                },
+            );
+            const file = await driveUpload<DrivePath>(
+                ctx.alice.user.sessionToken,
+                aliceId(),
+                mountId,
+                rootId,
+                new File(['x'], 'into-doc.txt', { type: 'text/plain' }),
+            );
+            const res = await request(ctx.alice.user.sessionToken, aliceId(), 'POST', `path/${file.id}/copy`, {
+                targetOwnerId: bob.id,
+                targetMountId: mountId,
+                targetParentId: bobsDoc.id,
+            });
+            expect(`${res.status} ${await res.text()}`).toBe(REFUSED);
+            const names = (await children(bob.sessionToken, bob.id, bobsDoc.id)).map((c) => c.name).sort();
+            expect(names).toEqual(parts);
         });
     });
 });

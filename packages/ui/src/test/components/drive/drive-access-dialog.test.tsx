@@ -4,8 +4,9 @@
 // the Share with team menu, and a viewer who may only look gets Close alone.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
-import type { DirectAccessItem, DrivePath, InheritedAccessItem } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
+import type { DirectAccessItem, InheritedAccessItem } from '@workspace/lib/types/drive-access';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';

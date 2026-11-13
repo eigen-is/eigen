@@ -1,11 +1,12 @@
 // Finds the chats whose members are exactly the caller and a given set of addresses, so the new-chat wizard can
-// open a chat that already exists instead of making a second one. The chat route calls it. It reads only the
-// caller's Home: a chat shared with the caller is judged from its mirror row and its owner's user record.
+// open a chat that already exists instead of making a second one. The chat route calls it. A chat shared with the
+// caller is judged from its own ACL and its owner's user record, without a walk of the folders above it.
 
 import { parseOwnerId } from '@workspace/lib/types';
 import type { ChatMatch } from '@workspace/lib/types/chat';
-import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_CHAT } from '@workspace/lib/types/drive';
+import type { DriveACL } from '@workspace/lib/types/drive-access';
 import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
 import type { User } from '../user';
@@ -17,30 +18,25 @@ export async function findChatsByMembers(drive: Drive, user: User, emails: reado
     const target = new Set(emails.map((e) => e.toLowerCase()));
     target.add(user.email.toLowerCase());
 
-    // Own paths carry the caller's ownerId, mirror rows the foreign owner's — that split
-    // drives the two matching strategies below.
+    // Own chats carry the caller's ownerId and shared ones their owner's, and each kind is matched its own way.
     const candidates = await drive.getMimeTypeContents(DRIVE_MIME_CHAT);
 
-    // Repeat sharers appear across many rows — resolve each owner once per request.
+    // One owner often shared several chats, so each owner is looked up once per request.
     const ownerCache = new Map<string, User | null>();
 
     const matches: ChatMatch[] = [];
     const ownCandidates: DrivePath[] = [];
     for (const path of candidates) {
-        // Public links and direct team entries make membership dynamic, never a fixed set.
-        // (Ancestor-inherited team entries still expand in the walk — accepted caveat.)
+        // A public link or a team entry lets in whoever follows or joins, so such a chat has no fixed set of members.
         if (path.visibility !== 'private') continue;
         if (hasTeamEntry(path.acl)) continue;
 
         if (path.ownerId === user.id) {
-            // Cheap direct-ACL screen before the costly effective-members walk below.
+            // The chat's own ACL is checked first, as the walk of its members below costs far more.
             if (directEmailsWithinTarget(path.acl, target)) ownCandidates.push(path);
         } else if (parseOwnerId(path.ownerId).type !== 'team') {
-            // Mirror rows carry only the direct ACL + owner id, so members = {owner} ∪ direct ACL.
+            // Another owner's folders are not read here, so the members are the owner and the chat's own ACL.
             if (!directEmailsWithinTarget(path.acl, target)) continue;
-            // No inherited members here, so |effective| ≤ |direct|+1 — a larger target can never
-            // match. (`<=` not `==`: an owner listed in their own ACL makes them equal.)
-            if (target.size > (path.acl?.length ?? 0) + 1) continue;
             let owner = ownerCache.get(path.ownerId);
             if (owner === undefined) {
                 owner = await getUserById(path.ownerId);
@@ -60,8 +56,7 @@ export async function findChatsByMembers(drive: Drive, user: User, emails: reado
     ownCandidates.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     const ownMatches = await Promise.all(
         ownCandidates.slice(0, MAX_MEMBER_WALKS).map(async (path): Promise<ChatMatch | null> => {
-            // A candidate trashed between the snapshot and its walk 404s — skip it, don't
-            // fail the whole batch.
+            // A chat trashed since the list was read answers 404, which must not fail the other walks.
             const members = await drive.getEffectiveMembers(path.mountId, path.id).catch((err) => {
                 if (err instanceof ApiError && err.status === 404) return null;
                 throw err;
@@ -77,7 +72,7 @@ export async function findChatsByMembers(drive: Drive, user: User, emails: reado
     );
     matches.push(...ownMatches.filter((m) => m !== null));
 
-    // Writable first (a chat you can post in beats a read-only one), then most-recently-touched.
+    // A chat the caller can post in comes before a read-only one, and then the newest first.
     matches.sort(
         (a, b) => Number(b.canWrite) - Number(a.canWrite) || b.path.updatedAt.getTime() - a.path.updatedAt.getTime(),
     );

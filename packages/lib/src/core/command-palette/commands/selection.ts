@@ -4,8 +4,9 @@
 // item's name beside it. The action provider adds these to the static catalog.
 
 import type { Command, CommandContext } from '@workspace/lib/types/command-palette';
-import { EXPORT_FORMAT_LABELS, exportFormatsFor, stripEigenExtension } from '@workspace/lib/types/drive';
+import { exportFormatsFor, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { DriveActionId } from '@workspace/lib/types/drive-actions';
+import { EXPORT_FORMAT_LABELS } from '@workspace/lib/types/drive-convert';
 import type { FileActionId } from '@workspace/lib/types/file-subject';
 import { labelFor } from '../../drive/drive-actions';
 

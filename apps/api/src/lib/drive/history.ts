@@ -7,6 +7,7 @@ import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
 import { isDocumentType } from '@workspace/lib/types/drive';
 import type { FileEvent, FileEventInput, FileEventType, PathWatchStatus } from '@workspace/lib/types/file-history';
 import { aclPrincipalsToResolve, describeFileEvent, toFileEventType } from '@workspace/lib/types/file-history';
+import type { SQL } from 'drizzle-orm';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { sendToUserHomes } from '../home/home-relay';
@@ -17,8 +18,8 @@ import type { User } from '../user';
 import { getMemberships, getUserById } from '../user';
 import { canReadFromAncestors } from './acl';
 
-// Caps per path and none on age, so a quiet file keeps its whole story. Edits are trimmed first, so a busy
-// document keeps its other rows.
+// Caps per path and none on age, so a quiet file keeps its whole story. Each recorded event trims its
+// path, edits first, so a busy document keeps its other rows.
 const HISTORY_MAX_EDITED_PER_PATH = 100;
 const HISTORY_MAX_PER_PATH = 500;
 
@@ -60,6 +61,8 @@ export class FileHistory {
                 createdAt: new Date(),
             })
             .run();
+        this.keepNewest(input.pathId, HISTORY_MAX_EDITED_PER_PATH, sql`AND eventType = 'edited'`);
+        this.keepNewest(input.pathId, HISTORY_MAX_PER_PATH, sql``);
     }
 
     // A file's own events; a folder's or a document's also those of everything below it. Newest first.
@@ -271,21 +274,11 @@ export class FileHistory {
         });
     }
 
-    public prune(): void {
+    private keepNewest(pathId: string, keep: number, only: SQL): void {
         this.db.run(sql`
             DELETE FROM ${fileEvents} WHERE id IN (
-                SELECT id FROM (
-                    SELECT id, ROW_NUMBER() OVER (PARTITION BY pathId ORDER BY createdAt DESC) AS rn
-                    FROM ${fileEvents} WHERE eventType = 'edited'
-                ) WHERE rn > ${HISTORY_MAX_EDITED_PER_PATH}
-            )
-        `);
-        this.db.run(sql`
-            DELETE FROM ${fileEvents} WHERE id IN (
-                SELECT id FROM (
-                    SELECT id, ROW_NUMBER() OVER (PARTITION BY pathId ORDER BY createdAt DESC) AS rn
-                    FROM ${fileEvents}
-                ) WHERE rn > ${HISTORY_MAX_PER_PATH}
+                SELECT id FROM ${fileEvents} WHERE pathId = ${pathId} ${only}
+                ORDER BY createdAt DESC, rowid DESC LIMIT -1 OFFSET ${keep}
             )
         `);
     }

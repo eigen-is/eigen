@@ -3,9 +3,10 @@
 // offers New for that kind only.
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { DEFAULT_MOUNT_ID, useAggregateMimeContent, usePathInfo, validateDriveSearch } from '@workspace/lib/drive';
+import { useAggregateMimeContent, usePathInfo, validateDriveSearch } from '@workspace/lib/drive';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByMime } from '@workspace/lib/types/drive';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { FILTER_LABELS } from '@workspace/ui';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
@@ -29,7 +30,11 @@ function MimeRoute() {
     const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
         items: folderContents,
         capabilities: DRIVE_CAPABILITIES.listing,
-        onOpenFolder: () => navigate({ to: Route.fullPath, params: { mimeType }, search: { pid: undefined } }),
+        onOpenFolder: (path: DrivePath) =>
+            navigate({
+                to: '/fs/$ownerId/$mountId/$pathId',
+                params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
+            }),
         onSelectItem: (path: DrivePath) =>
             navigate({
                 to: Route.fullPath,

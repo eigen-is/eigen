@@ -84,7 +84,7 @@ Edit data, from the panel and from a double-click, opens a dialog that mounts th
 |---|---|
 | Missing, as for a new chart, a pasted one or one from an older build | Creates a sheet, fills its first tab from the cache with `embeddedChartSheet`, and writes `workbook` |
 | Resolves in this document's `sheets/`, and no other chart of the document names it | Opens it |
-| Resolves, but another chart of the document names it too, as after a duplicate or a paste within the document | Copies it to a new name with `Drive.copyPath`, formulas kept, writes the copy's name, and opens the copy |
+| Resolves, but another chart of the document names it too, as after a duplicate or a paste within the document | Copies it to a new name in its own folder with `Drive.copyPath`, formulas kept, writes the copy's name, and opens the copy |
 | Names nothing in `sheets/`, as for a chart pasted from another document | Creates a sheet filled from the cache, as for a missing one |
 
 The last two rows keep one sheet per chart without the clipboard knowing where a chart came from. A sheet's name is a nanoid, so a name from another document resolves here only by a forgery, which the third row turns into a copy of a sheet the user can already read. "Another chart names it" is a walk over the document's chart nodes or canvas chart elements, done when the dialog opens.
@@ -127,7 +127,7 @@ Phase 1 ends with the domain docs: CHARTS.md's Edit data sections rewritten, MED
 - **A deleted chart leaves its sheet.** As a comment thread stays when its anchor goes, so an undo or a version restore brings the chart back with its sheet. The media sweep of [PROPOSAL_DOCUMENT_LIFECYCLE.md](PROPOSAL_DOCUMENT_LIFECYCLE.md#a-container-keeps-a-part-while-something-names-it) removes a sheet once neither the document nor any retained version names it.
 - **The Workbook in a dialog is the hard part.** The probe's focus, clipboard and Escape problems are known and the root cause of the first isn't. Phase 1 starts there, so a dead end is found before the rest is built.
 - **Bundle size.** Docs, Slides and Vector load the sheet package only when a dialog opens; a first open waits for it.
-- **A sheets document inside a document is new for collab.** The collab route, `findContainerPath`, version snapshots and `copyPathAcross` already handle a chat inside a document, and a sheets container is the same shape, but no test covers a collab document nested in another one yet. Phase 1 adds one for each.
+- **A sheets document inside a document is new for collab.** The collab route, `findContainerPath`, version snapshots and `Mount.copyPath` already handle a chat inside a document, and a sheets container is the same shape, but no test covers a collab document nested in another one yet. Phase 1 adds one for each.
 
 ## Decisions
 

@@ -1,13 +1,5 @@
-import {
-    CODE_EXTENSIONS,
-    DRIVE_MIME_DOC,
-    DRIVE_MIME_SHEETS,
-    DRIVE_MIME_SLIDES,
-    DRIVE_MIME_VECTOR,
-    isIcsFile,
-    isStructuredTextFile,
-    isVCardFile,
-} from '../types/drive';
+import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES, DRIVE_MIME_VECTOR } from '../types/drive';
+import { CODE_EXTENSIONS, isIcsFile, isStructuredTextFile, isVCardFile } from '../types/file-kinds';
 
 const CODE_MIMES = [
     'text/',

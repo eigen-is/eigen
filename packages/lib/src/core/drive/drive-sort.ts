@@ -3,8 +3,9 @@
 // Eigen extension, so "B Chat" comes before "B Chat Two", and the full name breaks a tie between a doc
 // and a sheet that share one.
 
-import type { DrivePath, DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
+import type { DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive-view';
 
 function byName(a: DrivePath, b: DrivePath): number {
     const options = { sensitivity: 'base' } as const;

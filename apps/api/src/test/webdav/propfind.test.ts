@@ -92,4 +92,25 @@ describe('WebDAV resource PROPFIND', () => {
         const body = await res.text();
         expect(body).toContain('PropfindFixture');
     });
+
+    // Behind the bundled Caddy the API lives under /eigen, so an href without it names a path the client can't reach.
+    test('every href names the path under the API base path', async () => {
+        const before = process.env['VITE_API_HOST'];
+        process.env['VITE_API_HOST'] = 'https://demo.example/eigen';
+        try {
+            const res = await webdavRequest(
+                ctx.alice.user.email,
+                'PROPFIND',
+                `/webdav/${ctx.alice.user.id}/${mountId}/`,
+                { headers: { Depth: '1' } },
+            );
+            const hrefs = [...(await res.text()).matchAll(/<D:href>([^<]*)<\/D:href>/g)].map((m) => m[1]);
+            expect(hrefs.length).toBeGreaterThan(1);
+            for (const href of hrefs)
+                expect(href.startsWith(`/eigen/webdav/${ctx.alice.user.id}/${mountId}/`)).toBe(true);
+        } finally {
+            if (before === undefined) delete process.env['VITE_API_HOST'];
+            else process.env['VITE_API_HOST'] = before;
+        }
+    });
 });

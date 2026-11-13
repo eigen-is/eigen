@@ -1,3 +1,5 @@
+import { spyOn } from 'bun:test';
+import type { Drive } from '../../lib/drive/drive';
 import { basicAuth, davRequest } from '../dav-test-helpers';
 import { authedRequest } from '../setup';
 
@@ -10,6 +12,31 @@ export function webdavRequest(
     options: { headers?: Record<string, string>; body?: BodyInit } = {},
 ): Promise<Response> {
     return davRequest(method, path, { email, headers: options.headers, body: options.body });
+}
+
+// Runs the requests so each finds `pathStr` missing before any goes on, as clients creating one new name at once can.
+export async function whenAllFindMissing<T>(
+    drive: Drive,
+    pathStr: string,
+    requests: (() => Promise<T>)[],
+): Promise<T[]> {
+    const allMissing = Promise.withResolvers<void>();
+    let missing = 0;
+    const resolvePath = drive.resolvePath.bind(drive);
+    const spy = spyOn(drive, 'resolvePath').mockImplementation(async (mountId: string, path: string) => {
+        const found = await resolvePath(mountId, path);
+        if (path === pathStr && !found && missing < requests.length) {
+            if (++missing === requests.length) allMissing.resolve();
+            await allMissing.promise;
+        }
+        return found;
+    });
+    try {
+        return await Promise.all(requests.map((request) => request()));
+    } finally {
+        allMissing.resolve();
+        spy.mockRestore();
+    }
 }
 
 // /webdav/<ownerId>/ lists no mounts, so this fetches them through the regular drive API.

@@ -3,17 +3,14 @@
 // and checks the caller's access before it passes the call on. It does not extend Drive, on purpose:
 // getSharedDrive returns Drive | SharedDrive, so a route can only call a method that has a wrapper here.
 
+import type { DrivePath, DrivePathDetails, EigenDocType } from '@workspace/lib/types/drive';
 import type {
     DriveACLDelta,
     DriveAccessCheckResult,
-    DriveContainerType,
-    DrivePath,
-    DrivePathDetails,
     DriveVisibility,
     EffectiveMember,
-    EigenDocType,
     InviteResult,
-} from '@workspace/lib/types/drive';
+} from '@workspace/lib/types/drive-access';
 import type { ClientFileEventRecord, FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { MountInfo } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -24,13 +21,12 @@ import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError } from '../core';
 import type { Home } from '../home';
 import type { Mount } from '../mount';
-import type { StorageFile } from '../storage';
+import type { FileBytes, StorageFile } from '../storage';
 import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
 import { canonicalACLId, canReadFromAncestors } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
-import type { CopyTarget } from './copy-across';
-import type { ContentWriteOptions, ContentWriteResult, Drive } from './drive';
+import type { ContentWriteOptions, ContentWriteResult, CopyTarget, Drive } from './drive';
 import type { LockManager } from './lock-manager';
 
 // A `_user` or `_actor` in the middle of a parameter list only keeps the arguments after it where
@@ -51,10 +47,16 @@ export class SharedDrive {
         return this.drive.lockManager;
     }
 
-    // Dropping the locks of other users needs write access, the same as the move that calls it.
-    public async releaseLocksUnder(mountId: string, pathId: string): Promise<void> {
-        await this.requireWrite(mountId, pathId);
-        return this.drive.releaseLocksUnder(mountId, pathId);
+    // The whole chain, not only what the caller can read: a lock on a folder above a share holds for the sharee too.
+    // Ids alone name nothing, and only a lock lookup uses them.
+    public async ancestorIds(mountId: string, pathId: string): Promise<string[]> {
+        await this.requireRead(mountId, pathId);
+        return this.drive.ancestorIds(mountId, pathId);
+    }
+
+    public async descendantIds(mountId: string, pathId: string): Promise<string[]> {
+        await this.requireRead(mountId, pathId);
+        return this.drive.descendantIds(mountId, pathId);
     }
 
     // Holding the owner's home has no access check of its own: the caller checks access before it holds.
@@ -177,27 +179,21 @@ export class SharedDrive {
         return this.drive.readRange(mountId, pathId, start, end);
     }
 
-    public async getMimeTypeContents(mimeType: string): Promise<DrivePath[]> {
+    public async getMimeTypeContents(mimeTypePrefix: string): Promise<DrivePath[]> {
         await this.requireDriveOwner('No read permission');
-        return this.drive.getMimeTypeContents(mimeType);
+        return this.drive.getMimeTypeContents(mimeTypePrefix);
     }
 
-    public async getMountMimeTypeContents(mountId: string, mimeType: string): Promise<DrivePath[]> {
+    public async getMountMimeTypeContents(mountId: string, mimeTypePrefix: string): Promise<DrivePath[]> {
         await this.requireDriveOwner('No read permission');
-        return this.drive.getMountMimeTypeContents(mountId, mimeType);
+        return this.drive.getMountMimeTypeContents(mountId, mimeTypePrefix);
     }
 
     // ---- Changing the tree ----
 
-    public async createFolder(
-        mountId: string,
-        parentId: string,
-        folderName: string,
-        _user: User,
-        containerType?: DriveContainerType,
-    ): Promise<DrivePath> {
+    public async createFolder(mountId: string, parentId: string, folderName: string): Promise<DrivePath> {
         await this.requireWrite(mountId, parentId);
-        return this.drive.createFolder(mountId, parentId, folderName, this.user, containerType);
+        return this.drive.createFolder(mountId, parentId, folderName, this.user);
     }
 
     public async create(mountId: string, parentId: string, name: string, type: EigenDocType): Promise<DrivePath> {
@@ -220,16 +216,27 @@ export class SharedDrive {
         parentId: string,
         name: string,
         mimeType: string,
-        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        data: FileBytes,
     ): Promise<DrivePath> {
         await this.requireWrite(mountId, parentId);
         return this.drive.createFileFromData(mountId, parentId, name, mimeType, data, this.user);
     }
 
+    public async createNamedFile(
+        mountId: string,
+        parentId: string,
+        name: string,
+        mimeType: string,
+        data: FileBytes,
+    ): Promise<DrivePath> {
+        await this.requireWrite(mountId, parentId);
+        return this.drive.createNamedFile(mountId, parentId, name, mimeType, data, this.user);
+    }
+
     public async writeFileContent(
         mountId: string,
         pathId: string,
-        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+        data: FileBytes,
         options: ContentWriteOptions,
     ): Promise<ContentWriteResult> {
         await this.requireWrite(mountId, pathId);
@@ -241,15 +248,32 @@ export class SharedDrive {
         return this.drive.updatePathDetails(mountId, pathId, details);
     }
 
-    // A move takes the item out of its folder, so it needs write on that folder too, as a rename does.
     public async movePath(mountId: string, pathId: string, targetParentId: string): Promise<DrivePath> {
+        await this.requireMove(mountId, pathId, targetParentId);
+        return this.drive.movePath(mountId, pathId, targetParentId, this.user);
+    }
+
+    // The move trashes or writes over what holds the name. Write on the folder covers that path too, as access only
+    // widens down a chain of folders.
+    public async movePathOver(
+        mountId: string,
+        pathId: string,
+        destParentId: string,
+        name: string,
+        checkedId: string | null,
+    ): Promise<DrivePath> {
+        await this.requireMove(mountId, pathId, destParentId);
+        return this.drive.movePathOver(mountId, pathId, destParentId, name, checkedId, this.user);
+    }
+
+    // A move takes the item out of its folder, so it needs write on that folder too, as a rename does.
+    private async requireMove(mountId: string, pathId: string, targetParentId: string): Promise<void> {
         const memberships = await getMemberships(this.user.id);
         await this.requireWrite(mountId, pathId, memberships, 'No write permission on source');
         const path = await this.drive.getPath(mountId, pathId);
         if (!path?.parentId) throw new ApiError(403, 'No write permission on source folder');
         await this.requireWrite(mountId, path.parentId, memberships, 'No write permission on source folder');
         await this.requireWrite(mountId, targetParentId, memberships, 'No write permission on target folder');
-        return this.drive.movePath(mountId, pathId, targetParentId, this.user);
     }
 
     public async renamePath(mountId: string, pathId: string, newName: string): Promise<void> {
@@ -259,19 +283,44 @@ export class SharedDrive {
         return this.drive.renamePath(mountId, pathId, newName, this.user);
     }
 
-    // A copy to another mount or drive writes through that drive, and Drive.copyPath checks its write access.
+    // Access to the target folder is the target's to check, as it can be another owner's drive.
     public async copyPath(
+        mountId: string,
+        srcPathId: string,
+        to: CopyTarget,
+        desiredName: string | undefined,
+    ): Promise<DrivePath> {
+        await this.requireRead(mountId, srcPathId, undefined, 'No read permission on source');
+        return this.drive.copyPath(mountId, srcPathId, to, desiredName, this.user);
+    }
+
+    // The copy trashes or writes over what holds the name, which write on the folder covers, as for movePathOver.
+    public async copyPathOver(
         mountId: string,
         srcPathId: string,
         destParentId: string,
         name: string,
-        _user: User,
-        to?: CopyTarget,
+        checkedId: string | null,
     ): Promise<DrivePath> {
         const memberships = await getMemberships(this.user.id);
         await this.requireRead(mountId, srcPathId, memberships, 'No read permission on source');
-        if (!to) await this.requireWrite(mountId, destParentId, memberships, 'No write permission on target folder');
-        return this.drive.copyPath(mountId, srcPathId, destParentId, name, this.user, to);
+        await this.requireWrite(mountId, destParentId, memberships, 'No write permission on target folder');
+        return this.drive.copyPathOver(mountId, srcPathId, destParentId, name, checkedId, this.user);
+    }
+
+    // The source can be in another owner's drive, which checked the read access on it. A copy needs read on its
+    // folder besides write, so a folder shared write-only takes none.
+    public async receiveCopy(
+        mountId: string,
+        destParentId: string,
+        source: Mount,
+        src: DrivePath,
+        desiredName: string | undefined,
+    ): Promise<DrivePath> {
+        const memberships = await getMemberships(this.user.id);
+        await this.requireRead(mountId, destParentId, memberships);
+        await this.requireWrite(mountId, destParentId, memberships, 'No write permission on target folder');
+        return this.drive.receiveCopy(mountId, destParentId, source, src, desiredName, this.user);
     }
 
     public async flushContainerDb(mountId: string, containerId: string): Promise<void> {
@@ -296,12 +345,6 @@ export class SharedDrive {
         }
         await this.requireWrite(mountId, pathId);
         return this.drive.deletePath(mountId, pathId, this.user);
-    }
-
-    // Removing a failed copy needs write access, the same as a trash.
-    public async deleteFailedCopy(mountId: string, pathId: string, createdIds: ReadonlySet<string>): Promise<void> {
-        await this.requireWrite(mountId, pathId);
-        return this.drive.deleteFailedCopy(mountId, pathId, createdIds, this.user);
     }
 
     public async restorePath(mountId: string, pathId: string): Promise<void> {
@@ -365,7 +408,7 @@ export class SharedDrive {
     public async checkAccessForEmails(
         mountId: string,
         pathId: string,
-        emails: string[],
+        emails: readonly string[],
     ): Promise<DriveAccessCheckResult> {
         const memberships = await getMemberships(this.user.id);
         await this.requireRead(mountId, pathId, memberships);

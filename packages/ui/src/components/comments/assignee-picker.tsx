@@ -1,4 +1,4 @@
-import type { EffectiveMember } from '@workspace/lib/types/drive';
+import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import type { ReactNode } from 'react';
 import { useState } from 'react';

@@ -5,7 +5,7 @@
 
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isImageMime } from '@workspace/lib/types/drive';
+import { isImageMime } from '@workspace/lib/types/file-kinds';
 import type { VectorFrame } from '@workspace/lib/vector';
 import { serializeBackgroundFill } from '@workspace/lib/vector';
 import { Button } from '@workspace/ui/components/button';

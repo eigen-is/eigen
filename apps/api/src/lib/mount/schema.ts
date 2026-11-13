@@ -1,7 +1,8 @@
 // The Drizzle tables of a mount's metadata.db, such as the tree of paths, the upload queue and the file history. Mount
 // and its sibling modules query them, and the mount's migrations create them.
 
-import type { DriveACL, DrivePathDetails, DrivePathType, DriveVisibility } from '@workspace/lib/types/drive';
+import type { DrivePathDetails, DrivePathType } from '@workspace/lib/types/drive';
+import type { DriveACL, DriveVisibility } from '@workspace/lib/types/drive-access';
 import type { FileEventDetailsMap, FileEventType } from '@workspace/lib/types/file-history';
 import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';

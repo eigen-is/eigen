@@ -70,7 +70,7 @@ describe('Folders nest at most 256 levels deep', () => {
         const discard = (pathId: string): Promise<void> => mount.deletePath(pathId);
         const before = await mount.listFolder(levels[254]!);
         await expect(
-            mount.copyPath(await mount.listCopy(a), levels[254]!, 'CopyMe', discard, TEST_ACTOR),
+            mount.copyPath(mount, await mount.listCopy(a), levels[254]!, 'CopyMe', discard, TEST_ACTOR),
         ).rejects.toMatchObject(TOO_DEEP);
         expect(await mount.listFolder(levels[254]!)).toEqual(before);
     });

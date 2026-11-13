@@ -4,7 +4,8 @@
 // the Share dialog's form, so both say the same thing.
 
 import { useDriveAccess } from '@workspace/lib/drive';
-import type { DriveACL, DriveAccessItem, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveACL, DriveAccessItem, DriveVisibility } from '@workspace/lib/types/drive-access';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { AvatarIcon } from '@workspace/ui/components/avatar';
 import { cn } from '@workspace/ui/lib/utils';

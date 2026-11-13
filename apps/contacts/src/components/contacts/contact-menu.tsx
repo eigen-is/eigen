@@ -16,10 +16,10 @@ import { MenuSections } from '@workspace/ui/components/context-menu';
 import { ProgressDialog } from '@workspace/ui/components/drive';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { LabelAssignSubMenu } from '@workspace/ui/components/labels';
+import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { printDocument } from '@workspace/ui/lib/print-element';
 import { Download, Mail, MessageSquare, Pencil, Printer, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
 
 // A card is yours if it carries your X-EIGEN-ID self-link, its eigenId, or shares your account email.
 export function isSelfContact(contact: Contact, user: AuthUser | null): boolean {
@@ -41,20 +41,21 @@ export type ContactMenuActions = {
     showExport?: boolean;
 };
 
-// The contact rows the list's context menu and the detail kebab share; mount `dialogs` outside the menu content.
-export function useContactMenu() {
+// The caller mounts `dialogs` outside the menu content, which unmounts when the menu closes.
+export function useContactMenu(): {
+    renderItems: (contacts: Contact[], close: () => void, actions: ContactMenuActions) => ReactNode;
+    dialogs: ReactNode;
+} {
     const openWriteEmailTo = useOpenWriteEmailTo();
     const mailEnabled = useMailEnabled();
     const startChatWith = useStartChatWith();
     const { exportContacts, isExporting } = useExportContacts();
     const { user } = useAuth();
-    const [chatWith, setChatWith] = useState<{ email: string; name: string }[] | null>(null);
+    const chatWizard = useDialogValue<{ email: string; name: string }[]>();
 
     const startChat = async (emails: string[], name: string) => {
-        // startChatWith prefers the registered account address. An existing one-to-one chat the user can write in opens
-        // directly, otherwise the wizard opens filled in.
         const result = await startChatWith(emails);
-        if (result !== 'opened') setChatWith([{ email: result.email, name }]);
+        if (result !== 'opened') chatWizard.openDialog([{ email: result.email, name }]);
     };
 
     const renderItems = (contacts: Contact[], close: () => void, actions: ContactMenuActions): ReactNode => {
@@ -73,7 +74,6 @@ export function useContactMenu() {
         }));
         const canReach = eligible.length > 0;
         const canMail = canReach && mailEnabled;
-
         const canExport = !!showExport && contacts.length > 0;
 
         const labelIds = labels.map((label) => label.id);
@@ -100,16 +100,14 @@ export function useContactMenu() {
                             )}
                             <DropdownMenuItem
                                 onClick={() => {
-                                    // One contact may open an existing chat, and its whole address list lets
-                                    // startChatWith prefer the registered account. Several open the wizard, filled
-                                    // in with every eligible person.
+                                    // The whole address list lets startChatWith prefer the registered account.
                                     if (eligible.length === 1) {
                                         void startChat(
                                             eligible[0].email.filter((email) => email.trim().length > 0),
                                             eligiblePeople[0].name,
                                         );
                                     } else {
-                                        setChatWith(eligiblePeople);
+                                        chatWizard.openDialog(eligiblePeople);
                                     }
                                     close();
                                 }}
@@ -197,11 +195,9 @@ export function useContactMenu() {
     const dialogs = (
         <>
             <ChatCreateWizard
-                open={!!chatWith}
-                onOpenChange={(open) => {
-                    if (!open) setChatWith(null);
-                }}
-                initialPeople={chatWith ?? undefined}
+                open={chatWizard.open}
+                onOpenChange={chatWizard.setOpen}
+                initialPeople={chatWizard.value}
             />
             <ProgressDialog open={isExporting} title={EXPORTING_CONTACTS_TITLE} />
         </>
