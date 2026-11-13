@@ -305,14 +305,15 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 
 ### Lookups
 
+- [ ] **A blank element of a computed array is 0**, as Excel stores it, where Google keeps it blank: over C1:C3 = 5, 6, 7 and a blank C4, `PRODUCT(IF({1;1;1;1},C1:C4))` is 0 (Google 210) and `COUNTA` of it 4 (Google 3). A formula's own blank result already stays blank, as in Google. Decide it with step 2's spill, from Excel batch 20 and the array probes of batch 21. **S**
 - [ ] **A lifted lookup answers per element**: four lifted reference-only rows answer one `#VALUE!` where Excel answers a 1×2 of `#VALUE!`, and the search does not know the blank cell of a lifted `INDEX` or `XLOOKUP` (`lift.ts` makes one blank-cell value). **S**
 
 ### Number display (numfmt)
 
 - [ ] **No carry at midnight for a date-only format**: `TEXT(45000.999995,"dddd")` is Wednesday, Excel Thursday; numfmt's own test pins the other answer. **S**
 - [ ] **Half a second rounds up**: `TEXT(0.5+0.5/86400,"hh:mm:ss")` is `12:00:01`, Excel `12:00:00`. **S**
-- [ ] **Negative serials**: `TEXT(-1.25,"[h]:mm:ss")` is `-18:00:00` where 30 hours are meant (Excel `#VALUE!`, and `#######` in a cell), and a negative time does not carry at midnight. numfmt's elapsed parts reuse the wrapped clock time: report it upstream rather than patch numfmt a second time. **S**
-- [ ] **`a/p` in lower or mixed case**: `TEXT(0.02,"hh:mm a/p")` is `00:28 a/p`, Excel `12:28 a`; `TEXT(0.52,"h:mm AM/pm")` is `12:28 A12/p12`, Excel `12:28 PM`. In cells too. A numfmt bug to report upstream. **S**
+- [ ] **Negative serials**: `TEXT(-1.25,"[h]:mm:ss")` is `-18:00:00` where 30 hours are meant (Excel `#VALUE!`, and `#######` in a cell), and under a day the minutes are wrong too: -0.1 shows `-2:36:00` for 2 hours 24 minutes (-0.5 only looks right, since half a day wraps onto itself). numfmt's elapsed parts reuse the wrapped clock time, and Google Sheets shows `-30:00:00` and `-2:24:00`: fix it upstream rather than patch numfmt a second time. **S**
+- [ ] **`a/p` in lower or mixed case**: `TEXT(0.02,"hh:mm a/p")` is `00:28 a/p`, Excel `12:28 a`; `TEXT(0.52,"h:mm AM/pm")` is `12:28 A12/p12`, Excel `12:28 PM`; `a/P` shows as written, Excel `P`. In cells too. numfmt reads the marker only as `AM/PM`, `am/pm` or `A/P`: fix it upstream. **S**
 - [ ] **A date past 31 December 9999**: `TEXT(2958466,"yyyy-mm-dd")` is `10000-01-01` and `TEXT(1E+300,"yyyy-mm-dd")` `1E+300`, Excel `#VALUE!` for both (`valueAsText` in `format/number-display.ts`). **S**
 - [ ] **Fraction formats past 1E+21** print exponent text, and **a 16-digit number whose 16th digit is an exact 5** rounds toward zero. **S**
 - [ ] **`TEXT` on a 16-digit tie** rounds as numfmt does, the engine's own number text the other way: `TEXT(73938790243119/4,"0.0")` is `18484697560779.7` as in Excel, where `&""`, `FIXED` and `ROUND` give `…779.8` (51 of 200,000 random numbers). **S**
@@ -373,7 +374,7 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 - [ ] **`RecalcResult.loops` after a load with cached values** lists fewer loop cells than a fresh load: a self-loop `=SUMPRODUCT(R[0]C:R[2]C)` loaded holding `#REF!` is never recomputed, so it is not listed. A host that trusts `loops` after such a load misses it. **S**
 - [ ] **A date typed from 1 January to 28 February 1900 shows the day before**: `1900-01-15` shows `1900-01-14` at once. The sheet's input parse (`parseCellInput`, `dateToSerial`) still makes Excel's serial for those 59 days and the display reads the day line Google uses. No data is lost. Step 1b's typed-date parse decides it. **S**
 - [ ] **A unary plus over a range makes an array**: `SUM(+A1:A20000)` costs 2.8 times what it did, and a range as the fallback of IFERROR or IFNA takes the same path, because a blank that passes through a computed array is 0. `+A1` is unchanged. **S**
-- [ ] **A Hijri `B2` format on a number up to 60** makes numfmt throw on a valid pattern: `TEXT(60,"B2yyyy")` shows `60`, and the format dialog's preview shows numfmt's error for it. Upstream. **S**
+- [ ] **A Hijri `B2` format on a number from 60 up to 61** makes numfmt throw on a valid pattern, as does a number that rounds up into day 60 (59.99999999999); 0 to 59 and 61 on are fine. `TEXT(60,"B2yyyy")` shows `60`, and the format dialog's preview shows numfmt's error for it. Day 60 is the 29 February 1900 of Excel's leap-year bug, and numfmt throws for it where no option can catch it: fix it upstream. **S**
 
 ## Sync and undo
 

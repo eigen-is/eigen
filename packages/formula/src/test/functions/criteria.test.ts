@@ -198,8 +198,8 @@ describe('blank cells', () => {
         expect(evaluate('=COUNTIF(P20:R23,"")')).toBe(12);
         expect(evaluate('=COUNTIF(I44:L44,"=")', { I44: '=""' })).toBe(3);
         expect(evaluate('=COUNTIF(I45:L45,"<>")', { I45: '=""' })).toBe(1);
-        expect(evaluate('=COUNTIF(A1:C1,"")', { B1: '=""', C1: '=A1' })).toBe(2);
-        expect(evaluate('=COUNTIF(A1:C1,"<>")', { B1: '=""', C1: '=A1' })).toBe(2);
+        expect(evaluate('=COUNTIF(A1:C1,"")', { B1: '=""', C1: '=A1' })).toBe(3);
+        expect(evaluate('=COUNTIF(A1:C1,"<>")', { B1: '=""', C1: '=A1' })).toBe(1);
     });
 
     test('<> of a value counts blank cells, also past the last used row', () => {

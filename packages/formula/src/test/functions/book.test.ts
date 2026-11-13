@@ -337,7 +337,7 @@ describe('CELL with no reference reads no cell', () => {
     test('the contents are a blank and the type is b, and the cell is on no loop', () => {
         const engine = engineOf({ s1: { A1: '=CELL("contents")', A2: '=CELL("type")', A3: '=CELL("contents",A3)' } });
         const { loops } = engine.recalc(Number.POSITIVE_INFINITY);
-        expect(['A1', 'A2', 'A3'].map((host) => valueAt(engine, host))).toEqual([0, 'b', REF]);
+        expect(['A1', 'A2', 'A3'].map((host) => valueAt(engine, host))).toEqual([null, 'b', REF]);
         expect(loops).toEqual([{ sheet: 's1', row: 2, column: 0 }]);
     });
 });

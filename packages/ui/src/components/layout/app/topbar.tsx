@@ -306,7 +306,7 @@ export function Topbar({ rootRoute }: TopbarProps) {
     const { data: unreadCount = 0 } = useUnreadNotificationCount(auth.user?.id ?? '');
 
     useEffect(() => {
-        const name = appName ? `eigen|${appName}>` : 'eigen';
+        const name = appName ? `eigen|${appName}⟩` : 'eigen';
         const base = documentTitle ? `${documentTitle} — ${name}` : name;
         document.title = unreadCount > 0 ? `(${unreadCount}) ${base}` : base;
     }, [appName, documentTitle, unreadCount]);

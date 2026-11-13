@@ -1351,7 +1351,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DELETE_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `DOCUMENT_FONT` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `DOCUMENT_FONT_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
-| `DOCUMENT_LINE_RATIO` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `DUPLICATE_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `EIGEN_ACCENT_COLOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
@@ -1518,6 +1517,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ITALIC_HEADING_LEVELS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
 | `ITALIC_HEADING_SELECTOR` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
 | `keepOnPaper` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
+| `LINE_SPACING_PROPERTY` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/paragraph-format.ts |
 | `listTypeOfStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/ordered-list.ts |
 | `matchPaperSize` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `mathAsText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation-paste.ts |

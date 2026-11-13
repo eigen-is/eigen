@@ -19,12 +19,12 @@ The name Eigen is Dutch/German for "own", which turned out to describe the whole
 
 The basics work:
 
-- **eigen|mail>**: a simple webmail client. You can read and send messages.
-- **eigen|drive>**: file storage and sharing. Upload files, create folders, share with others.
-- **eigen|docs>**: collaborative text editing using [Yjs](https://yjs.dev/). Multiple users can edit the same document
+- **eigen|mail⟩**: a simple webmail client. You can read and send messages.
+- **eigen|drive⟩**: file storage and sharing. Upload files, create folders, share with others.
+- **eigen|docs⟩**: collaborative text editing using [Yjs](https://yjs.dev/). Multiple users can edit the same document
   without conflicts.
-- **eigen|contacts>**: basic contact management.
-- **eigen|stickies>**: kanban boards like Trello. You can move cards around and collaborate in real time.
+- **eigen|contacts⟩**: basic contact management.
+- **eigen|stickies⟩**: kanban boards like Trello. You can move cards around and collaborate in real time.
 
 It’s all minimal, but functional enough to feel like a small ecosystem.
 
@@ -33,32 +33,32 @@ It’s all minimal, but functional enough to feel like a small ecosystem.
     src="/data/blog/media/2025-10-03-eigen-proof-of-concept/space.webp" 
     thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/space-thumb.webp"
     type="image" 
-    caption="eigen|space>" />
+    caption="eigen|space⟩" />
   <media 
     src="/data/blog/media/2025-10-03-eigen-proof-of-concept/mail.webp" 
     thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/mail-thumb.webp" 
     type="image" 
-    caption="eigen|mail>" />
+    caption="eigen|mail⟩" />
   <media 
     src="/data/blog/media/2025-10-03-eigen-proof-of-concept/contacts.webp" 
     thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/contacts-thumb.webp" 
     type="image" 
-    caption="eigen|contacts>" />
+    caption="eigen|contacts⟩" />
   <media 
     src="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive.webp" 
     thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive-thumb.webp" 
     type="image" 
-    caption="eigen|drive>" />
+    caption="eigen|drive⟩" />
   <media 
     src="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs.webp" 
     thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs-thumb.webp" 
     type="image" 
-    caption="eigen|docs>" />
+    caption="eigen|docs⟩" />
   <media 
     src="/data/blog/media/2025-10-03-eigen-proof-of-concept/stickies.webp" 
     thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/stickies-thumb.webp" 
     type="image" 
-    caption="eigen|stickies>" />
+    caption="eigen|stickies⟩" />
 </media-grid>
 
 ## Under the hood
@@ -103,12 +103,12 @@ disappears from memory.
     src="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs.mp4" 
     poster="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs-thumb.webp"
     type="video" 
-    caption="eigen|docs>" />
+    caption="eigen|docs⟩" />
   <media 
     src="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive.mp4" 
     poster="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive-thumb.webp"
     type="video" 
-    caption="eigen|drive>" />
+    caption="eigen|drive⟩" />
 </media-grid>
 
 ## What's Next?

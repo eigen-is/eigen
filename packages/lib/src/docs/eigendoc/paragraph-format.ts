@@ -7,7 +7,6 @@
 import type { Node } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
-import { DOCUMENT_LINE_RATIO } from '../../constants/fonts';
 import { readNumberIn } from '../../core/guards';
 import type { NormalStyle } from './normal-style';
 import { MAX_PAPER_MM, mmToPt } from './page';
@@ -54,8 +53,8 @@ export const PARAGRAPH_FORMAT_LIMITS: Record<ParagraphFormatKey, { min: number; 
     indentFirstLine: { min: -MAX_INDENT, max: MAX_INDENT },
 };
 
-// A line spacing as CSS draws it: CSS can't know the fonts of a paragraph's runs, so a multiple of Inter's line.
-export const cssLineHeight = (multiple: number) => Math.round(multiple * DOCUMENT_LINE_RATIO * 10_000) / 10_000;
+// A text block's line spacing, which eigen-prose.css and a run in another font multiply by their font's single line.
+export const LINE_SPACING_PROPERTY = '--line-spacing';
 
 // Each attribute's HTML, its unit's step (Word's twentieths of a point for a length) and its CSS. Space before is
 // padding, so it adds to the space after the block above as in Word and Google Docs, where margins would collapse, and
@@ -64,7 +63,7 @@ export const FORMAT: Record<ParagraphFormatKey, { data: string; perUnit: number;
     lineSpacing: {
         data: 'data-line-spacing',
         perUnit: 100,
-        css: (value) => `line-height: ${cssLineHeight(value)}`,
+        css: (value) => `${LINE_SPACING_PROPERTY}: ${value}`,
     },
     spaceBefore: { data: 'data-space-before', perUnit: 20, css: (value) => `margin-top: 0pt; padding-top: ${value}pt` },
     spaceAfter: { data: 'data-space-after', perUnit: 20, css: (value) => `margin-bottom: ${value}pt` },
@@ -131,7 +130,7 @@ function drawnFormat(block: Node, dom: globalThis.Node | null, spaced: boolean, 
         const style = getComputedStyle(dom);
         const px = (value: string) => Number.parseFloat(value);
         const drawn = {
-            lineSpacing: px(style.lineHeight) / px(style.fontSize) / DOCUMENT_LINE_RATIO,
+            lineSpacing: Number.parseFloat(style.getPropertyValue(LINE_SPACING_PROPERTY)),
             spaceBefore: px(style.marginTop) * 0.75,
             spaceAfter: px(style.marginBottom) * 0.75,
         };

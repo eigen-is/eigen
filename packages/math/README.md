@@ -1,4 +1,4 @@
-# @workspace/math
+# eigen|math⟩
 
 `@workspace/math` reads and writes equations. Every format reads into one tree of math nodes, and every format is written out of that tree: LaTeX, MathML and Word's OMML, plus a plain-text form that is written only. A conversion is always a reader and then a writer, such as `writeMathml(readLatex(latex))`. The readers take untrusted input, check bounds as they build, and either return a tree every writer can write or throw a `MathError`. The package has no dependencies and uses no DOM, Bun or Node API, so it runs unchanged in a browser, a Worker, Bun and Node.
 

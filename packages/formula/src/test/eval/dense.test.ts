@@ -100,7 +100,7 @@ function questions(dice: Dice, expr: Expr, grid: Grid): [string, Plain][] {
     const width = value.rows[0].length;
     const asked: [string, Plain][] = [];
     for (let r = 0; r < height; r += 1) {
-        for (let c = 0; c < width; c += 1) asked.push([`=INDEX(${text},${r + 1},${c + 1})`, value.rows[r][c] ?? 0]);
+        for (let c = 0; c < width; c += 1) asked.push([`=INDEX(${text},${r + 1},${c + 1})`, value.rows[r][c]]);
     }
     if (height * width === 1) return asked;
     for (const name of ['SUM', 'AVERAGE', 'COUNT', 'COUNTA', 'MAX', 'MIN', 'AND', 'OR']) {

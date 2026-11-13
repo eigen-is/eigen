@@ -10,7 +10,6 @@ import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import { writeOmml } from '@workspace/math';
 import { cssColorToHex, isTransparentCssColor } from '../../../document/colors';
 import { readStoredEquation } from '../../../document/equation';
-import type { RunFace } from '../../../document/looks';
 import { cssPt, halfPoints, SMALL_LOOK, twips } from '../../../document/looks';
 import { proseValue } from '../../../document/prose-css';
 import { uriReference } from '../../../ooxml/opc';
@@ -66,13 +65,13 @@ export function rPrXml(props: RunProps): string {
 // A run is written in its paragraph's style.
 export const INLINES = new Map<
     string,
-    (node: JSONContent, linked: boolean, context: Context, style: StyleId | undefined, faces: RunFace[]) => string
+    (node: JSONContent, linked: boolean, context: Context, style: StyleId | undefined) => string
 >([
     [
         'text',
-        (node, linked, context, style, faces) => {
+        (node, linked, context, style) => {
             const content = textXml(node.text ?? '');
-            return content && runXml(content, node, linked, context, style, faces);
+            return content && runXml(content, node, linked, context, style);
         },
     ],
     ['hardBreak', () => '<w:r><w:br/></w:r>'],
@@ -81,8 +80,8 @@ export const INLINES = new Map<
     // takes marks, because the Yjs binding stores none on an atom, so a reloaded doc holds none.
     [
         'pageNumber',
-        (node, linked, context, style, faces) => {
-            const run = (content: string) => runXml(content, {}, linked, context, style, faces);
+        (node, linked, context, style) => {
+            const run = (content: string) => runXml(content, {}, linked, context, style);
             const instruction = PAGE_NUMBER_FIELDS[readPageNumberKind(node.attrs?.['kind'])];
             return fieldStart(instruction, { run }) + run(textXml('1')) + fieldEnd(run);
         },
@@ -91,10 +90,10 @@ export const INLINES = new Map<
     // the body. The atom takes no marks, as the Yjs binding stores none on one.
     [
         'footnote',
-        (node, _linked, context, style, faces) => {
+        (node, _linked, context, style) => {
             const id = context.pkg.footnotes.push(node);
             const props: RunProps = { style: 'FootnoteReference' };
-            faces.push(useFace(context.pkg, props, style));
+            useFace(context.pkg, props, style);
             return `<w:r><w:rPr>${rPrXml(props)}</w:rPr><w:footnoteReference w:id="${id}"/></w:r>`;
         },
     ],
@@ -136,22 +135,21 @@ function runXml(
     linked: boolean,
     context: Context,
     style: StyleId | undefined,
-    faces: RunFace[],
 ): string {
     const props = runProps(node.marks ?? [], linked, context);
-    faces.push(useFace(context.pkg, props, style));
+    useFace(context.pkg, props, style);
     const rPr = rPrXml(props);
     return `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}${content}</w:r>`;
 }
 
 // Runs that share a link share one w:hyperlink.
-export function runsXml(nodes: JSONContent[], context: Context, style: StyleId | undefined, faces: RunFace[]): string {
+export function runsXml(nodes: JSONContent[], context: Context, style: StyleId | undefined): string {
     const links = nodes.map((node) => hyperlinkOf(node, context.pkg.publicOrigin));
     let xml = '';
     for (let i = 0; i < nodes.length; ) {
         const link = links[i];
         let runs = '';
-        do runs += INLINES.get(nodes[i].type ?? '')?.(nodes[i], link !== undefined, context, style, faces) ?? '';
+        do runs += INLINES.get(nodes[i].type ?? '')?.(nodes[i], link !== undefined, context, style) ?? '';
         while (++i < nodes.length && links[i]?.target === link?.target && links[i]?.tooltip === link?.tooltip);
         if (!link) {
             xml += runs;

@@ -88,8 +88,9 @@ describe('the Normal style', () => {
         expect(normalStyleProperties({ ...DEFAULT_NORMAL_STYLE, size: 12 })).toEqual({ '--doc-font-size': '12pt' });
         expect(normalStyleProperties(WORD_2013)).toEqual({
             '--doc-font-family': getFontFamily('Source Serif 4'),
+            '--doc-font-line': '1.371',
             '--doc-font-size': '12pt',
-            '--doc-line-height': '1.3068',
+            '--doc-line-spacing': '1.08',
             '--doc-space-before': '6pt',
             '--doc-space-after': '8pt',
             '--doc-color': '#000000',

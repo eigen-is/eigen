@@ -1,4 +1,4 @@
-// The public site's landing page: the cycling eigen|app> wordmark, what Eigen is and the apps it has, the buttons the
+// The public site's landing page: the cycling eigen|app⟩ wordmark, what Eigen is and the apps it has, the buttons the
 // server's admin turned on, such as the waitlist form, and three things it stands for. A signed-in visitor goes
 // straight on to the app.
 

@@ -1,4 +1,4 @@
-# @workspace/formula
+# eigen|formula⟩
 
 `@workspace/formula` is a headless spreadsheet formula engine: it reads and prints formula text, stores a workbook's cells, evaluates formulas, recalculates what an edit reaches, rewrites formulas when rows, columns, blocks or sheets move, and shows numbers as Excel's number formats do. Its source, `src/`, has no React, no DOM and no Bun or Node API, imports no other workspace package, and has one npm dependency, numfmt, used only for number display. So it runs the same in a browser, on Bun and on Node. The bench and oracle scripts in `scripts/` run on Bun and Node and use their APIs. The oracle is `scripts/oracle.ts`, with its rows mode in `scripts/oracle-rows.ts`, and runs as one script (`bun scripts/oracle.ts --help`).
 
@@ -125,6 +125,7 @@ These choices are decided and apply to many functions. FUNCTIONS.md gives an exa
 
 - The day line: day 0 is 30 December 1899, there is no 29 February 1900, and dates run from the year 1 to 9999. Excel's dates in January and February 1900 are one day off from ours.
 - An empty text in arithmetic is 0, where Excel answers `#VALUE!`.
+- A formula whose result is blank leaves its cell blank, as in Google Sheets, where Excel shows 0.
 - A date typed without a year is a number only to `DATEVALUE` and `TIMEVALUE`.
 - Text length is counted in UTF-16 units, so an emoji is 2 characters.
 - A one-cell array is a single value.

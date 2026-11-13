@@ -158,7 +158,7 @@ describe('an array has the size that was written', () => {
         ['=VLOOKUP(40,B:B*2,1,FALSE)', 40],
         ['=XLOOKUP(1,--(A:A="y"),B:B*3)', 60],
         ['=A1:XFC1048575', REF],
-        ['=Sheet2!A1:XFC1048575', 0],
+        ['=Sheet2!A1:XFC1048575', null],
         ['=Sheet2!D3:XFC1048575', 300],
         ['=A:A="x"', true],
         ['=@(B:B+1)', 11],

@@ -21,22 +21,22 @@ You join as one of the twenty people on the crew. Every time you enter, you get 
     src="/data/blog/media/2026-08-14-eigen-demo/chat.webp" 
     thumb="/data/blog/media/2026-08-14-eigen-demo/thumb_chat.webp"
     type="image" 
-    caption="eigen|chat>" />
+    caption="eigen|chat⟩" />
   <media 
     src="/data/blog/media/2026-08-14-eigen-demo/slides.webp" 
     thumb="/data/blog/media/2026-08-14-eigen-demo/thumb_slides.webp" 
     type="image" 
-    caption="eigen|slides>" />
+    caption="eigen|slides⟩" />
   <media 
     src="/data/blog/media/2026-08-14-eigen-demo/stickies.webp" 
     thumb="/data/blog/media/2026-08-14-eigen-demo/thumb_stickies.webp" 
     type="image" 
-    caption="eigen|stickies>" />
+    caption="eigen|stickies⟩" />
   <media 
     src="/data/blog/media/2026-08-14-eigen-demo/vector.webp" 
     thumb="/data/blog/media/2026-08-14-eigen-demo/thumb_vector.webp" 
     type="image" 
-    caption="eigen|vector>" />
+    caption="eigen|vector⟩" />
 </media-grid>
 
 Everything is made up, but the workspace has comments, history, and unread messages, so you can see how Eigen works in use.
@@ -51,7 +51,7 @@ It is a real Eigen server, so all apps are there: mail, drive, docs, sheets, sli
     src="/data/blog/media/2026-08-14-eigen-demo/sheets.mp4" 
     poster="/data/blog/media/2026-08-14-eigen-demo/thumb_sheets.webp"
     type="video" 
-    caption="eigen|sheets>" />
+    caption="eigen|sheets⟩" />
 </media-grid>
 
 Real-time collaboration works too. If you open the same document in a second browser window (using a private window, so you enter as a different crew member), you will see two cursors in the same text.

@@ -16,7 +16,8 @@ describe('IFERROR and IFNA answer a value, where IF and CHOOSE hand a reference 
         ['=SUM(IFERROR(B4,A1:A2))', -1],
         ['=SUM(IFERROR(B4,(A1:A2,C1:C2)))', VALUE],
         ['=IFERROR(B4,B2)', '3'],
-        ['=IFERROR(B4,B1)', 0],
+        // Excel 0: the engine follows Google here, where a blank result leaves its cell blank (batch 21).
+        ['=IFERROR(B4,B1)', null],
         ['=IFERROR(B4,B4)', DIV0],
         ['=INDEX(IFERROR(B4,C1:C3),3,1)', 6],
         ['=ISREF(IF(TRUE,B4,2))', true],

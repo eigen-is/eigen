@@ -23,7 +23,7 @@ node: bun build --target node packages/formula/scripts/oracle.ts --outfile /tmp/
 
 rows: every row with Excel's answer in the oracle's family and batch files that have a fixture plan here, each in a
 fresh engine; numbers equal at 15 significant digits. Skipped: rows Excel refused at entry and volatile ones.
---out gets the differing rows.
+A differing row is on the blank pick when ours is blank where Excel shows 0. --out gets the differing rows.
 
 corpus: one child process per workbook. A formula cell is
   NOT COMPARABLE  with no cached value, a volatile or environment function (NOW, TODAY, RAND, RANDBETWEEN,
@@ -41,10 +41,9 @@ A differing cell is put on a pick by its own formula, in this order, else by a d
   day line     it calls a date function and its value, Excel's, or a cell it reads is blank or a serial under 61
   MATCH -1     it calls MATCH(...,-1), XMATCH(...,-2) or XLOOKUP(...,-2)
   approximate  it runs an approximate lookup over a range whose values are not strictly ascending
-  blank        ours is 0 where the file cached an empty text (a blank result stored as 0)
+  blank        ours is blank where the file cached 0, as Excel stores a blank result, or ours is 0 where the file
+               cached an empty text, and ISBLANK of its formula over the computed values is TRUE
 The rest is the residue, by function: a cell counts under every function it calls.
-The blank pick's other count, "would change", is the equal cells whose result is a blank stored as 0, the cells
-Google's rule (keep it blank) would change: counted by asking ISBLANK of the formula over the computed values.
 --out gets the report as markdown.`;
 
 const { values: options, positionals } = parseArgs({
@@ -139,7 +138,6 @@ type BookReport = {
     // The first cell of each residue class, as workbook, cell, formula, Excel's value and ours.
     readonly examples: Record<string, string>;
     readonly matchDescending: number;
-    readonly wouldChange: number;
     readonly named: number;
     readonly seconds: number;
 };
@@ -391,6 +389,7 @@ function bookMode(file: string): BookReport {
     const digits = EXCEL.test(book.application) ? 15 : 10;
     let equal = 0;
     const differing = new Marks();
+    // The differing cells with no pick of their own whose value is a blank on one side and a 0 on the other.
     const candidates: Formula[] = [];
     for (const formula of formulas) {
         const { sheet, cell } = formula;
@@ -403,10 +402,17 @@ function bookMode(file: string): BookReport {
         const cached = cell.value ?? '';
         if (sameValue(ours, cached, digits)) {
             equal += 1;
-            if (ours === 0) candidates.push(formula);
             continue;
         }
-        differing.set(sheet, cell.row, cell.column, pickOf(formula, ours, cached, value) ?? '');
+        const pick = pickOf(formula, ours, cached, value);
+        if (pick === undefined && ((ours === null && cached === 0) || (ours === 0 && cached === ''))) {
+            candidates.push(formula);
+        } else differing.set(sheet, cell.row, cell.column, pick ?? '');
+    }
+    // A candidate that only copies a differing cell is no blank of its own, and takes its root's label below.
+    const blanks = blankResults(book, engine, candidates);
+    for (const { sheet, cell } of candidates) {
+        differing.set(sheet, cell.row, cell.column, blanks.has(keyOf(sheet, cell.row, cell.column)) ? 'blank' : '');
     }
     // A differing cell with no pick of its own takes the label of a differing cell it reads; one that reads none is
     // a root of the residue.
@@ -471,7 +477,6 @@ function bookMode(file: string): BookReport {
         classes,
         examples,
         matchDescending,
-        wouldChange: wouldChange(book, engine, candidates),
         named,
         seconds: (performance.now() - started) / 1000,
     };
@@ -499,6 +504,8 @@ function pickOf(
     cached: Literal,
     value: (sheet: number, row: number, column: number) => Literal | null,
 ): Pick | undefined {
+    // Every other pick gives a value, so a blank of ours is the blank pick's to claim.
+    if (ours === null) return undefined;
     const { facts: own, rects } = formula;
     const refused = typeof cached === 'object' && cached.text === '#VALUE!';
     const reads = rects.some((rect) => anyCell(rect, (row, column) => value(rect.sheet, row, column) === ''));
@@ -533,14 +540,13 @@ function pickOf(
         });
         if (unsorted) return 'approximate';
     }
-    if (ours === 0 && cached === '') return 'blank';
     return undefined;
 }
 
-// The equal cells whose value 0 is a blank result: each such formula asks ISBLANK of itself, in an engine where
-// every other formula is the value it computed.
-function wouldChange(book: Book, engine: Engine, candidates: readonly Formula[]): number {
-    if (candidates.length === 0) return 0;
+// The candidates whose own formula gives a blank, by their keys: each asks ISBLANK of its formula, in an engine
+// where every other formula is the value it computed.
+function blankResults(book: Book, engine: Engine, candidates: readonly Formula[]): Set<number> {
+    if (candidates.length === 0) return new Set();
     const probes = new Set(candidates.map(({ sheet, cell }) => keyOf(sheet, cell.row, cell.column)));
     const sources: SheetSource[] = book.sheets.map((sheet, place) => ({
         id: sheet.id,
@@ -556,8 +562,10 @@ function wouldChange(book: Book, engine: Engine, candidates: readonly Formula[])
     }));
     const probe = new Engine(sources);
     probe.recalc(Number.POSITIVE_INFINITY);
-    return candidates.filter(({ sheet, cell }) => probe.valueOf(book.sheets[sheet].id, cell.row, cell.column) === true)
-        .length;
+    const blank = candidates.filter(
+        ({ sheet, cell }) => probe.valueOf(book.sheets[sheet].id, cell.row, cell.column) === true,
+    );
+    return new Set(blank.map(({ sheet, cell }) => keyOf(sheet, cell.row, cell.column)));
 }
 
 function corpusMode(paths: readonly string[]): string {
@@ -622,7 +630,7 @@ function corpusMode(paths: readonly string[]): string {
         `| residue, roots (read no differing cell) | ${sum((report) => report.residueRoots)} |`,
         `| residue, downstream of a root | ${sum((report) => report.residueDownstream)} |`,
         '',
-        `MATCH -1 (and descending XMATCH, XLOOKUP) is used by ${sum((report) => report.matchDescending)} formula cells. The blank pick would change ${sum((report) => report.wouldChange)} equal cells under Google's rule.`,
+        `MATCH -1 (and descending XMATCH, XLOOKUP) is used by ${sum((report) => report.matchDescending)} formula cells.`,
         '',
         '| why not built or not comparable | cells |',
         '|---|---|',
@@ -640,11 +648,11 @@ function corpusMode(paths: readonly string[]): string {
                 return `| ${name} | ${count} | ${example.replace(/\|/g, '/').replace(/\n/g, ' ')} |`;
             }),
         '',
-        '| workbook | written by | formulas | equal | differs | not built | not comparable | picks (empty text, day line, MATCH -1, approximate, blank) | residue roots | blank would change | s |',
-        '|---|---|---|---|---|---|---|---|---|---|---|',
+        '| workbook | written by | formulas | equal | differs | not built | not comparable | picks (empty text, day line, MATCH -1, approximate, blank) | residue roots | s |',
+        '|---|---|---|---|---|---|---|---|---|---|',
         ...reports.map(
             (report) =>
-                `| ${path.basename(report.file).slice(-60)} | ${report.application} | ${report.formulas} | ${report.equal} | ${report.differs} | ${report.notBuilt} | ${report.notComparable} | ${PICKS.map((pick) => report.picks[pick]).join(', ')} | ${report.residueRoots} | ${report.wouldChange} | ${report.seconds.toFixed(1)} |`,
+                `| ${path.basename(report.file).slice(-60)} | ${report.application} | ${report.formulas} | ${report.equal} | ${report.differs} | ${report.notBuilt} | ${report.notComparable} | ${PICKS.map((pick) => report.picks[pick]).join(', ')} | ${report.residueRoots} | ${report.seconds.toFixed(1)} |`,
         ),
         '',
         ...failed.map((line) => `- could not be run: ${line}`),

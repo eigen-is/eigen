@@ -245,7 +245,7 @@ fi
 
 eigen_piped "$NEW_PASSWORD" reset-password ALICE@eigen.test
 show
-if [ "$CODE" = 0 ] && says "eigen|reset-password>" && says "Password changed for $ADMIN_EMAIL. Signed out everywhere."; then
+if [ "$CODE" = 0 ] && says "eigen|reset-password⟩" && says "Password changed for $ADMIN_EMAIL. Signed out everywhere."; then
     ok "reset-password with a piped password (address in another case) succeeds"
 else
     fail "reset-password exited $CODE"

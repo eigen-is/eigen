@@ -15,6 +15,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Guest sign-in code** — the code mailed to a guest works for 15 minutes instead of 5, so a mail that arrives late still gets them in
 - **Uploads** — an image or file that fails to upload into a document or a chat says why, such as a file over the size limit, instead of a bare error code. An upload in Drive can be stopped from its progress card
 - **Team drive storage** — giving a team drive new storage, or turning one on or off, reconnects the team's open documents. They show "Storage unavailable" for a few seconds and keep every edit
+- **Line spacing in Docs** — text draws at its own font's line height, as in Word and Google Docs, so a line spacing of 1.15 is the same 1.15 after an import or an export to Word, whatever the font. Text in Source Serif 4, JetBrains Mono or Excalifont sits on taller lines than before, about an eighth for Source Serif 4. A document imported from Word in such a font before this change shows looser lines until you set its line spacing again
 - **Number formats in Sheets** — numbers round as in Excel, so 1.005 under 0.00 shows 1.01, very small numbers show their digits, a time just before midnight shows the next day, dates before 1900 show their weekday, and Excel's long date shows March 5, not March 05. Chart labels too
 - **Dates in early 1900 in Sheets** — a date in January or February 1900 shows one day earlier than in Excel, as in Google Sheets, since 1900 had no 29 February
 
@@ -491,7 +492,7 @@ Whole-server backup and restore. Eigen backs up the whole server every night whi
 
 ## [0.3.0] - 2026-09-25
 
-Self-hosting release. Eigen now installs from prebuilt images with one line, and the `./eigen` launcher updates, rolls back and backs up the server. Slides use the same canvas as eigen|vector>. Mail, calendar and contacts keep exactly what your mail, calendar and contacts apps write, and `.eml`, `.ics` and `.vcf` files open and import everywhere a file shows up. The findings of the September security audit are fixed.
+Self-hosting release. Eigen now installs from prebuilt images with one line, and the `./eigen` launcher updates, rolls back and backs up the server. Slides use the same canvas as eigen|vector⟩. Mail, calendar and contacts keep exactly what your mail, calendar and contacts apps write, and `.eml`, `.ics` and `.vcf` files open and import everywhere a file shows up. The findings of the September security audit are fixed.
 
 **Breaking** — calendars, contacts, slides and vector drawings don't carry their data over from 0.2.0 (breaking). Events and contact books are dropped, decks open empty, and drawings lose their plain text and fills.
 
@@ -521,7 +522,7 @@ Self-hosting release. Eigen now installs from prebuilt images with one line, and
 - **Calendar and contacts storage (breaking)** — events and cards are stored exactly as a client wrote them and served back byte for byte. Calendar data counts toward the storage budget. Existing data is not converted
 - **Mail off is a complete product** — without hosted mail the Mail app and its settings disappear, and one `SMTP_RELAY_*` key set serves both modes: Postfix relays through it, or the API sends through it itself
 - **Owner-only administration** — only the owner sees server settings, onboarding, guest access, the waitlist and the S3 secret. The owner cannot be deleted. The wizard no longer asks for a domain
-- **eigen|vector>** — text elements are rich text. Shapes get gradient fills, true rounded corners and an optional border. Arrows dock on a shape's real outline. Phones open a drawing view-only
+- **eigen|vector⟩** — text elements are rich text. Shapes get gradient fills, true rounded corners and an optional border. Arrows dock on a shape's real outline. Phones open a drawing view-only
 - **Canvas editing** — a run of nudges is one undo step, and so is a typed panel value. The aspect-ratio lock is remembered per element. Copy and paste between apps keep text as text
 - **Sheets numbers** — every number shows the way Excel's General format shows it: no rounding noise, long values cut to 11 characters, scientific notation past that. A typed number is stored as a number, and a copy keeps full precision
 - **Sheets** — pasted text is read like typed input, `Ctrl+D` and `Ctrl+R` copy the whole source cell, conditional-format rules follow Excel on case and blanks, and an imported Excel rule stays one rule. Exports lay out exactly as the screen does
@@ -556,11 +557,11 @@ Self-hosting release. Eigen now installs from prebuilt images with one line, and
 
 ## [0.2.0] - 2026-09-02
 
-Drawing, contacts sync, and hardening release. Eigen gains a new app, eigen|vector>, a collaborative whiteboard heavily inspired by Excalidraw's impressive work. Contacts are stored as vCard files and served over CardDAV, so phones and desktops sync them the way they already sync calendars. Mail got its own parser, per-recipient document links, and a hardened outbound relay after an abuse incident. Under the hood, every collaborative editor shares one way to load and save, copy and paste, show live cursors and draw.
+Drawing, contacts sync, and hardening release. Eigen gains a new app, eigen|vector⟩, a collaborative whiteboard heavily inspired by Excalidraw's impressive work. Contacts are stored as vCard files and served over CardDAV, so phones and desktops sync them the way they already sync calendars. Mail got its own parser, per-recipient document links, and a hardened outbound relay after an abuse incident. Under the hood, every collaborative editor shares one way to load and save, copy and paste, show live cursors and draw.
 
 ### Added
 
-- **eigen|vector>** — a new collaborative whiteboard app. Shapes, freehand strokes with pen pressure, lines, text and images. Arrows stay bound to the shapes they connect, curved by default, with elbow routing, pinnable segments, heads and labels. There's an eraser, snap lines with align and distribute, live cursors, comments, an activity panel, and tuning for touch and stylus. Drawings export to SVG and PDF, show up in Drive previews and search, and paste into other apps as real images
+- **eigen|vector⟩** — a new collaborative whiteboard app. Shapes, freehand strokes with pen pressure, lines, text and images. Arrows stay bound to the shapes they connect, curved by default, with elbow routing, pinnable segments, heads and labels. There's an eraser, snap lines with align and distribute, live cursors, comments, an activity panel, and tuning for touch and stylus. Drawings export to SVG and PDF, show up in Drive previews and search, and paste into other apps as real images
 - **Contacts over CardDAV** — contacts are stored as vCard files and served under `/dav/addressbooks`, so iOS, macOS, Thunderbird, and other clients sync them two-way. Apple clients edit in place, vCard 4.0 uploads are accepted, labels round-trip as categories, and contact photos become avatars. The Integrations page shows a CardDAV card next to CalDAV, a device setup article walks through each client, and the setup guide documents the `_carddavs._tcp` / `_caldavs._tcp` autodiscovery DNS records
 - **Contacts** — edit a card straight from the context menu, select several contacts and email or chat with them at once, and the form shows what's wrong and marks only the fields that are required
 - **Mail: send a document link** — the share-and-send dialog lists the linked files, gives the recipients read access when you send, and writes each recipient a personal link. When some recipients fail, Eigen tells you which
@@ -725,7 +726,7 @@ Activity and history release. A timeline per file with file and folder watching,
 
 ### Changed
 
-- **Visual refresh** — a new app switcher, a grid of large app-colored icons with names. Lighter font weights across the apps, Drive file icons tinted by app, an animated `eigen|app>` wordmark on the landing page and Space home, and a topbar that can be app-colored or neutral. Toolbar titles are lighter, toolbar borders fade in as you scroll, and the Drive, Trash and Calendar layouts are tidier
+- **Visual refresh** — a new app switcher, a grid of large app-colored icons with names. Lighter font weights across the apps, Drive file icons tinted by app, an animated `eigen|app⟩` wordmark on the landing page and Space home, and a topbar that can be app-colored or neutral. Toolbar titles are lighter, toolbar borders fade in as you scroll, and the Drive, Trash and Calendar layouts are tidier
 - **Landing page** — the landing page is prerendered, so it shows instantly and search engines read it better. Signed-in visitors go straight into the app
 - **Sheets** — inserting or deleting rows and columns no longer sends the whole sheet, so large sheets stay responsive
 

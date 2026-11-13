@@ -14,7 +14,7 @@ test.each([
     ['=IFNA(A1,1/0)', DIV0],
     ['=IFNA(A1,A3:A3)', 1],
     ['=IFNA(VLOOKUP(2,A3:A3,1,FALSE),"none")', 'none'],
-    ['=IFNA(A9,"x")', 0],
+    ['=IFNA(A9,"x")', null],
     ['=SUM(IFNA({1,#N/A,3},10))', 14],
     ['=IFNA(A1)', VALUE],
 ])('%s is %p', (formula, expected) => {
