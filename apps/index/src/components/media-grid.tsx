@@ -60,7 +60,7 @@ function MediaItem({ src, type, caption, thumbnail, poster }: MediaItemProps) {
                     )}
                 </div>
                 {caption && (
-                    <p className="mt-2 text-sm text-muted-foreground text-center">
+                    <p className="mt-2 text-[11px] text-muted-foreground text-center">
                         <Caption text={caption} />
                     </p>
                 )}
