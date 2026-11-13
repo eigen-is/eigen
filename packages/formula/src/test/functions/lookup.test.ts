@@ -121,7 +121,7 @@ describe('VLOOKUP and HLOOKUP', () => {
         ['=VLOOKUP(5,A1:B6,2,)', 'c'],
         ['=VLOOKUP(5,A1:B6,2.9,FALSE)', 'c'],
         ['=VLOOKUP(9,A:B,2,FALSE)', 'e'],
-        ['=VLOOKUP(11,A1:C6,3,FALSE)', 0],
+        ['=VLOOKUP(11,A1:C6,3,FALSE)', null],
         ['=VLOOKUP(9,A3:A3,1,FALSE)', NA],
         ['=VLOOKUP("b",{"a",1;"B",2},2,FALSE)', 2],
         ['=VLOOKUP("a",{1;3;"b";"d"},1,1)', NA],
@@ -138,9 +138,9 @@ describe('VLOOKUP and HLOOKUP', () => {
         expect(evaluate(formula, TABLES)).toBe(expected);
     });
 
-    test('a found cell that is blank gives 0 in a cell and nothing in a text', () => {
-        expect(evaluate('=VLOOKUP(1,A1:B6,2,FALSE)', { A1: 1 })).toBe(0);
-        expect(evaluate('=VLOOKUP(1,D1:E1,2)', { D1: 1 })).toBe(0);
+    test('a found cell that is blank leaves the cell blank and is nothing in a text', () => {
+        expect(evaluate('=VLOOKUP(1,A1:B6,2,FALSE)', { A1: 1 })).toBeNull();
+        expect(evaluate('=VLOOKUP(1,D1:E1,2)', { D1: 1 })).toBeNull();
         expect(evaluate('=VLOOKUP(1,A1:B6,2,FALSE)&"."', { A1: 1 })).toBe('.');
     });
 
@@ -234,7 +234,7 @@ describe('XLOOKUP and XMATCH', () => {
         // Of equal keys a search down the values takes the last one (Excel: XMATCH(2,{3,2,2,2,1},0,-2) is 4).
         ['=XLOOKUP(5,{11,9,5,5,3,1},{"a","b","c","d","e","f"},,0,-2)', 'd'],
         ['=XLOOKUP(5,A1:A6,B1:C6)', 'c'],
-        ['=INDEX(XLOOKUP(5,A1:A6,B1:C6),1,2)', 0],
+        ['=INDEX(XLOOKUP(5,A1:A6,B1:C6),1,2)', null],
         ['=XLOOKUP(5,A1:B6,B1:B6)', VALUE],
         ['=XLOOKUP(5,A1:A6,B1:B5)', VALUE],
         ['=XLOOKUP(1,A:A,B:B)', 'a'],

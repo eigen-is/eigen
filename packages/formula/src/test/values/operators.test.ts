@@ -285,11 +285,12 @@ describe('references', () => {
         expect(evaluate('=(A1,B2)+1', cells)).toBe(VALUE);
     });
 
-    test('a formula result that is blank stores 0', () => {
-        expect(evaluate('=A9', cells)).toBe(0);
-        expect(evaluate('=IF(TRUE,A9)', cells)).toBe(0);
-        expect(evaluate('=IF(TRUE,,2)', cells)).toBe(0);
+    // Excel stores 0 for a blank result; the engine follows Google here (batch 21).
+    test('a formula result that is blank leaves its cell blank', () => {
+        expect(evaluate('=A9', cells)).toBeNull();
+        expect(evaluate('=IF(TRUE,A9)', cells)).toBeNull();
+        expect(evaluate('=IF(TRUE,,2)', cells)).toBeNull();
         expect(evaluate('=C1=0', { C1: '=A1' })).toBe(true);
-        expect(evaluate('=ISBLANK(C1)', { C1: '=A1' })).toBe(false);
+        expect(evaluate('=ISBLANK(C1)', { C1: '=A1' })).toBe(true);
     });
 });
