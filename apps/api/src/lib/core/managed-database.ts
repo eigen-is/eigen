@@ -150,6 +150,8 @@ export class ManagedDatabase<S extends SchemaType> {
             if (this.config.synchronous === 'FULL') this.rawDb.run('PRAGMA synchronous = FULL;');
             this.rawDb.run('PRAGMA foreign_keys = ON;');
             this.rawDb.run('PRAGMA busy_timeout = 5000;');
+            // onSync may copy the main file while commits go on, so only the sync's own checkpoint may write it.
+            if (this.callbacks.onSync) this.rawDb.run('PRAGMA wal_autocheckpoint = 0;');
 
             this.rawDb.exec(`
                 CREATE TABLE IF NOT EXISTS __schema_version (

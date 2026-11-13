@@ -1,6 +1,6 @@
 import { Database as BunDatabase } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { like, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
@@ -473,6 +473,46 @@ describe('ManagedDatabase dirty tracking', () => {
         await db.flush();
         expect(syncs).toBe(2);
 
+        await db.close({ skipFinalSnapshot: true });
+    });
+});
+
+describe('ManagedDatabase checkpoints', () => {
+    // One commit of far more than the 1000 WAL frames at which SQLite checkpoints by itself.
+    const commitManyPages = (mdb: ManagedDatabase<Schema>) =>
+        mdb.db.transaction((tx) => {
+            for (let i = 0; i < 1500; i++)
+                tx.insert(items)
+                    .values({ v: 'x'.repeat(4000) })
+                    .run();
+        });
+    const mainFile = (dbPath: string) => Bun.hash(readFileSync(dbPath));
+
+    test('only a sync writes the main file of a database with an onSync', async () => {
+        // onSync copies the main file off the JS thread while commits go on, so a checkpoint during that copy tears it.
+        const dbPath = nextDbPath();
+        const db = new ManagedDatabase(makeConfig(1000), dbPath, { onSync: async () => {} });
+        await db.open(0);
+        db.db.insert(items).values({ v: 'first' }).run();
+        await db.flush();
+        const synced = mainFile(dbPath);
+
+        commitManyPages(db);
+        expect(mainFile(dbPath)).toBe(synced);
+
+        await db.flush();
+        expect(mainFile(dbPath)).not.toBe(synced);
+        await db.close({ skipFinalSnapshot: true });
+    });
+
+    test('a database without an onSync keeps the checkpoint SQLite runs by itself', async () => {
+        const dbPath = nextDbPath();
+        const db = new ManagedDatabase(makeConfig(1000), dbPath);
+        await db.open(0);
+        const opened = mainFile(dbPath);
+
+        commitManyPages(db);
+        expect(mainFile(dbPath)).not.toBe(opened);
         await db.close({ skipFinalSnapshot: true });
     });
 });
