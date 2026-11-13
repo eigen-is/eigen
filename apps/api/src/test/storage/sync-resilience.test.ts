@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import {
     copyFileSync,
     existsSync,
@@ -873,6 +873,32 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
             'd',
         ]);
         fault.failNextWrites = 0;
+    });
+
+    test('an open whose staged copy the ack unlinks before the read opens from the stored object', async () => {
+        const { mount, fault } = createS3Mount('staged-acked-open');
+        await mount.init();
+        const dataDbId = await provisionStoredAbc(mount);
+        fault.failNextWrites = 9999;
+        await mount.withDatabase(docConfigNoSnap, dataDbId, async (managed) => {
+            managed.db.insert(docSchema.items).values({ id: 4, data: 'd' }).run();
+        });
+        await mount.closeDatabase(dataDbId);
+        await mount.uploadQueue?.drain({ flushNow: true });
+        expect(pendingUploadCount(mount)).toBeGreaterThan(0);
+        fault.failNextWrites = 0;
+
+        // The retry lands and unlinks the staged copy after the open picked it.
+        const replaceTempFrom = mount.replaceTempFrom.bind(mount);
+        const spy = spyOn(mount, 'replaceTempFrom').mockImplementationOnce(async (tempId, source) => {
+            await mount.uploadQueue?.drain({ flushNow: true });
+            return replaceTempFrom(tempId, source);
+        });
+        try {
+            expect(await readItems(mount, docConfigNoSnap, dataDbId)).toHaveLength(4);
+        } finally {
+            spy.mockRestore();
+        }
     });
 });
 

@@ -222,26 +222,9 @@ async function buildDocumentDb<S extends SchemaType>(
                         `[Mount] Discarding unusable crash temp for ${pathId} ` +
                             `(temp=${tempSize}B, stored=${known?.size ?? 0}B); re-fetching from storage`,
                     );
-                    await mount.cleanupTemp(pathId);
                 }
-                // Under the tree lock, as onSync: on `local` an ancestor rename racing the download
-                // would read as a miss.
-                await mount.withTreeShared(async () => {
-                    const currentKey = await mount.getStorageKey(pathId);
-                    // A clean close during an outage: the staged copy holds bytes newer than storage, so it is
-                    // the one to recover from.
-                    const staged = mount.pendingStagedCopy(currentKey);
-                    if (staged) {
-                        console.log(`[Mount] Recovering from staged upload for ${pathId}`);
-                        await mount.cleanupTemp(pathId);
-                        await mount.replaceTempFrom(pathId, Bun.file(staged));
-                        return;
-                    }
-                    // The open sends no HEAD: the GET itself answers a gone object (410).
-                    await mount.downloadKeyToTemp(currentKey, pathId);
-                    // An empty download needs no check here. ManagedDatabase refuses to open an
-                    // empty working copy as a new database.
-                });
+                // The open sends no HEAD: the GET itself answers a gone object (410).
+                await mount.downloadToTemp(pathId, pathId);
             },
             // On s3 the sync stages a frozen copy and queues its upload. A local mount copies at once:
             // a local write never answers 503, and a queue would only weaken its durability.

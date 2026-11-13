@@ -60,7 +60,7 @@ The mount's startup sweep removes `tmp/` files older than an hour, but never one
 
 **Invariant: an empty or invalid working copy never overwrites a non-trivial stored object. The worst case is a document that answers errors, never a wipe.** Adopting a crash temp is only safe if it holds real data. A failed or empty GET leaves a 0-byte temp, which is itself a valid empty SQLite file, and `markDirty` would then upload that emptiness over the good object.
 
-- `buildDocumentDb` adopts a temp only if `isViableRecoveryTemp` passes: it has the SQLite header and is not collapsed against the size the row knows, with its `-wal` counted. Otherwise it discards the temp through `Mount.cleanupTemp`, journals included, and re-fetches. A `-wal` left beside the re-fetched file would be replayed into it.
+- `buildDocumentDb` adopts a temp only if `isViableRecoveryTemp` passes: it has the SQLite header and is not collapsed against the size the row knows, with its `-wal` counted. Otherwise it re-fetches through `downloadToTemp`, which first removes the temp, journals included (`Mount.cleanupTemp`). A `-wal` left beside the re-fetched file would be replayed into it.
 - A temp with a valid header and a corrupt body passes that check and is adopted: the open throws, the stored object stays good, and the temp stays, so that document keeps answering errors until someone removes the temp. Only a disk fault or a power loss writes one.
 - An open (`Mount.holdDatabase`, `withDatabase`) and `createDatabase` pass their intent down as the mount's `mode`, which becomes `ManagedDatabase`'s `mustExist`. A `mustExist` open uses `{ create: false }` and refuses a missing or 0-byte working copy with a 503.
 - A download or a staged-copy recovery writes a `tmp/<uuid>` side file and renames it onto the working-copy path (`replaceTempFrom`). A process killed mid-GET leaves no partial temp for the next open to adopt.
@@ -69,7 +69,7 @@ Which failure answers 410 and which 503 is in [STORAGE.md](STORAGE.md#a-gone-obj
 
 ## Reads serve the staged copy first
 
-A pending staged copy holds bytes newer than the stored object, so every read on the mount serves it first: `readKey` and `readRange` (`apps/api/src/lib/mount/mount.ts`) and `downloadToTemp` (`apps/api/src/lib/mount/temp-files.ts`). `downloadKeyToTemp` is the raw GET that skips it, and both its callers look at the staged copy before they call it: `downloadToTemp`, and a document open, which looks at the crash temp, then the staged copy, then the object. So a reopen, a copy, a copy across mounts and a backup read the newest bytes during an outage, never a stale or missing object.
+A pending staged copy holds bytes newer than the stored object, so every read on the mount serves it first: `readKey` and `readRange` (`apps/api/src/lib/mount/mount.ts`) and `downloadToTemp` (`apps/api/src/lib/mount/temp-files.ts`). A document open looks at the crash temp first and then downloads through `downloadToTemp`. A staged copy that vanishes during the read had its PUT land, so `downloadToTemp` then reads the stored object. So a reopen, a copy, a copy across mounts and a backup read the newest bytes during an outage, never a stale or missing object.
 
 ## Version snapshots are queued too
 

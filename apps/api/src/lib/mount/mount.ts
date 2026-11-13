@@ -1021,10 +1021,6 @@ export class Mount {
         return tempFiles.downloadToTemp(this, pathId, tempId);
     }
 
-    public async downloadKeyToTemp(storageKey: string, tempId: string): Promise<string> {
-        return tempFiles.downloadKeyToTemp(this, storageKey, tempId);
-    }
-
     public async replaceTempFrom(tempId: string, source: StorageFile): Promise<number> {
         return tempFiles.replaceTempFrom(this, tempId, source);
     }
