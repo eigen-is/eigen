@@ -504,6 +504,8 @@ function pickOf(
     cached: Literal,
     value: (sheet: number, row: number, column: number) => Literal | null,
 ): Pick | undefined {
+    // Every other pick gives a value, so a blank of ours is the blank pick's to claim.
+    if (ours === null) return undefined;
     const { facts: own, rects } = formula;
     const refused = typeof cached === 'object' && cached.text === '#VALUE!';
     const reads = rects.some((rect) => anyCell(rect, (row, column) => value(rect.sheet, row, column) === ''));

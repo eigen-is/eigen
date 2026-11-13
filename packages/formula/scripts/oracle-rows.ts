@@ -388,7 +388,7 @@ function equalsRecorded(ours: Literal | null, expected: Expected): boolean {
     if (type === '4') return typeof ours === 'boolean' && shown(ours) === text;
     if (type === '16') return ours !== null && typeof ours === 'object' && ours.text === text;
     if (typeof ours === 'number') {
-        // A blank cell read through the INDEX probe is the 0 a formula shows for it.
+        // A blank element that Excel prints as nothing is the 0 a computed array holds for it.
         if (text === '' && type === undefined && expected.element) return ours === 0;
         const number = Number(text);
         if (text.trim() === '' || Number.isNaN(number)) return false;
