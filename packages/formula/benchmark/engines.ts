@@ -276,12 +276,12 @@ export class UniverEngine implements CellEngine {
         await this.api?.getFormula().onCalculationResultApplied();
     }
 
-    // The raw value keeps every digit; the cell's own value is rounded to 12. An error comes out as its text, so a
-    // formula's text that names one is read as the error.
+    // The raw value keeps every digit; the cell's own value is rounded to 12, and a value spilled from an array has
+    // only that one. An error comes out as its text, so a formula's text that names one is read as the error.
     public read(sheet: number, row: number, column: number): Value {
         const range = this.sheets[sheet].getRange(row, column);
         const data = range.getCellData();
-        const value = range.getRawValue();
+        const value = range.getRawValue() ?? data?.v;
         if (value === undefined || value === null) return null;
         if (data?.t === CellValueType.BOOLEAN) return value === true || value === 1;
         if (data?.t === CellValueType.NUMBER) return Number(value);
