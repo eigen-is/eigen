@@ -123,8 +123,9 @@ class Model {
             );
         };
         const position = (row: unknown) => (typeof row === 'number' ? row - top + 1 : (row ?? NA));
+        // A lookup gives the cell it finds, and E is blank below its weights.
         const weight = (row: unknown, missing: unknown) =>
-            typeof row === 'number' ? this.weight(row) : (row ?? missing);
+            typeof row === 'number' ? (row < ROWS ? this.weight(row) : null) : (row ?? missing);
         const matched = () => rows.filter((row) => counted(this.keys[row], this.key));
         const both = () => matched().filter((row) => row < ROWS && this.seconds[row] === this.second);
         const sum = (of: readonly number[]) => of.reduce((total, row) => total + this.weight(row), 0);

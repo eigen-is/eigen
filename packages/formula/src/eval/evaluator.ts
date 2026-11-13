@@ -52,18 +52,17 @@ export class Evaluator {
         this.recalc = recalc;
     }
 
-    // What the cell of a formula stores: one value, the top-left of an array, and 0 for a blank.
+    // What the cell of a formula stores: one value, or the top-left of an array. A blank stays blank, as in Google.
     public result(tree: FormulaNode, sheet: Sheet, row: number, column: number): Scalar {
         // Only the last + or - of a formula snaps a result that is tiny against its left operand to 0.
         const root = tree.kind === NodeKind.Binary && (tree.op === Token.Plus || tree.op === Token.Minus);
         const value = root
             ? this.read(this.binary(tree, sheet, row, column, true))
             : this.operand(tree, sheet, row, column);
-        if (!isArray(value)) return value === null ? 0 : value;
+        if (!isArray(value)) return value;
         // An array of references is no value a cell can hold, as Excel's INDIRECT({"A1","B2"}) is none.
         if (value.references) return CALC;
-        const first = this.first(value.items[0]);
-        return first === null ? 0 : first;
+        return this.first(value.items[0]);
     }
 
     public evaluate(node: FormulaNode, sheet: Sheet, row: number, column: number): Value {

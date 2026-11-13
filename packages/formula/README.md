@@ -123,6 +123,7 @@ These choices are decided and apply to many functions. FUNCTIONS.md gives an exa
 
 - The day line: day 0 is 30 December 1899, there is no 29 February 1900, and dates run from the year 1 to 9999. Excel's dates in January and February 1900 are one day off from ours.
 - An empty text in arithmetic is 0, where Excel answers `#VALUE!`.
+- A formula whose result is blank leaves its cell blank, as in Google Sheets, where Excel shows 0.
 - A date typed without a year is a number only to `DATEVALUE` and `TIMEVALUE`.
 - Text length is counted in UTF-16 units, so an emoji is 2 characters.
 - A one-cell array is a single value.
