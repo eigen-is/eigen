@@ -1,6 +1,7 @@
 // The rows mode of the oracle script: every row Excel answered in the recorded oracle files, each formula in a
-// fresh Engine on the fixture its file's plan gives it, compared with Excel's recorded answer. The fixtures are the
-// cells the recorder typed into each sheet, written out here because the files describe them in prose.
+// fresh Engine on the fixture its file's plan gives it, compared with Excel's recorded answer, and a row that differs
+// only where a blank result stays blank counted under that pick. The fixtures are the cells the recorder typed into
+// each sheet, written out here because the files describe them in prose.
 
 import * as fs from 'node:fs';
 import path from 'node:path';
@@ -27,6 +28,8 @@ type Outcome = {
     readonly excel: string;
     readonly ours: string;
     readonly equal: boolean;
+    // Differs only by the decided pick that a blank result stays blank where Excel shows 0.
+    readonly blank: boolean;
 };
 
 const HOST = 'U21';
@@ -474,12 +477,13 @@ function runFile(file: string, tag: string, plan: Plan, outcomes: Outcome[], ski
     ) => {
         if (CALLS_VOLATILE.test(formula)) return skip('volatile (RAND, NOW, TODAY)');
         const sheets = [...new Set(formula.match(/b\d+_[a-z]+\d*/g) ?? [])].sort();
-        const done = (ours: string, equal: boolean) =>
-            outcomes.push({ file: tag, section, formula, excel, ours, equal });
+        const done = (ours: string, equal: boolean, asZero = equal) =>
+            outcomes.push({ file: tag, section, formula, excel, ours, equal, blank: !equal && asZero });
         if (!('rows' in expected)) {
             const [value] = evaluateAll([formula], fixture, sheets);
             const quote = typeof value === 'string' && expected.type !== '2' && !expected.quoted;
-            return done(quote ? `"${value}"` : shown(value), equalsRecorded(value, expected));
+            const equal = equalsRecorded(value, expected);
+            return done(quote ? `"${value}"` : shown(value), equal, value === null && equalsRecorded(0, expected));
         }
         const { rows, columns, elements } = expected;
         const body = formula.slice(1);
@@ -502,7 +506,8 @@ function runFile(file: string, tag: string, plan: Plan, outcomes: Outcome[], ski
         const [, ours, ...values] = evaluateAll([formula, size, ...indexes], fixture, sheets);
         const sized = shown(ours);
         const equal = sized === wanted && elements.every((element, i) => equalsRecorded(values[i], element));
-        return done(`{${values.map(shown).join(',')}} ${sized}`, equal);
+        const asZero = sized === wanted && elements.every((element, i) => equalsRecorded(values[i] ?? 0, element));
+        return done(`{${values.map(shown).join(',')}} ${sized}`, equal, asZero);
     };
     let section = '';
     let header: string[] = [];
@@ -660,7 +665,7 @@ function runFile(file: string, tag: string, plan: Plan, outcomes: Outcome[], ski
 export function rowsMode(dir: string): { readonly report: string; readonly differing: string } {
     const outcomes: Outcome[] = [];
     const skipped = new Map<string, number>();
-    const lines = ['| file | run | equal | differs | skipped |', '|---|---|---|---|---|'];
+    const lines = ['| file | run | equal | differs | of them, the blank pick | skipped |', '|---|---|---|---|---|---|'];
     const unplanned: string[] = [];
     for (const name of fs.readdirSync(dir).sort()) {
         const planned = PLANS.get(name);
@@ -673,13 +678,15 @@ export function rowsMode(dir: string): { readonly report: string; readonly diffe
         runFile(path.join(dir, name), tag, plan, outcomes, skipped);
         const run = outcomes.slice(from);
         const equal = run.filter((outcome) => outcome.equal).length;
+        const blank = run.filter((outcome) => outcome.blank).length;
         const skips = [...skipped].filter(([why]) => why.startsWith(`${tag}: `));
         const skipText = skips.map(([why, count]) => `${why.slice(tag.length + 2)} ${count}`).join('; ');
-        lines.push(`| ${name} | ${run.length} | ${equal} | ${run.length - equal} | ${skipText} |`);
+        lines.push(`| ${name} | ${run.length} | ${equal} | ${run.length - equal} | ${blank} | ${skipText} |`);
     }
     const equal = outcomes.filter((outcome) => outcome.equal).length;
+    const blank = outcomes.filter((outcome) => outcome.blank).length;
     lines.push(
-        `| total | ${outcomes.length} | ${equal} | ${outcomes.length - equal} | ${[...skipped.values()].reduce((a, b) => a + b, 0)} |`,
+        `| total | ${outcomes.length} | ${equal} | ${outcomes.length - equal} | ${blank} | ${[...skipped.values()].reduce((a, b) => a + b, 0)} |`,
     );
     if (unplanned.length > 0)
         lines.push(
@@ -688,6 +695,9 @@ export function rowsMode(dir: string): { readonly report: string; readonly diffe
         );
     const differing = outcomes
         .filter((outcome) => !outcome.equal)
-        .map((o) => `[${o.file} / ${o.section.slice(0, 60)}] ${o.formula} | Excel ${o.excel} | ours ${o.ours}`);
+        .map(
+            (o) =>
+                `[${o.file} / ${o.section.slice(0, 60)}] ${o.formula} | Excel ${o.excel} | ours ${o.ours}${o.blank ? ' | pick: blank' : ''}`,
+        );
     return { report: lines.join('\n'), differing: differing.join('\n') };
 }
