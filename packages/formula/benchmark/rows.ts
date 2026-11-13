@@ -5,8 +5,8 @@
 
 import * as fs from 'node:fs';
 import path from 'node:path';
-import type { Cells, Expected, Probe } from './recorded';
-import { loadOracle } from './recorded';
+import type { Cells, Expected, Probe } from '../scripts/oracle-rows';
+import { rowsMode } from '../scripts/oracle-rows';
 
 export const DATA_FILE = path.join(import.meta.dir, 'excel-rows.jsonl');
 
@@ -30,12 +30,11 @@ export type DataRow = readonly [
 if (import.meta.main) {
     const dir = process.argv[2];
     if (dir === undefined) throw new Error('usage: bun rows.ts <oracle dir>');
-    const oracle = await loadOracle();
     const fixtures: RowSheet[][] = [];
     const places = new Map<string, number>();
     const rows: DataRow[] = [];
     let unjudged = 0;
-    for (const row of oracle.rows(dir)) {
+    for (const row of rowsMode(dir).outcomes) {
         const { fixture, named, expected } = row;
         if ('rows' in expected && expected.elements === null && row.excel !== '#CALC!') {
             unjudged += 1;

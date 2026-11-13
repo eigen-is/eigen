@@ -5,13 +5,13 @@
 
 import * as fs from 'node:fs';
 import { parseArgs } from 'node:util';
+import type { Expected } from '../scripts/oracle-rows';
+import { equalsRecorded } from '../scripts/oracle-rows';
 import type { Literal } from '../src/index';
 import type { FormulaNode } from '../src/text';
 import { NodeKind, parseA1, parseA1Range, Token } from '../src/text';
 import type { CellEngine, Input, SheetInput, Value } from './engines';
 import { formulajsFunction, formulajsValue, HyperFormulaEngine, OursEngine } from './engines';
-import type { Expected } from './recorded';
-import { loadOracle } from './recorded';
 import type { DataRow, RowSheet } from './rows';
 import { readData } from './rows';
 
@@ -157,7 +157,6 @@ export function judgeCall(
 if (import.meta.main) {
     const { values } = parseArgs({ options: { engine: { type: 'string' }, from: { type: 'string', default: '0' } } });
     const { header, rows } = readData();
-    const { equalsRecorded } = await loadOracle();
     const from = Number(values.from);
     const make = () => (values.engine === 'ours' ? new OursEngine() : new HyperFormulaEngine());
     const jobs: [number, () => Verdict][] =
