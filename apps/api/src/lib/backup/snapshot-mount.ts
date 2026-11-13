@@ -143,7 +143,7 @@ export async function snapshotMountData(
                     if (live.size && !(await isGone())) recordLost(live.size, storageKey);
                     return null;
                 }
-                const copy = captureFile(file, destPath, entryPath, true).catch(async (error: unknown) => {
+                const copy = captureFile(file, destPath, entryPath).catch(async (error: unknown) => {
                     if (!isMissingObjectCause(error) || !(await isGone())) fail(error);
                     fs.rmSync(destPath, { force: true });
                     return null;

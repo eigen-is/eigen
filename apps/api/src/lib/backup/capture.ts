@@ -9,14 +9,9 @@ import { eventLoopTurn } from '../core';
 import type { FileBytes, StorageFile } from '../storage';
 import { hashFile, isMissingObjectCause, writeTempWithHash } from '../storage';
 
-export async function captureFile(
-    source: FileBytes,
-    destPath: string,
-    relPath: string,
-    yields = false,
-): Promise<BackupEntry> {
+export async function captureFile(source: FileBytes, destPath: string, relPath: string): Promise<BackupEntry> {
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
-    const { size, hash } = await writeTempWithHash(destPath, source, { yields });
+    const { size, hash } = await writeTempWithHash(destPath, source);
     return { path: relPath, bytes: size, sha256: hash };
 }
 

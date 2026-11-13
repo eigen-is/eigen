@@ -1,3 +1,7 @@
+// The one loop that reads a stream chunk by chunk, such as a request body or a storage read, and the event
+// loop turn it gives every 2 MiB, so a large local file never holds the API while it is read. The storage
+// deadline wraps it for every body the server consumes itself.
+
 import { ApiError, payloadTooLarge, storageUnavailable } from './errors';
 
 const YIELD_EVERY_BYTES = 2 * 1024 * 1024;
@@ -19,9 +23,9 @@ export function eventLoopTurn(): Promise<void> {
 export async function consumeStream(
     stream: ReadableStream<Uint8Array>,
     onChunk: (chunk: Uint8Array) => void,
-    opts: { idleMs?: number; maxBytes?: number; signal?: AbortSignal; yields?: boolean } = {},
+    opts: { idleMs?: number; maxBytes?: number; signal?: AbortSignal } = {},
 ): Promise<number> {
-    const { idleMs, maxBytes = Number.POSITIVE_INFINITY, signal, yields = false } = opts;
+    const { idleMs, maxBytes = Number.POSITIVE_INFINITY, signal } = opts;
     let reader: ReadableStreamDefaultReader<Uint8Array>;
     try {
         reader = stream.getReader();
@@ -41,7 +45,6 @@ export async function consumeStream(
     let size = 0;
     let unyielded = 0;
     try {
-        // Opt-in: a warm local read never leaves the microtasks, which is all that keeps an unlocked reader whole.
         while (true) {
             timer?.refresh();
             // A read pending when cancel() runs resolves done rather than throwing, hence the flag.
@@ -56,7 +59,7 @@ export async function consumeStream(
             if (size > maxBytes) throw payloadTooLarge();
             onChunk(value);
             unyielded += value.byteLength;
-            if (yields && unyielded >= YIELD_EVERY_BYTES) {
+            if (unyielded >= YIELD_EVERY_BYTES) {
                 unyielded = 0;
                 await eventLoopTurn();
             }
