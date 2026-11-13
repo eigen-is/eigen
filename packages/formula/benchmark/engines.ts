@@ -16,7 +16,6 @@ export type SheetInput = { readonly name: string; readonly rows: readonly (reado
 export type Value = Literal | null;
 
 export type CellEngine = {
-    readonly name: string;
     load(sheets: readonly SheetInput[]): void;
     recalc(): void;
     read(sheet: number, row: number, column: number): Value;
@@ -29,7 +28,6 @@ const NOW = 46338.5;
 const SEED = 7;
 
 export class OursEngine implements CellEngine {
-    public readonly name = 'ours';
     private engine = new Engine([]);
     private ids: string[] = [];
     private find: (name: string) => { readonly id: string } | undefined = () => undefined;
@@ -120,7 +118,6 @@ const HYPERFORMULA_NAMES = [
 ];
 
 export class HyperFormulaEngine implements CellEngine {
-    public readonly name = 'hyperformula';
     private engine = HyperFormula.buildEmpty({ licenseKey: 'gpl-v3' });
     private ids: number[] = [];
 
