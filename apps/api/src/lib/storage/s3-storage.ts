@@ -1,4 +1,9 @@
+// The S3 backend of a mount, and the bucket-level requests around it: the connection check, and the versioning
+// and lifecycle rule that keep an overwritten object recoverable. A mount reads and writes its objects
+// through S3Storage, and callers such as the settings routes run the checks.
+
 import { S3_ABORT_INCOMPLETE_UPLOAD_DAYS, S3_LIFECYCLE_RULE_ID } from '@workspace/lib/constants/s3';
+import type { S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
 import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
 import type { S3File } from 'bun';
@@ -6,7 +11,7 @@ import { S3Client } from 'bun';
 import type { WriteData, XmlElement } from '../core';
 import { ApiError, parseXml, storageUnavailable, xmlChild, xmlChildren, xmlElements, xmlText } from '../core';
 import { errnoOf, storageRead, withStorageDeadline } from './deadline';
-import type { S3Config, StorageBackend } from './types';
+import type { StorageBackend } from './types';
 
 // `refusePublic` also fails a bucket that answers an unsigned GET of the probe: a backup bucket must be private.
 export async function checkS3Connection(

@@ -130,7 +130,7 @@ describe('crash-recovery durability', () => {
             await mount.withDatabase(docConfig, dataDbId, async () => {});
             await mount.closeDatabase(dataDbId);
 
-            // Without the crash-recovery markDirty(), the reopened DB looked clean and cleanupTemp dropped row 2.
+            // The adopted temp counts as dirty, so the close syncs row 2 before it drops the temp.
             expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(2);
         },
     );
@@ -675,10 +675,8 @@ describe('per-destination upload concurrency', () => {
     });
 });
 
-// The 2026-06-08 incident: an S3 read hiccup during a redeploy left an empty/0-byte temp, which
-// crash recovery adopted and re-uploaded OVER the good stored object — wiping two live
-// stickies docs, then re-wiping on every later redeploy. Recovery must refuse an empty/invalid/
-// collapsed temp and re-fetch the authoritative object, never overwrite real data with an empty db.
+// A failed GET leaves an empty temp. Recovery refuses an empty, invalid or collapsed temp and fetches the
+// stored object again, so an empty database never overwrites real data.
 describe('data-loss guard — crash recovery must not overwrite a good object with an empty temp', () => {
     test('a 0-byte crash temp is discarded; the stored object is re-fetched, not wiped', async () => {
         const { mount } = createS3Mount('empty-temp-guard');
@@ -728,9 +726,8 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(500);
         await mount.closeDatabase(dataDbId);
 
-        // Poison temp: a VALID but freshly-initialized (0-row) SQLite — passes a header check but is
-        // a tiny fraction of the stored object. This is the shape that reached S3 in the incident, so
-        // build it exactly the way the code creates a fresh db (schema + migrations, then 0 rows).
+        // Poison temp: a valid but freshly initialized (0-row) SQLite, which passes a header check but is a
+        // tiny fraction of the stored object. Built the way the code creates a fresh db.
         const emptyTemp = new ManagedDatabase(docConfigNoSnap, mount.getTempPath(dataDbId));
         await emptyTemp.open(0);
         await emptyTemp.close({ skipFinalSnapshot: true });
@@ -944,8 +941,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
 
         const documentDbs = mount.documentDbs;
 
-        // Tear down while the extract is mid-flight, THEN let it open its DB. Pre-fix: teardown returns
-        // before the open, which lands in the cleared cache and leaks. Post-fix: teardown awaits the
+        // Tear down while the extract is mid-flight, then let it open its DB. The teardown awaits the
         // drain, so the opened DB lands in the cache and the close pass closes it.
         const closing = mount.closeAllDatabases();
         releaseExtract();
@@ -975,8 +971,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         );
         await closed;
 
-        // Pre-fix: storage.write never resolves → this drain never returns (the test times out).
-        // Post-fix: the PUT deadline fires, performUpload treats it as a failure and backs off.
+        // The PUT deadline fired, so performUpload treats it as a failure and backs off, and this drain returns.
         await mount.uploadQueue?.drain();
 
         expect(fault.writeCount).toBeGreaterThan(writesBefore); // the PUT was attempted…
@@ -1013,8 +1008,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         await seedFile(mount, rootId, 'note.txt', 'text/plain', 5, Buffer.from('hello'));
         await entered;
 
-        // The close waits out its real deadline on fake time. Pre-fix it awaited the parked drain unboundedly, so
-        // this never returned (test times out).
+        // The close waits out its real deadline on fake time, not the parked drain.
         jest.useFakeTimers();
         try {
             const closed = mount.closeAllDatabases();

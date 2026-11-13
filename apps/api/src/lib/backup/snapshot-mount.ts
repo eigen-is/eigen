@@ -101,7 +101,7 @@ export async function snapshotMountData(
         const container = managedDbContainer(row, byId);
         if (container) {
             fs.mkdirSync(path.dirname(destPath), { recursive: true });
-            // A blocking lock: a raw read of the live main file would drop every commit still in the WAL. False is
+            // A blocking lock: a raw read of the live main file would drop every commit still in the WAL. Null is
             // no bytes anywhere. A gone row is never read.
             const source = await mount
                 .withPathLock(container.id, async () =>

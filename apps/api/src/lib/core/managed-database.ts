@@ -98,7 +98,7 @@ export class ManagedDatabase<S extends SchemaType> {
                 await this.sync();
                 syncFailed = false;
             } finally {
-                // After a failed sync a snapshot on a mount without an upload queue copies storage, which lacks the tail.
+                // After a failed sync storage lacks the tail, so a snapshot would miss it.
                 if (!opts.skipFinalSnapshot && !syncFailed) {
                     await this.snapshotIfDue(true).catch((err) =>
                         console.error(`[${this.config.name}] close snapshot failed:`, err),

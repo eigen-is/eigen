@@ -1,14 +1,13 @@
 // The one loop that reads a stream chunk by chunk, such as a request body or a storage read, and the event
-// loop turn it gives every 2 MiB, so a large local file never holds the API while it is read. The storage
-// deadline wraps it for every body the server consumes itself.
+// loop turn it gives every 2 MiB, so a large local file never holds the API while it is read. A storage
+// read runs it with an idle deadline; a request body or a local file runs it without one.
 
 import { ApiError, payloadTooLarge, storageUnavailable } from './errors';
 
 const YIELD_EVERY_BYTES = 2 * 1024 * 1024;
 
-// The empty second immediate keeps the loop awake: inside `expect().rejects`, which waits on its promise
-// synchronously, Bun otherwise sleeps until the next timer before it runs what the first one resolved
-// (oven-sh/bun#46558).
+// The empty second immediate keeps the loop awake: under a caller that waits on its promise synchronously,
+// Bun otherwise sleeps until the next timer before it runs what the first one resolved.
 export function eventLoopTurn(): Promise<void> {
     return new Promise((resolve) =>
         setImmediate(() => {
@@ -18,8 +17,8 @@ export function eventLoopTurn(): Promise<void> {
     );
 }
 
-// The one stream loop: pulls chunk by chunk and reports the total, past maxBytes a 413. With
-// idleMs it is a storage read: silence for idleMs, an aborted signal or a failed read cancels it and answers 503.
+// Answers the total, and a 413 past maxBytes. With idleMs it is a storage read: silence for idleMs, an aborted
+// signal or a failed read cancels it and answers 503.
 export async function consumeStream(
     stream: ReadableStream<Uint8Array>,
     onChunk: (chunk: Uint8Array) => void,

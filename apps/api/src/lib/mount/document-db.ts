@@ -178,7 +178,7 @@ async function buildDocumentDb<S extends SchemaType>(
     pathId: string,
     mode: 'open' | 'create',
 ): Promise<ManagedDatabase<S>> {
-    const localPath = mount.getTempPath(pathId);
+    const tempPath = mount.getTempPath(pathId);
 
     if (mode === 'create') {
         const storageKey = await mount.getStorageKey(pathId);
@@ -204,20 +204,20 @@ async function buildDocumentDb<S extends SchemaType>(
 
     const managed = new ManagedDatabase(
         config,
-        localPath,
+        tempPath,
         {
             onOpen: async () => {
                 if (mode === 'create') return;
-                if (fs.existsSync(localPath)) {
+                if (fs.existsSync(tempPath)) {
                     // A surviving temp signals an unclean shutdown. A 0-byte or partial temp (a failed S3 GET)
                     // would upload as an empty doc over the good stored object, so only a real SQLite is adopted.
                     const known = await mount.getPath(pathId);
-                    if (isViableRecoveryTemp(localPath, known?.size ?? 0)) {
+                    if (isViableRecoveryTemp(tempPath, known?.size ?? 0)) {
                         console.log(`[Mount] Recovering from crash: using existing tmp file for ${pathId}`);
                         recoveredFromCrash = true;
                         return;
                     }
-                    const tempSize = fs.statSync(localPath).size;
+                    const tempSize = fs.statSync(tempPath).size;
                     console.warn(
                         `[Mount] Discarding unusable crash temp for ${pathId} ` +
                             `(temp=${tempSize}B, stored=${known?.size ?? 0}B); re-fetching from storage`,
@@ -235,7 +235,7 @@ async function buildDocumentDb<S extends SchemaType>(
                     const currentKey = await mount.findStorageKey(pathId);
                     if (currentKey === null) return;
                     // The row takes the size of the bytes this sync wrote, which ranges and HEAD are served from.
-                    let written = localPath;
+                    let written = tempPath;
                     if (mount.uploadQueue) {
                         written = mount.uploadQueue.newStagingPath();
                         managed.stageCopy(written);

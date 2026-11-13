@@ -52,7 +52,7 @@ A tick, a flush and a close run one at a time under one lock. So two syncs can't
 
 ## The database triggers snapshots, the mount takes them
 
-A config with a `snapshot` key opts into file versioning. `snapshotIfDue` calls `onSnapshot` once `writesPerSnapshot` writes have piled up, and once more at close for any change left. `onSnapshot` answers `'skipped'` when the container lock is held, and a skip stays due, so the next tick tries again. A close whose final sync failed takes no snapshot, because a snapshot on `local` and `local-key` copies storage, which lacks the tail. Where versions live and why the close path try-locks is in [STORAGE.md](STORAGE.md#version-snapshots-live-inside-the-container).
+A config with a `snapshot` key opts into file versioning. `snapshotIfDue` calls `onSnapshot` once `writesPerSnapshot` writes have piled up, and once more at close for any change left. `onSnapshot` answers `'skipped'` when the container lock is held, and a skip stays due, so the next tick tries again. A close whose final sync failed takes no snapshot, because storage lacks the tail a snapshot would copy. Where versions live and why the close path try-locks is in [STORAGE.md](STORAGE.md#version-snapshots-live-inside-the-container).
 
 ## SQLite removes its own WAL and shared-memory files
 
