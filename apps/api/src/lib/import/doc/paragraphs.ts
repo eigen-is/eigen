@@ -556,13 +556,11 @@ function paragraphItems(
     const { normal } = reader;
     const normalBase = role.kind === 'paragraph' && scope.story !== 'note';
     const base = normalBase ? mergePara(styles.docPara, styles.para(styles.defaultParagraph)) : styled;
-    const autoLine = (para: ParaProps) =>
-        (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? SINGLE_LINE) : undefined;
-    const line = autoLine(props);
-    const baseLine = autoLine(base);
+    const lineSpacingOf = (para: ParaProps) =>
+        (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? SINGLE_LINE) / SINGLE_LINE : undefined;
+    const multiple = lineSpacingOf(props);
     // An at-least Normal reads as single, so the Normal's own line is the one to compare with.
-    const baseSpacing = normalBase ? normal.lineSpacing : baseLine === undefined ? undefined : baseLine / SINGLE_LINE;
-    const multiple = line === undefined ? undefined : line / SINGLE_LINE;
+    const baseSpacing = normalBase ? normal.lineSpacing : lineSpacingOf(base);
     const lineSpacing =
         multiple !== undefined &&
         (baseSpacing === undefined || Math.round(multiple * 100) !== Math.round(baseSpacing * 100))

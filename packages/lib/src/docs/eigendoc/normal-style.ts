@@ -56,9 +56,8 @@ export function readNormalStyle(record: Record<string, unknown>): NormalStyle {
     };
 }
 
-// The custom properties eigen-prose.css draws the body text from, set on the page: only those apart from Eigen's, so a
-// doc that keeps Eigen's look renders exactly as one without the map. A font comes with its single line, which a text
-// block's line spacing multiplies.
+// The custom properties eigen-prose.css draws the body from, only those apart from Eigen's, so a doc in Eigen's look
+// renders as one without the map. A font brings its single line, which a text block's line spacing multiplies.
 export function normalStyleProperties(style: NormalStyle): Record<string, string> {
     const properties: Record<string, string> = {};
     const own = (key: keyof NormalStyle) => style[key] !== DEFAULT_NORMAL_STYLE[key];

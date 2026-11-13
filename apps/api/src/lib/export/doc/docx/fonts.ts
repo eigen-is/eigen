@@ -1,5 +1,5 @@
 // The docx writer's fonts. The font table lists each family the doc draws in, and each face it uses is embedded whole,
-// so Word draws the doc in Eigen's fonts. useFace records the face a run draws in, which its line's height follows.
+// so Word draws the doc in Eigen's fonts. useFace records each face a run or a paragraph mark draws in.
 
 import * as fs from 'node:fs';
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
@@ -141,14 +141,13 @@ export function useFace(pkg: Package, run: RunProps, paragraphStyle: StyleId | u
 }
 
 // The nearest definition of each face property along a style's chain.
-function styleFace(styles: Styles, style: StyleId | undefined): Pick<RunProps, 'font' | 'bold' | 'italic' | 'size'> {
-    const face: Pick<RunProps, 'font' | 'bold' | 'italic' | 'size'> = {};
+function styleFace(styles: Styles, style: StyleId | undefined): Pick<RunProps, 'font' | 'bold' | 'italic'> {
+    const face: Pick<RunProps, 'font' | 'bold' | 'italic'> = {};
     for (let id = style; id !== undefined; ) {
         const definition = styles.get(id);
         face.font ??= definition?.rPr?.font;
         face.bold ??= definition?.rPr?.bold;
         face.italic ??= definition?.rPr?.italic;
-        face.size ??= definition?.rPr?.size;
         id = definition?.basedOn;
     }
     return face;

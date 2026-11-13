@@ -291,10 +291,10 @@ export function blocksOf(
         const runs = runsXml(inline, context, props.style);
         // The paragraph mark draws in its style's face, so an empty paragraph embeds it too.
         useFace(context.pkg, {}, props.style);
-        let own = props;
         // Word's navigator lists every paragraph at an outline level, so a heading a figure splits keeps one entry.
-        if (pieces.length > 0 && props.style && context.pkg.styles.get(props.style)?.pPr?.outlineLvl !== undefined)
-            own = { ...own, outlineLvl: BODY_TEXT_OUTLINE_LEVEL };
+        const split =
+            pieces.length > 0 && props.style && context.pkg.styles.get(props.style)?.pPr?.outlineLvl !== undefined;
+        const own = split ? { ...props, outlineLvl: BODY_TEXT_OUTLINE_LEVEL } : props;
         pieces.push(blocks.push({ props: own, runs }) - 1);
         inline = [];
     };
@@ -563,7 +563,7 @@ function withBefore(paragraph: Paragraph, margin: number, styles: Styles): Parag
 }
 
 // What the style chain gives a paragraph: its own style, what that is based on, Normal for none.
-export function styleSpacing(styles: Styles, style: StyleId | undefined, side: 'before' | 'after' | 'line'): number {
+export function styleSpacing(styles: Styles, style: StyleId | undefined, side: 'before' | 'after'): number {
     for (let id = style ?? 'Normal'; ; ) {
         const definition = styles.get(id);
         const value = definition?.pPr?.spacing?.[side];

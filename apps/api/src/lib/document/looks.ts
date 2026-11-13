@@ -204,11 +204,11 @@ export function textMetrics(selector: string, normalPt: number) {
     };
 }
 
+// The size in points, the space before and after in twips, and the line an auto line.
 type OwnLook = { sizePt: number; before: number; after: number; line: number };
 
 // What a text node draws with no mark or format of its own. The docx writer's styles write it, so the reader and the
-// audit read it as no format. The size is in points, the space before and after in twips, and the line an auto line.
-// A note's paragraph draws Word's FootnoteText over the Normal.
+// audit read it as no format.
 export function ownTextLook(type: string, level: number, normal: NormalStyle, inNote: boolean): OwnLook | undefined {
     if (inNote) return noteTextLook(normal);
     if (type === 'paragraph') return normalTextLook(normal);
