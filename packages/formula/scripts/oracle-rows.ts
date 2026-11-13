@@ -1,7 +1,8 @@
 // The rows mode of the oracle script: every row Excel answered in the recorded oracle files, each formula in a
 // fresh Engine on the fixture its file's plan gives it, compared with Excel's recorded answer, and a row that differs
 // only where a blank result stays blank counted under that pick. The fixtures are the cells the recorder typed into
-// each sheet, written out here because the files describe them in prose.
+// each sheet, written out here because the files describe them in prose. The benchmark puts the same rows to other
+// engines and judges them by the same rule, so both are exported.
 
 import * as fs from 'node:fs';
 import path from 'node:path';
@@ -9,19 +10,23 @@ import type { CellSink, Literal } from '../src/index';
 import { Engine } from '../src/index';
 import { parseA1Range, sheetFinder, storedText } from '../src/text';
 
-type Cells = Readonly<Record<string, Literal>>;
-type Fixture = { readonly host: Cells; readonly hostName?: string; readonly others?: Readonly<Record<string, Cells>> };
+export type Cells = Readonly<Record<string, Literal>>;
+export type Fixture = {
+    readonly host: Cells;
+    readonly hostName?: string;
+    readonly others?: Readonly<Record<string, Cells>>;
+};
 type Plan = readonly (readonly [RegExp, Fixture])[];
 // One expected value as recorded: Excel's text of it, whether it was a quoted text, and TYPE where it was taken.
-type Expected = {
+export type Expected = {
     readonly text: string;
     readonly quoted?: boolean;
     readonly type?: string;
     readonly element?: boolean;
     readonly exact15?: boolean;
 };
-type Probe = { readonly rows: number; readonly columns: number; readonly elements: readonly Expected[] | null };
-type Outcome = {
+export type Probe = { readonly rows: number; readonly columns: number; readonly elements: readonly Expected[] | null };
+export type Outcome = {
     readonly file: string;
     readonly section: string;
     readonly formula: string;
@@ -30,6 +35,11 @@ type Outcome = {
     readonly equal: boolean;
     // Differs only by the decided pick that a blank result stays blank where Excel shows 0.
     readonly blank: boolean;
+    // What the row ran on and was compared with, so the benchmark can put the same row to another engine.
+    readonly fixture: Fixture;
+    readonly named: readonly string[];
+    readonly expected: Expected | Probe;
+    readonly extra: { readonly isref?: string; readonly sum?: string };
 };
 
 const HOST = 'U21';
@@ -382,7 +392,7 @@ export function shown(value: Literal | null): string {
     return typeof value === 'object' ? value.text : String(value);
 }
 
-function equalsRecorded(ours: Literal | null, expected: Expected): boolean {
+export function equalsRecorded(ours: Literal | null, expected: Expected): boolean {
     const { type, text } = expected;
     if (expected.quoted || type === '2') return ours === text;
     if (type === '4') return typeof ours === 'boolean' && shown(ours) === text;
@@ -478,7 +488,19 @@ function runFile(file: string, tag: string, plan: Plan, outcomes: Outcome[], ski
         if (CALLS_VOLATILE.test(formula)) return skip('volatile (RAND, NOW, TODAY)');
         const sheets = [...new Set(formula.match(/b\d+_[a-z]+\d*/g) ?? [])].sort();
         const done = (ours: string, equal: boolean, asZero = equal) =>
-            outcomes.push({ file: tag, section, formula, excel, ours, equal, blank: !equal && asZero });
+            outcomes.push({
+                file: tag,
+                section,
+                formula,
+                excel,
+                ours,
+                equal,
+                blank: !equal && asZero,
+                fixture,
+                named: sheets,
+                expected,
+                extra,
+            });
         if (!('rows' in expected)) {
             const [value] = evaluateAll([formula], fixture, sheets);
             const quote = typeof value === 'string' && expected.type !== '2' && !expected.quoted;
@@ -662,7 +684,11 @@ function runFile(file: string, tag: string, plan: Plan, outcomes: Outcome[], ski
 }
 
 // The table of counts per file, and the differing rows, one per line.
-export function rowsMode(dir: string): { readonly report: string; readonly differing: string } {
+export function rowsMode(dir: string): {
+    readonly report: string;
+    readonly differing: string;
+    readonly outcomes: readonly Outcome[];
+} {
     const outcomes: Outcome[] = [];
     const skipped = new Map<string, number>();
     const lines = ['| file | run | equal | differs | of them, the blank pick | skipped |', '|---|---|---|---|---|---|'];
@@ -699,5 +725,5 @@ export function rowsMode(dir: string): { readonly report: string; readonly diffe
             (o) =>
                 `[${o.file} / ${o.section.slice(0, 60)}] ${o.formula} | Excel ${o.excel} | ours ${o.ours}${o.blank ? ' | pick: blank' : ''}`,
         );
-    return { report: lines.join('\n'), differing: differing.join('\n') };
+    return { report: lines.join('\n'), differing: differing.join('\n'), outcomes };
 }

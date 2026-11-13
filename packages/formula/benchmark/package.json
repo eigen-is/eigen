@@ -1,0 +1,16 @@
+{
+  "name": "formula-benchmark",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "rows": "bun rows.ts",
+    "run": "bun run.ts",
+    "readme": "bun readme.ts",
+    "typecheck": "bun check --no-script"
+  },
+  "dependencies": {
+    "@formulajs/formulajs": "4.6.1",
+    "hyperformula": "3.5.0"
+  }
+}
