@@ -53,7 +53,7 @@ A mismatch makes React throw the prerendered DOM away and render the page again.
 - `useMediaQuery` is `useSyncExternalStore` with a desktop `getServerSnapshot`.
 - The `Toaster` mounts only after hydration.
 - React's auto-emitted `<link rel="preload">` tags are moved into `<head>`, where the browser's React puts them.
-- The landing page's first render is deterministic: the `eigen|app>` wordmark starts at the first app, and the waitlist and link buttons, the install line and the version label wait for the config. The hero Login button is in the static HTML as Login and turns into Enter demo once the config says so.
+- The landing page's first render is deterministic: the `eigen|app⟩` wordmark starts at the first app, and the waitlist and link buttons, the install line and the version label wait for the config. The hero Login button is in the static HTML as Login and turns into Enter demo once the config says so.
 
 The comments in `prerender.tsx`, `entry-server.tsx` and `main.tsx` explain each one. Read them before changing the render path.
 
