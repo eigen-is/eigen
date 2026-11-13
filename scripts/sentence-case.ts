@@ -20,6 +20,7 @@ export const PROPER_NOUNS = new Set([
     'Vector',
     'Space',
     'Google',
+    'Workspace',
     'Microsoft',
     'Word',
     'Excel',
