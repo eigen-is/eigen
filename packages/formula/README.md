@@ -1,4 +1,4 @@
-# @workspace/formula
+# eigen|formula⟩
 
 `@workspace/formula` is a headless spreadsheet formula engine: it reads and prints formula text, stores a workbook's cells, evaluates formulas, recalculates what an edit reaches, rewrites formulas when rows, columns, blocks or sheets move, and shows numbers as Excel's number formats do. Its source, `src/`, has no React, no DOM and no Bun or Node API, imports no other workspace package, and has one npm dependency, numfmt, used only for number display. So it runs the same in a browser, on Bun and on Node. The bench and oracle scripts in `scripts/` run on Bun and Node and use their APIs. The oracle is `scripts/oracle.ts`, with its rows mode in `scripts/oracle-rows.ts`, and runs as one script (`bun scripts/oracle.ts --help`).
 
