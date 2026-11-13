@@ -394,8 +394,8 @@ function equalsRecorded(ours: Literal | null, expected: Expected): boolean {
         const digits = huge ? 14 : 15;
         return Number(ours.toPrecision(digits)) === Number(number.toPrecision(digits));
     }
-    if (type === '1') return ours === null && Number(text) === 0;
-    if (ours === null) return text === '' || text === '0';
+    if (type === '1') return false;
+    if (ours === null) return text === '';
     return shown(ours) === text;
 }
 
