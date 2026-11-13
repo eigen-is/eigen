@@ -293,7 +293,7 @@ export function marks(results: Results): Record<string, string> {
         'lookup-config': JSON.stringify(
             Object.fromEntries(
                 (first?.rows ?? [])
-                    .filter((row) => row.hyperformula !== '{}')
+                    .filter((row) => row.hyperformula !== '{}' && row.smallerFor === undefined)
                     .map((row) => [row.workload, JSON.parse(row.hyperformula)]),
             ),
         ),

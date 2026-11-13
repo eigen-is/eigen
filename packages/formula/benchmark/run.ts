@@ -40,6 +40,8 @@ const QUICK_FILE = path.join(os.tmpdir(), 'formula-benchmark-quick.json');
 const SILENT_MS = 20_000;
 const WAIT_MS = 30 * 60_000;
 const RETRIES = 5;
+// A child that runs longer than this raises the 1-minute load by itself, so its load says nothing about the machine.
+const OWN_LOAD_MS = 60_000;
 // An engine whose one run takes longer than this is timed again at a tenth of the size, in a row of its own.
 const TOO_SLOW_MS = 120_000;
 const CHILD_MS = 600_000;
@@ -180,10 +182,16 @@ function speedRun(runtime: 'bun' | 'node', { rounds, reps, filter, limit, scale 
                         );
                     // A run the machine got busy during is discarded and taken again once it is quiet.
                     waitForQuiet(limit);
+                    let began = Date.now();
                     let child = spawned();
-                    for (let retry = 0; retry < RETRIES && os.loadavg()[0] >= limit; retry += 1) {
+                    for (
+                        let retry = 0;
+                        retry < RETRIES && os.loadavg()[0] >= limit && Date.now() - began < OWN_LOAD_MS;
+                        retry += 1
+                    ) {
                         discarded += 1;
                         waitForQuiet(limit);
+                        began = Date.now();
                         child = spawned();
                     }
                     highest = Math.max(highest, os.loadavg()[0]);
