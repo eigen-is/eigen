@@ -312,9 +312,10 @@ const PAGE_FOOTNOTES_CSS = `
 }
 `;
 
-// The HTML download's notes after the body, in the note size under a short rule.
+// The HTML download's notes after the body, in the note size under a short rule, single spaced as on paper.
 const FOOTNOTE_LIST_CSS = `
 .footnotes { font-size: ${FOOTNOTE_LOOK.sizePt}pt; }
+.footnotes p { --line-spacing: 1; margin-bottom: 0; }
 .footnotes hr { width: 144pt; margin: 2em 0 1em; }
 `;
 
