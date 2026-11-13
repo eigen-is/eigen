@@ -28,13 +28,13 @@ Only container databases and the plain files a per-home restore stages go throug
 
 ## Only `s3` mounts queue
 
-A queue exists only when `buildUploadDestinationKey` (`apps/api/src/lib/mount/helpers.ts`) returns a key, which it does for storage type `s3`. `local` and `local-key` keep synchronous writes: a local write never 503s, and queuing it would only weaken its on-completion durability. The crash-temp recovery ([A crash temp is adopted and re-synced](#a-crash-temp-is-adopted-and-re-synced)) applies to both temp-copy backends, `s3` and `local`. A `local-key` document opens its stored file in place, so what a crash leaves is that file and its `-wal`, which the next open replays and a read of a closed document folds in first (`stageManagedDbCopy`).
+A queue exists only when `buildUploadDestinationKey` (`apps/api/src/lib/mount/helpers.ts`) returns a key, which it does for storage type `s3`. `local` and `local-key` keep synchronous writes: a local write never 503s, and queuing it would only weaken its on-completion durability. The crash-temp recovery ([A crash temp is adopted and re-synced](#a-crash-temp-is-adopted-and-re-synced)) applies to all three backends, since each opens a container database on a working copy in `tmp/` ([DATABASE.md](DATABASE.md#databases-come-in-three-kinds)).
 
 ## Code comments cite seven numbered invariants
 
 Comments and tests name these by number ("invariant 7").
 
-1. The payload is a frozen `VACUUM INTO` staged copy, captured at enqueue, never the live temp. The row's `paths.size` is stat'd from that staged copy too (`syncDocumentDbSize`), so it matches the object that range requests and WebDAV HEAD are served against. On `local` and `local-key` the live file is the object, and the size comes from it.
+1. The payload is a frozen `VACUUM INTO` staged copy, captured at enqueue, never the live temp. The row's `paths.size` is stat'd from that staged copy too (`syncDocumentDbSize`), so it matches the object that range requests and WebDAV HEAD are served against. On `local` and `local-key`, which have no queue, the sync writes the working copy itself to storage, and the size comes from that working copy.
 2. Staged copies live in the per-mount `staging/` folder, which the startup `tmp/` sweep never touches. A staged copy lives until its PUT acks.
 3. Local bytes count as synced only on ack. `ManagedDatabase` moves its dirty watermark once the copy is staged and its row written. The row is the durable marker, and only an ack clears it.
 4. At most one pending upload per storage key, and the newest staged copy wins (a primary-key upsert on `pending_uploads`). The superseded copy is deleted unless it is mid-PUT, in which case the worker deletes it afterwards.
