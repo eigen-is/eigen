@@ -119,7 +119,7 @@ What already exists, so the design extends rather than reinvents:
   `doc.getMap/getArray/getText/getXmlFragment` (or the `_start != null` idiom) before reading.
 - **Integrity anchors in `metadata.db`**: `paths.hash` (sha256, set by `Mount.computeHash` on
   upload/write/copy of plain files — *not* maintained for managed `data.db` rows, whose `size` is
-  refreshed by `syncDocumentDbSize` but whose `hash` goes stale) and `paths.size`.
+  refreshed by each sync but whose `hash` goes stale) and `paths.size`.
 - **Existing tests**: `managed-database.test.ts` pins `mustExist` (missing + 0-byte);
   `sync-resilience.test.ts` has a dedicated "data-loss guard" describe pinning the 2026-06-08 shape
   (0-byte temp discarded, content-empty temp doesn't collapse a larger object) plus queue

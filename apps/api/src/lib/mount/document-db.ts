@@ -251,27 +251,25 @@ async function buildDocumentDb<S extends SchemaType>(
                     // would write the old tree back. A deleted document's sync must not bring its key back.
                     const currentKey = await mount.findStorageKey(pathId);
                     if (currentKey === null) return;
+                    // The row takes the size of the bytes this sync wrote, which ranges and HEAD are served from.
+                    let written = localPath;
                     if (mount.uploadQueue) {
-                        const stagingPath = mount.uploadQueue.newStagingPath();
-                        managed.stageCopy(stagingPath);
+                        written = mount.uploadQueue.newStagingPath();
+                        managed.stageCopy(written);
                         // A VACUUM INTO copy of a managed database, so the queue checks its SQLite
                         // header before the PUT.
-                        mount.uploadQueue.enqueueStaged(currentKey, stagingPath, true);
-                        // Ranges and HEAD are served from the staged copy until its PUT lands. The queue
-                        // removes it only after that.
-                        await syncDocumentDbSize(mount, pathId, stagingPath);
+                        mount.uploadQueue.enqueueStaged(currentKey, written, true);
                     } else {
                         await mount.uploadFromTemp(currentKey, pathId);
-                        await syncDocumentDbSize(mount, pathId, localPath);
                     }
+                    const size = fs.statSync(written).size;
+                    await mount.db.update(paths).set({ size, updatedAt: new Date() }).where(eq(paths.id, pathId));
+                    await mount.invalidateAncestorsOf(pathId);
                     await markContainerContentDirty(mount, pathId);
                 }),
-            // With an upload queue the row already has the size of the staged copy, so only a
-            // mount without one reads the size again.
+            // After a failed final sync the temp is the only copy of the newest writes. It
+            // stays as the crash temp, which the next open adopts and syncs again.
             onClose: async (syncFailed) => {
-                if (!mount.uploadQueue) await syncDocumentDbSize(mount, pathId, localPath);
-                // After a failed final sync the temp is the only copy of the newest writes. It
-                // stays as the crash temp, which the next open adopts and syncs again.
                 if (!syncFailed) await mount.cleanupTemp(pathId);
             },
             onSnapshot,
@@ -383,16 +381,4 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
         }
         await mount.uploadQueue.close(deadline === null ? undefined : Math.max(0, deadline - Date.now()));
     }
-}
-
-// Copies the database file's size into its paths row and refreshes the folder sizes above it, so a
-// container's size follows its data.db.
-async function syncDocumentDbSize(mount: Mount, pathId: string, localPath: string): Promise<void> {
-    if (!fs.existsSync(localPath)) {
-        console.warn(`[Mount] syncDocumentDbSize ${pathId}: localPath missing at ${localPath}`);
-        return;
-    }
-    const size = fs.statSync(localPath).size;
-    await mount.db.update(paths).set({ size, updatedAt: new Date() }).where(eq(paths.id, pathId));
-    await mount.invalidateAncestorsOf(pathId);
 }

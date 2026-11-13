@@ -415,6 +415,28 @@ describe('unchanged paths', () => {
         expect(await readItems(mount, docConfig, dataDbId)).toHaveLength(1);
     });
 
+    test('a close whose final sync fails keeps the row on the size of the stored object', async () => {
+        const { mount, storage } = await createGatedLocalMount('failed-close-size');
+        const { dataDbId, managed } = await provisionDoc(mount, docConfig);
+        const storedSize = await storage.size(await mount.getStorageKey(dataDbId));
+        expect((await mount.getPath(dataDbId))!.size).toBe(storedSize!);
+        for (let id = 1; id <= 200; id++) {
+            managed.db
+                .insert(docSchema.items)
+                .values({ id, data: 'x'.repeat(400) })
+                .run();
+        }
+
+        const gate = storage.armWrite();
+        const closing = mount.closeDatabase(dataDbId);
+        await gate.parked;
+        gate.fail(new ApiError(503, 'storage unavailable'));
+        await expect(closing).rejects.toThrow();
+
+        expect(await storage.size(await mount.getStorageKey(dataDbId))).toBe(storedSize);
+        expect((await mount.getPath(dataDbId))!.size).toBe(storedSize!);
+    });
+
     test('a close whose final sync fails writes no version entry from the stale storage copy', async () => {
         const { mount, storage } = await createGatedLocalMount('failed-close-no-snapshot');
         const { containerId, dataDbId, managed } = await provisionDoc(mount, snapshotDocConfig);

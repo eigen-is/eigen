@@ -34,7 +34,7 @@ A queue exists only when `buildUploadDestinationKey` (`apps/api/src/lib/mount/he
 
 Comments and tests name these by number ("invariant 7").
 
-1. The payload is a frozen `VACUUM INTO` staged copy, captured at enqueue, never the live temp. The row's `paths.size` is stat'd from that staged copy too (`syncDocumentDbSize`), so it matches the object that range requests and WebDAV HEAD are served against. On `local` and `local-key`, which have no queue, the sync writes the working copy itself to storage, and the size comes from that working copy.
+1. The payload is a frozen `VACUUM INTO` staged copy, captured at enqueue, never the live temp. The row's `paths.size` is stat'd from that staged copy too, so it matches the object that range requests and WebDAV HEAD are served against. On `local` and `local-key`, which have no queue, the sync writes the working copy itself to storage, and the size comes from that working copy. Only a sync writes the size: a close whose final sync failed leaves the row on the size of the stored object.
 2. Staged copies live in the per-mount `staging/` folder, which the startup `tmp/` sweep never touches. A staged copy lives until its PUT acks.
 3. Local bytes count as synced only on ack. `ManagedDatabase` moves its dirty watermark once the copy is staged and its row written. The row is the durable marker, and only an ack clears it.
 4. At most one pending upload per storage key, and the newest staged copy wins (a primary-key upsert on `pending_uploads`). The superseded copy is deleted unless it is mid-PUT, in which case the worker deletes it afterwards.

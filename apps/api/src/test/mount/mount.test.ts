@@ -2383,14 +2383,7 @@ describe('Managed-db open vs create', () => {
         await mount.createDatabase(minimalConfig, dataDbId);
         await mount.closeDatabase(dataDbId);
 
-        // After close, syncDocumentDbSize stats the now-populated storage
-        // object and writes the size into the metadata row. A non-zero size
-        // proves a real SQLite file was created and persisted — i.e. that
-        // an open of the same path from a fresh process (after a restart)
-        // would find a real object. We don't reopen in-process because Bun +
-        // Drizzle's cached prepared statements keep file refs alive past
-        // rawDb.close() and trip SQLITE_IOERR_VNODE; production doesn't hit
-        // this since a real restart drops all handles.
+        // The sync wrote the object's size into the row, so a non-zero size means a real SQLite file was stored.
         const dataRow = await mount.getPath(dataDbId);
         expect(dataRow!.size).toBeGreaterThan(0);
     });
