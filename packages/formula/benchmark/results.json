@@ -1,0 +1,1485 @@
+{
+  "generated": "2026-11-13",
+  "machine": {
+    "cpu": "Apple M1 Pro",
+    "cores": 10,
+    "memoryGb": 32,
+    "os": "Darwin 27.2.0 arm64"
+  },
+  "versions": {
+    "bun": "1.4.4",
+    "node": "v24.15.0",
+    "hyperformula": "3.5.0",
+    "formulajs": "4.6.1"
+  },
+  "hyperformulaConfig": {
+    "licenseKey": "gpl-v3",
+    "dateFormats": ["MM/DD/YYYY", "MM/DD/YY", "YYYY/MM/DD"],
+    "timeFormats": ["hh:mm", "hh:mm:ss.sss"],
+    "currencySymbol": ["$", "USD"],
+    "localeLang": "en-US",
+    "functionArgSeparator": ",",
+    "decimalSeparator": ".",
+    "thousandSeparator": "",
+    "arrayColumnSeparator": ",",
+    "arrayRowSeparator": ";",
+    "nullYear": 30,
+    "caseSensitive": false,
+    "accentSensitive": true,
+    "ignorePunctuation": false,
+    "useWildcards": true,
+    "useRegularExpressions": false,
+    "matchWholeCell": true,
+    "useArrayArithmetic": true,
+    "ignoreWhiteSpace": "any",
+    "evaluateNullToZero": true,
+    "leapYear1900": true,
+    "nullDate": {
+      "year": 1899,
+      "month": 12,
+      "day": 31
+    },
+    "smartRounding": true,
+    "maxRows": 1048576,
+    "maxColumns": 16384
+  },
+  "speed": {
+    "node": {
+      "runtime": "node",
+      "rounds": 5,
+      "reps": 3,
+      "load": {
+        "before": "3.00 4.45 9.66",
+        "after": "3.11 3.17 4.12",
+        "highest": 5.37548828125,
+        "discarded": 2
+      },
+      "seconds": 1694,
+      "rows": [
+        {
+          "workload": "load and compute 300,000 formulas",
+          "what": "100,000 rows, each with two numbers and three formulas (arithmetic, IF, ROUND), loaded and computed.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 420.82783399999994,
+              "median": 425.964959
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 2434.1688749999994,
+              "median": 2455.387458
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        },
+        {
+          "workload": "edit a cell with 3 dependents",
+          "what": "In that workbook, one number in row 50,001 changes, and the three formulas on its row recompute.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 0.374625000000151,
+              "median": 0.3874590000000353
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 0.20283399999971152,
+              "median": 0.24745900000016263
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        },
+        {
+          "workload": "edit a cell read by 100,000 formulas",
+          "what": "Cell A1 is read by 100,000 formulas (=B1*$A$1+1 and so on); A1 changes and every formula recomputes. This is a full recalculation.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 13.228000000000009,
+              "median": 13.564665999999988
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 124.13691699999981,
+              "median": 129.0838749999998
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        },
+        {
+          "workload": "load a chain of 100,000 formulas",
+          "what": "A1 is 1 and each cell below adds 1 to the cell above it (=A1+1, =A2+1, ...), 100,000 cells deep.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 51.114540999999974,
+              "median": 51.932582999999994
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 366.85966599999995,
+              "median": 368.68125
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        },
+        {
+          "workload": "edit the start of a chain of 100,000",
+          "what": "In that chain, A1 changes, so all 100,000 cells below it recompute in order.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 16.001874999999984,
+              "median": 16.09045900000001
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 92.04379200000005,
+              "median": 92.69512500000019
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        },
+        {
+          "workload": "200 sums of 90,000 cells each",
+          "what": "200 formulas =SUM(A1:A90000), =SUM(A2:A90001) and so on, over 100,000 numbers.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 41.87591599999999,
+              "median": 42.95741699999999
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 2878.6483339999995,
+              "median": 2902.4980829999995
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 422.5472920000001,
+              "median": 427.35125000000005
+            }
+          }
+        },
+        {
+          "workload": "running total down 20,000 rows",
+          "what": "Each of 20,000 rows sums everything above it and itself: =SUM($A$1:A1), =SUM($A$1:A2) and so on.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 365.1283750000001,
+              "median": 369.6820839999999
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 180.904541,
+              "median": 184.69041700000002
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 1598.08625,
+              "median": 1604.5923329999996
+            }
+          }
+        },
+        {
+          "workload": "exact VLOOKUP, 2,000 over 100,000 rows",
+          "what": "2,000 formulas =VLOOKUP(E1,$A$1:$B$100000,2,FALSE) over 100,000 keys in no order.",
+          "memory": false,
+          "hyperformula": "{\"useColumnIndex\":true}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 25.02962499999998,
+              "median": 26.141708000000023
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 17282.999874999998,
+              "median": 17541.233458
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 122.91654200000005,
+              "median": 123.38479099999995
+            }
+          }
+        },
+        {
+          "workload": "approximate VLOOKUP, 2,000 over 100,000 rows",
+          "what": "2,000 formulas =VLOOKUP(E1,$A$1:$B$100000,2,TRUE) over 100,000 sorted keys; each key falls between two.",
+          "memory": false,
+          "hyperformula": "{\"useColumnIndex\":true}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 24.46558399999998,
+              "median": 24.895125000000007
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 17373.141875,
+              "median": 17707.794083
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 146.46762500000006,
+              "median": 148.04991700000005
+            }
+          }
+        },
+        {
+          "workload": "exact MATCH, 2,000 over 100,000 rows",
+          "what": "2,000 formulas =MATCH(E1,$A$1:$A$100000,0) over 100,000 keys in no order.",
+          "memory": false,
+          "hyperformula": "{\"useColumnIndex\":true}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 24.392500000000013,
+              "median": 27.967208
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 8844.286875,
+              "median": 8888.883709000002
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 1065.6910830000002,
+              "median": 1090.403875
+            }
+          }
+        },
+        {
+          "workload": "approximate MATCH, 2,000 over 100,000 rows",
+          "what": "2,000 formulas =MATCH(E1,$A$1:$A$100000,1) over 100,000 sorted keys.",
+          "memory": false,
+          "hyperformula": "{\"useColumnIndex\":true}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 19.483874999999983,
+              "median": 24.028042
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 8879.920625,
+              "median": 8889.801209000001
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 1652.841125,
+              "median": 1684.492792
+            }
+          }
+        },
+        {
+          "workload": "exact XLOOKUP, 2,000 over 100,000 rows",
+          "what": "2,000 formulas =XLOOKUP(E1,$A$1:$A$100000,$B$1:$B$100000) over 100,000 keys in no order.",
+          "memory": false,
+          "hyperformula": "{\"useColumnIndex\":true}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 25.907749999999993,
+              "median": 26.085417000000007
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 34859.612334000005,
+              "median": 35038.946124999995
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        },
+        {
+          "workload": "SUMIFS, 200 over 100,000 rows",
+          "what": "200 formulas =SUMIFS($A$1:$A$100000,$B$1:$B$100000,E1,$C$1:$C$100000,F1), each with its own pair of criteria such as \"k3\" and \">37\".",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 74.16387499999996,
+              "median": 75.79154100000005
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 12710.727667000001,
+              "median": 12837.2655
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 5481.424374999999,
+              "median": 5518.526791999999
+            }
+          }
+        },
+        {
+          "workload": "COUNTIFS, 200 over 100,000 rows",
+          "what": "200 formulas =COUNTIFS($B$1:$B$100000,E1,$C$1:$C$100000,F1) on the same data.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 68.12925000000001,
+              "median": 68.558334
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 9865.855084,
+              "median": 9979.856042000001
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 4176.420958000001,
+              "median": 4229.479125
+            }
+          }
+        },
+        {
+          "workload": "text functions on 100,000 rows",
+          "what": "100,000 formulas =UPPER(LEFT(A1,6))&\"-\"&LEN(TRIM(A1))&\"-\"&SUBSTITUTE(A1,\"a\",\"o\") over short texts.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 554.1863749999999,
+              "median": 555.3415419999999
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 2307.4298339999996,
+              "median": 2328.225375
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 49.39833300000001,
+              "median": 50.03812500000001
+            }
+          }
+        },
+        {
+          "workload": "insert a row near the top",
+          "what": "In the workbook of 300,000 formulas, one row is inserted above row 2, so every formula below it moves and its references change.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 0.8476670000000013,
+              "median": 0.935790999999881
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 14.685709000000315,
+              "median": 15.154749999999694
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        },
+        {
+          "workload": "memory after loading 300,000 formulas",
+          "what": "The memory the engine holds after the load and first compute of that workbook, in MB.",
+          "memory": true,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 42.606148,
+              "median": 42.60754
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 251.892932,
+              "median": 252.035964
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        }
+      ]
+    },
+    "bun": {
+      "runtime": "bun",
+      "rounds": 5,
+      "reps": 3,
+      "load": {
+        "before": "39.53 13.52 8.80",
+        "after": "3.00 4.45 9.66",
+        "highest": 5.9609375,
+        "discarded": 13
+      },
+      "seconds": 3725,
+      "rows": [
+        {
+          "workload": "load and compute 300,000 formulas",
+          "what": "100,000 rows, each with two numbers and three formulas (arithmetic, IF, ROUND), loaded and computed.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 298.7654580000001,
+              "median": 305.38637499999993
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 1756.5608750000001,
+              "median": 1783.708791
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        },
+        {
+          "workload": "edit a cell with 3 dependents",
+          "what": "In that workbook, one number in row 50,001 changes, and the three formulas on its row recompute.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 0.29549999999994725,
+              "median": 0.3015419999999267
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 0.22254100000009203,
+              "median": 0.25279199999931734
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        },
+        {
+          "workload": "edit a cell read by 100,000 formulas",
+          "what": "Cell A1 is read by 100,000 formulas (=B1*$A$1+1 and so on); A1 changes and every formula recomputes. This is a full recalculation.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 10.75037500000002,
+              "median": 11.21225000000004
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 158.72316699999988,
+              "median": 178.9640000000004
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        },
+        {
+          "workload": "load a chain of 100,000 formulas",
+          "what": "A1 is 1 and each cell below adds 1 to the cell above it (=A1+1, =A2+1, ...), 100,000 cells deep.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 49.058166,
+              "median": 51.54924999999997
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 292.29041699999993,
+              "median": 301.76275000000004
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        },
+        {
+          "workload": "edit the start of a chain of 100,000",
+          "what": "In that chain, A1 changes, so all 100,000 cells below it recompute in order.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 11.040750000000003,
+              "median": 11.136374999999987
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 136.816166,
+              "median": 147.28704199999999
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        },
+        {
+          "workload": "200 sums of 90,000 cells each",
+          "what": "200 formulas =SUM(A1:A90000), =SUM(A2:A90001) and so on, over 100,000 numbers.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 36.68708400000003,
+              "median": 37.174125000000004
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 3033.1875419999997,
+              "median": 3142.747625
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 284.48350000000005,
+              "median": 289.74741700000004
+            }
+          }
+        },
+        {
+          "workload": "running total down 20,000 rows",
+          "what": "Each of 20,000 rows sums everything above it and itself: =SUM($A$1:A1), =SUM($A$1:A2) and so on.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 296.38533399999994,
+              "median": 303.46725000000004
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 133.08937499999996,
+              "median": 145.21374999999995
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 1557.6452090000002,
+              "median": 1583.362666
+            }
+          }
+        },
+        {
+          "workload": "exact VLOOKUP, 2,000 over 100,000 rows",
+          "what": "2,000 formulas =VLOOKUP(E1,$A$1:$B$100000,2,FALSE) over 100,000 keys in no order.",
+          "memory": false,
+          "hyperformula": "{\"useColumnIndex\":true}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 18.931207999999998,
+              "median": 22.627624999999995
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 14703.930125,
+              "median": 15070.041834
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 169.37616699999995,
+              "median": 177.13962500000002
+            }
+          }
+        },
+        {
+          "workload": "approximate VLOOKUP, 2,000 over 100,000 rows",
+          "what": "2,000 formulas =VLOOKUP(E1,$A$1:$B$100000,2,TRUE) over 100,000 sorted keys; each key falls between two.",
+          "memory": false,
+          "hyperformula": "{\"useColumnIndex\":true}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 18.811083999999994,
+              "median": 21.27966699999999
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 14061.192749999998,
+              "median": 14164.729875
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 168.33100000000002,
+              "median": 175.35875000000004
+            }
+          }
+        },
+        {
+          "workload": "exact MATCH, 2,000 over 100,000 rows",
+          "what": "2,000 formulas =MATCH(E1,$A$1:$A$100000,0) over 100,000 keys in no order.",
+          "memory": false,
+          "hyperformula": "{\"useColumnIndex\":true}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 19.397166,
+              "median": 23.428292
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 7752.933,
+              "median": 7797.075084
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 735.1845000000001,
+              "median": 738.186333
+            }
+          }
+        },
+        {
+          "workload": "approximate MATCH, 2,000 over 100,000 rows",
+          "what": "2,000 formulas =MATCH(E1,$A$1:$A$100000,1) over 100,000 sorted keys.",
+          "memory": false,
+          "hyperformula": "{\"useColumnIndex\":true}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 17.28133299999999,
+              "median": 19.792625
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 7555.903583,
+              "median": 8047.652750000001
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 785.7730829999999,
+              "median": 786.8315839999998
+            }
+          }
+        },
+        {
+          "workload": "exact XLOOKUP, 2,000 over 100,000 rows",
+          "what": "2,000 formulas =XLOOKUP(E1,$A$1:$A$100000,$B$1:$B$100000) over 100,000 keys in no order.",
+          "memory": false,
+          "hyperformula": "{\"useColumnIndex\":true}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 21.164208000000002,
+              "median": 25.35024999999999
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 22311.943083000002,
+              "median": 22574.200792
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        },
+        {
+          "workload": "SUMIFS, 200 over 100,000 rows",
+          "what": "200 formulas =SUMIFS($A$1:$A$100000,$B$1:$B$100000,E1,$C$1:$C$100000,F1), each with its own pair of criteria such as \"k3\" and \">37\".",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 61.682333,
+              "median": 64.31354199999998
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 7005.785916999999,
+              "median": 7099.673959
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 3372.8464159999994,
+              "median": 3453.311042000001
+            }
+          }
+        },
+        {
+          "workload": "COUNTIFS, 200 over 100,000 rows",
+          "what": "200 formulas =COUNTIFS($B$1:$B$100000,E1,$C$1:$C$100000,F1) on the same data.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 50.853207999999995,
+              "median": 52.86462500000002
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 5690.080583000001,
+              "median": 5909.593833000001
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 1492.455875,
+              "median": 1521.41475
+            }
+          }
+        },
+        {
+          "workload": "text functions on 100,000 rows",
+          "what": "100,000 formulas =UPPER(LEFT(A1,6))&\"-\"&LEN(TRIM(A1))&\"-\"&SUBSTITUTE(A1,\"a\",\"o\") over short texts.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 408.466542,
+              "median": 412.73
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 1215.870375,
+              "median": 1298.138334
+            },
+            "formulajs": {
+              "status": "measured",
+              "min": 30.83137500000001,
+              "median": 30.88020800000001
+            }
+          }
+        },
+        {
+          "workload": "insert a row near the top",
+          "what": "In the workbook of 300,000 formulas, one row is inserted above row 2, so every formula below it moves and its references change.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 1.1841249999999945,
+              "median": 1.3543750000000045
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 10.15466699999979,
+              "median": 10.260291999999936
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        },
+        {
+          "workload": "memory after loading 300,000 formulas",
+          "what": "The memory the engine holds after the load and first compute of that workbook, in MB.",
+          "memory": true,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 9.656552,
+              "median": 9.658856
+            },
+            "hyperformula": {
+              "status": "measured",
+              "min": 152.528921,
+              "median": 152.608115
+            },
+            "formulajs": {
+              "status": "not supported"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "correctness": {
+    "source": "Recorded by hand in Excel for the web, November 2026: the family and batch files of the oracle.",
+    "rows": 17584,
+    "unjudged": 4,
+    "formulajsRows": 5129,
+    "engines": {
+      "ours": {
+        "total": {
+          "equal": 16171,
+          "differs": 1350,
+          "not supported": 63,
+          "crashed": 0
+        },
+        "byFile": {
+          "b10": {
+            "equal": 234,
+            "differs": 22,
+            "not supported": 7,
+            "crashed": 0
+          },
+          "b11": {
+            "equal": 327,
+            "differs": 30,
+            "not supported": 0,
+            "crashed": 0
+          },
+          "b12": {
+            "equal": 592,
+            "differs": 48,
+            "not supported": 0,
+            "crashed": 0
+          },
+          "b13": {
+            "equal": 379,
+            "differs": 5,
+            "not supported": 0,
+            "crashed": 0
+          },
+          "b6": {
+            "equal": 104,
+            "differs": 10,
+            "not supported": 5,
+            "crashed": 0
+          },
+          "b7": {
+            "equal": 236,
+            "differs": 19,
+            "not supported": 0,
+            "crashed": 0
+          },
+          "date": {
+            "equal": 2692,
+            "differs": 523,
+            "not supported": 0,
+            "crashed": 0
+          },
+          "logical": {
+            "equal": 2243,
+            "differs": 113,
+            "not supported": 1,
+            "crashed": 0
+          },
+          "math": {
+            "equal": 1439,
+            "differs": 101,
+            "not supported": 0,
+            "crashed": 0
+          },
+          "reference": {
+            "equal": 2159,
+            "differs": 173,
+            "not supported": 50,
+            "crashed": 0
+          },
+          "statistical": {
+            "equal": 3129,
+            "differs": 72,
+            "not supported": 0,
+            "crashed": 0
+          },
+          "text": {
+            "equal": 2637,
+            "differs": 234,
+            "not supported": 0,
+            "crashed": 0
+          }
+        },
+        "hung": []
+      },
+      "hyperformula": {
+        "total": {
+          "equal": 9703,
+          "differs": 3555,
+          "not supported": 4138,
+          "crashed": 188
+        },
+        "byFile": {
+          "b10": {
+            "equal": 57,
+            "differs": 50,
+            "not supported": 156,
+            "crashed": 0
+          },
+          "b11": {
+            "equal": 159,
+            "differs": 122,
+            "not supported": 76,
+            "crashed": 0
+          },
+          "b12": {
+            "equal": 116,
+            "differs": 148,
+            "not supported": 354,
+            "crashed": 22
+          },
+          "b13": {
+            "equal": 217,
+            "differs": 130,
+            "not supported": 37,
+            "crashed": 0
+          },
+          "b6": {
+            "equal": 41,
+            "differs": 39,
+            "not supported": 32,
+            "crashed": 7
+          },
+          "b7": {
+            "equal": 166,
+            "differs": 63,
+            "not supported": 25,
+            "crashed": 1
+          },
+          "date": {
+            "equal": 2302,
+            "differs": 878,
+            "not supported": 30,
+            "crashed": 5
+          },
+          "logical": {
+            "equal": 1440,
+            "differs": 323,
+            "not supported": 519,
+            "crashed": 75
+          },
+          "math": {
+            "equal": 968,
+            "differs": 409,
+            "not supported": 159,
+            "crashed": 4
+          },
+          "reference": {
+            "equal": 988,
+            "differs": 434,
+            "not supported": 912,
+            "crashed": 48
+          },
+          "statistical": {
+            "equal": 1717,
+            "differs": 520,
+            "not supported": 940,
+            "crashed": 24
+          },
+          "text": {
+            "equal": 1532,
+            "differs": 439,
+            "not supported": 898,
+            "crashed": 2
+          }
+        },
+        "hung": [
+          "=WORKDAY(A1:A5,10,G1:G3)",
+          "=WORKDAY(45000,A1:A5,G1:G3)",
+          "=WORKDAY.INTL(A1:A5,10,1,G1:G3)",
+          "=WORKDAY.INTL(45000,A1:A5,1,G1:G3)"
+        ]
+      },
+      "formulajs": {
+        "total": {
+          "equal": 3137,
+          "differs": 1458,
+          "not supported": 421,
+          "crashed": 113
+        },
+        "byFile": {
+          "b10": {
+            "equal": 10,
+            "differs": 25,
+            "not supported": 0,
+            "crashed": 0
+          },
+          "b11": {
+            "equal": 51,
+            "differs": 55,
+            "not supported": 4,
+            "crashed": 2
+          },
+          "b12": {
+            "equal": 29,
+            "differs": 23,
+            "not supported": 6,
+            "crashed": 5
+          },
+          "b13": {
+            "equal": 29,
+            "differs": 56,
+            "not supported": 0,
+            "crashed": 2
+          },
+          "b6": {
+            "equal": 7,
+            "differs": 8,
+            "not supported": 1,
+            "crashed": 2
+          },
+          "b7": {
+            "equal": 31,
+            "differs": 25,
+            "not supported": 1,
+            "crashed": 0
+          },
+          "date": {
+            "equal": 1182,
+            "differs": 593,
+            "not supported": 0,
+            "crashed": 35
+          },
+          "logical": {
+            "equal": 385,
+            "differs": 43,
+            "not supported": 79,
+            "crashed": 0
+          },
+          "math": {
+            "equal": 627,
+            "differs": 137,
+            "not supported": 0,
+            "crashed": 7
+          },
+          "reference": {
+            "equal": 12,
+            "differs": 36,
+            "not supported": 187,
+            "crashed": 12
+          },
+          "statistical": {
+            "equal": 263,
+            "differs": 144,
+            "not supported": 77,
+            "crashed": 6
+          },
+          "text": {
+            "equal": 511,
+            "differs": 313,
+            "not supported": 66,
+            "crashed": 42
+          }
+        },
+        "hung": [
+          "=WORKDAY(45000,1E+300)",
+          "=WORKDAY(45000,-1E+300)",
+          "=WORKDAY.INTL(45000,1E+300)",
+          "=WORKDAY.INTL(45000,-1E+300)"
+        ]
+      }
+    }
+  },
+  "coverage": {
+    "excel": 524,
+    "functions": {
+      "ours": {
+        "excel": 219,
+        "other": 0
+      },
+      "hyperformula": {
+        "excel": 384,
+        "other": 39
+      },
+      "formulajs": {
+        "excel": 406,
+        "other": 55
+      }
+    },
+    "onlyHyperformula": [
+      "ACOT",
+      "ACOTH",
+      "ARABIC",
+      "BASE",
+      "BESSELI",
+      "BESSELJ",
+      "BESSELK",
+      "BESSELY",
+      "BETA.DIST",
+      "BETA.INV",
+      "BETADIST",
+      "BETAINV",
+      "BIN2DEC",
+      "BIN2HEX",
+      "BIN2OCT",
+      "BINOM.DIST",
+      "BINOM.INV",
+      "BINOMDIST",
+      "BITAND",
+      "BITLSHIFT",
+      "BITOR",
+      "BITRSHIFT",
+      "BITXOR",
+      "CHIDIST",
+      "CHIINV",
+      "CHISQ.DIST",
+      "CHISQ.DIST.RT",
+      "CHISQ.INV",
+      "CHISQ.INV.RT",
+      "CHISQ.TEST",
+      "CHITEST",
+      "COMBINA",
+      "COMPLEX",
+      "CONFIDENCE",
+      "CONFIDENCE.NORM",
+      "CONFIDENCE.T",
+      "COT",
+      "COTH",
+      "CRITBINOM",
+      "CSC",
+      "CSCH",
+      "CUMIPMT",
+      "CUMPRINC",
+      "DAVERAGE",
+      "DB",
+      "DCOUNT",
+      "DCOUNTA",
+      "DDB",
+      "DEC2BIN",
+      "DEC2HEX",
+      "DEC2OCT",
+      "DECIMAL",
+      "DELTA",
+      "DGET",
+      "DMAX",
+      "DMIN",
+      "DOLLARDE",
+      "DOLLARFR",
+      "DPRODUCT",
+      "DSTDEV",
+      "DSTDEVP",
+      "DSUM",
+      "DVAR",
+      "DVARP",
+      "EFFECT",
+      "ERF",
+      "ERFC",
+      "EXPON.DIST",
+      "EXPONDIST",
+      "F.DIST",
+      "F.DIST.RT",
+      "F.INV",
+      "F.INV.RT",
+      "F.TEST",
+      "FACTDOUBLE",
+      "FDIST",
+      "FILTER",
+      "FINV",
+      "FISHER",
+      "FISHERINV",
+      "FTEST",
+      "FV",
+      "FVSCHEDULE",
+      "GAMMA",
+      "GAMMA.DIST",
+      "GAMMA.INV",
+      "GAMMADIST",
+      "GAMMAINV",
+      "GAMMALN",
+      "GAMMALN.PRECISE",
+      "GAUSS",
+      "HEX2BIN",
+      "HEX2DEC",
+      "HEX2OCT",
+      "HSTACK",
+      "HYPGEOM.DIST",
+      "HYPGEOMDIST",
+      "IMABS",
+      "IMAGINARY",
+      "IMARGUMENT",
+      "IMCONJUGATE",
+      "IMCOS",
+      "IMCOSH",
+      "IMCOT",
+      "IMCSC",
+      "IMCSCH",
+      "IMDIV",
+      "IMEXP",
+      "IMLN",
+      "IMLOG10",
+      "IMLOG2",
+      "IMPOWER",
+      "IMPRODUCT",
+      "IMREAL",
+      "IMSEC",
+      "IMSECH",
+      "IMSIN",
+      "IMSINH",
+      "IMSQRT",
+      "IMSUB",
+      "IMSUM",
+      "IMTAN",
+      "IPMT",
+      "IRR",
+      "ISPMT",
+      "LOGINV",
+      "LOGNORM.DIST",
+      "LOGNORM.INV",
+      "LOGNORMDIST",
+      "MIRR",
+      "MMULT",
+      "NEGBINOM.DIST",
+      "NEGBINOMDIST",
+      "NOMINAL",
+      "NORM.DIST",
+      "NORM.INV",
+      "NORM.S.DIST",
+      "NORM.S.INV",
+      "NORMDIST",
+      "NORMINV",
+      "NORMSDIST",
+      "NORMSINV",
+      "NPER",
+      "NPV",
+      "OCT2BIN",
+      "OCT2DEC",
+      "OCT2HEX",
+      "PDURATION",
+      "PHI",
+      "PMT",
+      "POISSON",
+      "POISSON.DIST",
+      "PPMT",
+      "PV",
+      "RATE",
+      "ROMAN",
+      "RRI",
+      "SEC",
+      "SECH",
+      "SEQUENCE",
+      "SERIESSUM",
+      "SKEW",
+      "SKEW.P",
+      "SLN",
+      "SORT",
+      "SQRTPI",
+      "STANDARDIZE",
+      "SYD",
+      "T.DIST",
+      "T.DIST.2T",
+      "T.DIST.RT",
+      "T.INV",
+      "T.INV.2T",
+      "T.TEST",
+      "TBILLEQ",
+      "TBILLPRICE",
+      "TBILLYIELD",
+      "TDIST",
+      "TINV",
+      "TRANSPOSE",
+      "TTEST",
+      "UNIQUE",
+      "VSTACK",
+      "WEIBULL",
+      "WEIBULL.DIST",
+      "XIRR",
+      "XNPV",
+      "Z.TEST",
+      "ZTEST"
+    ],
+    "onlyOurs": [
+      "AGGREGATE",
+      "AREAS",
+      "AVERAGEIFS",
+      "CELL",
+      "CONCAT",
+      "DOLLAR",
+      "ERROR.TYPE",
+      "FIXED",
+      "FORECAST",
+      "FORECAST.LINEAR",
+      "INDIRECT",
+      "INFO",
+      "INTERCEPT",
+      "LOOKUP",
+      "MODE",
+      "MODE.SNGL",
+      "NUMBERVALUE",
+      "RANK",
+      "RANK.AVG",
+      "RANK.EQ",
+      "TEXTAFTER",
+      "TEXTBEFORE",
+      "TYPE",
+      "XMATCH"
+    ],
+    "features": [
+      {
+        "name": "An array answer spills into the cells below",
+        "probe": "=A1:A3*2 in C1, read C2",
+        "answers": {
+          "ours": "blank",
+          "hyperformula": "4"
+        },
+        "passes": {
+          "ours": false,
+          "hyperformula": true
+        }
+      },
+      {
+        "name": "Array arithmetic inside one formula",
+        "probe": "=SUM(A1:A3*{1;2;3})",
+        "answers": {
+          "ours": "14",
+          "hyperformula": "14"
+        },
+        "passes": {
+          "ours": true,
+          "hyperformula": true
+        }
+      },
+      {
+        "name": "A dynamic-array function (FILTER)",
+        "probe": "=SUM(FILTER(A1:A3,A1:A3>1))",
+        "answers": {
+          "ours": "#NAME?",
+          "hyperformula": "5"
+        },
+        "passes": {
+          "ours": false,
+          "hyperformula": true
+        }
+      },
+      {
+        "name": "Implicit intersection with @",
+        "probe": "=@A1:A3 in row 2",
+        "answers": {
+          "ours": "2",
+          "hyperformula": "#ERROR!"
+        },
+        "passes": {
+          "ours": true,
+          "hyperformula": false
+        }
+      },
+      {
+        "name": "Structured table reference",
+        "probe": "=SUM(Table1[Qty])",
+        "answers": {
+          "ours": "#REF!",
+          "hyperformula": "#ERROR!"
+        },
+        "passes": {
+          "ours": false,
+          "hyperformula": false
+        }
+      },
+      {
+        "name": "LET",
+        "probe": "=LET(x,2,x*3)",
+        "answers": {
+          "ours": "#NAME?",
+          "hyperformula": "#NAME?"
+        },
+        "passes": {
+          "ours": false,
+          "hyperformula": false
+        }
+      },
+      {
+        "name": "LAMBDA called in place",
+        "probe": "=LAMBDA(x,x+1)(2)",
+        "answers": {
+          "ours": "#NAME?",
+          "hyperformula": "#ERROR!"
+        },
+        "passes": {
+          "ours": false,
+          "hyperformula": false
+        }
+      },
+      {
+        "name": "Whole-column reference",
+        "probe": "=SUM(A:A)",
+        "answers": {
+          "ours": "6",
+          "hyperformula": "6"
+        },
+        "passes": {
+          "ours": true,
+          "hyperformula": true
+        }
+      },
+      {
+        "name": "Reference to another sheet",
+        "probe": "=Sheet2!A1*2",
+        "answers": {
+          "ours": "20",
+          "hyperformula": "20"
+        },
+        "passes": {
+          "ours": true,
+          "hyperformula": true
+        }
+      },
+      {
+        "name": "3-D reference across sheets",
+        "probe": "=SUM(Sheet2:Sheet3!A1)",
+        "answers": {
+          "ours": "blank",
+          "hyperformula": "#NAME?"
+        },
+        "passes": {
+          "ours": false,
+          "hyperformula": false
+        }
+      },
+      {
+        "name": "A circular reference is reported as an error",
+        "probe": "=B1 in A1, =A1 in B1",
+        "answers": {
+          "ours": "#REF!",
+          "hyperformula": "#CYCLE!"
+        },
+        "passes": {
+          "ours": true,
+          "hyperformula": true
+        }
+      },
+      {
+        "name": "A row insert rewrites the references",
+        "probe": "=A1*2 in B5, insert a row above row 1, read B6",
+        "answers": {
+          "ours": "2",
+          "hyperformula": "2"
+        },
+        "passes": {
+          "ours": true,
+          "hyperformula": true
+        }
+      },
+      {
+        "name": "A column insert rewrites the references",
+        "probe": "=A1*3 in D1, insert a column before A, read E1",
+        "answers": {
+          "ours": "3",
+          "hyperformula": "3"
+        },
+        "passes": {
+          "ours": true,
+          "hyperformula": true
+        }
+      }
+    ]
+  }
+}

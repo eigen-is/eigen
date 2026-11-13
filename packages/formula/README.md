@@ -4,6 +4,8 @@
 
 Excel is the reference: every function it computes is listed in [FUNCTIONS.md](FUNCTIONS.md) with how its answers compare to Excel's.
 
+[benchmark/](benchmark/README.md) compares the engine with HyperFormula and formulajs on speed, correctness against Excel's recorded answers, and coverage.
+
 ## Status
 
 The engine is built and proven on its own: its tests, Excel's recorded answers and timing gates against today's engine. The product does not run it yet. Three parts are in use: number display through `@workspace/formula/format` (cells, charts, the xlsx importer and exporter), Excel's function inventory through `@workspace/formula/names`, and the row and column index maps of `@workspace/formula/text` (`mapIndex`, `mapSpan`, `GONE`), which today's sheet engine shifts its ranges with.
