@@ -98,9 +98,7 @@ export class ManagedDatabase<S extends SchemaType> {
                 await this.sync();
                 syncFailed = false;
             } finally {
-                // On local-key this file is the stored object a close's snapshot copies, so TRUNCATE makes it complete.
-                raw.run('PRAGMA wal_checkpoint(TRUNCATE);');
-                // After a failed sync a path-based snapshot copies storage, which lacks the tail.
+                // After a failed sync a snapshot on a mount without an upload queue copies storage, which lacks the tail.
                 if (!opts.skipFinalSnapshot && !syncFailed) {
                     await this.snapshotIfDue(true).catch((err) =>
                         console.error(`[${this.config.name}] close snapshot failed:`, err),

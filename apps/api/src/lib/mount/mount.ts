@@ -159,11 +159,6 @@ export class Mount {
         return this.config.storageType === 'local';
     }
 
-    // A document database is opened from a temp copy on every backend.
-    public get needsTempCopy(): boolean {
-        return true;
-    }
-
     // ---- Lifecycle ----
 
     // `passive` reads a mount the home does not serve, such as a disabled one a backup archives, and changes

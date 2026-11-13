@@ -54,10 +54,6 @@ export class LocalStorage implements StorageBackend {
         return (await file.exists()) ? file.size : null;
     }
 
-    public getPath(key: string): string {
-        return this.resolve(key);
-    }
-
     public async mkdir(key: string): Promise<void> {
         await fsPromises.mkdir(this.resolve(key), { recursive: true });
     }

@@ -214,7 +214,7 @@ describe('id-stable backends are unaffected by the fix', () => {
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mount.updatePath(containerId, { parentId: dstId }); // no storage move for local-key
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
-        await mount.closeDatabase(dataDbId); // TRUNCATE checkpoint folds the WAL into the backing file
+        await mount.closeDatabase(dataDbId); // the close writes the working copy back
 
         // Backing file lives under the flat id-stable UUID key, untouched by the move.
         expect(await countStoredRows(mount, dataDbId)).toBe(2);

@@ -90,26 +90,6 @@ describe('downloadToTemp', () => {
         expect(existsSync(tempPath)).toBe(false);
     });
 
-    test('works on backends without a local path (S3-style: no getPath)', async () => {
-        // The version-restore read path must not depend on storage.getPath — that
-        // was the original S3 bug. downloadToTemp goes through storage.read, which
-        // every backend implements.
-        const data = Buffer.from('snapshot-bytes-no-getpath');
-        const fileId = await seedFile(mount, rootId, 'snap2.db', 'application/octet-stream', data.length, data);
-
-        const storage = (mount as unknown as { storage: { getPath?: (key: string) => string } }).storage;
-        const originalGetPath = storage.getPath;
-        storage.getPath = undefined;
-        try {
-            const tempId = crypto.randomUUID();
-            const tempPath = await mount.downloadToTemp(fileId, tempId);
-            expect(readFileSync(tempPath).toString()).toBe('snapshot-bytes-no-getpath');
-            await mount.cleanupTemp(tempId);
-        } finally {
-            storage.getPath = originalGetPath;
-        }
-    });
-
     // handleApiError answers a raw error 500; a 503 would read as a storage outage.
     test('a local tmp/ failure is no storage outage, and leaves no side file behind', async () => {
         const data = Buffer.from('snapshot-bytes-local-failure');

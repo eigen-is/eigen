@@ -24,8 +24,6 @@ export interface StorageBackend {
 
     size(key: string): Promise<number | null>;
 
-    getPath?(key: string): string;
-
     mkdir?(key: string): Promise<void>;
 
     rename?(oldKey: string, newKey: string): Promise<void>;

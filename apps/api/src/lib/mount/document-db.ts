@@ -8,15 +8,14 @@ import * as fs from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { settlesWithin } from '../../utils/timing';
 import type { DatabaseConfig, SchemaType, SyncCallbacks } from '../core';
-import { ApiError, ManagedDatabase, storageGone, storageUnavailable } from '../core';
-import { errnoOf } from '../storage';
+import { ApiError, ManagedDatabase } from '../core';
 import { isViableRecoveryTemp } from './helpers';
 import type { Mount } from './mount';
 import { paths } from './schema';
 import { markContainerContentDirty } from './search-index';
 import { getShutdownDrainDeadline } from './upload-limits';
 
-// A database with no holder stays open for five minutes: a close takes a version and on a temp-copy mount an upload, so
+// A database with no holder stays open for five minutes: a close takes a version and an upload, so
 // a chat with a message now and then must not pay that for each, and the reindex must not reopen it.
 export const IDLE_CLOSE_MS = 5 * 60_000;
 // A close waits this long for the holders to let go. Then it closes anyway and logs, so a holder that
@@ -173,33 +172,18 @@ function armIdleClose(mount: Mount, pathId: string, slot: DocumentDbSlot): void 
     slot.idleTimer.unref();
 }
 
-// The file a document database opens: a temp copy, or on `local-key` the stored file in place. Only that
-// storage is sure to have getPath, because s3 has no local file.
-export function documentDbPath(mount: Mount, pathId: string, storageKey: string): string {
-    if (mount.needsTempCopy) return mount.getTempPath(pathId);
-    if (mount.storage.getPath) return mount.storage.getPath(storageKey);
-    throw new Error(`Mount ${mount.id}: storage backend exposes no local path for ${pathId}`);
-}
-
 async function buildDocumentDb<S extends SchemaType>(
     mount: Mount,
     config: DatabaseConfig<S>,
     pathId: string,
     mode: 'open' | 'create',
 ): Promise<ManagedDatabase<S>> {
-    const storageKey = await mount.getStorageKey(pathId);
-    const localPath = documentDbPath(mount, pathId, storageKey);
+    const localPath = mount.getTempPath(pathId);
 
     if (mode === 'create') {
+        const storageKey = await mount.getStorageKey(pathId);
         if (await mount.storage.exists(storageKey)) {
             throw new Error(`Mount.createDatabase ${pathId}: storage object ${storageKey} already exists`);
-        }
-    } else if (!mount.needsTempCopy) {
-        // Only absence is gone: EACCES or EIO (a volume gone away) is an outage the client retries.
-        try {
-            fs.statSync(localPath);
-        } catch (error) {
-            throw errnoOf(error) === 'ENOENT' ? storageGone(error) : storageUnavailable(error);
         }
     }
 
@@ -218,93 +202,80 @@ async function buildDocumentDb<S extends SchemaType>(
     // database is marked dirty after the open.
     let recoveredFromCrash = false;
 
-    // onSync stages a copy of this live database with VACUUM INTO.
     const managed = new ManagedDatabase(
         config,
         localPath,
-        mount.needsTempCopy
-            ? {
-                  onOpen: async () => {
-                      if (mode === 'create') return;
-                      const tempPath = mount.getTempPath(pathId);
-                      if (fs.existsSync(tempPath)) {
-                          // A surviving temp signals an unclean shutdown. A 0-byte or partial temp (a failed S3 GET)
-                          // would upload as an empty doc over the good stored object, so only a real SQLite is adopted.
-                          const known = await mount.getPath(pathId);
-                          if (isViableRecoveryTemp(tempPath, known?.size ?? 0)) {
-                              console.log(`[Mount] Recovering from crash: using existing tmp file for ${pathId}`);
-                              recoveredFromCrash = true;
-                              return;
-                          }
-                          const tempSize = fs.statSync(tempPath).size;
-                          console.warn(
-                              `[Mount] Discarding unusable crash temp for ${pathId} ` +
-                                  `(temp=${tempSize}B, stored=${known?.size ?? 0}B); re-fetching from storage`,
-                          );
-                          await mount.cleanupTemp(pathId);
-                      }
-                      // Under the tree lock, as onSync: on `local` an ancestor rename racing the download
-                      // would read as a miss.
-                      await mount.withTreeShared(async () => {
-                          const currentKey = await mount.getStorageKey(pathId);
-                          // A clean close during an outage: the staged copy holds bytes newer than storage, so it is
-                          // the one to recover from.
-                          const staged = mount.pendingStagedCopy(currentKey);
-                          if (staged) {
-                              console.log(`[Mount] Recovering from staged upload for ${pathId}`);
-                              await mount.cleanupTemp(pathId);
-                              await mount.replaceTempFrom(pathId, Bun.file(staged));
-                              return;
-                          }
-                          // The open sends no HEAD: the GET itself answers a gone object (410).
-                          await mount.downloadKeyToTemp(currentKey, pathId);
-                          // An empty download needs no check here. ManagedDatabase refuses to open an
-                          // empty working copy as a new database.
-                      });
-                  },
-                  // On s3 the sync stages a frozen copy and queues its upload. A path-based local mount copies at once:
-                  // a local write never answers 503, and a queue would only weaken its durability.
-                  onSync: () =>
-                      mount.withTreeShared(async () => {
-                          // The key is resolved on every sync, under the tree lock: on `local` a move since the open
-                          // would write the old tree back. A deleted document's sync must not bring its key back.
-                          const currentKey = await mount.findStorageKey(pathId);
-                          if (currentKey === null) return;
-                          if (mount.uploadQueue) {
-                              const stagingPath = mount.uploadQueue.newStagingPath();
-                              managed.stageCopy(stagingPath);
-                              // A VACUUM INTO copy of a managed database, so the queue checks its SQLite
-                              // header before the PUT.
-                              mount.uploadQueue.enqueueStaged(currentKey, stagingPath, true);
-                              // Ranges and HEAD are served from the staged copy until its PUT lands. The queue
-                              // removes it only after that.
-                              await syncDocumentDbSize(mount, pathId, stagingPath);
-                          } else {
-                              await mount.uploadFromTemp(currentKey, pathId);
-                              await syncDocumentDbSize(mount, pathId, localPath);
-                          }
-                          await markContainerContentDirty(mount, pathId);
-                      }),
-                  // With an upload queue the row already has the size of the staged copy, so only a
-                  // mount without one reads the size again.
-                  onClose: async (syncFailed) => {
-                      if (!mount.uploadQueue) await syncDocumentDbSize(mount, pathId, localPath);
-                      // After a failed final sync the temp is the only copy of the newest writes. It
-                      // stays as the crash temp, which the next open adopts and syncs again.
-                      if (!syncFailed) await mount.cleanupTemp(pathId);
-                  },
-                  onSnapshot,
-              }
-            : {
-                  onSync: async () => {
-                      await syncDocumentDbSize(mount, pathId, localPath);
-                      await markContainerContentDirty(mount, pathId);
-                  },
-                  onClose: async () => {
-                      await syncDocumentDbSize(mount, pathId, localPath);
-                  },
-                  onSnapshot,
-              },
+        {
+            onOpen: async () => {
+                if (mode === 'create') return;
+                if (fs.existsSync(localPath)) {
+                    // A surviving temp signals an unclean shutdown. A 0-byte or partial temp (a failed S3 GET)
+                    // would upload as an empty doc over the good stored object, so only a real SQLite is adopted.
+                    const known = await mount.getPath(pathId);
+                    if (isViableRecoveryTemp(localPath, known?.size ?? 0)) {
+                        console.log(`[Mount] Recovering from crash: using existing tmp file for ${pathId}`);
+                        recoveredFromCrash = true;
+                        return;
+                    }
+                    const tempSize = fs.statSync(localPath).size;
+                    console.warn(
+                        `[Mount] Discarding unusable crash temp for ${pathId} ` +
+                            `(temp=${tempSize}B, stored=${known?.size ?? 0}B); re-fetching from storage`,
+                    );
+                    await mount.cleanupTemp(pathId);
+                }
+                // Under the tree lock, as onSync: on `local` an ancestor rename racing the download
+                // would read as a miss.
+                await mount.withTreeShared(async () => {
+                    const currentKey = await mount.getStorageKey(pathId);
+                    // A clean close during an outage: the staged copy holds bytes newer than storage, so it is
+                    // the one to recover from.
+                    const staged = mount.pendingStagedCopy(currentKey);
+                    if (staged) {
+                        console.log(`[Mount] Recovering from staged upload for ${pathId}`);
+                        await mount.cleanupTemp(pathId);
+                        await mount.replaceTempFrom(pathId, Bun.file(staged));
+                        return;
+                    }
+                    // The open sends no HEAD: the GET itself answers a gone object (410).
+                    await mount.downloadKeyToTemp(currentKey, pathId);
+                    // An empty download needs no check here. ManagedDatabase refuses to open an
+                    // empty working copy as a new database.
+                });
+            },
+            // On s3 the sync stages a frozen copy and queues its upload. A local mount copies at once:
+            // a local write never answers 503, and a queue would only weaken its durability.
+            onSync: () =>
+                mount.withTreeShared(async () => {
+                    // The key is resolved on every sync, under the tree lock: on `local` a move since the open
+                    // would write the old tree back. A deleted document's sync must not bring its key back.
+                    const currentKey = await mount.findStorageKey(pathId);
+                    if (currentKey === null) return;
+                    if (mount.uploadQueue) {
+                        const stagingPath = mount.uploadQueue.newStagingPath();
+                        managed.stageCopy(stagingPath);
+                        // A VACUUM INTO copy of a managed database, so the queue checks its SQLite
+                        // header before the PUT.
+                        mount.uploadQueue.enqueueStaged(currentKey, stagingPath, true);
+                        // Ranges and HEAD are served from the staged copy until its PUT lands. The queue
+                        // removes it only after that.
+                        await syncDocumentDbSize(mount, pathId, stagingPath);
+                    } else {
+                        await mount.uploadFromTemp(currentKey, pathId);
+                        await syncDocumentDbSize(mount, pathId, localPath);
+                    }
+                    await markContainerContentDirty(mount, pathId);
+                }),
+            // With an upload queue the row already has the size of the staged copy, so only a
+            // mount without one reads the size again.
+            onClose: async (syncFailed) => {
+                if (!mount.uploadQueue) await syncDocumentDbSize(mount, pathId, localPath);
+                // After a failed final sync the temp is the only copy of the newest writes. It
+                // stays as the crash temp, which the next open adopts and syncs again.
+                if (!syncFailed) await mount.cleanupTemp(pathId);
+            },
+            onSnapshot,
+        },
         mode === 'open',
     );
 
@@ -316,9 +287,9 @@ async function buildDocumentDb<S extends SchemaType>(
         managed.markDirty();
     }
 
-    // On a temp-copy mount the new empty schema goes to storage before this returns. Otherwise a restart before the
-    // next 30 s sync makes every later open answer 410.
-    if (mode === 'create' && mount.needsTempCopy) {
+    // The new empty schema goes to storage before this returns. Otherwise a restart before the next 30 s sync
+    // makes every later open answer 410.
+    if (mode === 'create') {
         try {
             await managed.flush();
         } catch (err) {

@@ -9,7 +9,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
 import { ApiError, storageGone } from '../core';
 import { CONTAINER_DATA_DB } from '../mount/container-dbs';
-import { closeInSlot, documentDbPath, withDocumentDb } from '../mount/document-db';
+import { closeInSlot, withDocumentDb } from '../mount/document-db';
 import { isViableRecoveryTemp } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
@@ -158,17 +158,15 @@ export async function stageManagedDbCopy(
             // and only the slot puts the two in order. Its newest bytes can be read only through SQLite.
             const row = await mount.getPath(pathId);
             if (!row) return false;
-            const file = documentDbPath(mount, pathId, await mount.getStorageKey(pathId));
-            if (!isViableRecoveryTemp(file, row.size ?? 0)) return false;
-            // On local-key with no -wal the stored file is whole, and the read below copies it as it is.
-            if (!mount.needsTempCopy && !fs.existsSync(`${file}-wal`)) return false;
+            const tempPath = mount.getTempPath(pathId);
+            if (!isViableRecoveryTemp(tempPath, row.size ?? 0)) return false;
             // Read-write: a readonly open of a WAL database with no -wal and no -shm fails. The close folds a -wal in.
-            const db = new Database(file, { readwrite: true, create: false });
+            const db = new Database(tempPath, { readwrite: true, create: false });
             db.fileControl(constants.SQLITE_FCNTL_PERSIST_WAL, 0);
             try {
                 db.run('VACUUM INTO ?', [destPath]);
             } catch (error) {
-                throw new Error(`mount ${mount.id}: leftover database ${pathId} at ${file} cannot be copied`, {
+                throw new Error(`mount ${mount.id}: leftover database ${pathId} at ${tempPath} cannot be copied`, {
                     cause: error,
                 });
             } finally {
@@ -229,13 +227,6 @@ export async function replaceContainerDataDb(mount: Mount, containerId: string, 
                     fs.copyFileSync(sourcePath, staging);
                     mount.uploadQueue.enqueueStaged(storageKey, staging, true);
                 } else {
-                    // On local-key the object is the database file itself, and its old -wal would replay over the
-                    // new bytes. The main file stays until the write replaces it, so a failed write keeps it.
-                    if (!mount.needsTempCopy) {
-                        for (const file of [`${storageKey}-wal`, `${storageKey}-shm`]) {
-                            await mount.storage.delete(file);
-                        }
-                    }
                     await mount.storage.write(storageKey, Bun.file(sourcePath));
                 }
             });

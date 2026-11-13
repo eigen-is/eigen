@@ -379,7 +379,7 @@ describe('ManagedDatabase statement finalization', () => {
 
 describe('ManagedDatabase close releases the file (no zombie close)', () => {
     test('close → reopen of the SAME path works', async () => {
-        // Every local-key reopen takes exactly this path, so close() must be strict (statements
+        // Every working copy reopens at the same temp path, so close() must be strict (statements
         // finalized, see above) and release the file before the next open.
         const dbPath = nextDbPath();
         const db = new ManagedDatabase(makeConfig(1000), dbPath, { onSync: async () => {} });
