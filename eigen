@@ -205,7 +205,7 @@ die() {
     exit 1
 }
 
-wordmark() { printf '\n%seigen|%s>%s\n\n' "$ACCENT" "$1" "$RESET"; }
+wordmark() { printf '\n%seigen|%s⟩%s\n\n' "$ACCENT" "$1" "$RESET"; }
 
 # The last KEY= line of .env.production, without its quotes: the launcher reads no value that needs unescaping.
 env_value() {

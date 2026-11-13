@@ -725,7 +725,7 @@ Activity and history release. A timeline per file with file and folder watching,
 
 ### Changed
 
-- **Visual refresh** — a new app switcher, a grid of large app-colored icons with names. Lighter font weights across the apps, Drive file icons tinted by app, an animated `eigen|app>` wordmark on the landing page and Space home, and a topbar that can be app-colored or neutral. Toolbar titles are lighter, toolbar borders fade in as you scroll, and the Drive, Trash and Calendar layouts are tidier
+- **Visual refresh** — a new app switcher, a grid of large app-colored icons with names. Lighter font weights across the apps, Drive file icons tinted by app, an animated `eigen|app⟩` wordmark on the landing page and Space home, and a topbar that can be app-colored or neutral. Toolbar titles are lighter, toolbar borders fade in as you scroll, and the Drive, Trash and Calendar layouts are tidier
 - **Landing page** — the landing page is prerendered, so it shows instantly and search engines read it better. Signed-in visitors go straight into the app
 - **Sheets** — inserting or deleting rows and columns no longer sends the whole sheet, so large sheets stay responsive
 
