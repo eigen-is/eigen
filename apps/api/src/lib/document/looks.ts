@@ -3,15 +3,16 @@
 // measures of that look the exports estimate with, such as a character's width.
 
 import type { JSONContent } from '@tiptap/core';
-import {
-    DOCUMENT_LINE_RATIO,
-    EIGEN_FONT_NAMES,
-    FOOTNOTE_FONT_SIZE,
-    fontLineHeight,
-    getFontName,
-} from '@workspace/lib/constants/fonts';
+import { EIGEN_FONT_NAMES, FOOTNOTE_FONT_SIZE, getFontName } from '@workspace/lib/constants/fonts';
 import type { NormalStyle, TitleType } from '@workspace/lib/docs/eigendoc';
-import { DOC_PROSE_CLASS, listTypeOfStyle, ptToPx, ptToTwips, readParagraphFormat } from '@workspace/lib/docs/eigendoc';
+import {
+    DOC_PROSE_CLASS,
+    LINE_SPACING_PROPERTY,
+    listTypeOfStyle,
+    ptToPx,
+    ptToTwips,
+    readParagraphFormat,
+} from '@workspace/lib/docs/eigendoc';
 import { LIST_FORMATS, LIST_LEVELS, SINGLE_LINE, TWIPS_PER_PX } from '../ooxml/wordml';
 import { cssColorToHex } from './colors';
 import { proseValue, proseValueIfSet } from './prose-css';
@@ -182,69 +183,37 @@ export function nodeLook(type: string, level = 1): TextLook {
     return type === 'title' || type === 'subtitle' ? TITLE_LOOKS[type] : {};
 }
 
-export function lineHeightPt(value: string, sizePt: number): number {
-    return /^[\d.]+$/.test(value) ? Number(value) * sizePt : cssPt(value, sizePt);
+// A line spacing as Word's auto line, 240ths of the font's own single line. Eigen draws a line spacing the same way,
+// so the two are one number: Google Docs reads every atLeast as single.
+export function autoLine(lineSpacing: number): number {
+    return Math.round(SINGLE_LINE * lineSpacing);
 }
 
-// A heading's or title's size, spacing and line. One without its own size or line height inherits the prose root's,
-// as h5 and h6 do, so its size is the Normal's.
+// A heading's or title's size, spacing and auto line. One without its own size inherits the prose root's, as h5 and h6
+// do, so its size is the Normal's.
 export function textMetrics(selector: string, normalPt: number) {
     const size = proseValueIfSet(selector, 'font-size');
     const sizePt = size === undefined ? normalPt : cssPt(size, BODY.sizePt);
-    const line = proseValueIfSet(selector, 'line-height') ?? proseValue('.eigen-prose', 'line-height');
     const tracking = proseValueIfSet(selector, 'letter-spacing');
     return {
         sizePt,
         before: twips(cssPt(proseValue(selector, 'margin-top'), sizePt)),
         after: twips(cssPt(proseValue(selector, 'margin-bottom'), sizePt)),
-        line: lineHeightPt(line, sizePt),
+        line: autoLine(Number(proseValue(selector, LINE_SPACING_PROPERTY))),
         tracking: tracking === undefined ? undefined : twips(cssPt(tracking, sizePt)),
     };
 }
 
-// A multiple of the font's own line height, so the pitch is the CSS one: Google Docs reads every atLeast as single.
-export function autoLine(linePt: number, sizePt: number, font: string): number {
-    return Math.round((SINGLE_LINE * linePt) / (sizePt * fontLineHeight(font)));
-}
-
-// The auto line Word draws a line spacing at in the Normal's font. CSS draws a line spacing in Inter's line.
-export function normalLine(lineSpacing: number, normal: NormalStyle): number {
-    return autoLine(lineSpacing * DOCUMENT_LINE_RATIO * normal.size, normal.size, normal.font);
-}
-
-// normalLine's inverse: the line spacing an auto line written in this font draws.
-export function lineMultiple(written: number, font: string): number {
-    return (written * fontLineHeight(font)) / DOCUMENT_LINE_RATIO / SINGLE_LINE;
-}
-
-// A run's family and size in half-points, which the height of its line follows.
-export type RunFace = { family: string; size: number };
-
-// Word draws an auto line in the tallest face on it, the paragraph mark's included; CSS draws its line at the largest
-// size alone, in the mark's family. The writer writes the line of a paragraph all in one family times this, and the
-// reader divides it back out. Mixed families are 1: the writer leaves their line alone.
-export function familyLineScale(mark: RunFace, faces: RunFace[]): number {
-    const family = faces[0]?.family;
-    if (family === undefined || faces.some((face) => face.family !== family)) return 1;
-    let tallest = fontLineHeight(mark.family) * mark.size;
-    let largest = mark.size;
-    for (const face of faces) {
-        tallest = Math.max(tallest, fontLineHeight(face.family) * face.size);
-        largest = Math.max(largest, face.size);
-    }
-    return (fontLineHeight(mark.family) * largest) / tallest;
-}
-
+// The size in points, the space before and after in twips, and the line an auto line.
 type OwnLook = { sizePt: number; before: number; after: number; line: number };
 
 // What a text node draws with no mark or format of its own. The docx writer's styles write it, so the reader and the
-// audit read it as no format. The size is in points, the space before and after in twips, and the auto line in the
-// Normal's font. A note's paragraph draws Word's FootnoteText over the Normal.
+// audit read it as no format.
 export function ownTextLook(type: string, level: number, normal: NormalStyle, inNote: boolean): OwnLook | undefined {
     if (inNote) return noteTextLook(normal);
     if (type === 'paragraph') return normalTextLook(normal);
-    if (type === 'heading') return sizedTextLook(`.eigen-prose h${Math.min(level, HEADING_LOOKS.length)}`, normal);
-    return type === 'title' || type === 'subtitle' ? sizedTextLook(TITLE_SELECTORS[type], normal) : undefined;
+    if (type === 'heading') return textMetrics(`.eigen-prose h${Math.min(level, HEADING_LOOKS.length)}`, normal.size);
+    return type === 'title' || type === 'subtitle' ? textMetrics(TITLE_SELECTORS[type], normal.size) : undefined;
 }
 
 export function normalTextLook(normal: NormalStyle): OwnLook {
@@ -252,7 +221,7 @@ export function normalTextLook(normal: NormalStyle): OwnLook {
         sizePt: normal.size,
         before: twips(normal.spaceBefore),
         after: twips(normal.spaceAfter),
-        line: normalLine(normal.lineSpacing, normal),
+        line: autoLine(normal.lineSpacing),
     };
 }
 
@@ -263,12 +232,6 @@ export function noteTextLook(normal: NormalStyle): OwnLook {
         after: FOOTNOTE_LOOK.after,
         line: FOOTNOTE_LOOK.line,
     };
-}
-
-// A heading's or a title's, by its selector, with its letter spacing.
-export function sizedTextLook(selector: string, normal: NormalStyle): OwnLook & { tracking: number | undefined } {
-    const metrics = textMetrics(selector, normal.size);
-    return { ...metrics, line: autoLine(metrics.line, metrics.sizePt, normal.font) };
 }
 
 export const HEADER_CELL_LOOK = { fill: proseColor('.eigen-prose th', 'background-color') };

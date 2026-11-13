@@ -2,7 +2,7 @@
 // returns its bytes and the warnings that count what it left out.
 
 import type { JSONContent } from '@tiptap/core';
-import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
+import { DOCUMENT_FONT, EIGEN_FONTS, fontLineHeight } from '@workspace/lib/constants/fonts';
 import type { BandRoot, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_ROOTS,
@@ -294,7 +294,8 @@ const PAGE_FOOTNOTES_CSS = `
     font-weight: 400;
     font-style: normal;
     font-variant: normal;
-    line-height: normal;
+    --line-spacing: 1;
+    line-height: calc(var(--line-spacing) * var(--doc-font-line, ${fontLineHeight(DOCUMENT_FONT)}));
     letter-spacing: normal;
     text-transform: none;
     color: var(--doc-color, #${BODY.color});
@@ -311,9 +312,10 @@ const PAGE_FOOTNOTES_CSS = `
 }
 `;
 
-// The HTML download's notes after the body, in the note size under a short rule.
+// The HTML download's notes after the body, in the note size under a short rule, single spaced as on paper.
 const FOOTNOTE_LIST_CSS = `
 .footnotes { font-size: ${FOOTNOTE_LOOK.sizePt}pt; }
+.footnotes p { --line-spacing: 1; margin-bottom: 0; }
 .footnotes hr { width: 144pt; margin: 2em 0 1em; }
 `;
 

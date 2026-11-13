@@ -843,12 +843,12 @@ const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efa
 // The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
 // paper, no band, note, equation or small caps, so the two differ by the page-number counters every PDF's head holds,
 // and by the image: the download embeds its WebP preview, the PDF a JPEG made from its source. Both embed the prose
-// stylesheet, so an edit to it moves them. They last moved when a resolved comment lost its highlight.
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '3228785235b3e013f5dd37e01e19ded144d88eae28bd2edafe88295fcd92cc24';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '61298386da02af857d43bcf46b8a70cd346603590523502562ec5f290fe2a3b9';
+// stylesheet, so an edit to it moves them.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '884153e15fae77ea241cbc342648aacff8c8d2b8305baf1187a184c6683b3a0b';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'ffefc8a398fd91421d9ee3104cf627d2ff7034eace9d6f422591c9e47f041c0c';
 // The doc's docx: the writer's parts and embedded fonts, deflated by libdeflate, and the thumbnail Worker's JPEG of the
-// image. It last moved when the Hyperlink style took the editor's underline.
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '7e18568669cea9afc673aed909d64df660e1e9edec779d7ff7cf82fbe3f4fa36';
+// image.
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'af721dd21f9bc9cc7d7d7c52b9e06aaffa20d3e556738896a321e048acec2207';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
 // The HTML download embeds canvas-text.css whole, its comments too. The preview last moved when every font stack
 // took the emoji and CJK faces, and the HTML download and the PDF's when they also embedded only the slices it touches.

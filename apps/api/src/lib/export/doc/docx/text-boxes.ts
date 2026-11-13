@@ -5,7 +5,7 @@
 // does in Eigen.
 
 import type { JSONContent } from '@tiptap/core';
-import { DOCUMENT_LINE_RATIO, readFontSize } from '@workspace/lib/constants/fonts';
+import { fontLineHeight, readFontSize } from '@workspace/lib/constants/fonts';
 import type { TextBoxAttrs } from '@workspace/lib/docs/eigendoc';
 import {
     chartBox,
@@ -113,7 +113,7 @@ function textBoxRun(node: JSONContent, attrs: TextBoxAttrs, context: Context, pl
 // The height the box's content takes in its text column of `column` px: each paragraph's characters at its largest
 // run's size and the Normal's line, and its pictures and charts as tall as the writer draws them in that column.
 function contentHeight(node: JSONContent, column: number, pkg: Package): number {
-    const { size: normal, lineSpacing } = pkg.normal;
+    const { size: normal, lineSpacing, font } = pkg.normal;
     let height = 0;
     for (const paragraph of node.content ?? []) {
         const size = Math.max(normal, largestRun(paragraph));
@@ -122,7 +122,7 @@ function contentHeight(node: JSONContent, column: number, pkg: Package): number 
         const figures = figuresHeight(paragraph, column, pkg);
         // A paragraph that holds only a picture is the picture's height; an empty one is still a line.
         const lines = count > 0 || figures === 0 ? Math.max(1, Math.ceil(count / perLine)) : 0;
-        height += lines * ptToPx(size * lineSpacing * DOCUMENT_LINE_RATIO) + figures;
+        height += lines * ptToPx(size * lineSpacing * fontLineHeight(font)) + figures;
     }
     return height;
 }

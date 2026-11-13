@@ -85,10 +85,6 @@ export function fontLineHeight(name: string): number {
     return (EIGEN_FONTS.find((font) => font.name === name) ?? EIGEN_FONTS[0]).lineHeight;
 }
 
-// A paragraph's CSS line-height is its line spacing times the document font's single line, as CSS can't know the fonts
-// of a paragraph's runs.
-export const DOCUMENT_LINE_RATIO = fontLineHeight(DOCUMENT_FONT);
-
 // The size a doc's text draws at without a size mark, as eigen-prose.css sets the body, in pt.
 export const DOCUMENT_FONT_SIZE = 11;
 

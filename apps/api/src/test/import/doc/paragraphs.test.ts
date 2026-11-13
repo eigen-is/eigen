@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { DOCUMENT_FONT, fontLineHeight } from '@workspace/lib/constants/fonts';
 import {
     DEFAULT_NORMAL_STYLE,
     DEFAULT_PAGE_SETUP,
@@ -1102,16 +1101,13 @@ describe('the Normal', () => {
         '<w:pPrDefault><w:pPr><w:spacing w:after="200" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>',
         '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:before="60"/></w:pPr><w:rPr><w:color w:val="333333"/><w:sz w:val="24"/></w:rPr></w:style>',
     ].join('');
-    // Its line as the multiple CSS draws Word's pitch at, in Source Serif 4's line, as a paragraph's.
-    const TIMES_LINE =
-        Math.round(((1.15 * fontLineHeight('Source Serif 4')) / fontLineHeight(DOCUMENT_FONT)) * 100) / 100;
 
     test("docDefaults and the Normal style are the doc's Normal: the font through the font map, size, line, spacing, colour", async () => {
         const { style } = await importDocxBody(paragraph(run('Body')), { styles: TIMES });
         expect(style).toEqual({
             font: 'Source Serif 4',
             size: 12,
-            lineSpacing: TIMES_LINE,
+            lineSpacing: 1.15,
             spaceBefore: 3,
             spaceAfter: 10,
             color: '#333333',

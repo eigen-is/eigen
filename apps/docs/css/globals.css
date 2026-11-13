@@ -98,14 +98,15 @@
         line-height: 1.6;
     }
 
-    /* The note's text at its item's size, not the doc's Normal. */
+    /* The note's text at its item's size, not the doc's Normal, and single spaced with no space after, as Word's
+       FootnoteText and the exports draw it. */
     .eigen-prose {
         font-size: 1em;
     }
 
     .eigen-prose p {
         margin-bottom: 0;
-        line-height: 1.4;
+        --line-spacing: 1;
     }
 }
 

@@ -1018,9 +1018,11 @@ describe('docx writer — paragraphs and headings', () => {
         expect(bare?.children).toEqual([]);
     });
 
-    test("a paragraph all in one other family keeps the editor's pitch, its line scaled by that family's line height", async () => {
+    // The editor draws each run at its font's own line, as Word does, so no family or size needs a line of its own.
+    test("a paragraph in another family or size keeps its style's line", async () => {
         const family = (fontFamily: string) => ({ type: 'textStyle', attrs: { fontFamily } });
         const serif = family('Source Serif 4');
+        const bigSerif = { type: 'textStyle', attrs: { fontSize: 24, fontFamily: 'Source Serif 4' } };
         const body = await bodyOf(
             doc(
                 p(text('a', serif), text('b', serif, { type: 'bold' })),
@@ -1029,29 +1031,17 @@ describe('docx writer — paragraphs and headings', () => {
                 heading(1, text('e', serif)),
                 p(text('f', serif), text('g')),
                 p(text('h', { type: 'code' })),
+                p(text('i', bigSerif)),
             ),
         );
-        // 336 is line spacing 1.4 at Inter's 1.210; Source Serif 4 is 1.371, JetBrains Mono 1.32, Excalifont 1.26.
-        // Mixed families keep the style's; inline code is smaller, so the mark's Inter stays the tallest.
-        expect(xmlChildren(body, W, 'p').map((paragraph) => xmlOf(child(paragraph, 'pPr')))).toEqual([
-            '<w:pPr><w:spacing w:line="297" w:lineRule="auto"/></w:pPr>',
-            '<w:pPr><w:spacing w:line="308" w:lineRule="auto"/></w:pPr>',
-            '<w:pPr><w:spacing w:line="323" w:lineRule="auto"/></w:pPr>',
-            '<w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:line="210" w:lineRule="auto"/></w:pPr>',
-            '',
-            '',
-        ]);
-    });
-
-    // A unitless CSS line-height scales with each span's size, as Word's auto line does with the tallest face: only
-    // the family's own line height needs the rescale.
-    test('a run in a larger size keeps the line, in a family the line of that family', async () => {
-        const big = { type: 'textStyle', attrs: { fontSize: 24 } };
-        const bigSerif = { type: 'textStyle', attrs: { fontSize: 24, fontFamily: 'Source Serif 4' } };
-        const body = await bodyOf(doc(p(text('a'), text('b', big)), p(text('c', bigSerif))));
         expect(xmlChildren(body, W, 'p').map((paragraph) => xmlOf(child(paragraph, 'pPr')))).toEqual([
             '',
-            '<w:pPr><w:spacing w:line="297" w:lineRule="auto"/></w:pPr>',
+            '',
+            '',
+            '<w:pPr><w:pStyle w:val="Heading1"/></w:pPr>',
+            '',
+            '',
+            '',
         ]);
     });
 });
@@ -1126,19 +1116,10 @@ describe('docx writer — paragraph format', () => {
         },
     );
 
-    // The writer scales a paragraph all in one other family by that family's line, as it does the style's.
-    test('a line spacing in another family is scaled by its line height', async () => {
+    test('a line spacing is the same auto line in any family', async () => {
         const serif = { type: 'textStyle', attrs: { fontFamily: 'Source Serif 4' } };
-        const lineHeight = (family: string) => {
-            const tables = sfntTables(fs.readFileSync(DOCX_FONT_FILES.get(family)?.Regular ?? ''));
-            const os2 = tables.get('OS/2');
-            const head = tables.get('head');
-            if (!os2 || !head) throw new Error(`no metrics for ${family}`);
-            return (os2.readUInt16BE(74) + os2.readUInt16BE(76)) / head.readUInt16BE(18);
-        };
-        const line = Math.round((480 * lineHeight('Inter')) / lineHeight('Source Serif 4'));
         expect(await pPrOf(formatted({ lineSpacing: 2 }, text('x', serif)))).toEqual([
-            `<w:pPr><w:spacing w:line="${line}" w:lineRule="auto"/></w:pPr>`,
+            '<w:pPr><w:spacing w:line="480" w:lineRule="auto"/></w:pPr>',
         ]);
     });
 
@@ -3926,12 +3907,12 @@ describe('docx writer — styles from the CSS', () => {
             return [...sizeOf(heading), ...spacingOf(heading), w(child(child(heading, 'rPr'), 'spacing'), 'val')];
         });
         expect(rows).toEqual([
-            ['42', '42', '630', '210', '238', 'auto', '-8'],
-            ['33', '33', '495', '165', '248', 'auto', '-5'],
-            ['27', '27', '405', '135', '258', 'auto', '-3'],
-            ['24', '24', '360', '120', '278', 'auto', undefined],
-            ['22', '22', '330', '110', '298', 'auto', undefined],
-            ['22', '22', '330', '110', '298', 'auto', undefined],
+            ['42', '42', '630', '210', '240', 'auto', '-8'],
+            ['33', '33', '495', '165', '252', 'auto', '-5'],
+            ['27', '27', '405', '135', '264', 'auto', '-3'],
+            ['24', '24', '360', '120', '276', 'auto', undefined],
+            ['22', '22', '330', '110', '300', 'auto', undefined],
+            ['22', '22', '330', '110', '300', 'auto', undefined],
         ]);
     });
 
@@ -3981,8 +3962,8 @@ describe('docx writer — styles from the CSS', () => {
             const rPr = child(title, 'rPr');
             return [...sizeOf(title), ...spacingOf(title), w(child(rPr, 'color'), 'val'), !!child(rPr, 'b')];
         };
-        expect(look('Title')).toEqual(['52', '52', '0', '60', '238', 'auto', undefined, false]);
-        expect(look('Subtitle')).toEqual(['30', '30', '0', '320', '258', 'auto', '666666', false]);
+        expect(look('Title')).toEqual(['52', '52', '0', '60', '240', 'auto', undefined, false]);
+        expect(look('Subtitle')).toEqual(['30', '30', '0', '320', '264', 'auto', '666666', false]);
         // Inline code is 0.9em of the title's 26 pt.
         const body = await bodyOf(doc({ type: 'title', content: [text('x', { type: 'code' })] }));
         expect(w(only(descendants(body, W, 'sz')), 'val')).toBe('47');

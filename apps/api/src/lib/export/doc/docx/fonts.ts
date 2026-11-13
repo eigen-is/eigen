@@ -1,5 +1,5 @@
 // The docx writer's fonts. The font table lists each family the doc draws in, and each face it uses is embedded whole,
-// so Word draws the doc in Eigen's fonts. useFace records the face a run draws in, which its line's height follows.
+// so Word draws the doc in Eigen's fonts. useFace records each face a run or a paragraph mark draws in.
 
 import * as fs from 'node:fs';
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
@@ -21,8 +21,6 @@ import docxSerifBold from '@workspace/ui/assets/fonts/source-serif/SourceSerif4-
 import docxSerifBoldItalic from '@workspace/ui/assets/fonts/source-serif/SourceSerif4-BoldIt.ttf' with { type: 'file' };
 import docxSerifItalic from '@workspace/ui/assets/fonts/source-serif/SourceSerif4-It.ttf' with { type: 'file' };
 import docxSerifRegular from '@workspace/ui/assets/fonts/source-serif/SourceSerif4-Regular.ttf' with { type: 'file' };
-import type { RunFace } from '../../../document/looks';
-import { halfPoints } from '../../../document/looks';
 import { R_NS, W_NS } from '../../../ooxml/ooxml';
 import type { Relationship } from '../../../ooxml/opc';
 import { partRelationships } from '../../../ooxml/opc';
@@ -128,11 +126,10 @@ export function embeddedFonts(faces: Map<string, Set<FontSlot>>): {
 }
 
 // As Word resolves a face: the run over its character style over its paragraph style, whose toggles flip each other.
-export function useFace(pkg: Package, run: RunProps, paragraphStyle: StyleId | undefined): RunFace {
+export function useFace(pkg: Package, run: RunProps, paragraphStyle: StyleId | undefined): void {
     const character = styleFace(pkg.styles, run.style);
     const paragraph = styleFace(pkg.styles, paragraphStyle ?? 'Normal');
     const family = run.font ?? character.font ?? paragraph.font ?? pkg.normal.font;
-    const size = run.size ?? character.size ?? paragraph.size ?? halfPoints(pkg.normal.size);
     const files = DOCX_FONT_FILES.get(family);
     if (files) {
         const bold = run.bold ?? character.bold !== paragraph.bold;
@@ -141,18 +138,16 @@ export function useFace(pkg: Package, run: RunProps, paragraphStyle: StyleId | u
         // Word synthesizes a slot without a file from the Regular.
         pkg.faces.set(family, (pkg.faces.get(family) ?? new Set()).add(files[slot] ? slot : 'Regular'));
     }
-    return { family, size };
 }
 
 // The nearest definition of each face property along a style's chain.
-function styleFace(styles: Styles, style: StyleId | undefined): Pick<RunProps, 'font' | 'bold' | 'italic' | 'size'> {
-    const face: Pick<RunProps, 'font' | 'bold' | 'italic' | 'size'> = {};
+function styleFace(styles: Styles, style: StyleId | undefined): Pick<RunProps, 'font' | 'bold' | 'italic'> {
+    const face: Pick<RunProps, 'font' | 'bold' | 'italic'> = {};
     for (let id = style; id !== undefined; ) {
         const definition = styles.get(id);
         face.font ??= definition?.rPr?.font;
         face.bold ??= definition?.rPr?.bold;
         face.italic ??= definition?.rPr?.italic;
-        face.size ??= definition?.rPr?.size;
         id = definition?.basedOn;
     }
     return face;

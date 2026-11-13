@@ -1,15 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    DOCUMENT_FONT,
-    DOCUMENT_FONT_SIZE,
-    DOCUMENT_LINE_RATIO,
-    SMALL_FONT_SIZE,
-} from '@workspace/lib/constants/fonts';
+import { DOCUMENT_FONT, DOCUMENT_FONT_SIZE, fontLineHeight, SMALL_FONT_SIZE } from '@workspace/lib/constants/fonts';
 import {
     DEFAULT_NORMAL_STYLE,
     DEFAULT_PAGE_SETUP,
     DOCUMENT_PARAGRAPH_FORMAT,
     ITALIC_HEADING_LEVELS,
+    LINE_SPACING_PROPERTY,
     normalStyleProperties,
 } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../../lib/core/xml';
@@ -173,12 +169,13 @@ describe('the writer draws its body in the document font', () => {
     });
 });
 
-// A paragraph's CSS line-height is its line spacing times the document font's line (fonts.test.ts pins it to the TTF).
+// A paragraph's CSS line-height is its line spacing times its font's line (fonts.test.ts pins each to its TTF).
 describe("the writer draws a paragraph in Eigen's declared look", () => {
     test('eigen-prose.css draws an unset paragraph at line spacing 1.4 and 11 pt after', () => {
         const { lineSpacing, spaceAfter } = DOCUMENT_PARAGRAPH_FORMAT;
-        expect(Number(proseValue('.eigen-prose p', 'line-height'))).toBe(
-            Math.round(lineSpacing * DOCUMENT_LINE_RATIO * 10_000) / 10_000,
+        expect(Number(proseValue('.eigen-prose p', LINE_SPACING_PROPERTY))).toBe(lineSpacing);
+        expect(proseValue('.eigen-prose p', 'line-height')).toBe(
+            `calc(var(${LINE_SPACING_PROPERTY}) * ${fontLineHeight(DOCUMENT_FONT)})`,
         );
         expect(cssPt(proseValue('.eigen-prose p', 'margin-bottom'), BODY.sizePt)).toBe(spaceAfter);
     });
@@ -200,7 +197,8 @@ describe("the writer draws a paragraph in Eigen's declared look", () => {
             spaceAfter: 0,
             color: '#000000',
         });
-        expect(Object.keys(own)).toHaveLength(Object.keys(DEFAULT_NORMAL_STYLE).length);
+        // Each field sets one property, and the font its single line beside its family.
+        expect(Object.keys(own)).toHaveLength(Object.keys(DEFAULT_NORMAL_STYLE).length + 1);
         for (const property of Object.keys(own)) expect(PROSE_CSS).toContain(`var(${property},`);
     });
 

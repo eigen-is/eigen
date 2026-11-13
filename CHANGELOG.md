@@ -15,6 +15,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Guest sign-in code** — the code mailed to a guest works for 15 minutes instead of 5, so a mail that arrives late still gets them in
 - **Uploads** — an image or file that fails to upload into a document or a chat says why, such as a file over the size limit, instead of a bare error code. An upload in Drive can be stopped from its progress card
 - **Team drive storage** — giving a team drive new storage, or turning one on or off, reconnects the team's open documents. They show "Storage unavailable" for a few seconds and keep every edit
+- **Line spacing in Docs** — text draws at its own font's line height, as in Word and Google Docs, so a line spacing of 1.15 is the same 1.15 after an import or an export to Word, whatever the font. Text in Source Serif 4, JetBrains Mono or Excalifont sits on taller lines than before, about an eighth for Source Serif 4. A document imported from Word in such a font before this change shows looser lines until you set its line spacing again
 - **Number formats in Sheets** — numbers round as in Excel, so 1.005 under 0.00 shows 1.01, very small numbers show their digits, a time just before midnight shows the next day, dates before 1900 show their weekday, and Excel's long date shows March 5, not March 05. Chart labels too
 - **Dates in early 1900 in Sheets** — a date in January or February 1900 shows one day earlier than in Excel, as in Google Sheets, since 1900 had no 29 February
 
