@@ -33,6 +33,16 @@ export function valueAsText(value: number | string, fa: string): string | null {
     }
 }
 
+// Why numfmt cannot show a value in a format, for a dialog that says so, and null when it can.
+export function numberFormatError(value: Shown, fa: string): string | null {
+    try {
+        shown(fa, value);
+        return null;
+    } catch (e) {
+        return e instanceof Error ? e.message : String(e);
+    }
+}
+
 function shown(fa: string, value: Shown): string {
     return format(fa, value, DAYS);
 }

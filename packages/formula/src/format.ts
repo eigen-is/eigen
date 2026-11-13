@@ -1,1 +1,1 @@
-export { isDateFormat, numberDisplay } from './format/number-display';
+export { isDateFormat, numberDisplay, numberFormatError } from './format/number-display';

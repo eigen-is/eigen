@@ -16,7 +16,7 @@ It computes 219 of Excel's 524 functions. Not built yet: spilled results and the
 | --- | --- |
 | `@workspace/formula` | `Engine`; the function registry `FUNCTIONS`; the error values `NULL`, `DIV0`, `VALUE`, `REF`, `NAME`, `NUM`, `NA`, `SPILL`, `CALC`, `ERROR` and `errorOf`; the types `SheetSource`, `CellSink`, `Literal`, `FormulaError`, `EditResult`, `RecalcResult`, `Rewrite`, `LineEdit`, `Move` |
 | `@workspace/formula/text` | Formula text without an engine. Reading: `parseA1`, `parseA1Range`, `parseStored`, `parseXlsx`, `tokens`, `resolveTables`, `intersect`, `isLegacy`, `xlsxTree`. Printing: `printA1`, `printStored`, `printXlsx`, `storedKey`, `storedText`, `typedText`. Edits: `mapIndex`, `mapSpan`, `GONE`, `transformLines`, `hostClasses`, `transformMove`, `bindSheet`, `remapSheets`, `offGrid`, and the types `Edit`, `Span`, `LineEdit`, `Move`. Tables: the types `Table` and `TableFinder` that `resolveTables` takes. Labels and sheet names: `toA1`, `rangeToA1`, `columnIndex`, `columnLabel`, `GRID_ROWS`, `GRID_COLUMNS`, `quoteSheetName`, `sheetNameKey`, `sheetFinder`, `findSheetByName`. The tree: `FormulaNode`, `NodeKind`, `RefKind`, `RefFlag`, `SheetKind`, `Token`, `ERROR_LITERALS`. Limits: `MAX_STORED_LENGTH`, `MAX_NESTING`, `MAX_ARGUMENTS` |
-| `@workspace/formula/format` | `numberDisplay`, `isDateFormat` |
+| `@workspace/formula/format` | `numberDisplay`, `isDateFormat`, `numberFormatError` |
 | `@workspace/formula/names` | `isExcelFunction`, `EXCEL_FUTURE_FUNCTIONS` |
 
 The package is a workspace package and is not published. A workspace that needs it lists `"@workspace/formula": "workspace:*"` in its `package.json`.

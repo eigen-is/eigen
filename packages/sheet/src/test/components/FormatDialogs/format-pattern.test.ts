@@ -255,6 +255,6 @@ describe('previewPattern', () => {
     });
 
     test('an unterminated quote in a number pattern is an error, not a throw', () => {
-        expect(previewPattern('#,##0.00"', 1234.56)).toEqual({ ok: false, error: 'Illegal format' });
+        expect(previewPattern('#,##0.00"', 1234.56)).toEqual({ ok: false, error: 'Illegal character: #,##0.00"' });
     });
 });

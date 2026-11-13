@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { numberDisplay } from '../../format';
+import { numberDisplay, numberFormatError } from '../../format';
 import { valueAsText } from '../../format/number-display';
 import { grouped, seeded, typedDecimal } from './typed-decimal';
 
@@ -228,5 +228,17 @@ describe('valueAsText', () => {
     test('a number whose digits numfmt cannot write out is null', () => {
         expect(valueAsText(1e20, '# ?/?')).toBe('100000000000000000000    ');
         expect(valueAsText(1e22, '# ?/?')).toBeNull();
+    });
+});
+
+describe('numberFormatError', () => {
+    test('a format numfmt reads has none', () => {
+        expect(numberFormatError(1234.5, '#,##0.00')).toBeNull();
+        expect(numberFormatError('a', '@')).toBeNull();
+    });
+
+    test('a format numfmt refuses gives its reason', () => {
+        expect(numberFormatError(1234.5, '#,##0.00"')).toBe('Illegal character: #,##0.00"');
+        expect(numberFormatError(1, 'dd.,MM/yyyy')).toBe('Illegal format');
     });
 });
