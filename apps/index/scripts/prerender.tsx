@@ -1,5 +1,5 @@
-// Turns the built single-page shell into a static page for every public route: the landing page, the blog and each
-// post, the Support pages, the licenses and the changelog. Each page gets its own title, description and metadata, and
+// Turns the built single-page shell into a static page for every public route, such as the landing page, the blog
+// and each post, the Support pages, the About pages and the changelog. Each page gets its own title, description and metadata, and
 // the markup the route renders, which the browser then hydrates in place. It runs after the Vite build, and a sitemap
 // comes with it when the server's domain is known.
 
@@ -16,6 +16,8 @@ const DIST = join(ROOT, '..', '..', 'dist', 'index');
 const GEN = join(ROOT, 'src', 'content', '.generated');
 const DOMAIN = process.env['DOMAIN']?.replace(/\/+$/, '');
 const PUBLIC_ORIGIN = DOMAIN ? `https://${DOMAIN}` : undefined;
+// The About pages say the same on every server, so each copy names eigen.is's as the one search engines should list.
+const ABOUT_ORIGIN = 'https://eigen.is';
 
 function publicUrl(path: string): string | undefined {
     if (!PUBLIC_ORIGIN) return undefined;
@@ -33,14 +35,16 @@ type PageMeta = {
     type: 'website' | 'article';
     updated?: string;
 };
-type ArticleRef = { collection: 'blog' | 'support'; slug: string };
+type ArticleRef = { collection: 'blog' | 'support' | 'about'; slug: string };
 type PageArticle = ArticleRef & { body: ArticleBody };
-type PrerenderRoute = { path: string; meta: PageMeta; article?: ArticleRef };
+// `canonical` overrides only the page's <link rel="canonical">, not its og:url or its sitemap entry.
+type PrerenderRoute = { path: string; meta: PageMeta; article?: ArticleRef; canonical?: string };
 
-// Build the route list: the home page, plus the /blog and /support trees.
+// Build the route list: the home page, plus the /blog, /support and /about trees.
 function routes(shellDescription: string): PrerenderRoute[] {
     const blogArticles = manifest('blog').articles;
     const support = manifest('support').articles;
+    const about = manifest('about').articles;
     const list: PrerenderRoute[] = [
         {
             // Landing page. Its first render is deterministic — the wordmark starts at the first app and
@@ -122,6 +126,21 @@ function routes(shellDescription: string): PrerenderRoute[] {
                 updated: a.updated,
             },
             article: { collection: 'support', slug: a.slug },
+        });
+    }
+    for (const a of about) {
+        const overview = a.slug === 'index';
+        const path = overview ? '/about' : `/about/${a.slug}`;
+        list.push({
+            path,
+            meta: {
+                title: overview ? a.title : `${a.title} - eigen`,
+                description: a.description,
+                url: publicUrl(path),
+                type: overview ? 'website' : 'article',
+            },
+            article: { collection: 'about', slug: a.slug },
+            canonical: `${ABOUT_ORIGIN}${path}`,
         });
     }
     return list;
@@ -219,7 +238,8 @@ async function main() {
             const inlined = article
                 ? `<script type="application/json" id="eigen-article-body">${JSON.stringify(article).replace(/<\//g, '<\\/')}</script>`
                 : '';
-            const canonical = route.meta.url ? `<link rel="canonical" href="${escapeHtml(route.meta.url)}"/>` : '';
+            const canonicalUrl = route.canonical ?? route.meta.url;
+            const canonical = canonicalUrl ? `<link rel="canonical" href="${escapeHtml(canonicalUrl)}"/>` : '';
             const page = withMeta(shell, route.meta, shellDescription)
                 .replace('</head>', `${hoisted}${canonical}${jsonLd(route.meta)}</head>`)
                 // Append TanStack Router's dehydration <script> (sets window.$_TSR)

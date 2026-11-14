@@ -8,7 +8,7 @@ The help center is where users and the people who run a server read how Eigen wo
 
 Everything lives in `apps/index` plus three shared pieces in `packages/lib/src/core/`: `getSupportUrl` in `api.ts`, the Pagefind loader in `search/pagefind.ts`, and the palette's `command-palette/providers/help-search.ts`. No `apps/api` code serves it, so there is nothing to deploy or operate beyond the files in `dist/index`.
 
-- `apps/index/src/data/{support,blog}/` holds the content: one folder per support section, and the blog posts.
+- `apps/index/src/data/{support,blog,about}/` holds the content: one folder per support section, the blog posts and the About pages.
 - `apps/index/scripts/` holds the build steps, with `scripts/lib/` for frontmatter, Markdown and related articles.
 - `apps/index/src/components/support/` and `src/routes/support.*` render the pages.
 
@@ -26,7 +26,7 @@ postbuild  prerender.tsx, build-search-index.ts                       every rout
 
 ## A bad frontmatter field fails the build
 
-`build-content.ts` walks `src/data/{blog,support}`, parses frontmatter with `Bun.YAML` and validates it against the Zod schemas in `apps/index/scripts/lib/content-types.ts`. A bad or missing required field throws, so a broken article never ships. It extracts media grids and renders Markdown with `markdown-it` and `markdown-it-anchor`.
+`build-content.ts` walks `src/data/{blog,support,about}`, parses frontmatter with `Bun.YAML` and validates it against the Zod schemas in `apps/index/scripts/lib/content-types.ts`. A bad or missing required field throws, so a broken article never ships. It extracts media grids and renders Markdown with `markdown-it` and `markdown-it-anchor`.
 
 An app name written as a ket, such as `eigen|mail⟩`, is set in the mono font wherever the site shows prose, so its letters, bar and ket come from one face. The Markdown keeps the plain text. `renderMarkdown`'s text rule wraps each name in `<span class="ket-name">` and `MediaGrid` does the same for a caption, both through `splitKetNames`. Code spans, code blocks, URLs and attributes stay as written, and heading ids and TOC text come from the tokens, so they keep the plain name. A name in backticks is code: use that only for text that appears on screen as written, such as a browser tab title.
 
@@ -40,7 +40,7 @@ Per collection it writes one `<slug>.json` body (`{ html, mediaGrids }`) and one
 
 ## Every route is prerendered and hydrated in place
 
-`apps/index/scripts/prerender.tsx` boots a Vite SSR server, so the route tree's Vite-only APIs (`import.meta.glob`, `import.meta.env`) resolve. For every route it calls `src/entry-server.tsx`: a TanStack Router on a memory history at that path, `router.load()`, `serverSsr.dehydrate()` and `renderToString(<RouterServer/>)`. The HTML goes into the built shell's `<div id="app">`, followed by the article body as an inline JSON `<script>` and TanStack's dehydration script (`window.$_TSR`). The routes are `/`, `/blog` and every post, `/support` with every section and article, `/licenses` and `/changelog`.
+`apps/index/scripts/prerender.tsx` boots a Vite SSR server, so the route tree's Vite-only APIs (`import.meta.glob`, `import.meta.env`) resolve. For every route it calls `src/entry-server.tsx`: a TanStack Router on a memory history at that path, `router.load()`, `serverSsr.dehydrate()` and `renderToString(<RouterServer/>)`. The HTML goes into the built shell's `<div id="app">`, followed by the article body as an inline JSON `<script>` and TanStack's dehydration script (`window.$_TSR`). The routes are `/`, `/blog` and every post, `/support` with every section and article, `/about` and every app page, `/licenses` and `/changelog`.
 
 On the client, `mountReactApp` picks `hydrateRoot` when the container already has markup, and `main.tsx` renders `RouterClient` when `$_TSR` is present. The dev server has no bootstrap, so it falls back to a plain `RouterProvider`. Hydration reuses the prerendered DOM instead of rendering twice.
 
@@ -95,7 +95,7 @@ The index app sends a signed-in visitor on to `/space/` from a `useEffect` in `r
 
 ## The public site uses the shared app shell
 
-Every route of `apps/index` wraps its page in the shared `AppShell` with an `appName`: `support`, `blog`, `changelog`, `licenses`, and an empty one for the landing page, where the top bar shows the bare `eigen` wordmark. `routes/support.tsx` does it once for the whole Support tree. There is no separate public shell and no section sidebar.
+Every route of `apps/index` wraps its page in the shared `AppShell` with an `appName`: `support`, `blog`, `about`, `changelog`, `licenses`, and an empty one for the landing page, where the top bar shows the bare `eigen` wordmark. `routes/support.tsx` does it once for the whole Support tree. There is no separate public shell and no section sidebar.
 
 `components/site-page.tsx` (`SitePage`) is the frame inside it: one scrolling column with the footer after the content, so a short page's footer rests at the bottom. A Support page passes its section's color, which sets `--app-current-color` for the rows and the table of contents. `components/site-footer.tsx` is the one-line footer, drawn by `SitePage` and never by a page: the build's version label linking to the changelog, then Support, Blog, Changelog, GitHub, Sponsor and Licenses. `components/reading-layout.tsx` (`ReadingLayout`) is the grid of a reading page: an optional left gutter and the column, centered. Blog posts, the changelog and the Support section and article pages read in it. The gutter goes below 76rem.
 
@@ -117,9 +117,13 @@ The overview lists the posts newest first from the build-time manifest, so every
 
 `routes/index.tsx` is the landing page: the `EigenCyclingLogo` wordmark with the pitch, centered above the buttons, and three blocks along the bottom (`components/landing-blocks.tsx`), each a sentence over `Badge` tags that name its protocols or formats. The wordmark cycles through the enabled apps from an effect, so the prerender and the first client render are the same. The buttons are Login, the waitlist button and the admin's `landing.links`, and the install line under the blocks, a `CodeBlock` with a copy button, shows only when `landing.showInstall` is on ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)). The Login button is in the static HTML. The rest come from `/p/config` and appear after load. A demo server shows the Enter demo button and a line about the demo instead of the pitch.
 
-## What comes next
+## The About pages
 
-The About pages, one overview and one page per app, are proposed in [proposals/PROPOSAL_ABOUT_PAGES.md](proposals/PROPOSAL_ABOUT_PAGES.md). They would reuse `SitePage`, `ReadingLayout`, `ArticleToc` and the breadcrumb as they are.
+`/about` is an overview and `/about/<app>` one page per app, a third collection beside the blog and Support, in `src/data/about/` ([proposals/PROPOSAL_ABOUT_PAGES.md](proposals/PROPOSAL_ABOUT_PAGES.md)). The apps are the shared `apps` registry without Space, and an app's slug is its name in lower case (`aboutApps`). An app page takes its app from its file name, so `sheets.md` is `/about/sheets`, and a file named after no app throws at build. `index.md` is the overview, and its `rows` frontmatter holds one line for each of the apps, no more and no fewer. The frontmatter is strict: the order comes from the registry, so a field such as `order` or `draft` is refused.
+
+A file whose name starts with `_` is not a page. `_technical.md` is the block for the reader's technical person, appended to every About page's Markdown before the render, so its heading joins the table of contents. The overview lists every app in registry order, and a row links to its app's page only once that page exists. An app page ends with Previous and Next across the app pages. Both show the admin's landing links under the title, the same buttons as the landing page.
+
+The About pages say the same on every server, so their `<link rel="canonical">` always names `https://eigen.is/about...`, whatever `DOMAIN` is. Their `og:url`, JSON-LD and sitemap entry use `DOMAIN` like every other page.
 
 ## See also
 

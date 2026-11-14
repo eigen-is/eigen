@@ -1,5 +1,5 @@
-// The shapes of the site's generated content: the frontmatter a help article or a blog post must have, and the
-// manifests, bodies, changelog and license lists the build writes. The build scripts and the pages share them,
+// The shapes of the site's generated content: the frontmatter a help article, a blog post or an About page must
+// have, and the manifests, bodies, changelog and license lists the build writes. The build scripts and the pages share them,
 // so a field added here reaches both.
 
 import { z } from 'zod';
@@ -38,10 +38,21 @@ export const blogFrontmatterSchema = z.object({
 });
 export type BlogFrontmatter = z.infer<typeof blogFrontmatterSchema>;
 
+// About page frontmatter. The app comes from the file name and the order from the app registry, so a field such as
+// `order` or `draft` is refused rather than ignored.
+export const aboutFrontmatterSchema = z
+    .object({
+        title: z.string().min(1),
+        description: z.string().min(1),
+        // The overview's one line per app, keyed by the app's slug, such as `sheets`.
+        rows: z.record(z.string(), z.string().min(1)).optional(),
+    })
+    .strict();
+
 // One article in a generated manifest (metadata only, no body).
 export type ArticleMeta = {
-    slug: string; // support: "<section>/<file>"; blog: the frontmatter id
-    section: string; // support: the folder; blog: "blog"
+    slug: string; // support: "<section>/<file>"; blog: the frontmatter id; about: the app, or "index"
+    section: string; // support: the folder; blog: "blog"; about: "about"
     title: string;
     description: string;
     type?: SupportFrontmatter['type'];
@@ -51,6 +62,7 @@ export type ArticleMeta = {
     updated?: string;
     date?: string; // blog only — YYYY-MM-DD from the filename
     cover?: string; // blog only — the post's cover image
+    rows?: Record<string, string>; // the About overview only — a line per app
     toc: TocEntry[];
     related: string[]; // resolved slugs
     crossSections: string[]; // support: extra sections this article is also listed in

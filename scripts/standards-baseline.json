@@ -9,7 +9,7 @@
     "apps/api/src/scripts/demo/author-fixtures.ts": 1,
     "apps/index/scripts/build-search-index.ts": 2,
     "apps/index/scripts/prerender.tsx": 1,
-    "apps/index/src/content/manifest.ts": 3,
+    "apps/index/src/content/manifest.ts": 2,
     "packages/lib/src/core/chat/hooks/use-chat.ts": 1,
     "packages/lib/src/core/deep-merge.ts": 1,
     "packages/lib/src/core/mail/hooks/use-emails.ts": 1,
