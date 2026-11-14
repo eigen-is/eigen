@@ -46,7 +46,7 @@ The planning half, `scripts/fonts/plan-slices.ts`, decides which characters each
 - The math face and Excalifont stay one slice each, the math face because a formula's stretchy variants must sit in the face that lays it out.
 - The CJK cut drops the `dlig` feature, which CSS leaves off and which would pull whole ligature glyphs into every slice. Variable faces stay variable, so one slice draws every weight.
 
-The rules take 62 KB gzipped, 55 KB of it the Chinese and Korean faces, which only text people type needs. So those sit in `fonts-cjk.css`, which the apps load through `app.css`, while the website, which a first visit to eigen.is loads, imports `globals.css` alone. Each app's build carries its own copy of the rules and the font files, under its own path ([ROADMAP.md](ROADMAP.md)).
+The rules take 62 KB gzipped, 55 KB of it the Chinese and Korean faces, which only text people type needs. So those sit in `fonts-cjk.css`, which the apps load through `app.css`, while the website, which a first visit to eigen.is loads, imports `globals.css` alone. Each app's build carries its own copy of the rules and the font files, under its own path, so a browser fetches them once per app. That is accepted: the apps build on their own.
 
 ## Every stack comes from one builder
 
