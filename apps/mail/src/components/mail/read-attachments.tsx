@@ -1,4 +1,4 @@
-// The attachments row of a mail being read: one chip per part, a click opening its quick look, a
+// The attachments row of a mail being read: a chip per listed file, a click opening its quick look, a
 // right-click or long press offering the file actions, and a button that saves them all.
 
 import { useAuth } from '@workspace/lib/auth';
