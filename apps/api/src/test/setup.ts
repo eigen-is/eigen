@@ -281,6 +281,17 @@ export async function eventually<T>(read: () => Promise<T | undefined>, what = '
     throw new Error(`Timed out waiting for ${what}`);
 }
 
+// The error a promise rejects with, for one that settles after an event-loop turn, such as a backup or a restore.
+// Handed such a promise, `expect(...).rejects` sleeps until the next timer fires, often past the test's timeout.
+export async function rejectionOf(promise: Promise<unknown>): Promise<Error> {
+    const outcome = await promise.then(
+        () => undefined,
+        (error: unknown) => error,
+    );
+    if (!(outcome instanceof Error)) throw new Error(`Expected a rejection with an Error, got ${String(outcome)}`);
+    return outcome;
+}
+
 // Counts event-loop turns with a setImmediate chain rather than time, so a slow disk or a busy machine changes nothing.
 export function countLoopTurns(): { read: () => number; stop: () => void } {
     let turns = 0;
