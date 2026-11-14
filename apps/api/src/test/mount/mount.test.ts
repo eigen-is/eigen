@@ -6,7 +6,7 @@ import type { SQL } from 'drizzle-orm';
 import { eq, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../../lib/core';
-import { ApiError, eventLoopTurn, storageGone } from '../../lib/core';
+import { ApiError, eventLoopTurn, isEnoent, storageGone } from '../../lib/core';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
 import { getUniqueFileName } from '../../lib/drive/naming';
 import type { ContentExtractor } from '../../lib/mount/content-reindex-queue';
@@ -2533,6 +2533,21 @@ describe('content index dirty marks', () => {
         const dirtyIds = mount.getContentDirtyPaths(-1, 100).map((p) => p.id);
         expect(dirtyIds).toContain(txt);
         expect(dirtyIds).not.toContain(png);
+    });
+
+    test('a write from a missing temp file fails, and an overwrite keeps the stored bytes and the row', async () => {
+        const kept = await seedFile(mount, rootId, 'kept.txt', 'text/plain', 4, Buffer.from('good'));
+
+        const overwrite = await mount.writeFileFromTemp(kept, 'never-written', 0, 'hash-c').catch((e: unknown) => e);
+        expect(isEnoent(overwrite)).toBe(true);
+        expect(await (await mount.readFile(kept))?.text()).toBe('good');
+        expect((await mount.getPath(kept))?.size).toBe(4);
+
+        const create = await mount
+            .createFileFromTemp(rootId, 'never.txt', 'text/plain', 0, 'hash-d', 'never-written')
+            .catch((e: unknown) => e);
+        expect(isEnoent(create)).toBe(true);
+        expect(await mount.getChildByName(rootId, 'never.txt')).toBeNull();
     });
 });
 

@@ -73,17 +73,10 @@ export async function replaceTempFrom(mount: Mount, tempId: string, source: Stor
 }
 
 export async function uploadFromTemp(mount: Mount, storageKey: string, tempId: string): Promise<void> {
-    const tempPath = mount.getTempPath(tempId);
-    const tempFile = Bun.file(tempPath);
-    if (!(await tempFile.exists())) {
-        // The caller writes the temp file first. A missing one throws instead of doing nothing, so
-        // a failed sync at close is loud and never drops unflushed writes in silence.
-        throw new Error(`[Mount] uploadFromTemp ${storageKey}: tempfile missing at ${tempPath}`);
-    }
     const start = Bun.nanoseconds();
-    await mount.storage.write(storageKey, tempFile);
+    const size = await mount.storage.write(storageKey, Bun.file(mount.getTempPath(tempId)));
     const ms = (Bun.nanoseconds() - start) / 1_000_000;
-    console.log(`[timing] Mount.upload ${storageKey} ${(tempFile.size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
+    console.log(`[timing] Mount.upload ${storageKey} ${(size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
 }
 
 export async function cleanupTemp(mount: Mount, tempId: string): Promise<void> {
@@ -109,7 +102,7 @@ export function cleanupStaleFiles(mount: Mount, dir: string, maxAgeMs: number, p
                       .select({ id: paths.id })
                       .from(paths)
                       .all()
-                      .map((r) => r.id),
+                      .map((row) => row.id),
               )
             : null;
         for (const entry of fs.readdirSync(dir)) {

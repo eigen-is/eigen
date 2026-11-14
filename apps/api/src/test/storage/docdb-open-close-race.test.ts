@@ -190,7 +190,7 @@ describe('open during close waits for the close to settle', () => {
         await closePromise;
 
         // Pre-fix the old close's cleanupTemp unlinked the adopted temp: this flush throws
-        // 'uploadFromTemp … tempfile missing' (steady-state sync loss until reopen). Post-fix
+        // ENOENT on the missing temp (steady-state sync loss until reopen). Post-fix
         // the open waited and rebuilt from storage — the write lands in .trash/ with the rest.
         reopened.db.db.insert(docSchema.items).values({ id: 3, data: 'post-reopen' }).run();
         await reopened.db.flush();
