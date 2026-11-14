@@ -130,11 +130,8 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
                         <div key={i} className="eigen-prose site-prose">
                             {section.split(GRID_MARKER).map((part, j) => {
                                 if (j % 2) {
-                                    return (
-                                        <div key={j} data-grid={part}>
-                                            <MediaGrid {...body.mediaGrids[Number(part)]} />
-                                        </div>
-                                    );
+                                    const grid = Number(part);
+                                    return <MediaGrid key={j} {...body.mediaGrids[grid]} index={grid} />;
                                 }
                                 if (!part) return null;
                                 // Safe: build-time-rendered HTML from trusted, in-repo Markdown.

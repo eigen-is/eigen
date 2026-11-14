@@ -1,6 +1,6 @@
 // A grid of images and videos inside a blog post or Support article, which the article's markdown declares as a
 // media block. Each item is a button with a thumbnail, a play mark on a video, and its caption. The page around it
-// opens a clicked item in its lightbox, with the grid as the group to page through.
+// opens a clicked item in its lightbox, with the grid as the group, and finds the grid by its `index` on the page.
 
 import { cn } from '@workspace/ui/lib/utils';
 import { Play } from 'lucide-react';
@@ -16,10 +16,10 @@ const GRID_COLUMNS: Record<string, string> = {
     '6': 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6',
 };
 
-export function MediaGrid({ columns, items }: MediaGridData) {
+export function MediaGrid({ columns, items, index }: MediaGridData & { index: number }) {
     if (items.length === 0) return null;
     return (
-        <div className={cn('grid gap-6 my-8', GRID_COLUMNS[columns] ?? GRID_COLUMNS['2'])}>
+        <div className={cn('grid gap-6 my-8', GRID_COLUMNS[columns] ?? GRID_COLUMNS['2'])} data-grid={index}>
             {items.map((item, i) => (
                 <MediaThumbnail key={i} {...item} />
             ))}
