@@ -2,10 +2,17 @@
 // object, such as a still of a drive or a video of two people in one document.
 
 import type { Scene } from '../lib/scene';
+import { calendarHero } from './calendar-hero';
+import { calendarStillBuild, calendarStillWeek } from './calendar-stills';
+import { contactsHero } from './contacts-hero';
+import { contactsStillCard, contactsStillVCard } from './contacts-stills';
 import { docsCollabPair } from './docs-collab';
 import { docsComment } from './docs-comment';
 import { docsHero } from './docs-hero';
 import { docsStillDownload, docsStillEquation } from './docs-stills';
+import { mailHero } from './mail-hero';
+import { mailSearch } from './mail-search';
+import { mailStillInvite } from './mail-still';
 import { ROWS } from './rows';
 import { sheetsChart } from './sheets-chart';
 import { sheetsCollabPair } from './sheets-collab';
@@ -36,6 +43,15 @@ export const SCENES: Scene[] = [
     vectorHero,
     vectorZoom,
     vectorStillSketch,
+    mailHero,
+    mailSearch,
+    mailStillInvite,
+    calendarHero,
+    calendarStillWeek,
+    calendarStillBuild,
+    contactsHero,
+    contactsStillCard,
+    contactsStillVCard,
     suite,
     ...ROWS,
 ];
