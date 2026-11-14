@@ -3,7 +3,6 @@
 // calendar of its own too.
 
 import { CALENDAR_NAME_MAX_LENGTH, ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
-import { parseOwnerId } from '@workspace/lib/types';
 import type {
     CalendarEvent,
     CalendarEventOccurrence,
@@ -15,14 +14,21 @@ import type {
 import { ICS_CONTENT_TYPE, isIcsFile } from '@workspace/lib/types/file-kinds';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { Elysia, t } from 'elysia';
-import { requireNonGuest, requireSelf, requireTeamAdmin } from '../lib/auth/access';
-import { checkCalendarAccess, resolveCalendar, routedCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
+import { requireNonGuest, requireSelf } from '../lib/auth/access';
+import {
+    checkCalendarAccess,
+    resolveAdministeredCalendar,
+    resolveCalendar,
+    resolveListedCalendar,
+    resolveTransferCalendar,
+    routedCalendar,
+    syncTeamCalendars,
+} from '../lib/calendar/get-calendar';
 import { EVENT_MAX_BYTES } from '../lib/calendar/resource-store';
 import { ApiError, ICS_IMPORT_MAX_EVENTS, NOT_A_CALENDAR_FILE } from '../lib/core';
 import { contentDisposition, readBoundedBodyBytes } from '../lib/core/http';
 import { readImportSourceBytes } from '../lib/drive';
 import { getHome } from '../lib/home';
-import type { User } from '../lib/user';
 import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
 import { importFromDriveSchema } from './shared-schemas';
@@ -121,33 +127,6 @@ const ImportFromDriveIcsSchema = t.Object({
 });
 
 const ImportQuerySchema = t.Object({ calendarId: t.String({ ...TEXT, minLength: 1 }) });
-
-// A team home is the only foreign Home a transfer may touch. Free-busy counts as no read here.
-async function resolveTransferCalendar(user: User, ownerId: string, calendarId: string, need: 'read' | 'write') {
-    if (parseOwnerId(ownerId).type !== 'team') requireSelf(ownerId, user.id);
-    const { calendar, permission } = await checkCalendarAccess(user, ownerId, calendarId);
-    if (permission === 'free-busy' || (need === 'write' && permission !== 'write')) {
-        throw new ApiError(403, need === 'write' ? 'Write permission required' : 'Read permission required');
-    }
-    return calendar;
-}
-
-// A team home's calendar collection is admin-only: a member's write share on a team calendar is event-level.
-async function resolveAdministeredCalendar(user: User, ownerId: string) {
-    const parsed = parseOwnerId(ownerId);
-    if (parsed.type !== 'team') return resolveCalendar(user, ownerId);
-    await requireTeamAdmin(user.id, parsed.id);
-    return (await getHome(ownerId)).calendar;
-}
-
-// A team admin sets the shares of a team calendar, so the list those shares are read off is theirs too. The events
-// stay on membership.
-async function resolveListedCalendar(user: User, ownerId: string) {
-    const parsed = parseOwnerId(ownerId);
-    if (parsed.type !== 'team') return resolveCalendar(user, ownerId);
-    const { teamIds } = await getMemberships(user.id);
-    return teamIds.includes(parsed.id) ? resolveCalendar(user, ownerId) : resolveAdministeredCalendar(user, ownerId);
-}
 
 export const calendarRouter = new Elysia({ name: 'calendar' })
     .use(betterAuth)
