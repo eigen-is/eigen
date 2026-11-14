@@ -1,9 +1,10 @@
 // Date and time formatting for every app, always day-month-year in English with a 24-hour clock, with the formatters
 // cached because a long list formats one date per row. The backend uses it too, for example in the CLI.
 
-// "09:05" in the local zone, on a 24-hour clock.
-export function formatTime(date: Date | string | number): string {
+// "09:05" on a 24-hour clock, in the local zone or in the given one.
+export function formatTime(date: Date | string | number, timeZone?: string): string {
     const d = new Date(date);
+    if (timeZone) return dateFormatter({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(d);
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 

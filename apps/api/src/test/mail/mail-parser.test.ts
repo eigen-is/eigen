@@ -240,3 +240,36 @@ describe('#11 htmlToText DoS cap', () => {
         expect((mail.text ?? '').length).toBeLessThan(3 * 1024 * 1024);
     });
 });
+
+describe('An inline forwarded message', () => {
+    test('its Date row reads day-month-year on a 24-hour UTC clock', () => {
+        const bytes = Buffer.from(
+            [
+                'From: alice@example.com',
+                'Subject: Fwd: Plans',
+                'MIME-Version: 1.0',
+                'Content-Type: multipart/mixed; boundary="outer"',
+                '',
+                '--outer',
+                'Content-Type: text/html; charset=utf-8',
+                '',
+                '<p>See below.</p>',
+                '--outer',
+                'Content-Type: message/rfc822',
+                'Content-Disposition: inline',
+                '',
+                'From: carol@example.com',
+                'Subject: Plans',
+                'Date: Sat, 14 Nov 2026 16:42:11 +0100',
+                'Content-Type: text/plain; charset=utf-8',
+                '',
+                'The original.',
+                '--outer--',
+            ].join('\r\n'),
+        );
+        const mail = parseMail(bytes);
+
+        expect(mail.text).toContain('Date: 14 Nov 2026, 15:42 UTC\n');
+        expect(mail.html).toContain('<td class="mp_head_value">14 Nov 2026, 15:42 UTC</td>');
+    });
+});
