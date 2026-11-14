@@ -87,7 +87,7 @@ A card chat reply can `attach` seeded team documents as drive references, or `at
 
 The budget (`demo/sheet-build.ts`), the site plan (`demo/vector-build.ts`) and the sponsor deck (`demo/deck-build.ts`) are written straight into fresh Y.Docs, because frozen bytes cannot survive a change to the stored shape and a spec can.
 
-A `SheetSpec` is one tab: its columns, its rows of text, numbers and formulas, and its data bars, red-below-zero rules, dropdowns and charts by A1 range. `buildWorkbook` writes them in the shapes the editor stores, each chart's refs naming its tab by id, and runs `recalcSheets` once, as the xlsx importer does. So the snapshot is stored as computed and opens with its values. The budget's costs column chart sits under its table on the first tab, so an edited cost moves its bar in the same view, and its second tab holds the income pie. The same builder makes the quote a seeded mail attaches, through the shipped `writeXlsx`.
+A `SheetSpec` is one tab: its columns, its rows of text, numbers and formulas, and its data bars, red-below-zero rules, dropdowns and charts by A1 range. `buildWorkbook` writes them in the shapes the editor stores, each chart's refs naming its tab by id, and runs `recalcSheets` once, as the xlsx importer does. So the snapshot is stored as computed and opens with its values. The budget's costs column chart sits under the table on its Budget tab, one empty row below it, so an edited cost moves its bar in the same view; the Charts tab holds the income pie. The same builder makes the quote a seeded mail attaches, through the shipped `writeXlsx`.
 
 The site plan is one typed spec. Every element carries the full field set the editor writes. Ids, indices and roughjs seeds are deterministic, so every reseed renders the same jitter. Text is sized with `measureLabel` (`@workspace/lib/vector`), since the seeder has no DOM. Arrows settle through the lib's `followBindings`, as in the editor.
 
@@ -103,7 +103,7 @@ An external message can carry an `invite`, which `serializeEventForImip`, the sh
 
 ## Running the seeder
 
-Locally: `cd apps/api && EIGEN_DATA_ROOT=/abs/data MAIL_DOMAIN=tuimel.example bun run src/scripts/seed-demo.ts`. `EIGEN_DEMO_ADMIN_PASSWORD` and `EIGEN_DEMO_PERSONA_PASSWORD` fix the admin's and every persona's password, for a tool that signs in as them, such as the About pages' capture tool (`bun run capture` in `apps/index/capture`); unset, each is random. On a box the reset runs it by absolute path, because the image's working directory is `/app/apps/api`. `seed-demo.test.ts` spawns the whole seeder in about 30 s, so it runs on CI, and locally with `EIGEN_SLOW_TESTS=1` after you touch `scripts/demo/` or a reader it decodes with ([TESTING.md](TESTING.md)).
+Locally: `cd apps/api && EIGEN_DATA_ROOT=/abs/data MAIL_DOMAIN=tuimel.example bun run src/scripts/seed-demo.ts`. `EIGEN_DEMO_ADMIN_PASSWORD` and `EIGEN_DEMO_PERSONA_PASSWORD` fix the admin's and every persona's password, for a tool that signs in as them, such as the About pages' capture tool ([HELP-CENTER.md § Filming the demo](HELP-CENTER.md#filming-the-demo)); unset, each is random. On a box the reset runs it by absolute path, because the image's working directory is `/app/apps/api`. `seed-demo.test.ts` spawns the whole seeder in about 30 s, so it runs on CI, and locally with `EIGEN_SLOW_TESTS=1` after you touch `scripts/demo/` or a reader it decodes with ([TESTING.md](TESTING.md)).
 
 ## Accepted residuals
 
