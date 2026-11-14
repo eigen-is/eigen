@@ -35,27 +35,29 @@ export function AboutPage({ app, page, body, previous, next }: AboutPageProps) {
                     </div>
                     <ArticleContent body={body} className="mt-8" />
                 </article>
-                <nav className="mt-14 grid grid-cols-2 gap-6 border-t pt-6">
-                    {previous ? (
-                        <PagerLink
-                            label="Previous"
-                            title={previous.title}
-                            link={{ to: '/about/$app', params: { app: previous.slug } }}
-                        />
-                    ) : (
-                        <span />
-                    )}
-                    {next ? (
-                        <PagerLink
-                            label="Next"
-                            title={next.title}
-                            link={{ to: '/about/$app', params: { app: next.slug } }}
-                            className="text-right"
-                        />
-                    ) : (
-                        <span />
-                    )}
-                </nav>
+                {(previous || next) && (
+                    <nav className="mt-14 grid grid-cols-2 gap-6 border-t pt-6">
+                        {previous ? (
+                            <PagerLink
+                                label="Previous"
+                                title={previous.title}
+                                link={{ to: '/about/$app', params: { app: previous.slug } }}
+                            />
+                        ) : (
+                            <span />
+                        )}
+                        {next ? (
+                            <PagerLink
+                                label="Next"
+                                title={next.title}
+                                link={{ to: '/about/$app', params: { app: next.slug } }}
+                                className="text-right"
+                            />
+                        ) : (
+                            <span />
+                        )}
+                    </nav>
+                )}
             </ReadingLayout>
         </SitePage>
     );

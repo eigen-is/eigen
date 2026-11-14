@@ -1,5 +1,3 @@
-// The overview lists every app, and a row links to its app page only once that page is written. The pages come from
-// the built manifest, which has the sheets page.
 import { describe, expect, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';

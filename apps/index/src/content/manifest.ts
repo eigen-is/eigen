@@ -67,7 +67,7 @@ export function getInlinedBody(collection: ArticleCollection, slug: string): Art
 }
 
 // Each body is its own chunk outside the shared bundle, so a visitor downloads only the body they open. The glob
-// sits in here, where Vite expands it, so the module also loads outside Vite, such as in a test.
+// sits in here as only Vite expands it, and the module also loads where Vite does not run, e.g. under bun's own runner.
 export function fetchArticleBody(collection: ArticleCollection, slug: string): Promise<ArticleBody> | undefined {
     const bodies = import.meta.glob<ArticleBody>('./.generated/{blog,support,about}/**/*.json', { import: 'default' });
     return bodies[`./.generated/${collection}/${slug}.json`]?.();

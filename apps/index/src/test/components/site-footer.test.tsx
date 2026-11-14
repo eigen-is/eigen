@@ -1,4 +1,3 @@
-// The footer links the About overview on every page, in the prerendered HTML, before any config has loaded.
 import { describe, expect, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
