@@ -2,7 +2,7 @@
 // read, flag, move and delete changes. Those four patch the cached lists before the server answers,
 // and the SSE handler skips the echo of a change this tab already patched in.
 
-import type { InfiniteData, QueryClient } from '@tanstack/react-query';
+import type { InfiniteData, QueryClient, UseInfiniteQueryResult } from '@tanstack/react-query';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMailComposeUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
@@ -18,8 +18,10 @@ import { emailKeys, invalidateMailboxes } from './keys';
 const MAIL_PAGE_SIZE = 200;
 
 // Newest-first paginated mailbox. Composite cursor (beforeDate=epoch MS, beforeId) matches the
-// server's date-desc/id-desc order. Returns a flat `emails` array alongside the paging controls.
-export function useEmails(mailboxPath: string) {
+// server's date-desc/id-desc order.
+export function useEmails(
+    mailboxPath: string,
+): UseInfiniteQueryResult<InfiniteData<EmailSummary[]>> & { emails: EmailSummary[] } {
     const { user } = useAuth();
     const ownerId = user?.id || '';
 
@@ -72,7 +74,7 @@ export function useEmail(messageId: string | undefined) {
     });
 }
 
-export function useEmailById() {
+export function useEmailById(): (messageId: string) => Promise<Email | null> {
     const queryClient = useQueryClient();
     const { user } = useAuth();
     const ownerId = user?.id || '';

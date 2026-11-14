@@ -2,6 +2,7 @@
 // and the server-side previews of some file kinds, keyed by driveKeys so write hooks and drive events refresh
 // them. Views across the apps, such as Drive's folder view and a document app's index, read through them.
 
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { driveApi, emlPreviewRoute, icsPreviewRoute, vcardPreviewRoute } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
@@ -69,7 +70,15 @@ export function useFolderContent(ownerId: string, mountId: string, pathId: strin
 
 // A collaborator's upload reaches a document's Yjs state before this cache, so a name that misses refetches
 // the folder once, and isMissing turns true when that refetch settled without it.
-export function useFolderLookup(ownerId: string, mountId: string, folderId: string | null) {
+export function useFolderLookup(
+    ownerId: string,
+    mountId: string,
+    folderId: string | null,
+): {
+    contents: DrivePath[];
+    findByName: (name: string) => DrivePath | undefined;
+    isMissing: (name: string) => boolean;
+} {
     const { data = [], refetch } = useFolderContent(ownerId, mountId, folderId || '');
     const attemptedRef = useRef(new Set<string>());
     const refetchQueuedRef = useRef(false);
@@ -178,7 +187,9 @@ export function usePathInfo(ownerId: string, mountId: string, pathId: string | u
 }
 
 // Shares usePathInfo's cache entries, so a path fetched by either is fetched once.
-export function usePathInfos(refs: { ownerId: string; mountId: string; pathId: string }[]) {
+export function usePathInfos(
+    refs: { ownerId: string; mountId: string; pathId: string }[],
+): UseQueryResult<DrivePath | null>[] {
     return useQueries({
         queries: refs.map((r) => ({
             queryKey: driveKeys.path(r.ownerId, r.mountId, r.pathId),
