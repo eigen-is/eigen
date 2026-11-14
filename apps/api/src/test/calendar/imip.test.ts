@@ -1192,14 +1192,16 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
             'END:VCALENDAR',
         ].join('\r\n');
         const info = spyOn(console, 'info').mockImplementation(() => {});
-
-        await processInboundImip(home, calendarMail(ics, 'nostart@external.com'), {
-            verified: true,
-            reason: 'dkim pass',
-        });
-
-        const logged = info.mock.calls.flat();
-        mock.restore();
+        let logged: unknown[];
+        try {
+            await processInboundImip(home, calendarMail(ics, 'nostart@external.com'), {
+                verified: true,
+                reason: 'dkim pass',
+            });
+            logged = info.mock.calls.flat();
+        } finally {
+            mock.restore();
+        }
         expect(logged).toContain('iMIP: skipped 1 unreadable events from nostart@external.com');
         const [stored] = await home.calendar.getEventsByUid(event.uid);
         expect(stored.data?.attendees?.map((attendee) => attendee.status)).toEqual(['pending']);
