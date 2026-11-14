@@ -1,4 +1,4 @@
-// Stickies's entry point. It builds the router over Stickies's route tree under /stickies and mounts it inside
+// Stickies' entry point. It builds the router over Stickies' route tree under /stickies and mounts it inside
 // EigenApp, which brings the query client, auth and the other providers every app shares. It loads the
 // shared app styles and Stickies' own accent color.
 
@@ -10,7 +10,6 @@ import './../css/globals.css';
 
 const router = createEigenAppRouter({ routeTree, basepath: '/stickies' });
 
-// Register things for typesafety
 declare module '@tanstack/react-router' {
     interface Register {
         router: typeof router;

@@ -10,7 +10,6 @@ import './../css/globals.css';
 
 const router = createEigenAppRouter({ routeTree, basepath: '/chat' });
 
-// Register things for typesafety
 declare module '@tanstack/react-router' {
     interface Register {
         router: typeof router;
