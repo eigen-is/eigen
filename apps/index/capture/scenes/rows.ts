@@ -2,6 +2,7 @@
 // such as an open mail thread or the kanban board. Themes alternate down the list. Each still clicks without the mouse,
 // so no pointer shows in the picture.
 
+import { basename } from 'node:path';
 import {
     DRIVE_TYPE_DOC,
     DRIVE_TYPE_SLIDES,
@@ -9,12 +10,13 @@ import {
     DRIVE_TYPE_VECTOR,
 } from '../../../../packages/lib/src/types/drive';
 import { DOCS, KANBAN, SITE_PLAN, SPONSOR_DECK } from '../../../api/src/scripts/demo/content';
+import { aboutRowStill } from '../../src/content/about-media';
 import { openFile } from '../lib/open';
 import type { Scene } from '../lib/scene';
 import { openBudget } from './budget';
 
 const row = (app: string, theme: Scene['theme'], run: Scene['run']): Scene => ({
-    name: `row-${app}`,
+    name: basename(aboutRowStill(app), '.webp'),
     kind: 'still',
     theme,
     viewport: { width: 1280, height: 800 },

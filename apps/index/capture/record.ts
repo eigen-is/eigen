@@ -7,12 +7,13 @@
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from 'playwright-core';
+import { ABOUT_MEDIA } from '../src/content/about-media';
 import type { Frame, Output } from './lib/ffmpeg';
 import { concatList, encodeArgs, startingAt } from './lib/ffmpeg';
 import type { Scene } from './lib/scene';
 import { CAPTURE_ROOT } from './stack';
 
-const MEDIA_DIR = join(import.meta.dir, '..', 'public', 'data', 'about', 'media');
+const MEDIA_DIR = join(import.meta.dir, '..', 'public', ABOUT_MEDIA);
 const OUT_DIR = join(CAPTURE_ROOT, 'out');
 const WEBP_QUALITY = '85';
 

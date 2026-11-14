@@ -6,6 +6,7 @@ import { Link } from '@tanstack/react-router';
 import { cn } from '@workspace/ui/lib/utils';
 import type { AboutApp } from '../content/about-apps';
 import { aboutApps } from '../content/about-apps';
+import { aboutRowStill } from '../content/about-media';
 import type { ArticleBody, ArticleMeta } from '../content/manifest';
 import { getAboutArticles } from '../content/manifest';
 import { AppWordmark } from './app-wordmark';
@@ -68,7 +69,7 @@ function AppRow({ app, line }: { app: AboutApp; line?: string }) {
     return (
         <>
             <img
-                src={`/data/about/media/row-${app.slug}.webp`}
+                src={aboutRowStill(app.slug)}
                 alt=""
                 className="aspect-video w-28 shrink-0 rounded-md border bg-muted object-cover object-top"
             />
