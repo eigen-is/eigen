@@ -14,7 +14,7 @@ eigen|sheets⟩ is the spreadsheet app in Eigen. You type a formula, the totals 
 
 Several people can edit the same sheet at the same time. Their changes merge as they type, so nobody overwrites anyone. You share a sheet with people, a team or a link, and you can leave a comment on a cell without touching its value ([Get started](/support/sheets/get-started), [Share a spreadsheet and comment on cells](/support/sheets/share-and-comment)).
 
-::: video src="/data/about/media/sheets-collab" caption="Another person's cell and edit arrive live."
+::: video src="/data/about/media/sheets-collab-pair" caption="Two people in one budget. Anouk changes Security on the right; Bram sees it arrive on the left."
 :::
 
 ## Formulas and Excel files
