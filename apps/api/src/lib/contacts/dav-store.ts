@@ -193,7 +193,7 @@ export async function putCard(
             throw e;
         }
 
-        // A self-card PUT renames the user org-wide; a DAV PUT stages no avatar, so the pushed bytes are the derived webp cache.
+        // A self-card PUT renames the user org-wide; a DAV PUT stages no avatar, so the profile photo is the derived webp cache.
         if (eigenId === contacts.home.user.id) {
             let avatarWebP: Buffer | null = null;
             if (avatarUrl) {

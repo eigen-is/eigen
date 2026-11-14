@@ -365,9 +365,9 @@ export class Contacts {
                 throw new ApiError(412, 'Contact was changed elsewhere');
             }
 
-            // A self-card edit renames the user org-wide, so its inputs are read before the write swaps the staged URL and pushed after the commit.
+            // A self-card edit renames the user org-wide; its photo is read before the write swaps the staged URL, and the profile written after the commit.
             const isSelf = row.eigenId === this.home.user.id;
-            const selfName = `${contact.firstName} ${contact.lastName}`;
+            const selfName = `${contact.firstName.trim()} ${contact.lastName.trim()}`.trim();
             let selfAvatarBuffer: Buffer | null = null;
             if (isSelf) {
                 if (contact.avatar) {
