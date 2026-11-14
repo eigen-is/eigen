@@ -34,8 +34,6 @@ export const calendarStillBuild = {
         await page.goto(stack.appUrl('calendar'));
         await page.getByText('Build day').first().click();
         await page.getByRole('dialog').getByText('Fencing, stages, power.').waitFor();
-        // The drawn pointer stays where the mouse last moved, and in the corner it hangs off the screen.
-        await page.mouse.move(1599, 899);
         await Bun.sleep(1500);
     },
 } satisfies Scene;

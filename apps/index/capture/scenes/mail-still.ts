@@ -14,8 +14,6 @@ export const mailStillInvite = {
         await page.goto(stack.appUrl('mail'));
         await page.getByText('Committee visit to the field').first().dispatchEvent('click');
         await page.getByText('View in Calendar').waitFor();
-        // The drawn pointer stays where the mouse last moved, and in the corner it hangs off the screen.
-        await page.mouse.move(1599, 899);
         await Bun.sleep(2000);
     },
 } satisfies Scene;

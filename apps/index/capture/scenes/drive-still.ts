@@ -17,8 +17,6 @@ export const driveStillActivity = {
         await page.getByText('Recent activity').waitFor();
         // The panel opens on the folder's picture, and the activity sits below the fold until it scrolls up.
         await page.getByRole('heading', { name: 'Shared with' }).evaluate((heading) => heading.scrollIntoView());
-        // The drawn pointer stays where the mouse last moved, and in the corner it hangs off the screen.
-        await page.mouse.move(1599, 899);
         await Bun.sleep(2000);
     },
 } satisfies Scene;

@@ -31,6 +31,8 @@ export type Scene = {
     personas: string[];
     // A video films only the first persona's page, or every page side by side.
     composite?: 'side-by-side';
+    // A still draws no pointer unless it points at something on purpose, such as an open menu.
+    pointer?: boolean;
     // Runs before the camera rolls, such as opening the app and waiting for it to load.
     setup?: (ctx: SceneContext) => Promise<void>;
     run: (ctx: SceneContext) => Promise<void>;
