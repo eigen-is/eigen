@@ -6,7 +6,7 @@ import { MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DraftAttachmentUpload, Email } from '@workspace/lib/types/mail';
 import { mailAttachmentName } from '@workspace/lib/types/mail';
-import { getMailUploadMaxSize, getUploadMaxSize } from '../config/enforcement';
+import { enforceUploadLimits, getMailUploadRoom, getUploadRoom } from '../config/enforcement';
 import { isRoleAddress } from '../config/server-config';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive';
@@ -15,7 +15,7 @@ import { getHome } from '../home';
 import type { User } from '../user';
 import { getOrgAdmins, getUserByEmail } from '../user';
 import type { Mail } from './mail-domain';
-import { attachmentTooLarge } from './mail-domain';
+import { enforceAttachmentLimits } from './mail-domain';
 
 export async function getMailClient(user: User): Promise<Mail> {
     const home = await getHome(user.id);
@@ -52,9 +52,9 @@ export async function messageMoveToTrash(user: User, messageId: string): Promise
 }
 
 export async function uploadDraftAttachment(user: User, request: Request): Promise<DraftAttachmentUpload> {
-    const maxSize = await getMailUploadMaxSize(user.id);
+    const room = await getMailUploadRoom(user.id);
     const mailClient = await getMailClient(user);
-    return await mailClient.uploadDraftAttachment(request, maxSize);
+    return await mailClient.uploadDraftAttachment(request, room);
 }
 
 export async function attachFromDrive(
@@ -63,18 +63,18 @@ export async function attachFromDrive(
     sourceMountId: string,
     sourcePathId: string,
 ): Promise<DraftAttachmentUpload> {
-    const maxSize = await getMailUploadMaxSize(user.id);
+    const room = await getMailUploadRoom(user.id);
     const mailClient = await getMailClient(user);
 
     const drive = await getSharedDrive(sourceOwnerId, user);
     const { mount, path } = await drive.resolveFile(sourceMountId, sourcePathId);
-    if (path.size > maxSize) throw attachmentTooLarge(maxSize);
+    enforceAttachmentLimits(path.size, room);
 
     const sourceFile = await drive.downloadFile(sourceMountId, sourcePathId);
     if (!sourceFile) throw new ApiError(404, 'Source file missing on disk');
 
     const filename = await downloadName(mount, path);
-    return await mailClient.stageDriveAttachment(sourceFile, filename, path.mimeType, maxSize);
+    return await mailClient.stageDriveAttachment(sourceFile, filename, path.mimeType, room);
 }
 
 export async function saveAttachmentsToDrive(
@@ -91,7 +91,7 @@ export async function saveAttachmentsToDrive(
 
     const mail = await getMailClient(user);
     const drive = await getSharedDrive(targetOwnerId, user);
-    const maxSize = await getUploadMaxSize(targetOwnerId, targetMountId);
+    const room = await getUploadRoom(targetOwnerId, targetMountId);
 
     // Indexes refer to positions in the raw parsed EML attachment list (including calendar parts).
     // Parse the EML once and index into the result — avoids re-parsing on every iteration.
@@ -106,7 +106,7 @@ export async function saveAttachmentsToDrive(
         const att = attachments[index];
         const filename = mailAttachmentName(att, index);
         const content = Buffer.from(att.content);
-        if (content.byteLength > maxSize) throw attachmentTooLarge(maxSize);
+        enforceUploadLimits(content.byteLength, room);
         return { filename, contentType: att.contentType, content };
     });
 

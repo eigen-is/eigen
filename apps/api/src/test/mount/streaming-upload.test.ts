@@ -232,7 +232,7 @@ describe('Streaming Upload', () => {
     test('upload to a mount already at quota returns 507 before the body is read', async () => {
         // Seed so the mount has bytes, then shrink the live mount quota to exactly what's used
         // (mirrors editor.test.ts, which also lowers the server default). remaining <= 0 makes
-        // getUploadMaxSize throw up front: even this tiny file, which the parser's maxFileSize
+        // getUploadRoom throw up front: even this tiny file, which the parser's maxFileSize
         // would never reject, must bounce with 507.
         const seed = new File(['seed'], 'quota-seed.txt', { type: 'text/plain' });
         await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, seed);

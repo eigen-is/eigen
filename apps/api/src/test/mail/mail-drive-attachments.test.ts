@@ -1,9 +1,11 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types';
 import type { EmailDraft } from '@workspace/lib/types/mail';
+import { getHome } from '../../lib/home';
 import {
     assertJson,
     authedRequest,
+    capUserDrive,
     driveGet,
     driveGetList,
     drivePut,
@@ -312,6 +314,39 @@ describe.skipIf(isWindows)('Mail — Drive Attachment Integration', () => {
                 expect(res.status).toBe(413);
             } finally {
                 await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
+            }
+        });
+
+        test('returns 507 when an attachment is under the upload limit but past the free space', async () => {
+            const eml = buildEmlWithAttachment(
+                ctx.alice.user.email,
+                'Past-room',
+                'x'.repeat(2 * 1024 * 1024),
+                'room.bin',
+            );
+            expect((await deliverEml(ctx, ctx.alice.user.email, eml)).status).toBe(200);
+            const inboxRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox/inbox`,
+            );
+            const inbox = await assertJson<Array<{ id: string; subject: string }>>(inboxRes);
+            const message = inbox.find((m) => m.subject === 'Past-room');
+            if (!message) throw new Error('the message did not arrive');
+
+            const home = await getHome(ctx.alice.user.id);
+            const usedMB = (await home.drive.size(mountId)) / (1024 * 1024);
+            const restore = await capUserDrive(ctx.alice.user.id, mountId, usedMB + 1);
+            try {
+                const res = await saveAttachmentsToDrive(ctx.alice.user.sessionToken, ctx.alice.user.id, message.id, {
+                    indexes: [0],
+                    targetOwnerId: ctx.alice.user.id,
+                    targetMountId: mountId,
+                    targetParentId: aliceRootId,
+                });
+                expect(res.status).toBe(507);
+                expect(await res.text()).toBe('Not enough storage left');
+            } finally {
+                await restore();
             }
         });
 

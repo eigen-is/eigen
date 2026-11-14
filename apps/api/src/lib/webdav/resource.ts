@@ -4,8 +4,8 @@
 // (If-Match, If-None-Match) and the WebDAV locks as the RFCs ask.
 
 import { DRIVE_TYPE_FILE, isContainerType } from '@workspace/lib/types/drive';
-import { enforceMaxUploadSize, getMountRoom } from '../config/enforcement';
-import { ApiError, insufficientStorage } from '../core/errors';
+import { enforceUploadLimits, getMountRoom } from '../config/enforcement';
+import { ApiError } from '../core/errors';
 import { computeEtag, matchesIfMatch, matchesIfNoneMatch, rangeResponse, scriptableInlineHeaders } from '../core/http';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
@@ -107,13 +107,9 @@ export async function handlePut(args: {
     return await drive.withHomeHeld(async () => {
         // A 0-byte PUT (Finder's name reservation) adds nothing, so it skips the quota lookup.
         const room = contentLength === 0 ? 0 : await getMountRoom(ownerId, mountId, existing?.size ?? 0);
-        const withinLimits = (bytes: number) => {
-            enforceMaxUploadSize(bytes);
-            if (bytes > room) throw insufficientStorage();
-        };
         // A Content-Length refuses before a byte moves. A chunked body, such as Finder's, has none, so the
         // stream is counted too.
-        if (contentLength !== null) withinLimits(contentLength);
+        if (contentLength !== null) enforceUploadLimits(contentLength, room);
         let received = 0;
         // Finder (WebDAVFS/3.0.0) reserves a name with a 0-byte PUT before the content, so no body is an empty file.
         const data =
@@ -121,7 +117,7 @@ export async function handlePut(args: {
                 new TransformStream<Uint8Array, Uint8Array>({
                     transform(chunk, controller) {
                         received += chunk.byteLength;
-                        withinLimits(received);
+                        enforceUploadLimits(received, room);
                         controller.enqueue(chunk);
                     },
                 }),
