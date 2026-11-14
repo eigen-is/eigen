@@ -6,7 +6,6 @@
 
 import { CHART_DEFAULT_SIZE, FLAT_CHART_LOOK, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { escapeHtml } from '@workspace/lib/html';
-import { SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import type { FillPaint } from '@workspace/lib/types/background';
 import type {
     Arrowhead,
@@ -204,6 +203,7 @@ export type SheetChartSpec = {
     values: string;
     x: number; // the chart's box on the grid, in pixels from A1
     y: number;
+    size?: { width: number; height: number }; // Insert's default size when missing
 };
 
 export type SheetSpec = {
@@ -219,26 +219,7 @@ export type SheetSpec = {
 const EUR = '_(€* #,##0.00_);_(€* (#,##0.00);_(€* "-"??_);_(@_)';
 const BUDGET_STATUSES = ['confirmed', 'pending', 'paid'];
 
-const BUDGET_ROWS: SheetRowSpec[] = [
-    { cells: ['Item', 'Amount (EUR)', 'Status'], style: 'header' },
-    { cells: [] },
-    { cells: ['Income'], style: 'section' },
-    { cells: ['Ticket sales', 42000, 'pending'] },
-    { cells: ['Bar', 9000, 'pending'] },
-    { cells: ['Culture fund grant', 15000, 'confirmed'] },
-    { cells: ['Local sponsors', 6000, 'paid'] },
-    { cells: ['Total income', '=SUM(B4:B7)'], style: 'total' },
-    { cells: [] },
-    { cells: ['Costs'], style: 'section' },
-    { cells: ['Artist fees', 28000, 'confirmed'] },
-    { cells: ['Stage & tech', 12000, 'confirmed'] },
-    { cells: ['Security', 6000, 'pending'] },
-    { cells: ['Sanitation', 4000, 'paid'] },
-    { cells: ['Shuttle buses', 3500, 'pending'] },
-    { cells: ['Marketing', 2500, 'paid'] },
-    { cells: ['Total costs', '=SUM(B11:B16)'], style: 'total' },
-    { cells: ['Margin', '=B8-B17'], style: 'total' },
-];
+const BUDGET_COLUMNS = [{ width: 218 }, { width: 128, format: EUR }, { width: 110 }];
 
 export const BUDGET = {
     folder: 'finance' as const satisfies TeamFolder,
@@ -247,8 +228,27 @@ export const BUDGET = {
     sheets: [
         {
             name: 'Budget',
-            columns: [{ width: 218 }, { width: 128, format: EUR }, { width: 110 }],
-            rows: BUDGET_ROWS,
+            columns: BUDGET_COLUMNS,
+            rows: [
+                { cells: ['Item', 'Amount (EUR)', 'Status'], style: 'header' },
+                { cells: [] },
+                { cells: ['Income'], style: 'section' },
+                { cells: ['Ticket sales', 42000, 'pending'] },
+                { cells: ['Bar', 9000, 'pending'] },
+                { cells: ['Culture fund grant', 15000, 'confirmed'] },
+                { cells: ['Local sponsors', 6000, 'paid'] },
+                { cells: ['Total income', '=SUM(B4:B7)'], style: 'total' },
+                { cells: [] },
+                { cells: ['Costs'], style: 'section' },
+                { cells: ['Artist fees', 28000, 'confirmed'] },
+                { cells: ['Stage & tech', 12000, 'confirmed'] },
+                { cells: ['Security', 6000, 'pending'] },
+                { cells: ['Sanitation', 4000, 'paid'] },
+                { cells: ['Shuttle buses', 3500, 'pending'] },
+                { cells: ['Marketing', 2500, 'paid'] },
+                { cells: ['Total costs', '=SUM(B11:B16)'], style: 'total' },
+                { cells: ['Margin', '=B8-B17'], style: 'total' },
+            ],
             dataBars: ['B4:B7', 'B11:B16'],
             redBelowZero: ['B18'],
             dropdowns: [
@@ -262,9 +262,10 @@ export const BUDGET = {
                     seriesName: 'Amount (EUR)',
                     categories: 'Budget!A11:A16',
                     values: 'Budget!B11:B16',
-                    x: 20,
-                    // Below the table, after one empty row: the builder leaves every row at the default height.
-                    y: (BUDGET_ROWS.length + 1) * SHEET_DEFAULT_ROW_HEIGHT,
+                    // Beside the table and level with its top, small enough that both fit a 1000-pixel-wide page.
+                    x: BUDGET_COLUMNS.reduce((sum, column) => sum + column.width, 0) + 24,
+                    y: 0,
+                    size: { width: 440, height: 320 },
                 },
             ],
         },

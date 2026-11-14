@@ -129,8 +129,8 @@ function buildSheet(spec: SheetSpec, order: number, ids: ReadonlyMap<string, str
         dataValidations,
         charts,
     };
-    // Each chart is a one-series range chart at Insert's default size, stacked above the ones before it, as a second
-    // Insert would put it. One series needs no legend, and a pie names its own slices.
+    // Each chart is a one-series range chart, at Insert's default size unless its spec gives one, stacked above the
+    // ones before it as a second Insert would put it. One series needs no legend, and a pie names its own slices.
     for (const [i, chart] of (spec.charts ?? []).entries()) {
         const id = `chart-${chartsBefore + i + 1}`;
         const defaults = defaultChartSpec(chart.type, {
@@ -141,7 +141,7 @@ function buildSheet(spec: SheetSpec, order: number, ids: ReadonlyMap<string, str
         charts[id] = {
             id,
             index: nextFloatingIndex(sheet),
-            ...sheetFloatingBox({ x: chart.x, y: chart.y, ...CHART_DEFAULT_SIZE }),
+            ...sheetFloatingBox({ x: chart.x, y: chart.y, ...(chart.size ?? CHART_DEFAULT_SIZE) }),
             ...newChartSpecParts({ ...defaults, title: { text: chart.title }, legend: { position: 'none' } }),
         };
     }
