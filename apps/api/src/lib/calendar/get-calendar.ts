@@ -75,10 +75,11 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
         const teamOwner = teamOwnerId(teamId);
         try {
             const teamCalendars = await pullCalendars(teamOwner);
-            for (const tc of teamCalendars) {
+            for (const teamCalendar of teamCalendars) {
                 const permission =
-                    (await pullCalendarPermission(teamOwner, tc.id, user.email, memberships.teamIds)) || 'read';
-                await cal.ensureSharedEntry(teamOwner, tc.id, tc.name, permission);
+                    (await pullCalendarPermission(teamOwner, teamCalendar.id, user.email, memberships.teamIds)) ||
+                    'read';
+                await cal.ensureSharedEntry(teamOwner, teamCalendar.id, teamCalendar.name, permission);
             }
         } catch (error) {
             // Only a 404 removes: any other failure says nothing about the share, so the entries stay.
@@ -92,18 +93,18 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
 
     // Joining or leaving a team runs no share propagation, so a user-owned share's cached permission is re-resolved here.
     const sharedCalendars = await cal.getSharedCalendars();
-    for (const sc of sharedCalendars) {
-        const parsed = parseOwnerId(sc.ownerUserId);
+    for (const shared of sharedCalendars) {
+        const parsed = parseOwnerId(shared.ownerUserId);
         if (parsed.type === 'team') continue;
         try {
             const resolved = await pullCalendarPermission(
-                sc.ownerUserId,
-                sc.calendarId,
+                shared.ownerUserId,
+                shared.calendarId,
                 user.email,
                 memberships.teamIds,
             );
-            if (resolved && resolved !== sc.permission) {
-                await cal.ensureSharedEntry(sc.ownerUserId, sc.calendarId, sc.calendarName, resolved);
+            if (resolved && resolved !== shared.permission) {
+                await cal.ensureSharedEntry(shared.ownerUserId, shared.calendarId, shared.calendarName, resolved);
             }
         } catch {
             // Owner home not available, skip
