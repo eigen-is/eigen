@@ -1,5 +1,9 @@
+// The size checks a write meets before it lands: the per-file upload cap, what is left of a mount and a
+// home's data budget. A full budget answers 507 and a file too large 413. Routes and domain code call them
+// before they write, such as an upload, a copy, an editor save or a contact card.
+
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { ApiError } from '../core';
+import { ApiError, payloadTooLarge } from '../core';
 import { getHome } from '../home';
 import { getMemberships } from '../user';
 import { resolveHomeDataMax, resolveUserQuotas } from './quota';
@@ -31,12 +35,17 @@ export async function enforceMountQuota(
     }
 }
 
-export async function getUploadMaxSize(ownerId: string, mountId: string): Promise<number> {
+// What an upload may add to a mount, so a full one is refused before any bytes move.
+export async function getUploadRoom(ownerId: string, mountId: string): Promise<number> {
     const room = await getMountRoom(ownerId, mountId);
     if (room <= 0) {
         throw new ApiError(507, 'Insufficient Storage');
     }
-    return Math.min(getMaxUploadSize(), room);
+    return room;
+}
+
+export async function getUploadMaxSize(ownerId: string, mountId: string): Promise<number> {
+    return Math.min(getMaxUploadSize(), await getUploadRoom(ownerId, mountId));
 }
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
@@ -60,7 +69,7 @@ export async function getMailUploadMaxSize(userId: string): Promise<number> {
 
 export function enforceMaxUploadSize(fileSize: number): void {
     if (fileSize > getMaxUploadSize()) {
-        throw new ApiError(413, 'File exceeds max upload size');
+        throw payloadTooLarge();
     }
 }
 

@@ -18,7 +18,7 @@ Each Eigen installation has a maximum size for a single uploaded file. If your f
 
 ## Your storage is full
 
-Each drive has a storage quota. If the drive is already at or near its limit, an upload fails even if the file itself is small enough. Drive checks the free space first, so the upload fails straight away, not part-way through.
+Each drive has a storage quota. If the drive is already at or near its limit, an upload fails with **Insufficient Storage**, even if the file itself is small enough. A full drive refuses the upload straight away. A file larger than the space that is left stops part-way through, as soon as it runs past that space.
 
 **How to check your storage:** The storage bar at the bottom of the sidebar shows how much space you have used and how much is available. In Drive or any other Eigen app, look for the **Storage** progress bar at the very bottom of the left sidebar.
 

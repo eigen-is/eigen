@@ -198,14 +198,34 @@ describe('Streaming Upload', () => {
                 { method: 'POST', body: formData },
             );
             expect(res.status).toBe(413);
-            // The parser's MaxFileSizeExceededError mapping in streamFilesToTemp
-            expect(await res.text()).toBe('File exceeds maximum upload size');
+            expect(await res.text()).toBe('Upload too large');
         } finally {
             await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ quotas: { maxUploadSizeMB: previousMax } }),
             });
+        }
+    });
+
+    // The cut-off comes mid-stream, so the answer must still say the drive is full, not that the file is too large.
+    test('a file larger than the room left in the mount answers 507', async () => {
+        const home = await getHome(ctx.alice.user.id);
+        const usedMB = (await home.drive.size(aliceMountId)) / (1024 * 1024);
+        const restore = await capUserDrive(ctx.alice.user.id, aliceMountId, usedMB + 1);
+        try {
+            const file = new File(['x'.repeat(2 * 1024 * 1024)], 'over-room.txt', { type: 'text/plain' });
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${folderId}`,
+                { method: 'POST', body: formData },
+            );
+            expect(res.status).toBe(507);
+            expect(await res.text()).toBe('Insufficient Storage');
+        } finally {
+            await restore();
         }
     });
 
