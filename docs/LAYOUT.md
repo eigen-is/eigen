@@ -194,9 +194,10 @@ A row's state is a class in `globals.css`, painted in the current app's color:
 | `eigen-list-item-active` | the open row | stripe and wash |
 | `eigen-list-item-cursor` | the keyboard cursor on another row | stripe only, so it reads apart from the open row |
 | `eigen-list-item-selected` | multi-selected | wash |
-| `eigen-tile` (`-active`, `-selected`) | grid tiles | a full border, because a stripe on a tile's label strip reads as stray chrome |
+| `eigen-tile-active`, `eigen-tile-selected` | the open or a multi-selected grid tile | a full border, because the wash would cover only a tile's label strip |
+| `eigen-tile-cursor` | the keyboard cursor on a grid tile | the row cursor's stripe on the tile's left edge, drawn over the thumbnail |
 
-A row takes every class that holds. A right-click or ⋮ selects its row without opening it, so the open row keeps its look.
+A row or tile takes every class that holds, so a selected tile under the cursor shows the border and the stripe. A right-click or ⋮ selects its row without opening it, so the open row keeps its look.
 
 One context menu serves the whole list, so a list never draws a `DropdownMenu` per row. A row's button opens it from the button's own rect, because a click made with Enter reports 0,0. `ContextMenuAnchor` portals its trigger to `document.body`, because a transformed ancestor, such as a dialog's centering translate, would otherwise move the menu.
 
