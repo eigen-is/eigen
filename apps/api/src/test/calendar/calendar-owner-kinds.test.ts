@@ -140,20 +140,17 @@ describe('A calendar route on a team', () => {
         expect(await statusAndMessage(await createEvent(token, owner, 'some-calendar'))).toEqual(DISABLED);
     });
 
-    test('gives a member of a team without a home folder no shares and no write, and a read opens the home', async () => {
+    test('gives a member of a team without a home folder no shares, and a write or a read opens the home', async () => {
         const teamId = await createTeamFor('bob');
         const owner = teamOwnerId(teamId);
         const token = ctx.bob.user.sessionToken;
         const shared = await authedRequest(token, `/calendar/${owner}/shared-with-me`);
         expect(await shared.json()).toEqual([]);
         expect(fs.existsSync(getTeamHomePath(teamId))).toBe(false);
-        expect(await statusAndMessage(await createEvent(token, owner, 'some-calendar'))).toEqual({
-            status: 403,
-            message: 'Write permission required',
-        });
+        expect(await statusAndMessage(await createEvent(token, owner, 'some-calendar'))).toEqual(DISABLED);
+        expect(fs.existsSync(getTeamHomePath(teamId))).toBe(true);
         const read = await authedRequest(token, `/calendar/${owner}/calendars/some-calendar/events/some-event`);
         expect(await statusAndMessage(read)).toEqual(DISABLED);
-        expect(fs.existsSync(getTeamHomePath(teamId))).toBe(true);
     });
 
     test('lets a member without a share read a team calendar that is on, and not write it', async () => {
