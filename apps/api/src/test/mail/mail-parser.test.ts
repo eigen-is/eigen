@@ -272,4 +272,36 @@ describe('An inline forwarded message', () => {
         expect(mail.text).toContain('Date: 14 Nov 2026, 15:42 UTC\n');
         expect(mail.html).toContain('<td class="mp_head_value">14 Nov 2026, 15:42 UTC</td>');
     });
+
+    test('one with an unparseable Date header shows no Date row', () => {
+        const bytes = Buffer.from(
+            [
+                'From: alice@example.com',
+                'Subject: Fwd: Plans',
+                'MIME-Version: 1.0',
+                'Content-Type: multipart/mixed; boundary="outer"',
+                '',
+                '--outer',
+                'Content-Type: text/html; charset=utf-8',
+                '',
+                '<p>See below.</p>',
+                '--outer',
+                'Content-Type: message/rfc822',
+                'Content-Disposition: inline',
+                '',
+                'From: carol@example.com',
+                'Subject: Plans',
+                'Date: not a real date at all',
+                'Content-Type: text/plain; charset=utf-8',
+                '',
+                'The original.',
+                '--outer--',
+            ].join('\r\n'),
+        );
+        const mail = parseMail(bytes);
+
+        expect(mail.text).toContain('Subject: Plans\n');
+        expect(mail.text).not.toContain('Date:');
+        expect(mail.html).not.toContain('Date:');
+    });
 });
