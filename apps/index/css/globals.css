@@ -138,6 +138,14 @@
         opacity: 1;
     }
 
+    /* Every picture and film in a page gets a hairline and round corners, so a screenshot of a white page keeps its
+       edge on a white page. */
+    img,
+    video {
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+    }
+
     /* A media block from the Markdown, such as a looping video or a carousel, rounded like the media grid. */
     .media-video,
     .media-carousel,
