@@ -13,6 +13,7 @@ describe('LandingApps', () => {
         const html = renderToStaticMarkup(<RouterProvider router={router} />);
         expect(html.match(/href="[^"]+"/g)).toEqual([
             'href="/about/mail"',
+            'href="/about/drive"',
             'href="/about/docs"',
             'href="/about/sheets"',
             'href="/about/slides"',
