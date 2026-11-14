@@ -29,7 +29,6 @@ export async function resolveCalendar(user: User, ownerId: string): Promise<Cale
     return home.calendar;
 }
 
-// The calendar comes with the permission, so a route can only reach another owner's calendar through this check.
 export async function checkCalendarAccess(
     user: User,
     ownerId: string,
@@ -57,21 +56,16 @@ export async function checkCalendarAccess(
     return { calendar, permission };
 }
 
-// No check on the caller, so a route may only read from it what the calendar's own shares give them. An owner
-// with no home folder or no calendar answers null, so asking creates no home and doesn't tell which owners exist.
+// It does not check the caller, so a route may read from it only what the calendar's own shares give them.
+// An owner with no home folder or no calendar answers null, so asking neither creates a home nor tells who exists.
 export async function routedCalendar(ownerId: string): Promise<Calendar | null> {
-    if (ownersWithHomeFolder([ownerId]).length === 0) return null;
+    if (!fs.existsSync(homeDirUnder(getDataRoot(), ownerId))) return null;
     const home = await getHome(ownerId);
     return home.hasCalendar ? home.calendar : null;
 }
 
-export function ownersWithHomeFolder(ownerIds: readonly string[]): string[] {
-    return ownerIds.filter((ownerId) => fs.existsSync(homeDirUnder(getDataRoot(), ownerId)));
-}
-
 export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
-    const home = await getHome(user.id); // own home; cross-home reads use relay pull*() below
-    const cal = home.calendar;
+    const { calendar } = await getHome(user.id);
     const memberships = await getMemberships(user.id);
 
     for (const teamId of memberships.teamIds) {
@@ -82,12 +76,12 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
                 const permission =
                     (await pullCalendarPermission(teamOwner, teamCalendar.id, user.email, memberships.teamIds)) ||
                     'read';
-                await cal.ensureSharedEntry(teamOwner, teamCalendar.id, teamCalendar.name, permission);
+                await calendar.ensureSharedEntry(teamOwner, teamCalendar.id, teamCalendar.name, permission);
             }
         } catch (error) {
             // Only a 404 removes: any other failure says nothing about the share, so the entries stay.
             if (error instanceof ApiError && error.status === 404) {
-                await cal.removeSharedEntriesForOwner(teamOwner);
+                await calendar.removeSharedEntriesForOwner(teamOwner);
                 continue;
             }
             console.warn(`calendar: could not read the calendars of ${teamOwner}`, error);
@@ -95,10 +89,9 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
     }
 
     // Joining or leaving a team runs no share propagation, so a user-owned share's cached permission is re-resolved here.
-    const sharedCalendars = await cal.getSharedCalendars();
+    const sharedCalendars = await calendar.getSharedCalendars();
     for (const shared of sharedCalendars) {
-        const parsed = parseOwnerId(shared.ownerUserId);
-        if (parsed.type === 'team') continue;
+        if (parseOwnerId(shared.ownerUserId).type === 'team') continue;
         try {
             const resolved = await pullCalendarPermission(
                 shared.ownerUserId,
@@ -107,12 +100,12 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
                 memberships.teamIds,
             );
             if (resolved && resolved !== shared.permission) {
-                await cal.ensureSharedEntry(shared.ownerUserId, shared.calendarId, shared.calendarName, resolved);
+                await calendar.ensureSharedEntry(shared.ownerUserId, shared.calendarId, shared.calendarName, resolved);
             }
         } catch {
             // Owner home not available, skip
         }
     }
 
-    return cal.getSharedCalendars();
+    return calendar.getSharedCalendars();
 }
