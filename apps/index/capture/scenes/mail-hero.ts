@@ -2,7 +2,7 @@
 // first message, and turns its xlsx quote into a sheet in the team drive, which opens in Sheets. Back in Mail she
 // returns to the last reply, so the loop ends where it began.
 
-import { centerOf } from '../lib/cursor';
+import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
 import { openBudget } from './budget';
 
@@ -28,17 +28,17 @@ export const mailHero = {
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         await Bun.sleep(1200);
-        await cursor.click(await centerOf(page.getByText('Hi Saar, Quote attached')));
+        await cursor.click(await pointOn(page.getByText('Hi Saar, Quote attached')));
         await Bun.sleep(1000);
-        const chip = await centerOf(page.getByText('vlierkracht quote.xlsx'));
+        const chip = await pointOn(page.getByText('vlierkracht quote.xlsx'));
         await cursor.moveTo(chip);
         await page.mouse.click(chip.x, chip.y, { button: 'right' });
         await Bun.sleep(700);
-        await cursor.click(await centerOf(page.getByRole('menuitem', { name: 'Convert to sheet' })));
+        await cursor.click(await pointOn(page.getByRole('menuitem', { name: 'Convert to sheet' })));
         await Bun.sleep(900);
-        await cursor.click(await centerOf(page.getByRole('button', { name: /festival crew/ })));
+        await cursor.click(await pointOn(page.getByRole('button', { name: /festival crew/ })));
         await Bun.sleep(700);
-        await cursor.click(await centerOf(page.getByRole('button', { name: 'Save and convert' })));
+        await cursor.click(await pointOn(page.getByRole('button', { name: 'Save and convert' })));
         await page.waitForURL(/\/sheet\//);
         await page.locator('canvas').first().waitFor();
         // The canvas mounts before the workbook's first paint, and then the quote is on screen to read.
@@ -46,7 +46,7 @@ export const mailHero = {
         await page.goBack();
         await page.getByText('vlierkracht quote.xlsx').waitFor();
         await Bun.sleep(500);
-        await cursor.click(await centerOf(page.getByText('Re: Generator quote')));
+        await cursor.click(await pointOn(page.getByText('Re: Generator quote')));
         await Bun.sleep(800);
         await cursor.moveTo(REST, { duration: 900 });
         await Bun.sleep(600);

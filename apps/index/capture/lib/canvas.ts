@@ -4,14 +4,17 @@
 
 import type { Page } from 'playwright-core';
 import type { Point } from './cursor';
+import { pointOn } from './cursor';
 
-// A point on the element, as fractions of its box across and down from its top left corner.
 export async function elementPoint(page: Page, id: string, across = 0.5, down = 0.5): Promise<Point> {
-    const boxes = await Promise.all(
-        (await page.locator(`[data-element-id="${id}"]`).all()).map((match) => match.boundingBox()),
+    const matches = await page.locator(`[data-element-id="${id}"]`).all();
+    const areas = await Promise.all(
+        matches.map(async (match) => {
+            const box = await match.boundingBox();
+            return box ? box.width * box.height : 0;
+        }),
     );
-    const area = (match: (typeof boxes)[number]) => (match ? match.width * match.height : 0);
-    const box = boxes.reduce((largest, match) => (area(match) > area(largest) ? match : largest), null);
-    if (!box) throw new Error(`${id} is not on the page`);
-    return { x: box.x + across * box.width, y: box.y + down * box.height };
+    const largest = areas.indexOf(Math.max(...areas));
+    if (largest < 0) throw new Error(`${id} is not on the page`);
+    return pointOn(matches[largest], across, down);
 }

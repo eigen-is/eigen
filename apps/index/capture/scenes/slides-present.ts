@@ -1,6 +1,7 @@
 // The sponsor deck presented: the comms lead presses Present, the title fills the screen, the arrow keys step through
 // the pitch, and Escape brings the editor back, where a click on the first slide ends the loop where it began.
 
+import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
 import { openSponsorDeck, thumbnailPoint } from './sponsor-deck';
 
@@ -16,10 +17,9 @@ export const slidesPresent = {
         await cursor.moveTo({ x: 900, y: 500 }, { duration: 1 });
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
-        const present = await page.getByRole('button', { name: 'Present' }).boundingBox();
-        if (!present) throw new Error('The Present button is not on the page');
+        const present = await pointOn(page.getByRole('button', { name: 'Present' }));
         await Bun.sleep(800);
-        await cursor.click({ x: present.x + present.width / 2, y: present.y + present.height / 2 });
+        await cursor.click(present);
         await Bun.sleep(2500);
         for (let slide = 1; slide < 4; slide++) {
             await page.keyboard.press('ArrowRight');

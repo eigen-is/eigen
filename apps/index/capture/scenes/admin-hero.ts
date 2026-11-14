@@ -3,7 +3,7 @@
 // on the users list the loop ends where it began.
 
 import { ADMIN_LOCALPART, personaByKey, TEAM_NAME } from '../../../api/src/scripts/demo/content';
-import { centerOf } from '../lib/cursor';
+import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
 
 // The sidebar's empty foot, so the resting pointer lights up no row.
@@ -24,15 +24,15 @@ export const adminHero = {
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         await Bun.sleep(1000);
-        await cursor.click(await centerOf(page.getByRole('main').getByText(personaByKey('saar').name).first()));
+        await cursor.click(await pointOn(page.getByRole('main').getByText(personaByKey('saar').name)));
         await page.getByRole('heading', { name: 'Storage' }).waitFor();
         await Bun.sleep(3000);
-        await cursor.click(await centerOf(page.getByRole('link', { name: 'Teams' })));
+        await cursor.click(await pointOn(page.getByRole('link', { name: 'Teams' })));
         await page.getByText(TEAM_NAME).first().waitFor();
         await Bun.sleep(1000);
-        await cursor.click(await centerOf(page.getByRole('main').getByText(TEAM_NAME).first()));
+        await cursor.click(await pointOn(page.getByRole('main').getByText(TEAM_NAME)));
         await Bun.sleep(3500);
-        await cursor.click(await centerOf(page.getByRole('link', { name: 'Users' })));
+        await cursor.click(await pointOn(page.getByRole('link', { name: 'Users' })));
         await page.getByText(personaByKey('saar').name).first().waitFor();
         await Bun.sleep(800);
         await cursor.moveTo(REST, { duration: 900 });

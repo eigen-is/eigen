@@ -3,7 +3,7 @@
 // deletes it, and it goes from his screen too, so the loop ends where it began. The film shows both screens side by
 // side. He has never written in the channel, so no notification pops up over it.
 
-import { centerOf } from '../lib/cursor';
+import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 
@@ -30,7 +30,7 @@ export const chatPair = {
     },
     run: async ({ pages: [joris, anouk], cursors: [, anoukCursor] }) => {
         await Bun.sleep(1000);
-        await anoukCursor.click(await centerOf(anouk.getByPlaceholder('Message production')));
+        await anoukCursor.click(await pointOn(anouk.getByPlaceholder('Message production')));
         await Bun.sleep(500);
         await typeLikeAPerson(anouk, '/thank ti');
         await Bun.sleep(1000);
@@ -41,12 +41,12 @@ export const chatPair = {
         await sent.waitFor();
         await joris.getByText(/thanks Timo Jansen/).waitFor();
         await Bun.sleep(2500);
-        await anoukCursor.moveTo(await centerOf(sent));
+        await anoukCursor.moveTo(await pointOn(sent));
         await Bun.sleep(600);
         const row = anouk.locator('div.group', { has: sent });
-        await anoukCursor.click(await centerOf(row.getByRole('button', { name: 'Delete' })));
+        await anoukCursor.click(await pointOn(row.getByRole('button', { name: 'Delete' })));
         await Bun.sleep(700);
-        await anoukCursor.click(await centerOf(anouk.getByRole('dialog').getByRole('button', { name: 'Delete' })));
+        await anoukCursor.click(await pointOn(anouk.getByRole('dialog').getByRole('button', { name: 'Delete' })));
         await joris.getByText(/thanks Timo Jansen/).waitFor({ state: 'detached' });
         await Bun.sleep(800);
         await anoukCursor.moveTo(REST, { duration: 900 });

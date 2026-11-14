@@ -2,7 +2,7 @@
 // one and pages through the rest in the preview. She closes it and goes back up to the drive's folders, so the loop
 // ends where it began.
 
-import { centerOf } from '../lib/cursor';
+import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
 
 const REST = { x: 1450, y: 820 };
@@ -23,23 +23,23 @@ export const driveHero = {
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         await Bun.sleep(1000);
-        await cursor.click(await centerOf(page.getByRole('main').getByText('images', { exact: true })));
+        await cursor.click(await pointOn(page.getByRole('main').getByText('images', { exact: true })));
         await Bun.sleep(900);
-        await cursor.click(await centerOf(page.getByRole('button', { name: 'Open' })));
+        await cursor.click(await pointOn(page.getByRole('button', { name: 'Open' })));
         await page.getByText('camping-field.webp').first().waitFor();
         await Bun.sleep(1200);
-        await cursor.click(await centerOf(page.getByText('camping-field.webp').first()));
+        await cursor.click(await pointOn(page.getByText('camping-field.webp')));
         await Bun.sleep(1500);
         await page.keyboard.press('Space');
         await Bun.sleep(1800);
-        await cursor.click(await centerOf(page.getByTitle('Next (→)')));
+        await cursor.click(await pointOn(page.getByTitle('Next (→)')));
         await Bun.sleep(1600);
-        await cursor.click(await centerOf(page.getByTitle('Next (→)')));
+        await cursor.click(await pointOn(page.getByTitle('Next (→)')));
         await Bun.sleep(1600);
         await page.keyboard.press('Escape');
         await Bun.sleep(800);
         await cursor.click(
-            await centerOf(page.getByRole('navigation', { name: 'breadcrumb' }).getByText('festival', { exact: true })),
+            await pointOn(page.getByRole('navigation', { name: 'breadcrumb' }).getByText('festival', { exact: true })),
         );
         await page.getByText('images', { exact: true }).first().waitFor();
         await Bun.sleep(800);
