@@ -1,5 +1,6 @@
 // The routes to manage one team: its members, its settings, the drives it mounts, and its avatar. Members can read
-// them, and only an admin or the owner of the server can change them. The team data lives in the Home of the team.
+// the members and settings. Only an admin or the owner of the server can change them or read the mounts, which carry
+// the storage secret. The team data lives in the Home of the team.
 
 import { QUOTA_MIN_MB } from '@workspace/lib/constants/settings';
 import { MOUNT_STORAGE_TYPES } from '@workspace/lib/types/mount';
