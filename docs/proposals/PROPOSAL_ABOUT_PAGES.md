@@ -1,6 +1,6 @@
 # About pages
 
-A proposal for step 2 of the public site: one About overview and one short page per app. Step 1, the landing page, top bar, footer, Support, changelog and blog, ships first because all its content exists. Nothing here is built yet. The owner approved the look in a mock, and the text below is a first draft.
+A proposal for step 2 of the public site: one About overview and one short page per app. Step 1, the landing page, top bar, footer, Support, changelog and blog, ships first because all its content exists. The pages and their build are in place with stub text; the real text and media are not written yet. The owner approved the look in a mock, and the text below is a first draft.
 
 ## Why
 

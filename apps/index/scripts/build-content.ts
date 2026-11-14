@@ -1,12 +1,13 @@
-// Turns the site's Markdown into what its pages read: for every help article and blog post a JSON body with the
-// rendered HTML, and for each of the two a manifest of metadata with the headings and the related articles. A bad
-// frontmatter field throws, so a broken article never ships. It runs before the Vite build and the type check.
+// Turns the site's Markdown into what its pages read: for every help article, blog post and About page a JSON body
+// with the rendered HTML, and for each collection a manifest of metadata with the headings and the related articles.
+// A bad frontmatter field throws, so a broken article never ships. It runs before the Vite build and the type check.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { parseMediaGrids } from '../src/components/parse-media-grids';
+import { aboutApps, aboutPageSlug, checkAboutRows } from '../src/content/about-apps';
 import type { ArticleBody, ArticleMeta, ContentManifest } from './lib/content-types';
-import { blogFrontmatterSchema, supportFrontmatterSchema } from './lib/content-types';
+import { aboutFrontmatterSchema, blogFrontmatterSchema, supportFrontmatterSchema } from './lib/content-types';
 import { parseContentFile } from './lib/frontmatter';
 import { resolveRelated } from './lib/related';
 import { renderMarkdown } from './lib/render-markdown';
@@ -89,6 +90,35 @@ function buildBlog(): ArticleMeta[] {
     return articles.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
 }
 
+// The overview and one page per app. Every page ends with the shared block for the technical reader, appended before
+// the render so its heading joins the table of contents.
+function buildAbout(): ArticleMeta[] {
+    const dir = join(DATA, 'about');
+    const technical = readFileSync(join(dir, '_technical.md'), 'utf-8');
+    const articles: ArticleMeta[] = [];
+    for (const file of readdirSync(dir).filter((name) => name.endsWith('.md') && !name.startsWith('_'))) {
+        const slug = aboutPageSlug(file);
+        const { data, body } = parseContentFile(readFileSync(join(dir, file), 'utf-8'), aboutFrontmatterSchema);
+        const { content, mediaGrids } = parseMediaGrids(`${body.trimEnd()}\n\n${technical}`);
+        const { html, toc } = renderMarkdown(content);
+        writeArticle('about', slug, { html, mediaGrids });
+        articles.push({
+            slug,
+            section: 'about',
+            title: data.title,
+            description: data.description,
+            tags: [],
+            order: aboutApps.findIndex((app) => app.slug === slug),
+            rows: slug === 'index' ? checkAboutRows(data.rows) : undefined,
+            toc,
+            related: [],
+            crossSections: [],
+        });
+    }
+    if (!articles.some((a) => a.slug === 'index')) throw new Error('The About pages need an index.md overview');
+    return articles.sort((a, b) => a.order - b.order);
+}
+
 function writeManifest(name: string, articles: ArticleMeta[]) {
     const manifest: ContentManifest = { articles };
     writeFileSync(join(OUT, `${name}.manifest.json`), JSON.stringify(manifest, null, 2));
@@ -99,9 +129,13 @@ function main() {
     mkdirSync(OUT, { recursive: true });
     const blog = buildBlog();
     const support = buildSupport();
+    const about = buildAbout();
     writeManifest('blog', blog);
     writeManifest('support', support);
-    console.log(`Content build: ${blog.length} blog posts, ${support.length} support articles`);
+    writeManifest('about', about);
+    console.log(
+        `Content build: ${blog.length} blog posts, ${support.length} support articles, ${about.length} About pages`,
+    );
 }
 
 main();
