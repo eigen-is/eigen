@@ -301,8 +301,8 @@ private assertWritableCalendar(calendarId: string) {
 }
 ```
 
-Called at the top of `createEvent`, `updateEvent`, and `deleteEvent`. Because web routes reach
-these through the home-relay (`createEventAt`/`updateEventAt`/`deleteEventAt`) and CalDAV writes
+Called at the top of `createEvent`, `updateEvent`, and `deleteEvent`. Because web routes call
+these on the `Calendar` that `checkCalendarAccess` hands them and CalDAV writes
 reach the same domain methods, one guard covers every write surface. `updateCalendar` is **not**
 guarded — `name`, `color`, `visible`, and `shares` are local metadata and stay editable on a
 subscribed calendar.
