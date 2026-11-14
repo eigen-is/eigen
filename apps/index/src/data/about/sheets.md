@@ -27,10 +27,8 @@ You can bring your `.xlsx` files. An import keeps the values, formulas, formatti
 
 Select a table and insert a chart: column, bar, line or pie. The chart reads its cells, so it changes as soon as a number does ([Add a chart to a spreadsheet](/support/sheets/add-a-chart)).
 
-::: video src="/data/about/media/sheets-chart" caption="A cost changes, and its bar beside the table grows."
-:::
-
-::: carousel caption="A festival budget with its chart, and a pie chart in dark mode."
+::: carousel
+![A cost changes, and its bar beside the table grows](/data/about/media/sheets-chart)
 ![A budget table with a column chart of the costs beside it](/data/about/media/sheets-still-budget.webp)
 ![A pie chart in dark mode](/data/about/media/sheets-still-chart.webp)
 :::
