@@ -6,18 +6,16 @@
 
 import type { Browser, BrowserContext } from 'playwright-core';
 import { THEME_COPY_KEY } from '../../../packages/lib/src/constants/theme';
-import { personaByKey } from '../../api/src/scripts/demo/content';
+import { APP_PORTS } from '../../../vite.shared.config';
+import { DEMO_MAIL_DOMAIN, emailFor, personaByKey } from '../../api/src/scripts/demo/content';
 import { CURSOR_SCRIPT } from './lib/cursor';
 import type { Scene, Stack } from './lib/scene';
-import { MAIL_DOMAIN } from './stack';
 
-// A dev origin the API trusts for a sign-in.
-const SIGN_IN_ORIGIN = 'http://localhost:3014';
+const SIGN_IN_ORIGIN = `http://localhost:${APP_PORTS.index}`;
 const SESSION_COOKIE = 'better-auth.session_token';
 
-// The persona's session token.
 export async function signIn(stack: Stack, personaKey: string): Promise<string> {
-    const email = `${personaByKey(personaKey).key}@${MAIL_DOMAIN}`;
+    const email = emailFor(personaByKey(personaKey).key, DEMO_MAIL_DOMAIN);
     const res = await fetch(`${stack.apiUrl}/auth/sign-in/email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Origin: SIGN_IN_ORIGIN },
