@@ -1,12 +1,12 @@
-// A new event starts at the next quarter hour, and an end time computed from a start wraps past midnight
-// instead of running off the clock.
+// A new event starts at the next quarter hour, an end time computed from a start wraps past midnight
+// instead of running off the clock, and a moved start keeps an end that is still after it.
 import { describe, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 // The helpers share a file with the picker, which loads Radix's popover: the later files get it as it loads here.
 installHappyDom();
 
-const { addMinutes, roundToNext15Minutes, timeToMinutes } = await import('../../components/time-select');
+const { addMinutes, endForStart, roundToNext15Minutes, timeToMinutes } = await import('../../components/time-select');
 
 describe('roundToNext15Minutes', () => {
     test('a time between quarters moves up to the next one and drops its seconds', () => {
@@ -36,4 +36,25 @@ describe('addMinutes', () => {
 test('a time that is not hh:mm reads as no time', () => {
     expect(timeToMinutes('10:05')).toBe(605);
     expect(timeToMinutes('soon')).toBe(-1);
+});
+
+describe('endForStart', () => {
+    test('an end on the next day stays when the start moves later in the evening', () => {
+        const end = { date: '2026-11-14', time: '01:00' };
+        expect(endForStart(new Date(2026, 10, 13, 22, 15), end)).toEqual(end);
+    });
+
+    test('an end less than 15 minutes after the new start moves to 30 minutes after it', () => {
+        expect(endForStart(new Date(2026, 10, 13, 10, 0), { date: '2026-11-13', time: '10:10' })).toEqual({
+            date: '2026-11-13',
+            time: '10:30',
+        });
+    });
+
+    test('an end before the new start moves past it, onto the next day near midnight', () => {
+        expect(endForStart(new Date(2026, 10, 13, 23, 45), { date: '2026-11-13', time: '23:00' })).toEqual({
+            date: '2026-11-14',
+            time: '00:15',
+        });
+    });
 });

@@ -150,6 +150,12 @@ export function endAfter(start: Date, minutes: number): { date: string; time: st
     return { date: toLocalDateString(end), time: toTimeString(end) };
 }
 
+// The end once the start moves to `start`: it stays while it is at least 15 minutes later, on any day.
+export function endForStart(start: Date, end: { date: string; time: string }): { date: string; time: string } {
+    if (new Date(`${end.date}T${end.time}`).getTime() - start.getTime() >= 15 * 60_000) return end;
+    return endAfter(start, 30);
+}
+
 export function addMinutes(time: string, minutes: number): string {
     let totalMins = timeToMinutes(time) + minutes;
     if (totalMins >= 24 * 60) totalMins -= 24 * 60;
