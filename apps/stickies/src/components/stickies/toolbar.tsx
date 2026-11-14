@@ -4,7 +4,7 @@
 
 import { useYjsUndoState } from '@workspace/lib/collab';
 import type { useCommentFilter } from '@workspace/lib/comments';
-import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
+import { EIGEN_STICKIES_COLORS, readableTextColor } from '@workspace/lib/constants/colors';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
@@ -106,7 +106,7 @@ export function Toolbar({
                                             {active && (
                                                 <Check
                                                     className="h-2 w-2"
-                                                    style={{ color: isLightColor(c.value) ? '#000' : '#fff' }}
+                                                    style={{ color: readableTextColor(c.value) }}
                                                 />
                                             )}
                                         </button>

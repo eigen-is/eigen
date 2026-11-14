@@ -4,6 +4,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { rethrowUntoasted } from '@workspace/lib/api-error';
+import { readableTextColor } from '@workspace/lib/constants/colors';
 import { useLabels } from '@workspace/lib/contacts';
 import type { Contact, CreateContactInput } from '@workspace/lib/types/contact';
 import { useHeldEtag } from '@workspace/lib/use-held-etag';
@@ -167,11 +168,13 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                                         return (
                                                             <Badge
                                                                 key={index}
-                                                                className="px-3 py-1 text-primary-foreground"
-                                                                style={{
-                                                                    backgroundColor:
-                                                                        labelObj?.color || 'var(--primary)',
-                                                                }}
+                                                                className="px-3 py-1"
+                                                                style={
+                                                                    labelObj && {
+                                                                        backgroundColor: labelObj.color,
+                                                                        color: readableTextColor(labelObj.color),
+                                                                    }
+                                                                }
                                                             >
                                                                 {labelObj?.name}
                                                                 <button
