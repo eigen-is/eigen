@@ -14,6 +14,7 @@ import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { PATHS, SERVER_DATABASES } from '../config/paths';
 import { ApiError } from '../core/errors';
 import type { DatabaseConfig, SchemaType } from '../core/managed-database';
+import { eventLoopTurn } from '../core/stream';
 import { MOUNT_DB_CONFIG } from '../mount/db-config';
 import { hashFile } from '../storage/deadline';
 import { readManifestFile } from './archive';
@@ -87,7 +88,7 @@ export async function verifyFolder(dir: string, onProgress?: BackupProgress): Pr
     const databases = listArchiveDatabases(dir, new Map(manifest.entries.map((entry) => [entry.path, entry])), fail);
     for (const [index, database] of databases.entries()) {
         // Each check blocks the thread, and a restore runs this in the API.
-        if (index > 0 && index % DATABASES_PER_YIELD === 0) await new Promise(setImmediate);
+        if (index > 0 && index % DATABASES_PER_YIELD === 0) await eventLoopTurn();
         const abs = path.join(dir, database.path);
         if (fs.existsSync(abs)) {
             try {
