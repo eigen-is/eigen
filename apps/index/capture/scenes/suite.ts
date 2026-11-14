@@ -7,12 +7,14 @@ export const suite = {
     name: 'suite',
     kind: 'still',
     theme: 'light',
-    viewport: { width: 1600, height: 1000 },
+    viewport: { width: 1280, height: 640 },
     apps: ['space'],
     personas: ['anouk'],
     run: async ({ pages: [page], stack }) => {
         await page.goto(stack.appUrl('space'));
         await page.getByText('Help and support').waitFor();
         await Bun.sleep(2500);
+        // The wordmark cycles through the apps every two seconds; the still catches it on Space's own name.
+        await page.locator('.select-none.text-3xl', { hasText: 'space' }).waitFor();
     },
 } satisfies Scene;

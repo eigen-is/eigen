@@ -1,16 +1,17 @@
 // Two people in the budget at once: the director selects the security line on her own screen, and her selection and
 // then her new number arrive live in the finance lead's. She undoes it at the end, so the loop ends where it began.
-// One film shows his side; the pair shows both screens side by side.
+// The film shows both screens side by side.
 
 import type { Scene } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 import { cellPoint, openBudget } from './budget';
 
-export const sheetsCollab = {
-    name: 'sheets-collab',
+export const sheetsCollabPair = {
+    name: 'sheets-collab-pair',
     kind: 'video',
     theme: 'light',
-    viewport: { width: 1600, height: 1000 },
+    viewport: { width: 960, height: 800 },
+    composite: 'side-by-side',
     apps: ['sheets'],
     personas: ['bram', 'anouk'],
     setup: async ({ pages, stack }) => {
@@ -34,11 +35,4 @@ export const sheetsCollab = {
         await bramCursor.moveTo(await cellPoint(bram, 'A16'), { duration: 1000 });
         await Bun.sleep(800);
     },
-} satisfies Scene;
-
-export const sheetsCollabPair = {
-    ...sheetsCollab,
-    name: 'sheets-collab-pair',
-    viewport: { width: 960, height: 800 },
-    composite: 'side-by-side',
 } satisfies Scene;
