@@ -40,7 +40,7 @@ describe('AboutOverview', () => {
     test('draws a row per app at the apps block of the body, and links and highlights only the apps that have a page', async () => {
         const html = await renderOverview();
         expect(html.match(/src="\/data\/about\/media\/row-[a-z]+\.webp"/g)).toHaveLength(10);
-        expect(html.match(/eigen-list-item/g)).toHaveLength(8);
+        expect(html.match(/eigen-list-item/g)).toHaveLength(9);
         expect(html.match(/<a [^>]*href="\/about\/[a-z]+"/g)).toEqual([
             expect.stringContaining('href="/about/mail"'),
             expect.stringContaining('href="/about/calendar"'),
@@ -48,6 +48,7 @@ describe('AboutOverview', () => {
             expect.stringContaining('href="/about/sheets"'),
             expect.stringContaining('href="/about/slides"'),
             expect.stringContaining('href="/about/vector"'),
+            expect.stringContaining('href="/about/stickies"'),
             expect.stringContaining('href="/about/chat"'),
             expect.stringContaining('href="/about/contacts"'),
         ]);

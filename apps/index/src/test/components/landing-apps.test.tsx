@@ -17,6 +17,7 @@ describe('LandingApps', () => {
             'href="/about/sheets"',
             'href="/about/slides"',
             'href="/about/vector"',
+            'href="/about/stickies"',
             'href="/about/calendar"',
             'href="/about/contacts"',
             'href="/about/chat"',
