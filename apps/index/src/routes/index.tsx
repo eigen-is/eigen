@@ -19,7 +19,6 @@ import { LandingApps } from '../components/landing-apps';
 import { LandingBlocks } from '../components/landing-blocks';
 import { LandingLinks } from '../components/landing-links';
 import { SitePage } from '../components/site-page';
-import { getAboutArticles } from '../content/manifest';
 
 export const Route = createFileRoute('/')({
     component: HomeComponent,
@@ -74,7 +73,7 @@ function HomeComponent() {
                                 </p>
                             ) : (
                                 <>
-                                    <LandingApps pages={getAboutArticles()} />
+                                    <LandingApps />
                                     <p>Works with the apps already on your phone and computer.</p>
                                     <p>Runs on your own server, with your files in open formats.</p>
                                 </>

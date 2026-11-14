@@ -1,4 +1,5 @@
-// The overview lists every app, and a row links to its app page only once that page is written.
+// The overview lists every app, and a row links to its app page only once that page is written. The pages come from
+// the built manifest, which has the sheets page.
 import { describe, expect, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
@@ -7,29 +8,24 @@ import { AboutOverview } from '../../components/about-overview';
 import { aboutApps } from '../../content/about-apps';
 import type { ArticleMeta } from '../../content/manifest';
 
-function meta(slug: string, extra: Partial<ArticleMeta> = {}): ArticleMeta {
-    return {
-        slug,
+async function renderOverview(): Promise<string> {
+    const overview: ArticleMeta = {
+        slug: 'index',
         section: 'about',
-        title: slug,
-        description: slug,
+        title: 'About eigen',
+        description: 'About eigen',
         tags: [],
         order: 0,
+        rows: Object.fromEntries(aboutApps.map((app) => [app.slug, `The line of ${app.name}`])),
         toc: [],
         related: [],
         crossSections: [],
-        ...extra,
     };
-}
-
-async function renderOverview(pages: ArticleMeta[]): Promise<string> {
-    const rows = Object.fromEntries(aboutApps.map((app) => [app.slug, `The line of ${app.name}`]));
-    const overview = meta('index', { title: 'About eigen', rows });
     const router = createRouter({
         routeTree: createRootRoute({
             component: () => (
                 <QueryClientProvider client={new QueryClient()}>
-                    <AboutOverview overview={overview} body={{ html: '<p>Intro</p>', mediaGrids: [] }} pages={pages} />
+                    <AboutOverview overview={overview} body={{ html: '<p>Intro</p>', mediaGrids: [] }} />
                 </QueryClientProvider>
             ),
         }),
@@ -41,7 +37,7 @@ async function renderOverview(pages: ArticleMeta[]): Promise<string> {
 
 describe('AboutOverview', () => {
     test('draws a row per app, and links and highlights only the apps that have a page', async () => {
-        const html = await renderOverview([meta('sheets')]);
+        const html = await renderOverview();
         expect(html.match(/src="\/data\/about\/media\/row-[a-z]+\.webp"/g)).toHaveLength(10);
         expect(html.match(/eigen-list-item/g)).toHaveLength(1);
         expect(html.match(/<a [^>]*href="\/about\/[a-z]+"/g)).toEqual([

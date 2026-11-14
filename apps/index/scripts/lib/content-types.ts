@@ -1,14 +1,13 @@
 // The shapes of the site's generated content: the frontmatter a help article, a blog post or an About page must
-// have, and the manifests, bodies, changelog and license lists the build writes. The build scripts and the pages share them,
-// so a field added here reaches both.
+// have, and the manifests, bodies, changelog and license lists the build writes. The build scripts and the pages
+// share them, so a field added here reaches both.
 
 import { z } from 'zod';
 import type { MediaGridData } from '../../src/components/parse-media-grids';
 
 // A heading in an article, used to build the on-this-page table of contents.
-export type TocEntry = { id: string; text: string; level: 2 | 3 };
+export type TocEntry = { id: string; text: string; level: number };
 
-// Support article frontmatter — validated at build time.
 export const supportFrontmatterSchema = z.object({
     title: z.string().min(1),
     description: z.string().min(1),
@@ -25,9 +24,8 @@ export const supportFrontmatterSchema = z.object({
         .optional(),
     draft: z.boolean().default(false),
 });
-export type SupportFrontmatter = z.infer<typeof supportFrontmatterSchema>;
 
-// Blog post frontmatter — the blog keeps id-as-slug; date comes from the filename.
+// Blog post frontmatter. The id is the post's slug, and its date comes from the file name.
 export const blogFrontmatterSchema = z.object({
     id: z.string().min(1),
     title: z.string().min(1),
@@ -36,7 +34,6 @@ export const blogFrontmatterSchema = z.object({
     cover: z.string().startsWith('/').optional(),
     draft: z.boolean().default(false),
 });
-export type BlogFrontmatter = z.infer<typeof blogFrontmatterSchema>;
 
 // About page frontmatter. The app comes from the file name and the order from the app registry, so a field such as
 // `order` or `draft` is refused rather than ignored.
@@ -51,21 +48,22 @@ export const aboutFrontmatterSchema = z
 
 // One article in a generated manifest (metadata only, no body).
 export type ArticleMeta = {
-    slug: string; // support: "<section>/<file>"; blog: the frontmatter id; about: the app, or "index"
-    section: string; // support: the folder; blog: "blog"; about: "about"
+    slug: string;
+    section: string;
     title: string;
     description: string;
-    type?: SupportFrontmatter['type'];
+    type?: string;
     category?: string;
     tags: string[];
     order: number;
     updated?: string;
-    date?: string; // blog only — YYYY-MM-DD from the filename
-    cover?: string; // blog only — the post's cover image
-    rows?: Record<string, string>; // the About overview only — a line per app
+    // A blog post's date and cover, and the About overview's line per app.
+    date?: string;
+    cover?: string;
+    rows?: Record<string, string>;
     toc: TocEntry[];
-    related: string[]; // resolved slugs
-    crossSections: string[]; // support: extra sections this article is also listed in
+    related: string[];
+    crossSections: string[];
 };
 
 export type ContentManifest = { articles: ArticleMeta[] };
@@ -78,12 +76,12 @@ export type ArticleBody = { html: string; mediaGrids: MediaGridData[] };
 export type ChangelogVersion = { id: string; version: string; date?: string };
 export type ChangelogBody = ArticleBody & { versions: ChangelogVersion[] };
 
-// The generated open-source license list (one entry per package), written by build-licenses.ts.
+// One package in the generated open-source license list.
 export type LicensePackage = { name: string; version: string; license: string; url: string };
 
-// Projects eigen ports or forks code from without depending on them, so the dependency walk
-// cannot find them. Hardcoded in build-licenses.ts; `note` says what was taken.
+// A project eigen ports or forks code from without depending on it, which the dependency walk cannot find. `note`
+// says what was taken.
 export type LicenseVendored = { name: string; license: string; url: string; note: string };
 
-// The fonts packages/ui bundles. Each folder under packages/ui/src/assets/fonts holds its OFL.txt.
+// A font the UI package bundles, each with its OFL.txt beside it.
 export type LicenseFont = Omit<LicenseVendored, 'note'>;

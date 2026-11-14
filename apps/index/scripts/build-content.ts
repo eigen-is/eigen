@@ -5,7 +5,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { parseMediaGrids } from '../src/components/parse-media-grids';
-import { aboutApps, aboutPageSlug, checkAboutRows } from '../src/content/about-apps';
+import { aboutApps } from '../src/content/about-apps';
+import { aboutPageSlug, checkAboutRows } from './lib/about-pages';
 import type { ArticleBody, ArticleMeta, ContentManifest } from './lib/content-types';
 import { aboutFrontmatterSchema, blogFrontmatterSchema, supportFrontmatterSchema } from './lib/content-types';
 import { parseContentFile } from './lib/frontmatter';
@@ -90,33 +91,36 @@ function buildBlog(): ArticleMeta[] {
     return articles.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
 }
 
-// The overview and one page per app. Every page ends with the shared block for the technical reader, appended before
-// the render so its heading joins the table of contents.
+// The overview first, then one page per app in the registry's order. Every page ends with the shared block for the
+// technical reader, appended before the render so its heading joins the table of contents.
 function buildAbout(): ArticleMeta[] {
     const dir = join(DATA, 'about');
     const technical = readFileSync(join(dir, '_technical.md'), 'utf-8');
-    const articles: ArticleMeta[] = [];
+    let overview: ArticleMeta | undefined;
+    const pages: ArticleMeta[] = [];
     for (const file of readdirSync(dir).filter((name) => name.endsWith('.md') && !name.startsWith('_'))) {
         const slug = aboutPageSlug(file);
         const { data, body } = parseContentFile(readFileSync(join(dir, file), 'utf-8'), aboutFrontmatterSchema);
+        if (slug !== 'index' && data.rows) throw new Error(`About page ${file} has rows, which only index.md takes`);
         const { content, mediaGrids } = parseMediaGrids(`${body.trimEnd()}\n\n${technical}`);
         const { html, toc } = renderMarkdown(content);
         writeArticle('about', slug, { html, mediaGrids });
-        articles.push({
+        const article: ArticleMeta = {
             slug,
             section: 'about',
             title: data.title,
             description: data.description,
             tags: [],
             order: aboutApps.findIndex((app) => app.slug === slug),
-            rows: slug === 'index' ? checkAboutRows(data.rows) : undefined,
             toc,
             related: [],
             crossSections: [],
-        });
+        };
+        if (slug === 'index') overview = { ...article, rows: checkAboutRows(data.rows) };
+        else pages.push(article);
     }
-    if (!articles.some((a) => a.slug === 'index')) throw new Error('The About pages need an index.md overview');
-    return articles.sort((a, b) => a.order - b.order);
+    if (!overview) throw new Error('The About pages need an index.md overview');
+    return [overview, ...pages.sort((a, b) => a.order - b.order)];
 }
 
 function writeManifest(name: string, articles: ArticleMeta[]) {

@@ -37,12 +37,21 @@ export function AboutPage({ app, page, body, previous, next }: AboutPageProps) {
                 </article>
                 <nav className="mt-14 grid grid-cols-2 gap-6 border-t pt-6">
                     {previous ? (
-                        <PagerLink label="Previous" title={previous.title} to={`/about/${previous.slug}`} />
+                        <PagerLink
+                            label="Previous"
+                            title={previous.title}
+                            link={{ to: '/about/$app', params: { app: previous.slug } }}
+                        />
                     ) : (
                         <span />
                     )}
                     {next ? (
-                        <PagerLink label="Next" title={next.title} to={`/about/${next.slug}`} className="text-right" />
+                        <PagerLink
+                            label="Next"
+                            title={next.title}
+                            link={{ to: '/about/$app', params: { app: next.slug } }}
+                            className="text-right"
+                        />
                     ) : (
                         <span />
                     )}

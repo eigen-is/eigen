@@ -6,7 +6,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useMemo, useState } from 'react';
 
 // An h2 of an article, or a release of the changelog with its short date as the detail.
-export type TocItem = { id: string; text: string; level?: 2 | 3; detail?: string };
+export type TocItem = { id: string; text: string; level?: number; detail?: string };
 
 type ArticleTocProps = {
     toc: TocItem[];
