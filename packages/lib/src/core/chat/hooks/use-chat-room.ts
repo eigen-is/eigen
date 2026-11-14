@@ -28,14 +28,12 @@ import { useAutoMarkChatRead } from './use-chat-unread';
 
 let localIdCounter = 0;
 
-// `containerPathId` is set for a comment thread. It is the document the thread comments on, and the
-// thread's notifications are tagged with it. A standalone chat is tagged with itself.
 export type ChatRoomState = {
-    messages: ChatMessage[];
+    messages: readonly ChatMessage[];
     isLoading: boolean;
     chatName: string;
     chatPath: DrivePath | null | undefined;
-    roomMembers: RoomMember[];
+    roomMembers: readonly RoomMember[];
     readOnly: boolean;
     disabled: boolean;
     currentUserEmail: string;
@@ -46,11 +44,13 @@ export type ChatRoomState = {
     hasOlderMessages: boolean;
     isFetchingOlderMessages: boolean;
     fetchOlderMessages: UseInfiniteQueryResult<InfiniteData<ChatMessage[]>>['fetchNextPage'];
-    driveAttachments: ChatAttachment[];
+    driveAttachments: readonly ChatAttachment[];
     addDriveAttachments: (paths: readonly DrivePath[]) => Promise<void>;
     removeDriveAttachment: (attachment: ChatAttachment) => void;
 };
 
+// `containerPathId` is set for a comment thread. It is the document the thread comments on, and the
+// thread's notifications are tagged with it. A standalone chat is tagged with itself.
 export function useChatRoom(ownerId: string, mountId: string, chatId: string, containerPathId?: string): ChatRoomState {
     const { user } = useAuth();
 

@@ -1,3 +1,7 @@
+// The query keys of chat rooms and comment threads, and the invalidations the chat hooks and the SSE handlers call
+// when a message, a thread or a room's sharing changes. Every key starts with the owner, so personal and team chats
+// keep apart.
+
 import type { QueryClient } from '@tanstack/react-query';
 
 export const chatKeys = {
@@ -6,8 +10,8 @@ export const chatKeys = {
     messages: (ownerId: string, mountId: string, chatId: string) =>
         [...chatKeys.owner(ownerId), 'messages', mountId, chatId] as const,
     byMembersAll: (ownerId: string) => [...chatKeys.owner(ownerId), 'by-members'] as const,
-    // Lowercased + sorted so member order and case don't fork the cache entry.
-    byMembers: (ownerId: string, emails: string[]) =>
+    // Lowercased and sorted, so member order and case don't split the cache entry.
+    byMembers: (ownerId: string, emails: readonly string[]) =>
         [...chatKeys.byMembersAll(ownerId), emails.map((e) => e.toLowerCase()).sort()] as const,
 };
 
@@ -20,14 +24,12 @@ export const commentKeys = {
         [...commentKeys.container(ownerId, mountId, containerId), 'list'] as const,
 };
 
-// SSE invalidation functions
 export function invalidateMessages(queryClient: QueryClient, ownerId: string, mountId: string, chatId: string): void {
     queryClient.invalidateQueries({ queryKey: chatKeys.messages(ownerId, mountId, chatId) });
 }
 
-// By-members matches derive from ACLs, breadcrumbs and liveness, which change via drive events —
-// the drive SSE handler calls this so a cached lookup can't keep serving a trashed or re-shared
-// chat for its 30s staleTime.
+// A match depends on sharing, folders and the trash, which drive events change, so a cached lookup would otherwise
+// offer a trashed or re-shared chat until it goes stale.
 export function invalidateChatMatches(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: chatKeys.byMembersAll(ownerId) });
 }

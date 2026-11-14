@@ -4,11 +4,12 @@
 
 import { useAuth } from '@workspace/lib/auth';
 import { useStartChatWith } from '@workspace/lib/chat';
-import { contactFullName, useExportContacts } from '@workspace/lib/contacts';
+import { useExportContacts } from '@workspace/lib/contacts';
 import { useOpenWriteEmailTo } from '@workspace/lib/mail';
 import { useMailEnabled } from '@workspace/lib/public';
 import type { AuthUser } from '@workspace/lib/types/auth';
 import type { Contact } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { ChatCreateWizard } from '@workspace/ui/components/chat';
 import { EXPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';

@@ -2,8 +2,9 @@
 // entry. The user's own contact card wins, then the server's public profile, then what the caller passed.
 
 import { API_HOST, getPublicAvatarUrl } from '@workspace/lib/api';
-import { contactFullName, findContactByEmail, useContacts } from '@workspace/lib/contacts';
-import { parseOwnerId, UNRESOLVED_TEAM_LABEL } from '@workspace/lib/types';
+import { useContacts } from '@workspace/lib/contacts';
+import { contactFullName, findContactByEmail } from '@workspace/lib/types/contact';
+import { parseOwnerId, UNRESOLVED_TEAM_LABEL } from '@workspace/lib/types/owner';
 import { usePublicUser } from './use-public';
 
 type UseResolvedUserParams = {

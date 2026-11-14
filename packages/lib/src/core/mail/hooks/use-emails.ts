@@ -17,8 +17,8 @@ import { emailKeys, invalidateMailboxes } from './keys';
 
 const MAIL_PAGE_SIZE = 200;
 
-// Newest-first paginated mailbox. Composite cursor (beforeDate=epoch MS, beforeId) matches the
-// server's date-desc/id-desc order.
+// The server sorts by date and then id, newest first, so a page's cursor is its oldest message's date in epoch
+// milliseconds together with its id.
 export function useEmails(
     mailboxPath: string,
 ): UseInfiniteQueryResult<InfiniteData<EmailSummary[]>> & { emails: EmailSummary[] } {
@@ -33,8 +33,8 @@ export function useEmails(
                 q.beforeDate = pageParam.beforeDate;
                 q.beforeId = pageParam.beforeId;
             }
-            // Verbatim: the caller passes a route segment, which already spells the mailbox the way
-            // the server reads it — lowercasing here would lose a custom folder's case.
+            // The route segment already spells the mailbox as the server reads it, and lowercasing it would lose a
+            // custom folder's case.
             const response = await mailApi({ ownerId }).mailbox({ mailboxPath }).get({ query: q });
             if (response.error) throw new AppError(response);
             return response.data;
@@ -126,7 +126,7 @@ export function useDeleteEmail() {
                 queryClient.removeQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             } else {
                 queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
-                // Moved to Trash — the Trash list wasn't optimistically patched, so refresh it.
+                // The Trash list was not patched ahead of the server, so it reloads to show the message.
                 queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, MAILBOX_TRASH) });
             }
             invalidateMailboxes(queryClient, ownerId);
@@ -227,8 +227,7 @@ export function useMoveEmail() {
             beginOptimisticMailMutation(queryClient, ownerId, email.id, 'remove', SSEventType.MAIL_MOVED),
         onSuccess: (email, variables) => {
             queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
-            // The target list wasn't optimistically patched (only the source row was removed) — refresh it
-            // so the moved message appears there. Usually unmounted → marked stale, refetches on next visit.
+            // Only the source list was patched ahead of the server, so the target list reloads to show the message.
             queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, variables.mailbox) });
             invalidateMailboxes(queryClient, ownerId);
         },
@@ -239,11 +238,10 @@ export function useMoveEmail() {
     });
 }
 
-export function useOpenWriteEmailTo(): (addresses: string | string[]) => void {
-    // One address or several: several join into the compose `to` field as a comma-separated list,
-    // which the composer parses back into one recipient per address.
-    return (addresses: string | string[]) => {
-        const to = Array.isArray(addresses) ? addresses.join(', ') : addresses;
+export function useOpenWriteEmailTo(): (addresses: string | readonly string[]) => void {
+    // Several addresses join into one comma-separated `to` field, which the composer splits back into recipients.
+    return (addresses) => {
+        const to = typeof addresses === 'string' ? addresses : addresses.join(', ');
         window.location.href = getMailComposeUrl(to);
     };
 }
@@ -251,8 +249,7 @@ export function useOpenWriteEmailTo(): (addresses: string | string[]) => void {
 type EmailListPatch = ((email: EmailSummary) => EmailSummary) | 'remove';
 type MailMutationContext = { snapshot: [readonly unknown[], InfiniteData<EmailSummary[]> | undefined][] };
 
-// Every mail mutation patches the cached lists before the server answers: it cancels their fetches,
-// snapshots them for the rollback it returns, patches the row and records the echo to skip.
+// The fetches are cancelled before the snapshot, so a page that lands late can't overwrite the patch.
 async function beginOptimisticMailMutation(
     queryClient: QueryClient,
     ownerId: string,
@@ -276,8 +273,8 @@ function rollbackMailMutation(queryClient: QueryClient, context: MailMutationCon
     if (context) for (const [key, data] of context.snapshot) queryClient.setQueryData(key, data);
 }
 
-// Patch a row by id across every cached list, whatever mailbox key it sits under.
-// Lists are infinite queries, so patch each loaded page and keep refs stable when unchanged.
+// A message may sit in the cached list of any mailbox, so every loaded page of every list is patched. A page that
+// doesn't change keeps its reference, so its rows don't render again.
 function patchEmailInLists(queryClient: QueryClient, ownerId: string, messageId: string, patch: EmailListPatch): void {
     queryClient.setQueriesData<InfiniteData<EmailSummary[]>>({ queryKey: emailKeys.lists(ownerId) }, (data) => {
         if (!data) return data;

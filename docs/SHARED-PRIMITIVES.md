@@ -1578,8 +1578,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseUnicodeRange` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
 | `slicesFor` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
 | `sliceStyle` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
-| `contactFullName` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/contact-names.ts |
-| `findContactByEmail` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/contact-names.ts |
 | `handleContactsSSEvent` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/sse-handlers.ts |
 | `escapeContentText` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
 | `foldLine` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
@@ -1890,6 +1888,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `celebrationsOn` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
+| `contactFullName` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `CONVERT_SOURCES` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `describeFileEvent` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
@@ -1919,6 +1918,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EXPORT_SUMMARY_HEADER` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
 | `exportFormatsFor` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `externalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `findContactByEmail` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `getEigenDocInfoByMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `getEigenDocInfoByType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `ICS_ACCEPT` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |

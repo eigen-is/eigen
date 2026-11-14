@@ -5,8 +5,9 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { readableTextColor } from '@workspace/lib/constants/colors';
-import { contactFullName, useLabels } from '@workspace/lib/contacts';
+import { useLabels } from '@workspace/lib/contacts';
 import type { Contact, CreateContactInput } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import { useHeldEtag } from '@workspace/lib/use-held-etag';
 import { AvatarEditor } from '@workspace/ui/components/avatar-editor';
 import { Badge } from '@workspace/ui/components/badge';

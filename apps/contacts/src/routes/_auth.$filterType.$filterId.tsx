@@ -5,7 +5,6 @@
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
-    contactFullName,
     useContacts,
     useDeleteContact,
     useImportContacts,
@@ -15,6 +14,7 @@ import {
 } from '@workspace/lib/contacts';
 import { useMyTeams } from '@workspace/lib/home';
 import type { Contact } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import { isVCardFile, VCARD_ACCEPT } from '@workspace/lib/types/file-kinds';
 import { IMPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';
 import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
