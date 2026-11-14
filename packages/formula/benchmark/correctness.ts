@@ -1,17 +1,16 @@
-// Judges one engine on every recorded row: the formula goes into cell U21 of the row's sheets in a fresh engine,
-// and its value is compared with Excel's by the oracle's own rule, numbers at 15 significant digits. An array is
-// judged by its size and each element, each read through INDEX in a fresh engine, as the oracle does. formulajs is
-// judged only on the rows that are one call with plain literal arguments. The run starts one process per engine.
+// Judges one engine on every recorded row, or on every n-th for a quick look: the formula goes into cell U21 of the
+// row's sheets in a fresh engine, and its value is compared with Excel's by the oracle's own rule, numbers at 15
+// significant digits. An array is judged by its size and each element, each read through INDEX in a fresh engine,
+// as the oracle does. The run starts one process per engine.
 
 import * as fs from 'node:fs';
 import { parseArgs } from 'node:util';
 import type { Expected } from '../scripts/oracle-rows';
 import { equalsRecorded } from '../scripts/oracle-rows';
 import type { Literal } from '../src/index';
-import type { FormulaNode } from '../src/text';
-import { NodeKind, parseA1, parseA1Range, Token } from '../src/text';
+import { parseA1Range } from '../src/text';
 import type { CellEngine, Input, SheetInput, Value } from './engines';
-import { formulajsFunction, formulajsValue, HyperFormulaEngine, OursEngine } from './engines';
+import { HyperFormulaEngine, IRONCALC_UNKNOWN, IronCalcEngine, OursEngine, UniverEngine } from './engines';
 import type { DataRow, RowSheet } from './rows';
 import { readData } from './rows';
 
@@ -19,15 +18,10 @@ export const VERDICTS = ['equal', 'differs', 'not supported', 'crashed'] as cons
 export type Verdict = (typeof VERDICTS)[number];
 
 const [HOST_ROW, HOST_COLUMN] = [20, 20];
-// An engine that answers these where Excel did not lacks the function or the syntax.
-const UNSUPPORTED = new Set(['#NAME?', '#ERROR!']);
+// An engine that answers these where Excel did not lacks the function or the syntax. IronCalc has an error of its own
+// for a function it knows but does not implement.
+const UNSUPPORTED = new Set(['#NAME?', '#ERROR!', ...IRONCALC_UNKNOWN]);
 
-type SingleCall = {
-    readonly place: number;
-    readonly expected: Expected;
-    readonly name: string;
-    readonly args: readonly unknown[];
-};
 type Check = { readonly formula: string; readonly equal: (value: Value) => boolean; readonly wanted: string };
 
 function sheetInputs(sheets: readonly RowSheet[], formula: string): SheetInput[] {
@@ -94,74 +88,54 @@ function worst(verdicts: readonly Verdict[]): Verdict {
     return 'equal';
 }
 
-// One row on a cell engine: each check in a fresh engine, the worst verdict of them.
-export function judgeRow(
+// One row on one engine: each check in a fresh engine, the worst verdict of them.
+async function judgeRow(
     make: () => CellEngine,
     row: DataRow,
     fixtures: readonly (readonly RowSheet[])[],
     equals: (value: Literal | null, expected: Expected) => boolean,
-): Verdict {
-    const verdicts = checksOf(row, equals).map((check) => {
+): Promise<Verdict> {
+    const verdicts: Verdict[] = [];
+    for (const check of checksOf(row, equals)) {
         try {
             const engine = make();
             engine.load(sheetInputs(fixtures[row[1]], check.formula));
-            engine.recalc();
-            return verdictOf(engine.read(0, HOST_ROW, HOST_COLUMN), check);
+            await engine.recalc();
+            verdicts.push(verdictOf(engine.read(0, HOST_ROW, HOST_COLUMN), check));
         } catch {
-            return 'crashed' as const;
+            verdicts.push('crashed');
         }
-    });
+    }
     return worst(verdicts);
 }
 
-// A literal argument as formulajs takes it, or undefined for anything else.
-function literalOf(node: FormulaNode): number | string | boolean | undefined {
-    if (node.kind === NodeKind.Number) return node.value;
-    if (node.kind === NodeKind.String) return node.text;
-    if (node.kind === NodeKind.Boolean) return node.value === 1;
-    if (node.kind === NodeKind.Prefix && node.op === Token.Minus && node.children[0].kind === NodeKind.Number)
-        return -node.children[0].value;
-    return undefined;
+// The rows a run judges: every row, or for a quick look every `every`-th by its place in the file.
+export function sampled(place: number, every: number): boolean {
+    return place % every === 0;
 }
 
-// The rows that are one call of a function with plain literal arguments: their place, name and arguments.
-export function singleCalls(rows: readonly DataRow[]): SingleCall[] {
-    const calls: SingleCall[] = [];
-    for (const [place, row] of rows.entries()) {
-        const [, , formula, expected] = row;
-        if ('rows' in expected) continue;
-        const tree = parseA1(formula, HOST_ROW, HOST_COLUMN, () => undefined);
-        if ('reason' in tree || tree.kind !== NodeKind.Call) continue;
-        const args = tree.children.map(literalOf);
-        if (args.every((arg) => arg !== undefined)) calls.push({ place, expected, name: tree.text, args });
-    }
-    return calls;
-}
-
-export function judgeCall(
-    { expected, name, args }: SingleCall,
-    equals: (value: Literal | null, expected: Expected) => boolean,
-): Verdict {
-    const call = formulajsFunction(name);
-    if (call === undefined) return 'not supported';
-    try {
-        const equal = (value: Value) => equals(value, expected);
-        return verdictOf(formulajsValue(call(...args)), { formula: name, equal, wanted: expected.text });
-    } catch {
-        return 'crashed';
-    }
-}
+const MAKE: Readonly<Record<string, () => CellEngine>> = {
+    ours: () => new OursEngine(),
+    hyperformula: () => new HyperFormulaEngine(),
+    ironcalc: () => new IronCalcEngine(),
+    univer: () => new UniverEngine(),
+};
 
 // A child process judges one engine from a row on and prints a line per row as it is done, its place and verdict,
 // so the run can tell a row that never answers and go on after it.
 if (import.meta.main) {
-    const { values } = parseArgs({ options: { engine: { type: 'string' }, from: { type: 'string', default: '0' } } });
+    const { values } = parseArgs({
+        options: {
+            engine: { type: 'string', default: '' },
+            from: { type: 'string', default: '0' },
+            every: { type: 'string', default: '1' },
+        },
+    });
     const { header, rows } = readData();
     const from = Number(values.from);
-    const make = () => (values.engine === 'ours' ? new OursEngine() : new HyperFormulaEngine());
-    const jobs: [number, () => Verdict][] =
-        values.engine === 'formulajs'
-            ? singleCalls(rows).map((call) => [call.place, () => judgeCall(call, equalsRecorded)])
-            : rows.map((row, place) => [place, () => judgeRow(make, row, header.fixtures, equalsRecorded)]);
-    for (const [place, judge] of jobs) if (place >= from) fs.writeSync(1, `${place}\t${judge()}\n`);
+    const every = Number(values.every);
+    const make = MAKE[values.engine];
+    for (const [place, row] of rows.entries())
+        if (place >= from && sampled(place, every))
+            fs.writeSync(1, `${place}\t${await judgeRow(make, row, header.fixtures, equalsRecorded)}\n`);
 }

@@ -1,26 +1,29 @@
 // What each engine covers: how many of Excel's functions it registers, and a yes or no per language feature, each
-// found by running a probe formula and reading the answer, never from a feature list. formulajs has no parser and
-// no cells, so it has no language features; only its function names count. The run calls it in its own process.
+// found by running a probe formula and reading the answer, never from a feature list. IronCalc lists no function
+// names, so a probe call finds its functions too. The run calls it in its own process.
 
 import { HyperFormula } from 'hyperformula';
 import { EXCEL_2007_FUNCTIONS, EXCEL_FUTURE_FUNCTIONS } from '../src/functions/excel-names';
 import { FUNCTIONS } from '../src/index';
 import type { CellEngine, Input, SheetInput, Value } from './engines';
-import { formulajsNames, HyperFormulaEngine, OursEngine } from './engines';
+import { HyperFormulaEngine, IronCalcEngine, ironcalcNames, OursEngine, UniverEngine, univerNames } from './engines';
+import type { EngineName } from './speed';
 
-export type FunctionCount = { readonly excel: number; readonly other: number };
+export type Partner = Exclude<EngineName, 'ours'>;
+// `other` is null for an engine whose names are found by probing Excel's, which finds no other names.
+export type FunctionCount = { readonly excel: number; readonly other: number | null };
 export type Feature = {
     readonly name: string;
     readonly probe: string;
-    readonly answers: Readonly<Record<'ours' | 'hyperformula', string>>;
-    readonly passes: Readonly<Record<'ours' | 'hyperformula', boolean>>;
+    readonly answers: Readonly<Record<EngineName, string>>;
+    readonly passes: Readonly<Record<EngineName, boolean>>;
 };
 export type Coverage = {
     readonly excel: number;
-    readonly functions: Readonly<Record<'ours' | 'hyperformula' | 'formulajs', FunctionCount>>;
-    // Excel's functions that HyperFormula registers and ours does not, and the other way round.
-    readonly onlyHyperformula: readonly string[];
-    readonly onlyOurs: readonly string[];
+    readonly functions: Readonly<Record<EngineName, FunctionCount>>;
+    // Per other engine, Excel's functions it registers and ours does not, and the other way round.
+    readonly onlyTheirs: Readonly<Record<Partner, readonly string[]>>;
+    readonly onlyOurs: Readonly<Record<Partner, readonly string[]>>;
     readonly features: readonly Feature[];
 };
 
@@ -143,47 +146,78 @@ function shown(value: Value): string {
     return typeof value === 'string' ? `"${value}"` : String(value);
 }
 
-function count(names: Iterable<string>, excel: ReadonlySet<string>): FunctionCount {
-    const unique = new Set([...names].map((name) => name.toUpperCase()));
-    const known = [...unique].filter((name) => excel.has(name)).length;
-    return { excel: known, other: unique.size - known };
+function upper(names: Iterable<string>): Set<string> {
+    return new Set([...names].map((name) => name.toUpperCase()));
 }
 
-export function coverage(): Coverage {
+function count(names: ReadonlySet<string>, excel: ReadonlySet<string>, probed = false): FunctionCount {
+    const known = [...names].filter((name) => excel.has(name)).length;
+    return { excel: known, other: probed ? null : names.size - known };
+}
+
+async function run(engine: CellEngine, { sheets, edit, read, wanted }: Probe) {
+    try {
+        engine.load(sheets);
+        await engine.recalc();
+        edit?.(engine);
+        await engine.recalc();
+        const value = engine.read(...read);
+        return { answer: shown(value), passes: wanted(value) };
+    } catch (error) {
+        return { answer: `throws: ${String(error).slice(0, 60)}`, passes: false };
+    }
+}
+
+export async function coverage(): Promise<Coverage> {
     const excel = new Set([...EXCEL_FUTURE_FUNCTIONS, ...EXCEL_2007_FUNCTIONS]);
-    const hyperformula = HyperFormula.getRegisteredFunctionNames('enGB');
-    const ours = new Set(FUNCTIONS.keys());
-    const theirs = new Set(hyperformula.map((name) => name.toUpperCase()));
-    const features = PROBES.map(({ name, probe, sheets, edit, read, wanted }) => {
-        const run = (engine: CellEngine) => {
-            try {
-                engine.load(sheets);
-                engine.recalc();
-                edit?.(engine);
-                engine.recalc();
-                const value = engine.read(...read);
-                return { answer: shown(value), passes: wanted(value) };
-            } catch (error) {
-                return { answer: `throws: ${String(error).slice(0, 60)}`, passes: false };
-            }
+    const ours = upper(FUNCTIONS.keys());
+    const names: Record<Partner, ReadonlySet<string>> = {
+        hyperformula: upper(HyperFormula.getRegisteredFunctionNames('enGB')),
+        ironcalc: upper(ironcalcNames(excel)),
+        univer: upper(univerNames()),
+    };
+    const features: Feature[] = [];
+    for (const probe of PROBES) {
+        const runs = {
+            ours: await run(new OursEngine(), probe),
+            hyperformula: await run(new HyperFormulaEngine(), probe),
+            ironcalc: await run(new IronCalcEngine(), probe),
+            univer: await run(new UniverEngine(), probe),
         };
-        const [oursRun, theirRun] = [run(new OursEngine()), run(new HyperFormulaEngine())];
-        return {
-            name,
-            probe,
-            answers: { ours: oursRun.answer, hyperformula: theirRun.answer },
-            passes: { ours: oursRun.passes, hyperformula: theirRun.passes },
-        };
+        features.push({
+            name: probe.name,
+            probe: probe.probe,
+            answers: {
+                ours: runs.ours.answer,
+                hyperformula: runs.hyperformula.answer,
+                ironcalc: runs.ironcalc.answer,
+                univer: runs.univer.answer,
+            },
+            passes: {
+                ours: runs.ours.passes,
+                hyperformula: runs.hyperformula.passes,
+                ironcalc: runs.ironcalc.passes,
+                univer: runs.univer.passes,
+            },
+        });
+    }
+    const only = (from: ReadonlySet<string>, without: ReadonlySet<string>) =>
+        [...from].filter((name) => excel.has(name) && !without.has(name)).sort();
+    const partners = (pick: (theirs: ReadonlySet<string>) => readonly string[]) => ({
+        hyperformula: pick(names.hyperformula),
+        ironcalc: pick(names.ironcalc),
+        univer: pick(names.univer),
     });
     return {
         excel: excel.size,
         functions: {
             ours: count(ours, excel),
-            hyperformula: count(hyperformula, excel),
-            formulajs: count(formulajsNames(), excel),
+            hyperformula: count(names.hyperformula, excel),
+            ironcalc: count(names.ironcalc, excel, true),
+            univer: count(names.univer, excel),
         },
-        onlyHyperformula: [...theirs].filter((name) => excel.has(name) && !ours.has(name)).sort(),
-        onlyOurs: [...ours].filter((name) => excel.has(name) && !theirs.has(name)).sort(),
+        onlyTheirs: partners((theirs) => only(theirs, ours)),
+        onlyOurs: partners((theirs) => only(ours, theirs)),
         features,
     };
 }

@@ -1,5 +1,6 @@
 {
-  "generated": "2026-11-13",
+  "generated": "2026-11-14",
+  "quick": false,
   "machine": {
     "cpu": "Apple M1 Pro",
     "cores": 10,
@@ -10,7 +11,8 @@
     "bun": "1.4.4",
     "node": "v24.15.0",
     "hyperformula": "3.5.0",
-    "formulajs": "4.6.1"
+    "ironcalc": "0.9.1",
+    "univer": "1.4.0"
   },
   "hyperformulaConfig": {
     "licenseKey": "gpl-v3",
@@ -46,15 +48,16 @@
   "speed": {
     "node": {
       "runtime": "node",
+      "scale": 1,
       "rounds": 5,
       "reps": 3,
       "load": {
-        "before": "3.09 3.40 3.39",
-        "after": "4.49 4.28 3.98",
-        "highest": 5.5869140625,
+        "before": "3.51 2.80 2.88",
+        "after": "2.49 2.68 2.69",
+        "highest": 5.39599609375,
         "discarded": 0
       },
-      "seconds": 1622,
+      "seconds": 6743,
       "rows": [
         {
           "workload": "load and compute 300,000 formulas",
@@ -64,16 +67,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 421.617125,
-              "median": 437.66258400000004
+              "min": 425.28045799999995,
+              "median": 430.70062499999995,
+              "step": 369.362791
             },
             "hyperformula": {
               "status": "measured",
-              "min": 2482.260042,
-              "median": 2488.850791
+              "min": 2402.6215,
+              "median": 2424.1652919999997,
+              "step": 2424.147417
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 8460.47825,
+              "median": 8705.610125000001,
+              "step": 8222.988875000001
+            },
+            "univer": {
+              "status": "measured",
+              "min": 16904.840958,
+              "median": 17009.174165999997,
+              "step": 253.63195800000176
             }
           }
         },
@@ -85,16 +99,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 0.3858339999999316,
-              "median": 0.4064169999999194
+              "min": 0.4027499999999691,
+              "median": 0.4034589999998843,
+              "step": 0.023374999999987267
             },
             "hyperformula": {
               "status": "measured",
-              "min": 0.19845900000018446,
-              "median": 0.24804200000016863
+              "min": 0.2035409999998592,
+              "median": 0.20650000000023283,
+              "step": 0.20408399999996618
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 322.74374999999964,
+              "median": 323.5422920000001,
+              "step": 0.07633300000088639
+            },
+            "univer": {
+              "status": "measured",
+              "min": 6765.510666999999,
+              "median": 6808.883540999999,
+              "step": 2.0069169999987935
             }
           }
         },
@@ -106,16 +131,25 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 13.677875000000029,
-              "median": 14.351167000000032
+              "min": 13.419542000000035,
+              "median": 13.480874999999969,
+              "step": 0.019083000000023276
             },
             "hyperformula": {
               "status": "measured",
-              "min": 128.04983300000004,
-              "median": 130.1329999999998
+              "min": 124.05004100000042,
+              "median": 127.05970799999977,
+              "step": 127.04770799999915
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 59.457042,
+              "median": 61.1122919999998,
+              "step": 0.047000000000025466
+            },
+            "univer": {
+              "status": "too slow",
+              "note": "one run took 352 s"
             }
           }
         },
@@ -127,16 +161,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 51.02366699999999,
-              "median": 52.36737500000001
+              "min": 53.049792000000025,
+              "median": 57.229333999999994,
+              "step": 44.57191700000004
             },
             "hyperformula": {
               "status": "measured",
-              "min": 368.34279100000003,
-              "median": 372.69112499999994
+              "min": 363.046333,
+              "median": 365.046333,
+              "step": 365.040125
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 456.25316699999996,
+              "median": 493.21341599999994,
+              "step": 407.34404099999995
+            },
+            "univer": {
+              "status": "measured",
+              "min": 4871.664667000001,
+              "median": 4903.785291,
+              "step": 153.15366600000016
             }
           }
         },
@@ -148,16 +193,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 15.931250000000006,
-              "median": 16.109250000000003
+              "min": 15.824374999999975,
+              "median": 16.388125000000002,
+              "step": 0.008333999999990738
             },
             "hyperformula": {
               "status": "measured",
-              "min": 91.33325000000002,
-              "median": 104.86699999999996
+              "min": 88.3045830000001,
+              "median": 89.5295000000001,
+              "step": 89.51704200000017
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 40.90504099999998,
+              "median": 41.23520800000006,
+              "step": 0.04937500000005457
+            },
+            "univer": {
+              "status": "measured",
+              "min": 4739.416458,
+              "median": 4764.896165999999,
+              "step": 0.34375
             }
           }
         },
@@ -169,18 +225,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 42.79433399999999,
-              "median": 43.43320800000001
+              "min": 43.43266700000004,
+              "median": 49.055375000000026,
+              "step": 17.353084000000024
             },
             "hyperformula": {
               "status": "measured",
-              "min": 2846.213708,
-              "median": 2912.4774579999994
+              "min": 2822.6416659999995,
+              "median": 2858.0546670000003,
+              "step": 2858.049500000001
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 420.78258299999993,
-              "median": 428.0898330000001
+              "min": 865.8433750000002,
+              "median": 876.6533329999997,
+              "step": 171.83354200000008
+            },
+            "univer": {
+              "status": "measured",
+              "min": 13822.170042000002,
+              "median": 13916.638416,
+              "step": 112.78433300000142
             }
           }
         },
@@ -192,18 +257,25 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 366.73924999999997,
-              "median": 368.6155
+              "min": 363.83633299999997,
+              "median": 365.0529580000001,
+              "step": 15.902249999999981
             },
             "hyperformula": {
               "status": "measured",
-              "min": 182.692,
-              "median": 187.10504100000003
+              "min": 178.0129589999999,
+              "median": 179.32995900000003,
+              "step": 179.323167
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 1596.771417,
-              "median": 1618.244583
+              "min": 5743.913667000001,
+              "median": 5745.756167,
+              "step": 122.5465409999997
+            },
+            "univer": {
+              "status": "failed",
+              "note": "40: 0x1042eabb4 node::Start(int, char**) [/Users/reinder/.nvm/versions/node/v24.15.0/bin/node] 41: 0x1844f0d7c start [/usr/lib/dyld]"
             }
           }
         },
@@ -215,18 +287,25 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 24.876165999999984,
-              "median": 25.521124999999984
+              "min": 26.265916000000004,
+              "median": 27.00600000000003,
+              "step": 17.952958000000024
             },
             "hyperformula": {
               "status": "measured",
-              "min": 17609.18625,
-              "median": 17785.576624999998
+              "min": 17082.102958,
+              "median": 17108.766917,
+              "step": 17108.753833000002
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 122.63537499999995,
-              "median": 123.62012500000003
+              "min": 90569.90933299999,
+              "median": 91871.754333,
+              "step": 303.733458
+            },
+            "univer": {
+              "status": "too slow",
+              "note": "one run took 175 s"
             }
           }
         },
@@ -238,18 +317,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 20.044749999999993,
-              "median": 24.163250000000005
+              "min": 19.64866699999999,
+              "median": 23.723374999999976,
+              "step": 20.999666999999988
             },
             "hyperformula": {
               "status": "measured",
-              "min": 17525.930792,
-              "median": 17844.845875
+              "min": 17352.436541,
+              "median": 17693.851542,
+              "step": 17693.841959
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 147.534875,
-              "median": 150.066958
+              "min": 15437.388584,
+              "median": 15578.554583,
+              "step": 304.444708
+            },
+            "univer": {
+              "status": "measured",
+              "min": 379.85237500000017,
+              "median": 386.2769999999998,
+              "step": 115.40491699999984
             }
           }
         },
@@ -261,18 +349,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 24.926333999999997,
-              "median": 26.376542
+              "min": 23.687583000000018,
+              "median": 25.65583399999997,
+              "step": 17.527709000000016
             },
             "hyperformula": {
               "status": "measured",
-              "min": 8842.386874999998,
-              "median": 9106.885459
+              "min": 8524.114082999999,
+              "median": 9807.204249999999,
+              "step": 9807.19525
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 1078.6238750000002,
-              "median": 1112.7523750000003
+              "min": 15895.708584,
+              "median": 15928.519708,
+              "step": 298.66650000000004
+            },
+            "univer": {
+              "status": "measured",
+              "min": 1456.5403750000005,
+              "median": 1467.835959,
+              "step": 110.48741699999982
             }
           }
         },
@@ -284,18 +381,25 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 19.753917,
-              "median": 23.526999999999987
+              "min": 18.934750000000008,
+              "median": 19.821957999999995,
+              "step": 17.632083000000023
             },
             "hyperformula": {
               "status": "measured",
-              "min": 8817.349333000002,
-              "median": 9020.843166999999
+              "min": 8497.517875000001,
+              "median": 8689.246666000001,
+              "step": 8689.238082999998
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 1672.08825,
-              "median": 1685.639875
+              "min": 15452.99625,
+              "median": 15766.643667,
+              "step": 302.333583
+            },
+            "univer": {
+              "status": "too slow",
+              "note": "one run took 285 s"
             }
           }
         },
@@ -307,16 +411,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 25.12895800000001,
-              "median": 25.595332999999982
+              "min": 25.26370800000001,
+              "median": 26.072041000000013,
+              "step": 17.38370900000001
             },
             "hyperformula": {
               "status": "measured",
-              "min": 35086.366417000005,
-              "median": 35534.642208
+              "min": 39952.717709,
+              "median": 40247.449250000005,
+              "step": 40247.435042000005
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 91526.367125,
+              "median": 92231.91729099999,
+              "step": 301.995584
+            },
+            "univer": {
+              "status": "measured",
+              "min": 79848.795792,
+              "median": 79967.08274999999,
+              "step": 130.10229099999998
             }
           }
         },
@@ -328,18 +443,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 74.02412500000003,
-              "median": 74.71162499999997
+              "min": 72.41983299999998,
+              "median": 73.606,
+              "step": 27.402333999999996
             },
             "hyperformula": {
               "status": "measured",
-              "min": 12811.3375,
-              "median": 12893.919042000001
+              "min": 12227.351708000002,
+              "median": 12955.916000000001,
+              "step": 12955.906875
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 5536.916959000002,
-              "median": 5565.351416000001
+              "min": 3035.33925,
+              "median": 3041.985083,
+              "step": 696.93475
+            },
+            "univer": {
+              "status": "measured",
+              "min": 9363.512041000002,
+              "median": 9677.744583,
+              "step": 141.5465830000012
             }
           }
         },
@@ -351,18 +475,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 67.16237500000005,
-              "median": 68.44191599999999
+              "min": 65.13425000000001,
+              "median": 67.21104200000002,
+              "step": 27.523791000000017
             },
             "hyperformula": {
               "status": "measured",
-              "min": 9844.381708,
-              "median": 10020.531125
+              "min": 9788.549083,
+              "median": 9937.164583000002,
+              "step": 9937.156083000002
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 4231.583209,
-              "median": 4274.596791999999
+              "min": 6217.014125000001,
+              "median": 6238.378333,
+              "step": 689.326416
+            },
+            "univer": {
+              "status": "measured",
+              "min": 8829.261124999999,
+              "median": 8930.749667,
+              "step": 135.72299999999996
             }
           }
         },
@@ -374,18 +507,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 560.761708,
-              "median": 578.8731250000001
+              "min": 535.1969579999999,
+              "median": 548.7784999999999,
+              "step": 338.8550829999999
             },
             "hyperformula": {
               "status": "measured",
-              "min": 2301.0856249999997,
-              "median": 2346.412416
+              "min": 2292.4770829999998,
+              "median": 2313.3740419999995,
+              "step": 2313.3690829999996
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 49.85783299999997,
-              "median": 50.37587499999998
+              "min": 3760.4510410000003,
+              "median": 3874.0565,
+              "step": 3492.489167
+            },
+            "univer": {
+              "status": "measured",
+              "min": 12510.103,
+              "median": 12593.126208,
+              "step": 186.15537500000028
             }
           }
         },
@@ -397,16 +539,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 0.8843329999999696,
-              "median": 1.0013329999999314
+              "min": 0.7767089999999826,
+              "median": 0.909458000000086,
+              "step": 0.9015830000000733
             },
             "hyperformula": {
               "status": "measured",
-              "min": 14.86083299999973,
-              "median": 15.227375000000393
+              "min": 15.969040999999834,
+              "median": 16.355083000000377,
+              "step": 16.350167000000056
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 6358.3447080000005,
+              "median": 6363.287458000001,
+              "step": 6035.495375
+            },
+            "univer": {
+              "status": "measured",
+              "min": 34867.366209,
+              "median": 38671.238292,
+              "step": 21278.689667
             }
           }
         },
@@ -418,32 +571,125 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 42.604508,
-              "median": 42.60674
+              "min": 7.038061,
+              "median": 9.14568,
+              "step": 9.14568
             },
             "hyperformula": {
               "status": "measured",
-              "min": 250.772772,
-              "median": 252.088508
+              "min": 219.396653,
+              "median": 219.398133,
+              "step": 219.398133
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 225.440848,
+              "median": 225.445392,
+              "step": 225.445392
+            },
+            "univer": {
+              "status": "measured",
+              "min": 512.324856,
+              "median": 514.419331,
+              "step": 514.419331
             }
           }
+        },
+        {
+          "workload": "edit a cell read by 10,000 formulas",
+          "what": "Cell A1 is read by 10,000 formulas (=B1*$A$1+1 and so on); A1 changes and every formula recomputes. This is a full recalculation.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 1.423249999999996,
+              "median": 1.4272919999999942,
+              "step": 0.008624999999994998
+            },
+            "hyperformula": {
+              "status": "not run"
+            },
+            "ironcalc": {
+              "status": "not run"
+            },
+            "univer": {
+              "status": "measured",
+              "min": 2552.27925,
+              "median": 2572.599459,
+              "step": 0.3423750000001746
+            }
+          },
+          "smallerFor": ["univer"]
+        },
+        {
+          "workload": "exact VLOOKUP, 200 over 10,000 rows",
+          "what": "200 formulas =VLOOKUP(E1,$A$1:$B$10000,2,FALSE) over 10,000 keys in no order.",
+          "memory": false,
+          "hyperformula": "{\"useColumnIndex\":true}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 5.900749999999988,
+              "median": 6.383541000000008,
+              "step": 4.887875000000008
+            },
+            "hyperformula": {
+              "status": "not run"
+            },
+            "ironcalc": {
+              "status": "not run"
+            },
+            "univer": {
+              "status": "measured",
+              "min": 1771.575125,
+              "median": 1823.8839160000002,
+              "step": 45.382624999999734
+            }
+          },
+          "smallerFor": ["univer"]
+        },
+        {
+          "workload": "approximate MATCH, 200 over 10,000 rows",
+          "what": "200 formulas =MATCH(E1,$A$1:$A$10000,1) over 10,000 sorted keys.",
+          "memory": false,
+          "hyperformula": "{\"useColumnIndex\":true}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 6.435000000000002,
+              "median": 6.6213750000000005,
+              "step": 5.597166000000016
+            },
+            "hyperformula": {
+              "status": "not run"
+            },
+            "ironcalc": {
+              "status": "not run"
+            },
+            "univer": {
+              "status": "measured",
+              "min": 3054.714833000001,
+              "median": 3057.895542,
+              "step": 39.56075000000055
+            }
+          },
+          "smallerFor": ["univer"]
         }
       ]
     },
     "bun": {
       "runtime": "bun",
+      "scale": 1,
       "rounds": 5,
       "reps": 3,
       "load": {
-        "before": "2.05 2.18 3.21",
-        "after": "3.09 3.40 3.39",
-        "highest": 5.37841796875,
-        "discarded": 0
+        "before": "4.90 5.40 4.15",
+        "after": "3.51 2.80 2.88",
+        "highest": 8.6943359375,
+        "discarded": 3
       },
-      "seconds": 1253,
+      "seconds": 5218,
       "rows": [
         {
           "workload": "load and compute 300,000 formulas",
@@ -453,16 +699,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 286.1574160000001,
-              "median": 292.43108300000006
+              "min": 282.1742499999999,
+              "median": 287.60924999999986,
+              "step": 249.80716700000005
             },
             "hyperformula": {
               "status": "measured",
-              "min": 1714.1052919999997,
-              "median": 1747.8059170000001
+              "min": 1625.043209,
+              "median": 1651.4624589999999,
+              "step": 1651.4581670000002
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 2558.5309579999994,
+              "median": 2573.440667,
+              "step": 2311.0501670000003
+            },
+            "univer": {
+              "status": "measured",
+              "min": 9786.848833,
+              "median": 9892.871459,
+              "step": 242.960584
             }
           }
         },
@@ -474,16 +731,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 0.27737500000012005,
-              "median": 0.3091660000000047
+              "min": 0.2712089999999989,
+              "median": 0.27775000000019645,
+              "step": 0.01583300000015697
             },
             "hyperformula": {
               "status": "measured",
-              "min": 0.2102500000000873,
-              "median": 0.23520800000005693
+              "min": 0.23995800000011513,
+              "median": 0.24991599999975733,
+              "step": 0.24920799999927112
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 251.72733299999982,
+              "median": 253.5786250000001,
+              "step": 0.09212500000012369
+            },
+            "univer": {
+              "status": "measured",
+              "min": 3781.1406670000015,
+              "median": 3829.6492919999982,
+              "step": 2.153542000000016
             }
           }
         },
@@ -495,16 +763,25 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 10.792208000000016,
-              "median": 11.009582999999964
+              "min": 10.323916000000054,
+              "median": 10.895416999999952,
+              "step": 0.014375000000029559
             },
             "hyperformula": {
               "status": "measured",
-              "min": 153.22912499999984,
-              "median": 166.41499999999996
+              "min": 149.83187500000008,
+              "median": 151.91425000000004,
+              "step": 151.90812499999993
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 48.71275000000014,
+              "median": 51.51058400000011,
+              "step": 0.027959000000009837
+            },
+            "univer": {
+              "status": "too slow",
+              "note": "one run took 274 s"
             }
           }
         },
@@ -516,16 +793,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 48.186458000000016,
-              "median": 48.729208
+              "min": 48.908124999999984,
+              "median": 49.30612500000001,
+              "step": 42.17008299999998
             },
             "hyperformula": {
               "status": "measured",
-              "min": 278.79125,
-              "median": 291.710459
+              "min": 280.515709,
+              "median": 287.005042,
+              "step": 286.99904200000003
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 394.84720900000013,
+              "median": 397.567041,
+              "step": 360.0596250000001
+            },
+            "univer": {
+              "status": "measured",
+              "min": 3133.0824999999995,
+              "median": 3147.0051250000006,
+              "step": 156.04974999999968
             }
           }
         },
@@ -537,16 +825,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 10.837833999999987,
-              "median": 10.870292000000006
+              "min": 10.775041999999985,
+              "median": 10.784333000000004,
+              "step": 0.01220800000004374
             },
             "hyperformula": {
               "status": "measured",
-              "min": 133.34512499999994,
-              "median": 142.0123329999999
+              "min": 139.5569159999999,
+              "median": 140.64604100000008,
+              "step": 140.63866599999994
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 31.886457999999948,
+              "median": 32.705999999999904,
+              "step": 0.03770899999994981
+            },
+            "univer": {
+              "status": "measured",
+              "min": 3026.34375,
+              "median": 3060.816040999998,
+              "step": 0.387458000001061
             }
           }
         },
@@ -558,18 +857,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 36.453708000000006,
-              "median": 36.88737499999999
+              "min": 34.328709,
+              "median": 36.087875,
+              "step": 10.377916999999968
             },
             "hyperformula": {
               "status": "measured",
-              "min": 2959.1688339999996,
-              "median": 3018.3615
+              "min": 2932.7861249999996,
+              "median": 2945.9994589999997,
+              "step": 2945.988292
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 281.99462500000004,
-              "median": 283.0355830000001
+              "min": 703.57125,
+              "median": 705.4590420000002,
+              "step": 140.68920900000012
+            },
+            "univer": {
+              "status": "measured",
+              "min": 4950.573417,
+              "median": 4972.031208,
+              "step": 105.57433300000048
             }
           }
         },
@@ -581,18 +889,25 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 296.652375,
-              "median": 300.62591599999996
+              "min": 295.4462500000001,
+              "median": 295.6132499999999,
+              "step": 12.175375000000031
             },
             "hyperformula": {
               "status": "measured",
-              "min": 131.708167,
-              "median": 136.17075
+              "min": 114.414625,
+              "median": 117.67533400000002,
+              "step": 117.67175000000009
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 1552.1925409999994,
-              "median": 1571.631875
+              "min": 3669.6413330000005,
+              "median": 3674.3642499999996,
+              "step": 99.05724999999984
+            },
+            "univer": {
+              "status": "too slow",
+              "note": "one run took 150 s"
             }
           }
         },
@@ -604,18 +919,25 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 20.646334000000024,
-              "median": 24.282542000000007
+              "min": 19.930041000000017,
+              "median": 20.252666999999974,
+              "step": 14.103499999999997
             },
             "hyperformula": {
               "status": "measured",
-              "min": 13960.913625,
-              "median": 14109.287332999998
+              "min": 13841.967041,
+              "median": 13981.035791,
+              "step": 13981.02375
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 170.69179199999996,
-              "median": 175.591209
+              "min": 65905.4155,
+              "median": 66313.242791,
+              "step": 311.663458
+            },
+            "univer": {
+              "status": "too slow",
+              "note": "one run took 172 s"
             }
           }
         },
@@ -627,18 +949,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 17.531875000000014,
-              "median": 18.61749999999998
+              "min": 19.25954200000001,
+              "median": 19.543667,
+              "step": 17.30445899999998
             },
             "hyperformula": {
               "status": "measured",
-              "min": 13946.029125,
-              "median": 14125.303458
+              "min": 13833.884542,
+              "median": 13946.272083000002,
+              "step": 13946.259708000001
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 166.782292,
-              "median": 171.377625
+              "min": 12250.275334000002,
+              "median": 12412.314959000001,
+              "step": 312.245167
+            },
+            "univer": {
+              "status": "measured",
+              "min": 285.96524999999986,
+              "median": 287.77379200000007,
+              "step": 102.38999999999999
             }
           }
         },
@@ -650,18 +981,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 18.36854200000002,
-              "median": 23.756167000000005
+              "min": 18.666084000000012,
+              "median": 19.417750000000012,
+              "step": 14.086708000000044
             },
             "hyperformula": {
               "status": "measured",
-              "min": 7778.571125,
-              "median": 8140.022875000001
+              "min": 7507.673209,
+              "median": 7567.313333,
+              "step": 7567.3011670000005
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 735.7013750000001,
-              "median": 740.857167
+              "min": 9574.917082999998,
+              "median": 9613.163083,
+              "step": 289.9733749999996
+            },
+            "univer": {
+              "status": "measured",
+              "min": 1331.7969589999998,
+              "median": 1339.804209,
+              "step": 117.9208749999998
             }
           }
         },
@@ -673,18 +1013,25 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 17.360709000000014,
-              "median": 19.551999999999992
+              "min": 18.88975000000002,
+              "median": 19.243250000000018,
+              "step": 16.95349999999999
             },
             "hyperformula": {
               "status": "measured",
-              "min": 7497.15675,
-              "median": 7813.951166000001
+              "min": 7446.551708,
+              "median": 7547.936624999999,
+              "step": 7547.925249999999
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 796.0304169999999,
-              "median": 803.050917
+              "min": 9098.888917,
+              "median": 9184.349624999999,
+              "step": 287.50645799999984
+            },
+            "univer": {
+              "status": "too slow",
+              "note": "one run took 276 s"
             }
           }
         },
@@ -696,16 +1043,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 21.64108300000001,
-              "median": 23.708584000000002
+              "min": 19.58695799999998,
+              "median": 20.08987499999995,
+              "step": 14.103000000000009
             },
             "hyperformula": {
               "status": "measured",
-              "min": 21728.024250000002,
-              "median": 22644.95175
+              "min": 21199.517666,
+              "median": 21289.961834,
+              "step": 21289.95
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 61605.807833,
+              "median": 61836.576833,
+              "step": 313.314125
+            },
+            "univer": {
+              "status": "measured",
+              "min": 81632.744083,
+              "median": 81778.505791,
+              "step": 123.00383300000001
             }
           }
         },
@@ -717,18 +1075,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 62.60683399999999,
-              "median": 65.25324999999998
+              "min": 61.455250000000035,
+              "median": 61.59454199999999,
+              "step": 29.491665999999952
             },
             "hyperformula": {
               "status": "measured",
-              "min": 7045.094375,
-              "median": 7160.179792000001
+              "min": 6944.460542,
+              "median": 6967.329250000001,
+              "step": 6967.317166999999
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 3383.519292,
-              "median": 3429.0308330000003
+              "min": 2619.471042,
+              "median": 2649.802833,
+              "step": 429.432417
+            },
+            "univer": {
+              "status": "measured",
+              "min": 4725.237208,
+              "median": 4763.8127079999995,
+              "step": 127.24133299999994
             }
           }
         },
@@ -740,18 +1107,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 41.47108299999999,
-              "median": 55.06299999999999
+              "min": 50.587084000000004,
+              "median": 52.95400000000001,
+              "step": 29.421875
             },
             "hyperformula": {
               "status": "measured",
-              "min": 5705.233792000001,
-              "median": 5728.395165999998
+              "min": 5680.521791000001,
+              "median": 5720.669917000001,
+              "step": 5720.666041999999
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 1506.5585839999999,
-              "median": 1510.5982079999999
+              "min": 4436.867833,
+              "median": 4464.2675,
+              "step": 425.481625
+            },
+            "univer": {
+              "status": "measured",
+              "min": 4480.961875000001,
+              "median": 4729.072625000001,
+              "step": 119.59895899999901
             }
           }
         },
@@ -763,18 +1139,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 420.814042,
-              "median": 429.8536250000001
+              "min": 391.35241700000006,
+              "median": 392.2628749999999,
+              "step": 262.81883400000004
             },
             "hyperformula": {
               "status": "measured",
-              "min": 1235.4850000000001,
-              "median": 1255.494166
+              "min": 1190.0543749999997,
+              "median": 1212.0408750000001,
+              "step": 1212.0283750000003
             },
-            "formulajs": {
+            "ironcalc": {
               "status": "measured",
-              "min": 30.687166999999988,
-              "median": 30.907292000000012
+              "min": 1878.8435,
+              "median": 1906.2602499999998,
+              "step": 1697.358125
+            },
+            "univer": {
+              "status": "measured",
+              "min": 6248.293541999999,
+              "median": 6336.589124999999,
+              "step": 186.59354099999996
             }
           }
         },
@@ -786,16 +1171,27 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 0.9247919999997976,
-              "median": 1.28449999999998
+              "min": 0.7937079999999241,
+              "median": 0.9949169999999867,
+              "step": 0.9815419999999904
             },
             "hyperformula": {
               "status": "measured",
-              "min": 10.503833000000668,
-              "median": 10.608750000000327
+              "min": 9.916957999999795,
+              "median": 10.435832999999548,
+              "step": 10.43395799999962
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 4826.563249999999,
+              "median": 4840.513625,
+              "step": 4585.750040999999
+            },
+            "univer": {
+              "status": "measured",
+              "min": 14042.490124999998,
+              "median": 14247.672374999998,
+              "step": 3847.586709000001
             }
           }
         },
@@ -807,18 +1203,137 @@
           "engines": {
             "ours": {
               "status": "measured",
-              "min": 9.654203,
-              "median": 9.656424
+              "min": 9.661591,
+              "median": 9.663531,
+              "step": 9.663531
             },
             "hyperformula": {
               "status": "measured",
-              "min": 152.526367,
-              "median": 152.550042
+              "min": 152.633385,
+              "median": 152.647466,
+              "step": 152.647466
             },
-            "formulajs": {
-              "status": "not supported"
+            "ironcalc": {
+              "status": "measured",
+              "min": 228.968163,
+              "median": 228.968667,
+              "step": 228.968667
+            },
+            "univer": {
+              "status": "measured",
+              "min": 491.488958,
+              "median": 491.602567,
+              "step": 491.602567
             }
           }
+        },
+        {
+          "workload": "edit a cell read by 10,000 formulas",
+          "what": "Cell A1 is read by 10,000 formulas (=B1*$A$1+1 and so on); A1 changes and every formula recomputes. This is a full recalculation.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 1.159167000000025,
+              "median": 1.257249999999999,
+              "step": 0.007291000000009262
+            },
+            "hyperformula": {
+              "status": "not run"
+            },
+            "ironcalc": {
+              "status": "not run"
+            },
+            "univer": {
+              "status": "measured",
+              "min": 1347.5233750000002,
+              "median": 1353.5101249999998,
+              "step": 0.31195800000023155
+            }
+          },
+          "smallerFor": ["univer"]
+        },
+        {
+          "workload": "running total down 2,000 rows",
+          "what": "Each of 2,000 rows sums everything above it and itself: =SUM($A$1:A1), =SUM($A$1:A2) and so on.",
+          "memory": false,
+          "hyperformula": "{}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 5.042209000000014,
+              "median": 5.053625000000011,
+              "step": 1.3512920000000008
+            },
+            "hyperformula": {
+              "status": "not run"
+            },
+            "ironcalc": {
+              "status": "not run"
+            },
+            "univer": {
+              "status": "measured",
+              "min": 526.850541,
+              "median": 531.558542,
+              "step": 28.39058399999999
+            }
+          },
+          "smallerFor": ["univer"]
+        },
+        {
+          "workload": "exact VLOOKUP, 200 over 10,000 rows",
+          "what": "200 formulas =VLOOKUP(E1,$A$1:$B$10000,2,FALSE) over 10,000 keys in no order.",
+          "memory": false,
+          "hyperformula": "{\"useColumnIndex\":true}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 4.47483299999999,
+              "median": 4.565500000000014,
+              "step": 3.8427910000000054
+            },
+            "hyperformula": {
+              "status": "not run"
+            },
+            "ironcalc": {
+              "status": "not run"
+            },
+            "univer": {
+              "status": "measured",
+              "min": 1733.872875,
+              "median": 1742.2456659999998,
+              "step": 34.268332999999984
+            }
+          },
+          "smallerFor": ["univer"]
+        },
+        {
+          "workload": "approximate MATCH, 200 over 10,000 rows",
+          "what": "200 formulas =MATCH(E1,$A$1:$A$10000,1) over 10,000 sorted keys.",
+          "memory": false,
+          "hyperformula": "{\"useColumnIndex\":true}",
+          "engines": {
+            "ours": {
+              "status": "measured",
+              "min": 2.42183399999999,
+              "median": 4.234000000000009,
+              "step": 3.634416000000016
+            },
+            "hyperformula": {
+              "status": "not run"
+            },
+            "ironcalc": {
+              "status": "not run"
+            },
+            "univer": {
+              "status": "measured",
+              "min": 2913.770708,
+              "median": 2915.424792,
+              "step": 33.63574999999946
+            }
+          },
+          "smallerFor": ["univer"]
         }
       ]
     }
@@ -826,8 +1341,8 @@
   "correctness": {
     "source": "Recorded by hand in Excel for the web, November 2026: the family and batch files of the oracle.",
     "rows": 17584,
+    "every": 1,
     "unjudged": 4,
-    "formulajsRows": 5129,
     "engines": {
       "ours": {
         "total": {
@@ -1000,92 +1515,203 @@
           "=WORKDAY.INTL(45000,A1:A5,1,G1:G3)"
         ]
       },
-      "formulajs": {
+      "ironcalc": {
         "total": {
-          "equal": 3137,
-          "differs": 1458,
-          "not supported": 421,
-          "crashed": 113
+          "equal": 13068,
+          "differs": 3215,
+          "not supported": 1285,
+          "crashed": 16
         },
         "byFile": {
           "b10": {
-            "equal": 10,
-            "differs": 25,
+            "equal": 100,
+            "differs": 43,
+            "not supported": 120,
+            "crashed": 0
+          },
+          "b11": {
+            "equal": 211,
+            "differs": 132,
+            "not supported": 14,
+            "crashed": 0
+          },
+          "b12": {
+            "equal": 461,
+            "differs": 167,
+            "not supported": 12,
+            "crashed": 0
+          },
+          "b13": {
+            "equal": 211,
+            "differs": 166,
+            "not supported": 1,
+            "crashed": 6
+          },
+          "b6": {
+            "equal": 68,
+            "differs": 28,
+            "not supported": 23,
+            "crashed": 0
+          },
+          "b7": {
+            "equal": 214,
+            "differs": 21,
+            "not supported": 20,
+            "crashed": 0
+          },
+          "date": {
+            "equal": 2524,
+            "differs": 594,
+            "not supported": 89,
+            "crashed": 8
+          },
+          "logical": {
+            "equal": 1916,
+            "differs": 274,
+            "not supported": 167,
+            "crashed": 0
+          },
+          "math": {
+            "equal": 1334,
+            "differs": 163,
+            "not supported": 41,
+            "crashed": 2
+          },
+          "reference": {
+            "equal": 1622,
+            "differs": 479,
+            "not supported": 281,
+            "crashed": 0
+          },
+          "statistical": {
+            "equal": 2119,
+            "differs": 652,
+            "not supported": 430,
+            "crashed": 0
+          },
+          "text": {
+            "equal": 2288,
+            "differs": 496,
+            "not supported": 87,
+            "crashed": 0
+          }
+        },
+        "hung": ["=FACT(A1:A5)", "=FACT(1E+300)"]
+      },
+      "univer": {
+        "total": {
+          "equal": 14529,
+          "differs": 2957,
+          "not supported": 66,
+          "crashed": 32
+        },
+        "byFile": {
+          "b10": {
+            "equal": 159,
+            "differs": 104,
             "not supported": 0,
             "crashed": 0
           },
           "b11": {
-            "equal": 51,
-            "differs": 55,
-            "not supported": 4,
-            "crashed": 2
+            "equal": 235,
+            "differs": 122,
+            "not supported": 0,
+            "crashed": 0
           },
           "b12": {
-            "equal": 29,
-            "differs": 23,
-            "not supported": 6,
-            "crashed": 5
+            "equal": 354,
+            "differs": 286,
+            "not supported": 0,
+            "crashed": 0
           },
           "b13": {
-            "equal": 29,
-            "differs": 56,
+            "equal": 305,
+            "differs": 79,
             "not supported": 0,
-            "crashed": 2
+            "crashed": 0
           },
           "b6": {
-            "equal": 7,
-            "differs": 8,
-            "not supported": 1,
-            "crashed": 2
+            "equal": 81,
+            "differs": 38,
+            "not supported": 0,
+            "crashed": 0
           },
           "b7": {
-            "equal": 31,
-            "differs": 25,
-            "not supported": 1,
+            "equal": 218,
+            "differs": 37,
+            "not supported": 0,
             "crashed": 0
           },
           "date": {
-            "equal": 1182,
-            "differs": 593,
+            "equal": 2824,
+            "differs": 389,
             "not supported": 0,
-            "crashed": 35
+            "crashed": 2
           },
           "logical": {
-            "equal": 385,
-            "differs": 43,
-            "not supported": 79,
+            "equal": 1974,
+            "differs": 334,
+            "not supported": 49,
             "crashed": 0
           },
           "math": {
-            "equal": 627,
-            "differs": 137,
+            "equal": 1370,
+            "differs": 170,
             "not supported": 0,
-            "crashed": 7
+            "crashed": 0
           },
           "reference": {
-            "equal": 12,
-            "differs": 36,
-            "not supported": 187,
-            "crashed": 12
+            "equal": 1772,
+            "differs": 567,
+            "not supported": 17,
+            "crashed": 26
           },
           "statistical": {
-            "equal": 263,
-            "differs": 144,
-            "not supported": 77,
-            "crashed": 6
+            "equal": 2826,
+            "differs": 375,
+            "not supported": 0,
+            "crashed": 0
           },
           "text": {
-            "equal": 511,
-            "differs": 313,
-            "not supported": 66,
-            "crashed": 42
+            "equal": 2411,
+            "differs": 456,
+            "not supported": 0,
+            "crashed": 4
           }
         },
         "hung": [
           "=WORKDAY(45000,1E+300)",
-          "=WORKDAY(45000,-1E+300)",
           "=WORKDAY.INTL(45000,1E+300)",
-          "=WORKDAY.INTL(45000,-1E+300)"
+          "=ROWS(ROW(1:1048576))",
+          "=COLUMNS(COLUMN(1:1048576))",
+          "=ROWS(A1:XFD1048576)",
+          "=COLUMNS(A1:XFD1048576)",
+          "=INDIRECT(\"A1\",FALSE)",
+          "=INDIRECT(\"A1\",0)",
+          "=INDIRECT(\"A1:\")",
+          "=OFFSET(B2,1,1,12.5,1)",
+          "=OFFSET(B2,1,1,2,12.5)",
+          "=OFFSET(B2,1,1,A1:A5,1)",
+          "=OFFSET(B2,1,1,2,A1:A5)",
+          "=OFFSET(B2,0,0,0.5,1)",
+          "=OFFSET(B2,0,0,1,0.5)",
+          "=OFFSET(B2,0,0,-0.5,1)",
+          "=LOOKUP(4,C1:C3,\"3\")",
+          "=LOOKUP(4,C1:C3,\"abc\")",
+          "=LOOKUP(4,C1:C3,TRUE)",
+          "=LOOKUP(4,C1:C3,12.5)",
+          "=LOOKUP(4,C1:C3,)",
+          "=LOOKUP(4,C1:C3,{1,0;TRUE,\"x\"})",
+          "=LOOKUP(4,C1:C3,(A1:A2,C1:C2))",
+          "=LOOKUP(4,B4,NA())",
+          "=LOOKUP(B4,C1:C3,NA())",
+          "=LOOKUP(4,C1:C3,A1:A3+0)",
+          "=LOOKUP(4,C1:C3,5)",
+          "=LOOKUP(4,C1:C3,\"a\")",
+          "=TEXTJOIN({\",\",\";\"},TRUE,\"a\",\"b\",\"c\",\"d\")",
+          "=TEXTJOIN({\",\";\"-\"},TRUE,\"a\",\"b\",\"c\")",
+          "=TEXTJOIN({\",\",\";\"},FALSE,\"a\",\"b\",\"c\")",
+          "=TEXTJOIN({\",\";\"-\"},TRUE,\"a\",\"b\",\"c\",\"d\",\"e\")"
         ]
       }
     }
@@ -1101,239 +1727,809 @@
         "excel": 384,
         "other": 39
       },
-      "formulajs": {
-        "excel": 406,
-        "other": 55
+      "ironcalc": {
+        "excel": 492,
+        "other": null
+      },
+      "univer": {
+        "excel": 495,
+        "other": 22
       }
     },
-    "onlyHyperformula": [
-      "ACOT",
-      "ACOTH",
-      "ARABIC",
-      "BASE",
-      "BESSELI",
-      "BESSELJ",
-      "BESSELK",
-      "BESSELY",
-      "BETA.DIST",
-      "BETA.INV",
-      "BETADIST",
-      "BETAINV",
-      "BIN2DEC",
-      "BIN2HEX",
-      "BIN2OCT",
-      "BINOM.DIST",
-      "BINOM.INV",
-      "BINOMDIST",
-      "BITAND",
-      "BITLSHIFT",
-      "BITOR",
-      "BITRSHIFT",
-      "BITXOR",
-      "CHIDIST",
-      "CHIINV",
-      "CHISQ.DIST",
-      "CHISQ.DIST.RT",
-      "CHISQ.INV",
-      "CHISQ.INV.RT",
-      "CHISQ.TEST",
-      "CHITEST",
-      "COMBINA",
-      "COMPLEX",
-      "CONFIDENCE",
-      "CONFIDENCE.NORM",
-      "CONFIDENCE.T",
-      "COT",
-      "COTH",
-      "CRITBINOM",
-      "CSC",
-      "CSCH",
-      "CUMIPMT",
-      "CUMPRINC",
-      "DAVERAGE",
-      "DB",
-      "DCOUNT",
-      "DCOUNTA",
-      "DDB",
-      "DEC2BIN",
-      "DEC2HEX",
-      "DEC2OCT",
-      "DECIMAL",
-      "DELTA",
-      "DGET",
-      "DMAX",
-      "DMIN",
-      "DOLLARDE",
-      "DOLLARFR",
-      "DPRODUCT",
-      "DSTDEV",
-      "DSTDEVP",
-      "DSUM",
-      "DVAR",
-      "DVARP",
-      "EFFECT",
-      "ERF",
-      "ERFC",
-      "EXPON.DIST",
-      "EXPONDIST",
-      "F.DIST",
-      "F.DIST.RT",
-      "F.INV",
-      "F.INV.RT",
-      "F.TEST",
-      "FACTDOUBLE",
-      "FDIST",
-      "FILTER",
-      "FINV",
-      "FISHER",
-      "FISHERINV",
-      "FTEST",
-      "FV",
-      "FVSCHEDULE",
-      "GAMMA",
-      "GAMMA.DIST",
-      "GAMMA.INV",
-      "GAMMADIST",
-      "GAMMAINV",
-      "GAMMALN",
-      "GAMMALN.PRECISE",
-      "GAUSS",
-      "HEX2BIN",
-      "HEX2DEC",
-      "HEX2OCT",
-      "HSTACK",
-      "HYPGEOM.DIST",
-      "HYPGEOMDIST",
-      "IMABS",
-      "IMAGINARY",
-      "IMARGUMENT",
-      "IMCONJUGATE",
-      "IMCOS",
-      "IMCOSH",
-      "IMCOT",
-      "IMCSC",
-      "IMCSCH",
-      "IMDIV",
-      "IMEXP",
-      "IMLN",
-      "IMLOG10",
-      "IMLOG2",
-      "IMPOWER",
-      "IMPRODUCT",
-      "IMREAL",
-      "IMSEC",
-      "IMSECH",
-      "IMSIN",
-      "IMSINH",
-      "IMSQRT",
-      "IMSUB",
-      "IMSUM",
-      "IMTAN",
-      "IPMT",
-      "IRR",
-      "ISPMT",
-      "LOGINV",
-      "LOGNORM.DIST",
-      "LOGNORM.INV",
-      "LOGNORMDIST",
-      "MIRR",
-      "MMULT",
-      "NEGBINOM.DIST",
-      "NEGBINOMDIST",
-      "NOMINAL",
-      "NORM.DIST",
-      "NORM.INV",
-      "NORM.S.DIST",
-      "NORM.S.INV",
-      "NORMDIST",
-      "NORMINV",
-      "NORMSDIST",
-      "NORMSINV",
-      "NPER",
-      "NPV",
-      "OCT2BIN",
-      "OCT2DEC",
-      "OCT2HEX",
-      "PDURATION",
-      "PHI",
-      "PMT",
-      "POISSON",
-      "POISSON.DIST",
-      "PPMT",
-      "PV",
-      "RATE",
-      "ROMAN",
-      "RRI",
-      "SEC",
-      "SECH",
-      "SEQUENCE",
-      "SERIESSUM",
-      "SKEW",
-      "SKEW.P",
-      "SLN",
-      "SORT",
-      "SQRTPI",
-      "STANDARDIZE",
-      "SYD",
-      "T.DIST",
-      "T.DIST.2T",
-      "T.DIST.RT",
-      "T.INV",
-      "T.INV.2T",
-      "T.TEST",
-      "TBILLEQ",
-      "TBILLPRICE",
-      "TBILLYIELD",
-      "TDIST",
-      "TINV",
-      "TRANSPOSE",
-      "TTEST",
-      "UNIQUE",
-      "VSTACK",
-      "WEIBULL",
-      "WEIBULL.DIST",
-      "XIRR",
-      "XNPV",
-      "Z.TEST",
-      "ZTEST"
-    ],
-    "onlyOurs": [
-      "AGGREGATE",
-      "AREAS",
-      "AVERAGEIFS",
-      "CELL",
-      "CONCAT",
-      "DOLLAR",
-      "ERROR.TYPE",
-      "FIXED",
-      "FORECAST",
-      "FORECAST.LINEAR",
-      "INDIRECT",
-      "INFO",
-      "INTERCEPT",
-      "LOOKUP",
-      "MODE",
-      "MODE.SNGL",
-      "NUMBERVALUE",
-      "RANK",
-      "RANK.AVG",
-      "RANK.EQ",
-      "TEXTAFTER",
-      "TEXTBEFORE",
-      "TYPE",
-      "XMATCH"
-    ],
+    "onlyTheirs": {
+      "hyperformula": [
+        "ACOT",
+        "ACOTH",
+        "ARABIC",
+        "BASE",
+        "BESSELI",
+        "BESSELJ",
+        "BESSELK",
+        "BESSELY",
+        "BETA.DIST",
+        "BETA.INV",
+        "BETADIST",
+        "BETAINV",
+        "BIN2DEC",
+        "BIN2HEX",
+        "BIN2OCT",
+        "BINOM.DIST",
+        "BINOM.INV",
+        "BINOMDIST",
+        "BITAND",
+        "BITLSHIFT",
+        "BITOR",
+        "BITRSHIFT",
+        "BITXOR",
+        "CHIDIST",
+        "CHIINV",
+        "CHISQ.DIST",
+        "CHISQ.DIST.RT",
+        "CHISQ.INV",
+        "CHISQ.INV.RT",
+        "CHISQ.TEST",
+        "CHITEST",
+        "COMBINA",
+        "COMPLEX",
+        "CONFIDENCE",
+        "CONFIDENCE.NORM",
+        "CONFIDENCE.T",
+        "COT",
+        "COTH",
+        "CRITBINOM",
+        "CSC",
+        "CSCH",
+        "CUMIPMT",
+        "CUMPRINC",
+        "DAVERAGE",
+        "DB",
+        "DCOUNT",
+        "DCOUNTA",
+        "DDB",
+        "DEC2BIN",
+        "DEC2HEX",
+        "DEC2OCT",
+        "DECIMAL",
+        "DELTA",
+        "DGET",
+        "DMAX",
+        "DMIN",
+        "DOLLARDE",
+        "DOLLARFR",
+        "DPRODUCT",
+        "DSTDEV",
+        "DSTDEVP",
+        "DSUM",
+        "DVAR",
+        "DVARP",
+        "EFFECT",
+        "ERF",
+        "ERFC",
+        "EXPON.DIST",
+        "EXPONDIST",
+        "F.DIST",
+        "F.DIST.RT",
+        "F.INV",
+        "F.INV.RT",
+        "F.TEST",
+        "FACTDOUBLE",
+        "FDIST",
+        "FILTER",
+        "FINV",
+        "FISHER",
+        "FISHERINV",
+        "FTEST",
+        "FV",
+        "FVSCHEDULE",
+        "GAMMA",
+        "GAMMA.DIST",
+        "GAMMA.INV",
+        "GAMMADIST",
+        "GAMMAINV",
+        "GAMMALN",
+        "GAMMALN.PRECISE",
+        "GAUSS",
+        "HEX2BIN",
+        "HEX2DEC",
+        "HEX2OCT",
+        "HSTACK",
+        "HYPGEOM.DIST",
+        "HYPGEOMDIST",
+        "IMABS",
+        "IMAGINARY",
+        "IMARGUMENT",
+        "IMCONJUGATE",
+        "IMCOS",
+        "IMCOSH",
+        "IMCOT",
+        "IMCSC",
+        "IMCSCH",
+        "IMDIV",
+        "IMEXP",
+        "IMLN",
+        "IMLOG10",
+        "IMLOG2",
+        "IMPOWER",
+        "IMPRODUCT",
+        "IMREAL",
+        "IMSEC",
+        "IMSECH",
+        "IMSIN",
+        "IMSINH",
+        "IMSQRT",
+        "IMSUB",
+        "IMSUM",
+        "IMTAN",
+        "IPMT",
+        "IRR",
+        "ISPMT",
+        "LOGINV",
+        "LOGNORM.DIST",
+        "LOGNORM.INV",
+        "LOGNORMDIST",
+        "MIRR",
+        "MMULT",
+        "NEGBINOM.DIST",
+        "NEGBINOMDIST",
+        "NOMINAL",
+        "NORM.DIST",
+        "NORM.INV",
+        "NORM.S.DIST",
+        "NORM.S.INV",
+        "NORMDIST",
+        "NORMINV",
+        "NORMSDIST",
+        "NORMSINV",
+        "NPER",
+        "NPV",
+        "OCT2BIN",
+        "OCT2DEC",
+        "OCT2HEX",
+        "PDURATION",
+        "PHI",
+        "PMT",
+        "POISSON",
+        "POISSON.DIST",
+        "PPMT",
+        "PV",
+        "RATE",
+        "ROMAN",
+        "RRI",
+        "SEC",
+        "SECH",
+        "SEQUENCE",
+        "SERIESSUM",
+        "SKEW",
+        "SKEW.P",
+        "SLN",
+        "SORT",
+        "SQRTPI",
+        "STANDARDIZE",
+        "SYD",
+        "T.DIST",
+        "T.DIST.2T",
+        "T.DIST.RT",
+        "T.INV",
+        "T.INV.2T",
+        "T.TEST",
+        "TBILLEQ",
+        "TBILLPRICE",
+        "TBILLYIELD",
+        "TDIST",
+        "TINV",
+        "TRANSPOSE",
+        "TTEST",
+        "UNIQUE",
+        "VSTACK",
+        "WEIBULL",
+        "WEIBULL.DIST",
+        "XIRR",
+        "XNPV",
+        "Z.TEST",
+        "ZTEST"
+      ],
+      "ironcalc": [
+        "ACCRINT",
+        "ACCRINTM",
+        "ACOT",
+        "ACOTH",
+        "AMORDEGRC",
+        "AMORLINC",
+        "ARABIC",
+        "ARRAYTOTEXT",
+        "ASC",
+        "BASE",
+        "BESSELI",
+        "BESSELJ",
+        "BESSELK",
+        "BESSELY",
+        "BETA.DIST",
+        "BETA.INV",
+        "BETADIST",
+        "BETAINV",
+        "BIN2DEC",
+        "BIN2HEX",
+        "BIN2OCT",
+        "BINOM.DIST",
+        "BINOM.DIST.RANGE",
+        "BINOM.INV",
+        "BINOMDIST",
+        "BITAND",
+        "BITLSHIFT",
+        "BITOR",
+        "BITRSHIFT",
+        "BITXOR",
+        "BYCOL",
+        "BYROW",
+        "CHIDIST",
+        "CHIINV",
+        "CHISQ.DIST",
+        "CHISQ.DIST.RT",
+        "CHISQ.INV",
+        "CHISQ.INV.RT",
+        "CHISQ.TEST",
+        "CHITEST",
+        "CHOOSECOLS",
+        "CHOOSEROWS",
+        "COMBINA",
+        "COMPLEX",
+        "CONFIDENCE",
+        "CONFIDENCE.NORM",
+        "CONFIDENCE.T",
+        "CONVERT",
+        "COT",
+        "COTH",
+        "COUPDAYBS",
+        "COUPDAYS",
+        "COUPDAYSNC",
+        "COUPNCD",
+        "COUPNUM",
+        "COUPPCD",
+        "CRITBINOM",
+        "CSC",
+        "CSCH",
+        "CUMIPMT",
+        "CUMPRINC",
+        "DAVERAGE",
+        "DB",
+        "DCOUNT",
+        "DCOUNTA",
+        "DDB",
+        "DEC2BIN",
+        "DEC2HEX",
+        "DEC2OCT",
+        "DECIMAL",
+        "DELTA",
+        "DGET",
+        "DISC",
+        "DMAX",
+        "DMIN",
+        "DOLLARDE",
+        "DOLLARFR",
+        "DPRODUCT",
+        "DROP",
+        "DSTDEV",
+        "DSTDEVP",
+        "DSUM",
+        "DURATION",
+        "DVAR",
+        "DVARP",
+        "EFFECT",
+        "ENCODEURL",
+        "ERF",
+        "ERF.PRECISE",
+        "ERFC",
+        "ERFC.PRECISE",
+        "EXPAND",
+        "EXPON.DIST",
+        "EXPONDIST",
+        "F.DIST",
+        "F.DIST.RT",
+        "F.INV",
+        "F.INV.RT",
+        "F.TEST",
+        "FACTDOUBLE",
+        "FDIST",
+        "FILTER",
+        "FINDB",
+        "FINV",
+        "FISHER",
+        "FISHERINV",
+        "FREQUENCY",
+        "FTEST",
+        "FV",
+        "FVSCHEDULE",
+        "GAMMA",
+        "GAMMA.DIST",
+        "GAMMA.INV",
+        "GAMMADIST",
+        "GAMMAINV",
+        "GAMMALN",
+        "GAMMALN.PRECISE",
+        "GAUSS",
+        "GESTEP",
+        "GROWTH",
+        "HEX2BIN",
+        "HEX2DEC",
+        "HEX2OCT",
+        "HSTACK",
+        "HYPGEOM.DIST",
+        "HYPGEOMDIST",
+        "IMABS",
+        "IMAGINARY",
+        "IMARGUMENT",
+        "IMCONJUGATE",
+        "IMCOS",
+        "IMCOSH",
+        "IMCOT",
+        "IMCSC",
+        "IMCSCH",
+        "IMDIV",
+        "IMEXP",
+        "IMLN",
+        "IMLOG10",
+        "IMLOG2",
+        "IMPOWER",
+        "IMPRODUCT",
+        "IMREAL",
+        "IMSEC",
+        "IMSECH",
+        "IMSIN",
+        "IMSINH",
+        "IMSQRT",
+        "IMSUB",
+        "IMSUM",
+        "IMTAN",
+        "INTRATE",
+        "IPMT",
+        "IRR",
+        "ISOMITTED",
+        "ISPMT",
+        "KURT",
+        "LAMBDA",
+        "LEFTB",
+        "LENB",
+        "LET",
+        "LINEST",
+        "LOGEST",
+        "LOGINV",
+        "LOGNORM.DIST",
+        "LOGNORM.INV",
+        "LOGNORMDIST",
+        "MAKEARRAY",
+        "MAP",
+        "MDETERM",
+        "MDURATION",
+        "MIDB",
+        "MINVERSE",
+        "MIRR",
+        "MMULT",
+        "MODE.MULT",
+        "MUNIT",
+        "NEGBINOM.DIST",
+        "NEGBINOMDIST",
+        "NOMINAL",
+        "NORM.DIST",
+        "NORM.INV",
+        "NORM.S.DIST",
+        "NORM.S.INV",
+        "NORMDIST",
+        "NORMINV",
+        "NORMSDIST",
+        "NORMSINV",
+        "NPER",
+        "NPV",
+        "OCT2BIN",
+        "OCT2DEC",
+        "OCT2HEX",
+        "ODDFPRICE",
+        "ODDFYIELD",
+        "ODDLPRICE",
+        "ODDLYIELD",
+        "PDURATION",
+        "PERCENTOF",
+        "PERCENTRANK",
+        "PERCENTRANK.EXC",
+        "PERCENTRANK.INC",
+        "PERMUT",
+        "PERMUTATIONA",
+        "PHI",
+        "PMT",
+        "POISSON",
+        "POISSON.DIST",
+        "PPMT",
+        "PRICE",
+        "PRICEDISC",
+        "PRICEMAT",
+        "PROB",
+        "PV",
+        "RANDARRAY",
+        "RATE",
+        "RECEIVED",
+        "REDUCE",
+        "REGEXEXTRACT",
+        "REGEXREPLACE",
+        "REGEXTEST",
+        "REPLACEB",
+        "RIGHTB",
+        "ROMAN",
+        "RRI",
+        "SCAN",
+        "SEARCHB",
+        "SEC",
+        "SECH",
+        "SEQUENCE",
+        "SERIESSUM",
+        "SKEW",
+        "SKEW.P",
+        "SLN",
+        "SORT",
+        "SORTBY",
+        "SQRTPI",
+        "STANDARDIZE",
+        "SYD",
+        "T.DIST",
+        "T.DIST.2T",
+        "T.DIST.RT",
+        "T.INV",
+        "T.INV.2T",
+        "T.TEST",
+        "TAKE",
+        "TBILLEQ",
+        "TBILLPRICE",
+        "TBILLYIELD",
+        "TDIST",
+        "TEXTSPLIT",
+        "TINV",
+        "TOCOL",
+        "TOROW",
+        "TRANSPOSE",
+        "TREND",
+        "TRIMMEAN",
+        "TRIMRANGE",
+        "TTEST",
+        "UNIQUE",
+        "VALUETOTEXT",
+        "VDB",
+        "VSTACK",
+        "WEIBULL",
+        "WEIBULL.DIST",
+        "WRAPCOLS",
+        "WRAPROWS",
+        "XIRR",
+        "XNPV",
+        "YIELD",
+        "YIELDDISC",
+        "YIELDMAT",
+        "Z.TEST",
+        "ZTEST"
+      ],
+      "univer": [
+        "ACCRINT",
+        "ACCRINTM",
+        "ACOT",
+        "ACOTH",
+        "AMORLINC",
+        "ANCHORARRAY",
+        "ARABIC",
+        "ARRAYTOTEXT",
+        "ASC",
+        "BAHTTEXT",
+        "BASE",
+        "BESSELI",
+        "BESSELJ",
+        "BESSELK",
+        "BESSELY",
+        "BETA.DIST",
+        "BETA.INV",
+        "BETADIST",
+        "BETAINV",
+        "BIN2DEC",
+        "BIN2HEX",
+        "BIN2OCT",
+        "BINOM.DIST",
+        "BINOM.DIST.RANGE",
+        "BINOM.INV",
+        "BINOMDIST",
+        "BITAND",
+        "BITLSHIFT",
+        "BITOR",
+        "BITRSHIFT",
+        "BITXOR",
+        "BYCOL",
+        "BYROW",
+        "CHIDIST",
+        "CHIINV",
+        "CHISQ.DIST",
+        "CHISQ.DIST.RT",
+        "CHISQ.INV",
+        "CHISQ.INV.RT",
+        "CHISQ.TEST",
+        "CHITEST",
+        "CHOOSECOLS",
+        "CHOOSEROWS",
+        "COMBINA",
+        "COMPLEX",
+        "CONFIDENCE",
+        "CONFIDENCE.NORM",
+        "CONFIDENCE.T",
+        "CONVERT",
+        "COT",
+        "COTH",
+        "COUPDAYBS",
+        "COUPDAYS",
+        "COUPDAYSNC",
+        "COUPNCD",
+        "COUPNUM",
+        "COUPPCD",
+        "CRITBINOM",
+        "CSC",
+        "CSCH",
+        "CUMIPMT",
+        "CUMPRINC",
+        "DAVERAGE",
+        "DB",
+        "DBCS",
+        "DCOUNT",
+        "DCOUNTA",
+        "DDB",
+        "DEC2BIN",
+        "DEC2HEX",
+        "DEC2OCT",
+        "DECIMAL",
+        "DELTA",
+        "DGET",
+        "DISC",
+        "DMAX",
+        "DMIN",
+        "DOLLARDE",
+        "DOLLARFR",
+        "DPRODUCT",
+        "DROP",
+        "DSTDEV",
+        "DSTDEVP",
+        "DSUM",
+        "DURATION",
+        "DVAR",
+        "DVARP",
+        "EFFECT",
+        "ENCODEURL",
+        "ERF",
+        "ERF.PRECISE",
+        "ERFC",
+        "ERFC.PRECISE",
+        "EXPAND",
+        "EXPON.DIST",
+        "EXPONDIST",
+        "F.DIST",
+        "F.DIST.RT",
+        "F.INV",
+        "F.INV.RT",
+        "F.TEST",
+        "FACTDOUBLE",
+        "FDIST",
+        "FILTER",
+        "FILTERXML",
+        "FINDB",
+        "FINV",
+        "FISHER",
+        "FISHERINV",
+        "FREQUENCY",
+        "FTEST",
+        "FV",
+        "FVSCHEDULE",
+        "GAMMA",
+        "GAMMA.DIST",
+        "GAMMA.INV",
+        "GAMMADIST",
+        "GAMMAINV",
+        "GAMMALN",
+        "GAMMALN.PRECISE",
+        "GAUSS",
+        "GESTEP",
+        "GETPIVOTDATA",
+        "GROUPBY",
+        "GROWTH",
+        "HEX2BIN",
+        "HEX2DEC",
+        "HEX2OCT",
+        "HSTACK",
+        "HYPGEOM.DIST",
+        "HYPGEOMDIST",
+        "IMABS",
+        "IMAGE",
+        "IMAGINARY",
+        "IMARGUMENT",
+        "IMCONJUGATE",
+        "IMCOS",
+        "IMCOSH",
+        "IMCOT",
+        "IMCSC",
+        "IMCSCH",
+        "IMDIV",
+        "IMEXP",
+        "IMLN",
+        "IMLOG10",
+        "IMLOG2",
+        "IMPOWER",
+        "IMPRODUCT",
+        "IMREAL",
+        "IMSEC",
+        "IMSECH",
+        "IMSIN",
+        "IMSINH",
+        "IMSQRT",
+        "IMSUB",
+        "IMSUM",
+        "IMTAN",
+        "INTRATE",
+        "IPMT",
+        "IRR",
+        "ISPMT",
+        "KURT",
+        "LAMBDA",
+        "LEFTB",
+        "LENB",
+        "LET",
+        "LINEST",
+        "LOGEST",
+        "LOGINV",
+        "LOGNORM.DIST",
+        "LOGNORM.INV",
+        "LOGNORMDIST",
+        "MAKEARRAY",
+        "MAP",
+        "MDETERM",
+        "MDURATION",
+        "MIDB",
+        "MINVERSE",
+        "MIRR",
+        "MMULT",
+        "MODE.MULT",
+        "MUNIT",
+        "NEGBINOM.DIST",
+        "NEGBINOMDIST",
+        "NOMINAL",
+        "NORM.DIST",
+        "NORM.INV",
+        "NORM.S.DIST",
+        "NORM.S.INV",
+        "NORMDIST",
+        "NORMINV",
+        "NORMSDIST",
+        "NORMSINV",
+        "NPER",
+        "NPV",
+        "OCT2BIN",
+        "OCT2DEC",
+        "OCT2HEX",
+        "ODDFPRICE",
+        "ODDFYIELD",
+        "ODDLPRICE",
+        "ODDLYIELD",
+        "PDURATION",
+        "PERCENTOF",
+        "PERCENTRANK",
+        "PERCENTRANK.EXC",
+        "PERCENTRANK.INC",
+        "PERMUT",
+        "PERMUTATIONA",
+        "PHI",
+        "PMT",
+        "POISSON",
+        "POISSON.DIST",
+        "PPMT",
+        "PRICE",
+        "PRICEDISC",
+        "PRICEMAT",
+        "PROB",
+        "PV",
+        "RANDARRAY",
+        "RATE",
+        "RECEIVED",
+        "REDUCE",
+        "REGEXEXTRACT",
+        "REGEXREPLACE",
+        "REGEXTEST",
+        "REPLACEB",
+        "RIGHTB",
+        "ROMAN",
+        "RRI",
+        "SCAN",
+        "SEARCHB",
+        "SEC",
+        "SECH",
+        "SEQUENCE",
+        "SERIESSUM",
+        "SKEW",
+        "SKEW.P",
+        "SLN",
+        "SORT",
+        "SORTBY",
+        "SQRTPI",
+        "STANDARDIZE",
+        "SYD",
+        "T.DIST",
+        "T.DIST.2T",
+        "T.DIST.RT",
+        "T.INV",
+        "T.INV.2T",
+        "T.TEST",
+        "TAKE",
+        "TBILLEQ",
+        "TBILLPRICE",
+        "TBILLYIELD",
+        "TDIST",
+        "TEXTSPLIT",
+        "TINV",
+        "TOCOL",
+        "TOROW",
+        "TRANSPOSE",
+        "TREND",
+        "TRIMMEAN",
+        "TTEST",
+        "UNIQUE",
+        "VALUETOTEXT",
+        "VDB",
+        "VSTACK",
+        "WEIBULL",
+        "WEIBULL.DIST",
+        "WRAPCOLS",
+        "WRAPROWS",
+        "XIRR",
+        "XNPV",
+        "YIELD",
+        "YIELDDISC",
+        "YIELDMAT",
+        "Z.TEST",
+        "ZTEST"
+      ]
+    },
+    "onlyOurs": {
+      "hyperformula": [
+        "AGGREGATE",
+        "AREAS",
+        "AVERAGEIFS",
+        "CELL",
+        "CONCAT",
+        "DOLLAR",
+        "ERROR.TYPE",
+        "FIXED",
+        "FORECAST",
+        "FORECAST.LINEAR",
+        "INDIRECT",
+        "INFO",
+        "INTERCEPT",
+        "LOOKUP",
+        "MODE",
+        "MODE.SNGL",
+        "NUMBERVALUE",
+        "RANK",
+        "RANK.AVG",
+        "RANK.EQ",
+        "TEXTAFTER",
+        "TEXTBEFORE",
+        "TYPE",
+        "XMATCH"
+      ],
+      "ironcalc": ["AGGREGATE"],
+      "univer": ["INFO", "ISO.CEILING"]
+    },
     "features": [
       {
         "name": "An array answer spills into the cells below",
         "probe": "=A1:A3*2 in C1, read C2",
         "answers": {
           "ours": "blank",
-          "hyperformula": "4"
+          "hyperformula": "4",
+          "ironcalc": "4",
+          "univer": "4"
         },
         "passes": {
           "ours": false,
-          "hyperformula": true
+          "hyperformula": true,
+          "ironcalc": true,
+          "univer": true
         }
       },
       {
@@ -1341,11 +2537,15 @@
         "probe": "=SUM(A1:A3*{1;2;3})",
         "answers": {
           "ours": "14",
-          "hyperformula": "14"
+          "hyperformula": "14",
+          "ironcalc": "14",
+          "univer": "14"
         },
         "passes": {
           "ours": true,
-          "hyperformula": true
+          "hyperformula": true,
+          "ironcalc": true,
+          "univer": true
         }
       },
       {
@@ -1353,11 +2553,15 @@
         "probe": "=SUM(FILTER(A1:A3,A1:A3>1))",
         "answers": {
           "ours": "#NAME?",
-          "hyperformula": "5"
+          "hyperformula": "5",
+          "ironcalc": "5",
+          "univer": "5"
         },
         "passes": {
           "ours": false,
-          "hyperformula": true
+          "hyperformula": true,
+          "ironcalc": true,
+          "univer": true
         }
       },
       {
@@ -1365,11 +2569,15 @@
         "probe": "=@A1:A3 in row 2",
         "answers": {
           "ours": "2",
-          "hyperformula": "#ERROR!"
+          "hyperformula": "#ERROR!",
+          "ironcalc": "2",
+          "univer": "2"
         },
         "passes": {
           "ours": true,
-          "hyperformula": false
+          "hyperformula": false,
+          "ironcalc": true,
+          "univer": true
         }
       },
       {
@@ -1377,11 +2585,15 @@
         "probe": "=SUM(Table1[Qty])",
         "answers": {
           "ours": "#REF!",
-          "hyperformula": "#ERROR!"
+          "hyperformula": "#ERROR!",
+          "ironcalc": "#ERROR!",
+          "univer": "#REF!"
         },
         "passes": {
           "ours": false,
-          "hyperformula": false
+          "hyperformula": false,
+          "ironcalc": false,
+          "univer": false
         }
       },
       {
@@ -1389,11 +2601,15 @@
         "probe": "=LET(x,2,x*3)",
         "answers": {
           "ours": "#NAME?",
-          "hyperformula": "#NAME?"
+          "hyperformula": "#NAME?",
+          "ironcalc": "6",
+          "univer": "6"
         },
         "passes": {
           "ours": false,
-          "hyperformula": false
+          "hyperformula": false,
+          "ironcalc": true,
+          "univer": true
         }
       },
       {
@@ -1401,11 +2617,15 @@
         "probe": "=LAMBDA(x,x+1)(2)",
         "answers": {
           "ours": "#NAME?",
-          "hyperformula": "#ERROR!"
+          "hyperformula": "#ERROR!",
+          "ironcalc": "3",
+          "univer": "3"
         },
         "passes": {
           "ours": false,
-          "hyperformula": false
+          "hyperformula": false,
+          "ironcalc": true,
+          "univer": true
         }
       },
       {
@@ -1413,11 +2633,15 @@
         "probe": "=SUM(A:A)",
         "answers": {
           "ours": "6",
-          "hyperformula": "6"
+          "hyperformula": "6",
+          "ironcalc": "6",
+          "univer": "6"
         },
         "passes": {
           "ours": true,
-          "hyperformula": true
+          "hyperformula": true,
+          "ironcalc": true,
+          "univer": true
         }
       },
       {
@@ -1425,11 +2649,15 @@
         "probe": "=Sheet2!A1*2",
         "answers": {
           "ours": "20",
-          "hyperformula": "20"
+          "hyperformula": "20",
+          "ironcalc": "20",
+          "univer": "20"
         },
         "passes": {
           "ours": true,
-          "hyperformula": true
+          "hyperformula": true,
+          "ironcalc": true,
+          "univer": true
         }
       },
       {
@@ -1437,11 +2665,15 @@
         "probe": "=SUM(Sheet2:Sheet3!A1)",
         "answers": {
           "ours": "blank",
-          "hyperformula": "#NAME?"
+          "hyperformula": "#NAME?",
+          "ironcalc": "#VALUE!",
+          "univer": "15"
         },
         "passes": {
           "ours": false,
-          "hyperformula": false
+          "hyperformula": false,
+          "ironcalc": false,
+          "univer": true
         }
       },
       {
@@ -1449,11 +2681,15 @@
         "probe": "=B1 in A1, =A1 in B1",
         "answers": {
           "ours": "#REF!",
-          "hyperformula": "#CYCLE!"
+          "hyperformula": "#CYCLE!",
+          "ironcalc": "#CIRC!",
+          "univer": "0"
         },
         "passes": {
           "ours": true,
-          "hyperformula": true
+          "hyperformula": true,
+          "ironcalc": true,
+          "univer": false
         }
       },
       {
@@ -1461,11 +2697,15 @@
         "probe": "=A1*2 in B5, insert a row above row 1, read B6",
         "answers": {
           "ours": "2",
-          "hyperformula": "2"
+          "hyperformula": "2",
+          "ironcalc": "2",
+          "univer": "2"
         },
         "passes": {
           "ours": true,
-          "hyperformula": true
+          "hyperformula": true,
+          "ironcalc": true,
+          "univer": true
         }
       },
       {
@@ -1473,13 +2713,18 @@
         "probe": "=A1*3 in D1, insert a column before A, read E1",
         "answers": {
           "ours": "3",
-          "hyperformula": "3"
+          "hyperformula": "3",
+          "ironcalc": "3",
+          "univer": "3"
         },
         "passes": {
           "ours": true,
-          "hyperformula": true
+          "hyperformula": true,
+          "ironcalc": true,
+          "univer": true
         }
       }
     ]
-  }
+  },
+  "seconds": 15428
 }
