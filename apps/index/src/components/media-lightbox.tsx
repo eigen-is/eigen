@@ -34,7 +34,7 @@ export function MediaLightbox({ items, index, open, onIndexChange, onOpenChange 
 
     return (
         <Dialog open={open && item !== undefined} onOpenChange={onOpenChange}>
-            <DialogContent className="justify-items-center p-4 sm:max-w-6xl sm:p-6" onKeyDown={onKeyDown}>
+            <DialogContent className="justify-items-center p-4 pt-12 sm:max-w-6xl sm:p-6" onKeyDown={onKeyDown}>
                 <DialogTitle className="sr-only">{item?.caption ?? 'Media preview'}</DialogTitle>
                 {item?.type === 'image' && (
                     <img src={item.src} alt={item.caption ?? ''} className="max-h-[75vh] max-w-full rounded" />
