@@ -33,13 +33,3 @@ export type Scene = {
     setup?: (ctx: SceneContext) => Promise<void>;
     run: (ctx: SceneContext) => Promise<void>;
 };
-
-export function pickScenes(names: readonly string[], scenes: readonly Scene[]): Scene[] {
-    if (names.length === 0) return [...scenes];
-    return names.map((name) => {
-        const scene = scenes.find((s) => s.name === name);
-        if (!scene)
-            throw new Error(`Unknown scene ${name}. Scenes: ${scenes.map((s) => s.name).join(', ') || 'none yet'}`);
-        return scene;
-    });
-}

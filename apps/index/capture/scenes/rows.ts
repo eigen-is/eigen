@@ -2,13 +2,13 @@
 // such as an open mail thread or the kanban board. Themes alternate down the list. Each still clicks without the mouse,
 // so no pointer shows in the picture.
 
-import { DOCS, KANBAN, SITE_PLAN, SPONSOR_DECK } from '../../../apps/api/src/scripts/demo/content';
 import {
     DRIVE_MIME_DOC,
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_STICKIES,
     DRIVE_MIME_VECTOR,
-} from '../../../packages/lib/src/types/drive';
+} from '../../../../packages/lib/src/types/drive';
+import { DOCS, KANBAN, SITE_PLAN, SPONSOR_DECK } from '../../../api/src/scripts/demo/content';
 import { openFile } from '../lib/open';
 import type { Scene } from '../lib/scene';
 import { openBudget } from './budget';

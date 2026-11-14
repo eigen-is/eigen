@@ -2,9 +2,9 @@
 // tab, worked out from the column widths the seeder gives the tab.
 
 import type { Page } from 'playwright-core';
-import { BUDGET } from '../../../apps/api/src/scripts/demo/content';
-import { SHEET_DEFAULT_ROW_HEIGHT } from '../../../packages/lib/src/sheets';
-import { DRIVE_MIME_SHEETS } from '../../../packages/lib/src/types/drive';
+import { SHEET_DEFAULT_ROW_HEIGHT } from '../../../../packages/lib/src/sheets';
+import { DRIVE_MIME_SHEETS } from '../../../../packages/lib/src/types/drive';
+import { BUDGET } from '../../../api/src/scripts/demo/content';
 import type { Point } from '../lib/cursor';
 import { openFile } from '../lib/open';
 import type { Stack } from '../lib/scene';

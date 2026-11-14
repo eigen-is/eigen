@@ -5,8 +5,8 @@
 // and the visible cursor.
 
 import type { Browser, BrowserContext } from 'playwright-core';
-import { personaByKey } from '../../apps/api/src/scripts/demo/content';
-import { THEME_COPY_KEY } from '../../packages/lib/src/constants/theme';
+import { THEME_COPY_KEY } from '../../../packages/lib/src/constants/theme';
+import { personaByKey } from '../../api/src/scripts/demo/content';
 import { CURSOR_SCRIPT } from './lib/cursor';
 import type { Scene, Stack } from './lib/scene';
 import { MAIL_DOMAIN } from './stack';

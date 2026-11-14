@@ -6,55 +6,16 @@
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from 'playwright-core';
+import type { Frame } from './lib/ffmpeg';
+import { concatList, encodeArgs } from './lib/ffmpeg';
 import type { Scene } from './lib/scene';
-
-type Frame = { file: string; time: number };
 
 // The tool's scratch folder, which every run starts by wiping: the seeded data root, the logs, the frames.
 export const CAPTURE_ROOT = '/tmp/eigen-capture';
-type Codec = 'av1' | 'h264';
 
-const MEDIA_DIR = join(import.meta.dir, '..', '..', 'apps', 'index', 'public', 'data', 'about', 'media');
+const MEDIA_DIR = join(import.meta.dir, '..', 'public', 'data', 'about', 'media');
 const OUT_DIR = join(CAPTURE_ROOT, 'out');
 const WEBP_QUALITY = '85';
-
-// A screen recording barely changes from frame to frame, so one keyframe per loop (600 frames, 20 s) halves the
-// files. At these settings AV1 comes out at about two thirds of H.264's size and still looks sharper.
-const KEYFRAME_INTERVAL = '600';
-const CODEC_ARGS: Record<Codec, string[]> = {
-    av1: ['-c:v', 'libsvtav1', '-crf', '40', '-preset', '4', '-g', KEYFRAME_INTERVAL],
-    h264: ['-c:v', 'libx264', '-crf', '23', '-preset', 'slow', '-g', KEYFRAME_INTERVAL, '-movflags', '+faststart'],
-};
-
-// The concat demuxer gives each file the duration under it, and needs the last file again to honor the last one.
-export function concatList(frames: readonly Frame[], stopTime: number): string {
-    const lines = ['ffconcat version 1.0'];
-    for (const [i, frame] of frames.entries()) {
-        const until = frames[i + 1]?.time ?? stopTime;
-        lines.push(`file '${frame.file}'`, `duration ${(until - frame.time).toFixed(3)}`);
-    }
-    lines.push(`file '${frames[frames.length - 1].file}'`, '');
-    return lines.join('\n');
-}
-
-export function encodeArgs(codec: Codec, listPath: string, outPath: string): string[] {
-    return [
-        '-y',
-        '-hide_banner',
-        '-loglevel',
-        'error',
-        '-f',
-        'concat',
-        '-safe',
-        '0',
-        '-i',
-        listPath,
-        '-vf',
-        'fps=30,format=yuv420p',
-        ...CODEC_ARGS[codec],
-        outPath,
-    ];
-}
 
 export async function recordVideo(page: Page, scene: Scene, run: () => Promise<void>): Promise<void> {
     const framesDir = join(CAPTURE_ROOT, 'frames', scene.name);

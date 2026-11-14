@@ -1,8 +1,8 @@
-// Tests the pure parts of the capture tool's recorder: the ffmpeg concat list that times each screencast frame, and
-// the encoder arguments.
+// Tests the ffmpeg side of the capture tool's recorder: the concat list that times each screencast frame, and the
+// encoder arguments.
 
 import { describe, expect, test } from 'bun:test';
-import { concatList, encodeArgs } from '../../../../../../scripts/capture/record';
+import { concatList, encodeArgs } from '../../../capture/lib/ffmpeg';
 
 describe('concatList', () => {
     test('each frame lasts until the next, the last until stop, and the last file is repeated', () => {
