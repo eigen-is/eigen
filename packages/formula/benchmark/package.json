@@ -6,11 +6,17 @@
   "scripts": {
     "rows": "bun rows.ts",
     "run": "bun run.ts",
+    "quick": "bun run.ts --quick",
     "readme": "bun readme.ts",
     "typecheck": "bun check --no-script"
   },
   "dependencies": {
-    "@formulajs/formulajs": "4.6.1",
-    "hyperformula": "3.5.0"
+    "@ironcalc/wasm": "0.9.1",
+    "@univerjs/core": "1.4.0",
+    "@univerjs/engine-formula": "1.4.0",
+    "@univerjs/sheets": "1.4.0",
+    "@univerjs/sheets-formula": "1.4.0",
+    "hyperformula": "3.5.0",
+    "rxjs": "7.8.2"
   }
 }
