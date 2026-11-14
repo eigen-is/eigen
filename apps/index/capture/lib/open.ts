@@ -3,14 +3,14 @@
 // see, its own and its teams'.
 
 import type { Page } from 'playwright-core';
-import type { DrivePath } from '../../../packages/lib/src/types/drive';
+import type { DrivePath } from '../../../../packages/lib/src/types/drive';
 import {
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_STICKIES,
     DRIVE_MIME_VECTOR,
-} from '../../../packages/lib/src/types/drive';
+} from '../../../../packages/lib/src/types/drive';
 import type { Stack } from './scene';
 
 const EDITORS = {

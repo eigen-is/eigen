@@ -1,13 +1,14 @@
-// `bun run capture [scene …]` films the seeded Tuimel demo world for the About pages of the public site: every scene,
-// or the ones named. It starts one throwaway stack for the apps those scenes need, signs each scene's personas in,
-// runs the scene in system Chrome and records it, then stops the stack. It runs on the owner's Mac, not in CI.
+// `bun run capture [scene …]`, run in the capture tool's own folder after its own `bun install`, films the seeded
+// Tuimel demo world for the About pages of the public site: every scene, or the ones named. It starts one throwaway
+// stack for the apps those scenes need, signs each scene's personas in, runs the scene in system Chrome and records
+// it, then stops the stack. It runs on the owner's Mac, not in CI.
 
 import type { Browser } from 'playwright-core';
 import { chromium } from 'playwright-core';
 import { personaContext, signIn } from './auth';
 import { cursor } from './lib/cursor';
+import { pickScenes } from './lib/pick';
 import type { Scene, SceneContext, Stack } from './lib/scene';
-import { pickScenes } from './lib/scene';
 import { typeLikeAPerson } from './lib/type';
 import { recordVideo, takeStill } from './record';
 import { SCENES } from './scenes';
@@ -59,7 +60,7 @@ async function film(
         hold: (ms) => Bun.sleep(ms),
     };
     await scene.setup?.(ctx);
-    if (scene.kind === 'video') await recordVideo(pages[0], scene, () => scene.run(ctx));
+    if (scene.kind === 'video') await recordVideo(pages, scene, () => scene.run(ctx));
     else {
         await scene.run(ctx);
         await takeStill(pages[0], scene);

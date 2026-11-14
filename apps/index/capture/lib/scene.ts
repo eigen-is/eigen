@@ -29,17 +29,9 @@ export type Scene = {
     viewport: { width: number; height: number };
     apps: string[];
     personas: string[];
+    // A video films only the first persona's page, or every page side by side.
+    composite?: 'side-by-side';
     // Runs before the camera rolls, such as opening the app and waiting for it to load.
     setup?: (ctx: SceneContext) => Promise<void>;
     run: (ctx: SceneContext) => Promise<void>;
 };
-
-export function pickScenes(names: readonly string[], scenes: readonly Scene[]): Scene[] {
-    if (names.length === 0) return [...scenes];
-    return names.map((name) => {
-        const scene = scenes.find((s) => s.name === name);
-        if (!scene)
-            throw new Error(`Unknown scene ${name}. Scenes: ${scenes.map((s) => s.name).join(', ') || 'none yet'}`);
-        return scene;
-    });
-}

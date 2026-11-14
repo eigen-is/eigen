@@ -1,20 +1,9 @@
 // Tests how the capture tool picks scenes from its command line: none named runs all, an unknown name throws.
 
 import { describe, expect, test } from 'bun:test';
-import type { Scene } from '../../../../../../scripts/capture/lib/scene';
-import { pickScenes } from '../../../../../../scripts/capture/lib/scene';
+import { pickScenes } from '../../../capture/lib/pick';
 
-const scene = (name: string): Scene => ({
-    name,
-    kind: 'still',
-    theme: 'light',
-    viewport: { width: 800, height: 600 },
-    apps: ['space'],
-    personas: ['anouk'],
-    run: async () => {},
-});
-
-const scenes = [scene('drive-home'), scene('two-editors')];
+const scenes = [{ name: 'drive-home' }, { name: 'two-editors' }];
 
 describe('pickScenes', () => {
     test('no names picks every scene', () => {

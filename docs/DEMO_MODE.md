@@ -103,7 +103,7 @@ An external message can carry an `invite`, which `serializeEventForImip`, the sh
 
 ## Running the seeder
 
-Locally: `cd apps/api && EIGEN_DATA_ROOT=/abs/data MAIL_DOMAIN=tuimel.example bun run src/scripts/seed-demo.ts`. `EIGEN_DEMO_ADMIN_PASSWORD` and `EIGEN_DEMO_PERSONA_PASSWORD` fix the admin's and every persona's password, for a tool that signs in as them, such as `bun run capture`; unset, each is random. On a box the reset runs it by absolute path, because the image's working directory is `/app/apps/api`. `seed-demo.test.ts` spawns the whole seeder in about 30 s, so it runs on CI, and locally with `EIGEN_SLOW_TESTS=1` after you touch `scripts/demo/` or a reader it decodes with ([TESTING.md](TESTING.md)).
+Locally: `cd apps/api && EIGEN_DATA_ROOT=/abs/data MAIL_DOMAIN=tuimel.example bun run src/scripts/seed-demo.ts`. `EIGEN_DEMO_ADMIN_PASSWORD` and `EIGEN_DEMO_PERSONA_PASSWORD` fix the admin's and every persona's password, for a tool that signs in as them, such as the About pages' capture tool (`bun run capture` in `apps/index/capture`); unset, each is random. On a box the reset runs it by absolute path, because the image's working directory is `/app/apps/api`. `seed-demo.test.ts` spawns the whole seeder in about 30 s, so it runs on CI, and locally with `EIGEN_SLOW_TESTS=1` after you touch `scripts/demo/` or a reader it decodes with ([TESTING.md](TESTING.md)).
 
 ## Accepted residuals
 

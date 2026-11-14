@@ -8,14 +8,14 @@ import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, openSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { APP_PORTS } from '../../vite.shared.config';
+import { APP_PORTS } from '../../../vite.shared.config';
 import type { Stack } from './lib/scene';
 import { CAPTURE_ROOT } from './record';
 
 // The seeder's own default, set here so the API and the persona emails agree with it.
 export const MAIL_DOMAIN = 'tuimel.example';
 
-const REPO_ROOT = join(import.meta.dir, '..', '..');
+const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
 const DATA_ROOT = join(CAPTURE_ROOT, 'data');
 const LOG_DIR = join(CAPTURE_ROOT, 'logs');
 const API_PORT = 8690;

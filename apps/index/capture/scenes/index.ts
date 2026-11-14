@@ -4,7 +4,7 @@
 import type { Scene } from '../lib/scene';
 import { ROWS } from './rows';
 import { sheetsChart } from './sheets-chart';
-import { sheetsCollab } from './sheets-collab';
+import { sheetsCollab, sheetsCollabPair } from './sheets-collab';
 import { sheetsHero } from './sheets-hero';
 import { sheetsStillBudget, sheetsStillChart } from './sheets-stills';
 import { suite } from './suite';
@@ -12,6 +12,7 @@ import { suite } from './suite';
 export const SCENES: Scene[] = [
     sheetsHero,
     sheetsCollab,
+    sheetsCollabPair,
     sheetsChart,
     sheetsStillBudget,
     sheetsStillChart,

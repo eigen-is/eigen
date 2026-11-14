@@ -1,0 +1,13 @@
+{
+  "name": "index-capture",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "capture": "bun --no-env-file cli.ts",
+    "typecheck": "bun check --no-script"
+  },
+  "dependencies": {
+    "playwright-core": "^1.65.1"
+  }
+}
