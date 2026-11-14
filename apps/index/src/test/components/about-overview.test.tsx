@@ -40,9 +40,10 @@ async function renderOverview(pages: ArticleMeta[]): Promise<string> {
 }
 
 describe('AboutOverview', () => {
-    test('draws a row per app, and links only the apps that have a page', async () => {
+    test('draws a row per app, and links and highlights only the apps that have a page', async () => {
         const html = await renderOverview([meta('sheets')]);
-        expect(html.match(/class="eigen-list-item/g)).toHaveLength(10);
+        expect(html.match(/src="\/data\/about\/media\/row-[a-z]+\.webp"/g)).toHaveLength(10);
+        expect(html.match(/eigen-list-item/g)).toHaveLength(1);
         expect(html.match(/<a [^>]*href="\/about\/[a-z]+"/g)).toEqual([
             expect.stringContaining('href="/about/sheets"'),
         ]);
