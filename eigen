@@ -922,12 +922,14 @@ refresh_fail2ban() {
     fi
 }
 
-# prune_images [image…]: the images an update leaves behind. Keeps those, the rollback's, and the images PINS
-# names, and removes the rest by ID: an old build of main keeps no tag, only its digest, which no prune takes, and
-# which a CLI from 29 on hides without --all. Best effort.
+# prune_images [pin…]: the images an update leaves behind. Keeps those pins, the rollback's, and the images PINS
+# names, and removes the rest by ID. On the containerd store a moved tag leaves an old build of main dangling, which
+# the prune at the end would take, so the pins are pulled back by digest first: only their manifests download. Best
+# effort.
 prune_images() {
     keep=' '
     for ref in "$@" $PINS; do keep="$keep${ref#*=} "; done
+    pull_refs $(printf '%s\n' "$@" | sed -n 's/^EIGEN_[A-Z]*_IMAGE=//p') || :
     for name in $IMAGES; do
         remove=$(docker image ls --all "$REGISTRY/$name" --digests \
             --format '{{.ID}} {{.Repository}}@{{.Digest}} {{.Repository}}:{{.Tag}}' | awk -v keep="$keep" '

@@ -10,10 +10,10 @@
 # first; roll back on the data as it is; refuse and then accept the breaking
 # release; refuse an unknown version and a downgrade; refuse the backup of .8 while the registry is down, before
 # anything stops; restore the backup of .8, which brings its launcher and Compose files back; move .8 onto the main
-# channel, update it to a second build of main, roll back one build, and leave main for .10; install from main; install
-# .9 from the launcher alone; install .9 twice, on one digest. The published release updates through its own launcher,
-# which makes a Full backup first, and ./eigen rollback keeps the data when the published build opens it, and else
-# restores that backup.
+# channel, update it to a second build of main, which keeps every image of the first, roll back one build, and leave
+# main for .10; install from main; install .9 from the launcher alone; install .9 twice, on one digest. The published
+# release updates through its own launcher, which makes a Full backup first, and ./eigen rollback keeps the data when
+# the published build opens it, and else restores that backup.
 #
 # Usage:  ./docker/test-release.sh
 #         ACCEPT_BREAKING=1 is for a new release that lists breaking changes since the published one: the update takes
@@ -726,6 +726,16 @@ else
             "build=$(image_label "$id" version) $(image_label "$id" revision)"
         docker ps -a --filter "ancestor=$id" --format '      used by {{.Names}} ({{.Status}})'
     done
+fi
+# On the containerd store the moved tag left main1 dangling, and the prune took what was not pulled back by digest.
+gone=''
+for ref in $(scratch_run sed -n 's/^EIGEN_[A-Z]*_IMAGE=//p' "$INSTALL/.eigen/last-update"); do
+    if ! docker image inspect "$ref" >/dev/null 2>&1; then gone="$gone ${ref#"$REGISTRY"/}"; fi
+done
+if [ -z "$gone" ]; then
+    ok "every image of the previous build of main is kept, for a rollback without the registry"
+else
+    fail "images of the previous build of main removed:$gone"
 fi
 
 eigen rollback --yes

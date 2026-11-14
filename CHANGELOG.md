@@ -57,6 +57,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Keyboard in Drive's grid** — the item under the keyboard cursor gets the stripe a list row shows, so it no longer looks selected
 - **Team drives on a phone** — **Move to**, **Copy to** and **Save to Drive** have a drive picker above the folders on a phone, so a file can go to a team drive
 - **Stopping Eigen** — when Docker stops answering, `./eigen stop`, `update` and `rollback` give up asking Eigen whether a backup runs after 20 s, instead of waiting for good
+- **Rolling back on the main channel** — an update keeps every image of the build before, not only the server's, so `./eigen rollback` needs no download
 
 ## [0.4.3] - 2026-11-11
 
